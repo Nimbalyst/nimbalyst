@@ -68,30 +68,12 @@ export function Gallery({ generations, imagesBasePath, onEditPrompt, theme }: Ga
 
   if (generations.length === 0) {
     return (
-      <div
-        style={{
-          flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: 'var(--nim-text-muted)',
-          textAlign: 'center',
-          padding: 40,
-        }}
-      >
-        <div style={{ fontSize: 64, marginBottom: 16, opacity: 0.3 }}>&#127912;</div>
-        <div
-          style={{
-            fontSize: 16,
-            fontWeight: 500,
-            color: 'var(--nim-text)',
-            marginBottom: 8,
-          }}
-        >
+      <div className="flex-1 flex flex-col items-center justify-center text-nim-muted text-center p-10">
+        <div className="text-[64px] mb-4 opacity-30">&#127912;</div>
+        <div className="text-base font-medium text-nim mb-2">
           No images yet
         </div>
-        <div style={{ fontSize: 13, maxWidth: 300, lineHeight: 1.5 }}>
+        <div className="text-[13px] max-w-[300px] leading-normal">
           Enter a prompt below to generate your first image
         </div>
       </div>
@@ -366,71 +348,27 @@ export function Gallery({ generations, imagesBasePath, onEditPrompt, theme }: Ga
                       e.currentTarget.nextElementSibling?.classList.remove('hidden');
                     }}
                   />
-                  <div
-                    className="hidden"
-                    style={{
-                      display: 'none',
-                      width: '100%',
-                      height: '100%',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      background: 'var(--nim-bg-tertiary)',
-                    }}
-                  >
-                    <div style={{ textAlign: 'center', color: 'var(--nim-text-muted)' }}>
-                      <div style={{ fontSize: 40, marginBottom: 8, opacity: 0.5 }}>&#128247;</div>
-                      <div style={{ fontSize: 11 }}>{result.file}</div>
+                  <div className="hidden w-full h-full items-center justify-center bg-nim-tertiary">
+                    <div className="text-center text-nim-muted">
+                      <div className="text-[40px] mb-2 opacity-50">&#128247;</div>
+                      <div className="text-[11px]">{result.file}</div>
                     </div>
                   </div>
 
                   {/* Hover overlay with actions */}
                   <div
-                    style={{
-                      position: 'absolute',
-                      bottom: 0,
-                      left: 0,
-                      right: 0,
-                      padding: 10,
-                      background: 'linear-gradient(transparent, rgba(0, 0, 0, 0.8))',
-                      opacity: 0,
-                      transition: 'opacity 0.15s ease',
-                    }}
-                    className="image-overlay"
+                    className="image-overlay absolute bottom-0 left-0 right-0 p-2.5 bg-gradient-to-t from-black/80 to-transparent opacity-0 transition-opacity duration-150"
                   >
-                    <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                    <div className="flex gap-1.5 justify-end">
                       <button
                         title="Download"
-                        style={{
-                          width: 28,
-                          height: 28,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          background: 'rgba(255, 255, 255, 0.15)',
-                          border: 'none',
-                          borderRadius: 5,
-                          color: '#ffffff',
-                          cursor: 'pointer',
-                          fontSize: 13,
-                        }}
+                        className="w-7 h-7 flex items-center justify-center bg-white/15 border-none rounded text-white cursor-pointer text-[13px]"
                       >
                         &#8595;
                       </button>
                       <button
                         title="Copy to clipboard"
-                        style={{
-                          width: 28,
-                          height: 28,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          background: 'rgba(255, 255, 255, 0.15)',
-                          border: 'none',
-                          borderRadius: 5,
-                          color: '#ffffff',
-                          cursor: 'pointer',
-                          fontSize: 13,
-                        }}
+                        className="w-7 h-7 flex items-center justify-center bg-white/15 border-none rounded text-white cursor-pointer text-[13px]"
                       >
                         &#128203;
                       </button>
@@ -440,20 +378,10 @@ export function Gallery({ generations, imagesBasePath, onEditPrompt, theme }: Ga
               ))
             ) : (
               // Placeholder for pending generation
-              <div
-                style={{
-                  position: 'relative',
-                  aspectRatio: '1',
-                  background: 'var(--nim-bg-secondary)',
-                  borderRadius: 8,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <div style={{ textAlign: 'center', color: 'var(--nim-text-muted)' }}>
-                  <div style={{ fontSize: 40, marginBottom: 8, opacity: 0.5 }}>&#8987;</div>
-                  <div style={{ fontSize: 11 }}>Pending</div>
+              <div className="relative aspect-square bg-nim-secondary rounded-lg flex items-center justify-center">
+                <div className="text-center text-nim-muted">
+                  <div className="text-[40px] mb-2 opacity-50">&#8987;</div>
+                  <div className="text-[11px]">Pending</div>
                 </div>
               </div>
             )}

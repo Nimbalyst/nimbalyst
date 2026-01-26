@@ -718,7 +718,7 @@ export const RichTranscriptView = React.forwardRef<
                   <span
                     role="link"
                     tabIndex={0}
-                    className="rich-transcript-tool-args rich-transcript-tool-args-link text-[var(--nim-text-muted)] flex-1 overflow-hidden text-ellipsis whitespace-nowrap bg-transparent border-none p-0 m-0 font-inherit text-[var(--accent-link)] cursor-pointer no-underline text-left hover:underline"
+                    className="rich-transcript-tool-args rich-transcript-tool-args-link text-[var(--nim-text-muted)] flex-1 overflow-hidden text-ellipsis whitespace-nowrap bg-transparent border-none p-0 m-0 font-inherit text-[var(--nim-link)] cursor-pointer no-underline text-left hover:underline"
                     onClick={(e) => {
                       e.stopPropagation();
                       onOpenFile(filePath);

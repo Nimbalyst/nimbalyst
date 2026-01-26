@@ -360,19 +360,8 @@ import {
       return (
         <div
           ref={ref}
-          className={`typeahead-menu-header ${className}`}
+          className={`typeahead-menu-header ${className} px-3 py-2 bg-nim-tertiary text-xs font-semibold text-nim-muted uppercase tracking-wide m-0 pointer-events-none`}
           role="presentation"
-          style={{
-            padding: '8px 12px',
-            backgroundColor: 'var(--surface-tertiary, #f5f5f5)',
-            fontSize: '0.75rem',
-            fontWeight: 600,
-            color: 'var(--text-secondary, #666)',
-            textTransform: 'uppercase',
-            letterSpacing: '0.5px',
-            margin: '0',
-            pointerEvents: 'none',
-          }}
         >
           {option.label}
         </div>
@@ -385,58 +374,20 @@ import {
     return (
       <div
         ref={ref}
-        className={`typeahead-menu-option ${className} ${isSelected ? selectedClassName : ''}`}
+        className={`typeahead-menu-option ${className} ${isSelected ? selectedClassName : ''} px-2.5 py-1.5 cursor-pointer flex items-center justify-between rounded mx-1 my-0.5 text-[0.9rem] text-nim gap-2 ${option.disabled ? 'opacity-50 pointer-events-none' : ''} ${isSelected ? 'bg-nim-selected' : 'bg-transparent'}`}
         onClick={onClick}
         onMouseEnter={onMouseEnter}
         role="option"
         aria-selected={isSelected}
         title={option.tooltip}
-        style={{
-          padding: '6px 10px',
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          opacity: option.disabled ? 0.5 : 1,
-          pointerEvents: option.disabled ? 'none' : 'auto',
-          backgroundColor: isSelected ? 'var(--surface-selected, #f0f0f0)' : 'transparent',
-          borderRadius: '4px',
-          margin: '2px 4px',
-          fontSize: '0.9rem',
-          color: 'var(--text-primary, #111)',
-          gap: '8px',
-        }}
       >
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          flex: 1,
-          minWidth: 0, // Allow truncation
-          overflow: 'hidden',
-        }}>
+        <div className="flex items-center flex-1 min-w-0 overflow-hidden">
           {option.icon && (
-            <span style={{ marginRight: '8px', flexShrink: 0 }}>{option.icon}</span>
+            <span className="mr-2 shrink-0">{option.icon}</span>
           )}
-          <div style={{
-            flex: 1,
-            minWidth: 0, // Allow truncation
-            overflow: 'hidden',
-          }}>
-            <div style={{
-              fontWeight: 500,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              lineHeight: 1.2,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}>
-              <span style={{
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}>
+          <div className="flex-1 min-w-0 overflow-hidden">
+            <div className="font-medium flex items-center gap-1.5 leading-tight overflow-hidden text-ellipsis whitespace-nowrap">
+              <span className="overflow-hidden text-ellipsis whitespace-nowrap">
                 {option.label}
               </span>
               {option.flag && (
@@ -457,7 +408,7 @@ import {
               )}
             </div>
             {!useSingleLineLayout && option.description && (
-              <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary, #666)', marginTop: '2px' }}>
+              <div className="text-sm text-nim-muted mt-0.5">
                 {option.description}
               </div>
             )}
@@ -465,29 +416,12 @@ import {
         </div>
         {/* Secondary text (e.g., truncated path) shown on the right */}
         {option.secondaryText && (
-          <span style={{
-            fontSize: '0.8rem',
-            color: 'var(--text-tertiary, #71717a)',
-            flexShrink: 1,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-            maxWidth: '50%',
-            textAlign: 'right',
-          }}>
+          <span className="text-[0.8rem] text-nim-faint shrink overflow-hidden text-ellipsis whitespace-nowrap max-w-[50%] text-right">
             {option.secondaryText}
           </span>
         )}
         {option.shortcut && (
-          <span style={{
-            fontSize: '0.75rem',
-            color: 'var(--text-tertiary, #999)',
-            backgroundColor: 'var(--surface-tertiary, #f5f5f5)',
-            padding: '2px 6px',
-            borderRadius: '3px',
-            fontFamily: 'monospace',
-            flexShrink: 0,
-          }}>
+          <span className="text-xs text-nim-faint bg-nim-tertiary px-1.5 py-0.5 rounded font-mono shrink-0">
             {option.shortcut}
           </span>
         )}
@@ -685,64 +619,37 @@ import {
     const isVisible = isMeasured && position;
     const menuStyle: React.CSSProperties = isVisible
       ? {
-          position: 'absolute',
           top: `${position.top}px`,
           left: `${position.left}px`,
           minWidth: `${minWidth}px`,
           maxWidth: `${maxWidth}px`,
           maxHeight: `${position.maxHeight}px`,
-          backgroundColor: 'var(--surface-primary, white)',
-          border: '1px solid var(--border-primary, #ccc)',
-          borderRadius: '6px',
-          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-          zIndex: 1000,
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
         }
       : {
-          position: 'absolute',
           top: -9999,
           left: -9999,
-          visibility: 'hidden',
-          pointerEvents: 'none',
           minWidth: `${minWidth}px`,
           maxWidth: `${maxWidth}px`,
           maxHeight: `${maxHeight}px`,
-          backgroundColor: 'var(--surface-primary, white)',
-          border: '1px solid var(--border-primary, #ccc)',
-          borderRadius: '6px',
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
         };
 
     return (
       <div
         ref={menuRef}
-        className={`typeahead-menu ${className}`}
+        className={`typeahead-menu ${className} absolute bg-nim border border-nim rounded-md shadow-lg z-[1000] flex flex-col overflow-hidden ${!isVisible ? 'invisible pointer-events-none' : ''}`}
         role={isVisible ? "listbox" : undefined}
         style={menuStyle}
         // Prevent menu from closing when clicking inside
         onMouseDown={isVisible ? (e) => e.preventDefault() : undefined}
       >
         {header && (
-          <div style={{
-            borderBottom: '1px solid var(--border-primary, #eee)',
-            padding: '6px 10px',
-            flexShrink: 0,
-          }}>
+          <div className="border-b border-nim px-2.5 py-1.5 shrink-0">
             {header}
           </div>
         )}
 
         <div
-          style={{
-            flex: 1,
-            overflowY: 'auto',
-            overflowX: 'hidden',
-            padding: '2px 0',
-          }}
+          className="flex-1 overflow-y-auto overflow-x-hidden py-0.5"
           // Critical: Stop propagation of scroll events to prevent menu closure
           onScroll={(e) => e.stopPropagation()}
         >
@@ -754,20 +661,7 @@ import {
               return (
                 <div key={sectionName} className="typeahead-section">
                   {sectionName !== '_default' && (
-                    <div
-                      className="typeahead-section-header"
-                      style={{
-                        padding: '6px 10px',
-                        backgroundColor: 'var(--surface-tertiary, #f5f5f5)',
-                        fontSize: '0.7rem',
-                        fontWeight: 600,
-                        color: 'var(--text-secondary, #666)',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.5px',
-                        margin: '0',
-                        pointerEvents: 'none',
-                      }}
-                    >
+                    <div className="typeahead-section-header px-2.5 py-1.5 bg-nim-tertiary text-[0.7rem] font-semibold text-nim-muted uppercase tracking-wide m-0 pointer-events-none">
                       {sectionName}
                     </div>
                   )}
@@ -804,23 +698,14 @@ import {
             ))
           )}
           {options.length === 0 && (
-            <div style={{
-              padding: '16px',
-              textAlign: 'center',
-              color: 'var(--text-tertiary, #999)',
-              fontStyle: 'italic'
-            }}>
+            <div className="p-4 text-center text-nim-faint italic">
               No matches found
             </div>
           )}
         </div>
 
           {footer && (
-          <div style={{
-            borderTop: '1px solid var(--border-primary, #eee)',
-            padding: '6px 10px',
-            flexShrink: 0,
-          }}>
+          <div className="border-t border-nim px-2.5 py-1.5 shrink-0">
             {footer}
           </div>
           )}

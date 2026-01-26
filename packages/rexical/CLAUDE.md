@@ -54,15 +54,17 @@ Themes in `src/themes/[ThemeName].ts` and `.css`
 When writing CSS, you MUST use the correct CSS variables from `src/themes/PlaygroundEditorTheme.css`. Do NOT invent variable names.
 
 **Correct CSS variables:**
-- `--surface-primary` - Primary background surface (NOT `--bg-primary`)
-- `--surface-secondary` - Secondary background surface (NOT `--bg-secondary`)
-- `--surface-tertiary` - Tertiary background surface (NOT `--bg-tertiary`)
-- `--surface-hover` - Hover state background
-- `--border-primary` - Primary border color (NOT `--border-color`)
-- `--text-primary` - Primary text color
-- `--text-secondary` - Secondary text color
-- `--text-tertiary` - Tertiary/muted text color
-- `--primary-color` - Primary accent color (NOT `--accent-color`)
+- `--nim-bg` - Primary background surface
+- `--nim-bg-secondary` - Secondary background surface
+- `--nim-bg-tertiary` - Tertiary background surface
+- `--nim-bg-hover` - Hover state background
+- `--nim-border` - Primary border color
+- `--nim-border-focus` - Focus state border color
+- `--nim-text` - Primary text color
+- `--nim-text-muted` - Muted/secondary text color
+- `--nim-text-faint` - Faint/tertiary text color
+- `--nim-primary` - Primary accent color
+- `--nim-link` - Link color
 
 **CSS Rules:**
 1. **ALWAYS reference** `src/themes/PlaygroundEditorTheme.css` when writing CSS

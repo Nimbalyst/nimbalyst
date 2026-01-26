@@ -176,18 +176,18 @@ Nimbalyst provides CSS variables for theming. Always use these instead of hardco
 
 ```css
 .my-editor {
-  background: var(--surface-primary);
-  color: var(--text-primary);
-  border: 1px solid var(--border-primary);
+  background: var(--nim-bg);
+  color: var(--nim-text);
+  border: 1px solid var(--nim-border);
 }
 
 .my-editor-toolbar {
-  background: var(--surface-secondary);
-  border-bottom: 1px solid var(--border-primary);
+  background: var(--nim-bg-secondary);
+  border-bottom: 1px solid var(--nim-border);
 }
 
 .my-editor-button:hover {
-  background: var(--surface-hover);
+  background: var(--nim-bg-hover);
 }
 ```
 
@@ -195,15 +195,15 @@ Nimbalyst provides CSS variables for theming. Always use these instead of hardco
 
 | Variable | Purpose |
 | --- | --- |
-| `--surface-primary` | Main background |
-| `--surface-secondary` | Toolbar/panel background |
-| `--surface-tertiary` | Nested element background |
-| `--surface-hover` | Hover state background |
-| `--text-primary` | Main text color |
-| `--text-secondary` | Muted text |
-| `--text-tertiary` | Very muted text |
-| `--border-primary` | Main borders |
-| `--primary-color` | Accent/brand color |
+| `--nim-bg` | Main background |
+| `--nim-bg-secondary` | Toolbar/panel background |
+| `--nim-bg-tertiary` | Nested element background |
+| `--nim-bg-hover` | Hover state background |
+| `--nim-text` | Main text color |
+| `--nim-text-muted` | Muted text |
+| `--nim-text-faint` | Very muted text |
+| `--nim-border` | Main borders |
+| `--nim-primary` | Accent/brand color |
 
 ### Including Styles
 
@@ -390,7 +390,7 @@ export function CSVEditor({ content, onChange }: CSVEditorProps) {
           {data.map((row, rowIndex) => (
             <tr key={rowIndex}>
               {row.map((cell, colIndex) => (
-                <td key={colIndex} style={{ border: '1px solid var(--border-primary)' }}>
+                <td key={colIndex} style={{ border: '1px solid var(--nim-border)' }}>
                   <input
                     value={cell}
                     onChange={e => handleCellChange(rowIndex, colIndex, e.target.value)}
@@ -399,7 +399,7 @@ export function CSVEditor({ content, onChange }: CSVEditorProps) {
                       padding: '4px',
                       border: 'none',
                       background: 'transparent',
-                      color: 'var(--text-primary)'
+                      color: 'var(--nim-text)'
                     }}
                   />
                 </td>

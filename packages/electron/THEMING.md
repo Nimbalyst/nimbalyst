@@ -55,28 +55,30 @@ if (savedTheme === 'dark') {
 #### Core Variables (defined in PlaygroundEditorTheme.css):
 ```css
 /* Surfaces/Backgrounds */
---surface-primary: #ffffff;       /* Main content background */
---surface-secondary: #f9fafb;     /* Sidebar, panels */
---surface-tertiary: #f3f4f6;      /* Hover states, subtle backgrounds */
+--nim-bg: #ffffff;           /* Main content background */
+--nim-bg-secondary: #f9fafb; /* Sidebar, panels */
+--nim-bg-tertiary: #f3f4f6;  /* Hover states, subtle backgrounds */
+--nim-bg-hover: #e5e7eb;     /* Hover state background */
 
 /* Text */
---text-primary: #111827;          /* Main text */
---text-secondary: #6b7280;        /* Muted text */
---text-tertiary: #9ca3af;         /* Very muted text */
+--nim-text: #111827;         /* Main text */
+--nim-text-muted: #6b7280;   /* Muted text */
+--nim-text-faint: #9ca3af;   /* Very muted text */
 
 /* Borders */
---border-primary: #e5e7eb;        /* Default borders */
---border-focus: #3b82f6;          /* Focus state borders */
+--nim-border: #e5e7eb;       /* Default borders */
+--nim-border-focus: #3b82f6; /* Focus state borders */
 
 /* Accent Colors */
---accent-primary: #3b82f6;        /* Primary actions, links */
---accent-primary-hover: #2563eb;  /* Primary hover */
+--nim-primary: #3b82f6;        /* Primary actions, links */
+--nim-primary-hover: #2563eb;  /* Primary hover */
+--nim-link: #3b82f6;           /* Link color */
 
 /* Status Colors */
---success-color: #10b981;
---error-color: #ef4444;
---warning-color: #f59e0b;
---info-color: #3b82f6;
+--nim-success: #10b981;
+--nim-error: #ef4444;
+--nim-warning: #f59e0b;
+--nim-info: #3b82f6;
 ```
 
 ### 4. Dark Theme Colors
@@ -119,8 +121,8 @@ The Crystal Dark theme uses Tailwind gray scale colors (#0f172a, #020617, #1e293
 ```css
 /* ALWAYS DO THIS */
 .my-component {
-    background-color: var(--surface-primary);
-    color: var(--text-primary);
+    background-color: var(--nim-bg);
+    color: var(--nim-text);
 }
 ```
 
@@ -140,7 +142,7 @@ The Crystal Dark theme uses Tailwind gray scale colors (#0f172a, #020617, #1e293
 ```css
 /* component.css - ALWAYS DO THIS */
 .my-component {
-    background: var(--surface-primary); /* Defined in PlaygroundEditorTheme.css */
+    background: var(--nim-bg); /* Defined in PlaygroundEditorTheme.css */
 }
 ```
 
@@ -171,17 +173,17 @@ Example for a new component:
 ```css
 /* NewComponent.css */
 .new-component {
-    background: var(--surface-primary);
-    color: var(--text-primary);
-    border: 1px solid var(--border-primary);
+    background: var(--nim-bg);
+    color: var(--nim-text);
+    border: 1px solid var(--nim-border);
 }
 
 .new-component:hover {
-    background: var(--surface-secondary);
+    background: var(--nim-bg-secondary);
 }
 
 .new-component-title {
-    color: var(--text-secondary);
+    color: var(--nim-text-muted);
 }
 ```
 

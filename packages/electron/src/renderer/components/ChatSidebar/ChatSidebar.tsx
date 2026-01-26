@@ -276,7 +276,7 @@ export const ChatSidebar = forwardRef<ChatSidebarRef, ChatSidebarProps>(({
 
   if (isLoading) {
     return (
-      <div className="chat-sidebar chat-sidebar-loading flex flex-col h-full overflow-hidden bg-nim border-l border-nim relative items-center justify-center text-nim-secondary" style={{ width: onWidthChange ? width : undefined }}>
+      <div className="chat-sidebar chat-sidebar-loading flex flex-col h-full overflow-hidden bg-nim border-l border-nim relative items-center justify-center text-nim-muted" style={{ width: onWidthChange ? width : undefined }}>
         <div className="chat-sidebar-spinner w-6 h-6 border-2 border-nim border-t-nim-accent rounded-full animate-spin" />
       </div>
     );
@@ -284,7 +284,7 @@ export const ChatSidebar = forwardRef<ChatSidebarRef, ChatSidebarProps>(({
 
   if (!sessionId) {
     return (
-      <div className="chat-sidebar chat-sidebar-error flex flex-col h-full overflow-hidden bg-nim border-l border-nim relative items-center justify-center text-nim-secondary" style={{ width: onWidthChange ? width : undefined }}>
+      <div className="chat-sidebar chat-sidebar-error flex flex-col h-full overflow-hidden bg-nim border-l border-nim relative items-center justify-center text-nim-muted" style={{ width: onWidthChange ? width : undefined }}>
         <p>Failed to load chat session</p>
       </div>
     );

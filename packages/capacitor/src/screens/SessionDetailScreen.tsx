@@ -881,10 +881,10 @@ export function SessionDetailScreen({ hiddenBackButton, voiceModeActive }: Sessi
   const latestVoiceEntry = voiceTranscript[voiceTranscript.length - 1];
 
   return (
-    <div className="flex flex-col w-full bg-[var(--surface-primary)]" style={{ height: hiddenBackButton || voiceModeActive ? '100%' : '100dvh' }}>
+    <div className="flex flex-col w-full bg-nim" style={{ height: hiddenBackButton || voiceModeActive ? '100%' : '100dvh' }}>
       {/* Header - Hidden in voice mode since VoiceControlScreen provides its own */}
       {!voiceModeActive && (
-        <header className="flex-shrink-0 flex items-center px-3 py-2 border-b border-[var(--border-primary)] bg-[var(--surface-secondary)] safe-area-top">
+        <header className="flex-shrink-0 flex items-center px-3 py-2 border-b border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] safe-area-top">
           {!hiddenBackButton && (
             <button
               onClick={() => {
@@ -892,7 +892,7 @@ export function SessionDetailScreen({ hiddenBackButton, voiceModeActive }: Sessi
                 const projectId = metadata.project_id || indexEntry?.workspaceId || 'default';
                 navigate(`/project/${encodeURIComponent(projectId)}/sessions`);
               }}
-              className="mr-2 p-1 text-[var(--text-primary)] active:opacity-70"
+              className="mr-2 p-1 text-[var(--nim-text)] active:opacity-70"
               aria-label="Go back"
             >
               <svg
@@ -911,8 +911,8 @@ export function SessionDetailScreen({ hiddenBackButton, voiceModeActive }: Sessi
             </button>
           )}
           <div className="flex-1 min-w-0">
-            <h1 className="text-base font-semibold truncate text-[var(--text-primary)]">{title}</h1>
-            <div className="flex items-center gap-1.5 text-xs text-[var(--text-secondary)]">
+            <h1 className="text-base font-semibold truncate text-[var(--nim-text)]">{title}</h1>
+            <div className="flex items-center gap-1.5 text-xs text-[var(--nim-text-muted)]">
               {metadata.provider && <span>{metadata.provider}</span>}
               {metadata.model && <span>/ {metadata.model}</span>}
               <span className={`status-dot ${connected ? 'connected' : 'disconnected'}`} />
@@ -924,10 +924,10 @@ export function SessionDetailScreen({ hiddenBackButton, voiceModeActive }: Sessi
             disabled={voiceState === 'connecting'}
             className={`ml-2 p-1.5 rounded-lg transition-all ${
               voiceState === 'connecting'
-                ? 'bg-[var(--surface-tertiary)] text-[var(--text-tertiary)]'
+                ? 'bg-[var(--nim-bg-tertiary)] text-[var(--nim-text-faint)]'
                 : isVoiceActive
                   ? 'bg-red-500 text-white'
-                  : 'hover:bg-[var(--surface-tertiary)] text-[var(--primary-color)]'
+                  : 'hover:bg-[var(--nim-bg-tertiary)] text-[var(--nim-primary)]'
             }`}
             title={isVoiceActive ? 'Stop Voice' : 'Start Voice'}
           >
@@ -956,14 +956,14 @@ export function SessionDetailScreen({ hiddenBackButton, voiceModeActive }: Sessi
 
       {/* Voice Status Bar - Shows when voice is active */}
       {isVoiceActive && !voiceModeActive && (
-        <div className="flex-shrink-0 px-3 py-1.5 bg-[var(--surface-tertiary)] border-b border-[var(--border-primary)]">
+        <div className="flex-shrink-0 px-3 py-1.5 bg-[var(--nim-bg-tertiary)] border-b border-[var(--nim-border)]">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-            <span className="text-xs text-[var(--text-secondary)]">
+            <span className="text-xs text-[var(--nim-text-muted)]">
               {voiceState === 'listening' ? 'Listening...' : voiceState === 'agent_speaking' ? 'Speaking...' : 'Voice active'}
             </span>
             {latestVoiceEntry && (
-              <span className="flex-1 text-xs text-[var(--text-primary)] truncate">
+              <span className="flex-1 text-xs text-[var(--nim-text)] truncate">
                 {latestVoiceEntry.role === 'user' ? 'You: ' : 'Agent: '}
                 {latestVoiceEntry.text || '...'}
               </span>
@@ -974,24 +974,24 @@ export function SessionDetailScreen({ hiddenBackButton, voiceModeActive }: Sessi
 
       {/* Voice Pending Prompt - Shows when agent queues a task */}
       {voicePendingPrompt && !voiceModeActive && (
-        <div className="flex-shrink-0 px-3 py-2 bg-[var(--surface-secondary)] border-b border-[var(--border-primary)]">
-          <div className="p-2 rounded-lg bg-[var(--surface-tertiary)] border border-[var(--primary-color)]/50">
+        <div className="flex-shrink-0 px-3 py-2 bg-[var(--nim-bg-secondary)] border-b border-[var(--nim-border)]">
+          <div className="p-2 rounded-lg bg-[var(--nim-bg-tertiary)] border border-[var(--nim-primary)]/50">
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-xs text-[var(--primary-color)] font-medium">Pending Task</span>
+              <span className="text-xs text-[var(--nim-primary)] font-medium">Pending Task</span>
               {!isEditingVoicePrompt && (
-                <span className="text-xs text-[var(--text-tertiary)]">Auto-send in {voiceCountdown}s</span>
+                <span className="text-xs text-[var(--nim-text-faint)]">Auto-send in {voiceCountdown}s</span>
               )}
             </div>
             {isEditingVoicePrompt ? (
               <textarea
                 value={editedVoicePrompt}
                 onChange={(e) => setEditedVoicePrompt(e.target.value)}
-                className="w-full p-2 rounded border border-[var(--border-primary)] bg-[var(--surface-primary)] text-[var(--text-primary)] text-sm resize-none"
+                className="w-full p-2 rounded border border-[var(--nim-border)] bg-[var(--nim-bg)] text-[var(--nim-text)] text-sm resize-none"
                 rows={2}
                 autoFocus
               />
             ) : (
-              <p className="text-sm text-[var(--text-primary)] line-clamp-2">{voicePendingPrompt.prompt}</p>
+              <p className="text-sm text-[var(--nim-text)] line-clamp-2">{voicePendingPrompt.prompt}</p>
             )}
             <div className="flex items-center justify-between mt-2">
               <button
@@ -1019,20 +1019,20 @@ export function SessionDetailScreen({ hiddenBackButton, voiceModeActive }: Sessi
                     setIsEditingVoicePrompt(true);
                   }
                 }}
-                className="text-xs text-[var(--primary-color)] font-medium"
+                className="text-xs text-[var(--nim-primary)] font-medium"
               >
                 {isEditingVoicePrompt ? 'Done' : 'Edit'}
               </button>
               <div className="flex gap-2">
                 <button
                   onClick={cancelVoicePendingPrompt}
-                  className="px-2 py-1 text-xs rounded bg-[var(--surface-primary)] text-[var(--text-secondary)] border border-[var(--border-primary)]"
+                  className="px-2 py-1 text-xs rounded bg-[var(--nim-bg)] text-[var(--nim-text-muted)] border border-[var(--nim-border)]"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={sendVoicePendingPrompt}
-                  className="px-2 py-1 text-xs rounded bg-[var(--primary-color)] text-white font-medium"
+                  className="px-2 py-1 text-xs rounded bg-[var(--nim-primary)] text-white font-medium"
                 >
                   Send
                 </button>
@@ -1064,7 +1064,7 @@ export function SessionDetailScreen({ hiddenBackButton, voiceModeActive }: Sessi
         )}
 
         {messages.length === 0 ? (
-          <div className="text-center text-[var(--text-tertiary)] py-8">
+          <div className="text-center text-[var(--nim-text-faint)] py-8">
             {connected ? 'No messages yet' : 'Connecting...'}
           </div>
         ) : (
@@ -1090,7 +1090,7 @@ export function SessionDetailScreen({ hiddenBackButton, voiceModeActive }: Sessi
 
       {/* Interactive Prompt (when pending) */}
       {pendingPrompt && (
-        <div className="flex-shrink-0 px-3 py-2 border-t border-[var(--border-primary)] bg-[var(--surface-secondary)]">
+        <div className="flex-shrink-0 px-3 py-2 border-t border-[var(--nim-border)] bg-[var(--nim-bg-secondary)]">
           <InteractivePromptWidget
             promptType={pendingPrompt.type}
             content={pendingPrompt.content}
@@ -1102,7 +1102,7 @@ export function SessionDetailScreen({ hiddenBackButton, voiceModeActive }: Sessi
       )}
 
       {/* AI Input - Fixed at bottom with safe area for home indicator */}
-      <footer className="flex-shrink-0 bg-[var(--surface-primary)] border-t border-[var(--border-primary)] safe-area-bottom">
+      <footer className="flex-shrink-0 bg-[var(--nim-bg)] border-t border-[var(--nim-border)] safe-area-bottom">
         <AIInput
           value={inputValue}
           onChange={handleInputChange}

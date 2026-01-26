@@ -72,7 +72,7 @@ tracking depth for indentation and managing expand/collapse state.
 
 ### Theme-Compatible CSS
 
-Uses CSS variables like `var(--surface-primary)` that automatically adapt
+Uses CSS variables like `var(--nim-bg)` that automatically adapt
 to light, dark, and crystal-dark themes.
 
 ### AI Tool with File Updates

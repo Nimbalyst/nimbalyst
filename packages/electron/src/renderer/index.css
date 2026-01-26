@@ -18,8 +18,8 @@
 
 /* Map rexical variables to electron-specific aliases for backwards compatibility */
 :root {
-  --primary-color: var(--accent-primary);
-  --primary-color-hover: var(--accent-primary-hover);
+  --primary-color: var(--nim-primary);
+  --primary-color-hover: var(--nim-primary-hover);
 }
 
 /* Reset and base styles */

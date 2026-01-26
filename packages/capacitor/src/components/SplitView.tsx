@@ -41,7 +41,7 @@ export function SplitView({ children }: SplitViewProps) {
   return (
     <div className="flex h-screen">
       <SessionSidebar />
-      <div className="flex-1 border-l border-[var(--border-primary)]">
+      <div className="flex-1 border-l border-[var(--nim-border)]">
         {children}
       </div>
     </div>
@@ -84,14 +84,14 @@ function SessionSidebar() {
   }, [navigate]);
 
   return (
-    <div className="w-80 flex flex-col h-full bg-[var(--surface-secondary)]">
+    <div className="w-80 flex flex-col h-full bg-[var(--nim-bg-secondary)]">
       {/* Header */}
-      <header className="flex items-center justify-between px-3 py-2 border-b border-[var(--border-primary)] safe-area-top">
+      <header className="flex items-center justify-between px-3 py-2 border-b border-[var(--nim-border)] safe-area-top">
         <div className="flex items-center gap-1">
           {/* Project Picker Button */}
           <button
             onClick={() => setShowProjectPicker(true)}
-            className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-[var(--surface-tertiary)] text-[var(--text-primary)]"
+            className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-[var(--nim-bg-tertiary)] text-[var(--nim-text)]"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/>
@@ -107,7 +107,7 @@ function SessionSidebar() {
           <SyncStatusBadge />
           <button
             onClick={() => navigate('/settings')}
-            className="p-1.5 rounded-lg hover:bg-[var(--surface-tertiary)] text-[var(--text-secondary)]"
+            className="p-1.5 rounded-lg hover:bg-[var(--nim-bg-tertiary)] text-[var(--nim-text-muted)]"
             title="Settings"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -142,8 +142,8 @@ function SessionSidebar() {
                 onClick={() => handleSessionClick(session.id)}
                 className={`w-full text-left rounded-lg transition-colors ${
                   selectedSessionId === session.id
-                    ? 'bg-[var(--primary-color)] bg-opacity-10'
-                    : 'hover:bg-[var(--surface-tertiary)]'
+                    ? 'bg-[var(--nim-primary)] bg-opacity-10'
+                    : 'hover:bg-[var(--nim-bg-tertiary)]'
                 }`}
               >
                 <SessionCard
@@ -180,11 +180,11 @@ interface SidebarEmptyStateProps {
 function SidebarEmptyState({ title, description, actionLabel, onAction }: SidebarEmptyStateProps) {
   return (
     <div className="flex flex-col items-center justify-center h-full p-6 text-center">
-      <h3 className="text-sm font-medium text-[var(--text-primary)] mb-1">{title}</h3>
-      <p className="text-xs text-[var(--text-tertiary)] mb-3">{description}</p>
+      <h3 className="text-sm font-medium text-[var(--nim-text)] mb-1">{title}</h3>
+      <p className="text-xs text-[var(--nim-text-faint)] mb-3">{description}</p>
       <button
         onClick={onAction}
-        className="px-4 py-1.5 text-xs font-medium rounded-lg text-[var(--primary-color)] border border-[var(--primary-color)] hover:bg-[var(--primary-color)] hover:text-white transition-colors"
+        className="px-4 py-1.5 text-xs font-medium rounded-lg text-[var(--nim-primary)] border border-[var(--nim-primary)] hover:bg-[var(--nim-primary)] hover:text-white transition-colors"
       >
         {actionLabel}
       </button>

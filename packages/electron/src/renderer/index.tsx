@@ -40,7 +40,8 @@ initializeTheme();
 
 // Initialize app settings atoms from main process
 // This loads settings and hydrates the Jotai atoms before React renders
-Promise.all([
+// MUST be awaited to ensure settings are loaded before components mount
+await Promise.all([
   initVoiceModeSettings().then((settings) => {
     store.set(voiceModeSettingsAtom, settings);
   }),

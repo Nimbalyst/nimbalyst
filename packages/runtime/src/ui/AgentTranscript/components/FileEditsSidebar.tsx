@@ -351,17 +351,9 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
       <button
         key={filePath}
         onClick={() => onFileClick?.(filePath)}
-        className={`file-edits-sidebar__file w-full text-left px-2 py-1 rounded border border-transparent transition-all bg-transparent hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-border)] ${hasPendingReview ? 'bg-[rgba(251,191,36,0.08)] border-[rgba(251,191,36,0.2)] hover:bg-[rgba(251,191,36,0.12)] hover:border-[rgba(251,191,36,0.3)]' : ''}`}
+        className={`file-edits-sidebar__file w-full text-left px-2 py-0.5 rounded border border-transparent transition-all bg-transparent hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-border)] ${hasPendingReview ? 'bg-[rgba(251,191,36,0.08)] border-[rgba(251,191,36,0.2)] hover:bg-[rgba(251,191,36,0.12)] hover:border-[rgba(251,191,36,0.3)]' : ''}`}
       >
         <div className="file-edits-sidebar__file-content flex items-center gap-1.5">
-          {hasPendingReview && (
-            <MaterialSymbol
-              icon="rate_review"
-              size={14}
-              className="file-edits-sidebar__pending-icon text-[var(--nim-warning)] shrink-0"
-              title="Pending review"
-            />
-          )}
           {operation && (
             <div className="file-edits-sidebar__file-operation-icon shrink-0">
               {getOperationIcon(operation)}
@@ -397,7 +389,7 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
         {node.displayPath && (
           <button
             onClick={() => toggleFolder(node.path)}
-            className="file-edits-sidebar__directory-header w-full flex items-center gap-1 px-2 py-1 text-[0.8125rem] font-medium text-[var(--nim-text-muted)] bg-transparent border border-transparent rounded transition-all cursor-pointer text-left hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)]"
+            className="file-edits-sidebar__directory-header w-full flex items-center gap-1 px-2 py-0.5 text-[0.8125rem] font-medium text-[var(--nim-text-muted)] bg-transparent border border-transparent rounded transition-all cursor-pointer text-left hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)]"
           >
             <MaterialSymbol
               icon={isExpanded ? "expand_more" : "chevron_right"}

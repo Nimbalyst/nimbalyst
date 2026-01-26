@@ -3,28 +3,33 @@
 @tailwind utilities;
 
 :root {
-  --surface-primary: #ffffff;
-  --surface-secondary: #f5f5f5;
-  --surface-tertiary: #e5e5e5;
-  --text-primary: #1a1a1a;
-  --text-secondary: #666666;
-  --text-tertiary: #999999;
-  --border-primary: #e0e0e0;
-  --primary-color: #3b82f6;
-  --success-color: #22c55e;
-  --warning-color: #f59e0b;
-  --error-color: #ef4444;
+  --nim-bg: #ffffff;
+  --nim-bg-secondary: #f5f5f5;
+  --nim-bg-tertiary: #e5e5e5;
+  --nim-bg-hover: #ebebeb;
+  --nim-text: #1a1a1a;
+  --nim-text-muted: #666666;
+  --nim-text-faint: #999999;
+  --nim-border: #e0e0e0;
+  --nim-border-focus: #3b82f6;
+  --nim-primary: #3b82f6;
+  --nim-primary-hover: #2563eb;
+  --nim-link: #3b82f6;
+  --nim-success: #22c55e;
+  --nim-warning: #f59e0b;
+  --nim-error: #ef4444;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --surface-primary: #1a1a1a;
-    --surface-secondary: #2d2d2d;
-    --surface-tertiary: #3a3a3a;
-    --text-primary: #ffffff;
-    --text-secondary: #a0a0a0;
-    --text-tertiary: #666666;
-    --border-primary: #3a3a3a;
+    --nim-bg: #1a1a1a;
+    --nim-bg-secondary: #2d2d2d;
+    --nim-bg-tertiary: #3a3a3a;
+    --nim-bg-hover: #404040;
+    --nim-text: #ffffff;
+    --nim-text-muted: #a0a0a0;
+    --nim-text-faint: #666666;
+    --nim-border: #3a3a3a;
   }
 }
 
@@ -37,7 +42,7 @@ body {
   padding: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
   background-color: var(--nim-bg);
-  color: var(--text-primary);
+  color: var(--nim-text);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -70,17 +75,17 @@ body {
 
 .status-badge.connected {
   background-color: rgba(34, 197, 94, 0.1);
-  color: var(--success-color);
+  color: var(--nim-success);
 }
 
 .status-badge.disconnected {
   background-color: rgba(239, 68, 68, 0.1);
-  color: var(--error-color);
+  color: var(--nim-error);
 }
 
 .status-badge.syncing {
   background-color: rgba(59, 130, 246, 0.1);
-  color: var(--primary-color);
+  color: var(--nim-primary);
 }
 
 /* Status dot animation */
@@ -91,15 +96,15 @@ body {
 }
 
 .status-dot.connected {
-  background-color: var(--success-color);
+  background-color: var(--nim-success);
 }
 
 .status-dot.disconnected {
-  background-color: var(--error-color);
+  background-color: var(--nim-error);
 }
 
 .status-dot.syncing {
-  background-color: var(--primary-color);
+  background-color: var(--nim-primary);
   animation: pulse 1.5s ease-in-out infinite;
 }
 
@@ -144,9 +149,9 @@ pre, code {
   width: 44px;
   height: 44px;
   border-radius: 22px;
-  border: 1px solid var(--border-primary);
+  border: 1px solid var(--nim-border);
   background: var(--nim-bg);
-  color: var(--text-primary);
+  color: var(--nim-text);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -171,7 +176,7 @@ pre, code {
   max-height: 60vh;
   overflow-y: auto;
   background: var(--nim-bg);
-  border: 1px solid var(--border-primary);
+  border: 1px solid var(--nim-border);
   border-bottom: none;
   border-radius: 16px 16px 0 0;
   box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.25);
@@ -196,7 +201,7 @@ pre, code {
   gap: 12px;
   padding: 14px 16px;
   cursor: pointer;
-  border-bottom: 1px solid var(--border-primary);
+  border-bottom: 1px solid var(--nim-border);
 }
 
 .mobile-prompts-dropdown .prompts-item:last-child {
@@ -208,7 +213,7 @@ pre, code {
 }
 
 .mobile-prompts-dropdown .prompts-item-number {
-  color: var(--text-tertiary);
+  color: var(--nim-text-faint);
   font-size: 13px;
   font-weight: 600;
   min-width: 36px;
@@ -216,7 +221,7 @@ pre, code {
 
 .mobile-prompts-dropdown .prompts-item-text {
   flex: 1;
-  color: var(--text-primary);
+  color: var(--nim-text);
   font-size: 14px;
   line-height: 1.4;
   overflow: hidden;
@@ -227,7 +232,7 @@ pre, code {
 }
 
 .mobile-prompts-dropdown .prompts-item-timestamp {
-  color: var(--text-tertiary);
+  color: var(--nim-text-faint);
   font-size: 12px;
   white-space: nowrap;
 }
@@ -235,7 +240,7 @@ pre, code {
 .mobile-prompts-dropdown .prompts-empty {
   padding: 24px 16px;
   text-align: center;
-  color: var(--text-tertiary);
+  color: var(--nim-text-faint);
   font-size: 14px;
 }
 
@@ -269,7 +274,7 @@ pre, code {
   left: 0;
   width: 8px;
   height: 100%;
-  background: linear-gradient(to right, var(--primary-color), transparent);
+  background: linear-gradient(to right, var(--nim-primary), transparent);
   opacity: 0;
   transform-origin: left;
   pointer-events: none;

@@ -119,14 +119,14 @@ export function SessionListScreen() {
   const canCreateSession = hasReceivedInitialData && currentProject !== null;
 
   return (
-    <div className="flex flex-col w-full overflow-x-hidden bg-[var(--surface-primary)]" style={{ height: '100dvh' }}>
+    <div className="flex flex-col w-full overflow-x-hidden bg-nim h-[100dvh]">
       {/* Header - Fixed with safe area */}
-      <header className="flex-shrink-0 flex items-center justify-between px-3 py-2 border-b border-[var(--border-primary)] bg-[var(--surface-secondary)] safe-area-top">
+      <header className="flex-shrink-0 flex items-center justify-between px-3 py-2 border-b border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] safe-area-top">
         <div className="flex items-center gap-1 min-w-0 flex-1">
           {/* Back button */}
           <button
             onClick={() => navigate('/')}
-            className="p-1.5 rounded-lg hover:bg-[var(--surface-tertiary)] text-[var(--primary-color)] flex-shrink-0"
+            className="p-1.5 rounded-lg hover:bg-[var(--nim-bg-tertiary)] text-[var(--nim-primary)] flex-shrink-0"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="m15 18-6-6 6-6"/>
@@ -134,13 +134,13 @@ export function SessionListScreen() {
           </button>
           {/* Project name and session count */}
           <div className="min-w-0 flex-1">
-            <div className="font-semibold text-[17px] text-[var(--text-primary)] truncate">
+            <div className="font-semibold text-[17px] text-[var(--nim-text)] truncate">
               {currentProject?.name
                 ? (currentProject.name.includes('/') ? currentProject.name.split('/').pop() : currentProject.name)
                 : 'Sessions'}
             </div>
             {currentProject && (
-              <div className="text-[12px] text-[var(--text-secondary)]">
+              <div className="text-[12px] text-[var(--nim-text-muted)]">
                 {sessions.length} {sessions.length === 1 ? 'session' : 'sessions'}
               </div>
             )}
@@ -152,7 +152,7 @@ export function SessionListScreen() {
             <button
               onClick={handleCreateSession}
               disabled={isCreatingSession}
-              className="p-1.5 rounded-lg hover:bg-[var(--surface-tertiary)] text-[var(--primary-color)] disabled:opacity-50"
+              className="p-1.5 rounded-lg hover:bg-[var(--nim-bg-tertiary)] text-[var(--nim-primary)] disabled:opacity-50"
               title="New Session"
             >
               {isCreatingSession ? (
@@ -174,8 +174,7 @@ export function SessionListScreen() {
       {/* Content */}
       <main
         ref={scrollContainerRef}
-        className="flex-1 overflow-auto min-h-0"
-        style={{ touchAction: 'pan-y' }}
+        className="flex-1 overflow-auto min-h-0 touch-pan-y"
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
@@ -201,7 +200,7 @@ export function SessionListScreen() {
             <div className="flex flex-col items-center gap-1">
               {isRefreshing || pullDistance >= pullThreshold ? (
                 <svg
-                  className="animate-spin h-5 w-5 text-[var(--primary-color)]"
+                  className="animate-spin h-5 w-5 text-[var(--nim-primary)]"
                   viewBox="0 0 24 24"
                 >
                   <circle
@@ -230,7 +229,7 @@ export function SessionListScreen() {
                   strokeWidth="2"
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  className="text-[var(--text-tertiary)]"
+                  className="text-[var(--nim-text-faint)]"
                   style={{
                     transform: `rotate(${(pullDistance / pullThreshold) * 180}deg)`,
                     transition: 'transform 0.1s ease-out',
@@ -245,7 +244,7 @@ export function SessionListScreen() {
         {!isConfigured ? (
           <EmptyState
             icon={
-              <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--text-tertiary)]">
+              <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--nim-text-faint)]">
                 <rect x="3" y="3" width="7" height="7"/>
                 <rect x="14" y="3" width="7" height="7"/>
                 <rect x="14" y="14" width="7" height="7"/>
@@ -257,7 +256,7 @@ export function SessionListScreen() {
             action={
               <button
                 onClick={() => navigate('/settings')}
-                className="px-6 py-2 rounded-lg font-medium text-white bg-[var(--primary-color)] hover:opacity-90 transition-opacity"
+                className="px-6 py-2 rounded-lg font-medium text-white bg-[var(--nim-primary)] hover:opacity-90 transition-opacity"
               >
                 Get Started
               </button>
@@ -270,7 +269,7 @@ export function SessionListScreen() {
         ) : sessions.length === 0 ? (
           <EmptyState
             icon={
-              <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--text-tertiary)]">
+              <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--nim-text-faint)]">
                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
               </svg>
             }
@@ -280,7 +279,7 @@ export function SessionListScreen() {
               <button
                 onClick={handleRefresh}
                 disabled={isRefreshing}
-                className="px-6 py-2 rounded-lg font-medium text-[var(--primary-color)] border border-[var(--primary-color)] hover:bg-[var(--primary-color)] hover:text-white transition-colors disabled:opacity-50"
+                className="px-6 py-2 rounded-lg font-medium text-[var(--nim-primary)] border border-[var(--nim-primary)] hover:bg-[var(--nim-primary)] hover:text-white transition-colors disabled:opacity-50"
               >
                 {isRefreshing ? 'Refreshing...' : 'Refresh'}
               </button>
@@ -300,7 +299,7 @@ export function SessionListScreen() {
 
       {/* Error Toast */}
       {createError && (
-        <div className="fixed bottom-24 left-4 right-4 bg-[var(--error-color)] text-white px-4 py-3 rounded-lg shadow-lg text-sm text-center safe-area-bottom">
+        <div className="fixed bottom-24 left-4 right-4 bg-[var(--nim-error)] text-white px-4 py-3 rounded-lg shadow-lg text-sm text-center safe-area-bottom">
           {createError}
         </div>
       )}
@@ -319,8 +318,8 @@ function EmptyState({ icon, title, description, action }: EmptyStateProps) {
   return (
     <div className="flex flex-col items-center justify-center h-full min-h-[300px] px-8 text-center">
       <div className="mb-4">{icon}</div>
-      <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-2">{title}</h2>
-      <p className="text-sm text-[var(--text-secondary)] mb-6 max-w-xs">{description}</p>
+      <h2 className="text-lg font-semibold text-[var(--nim-text)] mb-2">{title}</h2>
+      <p className="text-sm text-[var(--nim-text-muted)] mb-6 max-w-xs">{description}</p>
       {action}
     </div>
   );
@@ -330,13 +329,13 @@ function LoadingState() {
   return (
     <div className="flex flex-col items-center justify-center h-full min-h-[300px] px-8 text-center">
       <div className="mb-4">
-        <svg className="animate-spin h-10 w-10 text-[var(--primary-color)]" viewBox="0 0 24 24">
+        <svg className="animate-spin h-10 w-10 text-[var(--nim-primary)]" viewBox="0 0 24 24">
           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
         </svg>
       </div>
-      <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-2">Loading Sessions</h2>
-      <p className="text-sm text-[var(--text-secondary)]">Syncing with server...</p>
+      <h2 className="text-lg font-semibold text-[var(--nim-text)] mb-2">Loading Sessions</h2>
+      <p className="text-sm text-[var(--nim-text-muted)]">Syncing with server...</p>
     </div>
   );
 }
@@ -350,17 +349,17 @@ function ErrorState({ error, onRetry }: ErrorStateProps) {
   return (
     <div className="flex flex-col items-center justify-center h-full min-h-[300px] px-8 text-center">
       <div className="mb-4">
-        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--error-color)]">
+        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--nim-error)]">
           <circle cx="12" cy="12" r="10"/>
           <line x1="12" x2="12" y1="8" y2="12"/>
           <line x1="12" x2="12.01" y1="16" y2="16"/>
         </svg>
       </div>
-      <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-2">Connection Error</h2>
-      <p className="text-sm text-[var(--text-secondary)] mb-6 max-w-xs">{error}</p>
+      <h2 className="text-lg font-semibold text-[var(--nim-text)] mb-2">Connection Error</h2>
+      <p className="text-sm text-[var(--nim-text-muted)] mb-6 max-w-xs">{error}</p>
       <button
         onClick={onRetry}
-        className="px-6 py-2 rounded-lg font-medium text-white bg-[var(--primary-color)] hover:opacity-90 transition-opacity"
+        className="px-6 py-2 rounded-lg font-medium text-white bg-[var(--nim-primary)] hover:opacity-90 transition-opacity"
       >
         Retry
       </button>

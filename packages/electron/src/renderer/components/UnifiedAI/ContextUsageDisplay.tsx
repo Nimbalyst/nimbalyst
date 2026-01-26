@@ -4,7 +4,7 @@ import { MaterialSymbol } from '@nimbalyst/runtime';
 import { getHelpContent } from '../../help';
 
 const CATEGORY_COLORS = [
-  'var(--primary-color)',
+  'var(--nim-primary)',
   '#5E81F4',
   '#4AB4D8',
   '#F59E0B',

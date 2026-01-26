@@ -46,7 +46,7 @@ export const ExitPlanModeConfirmation: React.FC<ExitPlanModeConfirmationProps> =
 
       {data.planSummary && (
         <div className="exit-plan-mode-confirmation-plan mb-4 p-3 bg-nim-tertiary rounded-md text-[13px]">
-          <div className="exit-plan-mode-confirmation-plan-label font-medium text-nim-secondary mb-2">Plan summary:</div>
+          <div className="exit-plan-mode-confirmation-plan-label font-medium text-nim-muted mb-2">Plan summary:</div>
           <div className="exit-plan-mode-confirmation-plan-content text-nim-primary whitespace-pre-wrap max-h-[200px] overflow-y-auto">
             {data.planSummary}
           </div>

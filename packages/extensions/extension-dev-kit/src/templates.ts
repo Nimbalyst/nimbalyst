@@ -140,7 +140,7 @@ export function ${componentName}({ content, filePath, onChange }: ${componentNam
     }}>
       <div style={{
         marginBottom: '12px',
-        color: 'var(--text-secondary)',
+        color: 'var(--nim-text-muted)',
         fontSize: '12px',
       }}>
         Editing: {filePath}
@@ -155,9 +155,9 @@ export function ${componentName}({ content, filePath, onChange }: ${componentNam
           padding: '12px',
           fontSize: '14px',
           fontFamily: 'monospace',
-          backgroundColor: 'var(--surface-secondary)',
-          color: 'var(--text-primary)',
-          border: '1px solid var(--border-primary)',
+          backgroundColor: 'var(--nim-bg-secondary)',
+          color: 'var(--nim-text)',
+          border: '1px solid var(--nim-border)',
           borderRadius: '4px',
           resize: 'none',
           outline: 'none',
@@ -373,8 +373,8 @@ export const aiTools: ExtensionAITool[] = [
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: var(--surface-primary);
-  color: var(--text-primary);
+  background: var(--nim-bg);
+  color: var(--nim-text);
 }
 
 .${toolPrefix}-editor-toolbar {
@@ -382,8 +382,8 @@ export const aiTools: ExtensionAITool[] = [
   align-items: center;
   justify-content: space-between;
   padding: 8px 12px;
-  background: var(--surface-secondary);
-  border-bottom: 1px solid var(--border-primary);
+  background: var(--nim-bg-secondary);
+  border-bottom: 1px solid var(--nim-border);
 }
 
 .${toolPrefix}-editor-title {
@@ -399,15 +399,15 @@ export const aiTools: ExtensionAITool[] = [
 .${toolPrefix}-editor-actions button {
   padding: 4px 12px;
   font-size: 12px;
-  background: var(--surface-tertiary);
-  border: 1px solid var(--border-primary);
+  background: var(--nim-bg-tertiary);
+  border: 1px solid var(--nim-border);
   border-radius: 4px;
-  color: var(--text-primary);
+  color: var(--nim-text);
   cursor: pointer;
 }
 
 .${toolPrefix}-editor-actions button:hover {
-  background: var(--surface-hover);
+  background: var(--nim-bg-hover);
 }
 
 .${toolPrefix}-editor-content {
@@ -422,9 +422,9 @@ export const aiTools: ExtensionAITool[] = [
   padding: 12px;
   font-family: monospace;
   font-size: 14px;
-  background: var(--surface-secondary);
-  color: var(--text-primary);
-  border: 1px solid var(--border-primary);
+  background: var(--nim-bg-secondary);
+  color: var(--nim-text);
+  border: 1px solid var(--nim-border);
   border-radius: 4px;
   resize: none;
   outline: none;

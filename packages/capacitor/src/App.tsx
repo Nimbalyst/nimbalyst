@@ -264,14 +264,14 @@ function SplitViewPlaceholder() {
           strokeWidth="1.5"
           strokeLinecap="round"
           strokeLinejoin="round"
-          className="mx-auto mb-4 text-[var(--text-tertiary)]"
+          className="mx-auto mb-4 text-[var(--nim-text-faint)]"
         >
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
         </svg>
-        <h2 className="text-lg font-medium text-[var(--text-secondary)] mb-2">
+        <h2 className="text-lg font-medium text-[var(--nim-text-muted)] mb-2">
           Select a Session
         </h2>
-        <p className="text-sm text-[var(--text-tertiary)]">
+        <p className="text-sm text-[var(--nim-text-faint)]">
           Choose a session from the sidebar to view the conversation
         </p>
       </div>
@@ -282,7 +282,7 @@ function SplitViewPlaceholder() {
 export function App() {
   return (
     <CollabV3SyncProvider>
-      <div className="min-h-screen bg-[var(--surface-primary)]">
+      <div className="min-h-screen bg-nim">
         <AppContent />
       </div>
     </CollabV3SyncProvider>

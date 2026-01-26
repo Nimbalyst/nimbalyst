@@ -66,8 +66,8 @@ export function VoiceContextIndicator({ isActive, sessionId }: VoiceContextIndic
         gap: '6px',
         padding: '2px 8px',
         fontSize: '11px',
-        color: 'var(--text-secondary)',
-        background: 'var(--surface-tertiary)',
+        color: 'var(--nim-text-muted)',
+        background: 'var(--nim-bg-tertiary)',
         borderRadius: '4px',
         fontFamily: 'monospace',
       }}
@@ -78,7 +78,7 @@ export function VoiceContextIndicator({ isActive, sessionId }: VoiceContextIndic
         style={{
           width: '40px',
           height: '6px',
-          background: 'var(--surface-primary)',
+          background: 'var(--nim-bg)',
           borderRadius: '3px',
           overflow: 'hidden',
         }}

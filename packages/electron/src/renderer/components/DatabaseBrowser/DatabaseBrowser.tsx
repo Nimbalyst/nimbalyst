@@ -305,8 +305,8 @@ export function DatabaseBrowser() {
   const totalPages = tableData ? Math.ceil(tableData.totalCount / pageSize) : 0;
 
   return (
-    <div className="database-browser flex h-screen w-screen overflow-hidden font-[-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,Oxygen,Ubuntu,Cantarell,sans-serif] before:content-[''] before:fixed before:inset-x-0 before:top-0 before:h-10 before:z-[1000] before:pointer-events-none before:[-webkit-app-region:drag]" style={{ background: 'var(--nim-bg)', color: 'var(--nim-text)' }}>
-      <div className="database-browser-sidebar w-[250px] flex flex-col border-r border-[var(--nim-border)]" style={{ background: 'var(--nim-bg-secondary)' }}>
+    <div className="database-browser flex h-screen w-screen overflow-hidden font-[-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,Oxygen,Ubuntu,Cantarell,sans-serif] before:content-[''] before:fixed before:inset-x-0 before:top-0 before:h-10 before:z-[1000] before:pointer-events-none before:[-webkit-app-region:drag] bg-nim text-nim">
+      <div className="database-browser-sidebar w-[250px] flex flex-col border-r border-[var(--nim-border)] bg-nim-secondary">
         <div className="sidebar-header flex items-center justify-between p-4 border-b border-[var(--nim-border)] relative z-[1001]">
           <h2 className="text-base font-semibold m-0">Tables</h2>
           <button onClick={loadTables} className="refresh-button bg-transparent border-none text-xl cursor-pointer py-1 px-2 rounded [-webkit-app-region:no-drag] text-[var(--nim-text-muted)] hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)]" title="Refresh tables">
@@ -330,7 +330,7 @@ export function DatabaseBrowser() {
       </div>
 
       <div className="database-browser-main flex-1 flex flex-col overflow-hidden p-4 gap-4">
-        <div className={`query-panel border border-[var(--nim-border)] rounded-lg transition-all duration-200 ${sqlExpanded ? 'p-4' : 'p-0'}`} style={{ background: 'var(--nim-bg-secondary)' }}>
+        <div className={`query-panel border border-[var(--nim-border)] rounded-lg transition-all duration-200 bg-nim-secondary ${sqlExpanded ? 'p-4' : 'p-0'}`}>
           <div className={`query-header flex items-center justify-between cursor-pointer select-none ${!sqlExpanded ? 'py-3 px-4' : 'mb-3'}`} onClick={() => setSqlExpanded(!sqlExpanded)}>
             <div className="query-title flex items-center gap-2">
               <span className="expand-icon text-xs text-[var(--nim-text-muted)] transition-transform duration-200">{sqlExpanded ? '▼' : '▶'}</span>
@@ -367,7 +367,7 @@ export function DatabaseBrowser() {
         </div>
 
         {selectedTable && !queryResult && (
-          <div className="table-view flex-1 border border-[var(--nim-border)] rounded-lg flex flex-col overflow-hidden" style={{ background: 'var(--nim-bg-secondary)' }}>
+          <div className="table-view flex-1 border border-[var(--nim-border)] rounded-lg flex flex-col overflow-hidden bg-nim-secondary">
             <div className="table-header flex items-center justify-between p-4 border-b border-[var(--nim-border)]">
               <h3 className="text-base font-semibold m-0">Table: {selectedTable}</h3>
               <div className="tab-buttons flex gap-2">
@@ -388,20 +388,20 @@ export function DatabaseBrowser() {
 
             {activeTab === 'schema' && tableSchema.length > 0 && (
               <div className="schema-tab flex-1 overflow-auto p-4">
-                <div className="table-container flex-1 overflow-auto border border-[var(--nim-border)] rounded" style={{ background: 'var(--nim-bg)' }}>
+                <div className="table-container flex-1 overflow-auto border border-[var(--nim-border)] rounded bg-nim">
                   <table className="schema-table w-full border-collapse text-[13px]">
                     <thead>
                       <tr>
-                        <th className="py-2 px-3 text-left border-b border-r border-[var(--nim-border)] font-semibold text-[var(--nim-text-muted)] sticky top-0 z-[1]" style={{ background: 'var(--nim-bg-tertiary)' }}>Column</th>
-                        <th className="py-2 px-3 text-left border-b border-r border-[var(--nim-border)] font-semibold text-[var(--nim-text-muted)] sticky top-0 z-[1]" style={{ background: 'var(--nim-bg-tertiary)' }}>Type</th>
-                        <th className="py-2 px-3 text-left border-b border-r border-[var(--nim-border)] font-semibold text-[var(--nim-text-muted)] sticky top-0 z-[1]" style={{ background: 'var(--nim-bg-tertiary)' }}>Nullable</th>
-                        <th className="py-2 px-3 text-left border-b border-r border-[var(--nim-border)] font-semibold text-[var(--nim-text-muted)] sticky top-0 z-[1]" style={{ background: 'var(--nim-bg-tertiary)' }}>Default</th>
+                        <th className="py-2 px-3 text-left border-b border-r border-[var(--nim-border)] font-semibold text-nim-muted sticky top-0 z-[1] bg-nim-tertiary">Column</th>
+                        <th className="py-2 px-3 text-left border-b border-r border-[var(--nim-border)] font-semibold text-nim-muted sticky top-0 z-[1] bg-nim-tertiary">Type</th>
+                        <th className="py-2 px-3 text-left border-b border-r border-[var(--nim-border)] font-semibold text-nim-muted sticky top-0 z-[1] bg-nim-tertiary">Nullable</th>
+                        <th className="py-2 px-3 text-left border-b border-r border-[var(--nim-border)] font-semibold text-nim-muted sticky top-0 z-[1] bg-nim-tertiary">Default</th>
                       </tr>
                     </thead>
                     <tbody>
                       {tableSchema.map(col => (
                         <tr key={col.column_name}>
-                          <td className="py-2 px-3 text-left border-b border-r border-[var(--nim-border)]"><code className="py-0.5 px-1.5 rounded text-xs font-mono" style={{ background: 'var(--nim-bg-tertiary)' }}>{col.column_name}</code></td>
+                          <td className="py-2 px-3 text-left border-b border-r border-[var(--nim-border)]"><code className="py-0.5 px-1.5 rounded text-xs font-mono bg-nim-tertiary">{col.column_name}</code></td>
                           <td className="py-2 px-3 text-left border-b border-r border-[var(--nim-border)]">{col.data_type}</td>
                           <td className="py-2 px-3 text-left border-b border-r border-[var(--nim-border)]">{col.is_nullable}</td>
                           <td className="py-2 px-3 text-left border-b border-r border-[var(--nim-border)]">{col.column_default || '—'}</td>
@@ -450,7 +450,7 @@ export function DatabaseBrowser() {
                 </div>
 
                 {showColumnPicker && tableData.rows.length > 0 && (
-                  <div className="column-picker p-3 mb-2 rounded border border-[var(--nim-border)] shadow-sm" style={{ background: 'var(--nim-bg-secondary)' }}>
+                  <div className="column-picker p-3 mb-2 rounded border border-[var(--nim-border)] shadow-sm bg-nim-secondary">
                     <div className="column-picker-header flex items-center justify-between mb-3 pb-2 border-b border-[var(--nim-border)]">
                       <strong className="text-[13px]">Show/Hide Columns</strong>
                       <button className="bg-transparent border-none text-xl cursor-pointer p-0 w-6 h-6 flex items-center justify-center rounded text-[var(--nim-text-muted)] hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)]" onClick={() => setShowColumnPicker(false)}>×</button>
@@ -478,13 +478,13 @@ export function DatabaseBrowser() {
                   const visibleColumns = getVisibleColumns(selectedTable, allColumns);
 
                   return (
-                    <div className="virtual-table-container flex-1 flex flex-col border border-[var(--nim-border)] rounded overflow-hidden min-h-0" style={{ background: 'var(--nim-bg)' }}>
-                      <div className="virtual-table-header shrink-0 overflow-x-auto" style={{ background: 'var(--nim-bg-tertiary)' }}>
+                    <div className="virtual-table-container flex-1 flex flex-col border border-[var(--nim-border)] rounded overflow-hidden min-h-0 bg-nim">
+                      <div className="virtual-table-header shrink-0 overflow-x-auto bg-nim-tertiary">
                         <table className="data-table w-full border-collapse text-[13px] table-fixed">
                           <thead>
                             <tr>
                               {visibleColumns.map(key => (
-                                <th key={key} onClick={() => handleSort(key)} className="sortable py-2 px-3 text-left border-b border-r border-[var(--nim-border)] font-semibold text-[var(--nim-text-muted)] cursor-pointer select-none static hover:bg-[var(--nim-bg-hover)]" style={{ background: 'var(--nim-bg-tertiary)' }}>
+                                <th key={key} onClick={() => handleSort(key)} className="sortable py-2 px-3 text-left border-b border-r border-[var(--nim-border)] font-semibold text-nim-muted cursor-pointer select-none static hover:bg-nim-hover bg-nim-tertiary">
                                   {key}
                                   {sortColumn === key && (
                                     <span className="sort-indicator text-[10px] ml-1">
@@ -535,7 +535,7 @@ export function DatabaseBrowser() {
         )}
 
         {queryResult && (
-          <div className="query-results flex-1 border border-[var(--nim-border)] rounded-lg p-4 flex flex-col overflow-hidden gap-3" style={{ background: 'var(--nim-bg-secondary)' }}>
+          <div className="query-results flex-1 border border-[var(--nim-border)] rounded-lg p-4 flex flex-col overflow-hidden gap-3 bg-nim-secondary">
             <div className="data-header flex items-center justify-between">
               <h4 className="text-sm font-semibold m-0">Query Results ({queryResult.rowCount} rows){queryTimeMs !== null && <span className="query-time font-normal text-[var(--nim-text-muted)] text-[13px]"> - {queryTimeMs}ms</span>}</h4>
             </div>
@@ -547,13 +547,13 @@ export function DatabaseBrowser() {
               const sortedRows = getSortedQueryResults();
 
               return (
-                <div className="virtual-table-container flex-1 flex flex-col border border-[var(--nim-border)] rounded overflow-hidden min-h-0" style={{ background: 'var(--nim-bg)' }}>
-                  <div className="virtual-table-header shrink-0 overflow-x-auto" style={{ background: 'var(--nim-bg-tertiary)' }}>
+                <div className="virtual-table-container flex-1 flex flex-col border border-[var(--nim-border)] rounded overflow-hidden min-h-0 bg-nim">
+                  <div className="virtual-table-header shrink-0 overflow-x-auto bg-nim-tertiary">
                     <table className="data-table w-full border-collapse text-[13px] table-fixed">
                       <thead>
                         <tr>
                           {columns.map(key => (
-                            <th key={key} onClick={() => handleSort(key)} className="sortable py-2 px-3 text-left border-b border-r border-[var(--nim-border)] font-semibold text-[var(--nim-text-muted)] cursor-pointer select-none static hover:bg-[var(--nim-bg-hover)]" style={{ background: 'var(--nim-bg-tertiary)' }}>
+                            <th key={key} onClick={() => handleSort(key)} className="sortable py-2 px-3 text-left border-b border-r border-[var(--nim-border)] font-semibold text-nim-muted cursor-pointer select-none static hover:bg-nim-hover bg-nim-tertiary">
                               {key}
                               {sortColumn === key && (
                                 <span className="sort-indicator text-[10px] ml-1">
@@ -611,8 +611,8 @@ export function DatabaseBrowser() {
       {/* Cell Detail Modal */}
       {expandedCell && (
         <div className="cell-modal-overlay fixed inset-0 flex items-center justify-center z-[2000] bg-black/50" onClick={() => setExpandedCell(null)}>
-          <div className="cell-modal flex flex-col w-[90%] max-w-[800px] max-h-[80vh] overflow-hidden rounded-lg border border-[var(--nim-border)] shadow-[0_8px_32px_rgba(0,0,0,0.3)]" style={{ background: 'var(--nim-bg)' }} onClick={e => e.stopPropagation()}>
-            <div className="cell-modal-header flex items-center justify-between py-3 px-4 border-b border-[var(--nim-border)] rounded-t-lg" style={{ background: 'var(--nim-bg-secondary)' }}>
+          <div className="cell-modal flex flex-col w-[90vw] max-w-[800px] max-h-[80vh] overflow-hidden rounded-lg border border-[var(--nim-border)] shadow-[0_8px_32px_rgba(0,0,0,0.3)] bg-nim" onClick={e => e.stopPropagation()}>
+            <div className="cell-modal-header flex items-center justify-between py-3 px-4 border-b border-[var(--nim-border)] rounded-t-lg bg-nim-secondary">
               <h3 className="m-0 text-sm font-semibold text-[var(--nim-text)]">{expandedCell.column}</h3>
               <div className="cell-modal-actions flex items-center gap-2">
                 <button

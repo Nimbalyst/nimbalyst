@@ -236,39 +236,39 @@ export function SettingsScreen() {
   return (
     <div className="flex flex-col min-h-screen">
       {/* Header with safe area for notch */}
-      <header className="flex items-center px-4 py-3 border-b border-[var(--border-primary)] bg-[var(--surface-secondary)] safe-area-top">
+      <header className="flex items-center px-4 py-3 border-b border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] safe-area-top">
         <button
           onClick={() => navigate('/')}
-          className="mr-3 p-1 text-[var(--text-primary)] active:opacity-70"
+          className="mr-3 p-1 text-[var(--nim-text)] active:opacity-70"
           aria-label="Go back"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="m15 18-6-6 6-6"/>
           </svg>
         </button>
-        <h1 className="text-lg font-semibold text-[var(--text-primary)]">Settings</h1>
+        <h1 className="text-lg font-semibold text-[var(--nim-text)]">Settings</h1>
       </header>
 
       {/* Content */}
       <main className="flex-1 p-4">
         {/* Sync Status Card */}
-        <div className="mb-6 p-4 rounded-lg bg-[var(--surface-secondary)] border border-[var(--border-primary)]">
+        <div className="mb-6 p-4 rounded-lg bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)]">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-[var(--text-secondary)]">Sync Status</span>
+            <span className="text-sm font-medium text-[var(--nim-text-muted)]">Sync Status</span>
             <SyncStatusBadge />
           </div>
           {isConnected && stytchSession && (
-            <div className="text-xs text-[var(--text-tertiary)]">
+            <div className="text-xs text-[var(--nim-text-faint)]">
               Signed in as {stytchSession.email}
             </div>
           )}
           {needsLogin && (
-            <div className="text-xs text-[var(--text-tertiary)]">
+            <div className="text-xs text-[var(--nim-text-faint)]">
               QR paired - please sign in with Google
             </div>
           )}
           {needsPairing && (
-            <div className="text-xs text-[var(--text-tertiary)]">
+            <div className="text-xs text-[var(--nim-text-faint)]">
               Scan QR code from desktop app to connect
             </div>
           )}
@@ -284,13 +284,13 @@ export function SettingsScreen() {
         {/* Step 1: QR Code Scanning (if not paired) */}
         {needsPairing && (
           <div className="mb-6">
-            <h2 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">
+            <h2 className="text-sm font-semibold text-[var(--nim-text-muted)] uppercase tracking-wide mb-3">
               Step 1: Pair with Desktop
             </h2>
 
-            <div className="p-6 rounded-lg bg-[var(--surface-secondary)] border border-[var(--border-primary)] text-center">
+            <div className="p-6 rounded-lg bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] text-center">
               <div className="mb-4">
-                <svg className="w-16 h-16 mx-auto text-[var(--text-tertiary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <svg className="w-16 h-16 mx-auto text-[var(--nim-text-faint)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                   <rect x="3" y="3" width="7" height="7" rx="1" />
                   <rect x="14" y="3" width="7" height="7" rx="1" />
                   <rect x="3" y="14" width="7" height="7" rx="1" />
@@ -301,14 +301,14 @@ export function SettingsScreen() {
                 </svg>
               </div>
 
-              <p className="text-sm text-[var(--text-secondary)] mb-4">
+              <p className="text-sm text-[var(--nim-text-muted)] mb-4">
                 Open Settings on the desktop app and show the pairing QR code.
               </p>
 
               <button
                 onClick={handleScanQR}
                 disabled={isScanning}
-                className="w-full py-3 px-4 rounded-lg bg-[var(--primary-color)] text-white font-medium disabled:opacity-50"
+                className="w-full py-3 px-4 rounded-lg bg-[var(--nim-primary)] text-white font-medium disabled:opacity-50"
               >
                 {isScanning ? 'Scanning...' : 'Scan QR Code'}
               </button>
@@ -328,15 +328,15 @@ export function SettingsScreen() {
               </div>
               <div>
                 <div className="text-sm font-semibold text-green-500">Encryption key received</div>
-                <div className="text-xs text-[var(--text-tertiary)]">Your sessions will be end-to-end encrypted</div>
+                <div className="text-xs text-[var(--nim-text-faint)]">Your sessions will be end-to-end encrypted</div>
               </div>
             </div>
 
-            <h2 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">
+            <h2 className="text-sm font-semibold text-[var(--nim-text-muted)] uppercase tracking-wide mb-3">
               Step 2: Sign In
             </h2>
 
-            <div className="p-6 rounded-lg bg-[var(--surface-secondary)] border border-[var(--border-primary)]">
+            <div className="p-6 rounded-lg bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)]">
               {magicLinkSent ? (
                 // Magic link sent confirmation
                 <div className="text-center">
@@ -346,10 +346,10 @@ export function SettingsScreen() {
                       <polyline points="22 4 12 14.01 9 11.01" />
                     </svg>
                   </div>
-                  <p className="text-sm text-[var(--text-primary)] font-medium mb-2">
+                  <p className="text-sm text-[var(--nim-text)] font-medium mb-2">
                     Check your email
                   </p>
-                  <p className="text-xs text-[var(--text-secondary)] mb-4">
+                  <p className="text-xs text-[var(--nim-text-muted)] mb-4">
                     We sent a login link to {email}
                   </p>
                   <button
@@ -357,7 +357,7 @@ export function SettingsScreen() {
                       setMagicLinkSent(false);
                       setEmail('');
                     }}
-                    className="text-xs text-[var(--primary-color)]"
+                    className="text-xs text-[var(--nim-primary)]"
                   >
                     Use a different email
                   </button>
@@ -366,9 +366,9 @@ export function SettingsScreen() {
                 <>
                   {/* Required Email Display (if syncEmail is set) */}
                   {credentials?.syncEmail && (
-                    <div className="mb-4 p-4 rounded-lg bg-[var(--surface-tertiary)] border border-[var(--border-primary)]">
-                      <div className="text-xs text-[var(--text-tertiary)] mb-1">Sign in with this account:</div>
-                      <div className="text-base font-semibold text-[var(--text-primary)] mb-2">{credentials.syncEmail}</div>
+                    <div className="mb-4 p-4 rounded-lg bg-[var(--nim-bg-tertiary)] border border-[var(--nim-border)]">
+                      <div className="text-xs text-[var(--nim-text-faint)] mb-1">Sign in with this account:</div>
+                      <div className="text-base font-semibold text-[var(--nim-text)] mb-2">{credentials.syncEmail}</div>
                       <div className="flex items-start gap-2 text-xs text-amber-500">
                         <svg className="w-4 h-4 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="currentColor">
                           <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
@@ -379,7 +379,7 @@ export function SettingsScreen() {
                   )}
 
                   {!credentials?.syncEmail && (
-                    <p className="text-sm text-[var(--text-secondary)] mb-4 text-center">
+                    <p className="text-sm text-[var(--nim-text-muted)] mb-4 text-center">
                       Sign in with the same account as your desktop app.
                     </p>
                   )}
@@ -401,9 +401,9 @@ export function SettingsScreen() {
 
                   {/* Divider */}
                   <div className="flex items-center gap-3 mb-4">
-                    <div className="flex-1 h-px bg-[var(--border-primary)]" />
-                    <span className="text-xs text-[var(--text-tertiary)]">or</span>
-                    <div className="flex-1 h-px bg-[var(--border-primary)]" />
+                    <div className="flex-1 h-px bg-[var(--nim-border)]" />
+                    <span className="text-xs text-[var(--nim-text-faint)]">or</span>
+                    <div className="flex-1 h-px bg-[var(--nim-border)]" />
                   </div>
 
                   {/* Email Magic Link */}
@@ -413,13 +413,13 @@ export function SettingsScreen() {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder={credentials?.syncEmail || "Enter your email"}
-                      className="w-full px-4 py-3 rounded-lg border border-[var(--border-primary)] bg-[var(--surface-primary)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] mb-3"
+                      className="w-full px-4 py-3 rounded-lg border border-[var(--nim-border)] bg-[var(--nim-bg)] text-[var(--nim-text)] placeholder:text-[var(--nim-text-faint)] mb-3"
                       disabled={isLoggingIn}
                     />
                     <button
                       type="submit"
                       disabled={isLoggingIn || !email}
-                      className="w-full py-3 px-4 rounded-lg bg-[var(--primary-color)] text-white font-medium disabled:opacity-50"
+                      className="w-full py-3 px-4 rounded-lg bg-[var(--nim-primary)] text-white font-medium disabled:opacity-50"
                     >
                       {isLoggingIn ? 'Sending...' : 'Send login link'}
                     </button>
@@ -435,24 +435,24 @@ export function SettingsScreen() {
           <>
             {/* Account Info */}
             <div className="mb-6">
-              <h2 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">
+              <h2 className="text-sm font-semibold text-[var(--nim-text-muted)] uppercase tracking-wide mb-3">
                 Account
               </h2>
 
-              <div className="p-4 rounded-lg bg-[var(--surface-secondary)] border border-[var(--border-primary)]">
+              <div className="p-4 rounded-lg bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)]">
                 <div className="flex items-center gap-3 mb-3">
-                  <div className="w-10 h-10 rounded-full bg-[var(--primary-color)] flex items-center justify-center text-white font-medium">
+                  <div className="w-10 h-10 rounded-full bg-[var(--nim-primary)] flex items-center justify-center text-white font-medium">
                     {stytchSession?.email?.charAt(0).toUpperCase() || '?'}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="font-medium truncate">{stytchSession?.email || 'Unknown'}</div>
-                    <div className="text-xs text-[var(--text-tertiary)]">Google Account</div>
+                    <div className="text-xs text-[var(--nim-text-faint)]">Google Account</div>
                   </div>
                 </div>
 
                 <button
                   onClick={handleLogout}
-                  className="w-full py-2 px-4 rounded-lg border border-[var(--border-primary)] text-[var(--text-secondary)] text-sm"
+                  className="w-full py-2 px-4 rounded-lg border border-[var(--nim-border)] text-[var(--nim-text-muted)] text-sm"
                 >
                   Sign Out
                 </button>
@@ -461,26 +461,26 @@ export function SettingsScreen() {
 
             {/* Pairing Info */}
             <div className="mb-6">
-              <h2 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">
+              <h2 className="text-sm font-semibold text-[var(--nim-text-muted)] uppercase tracking-wide mb-3">
                 Pairing
               </h2>
 
-              <div className="p-4 rounded-lg bg-[var(--surface-secondary)] border border-[var(--border-primary)]">
-                <div className="text-sm text-[var(--text-secondary)] mb-1">Server</div>
-                <div className="text-xs text-[var(--text-tertiary)] font-mono truncate mb-3">
+              <div className="p-4 rounded-lg bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)]">
+                <div className="text-sm text-[var(--nim-text-muted)] mb-1">Server</div>
+                <div className="text-xs text-[var(--nim-text-faint)] font-mono truncate mb-3">
                   {serverUrl || 'Not configured'}
                 </div>
 
                 {credentials?.pairedAt && (
                   <>
-                    <div className="text-sm text-[var(--text-secondary)] mb-1">Paired</div>
-                    <div className="text-xs text-[var(--text-tertiary)] mb-3">
+                    <div className="text-sm text-[var(--nim-text-muted)] mb-1">Paired</div>
+                    <div className="text-xs text-[var(--nim-text-faint)] mb-3">
                       {new Date(credentials.pairedAt).toLocaleDateString()}
                     </div>
                   </>
                 )}
 
-                <div className="text-sm text-[var(--text-secondary)] mb-1">Encryption</div>
+                <div className="text-sm text-[var(--nim-text-muted)] mb-1">Encryption</div>
                 <div className="text-xs text-green-500 flex items-center gap-1 mb-3">
                   <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
@@ -506,7 +506,7 @@ export function SettingsScreen() {
             <button
               onClick={handleScanQR}
               disabled={isScanning}
-              className="w-full py-2 px-4 rounded-lg border border-[var(--border-primary)] text-[var(--text-secondary)] text-sm"
+              className="w-full py-2 px-4 rounded-lg border border-[var(--nim-border)] text-[var(--nim-text-muted)] text-sm"
             >
               {isScanning ? 'Scanning...' : 'Scan New QR Code'}
             </button>
@@ -515,20 +515,20 @@ export function SettingsScreen() {
 
         {/* Sleep Settings */}
         <div className="mb-6">
-          <h2 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">
+          <h2 className="text-sm font-semibold text-[var(--nim-text-muted)] uppercase tracking-wide mb-3">
             Sleep Settings
           </h2>
 
-          <div className="p-4 rounded-lg bg-[var(--surface-secondary)] border border-[var(--border-primary)]">
-            <div className="text-sm text-[var(--text-secondary)] mb-2">Disconnect after inactivity</div>
-            <p className="text-xs text-[var(--text-tertiary)] mb-3">
+          <div className="p-4 rounded-lg bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)]">
+            <div className="text-sm text-[var(--nim-text-muted)] mb-2">Disconnect after inactivity</div>
+            <p className="text-xs text-[var(--nim-text-faint)] mb-3">
               Disconnect sync when idle to let your device sleep and save battery.
             </p>
 
             <select
               value={inactivityTimeoutMinutes}
               onChange={(e) => setInactivityTimeoutMinutes(Number(e.target.value))}
-              className="w-full px-3 py-2 rounded-lg border border-[var(--border-primary)] bg-[var(--surface-primary)] text-[var(--text-primary)]"
+              className="w-full px-3 py-2 rounded-lg border border-[var(--nim-border)] bg-[var(--nim-bg)] text-[var(--nim-text)]"
             >
               {INACTIVITY_TIMEOUT_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -541,15 +541,15 @@ export function SettingsScreen() {
 
         {/* Notifications Settings */}
         <div className="mb-6">
-          <h2 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">
+          <h2 className="text-sm font-semibold text-[var(--nim-text-muted)] uppercase tracking-wide mb-3">
             Notifications
           </h2>
 
-          <div className="p-4 rounded-lg bg-[var(--surface-secondary)] border border-[var(--border-primary)]">
+          <div className="p-4 rounded-lg bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)]">
             <div className="flex items-center justify-between mb-2">
               <div>
-                <div className="text-sm text-[var(--text-secondary)]">Agent Completion Alerts</div>
-                <p className="text-xs text-[var(--text-tertiary)]">
+                <div className="text-sm text-[var(--nim-text-muted)]">Agent Completion Alerts</div>
+                <p className="text-xs text-[var(--nim-text-faint)]">
                   Get notified when an AI agent finishes processing
                 </p>
               </div>
@@ -569,7 +569,7 @@ export function SettingsScreen() {
                 {(notificationPermission === 'prompt' || notificationPermission === 'unknown') && (
                   <button
                     onClick={requestNotificationPermission}
-                    className="px-3 py-1 text-xs rounded-lg bg-[var(--primary-color)] text-white"
+                    className="px-3 py-1 text-xs rounded-lg bg-[var(--nim-primary)] text-white"
                   >
                     Enable
                   </button>
@@ -578,13 +578,13 @@ export function SettingsScreen() {
             </div>
 
             {notificationPermission === 'denied' && (
-              <p className="text-xs text-[var(--text-tertiary)] mt-2">
+              <p className="text-xs text-[var(--nim-text-faint)] mt-2">
                 Open device Settings to enable notifications for Nimbalyst.
               </p>
             )}
 
             {notificationPermission === 'granted' && (
-              <p className="text-xs text-[var(--text-tertiary)] mt-2">
+              <p className="text-xs text-[var(--nim-text-faint)] mt-2">
                 Notifications will only appear when the app is in the background and your desktop is not active.
               </p>
             )}
@@ -592,11 +592,11 @@ export function SettingsScreen() {
         </div>
 
         {/* Help Section */}
-        <div className="mt-8 p-4 rounded-lg bg-[var(--surface-secondary)] border border-[var(--border-primary)]">
-          <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-2">
+        <div className="mt-8 p-4 rounded-lg bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)]">
+          <h3 className="text-sm font-semibold text-[var(--nim-text)] mb-2">
             How to connect
           </h3>
-          <ol className="text-xs text-[var(--text-secondary)] space-y-2 list-decimal list-inside mb-4">
+          <ol className="text-xs text-[var(--nim-text-muted)] space-y-2 list-decimal list-inside mb-4">
             <li>Sign in to your Nimbalyst account on desktop</li>
             <li>Go to Settings &gt; Account & Sync</li>
             <li>Click "Pair Mobile Device" to show QR code</li>
@@ -617,7 +617,7 @@ export function SettingsScreen() {
           <div className="mt-8">
             <button
               onClick={() => setShowDevSetup(!showDevSetup)}
-              className="w-full py-3 px-4 rounded-lg font-medium text-[var(--text-secondary)] bg-[var(--surface-secondary)] hover:bg-[var(--surface-tertiary)] border border-[var(--border-primary)] transition-colors flex items-center justify-center gap-2"
+              className="w-full py-3 px-4 rounded-lg font-medium text-[var(--nim-text-muted)] bg-[var(--nim-bg-secondary)] hover:bg-[var(--nim-bg-tertiary)] border border-[var(--nim-border)] transition-colors flex items-center justify-center gap-2"
             >
               <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
@@ -626,19 +626,19 @@ export function SettingsScreen() {
             </button>
 
             {showDevSetup && (
-              <div className="mt-4 p-4 rounded-lg bg-[var(--surface-secondary)] border border-[var(--border-primary)]">
-                <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3 flex items-center gap-2">
+              <div className="mt-4 p-4 rounded-lg bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)]">
+                <h3 className="text-sm font-semibold text-[var(--nim-text)] mb-3 flex items-center gap-2">
                   <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <rect x="2" y="2" width="20" height="20" rx="2" />
                     <path d="M7 7h3v3H7zM14 7h3v3h-3zM7 14h3v3H7z" />
                   </svg>
                   Alternative to QR Code
                 </h3>
-                <p className="text-xs text-[var(--text-secondary)] mb-4">
+                <p className="text-xs text-[var(--nim-text-muted)] mb-4">
                   If you can't scan the QR code, copy the pairing data from your desktop:
                 </p>
 
-                <ol className="text-xs text-[var(--text-secondary)] space-y-2 list-decimal list-inside mb-4">
+                <ol className="text-xs text-[var(--nim-text-muted)] space-y-2 list-decimal list-inside mb-4">
                   <li>Open Nimbalyst on your desktop</li>
                   <li>Go to Settings &gt; Session Sync</li>
                   <li>Click "Pair Mobile Device"</li>
@@ -648,7 +648,7 @@ export function SettingsScreen() {
 
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+                    <label className="block text-sm font-medium text-[var(--nim-text-muted)] mb-1">
                       Pairing Data
                     </label>
                     <textarea
@@ -658,14 +658,14 @@ export function SettingsScreen() {
                         setDevJsonError(null);
                       }}
                       placeholder='{"version":2,"serverUrl":"wss://...","encryptionKeySeed":"...","expiresAt":...}'
-                      className="w-full px-3 py-2 rounded-lg border border-[var(--border-primary)] bg-[var(--surface-primary)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)] font-mono text-xs"
+                      className="w-full px-3 py-2 rounded-lg border border-[var(--nim-border)] bg-[var(--nim-bg)] text-[var(--nim-text)] placeholder:text-[var(--nim-text-faint)] focus:outline-none focus:ring-2 focus:ring-[var(--nim-primary)] font-mono text-xs"
                       rows={4}
                     />
                   </div>
 
                   {devJsonError && (
                     <div className="p-2 rounded-lg bg-[rgba(239,68,68,0.1)] border border-[rgba(239,68,68,0.3)]">
-                      <p className="text-xs text-[var(--error-color)]">{devJsonError}</p>
+                      <p className="text-xs text-[var(--nim-error)]">{devJsonError}</p>
                     </div>
                   )}
 
@@ -720,7 +720,7 @@ export function SettingsScreen() {
                       }
                     }}
                     disabled={!devJsonInput.trim()}
-                    className="w-full py-2 px-4 rounded-lg font-medium text-white bg-[var(--accent-primary)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    className="w-full py-2 px-4 rounded-lg font-medium text-white bg-[var(--nim-primary)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
                     Connect
                   </button>
@@ -728,17 +728,17 @@ export function SettingsScreen() {
 
                 {/* Session Token Import - for completing OAuth on another device */}
                 {isPaired && !isAuthenticated && (
-                  <div className="mt-6 pt-6 border-t border-[var(--border-primary)]">
-                    <h4 className="text-sm font-semibold text-[var(--text-primary)] mb-2">
+                  <div className="mt-6 pt-6 border-t border-[var(--nim-border)]">
+                    <h4 className="text-sm font-semibold text-[var(--nim-text)] mb-2">
                       Import Session
                     </h4>
-                    <p className="text-xs text-[var(--text-secondary)] mb-3">
+                    <p className="text-xs text-[var(--nim-text-muted)] mb-3">
                       If you completed sign-in on another device, paste the session data here.
                     </p>
 
                     {devSessionError && (
                       <div className="mb-3 p-2 rounded-lg bg-[rgba(239,68,68,0.1)] border border-[rgba(239,68,68,0.3)]">
-                        <p className="text-xs text-[var(--error-color)]">{devSessionError}</p>
+                        <p className="text-xs text-[var(--nim-error)]">{devSessionError}</p>
                       </div>
                     )}
 
@@ -749,7 +749,7 @@ export function SettingsScreen() {
                         setDevSessionError(null);
                       }}
                       placeholder='{"sessionToken": "...", "sessionJwt": "...", ...}'
-                      className="w-full h-24 p-3 rounded-lg border border-[var(--border-primary)] bg-[var(--surface-primary)] text-[var(--text-primary)] text-xs font-mono placeholder:text-[var(--text-tertiary)] resize-none"
+                      className="w-full h-24 p-3 rounded-lg border border-[var(--nim-border)] bg-[var(--nim-bg)] text-[var(--nim-text)] text-xs font-mono placeholder:text-[var(--nim-text-faint)] resize-none"
                     />
 
                     <button
@@ -789,7 +789,7 @@ export function SettingsScreen() {
                         }
                       }}
                       disabled={!devSessionInput.trim()}
-                      className="mt-3 w-full py-2 px-4 rounded-lg font-medium text-white bg-[var(--accent-primary)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      className="mt-3 w-full py-2 px-4 rounded-lg font-medium text-white bg-[var(--nim-primary)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                     >
                       Import Session
                     </button>

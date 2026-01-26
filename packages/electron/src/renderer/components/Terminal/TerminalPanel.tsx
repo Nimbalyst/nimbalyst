@@ -349,7 +349,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: 'var(--text-tertiary)',
+            color: 'var(--nim-text-faint)',
             fontSize: '14px',
           }}
         >
@@ -379,10 +379,10 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
             onClick={handleRestart}
             style={{
               padding: '6px 12px',
-              backgroundColor: 'var(--surface-tertiary)',
+              backgroundColor: 'var(--nim-bg-tertiary)',
               border: 'none',
               borderRadius: '4px',
-              color: 'var(--text-primary)',
+              color: 'var(--nim-text)',
               fontSize: '12px',
               cursor: 'pointer',
             }}
@@ -400,9 +400,9 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
             left: '8px',
             right: '8px',
             padding: '8px 12px',
-            backgroundColor: 'var(--surface-secondary)',
+            backgroundColor: 'var(--nim-bg-secondary)',
             borderRadius: '4px',
-            color: 'var(--text-secondary)',
+            color: 'var(--nim-text-muted)',
             fontSize: '12px',
             display: 'flex',
             alignItems: 'center',
@@ -416,10 +416,10 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
             onClick={handleRestart}
             style={{
               padding: '4px 8px',
-              backgroundColor: 'var(--surface-tertiary)',
+              backgroundColor: 'var(--nim-bg-tertiary)',
               border: 'none',
               borderRadius: '4px',
-              color: 'var(--text-primary)',
+              color: 'var(--nim-text)',
               fontSize: '12px',
               cursor: 'pointer',
             }}

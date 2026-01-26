@@ -187,22 +187,14 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
     const displayContent = isUser ? stripSystemMessage(message.content) : message.content;
 
     return (
-      <div style={isCollapsed ? { maxHeight: '5rem', overflow: 'hidden', position: 'relative' } : {}}>
+      <div className={isCollapsed ? 'max-h-20 overflow-hidden relative' : ''}>
         <MarkdownRenderer
           content={displayContent}
           isUser={isUser}
           isSystemMessage={isSystemMessage}
         />
         {isCollapsed && (
-          <div style={{
-            position: 'absolute',
-            bottom: 0,
-            left: 0,
-            right: 0,
-            height: '3rem',
-            background: 'linear-gradient(to top, var(--surface-secondary), transparent)',
-            pointerEvents: 'none'
-          }} />
+          <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-[var(--nim-bg-secondary)] to-transparent pointer-events-none" />
         )}
       </div>
     );
@@ -220,54 +212,29 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
     const derivedErrorMessage = message.errorMessage || (resultDetails && typeof resultDetails.error === 'string' ? (resultDetails.error as string) : undefined);
     const didFail = message.isError || explicitSuccess === false || !!derivedErrorMessage;
     const statusLabel = didFail ? 'Failed' : 'Succeeded';
-    const statusColor = didFail ? 'var(--error-color)' : 'var(--success-color)';
+    const statusColor = didFail ? 'var(--nim-error)' : 'var(--nim-success)';
     const statusBackground = didFail ? 'rgba(239, 68, 68, 0.12)' : 'rgba(16, 185, 129, 0.12)';
     const hasResult = toolResult !== undefined && toolResult !== null && (typeof toolResult !== 'string' || toolResult.trim().length > 0);
     const toolDisplayName = formatToolDisplayName(tool.name || '') || tool.name || 'Tool Call';
 
     return (
-      <div style={{
-        borderRadius: '0.375rem',
-        backgroundColor: 'var(--surface-tertiary)',
-        overflow: 'hidden',
-        border: '1px solid var(--border-primary)',
-        margin: '0.5rem 0'
-      }}>
+      <div className="rounded-md bg-nim-tertiary overflow-hidden border border-nim my-2">
         <button
           onClick={() => onToggleToolExpand(tool.id || tool.name)}
-          style={{
-            width: '100%',
-            padding: '0.5rem 0.75rem',
-            backgroundColor: 'var(--surface-secondary)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            transition: 'colors 0.2s',
-            textAlign: 'left',
-            border: 'none',
-            cursor: 'pointer'
-          }}
-          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--surface-hover)'}
-          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--surface-secondary)'}
+          className="w-full py-2 px-3 bg-nim-secondary flex items-center gap-2 transition-colors text-left border-none cursor-pointer hover:bg-nim-hover"
         >
           <MaterialSymbol icon="build" size={14} className="tool-icon" />
           <span
-            style={{ fontFamily: 'monospace', fontSize: '0.75rem', color: 'var(--text-primary)', flex: 1 }}
+            className="font-mono text-xs text-nim flex-1"
             title={tool.name}
           >
             {toolDisplayName}
           </span>
           <span
+            className="text-[0.7rem] font-semibold py-0.5 px-2 rounded-full uppercase tracking-tight pointer-events-none"
             style={{
-              fontSize: '0.7rem',
-              fontWeight: 600,
               color: statusColor,
-              backgroundColor: statusBackground,
-              padding: '0.125rem 0.5rem',
-              borderRadius: '9999px',
-              textTransform: 'uppercase',
-              letterSpacing: '0.02em',
-              pointerEvents: 'none'
+              backgroundColor: statusBackground
             }}
           >
             {statusLabel}
@@ -280,66 +247,40 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
         </button>
 
         {isExpanded && (
-          <div style={{ padding: '0.5rem 0.75rem', fontSize: '0.75rem' }}>
+          <div className="py-2 px-3 text-xs">
             {typeof tool.arguments === 'object' && tool.arguments !== null && Object.keys(tool.arguments).length > 0 && (
-              <div style={{ marginBottom: '0.5rem' }}>
-                <div style={{ color: 'var(--text-tertiary)', marginBottom: '0.25rem' }}>Parameters:</div>
+              <div className="mb-2">
+                <div className="text-nim-faint mb-1">Parameters:</div>
                 <JSONViewer data={tool.arguments} maxHeight="16rem" />
               </div>
             )}
 
             {typeof tool.arguments === 'string' && tool.arguments.trim().length > 0 && (
-              <div style={{ marginBottom: '0.5rem' }}>
-                <div style={{ color: 'var(--text-tertiary)', marginBottom: '0.25rem' }}>Parameters (raw):</div>
-                <pre style={{
-                  fontSize: '0.75rem',
-                  color: 'var(--text-secondary)',
-                  fontFamily: 'monospace',
-                  overflowX: 'auto',
-                  backgroundColor: 'var(--surface-secondary)',
-                  padding: '0.5rem',
-                  borderRadius: '0.25rem'
-                }}>
+              <div className="mb-2">
+                <div className="text-nim-faint mb-1">Parameters (raw):</div>
+                <pre className="text-xs text-nim-muted font-mono overflow-x-auto bg-nim-secondary p-2 rounded">
                   {tool.arguments}
                 </pre>
               </div>
             )}
 
-            <div style={{ marginTop: '0.5rem' }}>
-              <div style={{ color: 'var(--text-tertiary)', marginBottom: '0.25rem' }}>Result:</div>
+            <div className="mt-2">
+              <div className="text-nim-faint mb-1">Result:</div>
               {hasResult ? (
                 typeof toolResult === 'string' ? (
-                  <pre style={{
-                    fontSize: '0.75rem',
-                    color: 'var(--text-primary)',
-                    fontFamily: 'monospace',
-                    overflowX: 'auto',
-                    backgroundColor: 'var(--surface-secondary)',
-                    padding: '0.5rem',
-                    borderRadius: '0.25rem',
-                    maxHeight: '16rem',
-                    overflowY: 'auto'
-                  }}>
+                  <pre className="text-xs text-nim font-mono overflow-x-auto bg-nim-secondary p-2 rounded max-h-64 overflow-y-auto">
                     {toolResult}
                   </pre>
                 ) : (
                   <JSONViewer data={toolResult} maxHeight="16rem" />
                 )
               ) : (
-                <div style={{
-                  fontSize: '0.75rem',
-                  color: 'var(--text-tertiary)',
-                  fontStyle: 'italic'
-                }}>
+                <div className="text-xs text-nim-faint italic">
                   Tool did not return a result.
                 </div>
               )}
               {derivedErrorMessage && (
-                <div style={{
-                  marginTop: '0.5rem',
-                  fontSize: '0.75rem',
-                  color: 'var(--error-color)'
-                }}>
+                <div className="mt-2 text-xs text-nim-error">
                   {derivedErrorMessage}
                 </div>
               )}
@@ -376,19 +317,8 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
 
     // Otherwise, render the generic error UI
     return (
-      <div style={{
-        margin: '0.5rem 0',
-        padding: '0.75rem',
-        backgroundColor: 'rgba(239, 68, 68, 0.1)',
-        border: '1px solid rgba(239, 68, 68, 0.3)',
-        borderRadius: '0.5rem'
-      }}>
-        <div style={{
-          color: 'var(--error-color)',
-          fontWeight: 600,
-          fontSize: '0.875rem',
-          marginBottom: '0.5rem'
-        }}>
+      <div className="my-2 p-3 bg-[rgba(239,68,68,0.1)] border border-[rgba(239,68,68,0.3)] rounded-lg">
+        <div className="text-nim-error font-semibold text-sm mb-2">
           {errorMessage}
         </div>
       </div>
@@ -565,41 +495,21 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
     if (!message.edits || message.edits.length === 0) return null;
 
     return (
-      <div style={{ margin: '0.5rem 0' }}>
+      <div className="my-2">
         <button
           onClick={() => setDiffExpanded(!isDiffExpanded)}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            padding: '0.375rem 0.75rem',
-            fontSize: '0.75rem',
-            backgroundColor: 'var(--surface-secondary)',
-            borderRadius: '0.25rem',
-            transition: 'colors 0.2s',
-            width: '100%',
-            textAlign: 'left',
-            border: 'none',
-            cursor: 'pointer'
-          }}
-          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--surface-hover)'}
-          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--surface-secondary)'}
+          className="flex items-center gap-2 py-1.5 px-3 text-xs bg-nim-secondary rounded transition-colors w-full text-left border-none cursor-pointer hover:bg-nim-hover"
         >
-          <span style={{ color: 'var(--text-tertiary)' }}>
-            {isDiffExpanded ? '▼' : '▶'}
+          <span className="text-nim-faint">
+            {isDiffExpanded ? '\u25BC' : '\u25B6'}
           </span>
-          <span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>
+          <span className="text-nim-muted font-medium">
             {message.edits.length} edit{message.edits.length !== 1 ? 's' : ''}
           </span>
         </button>
 
         {isDiffExpanded && (
-          <div style={{
-            marginTop: '0.5rem',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '0.5rem'
-          }}>
+          <div className="mt-2 flex flex-col gap-2">
             {message.edits.map((edit: any, idx: number) => {
               const absolutePath = edit.filePath || edit.file_path || edit.targetFilePath;
               return (
@@ -620,7 +530,7 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+    <div className="flex flex-col gap-2">
       {renderAttachments()}
       {renderTextContent()}
       {renderToolCall()}

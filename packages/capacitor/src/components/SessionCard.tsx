@@ -25,12 +25,12 @@ export function SessionCard({ session, compact, isSelected, onClick }: SessionCa
   if (compact) {
     return (
       <div
-        className={`p-3 rounded-lg ${isSelected ? '' : 'hover:bg-[var(--surface-tertiary)]'} transition-colors cursor-pointer`}
+        className={`p-3 rounded-lg ${isSelected ? '' : 'hover:bg-[var(--nim-bg-tertiary)]'} transition-colors cursor-pointer`}
         onClick={handleClick}
       >
         <div className="flex items-center gap-2 mb-1">
           <ProviderIcon provider={session.provider} size="small" />
-          <span className={`font-medium text-sm line-clamp-1 ${isSelected ? 'text-[var(--primary-color)]' : 'text-[var(--text-primary)]'}`}>
+          <span className={`font-medium text-sm line-clamp-1 ${isSelected ? 'text-[var(--nim-primary)]' : 'text-[var(--nim-text)]'}`}>
             {session.title || 'Untitled Session'}
           </span>
           {session.hasPendingPrompt && (
@@ -44,12 +44,12 @@ export function SessionCard({ session, compact, isSelected, onClick }: SessionCa
             </span>
           )}
           {session.pendingExecution && !session.isExecuting && !session.hasPendingPrompt && (
-            <span className="px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-[var(--warning-color)] text-white flex-shrink-0">
+            <span className="px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-[var(--nim-warning)] text-white flex-shrink-0">
               Pending
             </span>
           )}
         </div>
-        <div className="flex items-center justify-between text-xs text-[var(--text-tertiary)] pl-6">
+        <div className="flex items-center justify-between text-xs text-[var(--nim-text-faint)] pl-6">
           <span>{formattedTime}</span>
           <span>{session.messageCount || 0} msgs</span>
         </div>
@@ -59,13 +59,13 @@ export function SessionCard({ session, compact, isSelected, onClick }: SessionCa
 
   return (
     <div
-      className="p-4 rounded-lg border border-[var(--border-primary)] bg-[var(--surface-secondary)] hover:bg-[var(--surface-tertiary)] transition-colors cursor-pointer"
+      className="p-4 rounded-lg border border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] hover:bg-[var(--nim-bg-tertiary)] transition-colors cursor-pointer"
       onClick={handleClick}
     >
       <div className="flex items-start justify-between mb-2">
         <div className="flex items-center gap-2">
           <ProviderIcon provider={session.provider} />
-          <span className="font-medium text-[var(--text-primary)] line-clamp-1">
+          <span className="font-medium text-[var(--nim-text)] line-clamp-1">
             {session.title || 'Untitled Session'}
           </span>
         </div>
@@ -80,19 +80,19 @@ export function SessionCard({ session, compact, isSelected, onClick }: SessionCa
           </span>
         )}
         {session.pendingExecution && !session.isExecuting && !session.hasPendingPrompt && (
-          <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-[var(--warning-color)] text-white">
+          <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-[var(--nim-warning)] text-white">
             Pending
           </span>
         )}
       </div>
 
       {session.lastMessagePreview && (
-        <p className="text-sm text-[var(--text-secondary)] line-clamp-2 mb-2">
+        <p className="text-sm text-[var(--nim-text-muted)] line-clamp-2 mb-2">
           {session.lastMessagePreview}
         </p>
       )}
 
-      <div className="flex items-center justify-between text-xs text-[var(--text-tertiary)]">
+      <div className="flex items-center justify-between text-xs text-[var(--nim-text-faint)]">
         <span>{formattedTime}</span>
         <div className="flex items-center gap-3">
           {session.mode && (

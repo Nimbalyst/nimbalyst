@@ -30,17 +30,17 @@ const injectInteractivePromptStyles = () => {
   style.textContent = `
     @keyframes interactive-prompt-pulse {
       0%, 100% {
-        box-shadow: 0 0 0 0 rgba(var(--primary-color-rgb, 59, 130, 246), 0.3);
+        box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.3);
       }
       50% {
-        box-shadow: 0 0 0 4px rgba(var(--primary-color-rgb, 59, 130, 246), 0.1);
+        box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
       }
     }
     .interactive-prompt--pending {
       animation: interactive-prompt-pulse 2s ease-in-out infinite;
     }
     .interactive-prompt__option--selected {
-      background: rgba(var(--primary-color-rgb, 59, 130, 246), 0.1);
+      background: rgba(59, 130, 246, 0.1);
     }
   `;
   document.head.appendChild(style);

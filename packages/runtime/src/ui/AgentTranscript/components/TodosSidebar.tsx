@@ -15,19 +15,19 @@ export const TodosSidebar: React.FC<TodosSidebarProps> = ({
     switch (status) {
       case 'completed':
         return (
-          <span style={{ color: 'var(--success-color)' }}>
+          <span className="text-nim-success">
             <MaterialSymbol icon="check_circle" size={16} />
           </span>
         );
       case 'in_progress':
         return (
-          <span style={{ color: 'var(--accent-primary)' }}>
+          <span className="text-nim-primary">
             <MaterialSymbol icon="sync" size={16} />
           </span>
         );
       case 'pending':
         return (
-          <span style={{ color: 'var(--text-tertiary)' }}>
+          <span className="text-nim-faint">
             <MaterialSymbol icon="schedule" size={16} />
           </span>
         );
@@ -37,11 +37,11 @@ export const TodosSidebar: React.FC<TodosSidebarProps> = ({
   const getStatusColor = (status: TodoItem['status']) => {
     switch (status) {
       case 'completed':
-        return { backgroundColor: 'color-mix(in srgb, var(--success-color) 10%, transparent)', borderColor: 'color-mix(in srgb, var(--success-color) 30%, transparent)' };
+        return { backgroundColor: 'color-mix(in srgb, var(--nim-success) 10%, transparent)', borderColor: 'color-mix(in srgb, var(--nim-success) 30%, transparent)' };
       case 'in_progress':
-        return { backgroundColor: 'color-mix(in srgb, var(--accent-primary) 10%, transparent)', borderColor: 'color-mix(in srgb, var(--accent-primary) 30%, transparent)' };
+        return { backgroundColor: 'color-mix(in srgb, var(--nim-primary) 10%, transparent)', borderColor: 'color-mix(in srgb, var(--nim-primary) 30%, transparent)' };
       case 'pending':
-        return { backgroundColor: 'color-mix(in srgb, var(--surface-tertiary) 50%, transparent)', borderColor: 'var(--border-primary)' };
+        return { backgroundColor: 'color-mix(in srgb, var(--nim-bg-tertiary) 50%, transparent)', borderColor: 'var(--nim-border)' };
     }
   };
 
@@ -98,15 +98,10 @@ export const TodosSidebar: React.FC<TodosSidebarProps> = ({
             <span>{completedCount} of {totalCount} completed</span>
             <span>{progressPercent}%</span>
           </div>
-          <div style={{ width: '100%', backgroundColor: 'var(--surface-tertiary)', borderRadius: '9999px', height: '0.375rem' }}>
+          <div className="w-full bg-nim-tertiary rounded-full h-1.5">
             <div
-              style={{
-                width: `${progressPercent}%`,
-                backgroundColor: 'var(--success-color)',
-                borderRadius: '9999px',
-                height: '0.375rem',
-                transition: 'all 0.3s'
-              }}
+              className="bg-nim-success rounded-full h-1.5 transition-all duration-300"
+              style={{ width: `${progressPercent}%` }}
             />
           </div>
         </div>
