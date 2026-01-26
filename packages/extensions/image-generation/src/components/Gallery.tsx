@@ -4,7 +4,7 @@
  * Displays a scrollable list of image generations grouped by prompt.
  */
 
-import { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { Generation, GeneratedImage } from '../types';
 import { STYLE_PRESETS } from '../types';
 
@@ -23,6 +23,17 @@ interface ExpandedImage {
 export function Gallery({ generations, imagesBasePath, onEditPrompt, theme }: GalleryProps) {
   const isDark = theme === 'dark';
   const [expandedImage, setExpandedImage] = useState<ExpandedImage | null>(null);
+
+  // Handle Escape key to close lightbox
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && expandedImage) {
+        setExpandedImage(null);
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [expandedImage]);
 
   // Get style label from preset
   const getStyleLabel = (styleId: string): string => {
@@ -94,7 +105,7 @@ export function Gallery({ generations, imagesBasePath, onEditPrompt, theme }: Ga
           left: 0,
           right: 0,
           bottom: 0,
-          background: isDark ? 'rgba(0, 0, 0, 0.95)' : 'rgba(0, 0, 0, 0.9)',
+          background: 'var(--surface-secondary)',
           display: 'flex',
           flexDirection: 'column',
           zIndex: 1000,
@@ -108,8 +119,8 @@ export function Gallery({ generations, imagesBasePath, onEditPrompt, theme }: Ga
             alignItems: 'center',
             justifyContent: 'space-between',
             padding: '12px 16px',
-            background: 'rgba(0, 0, 0, 0.5)',
-            borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+            background: 'var(--surface-tertiary)',
+            borderBottom: '1px solid var(--border-primary)',
           }}
           onClick={(e) => e.stopPropagation()}
         >
@@ -117,7 +128,7 @@ export function Gallery({ generations, imagesBasePath, onEditPrompt, theme }: Ga
             <div
               style={{
                 fontSize: 13,
-                color: '#ffffff',
+                color: 'var(--text-primary)',
                 lineHeight: 1.4,
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
@@ -129,7 +140,7 @@ export function Gallery({ generations, imagesBasePath, onEditPrompt, theme }: Ga
             <div
               style={{
                 fontSize: 11,
-                color: 'rgba(255, 255, 255, 0.6)',
+                color: 'var(--text-secondary)',
                 marginTop: 4,
               }}
             >
@@ -147,10 +158,10 @@ export function Gallery({ generations, imagesBasePath, onEditPrompt, theme }: Ga
               }}
               style={{
                 padding: '6px 12px',
-                background: 'rgba(255, 255, 255, 0.15)',
-                border: 'none',
+                background: 'var(--surface-hover)',
+                border: '1px solid var(--border-primary)',
                 borderRadius: 5,
-                color: '#ffffff',
+                color: 'var(--text-primary)',
                 cursor: 'pointer',
                 fontSize: 12,
                 display: 'flex',
@@ -164,10 +175,10 @@ export function Gallery({ generations, imagesBasePath, onEditPrompt, theme }: Ga
               onClick={() => setExpandedImage(null)}
               style={{
                 padding: '6px 12px',
-                background: 'rgba(255, 255, 255, 0.15)',
-                border: 'none',
+                background: 'var(--surface-hover)',
+                border: '1px solid var(--border-primary)',
                 borderRadius: 5,
-                color: '#ffffff',
+                color: 'var(--text-primary)',
                 cursor: 'pointer',
                 fontSize: 12,
               }}
@@ -196,7 +207,7 @@ export function Gallery({ generations, imagesBasePath, onEditPrompt, theme }: Ga
               maxHeight: '100%',
               objectFit: 'contain',
               borderRadius: 8,
-              boxShadow: '0 4px 24px rgba(0, 0, 0, 0.5)',
+              boxShadow: '0 4px 24px rgba(0, 0, 0, 0.3)',
             }}
             onClick={(e) => e.stopPropagation()}
           />
@@ -207,11 +218,11 @@ export function Gallery({ generations, imagesBasePath, onEditPrompt, theme }: Ga
           style={{
             padding: '8px 16px',
             textAlign: 'center',
-            color: 'rgba(255, 255, 255, 0.4)',
+            color: 'var(--text-tertiary)',
             fontSize: 11,
           }}
         >
-          Click anywhere outside the image to close
+          Press Escape or click outside to close
         </div>
       </div>
     );
