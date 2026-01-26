@@ -20,6 +20,7 @@ export interface SessionListItem {
   messageCount?: number;
   isArchived?: boolean;
   isPinned?: boolean;  // Whether this session is pinned to the top of the list
+  hasUnread?: boolean;  // Whether this session has unread messages (from metadata, for cross-device sync)
   // Branch tracking - SEPARATE from hierarchical parentSessionId
   branchedFromSessionId?: string;  // ID of the session this was forked from
   branchPointMessageId?: number;  // Message ID where this branch diverged

@@ -13,6 +13,7 @@ export interface SpreadsheetMetadata {
   headerRowCount: number;
   frozenColumnCount: number;
   columnFormats: Record<number, ColumnFormat>;
+  columnWidths: Record<number, number>;
   columnCount: number;
   hasHeaders: boolean;
 }
@@ -36,6 +37,7 @@ export interface UseSpreadsheetMetadataResult {
   setHeaderRowCount: (count: number) => void;
   setFrozenColumnCount: (count: number) => void;
   setColumnFormat: (columnIndex: number, format: ColumnFormat | null) => void;
+  setColumnWidth: (columnIndex: number, width: number) => void;
   setColumnCount: (count: number) => void;
   setSortConfig: (config: SortConfig | null) => void;
 
@@ -174,6 +176,7 @@ export function useSpreadsheetMetadata(
           headerRowCount: 0,
           frozenColumnCount: 0,
           columnFormats: {} as Record<number, ColumnFormat>,
+          columnWidths: {} as Record<number, number>,
           columnCount: 5,
           hasHeaders: false,
         },
@@ -182,7 +185,7 @@ export function useSpreadsheetMetadata(
       };
     }
 
-    const { data, delimiter } = parseCSV(initialContent);
+    const { data, delimiter, metadata: csvMetadata } = parseCSV(initialContent);
     const gridData = toGridSource(data.rows, data.headerRowCount);
 
     return {
@@ -190,6 +193,7 @@ export function useSpreadsheetMetadata(
         headerRowCount: data.headerRowCount,
         frozenColumnCount: data.frozenColumnCount,
         columnFormats: data.columnFormats,
+        columnWidths: csvMetadata?.columnWidths ?? {},
         columnCount: data.columnCount,
         hasHeaders: data.hasHeaders,
       },
@@ -254,6 +258,15 @@ export function useSpreadsheetMetadata(
     markDirty();
   }, [markDirty]);
 
+  const setColumnWidth = useCallback((columnIndex: number, width: number) => {
+    setMetadata(prev => {
+      const newWidths = { ...prev.columnWidths };
+      newWidths[columnIndex] = width;
+      return { ...prev, columnWidths: newWidths };
+    });
+    markDirty();
+  }, [markDirty]);
+
   const setColumnCount = useCallback((count: number) => {
     setMetadata(prev => ({
       ...prev,
@@ -272,13 +285,14 @@ export function useSpreadsheetMetadata(
 
   // Load new content (for file reload)
   const loadFromCSV = useCallback((content: string) => {
-    const { data } = parseCSV(content);
+    const { data, metadata: csvMetadata } = parseCSV(content);
     const gridData = toGridSource(data.rows, data.headerRowCount);
 
     setMetadata({
       headerRowCount: data.headerRowCount,
       frozenColumnCount: data.frozenColumnCount,
       columnFormats: data.columnFormats,
+      columnWidths: csvMetadata?.columnWidths ?? {},
       columnCount: data.columnCount,
       hasHeaders: data.hasHeaders,
     });
@@ -293,11 +307,13 @@ export function useSpreadsheetMetadata(
   // Serialize metadata for saving
   const serializeMetadataForSave = useCallback((): string => {
     const hasColumnFormats = Object.keys(metadata.columnFormats).length > 0;
+    const hasColumnWidths = Object.keys(metadata.columnWidths).length > 0;
     const csvMetadata: CSVMetadata = {
       hasHeaders: metadata.hasHeaders,
       headerRowCount: metadata.headerRowCount,
       frozenColumnCount: metadata.frozenColumnCount,
       ...(hasColumnFormats ? { columnFormats: metadata.columnFormats } : {}),
+      ...(hasColumnWidths ? { columnWidths: metadata.columnWidths } : {}),
     };
     return serializeMetadata(csvMetadata);
   }, [metadata]);
@@ -312,6 +328,7 @@ export function useSpreadsheetMetadata(
     setHeaderRowCount,
     setFrozenColumnCount,
     setColumnFormat,
+    setColumnWidth,
     setColumnCount,
     setSortConfig,
     markDirty,

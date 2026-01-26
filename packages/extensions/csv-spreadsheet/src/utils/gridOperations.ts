@@ -18,6 +18,7 @@ export interface GridOperationsOptions {
   setColumnCount: (count: number) => void;
   getDelimiter: () => ',' | '\t';
   getColumnFormats: () => Record<number, ColumnFormat>;
+  getColumnWidths: () => Record<number, number>;
   getFrozenColumnCount: () => number;
   onDirty: () => void;
   getUndoPlugin: () => UndoRedoPlugin | null;
@@ -68,6 +69,7 @@ export function createGridOperations(
     setColumnCount,
     getDelimiter,
     getColumnFormats,
+    getColumnWidths,
     getFrozenColumnCount,
     onDirty,
     getUndoPlugin,
@@ -771,8 +773,10 @@ export function createGridOperations(
     }
 
     // Build metadata - only include if using non-default features
+    const columnWidths = getColumnWidths();
     const hasColumnFormats = Object.keys(columnFormats).length > 0;
-    const hasNonDefaultMetadata = headerRowCount > 0 || frozenColumnCount > 0 || hasColumnFormats;
+    const hasColumnWidths = Object.keys(columnWidths).length > 0;
+    const hasNonDefaultMetadata = headerRowCount > 0 || frozenColumnCount > 0 || hasColumnFormats || hasColumnWidths;
 
     if (hasNonDefaultMetadata) {
       const metadata: CSVMetadata = {
@@ -780,6 +784,7 @@ export function createGridOperations(
         headerRowCount,
         frozenColumnCount,
         ...(hasColumnFormats ? { columnFormats } : {}),
+        ...(hasColumnWidths ? { columnWidths } : {}),
       };
       return `${serializeMetadata(metadata)}\n${csvRows.join('\n')}`;
     }

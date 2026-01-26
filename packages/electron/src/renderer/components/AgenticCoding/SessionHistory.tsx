@@ -1304,7 +1304,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                   </svg>
                 </button>
                 {newDropdownOpen && (
-                  <div className="session-history-new-menu absolute top-[calc(100%+4px)] right-0 min-w-40 bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded overflow-hidden z-[100] shadow-[0_4px_12px_rgba(0,0,0,0.15)]">
+                  <div className="session-history-new-menu absolute top-[calc(100%+4px)] right-0 min-w-40 bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded overflow-hidden z-[100] shadow-[0_4px_12px_rgba(0,0,0,0.15)] whitespace-nowrap">
                     {onNewSession && (
                       <button
                         className="session-history-new-option flex items-center w-full px-3 py-2 text-[13px] bg-transparent border-none text-[var(--nim-text)] cursor-pointer transition-colors duration-150 text-left gap-2 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0 [&_svg]:text-[var(--nim-text-muted)] [&>span]:flex-1"
@@ -1438,7 +1438,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                   </svg>
                 </button>
                 {newDropdownOpen && (
-                  <div className="session-history-new-menu absolute top-[calc(100%+4px)] right-0 min-w-40 bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded overflow-hidden z-[100] shadow-[0_4px_12px_rgba(0,0,0,0.15)]">
+                  <div className="session-history-new-menu absolute top-[calc(100%+4px)] right-0 min-w-40 bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded overflow-hidden z-[100] shadow-[0_4px_12px_rgba(0,0,0,0.15)] whitespace-nowrap">
                     {onNewSession && (
                       <button
                         className="session-history-new-option flex items-center w-full px-3 py-2 text-[13px] bg-transparent border-none text-[var(--nim-text)] cursor-pointer transition-colors duration-150 text-left gap-2 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0 [&_svg]:text-[var(--nim-text-muted)] [&>span]:flex-1"
@@ -1539,7 +1539,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                   </svg>
                 </button>
                 {newDropdownOpen && (
-                  <div className="session-history-new-menu absolute top-[calc(100%+4px)] right-0 min-w-40 bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded overflow-hidden z-[100] shadow-[0_4px_12px_rgba(0,0,0,0.15)]">
+                  <div className="session-history-new-menu absolute top-[calc(100%+4px)] right-0 min-w-40 bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded overflow-hidden z-[100] shadow-[0_4px_12px_rgba(0,0,0,0.15)] whitespace-nowrap">
                     {onNewSession && (
                       <button
                         className="session-history-new-option flex items-center w-full px-3 py-2 text-[13px] bg-transparent border-none text-[var(--nim-text)] cursor-pointer transition-colors duration-150 text-left gap-2 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0 [&_svg]:text-[var(--nim-text-muted)] [&>span]:flex-1"
@@ -1653,7 +1653,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                 </svg>
               </button>
               {newDropdownOpen && (
-                <div className="session-history-new-menu absolute top-[calc(100%+4px)] right-0 min-w-40 bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded overflow-hidden z-[100] shadow-[0_4px_12px_rgba(0,0,0,0.15)]">
+                <div className="session-history-new-menu absolute top-[calc(100%+4px)] right-0 min-w-40 bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded overflow-hidden z-[100] shadow-[0_4px_12px_rgba(0,0,0,0.15)] whitespace-nowrap">
                   {onNewSession && (
                     <button
                       className="session-history-new-option flex items-center w-full px-3 py-2 text-[13px] bg-transparent border-none text-[var(--nim-text)] cursor-pointer transition-colors duration-150 text-left gap-2 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0 [&_svg]:text-[var(--nim-text-muted)] [&>span]:flex-1"

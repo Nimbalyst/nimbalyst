@@ -34,6 +34,7 @@ import {
   loadSessionChildrenAtom,
   loadSessionDataAtom,
   updateSessionStoreAtom,
+  setActiveSessionInWorkstreamAtom,
   type WorkstreamType,
 } from '../../store';
 import {
@@ -43,7 +44,6 @@ import {
   workstreamSplitRatioAtom,
   workstreamFilesSidebarVisibleAtom,
   workstreamHasOpenFilesAtom,
-  setWorkstreamActiveChildAtom,
   setWorkstreamLayoutModeAtom,
   setWorkstreamSplitRatioAtom,
   toggleWorkstreamFilesSidebarAtom,
@@ -299,7 +299,7 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
   // Get sessions in this workstream
   const sessions = useAtomValue(workstreamSessionsAtom(workstreamId));
   const activeSessionId = useAtomValue(workstreamActiveChildAtom(workstreamId));
-  const setActiveSession = useSetAtom(setWorkstreamActiveChildAtom);
+  const setActiveSession = useSetAtom(setActiveSessionInWorkstreamAtom);
 
   // Worktree state - resolve worktree path if this is a worktree session
   const [worktreePath, setWorktreePath] = useState<string | null>(null);
@@ -435,7 +435,7 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
   // We trust the atom state - no fallback that masks bugs
 
   const handleSessionSelect = useCallback((sessionId: string) => {
-    setActiveSession({ workstreamId, childId: sessionId });
+    setActiveSession({ workstreamId, sessionId });
   }, [workstreamId, setActiveSession]);
 
   // Track pending file open when switching to split mode

@@ -42,6 +42,8 @@ export interface CSVMetadata {
   frozenColumnCount?: number;
   /** Column format configurations, keyed by column index */
   columnFormats?: Record<number, ColumnFormat>;
+  /** Column widths, keyed by column index (only stored if user has resized) */
+  columnWidths?: Record<number, number>;
 }
 
 /**

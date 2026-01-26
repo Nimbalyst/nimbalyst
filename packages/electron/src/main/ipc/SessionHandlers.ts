@@ -288,6 +288,7 @@ export async function registerSessionHandlers() {
                     parentSessionId: entry.parentSessionId || null,  // Hierarchical workstream support
                     childCount: entry.childCount || 0,  // Number of child sessions
                     uncommittedCount,  // Number of uncommitted files
+                    hasUnread: (entry as any).hasUnread || false,  // Unread state from metadata
                     // Branch tracking - SEPARATE from hierarchical parentSessionId
                     branchedFromSessionId: (entry as any).branchedFromSessionId,
                     branchPointMessageId: entry.branchPointMessageId,
@@ -295,14 +296,6 @@ export async function registerSessionHandlers() {
                     metadata: {}
                 };
             });
-
-            // Log a few sessions with their uncommitted counts for debugging
-            const samplesWithCount = sessions.slice(0, 3).map(s => ({
-                id: s.id.substring(0, 8),
-                title: s.title?.substring(0, 30),
-                uncommittedCount: s.uncommittedCount
-            }));
-            console.log(`[SessionHandlers] Returning ${sessions.length} sessions, first 3:`, JSON.stringify(samplesWithCount));
 
             return { success: true, sessions };
         } catch (error) {

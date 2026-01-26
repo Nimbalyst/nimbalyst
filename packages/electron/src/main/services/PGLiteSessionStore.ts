@@ -403,17 +403,19 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
       // Query includes parent_session_id and child_count for hierarchical session support
       // child_count is calculated via a correlated subquery for sessions that have children
       // branched_from_session_id is separate from parent_session_id (branch vs hierarchy)
+      // metadata is included for hasUnread state (transient UI state stored in DB for cross-device sync)
       const { rows } = await db.query<any>(
         `SELECT s.id, s.provider, s.model, s.session_type, s.mode, s.title, s.workspace_id,
                 s.worktree_id, s.parent_session_id, s.created_at, s.updated_at, s.is_archived, s.is_pinned,
-                s.branched_from_session_id, s.branch_point_message_id, s.branched_at, COUNT(m.id) as message_count,
+                s.branched_from_session_id, s.branch_point_message_id, s.branched_at, s.metadata,
+                COUNT(m.id) as message_count,
                 (SELECT COUNT(*) FROM ai_sessions c WHERE c.parent_session_id = s.id) as child_count
          FROM ai_sessions s
          LEFT JOIN ai_agent_messages m ON s.id = m.session_id AND m.direction = 'input' AND (m.hidden = FALSE OR m.hidden IS NULL)
          WHERE s.workspace_id=$1 ${archiveFilter}
          GROUP BY s.id, s.provider, s.model, s.session_type, s.mode, s.title, s.workspace_id,
                   s.worktree_id, s.parent_session_id, s.created_at, s.updated_at, s.is_archived, s.is_pinned,
-                  s.branched_from_session_id, s.branch_point_message_id, s.branched_at
+                  s.branched_from_session_id, s.branch_point_message_id, s.branched_at, s.metadata
          ORDER BY s.updated_at DESC`,
         [workspaceId]
       );
@@ -426,6 +428,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
         const branchedAt = row.branched_at ? toMillis(row.branched_at) : undefined;
         const messageCount = parseInt(row.message_count) || 0;
         const childCount = parseInt(row.child_count) || 0;
+        const metadata = row.metadata ?? {};
         return {
           id: row.id,
           provider: row.provider,
@@ -446,6 +449,9 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
           branchedFromSessionId: row.branched_from_session_id ?? undefined,
           branchPointMessageId: row.branch_point_message_id ? parseInt(row.branch_point_message_id) : undefined,
           branchedAt,
+          // UI state from metadata (for cross-device sync)
+          // Note: hasUnread is nested under metadata.metadata due to how updateSessionMetadata works
+          hasUnread: metadata.metadata?.hasUnread ?? metadata.hasUnread ?? false,
         };
       });
     },
