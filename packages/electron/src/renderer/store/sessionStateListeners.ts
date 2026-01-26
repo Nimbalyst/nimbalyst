@@ -157,6 +157,20 @@ export function initSessionStateListeners(): () => void {
       console.error('[sessionStateListeners] Error subscribing to session state manager:', error);
     });
 
+  // Fetch currently active sessions and restore their processing state
+  // This handles the case where the renderer refreshes while sessions are running
+  window.electronAPI.sessionState.getActiveSessionIds?.()
+    .then((result: { success: boolean; sessionIds: string[] }) => {
+      if (result.success && result.sessionIds.length > 0) {
+        for (const sessionId of result.sessionIds) {
+          store.set(sessionProcessingAtom(sessionId), true);
+        }
+      }
+    })
+    .catch((error: any) => {
+      console.error('[sessionStateListeners] Error fetching active sessions:', error);
+    });
+
   // Then, listen for state change events
   window.electronAPI.sessionState.onStateChange(handleStateChange);
 
