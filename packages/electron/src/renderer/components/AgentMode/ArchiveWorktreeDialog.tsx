@@ -5,12 +5,15 @@ interface ArchiveWorktreeDialogProps {
   worktreeName: string;
   onArchive: () => void;
   onKeep: () => void;
+  /** Optional message to show (e.g., "Merge successful!" after a merge) */
+  contextMessage?: string;
 }
 
 export function ArchiveWorktreeDialog({
   worktreeName,
   onArchive,
   onKeep,
+  contextMessage,
 }: ArchiveWorktreeDialogProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
 
@@ -48,7 +51,7 @@ export function ArchiveWorktreeDialog({
 
         <div className="archive-worktree-dialog-body px-6 pb-5">
           <p className="mb-4 text-sm leading-relaxed text-[var(--nim-text-muted)]">
-            Merge successful! Would you like to archive{' '}
+            {contextMessage ? `${contextMessage} ` : ''}Are you sure you want to archive{' '}
             <strong className="font-medium text-[var(--nim-text)]">{worktreeName}</strong>?
           </p>
           <p className="archive-worktree-dialog-info m-0 text-[0.8125rem] text-[var(--nim-text-faint)]">

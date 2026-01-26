@@ -17,7 +17,7 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState, useImperativeHandle, type KeyboardEvent } from 'react';
-import { useAtomValue, useSetAtom } from 'jotai';
+import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { ProviderIcon, MaterialSymbol } from '@nimbalyst/runtime';
 import { WorkstreamEditorTabs, type WorkstreamEditorTabsRef } from './WorkstreamEditorTabs';
 import { WorkstreamSessionTabs } from './WorkstreamSessionTabs';
@@ -55,6 +55,7 @@ import {
   filesEditedWidthAtom,
   setFilesEditedWidthAtom,
 } from '../../store/atoms/agentMode';
+import { ArchiveWorktreeDialog } from './ArchiveWorktreeDialog';
 
 export interface AgentWorkstreamPanelRef {
   closeActiveTab: () => void;
@@ -83,14 +84,15 @@ const WorkstreamHeader: React.FC<{
   sidebarVisible: boolean;
   onArchiveStatusChange?: () => void;
   onOpenTerminal?: () => void;
-}> = React.memo(({ workstreamId, workspacePath, worktreeId, worktreePath, onToggleSidebar, sidebarVisible, onArchiveStatusChange, onOpenTerminal }) => {
+  onShowArchiveDialog?: () => void;
+}> = React.memo(({ workstreamId, workspacePath, worktreeId, worktreePath, onToggleSidebar, sidebarVisible, onArchiveStatusChange, onOpenTerminal, onShowArchiveDialog }) => {
   const title = useAtomValue(workstreamTitleAtom(workstreamId));
   const isProcessing = useAtomValue(workstreamProcessingAtom(workstreamId));
   const sessionData = useAtomValue(sessionStoreAtom(workstreamId));
   const layoutMode = useAtomValue(workstreamLayoutModeAtom(workstreamId));
   const hasTabs = useAtomValue(workstreamHasOpenFilesAtom(workstreamId));
   const sessions = useAtomValue(workstreamSessionsAtom(workstreamId));
-  const [isArchived, setIsArchived] = useState(false);
+  const [isArchived, setIsArchived] = useAtom(sessionArchivedAtom(workstreamId));
   const setLayoutMode = useSetAtom(setWorkstreamLayoutModeAtom);
   const updateSessionStore = useSetAtom(updateSessionStoreAtom);
 
@@ -101,12 +103,6 @@ const WorkstreamHeader: React.FC<{
 
   // A workstream has children if there are multiple sessions
   const hasChildren = sessions.length > 1;
-
-  // Load archived state from atom
-  const archivedFromAtom = useAtomValue(sessionArchivedAtom(workstreamId));
-  useEffect(() => {
-    setIsArchived(archivedFromAtom);
-  }, [archivedFromAtom]);
 
   // Focus input when editing starts
   useEffect(() => {
@@ -163,25 +159,42 @@ const WorkstreamHeader: React.FC<{
     setLayoutMode({ workstreamId, mode });
   }, [workstreamId, setLayoutMode]);
 
+  // Determine session type label for archive button
+  const getSessionTypeLabel = useCallback(() => {
+    if (worktreeId) return 'Worktree';
+    if (hasChildren) return 'Workstream';
+    return 'Session';
+  }, [worktreeId, hasChildren]);
+
   const handleArchive = useCallback(async () => {
+    // For worktrees, show confirmation dialog first
+    if (worktreeId && onShowArchiveDialog) {
+      onShowArchiveDialog();
+      return;
+    }
+
     try {
       await window.electronAPI.invoke('sessions:update-metadata', workstreamId, { isArchived: true });
       setIsArchived(true);
+      // Update atom state for immediate UI feedback across all components
+      updateSessionStore({ sessionId: workstreamId, updates: { isArchived: true } });
       onArchiveStatusChange?.();
     } catch (error) {
       console.error('[WorkstreamHeader] Failed to archive:', error);
     }
-  }, [workstreamId, onArchiveStatusChange]);
+  }, [workstreamId, worktreeId, onArchiveStatusChange, onShowArchiveDialog, updateSessionStore]);
 
   const handleUnarchive = useCallback(async () => {
     try {
       await window.electronAPI.invoke('sessions:update-metadata', workstreamId, { isArchived: false });
       setIsArchived(false);
+      // Update atom state for immediate UI feedback across all components
+      updateSessionStore({ sessionId: workstreamId, updates: { isArchived: false } });
       onArchiveStatusChange?.();
     } catch (error) {
       console.error('[WorkstreamHeader] Failed to unarchive:', error);
     }
-  }, [workstreamId, onArchiveStatusChange]);
+  }, [workstreamId, onArchiveStatusChange, updateSessionStore]);
 
   return (
     <div className="workstream-header shrink-0 h-12 px-4 border-b border-[var(--nim-border)] bg-[var(--nim-bg)]">
@@ -246,10 +259,10 @@ const WorkstreamHeader: React.FC<{
         <button
           className="workstream-archive-button flex items-center gap-1.5 h-6 px-2 rounded text-[var(--nim-text-faint)] text-[11px] font-medium cursor-pointer border-none bg-transparent hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text-muted)]"
           onClick={isArchived ? handleUnarchive : handleArchive}
-          title={isArchived ? 'Unarchive session' : 'Archive session'}
+          title={isArchived ? `Unarchive ${getSessionTypeLabel().toLowerCase()}` : `Archive ${getSessionTypeLabel().toLowerCase()}`}
         >
           <MaterialSymbol icon={isArchived ? 'unarchive' : 'archive'} size={16} />
-          <span>{isArchived ? 'Unarchive session' : 'Archive session'}</span>
+          <span>{isArchived ? `Unarchive ${getSessionTypeLabel()}` : `Archive ${getSessionTypeLabel()}`}</span>
         </button>
 
         {/* Toggle files sidebar */}
@@ -310,6 +323,9 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
   // Files sidebar width (project-level state from agentMode)
   const sidebarWidth = useAtomValue(filesEditedWidthAtom);
   const setSidebarWidth = useSetAtom(setFilesEditedWidthAtom);
+
+  // Session store for updating archived state
+  const updateSessionStore = useSetAtom(updateSessionStoreAtom);
 
   // Load persisted state when workstream changes
   useEffect(() => {
@@ -405,6 +421,9 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
   const [isDraggingVertical, setIsDraggingVertical] = useState(false);
   const [isDraggingSidebar, setIsDraggingSidebar] = useState(false);
 
+  // State for archive confirmation dialog (worktrees only)
+  const [showArchiveDialog, setShowArchiveDialog] = useState(false);
+
   // Ref for the content container (used for resize calculations)
   const contentRef = useRef<HTMLDivElement>(null);
 
@@ -439,6 +458,34 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
   const handleToggleSidebar = useCallback(() => {
     toggleSidebar(workstreamId);
   }, [workstreamId, toggleSidebar]);
+
+  // Archive dialog handlers
+  const handleShowArchiveDialog = useCallback(() => {
+    setShowArchiveDialog(true);
+  }, []);
+
+  const handleConfirmArchive = useCallback(async () => {
+    setShowArchiveDialog(false);
+    if (!sessionWorktreeId) return;
+
+    try {
+      // Use the proper worktree archive API (same as right-click context menu)
+      const result = await window.electronAPI.worktreeArchive(sessionWorktreeId, workspacePath);
+
+      if (result.success) {
+        // Callback will trigger refresh of session list
+        onWorktreeArchived?.();
+      } else {
+        console.error('[AgentWorkstreamPanel] Failed to archive worktree:', result.error);
+      }
+    } catch (error) {
+      console.error('[AgentWorkstreamPanel] Failed to archive worktree:', error);
+    }
+  }, [sessionWorktreeId, workspacePath, onWorktreeArchived]);
+
+  const handleCancelArchive = useCallback(() => {
+    setShowArchiveDialog(false);
+  }, []);
 
   // Open a terminal in the worktree directory
   const handleOpenTerminal = useCallback(async () => {
@@ -653,6 +700,8 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
           onToggleSidebar={handleToggleSidebar}
           sidebarVisible={sidebarVisible}
           onOpenTerminal={sessionWorktreeId ? handleOpenTerminal : undefined}
+          onShowArchiveDialog={sessionWorktreeId ? handleShowArchiveDialog : undefined}
+          onArchiveStatusChange={onWorktreeArchived}
         />
 
         <div ref={contentRef} className="agent-workstream-panel-content flex-1 min-h-0 flex flex-col overflow-hidden">
@@ -719,6 +768,15 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
           worktreeId={sessionWorktreeId}
           worktreePath={worktreePath}
           onWorktreeArchived={onWorktreeArchived}
+        />
+      )}
+
+      {/* Archive worktree confirmation dialog */}
+      {showArchiveDialog && sessionWorktreeId && (
+        <ArchiveWorktreeDialog
+          worktreeName={worktreePath?.split('/').pop() || 'worktree'}
+          onArchive={handleConfirmArchive}
+          onKeep={handleCancelArchive}
         />
       )}
     </div>

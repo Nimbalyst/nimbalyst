@@ -1581,6 +1581,7 @@ Please proceed with this strategy.`;
             worktreeName={worktreeName}
             onArchive={handleArchiveWorktree}
             onKeep={handleKeepWorktree}
+            contextMessage="Merge successful!"
           />
         )}
 
