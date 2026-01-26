@@ -441,6 +441,7 @@ cd packages/electron
 
 # Run the dev app with custom port and isolated user data
 echo "Starting Nimbalyst on port $DEV_PORT with isolated user data..."
-VITE_PORT=$DEV_PORT RUN_ONE_DEV_MODE=true npm run dev
+echo "Use /restart in AI chat to restart the app."
+VITE_PORT=$DEV_PORT RUN_ONE_DEV_MODE=true npm run dev:loop
 
 echo "Nimbalyst has been launched!"
