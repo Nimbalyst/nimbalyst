@@ -99,55 +99,23 @@ export function Gallery({ generations, imagesBasePath, onEditPrompt, theme }: Ga
 
     return (
       <div
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'var(--surface-secondary)',
-          display: 'flex',
-          flexDirection: 'column',
-          zIndex: 1000,
-        }}
+        className="fixed inset-0 bg-nim-secondary flex flex-col z-[1000]"
         onClick={() => setExpandedImage(null)}
       >
         {/* Header bar */}
         <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '12px 16px',
-            background: 'var(--surface-tertiary)',
-            borderBottom: '1px solid var(--border-primary)',
-          }}
+          className="flex items-center justify-between px-4 py-3 bg-nim-tertiary border-b border-nim"
           onClick={(e) => e.stopPropagation()}
         >
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div
-              style={{
-                fontSize: 13,
-                color: 'var(--text-primary)',
-                lineHeight: 1.4,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}
-            >
+          <div className="flex-1 min-w-0">
+            <div className="text-[13px] text-nim leading-snug overflow-hidden text-ellipsis whitespace-nowrap">
               {generation.prompt}
             </div>
-            <div
-              style={{
-                fontSize: 11,
-                color: 'var(--text-secondary)',
-                marginTop: 4,
-              }}
-            >
+            <div className="text-[11px] text-nim-muted mt-1">
               {image.width} x {image.height} &middot; {getStyleLabel(generation.style)}
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 8, marginLeft: 16 }}>
+          <div className="flex gap-2 ml-4">
             <button
               onClick={() => {
                 // Download image
@@ -156,32 +124,13 @@ export function Gallery({ generations, imagesBasePath, onEditPrompt, theme }: Ga
                 link.download = image.file;
                 link.click();
               }}
-              style={{
-                padding: '6px 12px',
-                background: 'var(--surface-hover)',
-                border: '1px solid var(--border-primary)',
-                borderRadius: 5,
-                color: 'var(--text-primary)',
-                cursor: 'pointer',
-                fontSize: 12,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-              }}
+              className="px-3 py-1.5 bg-nim-hover border border-nim rounded text-nim cursor-pointer text-xs flex items-center gap-1.5"
             >
               <span>&#8595;</span> Download
             </button>
             <button
               onClick={() => setExpandedImage(null)}
-              style={{
-                padding: '6px 12px',
-                background: 'var(--surface-hover)',
-                border: '1px solid var(--border-primary)',
-                borderRadius: 5,
-                color: 'var(--text-primary)',
-                cursor: 'pointer',
-                fontSize: 12,
-              }}
+              className="px-3 py-1.5 bg-nim-hover border border-nim rounded text-nim cursor-pointer text-xs"
             >
               Close
             </button>
@@ -189,39 +138,17 @@ export function Gallery({ generations, imagesBasePath, onEditPrompt, theme }: Ga
         </div>
 
         {/* Image container */}
-        <div
-          style={{
-            flex: 1,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: 20,
-            overflow: 'hidden',
-          }}
-        >
+        <div className="flex-1 flex items-center justify-center p-5 overflow-hidden">
           <img
             src={`file://${imagesBasePath}/${image.file}`}
             alt={generation.prompt}
-            style={{
-              maxWidth: '100%',
-              maxHeight: '100%',
-              objectFit: 'contain',
-              borderRadius: 8,
-              boxShadow: '0 4px 24px rgba(0, 0, 0, 0.3)',
-            }}
+            className="max-w-full max-h-full object-contain rounded-lg shadow-[0_4px_24px_rgba(0,0,0,0.3)]"
             onClick={(e) => e.stopPropagation()}
           />
         </div>
 
         {/* Navigation hint */}
-        <div
-          style={{
-            padding: '8px 16px',
-            textAlign: 'center',
-            color: 'var(--text-tertiary)',
-            fontSize: 11,
-          }}
-        >
+        <div className="px-4 py-2 text-center text-nim-faint text-[11px]">
           Press Escape or click outside to close
         </div>
       </div>
@@ -229,82 +156,28 @@ export function Gallery({ generations, imagesBasePath, onEditPrompt, theme }: Ga
   };
 
   return (
-    <div
-      style={{
-        flex: 1,
-        minHeight: 0,
-        overflowY: 'auto',
-        padding: 20,
-        position: 'relative',
-      }}
-    >
+    <div className="flex-1 min-h-0 overflow-y-auto p-5 relative">
       <Lightbox />
       {generations.map((generation) => (
-        <div key={generation.id} style={{ marginBottom: 32 }}>
+        <div key={generation.id} className="mb-8">
           {/* Generation header */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'flex-start',
-              gap: 12,
-              marginBottom: 16,
-              padding: '12px 16px',
-              background: 'var(--nim-bg-secondary)',
-              borderRadius: 8,
-            }}
-          >
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                <div
-                  style={{
-                    flex: 1,
-                    fontSize: 13,
-                    color: 'var(--nim-text)',
-                    lineHeight: 1.5,
-                  }}
-                >
+          <div className="flex items-start gap-3 mb-4 px-4 py-3 bg-nim-secondary rounded-lg">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-start gap-3">
+                <div className="flex-1 text-[13px] text-nim leading-normal">
                   {generation.prompt}
                 </div>
                 <button
                   onClick={() => onEditPrompt(generation)}
-                  style={{
-                    padding: '6px 10px',
-                    background: 'transparent',
-                    border: '1px solid var(--nim-border)',
-                    borderRadius: 5,
-                    color: 'var(--nim-text-muted)',
-                    fontSize: 12,
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    flexShrink: 0,
-                  }}
+                  className="px-2.5 py-1.5 bg-transparent border border-nim rounded text-nim-muted text-xs cursor-pointer flex items-center gap-1.5 shrink-0"
                 >
                   <span>&#9998;</span>
                   Edit & Retry
                 </button>
               </div>
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 12,
-                  marginTop: 8,
-                  fontSize: 11,
-                  color: 'var(--nim-text-faint)',
-                }}
-              >
+              <div className="flex items-center gap-3 mt-2 text-[11px] text-nim-faint">
                 <span
-                  style={{
-                    display: 'inline-block',
-                    padding: '3px 8px',
-                    background: isDark ? 'rgba(96, 165, 250, 0.2)' : 'rgba(59, 130, 246, 0.1)',
-                    color: 'var(--nim-link)',
-                    borderRadius: 4,
-                    fontSize: 11,
-                    fontWeight: 500,
-                  }}
+                  className={`inline-block px-2 py-0.5 ${isDark ? 'bg-blue-400/20' : 'bg-blue-500/10'} text-nim-link rounded text-[11px] font-medium`}
                 >
                   {getStyleLabel(generation.style)}
                 </span>
@@ -315,44 +188,19 @@ export function Gallery({ generations, imagesBasePath, onEditPrompt, theme }: Ga
           </div>
 
           {/* Generated images grid */}
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-              gap: 16,
-            }}
-          >
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-4">
             {generation.results.length > 0 ? (
               generation.results.map((result, index) => (
                 <div
                   key={`${generation.id}-${index}`}
-                  style={{
-                    position: 'relative',
-                    aspectRatio: '1',
-                    background: 'var(--nim-bg-secondary)',
-                    borderRadius: 8,
-                    overflow: 'hidden',
-                    cursor: 'pointer',
-                    border: '2px solid transparent',
-                    transition: 'border-color 0.15s ease',
-                  }}
+                  className="relative aspect-square bg-nim-secondary rounded-lg overflow-hidden cursor-pointer border-2 border-transparent hover:border-nim transition-colors duration-150"
                   onClick={() => setExpandedImage({ image: result, generation })}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.borderColor = 'var(--nim-border)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.borderColor = 'transparent';
-                  }}
                 >
                   {/* Image or placeholder */}
                   <img
                     src={`file://${imagesBasePath}/${result.file}`}
                     alt={`Generated image ${index + 1}`}
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'cover',
-                    }}
+                    className="w-full h-full object-cover"
                     onError={(e) => {
                       // Replace with placeholder on error
                       e.currentTarget.style.display = 'none';
@@ -367,9 +215,7 @@ export function Gallery({ generations, imagesBasePath, onEditPrompt, theme }: Ga
                   </div>
 
                   {/* Hover overlay with actions */}
-                  <div
-                    className="image-overlay absolute bottom-0 left-0 right-0 p-2.5 bg-gradient-to-t from-black/80 to-transparent opacity-0 transition-opacity duration-150"
-                  >
+                  <div className="image-overlay absolute bottom-0 left-0 right-0 p-2.5 bg-gradient-to-t from-black/80 to-transparent opacity-0 transition-opacity duration-150">
                     <div className="flex gap-1.5 justify-end">
                       <button
                         title="Download"
