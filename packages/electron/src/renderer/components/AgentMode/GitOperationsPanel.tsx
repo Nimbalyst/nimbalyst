@@ -220,10 +220,10 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
 
     // Handle smart commit (AI-assisted)
     const handleSmartCommit = useCallback(async () => {
-      // Send message to AI session to analyze changes and propose commit
+      // Send message to AI session to propose commit based on session work
       if (window.electronAPI && sessionId && workspacePath) {
         try {
-          const message = 'Please analyze the changes I made and propose a commit using git_commit_proposal.';
+          const message = 'Use git_commit_proposal to create a commit for the work done in this session. Include all session-edited files that have uncommitted changes.';
           const docContext = {
             filePath: undefined,
             content: undefined,
