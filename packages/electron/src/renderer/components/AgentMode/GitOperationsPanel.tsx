@@ -914,7 +914,9 @@ Please proceed with this strategy.`;
             </button>
             {worktreeId && (
               <button
-                className={mode === 'worktree' ? 'active' : ''}
+                className={`px-1.5 py-0.5 border-none bg-transparent text-[var(--nim-text-muted)] text-[10px] font-medium cursor-pointer transition-all duration-150 ${
+                  mode === 'worktree' ? 'bg-[var(--nim-bg-tertiary)] text-[var(--nim-text)]' : 'hover:bg-[var(--nim-bg-tertiary)] hover:opacity-60'
+                }`}
                 onClick={() => setMode('worktree')}
                 title="Worktree operations"
               >
@@ -1018,41 +1020,45 @@ Please proceed with this strategy.`;
 
             {/* Worktree Mode */}
             {mode === 'worktree' && worktreeId && (
-              <div className="git-operations-panel__worktree">
+              <div className="flex flex-col gap-3">
                 {/* Uncommitted Changes */}
-                <div className="git-operations-panel__section">
-                  <div className="git-operations-panel__section-header">
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between text-[11px] font-semibold text-[var(--nim-text)]">
                     <span>Uncommitted Changes ({worktreeChangedFiles.length})</span>
-                    <div className="git-operations-panel__section-actions">
+                    <div className="flex gap-2">
                       <button
                         onClick={() => handleWorktreeToggleAllStaged(true)}
                         disabled={worktreeChangedFiles.length === 0}
-                        className="git-operations-panel__btn-text"
+                        className="bg-transparent border-none text-[var(--nim-primary)] text-[10px] font-medium cursor-pointer p-0 hover:underline disabled:text-[var(--nim-text-faint)] disabled:cursor-not-allowed disabled:no-underline"
                       >
                         Stage All
                       </button>
                       <button
                         onClick={() => handleWorktreeToggleAllStaged(false)}
                         disabled={worktreeStagedCount === 0}
-                        className="git-operations-panel__btn-text"
+                        className="bg-transparent border-none text-[var(--nim-primary)] text-[10px] font-medium cursor-pointer p-0 hover:underline disabled:text-[var(--nim-text-faint)] disabled:cursor-not-allowed disabled:no-underline"
                       >
                         Clear
                       </button>
                     </div>
                   </div>
                   {worktreeChangedFiles.length > 0 && (
-                    <div className="git-operations-panel__file-list">
+                    <div className="flex flex-col gap-1 max-h-[200px] overflow-y-auto border border-[var(--nim-border)] rounded p-1 bg-[var(--nim-bg)]">
                       {worktreeChangedFiles.map((file) => (
-                        <div key={file.path} className="git-operations-panel__file-item">
+                        <div key={file.path} className="flex items-center gap-2 p-1 text-[11px] text-[var(--nim-text)] hover:bg-[var(--nim-bg-tertiary)] hover:rounded-[3px]">
                           <input
                             type="checkbox"
                             checked={file.staged}
                             onChange={() => handleWorktreeToggleStaged(file.path)}
                           />
-                          <span className={`git-operations-panel__file-status git-operations-panel__file-status--${file.status}`}>
+                          <span className={`text-[10px] font-[var(--nim-font-mono)] font-semibold ${
+                            file.status === 'added' ? 'text-[var(--nim-success)]' :
+                            file.status === 'modified' ? 'text-[var(--nim-warning)]' :
+                            'text-[var(--nim-error)]'
+                          }`}>
                             {file.status === 'added' ? 'A' : file.status === 'modified' ? 'M' : 'D'}
                           </span>
-                          <span className="git-operations-panel__file-path">
+                          <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
                             {file.path.split('/').pop()}
                           </span>
                         </div>
@@ -1063,15 +1069,15 @@ Please proceed with this strategy.`;
 
                 {/* Worktree Status Info */}
                 {(effectiveWorktreeCommitsBehind > 0 || worktreeIsMerged) && (
-                  <div className="git-operations-panel__worktree-status">
+                  <div className="flex flex-col gap-1 text-[11px]">
                     {effectiveWorktreeCommitsBehind > 0 && (
-                      <span className="git-operations-panel__status-warning">
+                      <span className="flex items-center gap-1.5 text-[var(--nim-warning)] font-medium">
                         <MaterialSymbol icon="warning" size={14} />
                         {effectiveWorktreeCommitsBehind} commit{effectiveWorktreeCommitsBehind !== 1 ? 's' : ''} behind {worktreeRepoRootBranch || 'base'}
                       </span>
                     )}
                     {worktreeIsMerged && (
-                      <span className="git-operations-panel__status-success">
+                      <span className="flex items-center gap-1.5 text-[var(--nim-success)] font-medium">
                         <MaterialSymbol icon="check_circle" size={14} />
                         Merged to {worktreeRepoRootBranch || 'base'}
                       </span>
@@ -1080,9 +1086,9 @@ Please proceed with this strategy.`;
                 )}
 
                 {/* Commit Message */}
-                <div className="git-operations-panel__section">
+                <div className="flex flex-col gap-2">
                   <textarea
-                    className="git-operations-panel__worktree-commit-message"
+                    className="w-full p-2 border border-[var(--nim-border)] rounded bg-[var(--nim-bg)] text-[var(--nim-text)] text-[11px] font-[var(--nim-font-mono)] resize-y focus:outline-none focus:border-[var(--nim-primary)] disabled:opacity-50 disabled:cursor-not-allowed"
                     placeholder="Commit message..."
                     value={worktreeCommitMessage}
                     onChange={(e) => setWorktreeCommitMessage(e.target.value)}
@@ -1091,11 +1097,11 @@ Please proceed with this strategy.`;
                   />
                 </div>
 
-                {/* Action Buttons - styled like CommitSection */}
-                <div className="git-operations-panel__worktree-actions">
+                {/* Action Buttons */}
+                <div className="flex flex-col gap-2">
                   <button
                     type="button"
-                    className="git-operations-panel__worktree-button git-operations-panel__worktree-button--primary"
+                    className="w-full p-2 border-none rounded bg-[var(--nim-primary)] text-white text-xs font-semibold cursor-pointer flex items-center justify-center gap-1.5 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
                     onClick={handleWorktreeCommit}
                     disabled={!worktreeCanCommit}
                     title={worktreeStagedCount === 0 ? 'Stage files to commit' : !worktreeCommitMessage.trim() ? 'Enter commit message' : 'Commit staged changes'}
@@ -1114,7 +1120,11 @@ Please proceed with this strategy.`;
                   </button>
                   <button
                     type="button"
-                    className={`git-operations-panel__worktree-button ${effectiveWorktreeCommitsBehind > 0 ? 'git-operations-panel__worktree-button--warning' : 'git-operations-panel__worktree-button--secondary'}`}
+                    className={`w-full p-2 border-none rounded text-white text-xs font-semibold cursor-pointer flex items-center justify-center gap-1.5 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed ${
+                      effectiveWorktreeCommitsBehind > 0
+                        ? 'bg-[var(--nim-warning)]'
+                        : 'bg-[var(--nim-bg-tertiary)] text-[var(--nim-text)]'
+                    }`}
                     onClick={handleWorktreeRebase}
                     disabled={!worktreeCanRebase}
                     title={
@@ -1139,7 +1149,7 @@ Please proceed with this strategy.`;
                   </button>
                   <button
                     type="button"
-                    className="git-operations-panel__worktree-button git-operations-panel__worktree-button--secondary"
+                    className="w-full p-2 border-none rounded bg-[var(--nim-bg-tertiary)] text-[var(--nim-text)] text-xs font-semibold cursor-pointer flex items-center justify-center gap-1.5 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
                     onClick={handleWorktreeMerge}
                     disabled={!worktreeCanMerge}
                     title={
@@ -1170,31 +1180,31 @@ Please proceed with this strategy.`;
 
                 {/* Worktree Commits */}
                 {worktreeCommits.length > 0 && (
-                  <div className="git-operations-panel__section">
-                    <div className="git-operations-panel__section-header">
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-between text-[11px] font-semibold text-[var(--nim-text)]">
                       <span>Commits ({worktreeCommits.length})</span>
                     </div>
                     {/* Squash actions - only show when commits are selected */}
                     {worktreeCommits.length > 1 && selectedCommits.size > 0 && (
-                      <div className="git-operations-panel__squash-actions">
-                        <div className="git-operations-panel__squash-info">
+                      <div className="flex items-center justify-between gap-2 p-2 bg-[var(--nim-bg-tertiary)] rounded border border-[var(--nim-border)]">
+                        <div className="text-[11px] text-[var(--nim-text-muted)]">
                           {selectedCommits.size === 1 ? (
                             <span>Select at least one more commit</span>
                           ) : (
                             <span>{selectedCommits.size} commits selected</span>
                           )}
                         </div>
-                        <div className="git-operations-panel__squash-buttons">
+                        <div className="flex gap-2">
                           <button
                             type="button"
-                            className="git-operations-panel__btn-text"
+                            className="bg-transparent border-none text-[var(--nim-primary)] text-[10px] font-medium cursor-pointer p-0 hover:underline"
                             onClick={handleClearSelection}
                           >
                             Clear
                           </button>
                           <button
                             type="button"
-                            className="git-operations-panel__squash-btn"
+                            className="px-2 py-1 border-none rounded bg-[var(--nim-primary)] text-white text-[10px] font-semibold cursor-pointer hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
                             onClick={handleSquashClick}
                             disabled={selectedCommits.size < 2 || isSquashing}
                           >
@@ -1203,14 +1213,16 @@ Please proceed with this strategy.`;
                         </div>
                       </div>
                     )}
-                    <div className="git-operations-panel__worktree-commits">
+                    <div className="flex flex-col gap-1 max-h-[200px] overflow-y-auto border border-[var(--nim-border)] rounded p-1 bg-[var(--nim-bg)]">
                       {worktreeCommits.map((commit) => {
                         const isSelected = selectedCommits.has(commit.hash);
                         const canSelect = selectableCommits.has(commit.hash);
                         return (
                           <div
                             key={commit.hash}
-                            className={`git-operations-panel__worktree-commit ${isSelected ? 'git-operations-panel__worktree-commit--selected' : ''}`}
+                            className={`flex items-center gap-2 p-2 rounded text-[11px] ${
+                              isSelected ? 'bg-[var(--nim-bg-selected)] border border-[var(--nim-primary)]' : 'hover:bg-[var(--nim-bg-tertiary)]'
+                            }`}
                           >
                             {worktreeCommits.length > 1 && (
                               <input
@@ -1218,14 +1230,14 @@ Please proceed with this strategy.`;
                                 checked={isSelected}
                                 disabled={!canSelect && !isSelected}
                                 onChange={() => handleToggleCommit(commit.hash)}
-                                className="git-operations-panel__commit-checkbox"
+                                className="cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                                 title={!canSelect && !isSelected ? 'Only consecutive commits can be squashed' : 'Select for squashing'}
                               />
                             )}
-                            <div className="git-operations-panel__commit-hash">
+                            <div className="font-[var(--nim-font-mono)] text-[var(--nim-primary)] text-[10px] font-semibold">
                               {commit.shortHash}
                             </div>
-                            <div className="git-operations-panel__worktree-commit-message">
+                            <div className="flex-1 text-[var(--nim-text)] overflow-hidden text-ellipsis whitespace-nowrap">
                               {commit.message}
                             </div>
                           </div>

@@ -1629,6 +1629,27 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
             <path d="M6 8h4" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round"/>
           </svg>
         </button>
+        <button
+          className={`session-history-view-toggle flex items-center justify-center px-1.5 py-1 text-xs rounded border border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] text-[var(--nim-text-faint)] cursor-pointer transition-all duration-150 outline-none hover:bg-[var(--nim-bg-tertiary)] hover:border-[var(--nim-primary)] hover:text-[var(--nim-text)] [&_svg]:block ${viewMode === 'card' ? 'bg-[var(--nim-primary)] border-[var(--nim-primary)] text-white hover:opacity-90' : ''}`}
+          onClick={() => setViewMode(viewMode === 'list' ? 'card' : 'list')}
+          title={viewMode === 'list' ? 'Switch to card view' : 'Switch to list view'}
+          aria-label={viewMode === 'list' ? 'Switch to card view' : 'Switch to list view'}
+        >
+          {viewMode === 'list' ? (
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="2" y="2" width="5" height="5" stroke="currentColor" strokeWidth="1.25" rx="1"/>
+              <rect x="9" y="2" width="5" height="5" stroke="currentColor" strokeWidth="1.25" rx="1"/>
+              <rect x="2" y="9" width="5" height="5" stroke="currentColor" strokeWidth="1.25" rx="1"/>
+              <rect x="9" y="9" width="5" height="5" stroke="currentColor" strokeWidth="1.25" rx="1"/>
+            </svg>
+          ) : (
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="2" y="3" width="12" height="2" rx="0.5" fill="currentColor"/>
+              <rect x="2" y="7" width="12" height="2" rx="0.5" fill="currentColor"/>
+              <rect x="2" y="11" width="12" height="2" rx="0.5" fill="currentColor"/>
+            </svg>
+          )}
+        </button>
         <div className="session-history-sort-dropdown ml-auto relative">
           <button
             className="session-history-sort-button flex items-center justify-center px-1.5 py-1 text-xs rounded border border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] text-[var(--nim-text-muted)] cursor-pointer transition-all duration-150 outline-none hover:bg-[var(--nim-bg-tertiary)] hover:border-[var(--nim-primary)] hover:text-[var(--nim-text)] [&_svg]:block"
