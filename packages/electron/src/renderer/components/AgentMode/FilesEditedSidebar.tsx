@@ -18,6 +18,11 @@ import { FileEditsSidebar as FileEditsSidebarComponent, MaterialSymbol } from '@
 import type { FileEditSummary } from '@nimbalyst/runtime';
 import { diffTreeGroupByDirectoryAtom, setDiffTreeGroupByDirectoryAtom } from '../../store/atoms/projectState';
 import { workstreamSessionsAtom, sessionTitleAtom } from '../../store/atoms/sessions';
+import { gitOperationModeAtom } from '../../store/atoms/gitOperations';
+import {
+  workstreamStagedFilesAtom,
+  setWorkstreamStagedFilesAtom,
+} from '../../store/atoms/workstreamState';
 import { GitOperationsPanel } from './GitOperationsPanel';
 
 interface FilesEditedSidebarProps {
@@ -71,6 +76,15 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
   const [groupByDirectory] = useAtom(diffTreeGroupByDirectoryAtom);
   const setDiffTreeGroupByDirectory = useSetAtom(setDiffTreeGroupByDirectoryAtom);
 
+  // Git operation mode - determines if checkboxes are shown
+  const gitOperationMode = useAtomValue(gitOperationModeAtom);
+  const showCheckboxes = gitOperationMode === 'manual' || gitOperationMode === 'worktree';
+
+  // Staged files - used for checkbox state (per-workstream)
+  const stagedFilesArr = useAtomValue(workstreamStagedFilesAtom(workstreamId));
+  const stagedFiles = useMemo(() => new Set(stagedFilesArr), [stagedFilesArr]);
+  const setStagedFilesAction = useSetAtom(setWorkstreamStagedFilesAtom);
+
   const setGroupByDirectory = useCallback((value: boolean) => {
     if (workspacePath) {
       setDiffTreeGroupByDirectory({ groupByDirectory: value, workspacePath });
@@ -98,6 +112,23 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
   const editedFilePaths = useMemo(() => {
     return fileEdits.map((f) => f.filePath);
   }, [fileEdits]);
+
+  // Handle file selection change (checkbox toggle)
+  const handleSelectionChange = useCallback((filePath: string, selected: boolean) => {
+    const newFiles = selected
+      ? [...stagedFilesArr, filePath]
+      : stagedFilesArr.filter(f => f !== filePath);
+    setStagedFilesAction({ workstreamId, files: newFiles });
+  }, [stagedFilesArr, setStagedFilesAction, workstreamId]);
+
+  // Handle select all files
+  const handleSelectAll = useCallback((selected: boolean) => {
+    if (selected) {
+      setStagedFilesAction({ workstreamId, files: editedFilePaths });
+    } else {
+      setStagedFilesAction({ workstreamId, files: [] });
+    }
+  }, [editedFilePaths, setStagedFilesAction, workstreamId]);
 
   // Fetch file edits from database for ALL sessions in the workstream
   useEffect(() => {
@@ -333,6 +364,41 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
     }
   }, [workspacePath, workstreamSessions, isClearing]);
 
+  // Context menu handlers
+  const handleOpenInFiles = useCallback((filePath: string) => {
+    // Navigate to the file in Files mode (main editor)
+    onFileClick(filePath);
+  }, [onFileClick]);
+
+  const handleViewDiff = useCallback(async (filePath: string) => {
+    // Open diff view for the file
+    if (typeof window !== 'undefined' && window.electronAPI) {
+      try {
+        await window.electronAPI.invoke('file:open-diff', filePath, workspacePath);
+      } catch (error) {
+        console.error('[FilesEditedSidebar] Failed to open diff:', error);
+      }
+    }
+  }, [workspacePath]);
+
+  const handleCopyPath = useCallback((filePath: string) => {
+    // Copy file path to clipboard
+    navigator.clipboard.writeText(filePath).catch(error => {
+      console.error('[FilesEditedSidebar] Failed to copy path:', error);
+    });
+  }, []);
+
+  const handleRevealInFinder = useCallback(async (filePath: string) => {
+    // Reveal file in system file browser
+    if (typeof window !== 'undefined' && window.electronAPI) {
+      try {
+        await window.electronAPI.invoke('shell:show-item-in-folder', filePath);
+      } catch (error) {
+        console.error('[FilesEditedSidebar] Failed to reveal in finder:', error);
+      }
+    }
+  }, []);
+
   return (
     <div className="files-edited-sidebar shrink-0 flex flex-col h-full bg-[var(--nim-bg-secondary)]" style={{ width }}>
       {/* Header with Files label and controls */}
@@ -419,12 +485,20 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
           groupByDirectory={groupByDirectory}
           onGroupByDirectoryChange={setGroupByDirectory}
           hideControls
+          onOpenInFiles={handleOpenInFiles}
+          onCopyPath={handleCopyPath}
+          onRevealInFinder={handleRevealInFinder}
+          showCheckboxes={showCheckboxes}
+          selectedFiles={stagedFiles}
+          onSelectionChange={handleSelectionChange}
+          onSelectAll={handleSelectAll}
         />
       </div>
 
       {/* Git Operations Panel */}
       <GitOperationsPanel
         workspacePath={workspacePath}
+        workstreamId={workstreamId}
         sessionId={activeSessionId || workstreamId}
         editedFiles={editedFilePaths}
         worktreeId={worktreeId}

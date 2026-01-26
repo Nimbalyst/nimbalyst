@@ -29,6 +29,42 @@ import { atomFamily } from 'jotai/utils';
 import { store } from '@nimbalyst/runtime/store';
 
 // ============================================================
+// Utilities
+// ============================================================
+
+/**
+ * Deep merge source into target, returning a new object.
+ * Handles nested objects recursively. Arrays are replaced, not merged.
+ * Used to merge persisted state with defaults so new fields are always present.
+ */
+function deepMergeWorkstreamState(
+  target: WorkstreamState,
+  source: Partial<WorkstreamState> | undefined
+): WorkstreamState {
+  if (!source) return target;
+
+  // Start with target defaults
+  const result: WorkstreamState = { ...target };
+
+  // Merge each field from source if defined
+  if (source.id !== undefined) result.id = source.id;
+  if (source.type !== undefined) result.type = source.type;
+  if (source.childSessionIds !== undefined) result.childSessionIds = source.childSessionIds;
+  if (source.activeChildId !== undefined) result.activeChildId = source.activeChildId;
+  if (source.worktreeId !== undefined) result.worktreeId = source.worktreeId;
+  if (source.layoutMode !== undefined) result.layoutMode = source.layoutMode;
+  if (source.splitRatio !== undefined) result.splitRatio = source.splitRatio;
+  if (source.filesSidebarVisible !== undefined) result.filesSidebarVisible = source.filesSidebarVisible;
+  if (source.openFilePaths !== undefined) result.openFilePaths = source.openFilePaths;
+  if (source.activeFilePath !== undefined) result.activeFilePath = source.activeFilePath;
+  if (source.stagedFiles !== undefined) result.stagedFiles = source.stagedFiles;
+  if (source.commitMessage !== undefined) result.commitMessage = source.commitMessage;
+  if (source.activeProposalId !== undefined) result.activeProposalId = source.activeProposalId;
+
+  return result;
+}
+
+// ============================================================
 // Types
 // ============================================================
 
@@ -87,6 +123,14 @@ export interface WorkstreamState {
   openFilePaths: string[];
   /** Currently active file path */
   activeFilePath: string | null;
+
+  // ===== Git Commit State (for Manual/Smart mode) =====
+  /** Files selected for commit (staged in UI) */
+  stagedFiles: string[];
+  /** Commit message being composed */
+  commitMessage: string;
+  /** Active AI proposal ID (when AI proposed a commit) */
+  activeProposalId: string | null;
 }
 
 /**
@@ -104,6 +148,9 @@ function createDefaultState(id: string): WorkstreamState {
     filesSidebarVisible: true,
     openFilePaths: [],
     activeFilePath: null,
+    stagedFiles: [],
+    commitMessage: '',
+    activeProposalId: null,
   };
 }
 
@@ -143,7 +190,10 @@ export const workstreamStateAtom = atomFamily((workstreamId: string) =>
     // Read
     (get) => {
       const map = get(workstreamStatesAtom);
-      let state = map.get(workstreamId) ?? createDefaultState(workstreamId);
+      const stored = map.get(workstreamId);
+      // Deep merge with defaults ensures all fields have values, even nested ones.
+      // This handles old persisted state that's missing newly added fields.
+      let state = deepMergeWorkstreamState(createDefaultState(workstreamId), stored);
 
       // Auto-determine type based on state if not explicitly set
       if (state.type === 'single') {
@@ -250,6 +300,27 @@ export const workstreamHasChildrenAtom = atomFamily((id: string) =>
  */
 export const workstreamHasOpenFilesAtom = atomFamily((id: string) =>
   atom((get) => get(workstreamStateAtom(id)).openFilePaths.length > 0)
+);
+
+/**
+ * Staged files for git commit in a workstream.
+ */
+export const workstreamStagedFilesAtom = atomFamily((id: string) =>
+  atom((get) => get(workstreamStateAtom(id)).stagedFiles)
+);
+
+/**
+ * Commit message being composed in a workstream.
+ */
+export const workstreamCommitMessageAtom = atomFamily((id: string) =>
+  atom((get) => get(workstreamStateAtom(id)).commitMessage)
+);
+
+/**
+ * Active AI proposal ID in a workstream (when AI proposed a commit).
+ */
+export const workstreamActiveProposalIdAtom = atomFamily((id: string) =>
+  atom((get) => get(workstreamStateAtom(id)).activeProposalId)
 );
 
 // ============================================================
@@ -359,6 +430,67 @@ export const addWorkstreamChildAtom = atom(
   }
 );
 
+// ===== Git Commit State Actions =====
+
+/**
+ * Set staged files for a workstream.
+ */
+export const setWorkstreamStagedFilesAtom = atom(
+  null,
+  (get, set, { workstreamId, files }: { workstreamId: string; files: string[] }) => {
+    set(workstreamStateAtom(workstreamId), { stagedFiles: files });
+  }
+);
+
+/**
+ * Toggle a file's staged state in a workstream.
+ */
+export const toggleWorkstreamStagedFileAtom = atom(
+  null,
+  (get, set, { workstreamId, filePath }: { workstreamId: string; filePath: string }) => {
+    const state = get(workstreamStateAtom(workstreamId));
+    const isStaged = state.stagedFiles.includes(filePath);
+    const newStaged = isStaged
+      ? state.stagedFiles.filter(f => f !== filePath)
+      : [...state.stagedFiles, filePath];
+    set(workstreamStateAtom(workstreamId), { stagedFiles: newStaged });
+  }
+);
+
+/**
+ * Set commit message for a workstream.
+ */
+export const setWorkstreamCommitMessageAtom = atom(
+  null,
+  (get, set, { workstreamId, message }: { workstreamId: string; message: string }) => {
+    set(workstreamStateAtom(workstreamId), { commitMessage: message });
+  }
+);
+
+/**
+ * Set active proposal ID for a workstream.
+ */
+export const setWorkstreamActiveProposalIdAtom = atom(
+  null,
+  (get, set, { workstreamId, proposalId }: { workstreamId: string; proposalId: string | null }) => {
+    set(workstreamStateAtom(workstreamId), { activeProposalId: proposalId });
+  }
+);
+
+/**
+ * Clear git commit state for a workstream (after successful commit).
+ */
+export const clearWorkstreamGitStateAtom = atom(
+  null,
+  (get, set, workstreamId: string) => {
+    set(workstreamStateAtom(workstreamId), {
+      stagedFiles: [],
+      commitMessage: '',
+      activeProposalId: null,
+    });
+  }
+);
+
 /**
  * Convert a single session into a workstream.
  * Creates the workstream structure and updates state.
@@ -390,6 +522,10 @@ export const convertToWorkstreamAtom = atom(
       filesSidebarVisible: currentState.filesSidebarVisible,
       openFilePaths: currentState.openFilePaths,
       activeFilePath: currentState.activeFilePath,
+      // Inherit git state from original session
+      stagedFiles: currentState.stagedFiles,
+      commitMessage: currentState.commitMessage,
+      activeProposalId: currentState.activeProposalId,
     });
 
     // Clear the original session's state (it's now a child, state lives on parent)
@@ -404,6 +540,9 @@ export const convertToWorkstreamAtom = atom(
       filesSidebarVisible: true,
       openFilePaths: [],
       activeFilePath: null,
+      stagedFiles: [],
+      commitMessage: '',
+      activeProposalId: null,
     });
 
     // Initialize sibling state

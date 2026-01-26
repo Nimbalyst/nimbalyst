@@ -100,6 +100,12 @@
   --nim-code-attr: var(--code-attr, #07a);
   --nim-code-variable: var(--code-variable, #e90);
   --nim-code-function: var(--code-function, #dd4a68);
+
+  /* File status colors (for FilesEditedSidebar) */
+  --nim-file-new: #2d8a6e;
+  --nim-file-edited: #4a7ab8;
+  --nim-file-deleted: #b85c5c;
+  --nim-file-committed: var(--nim-text-muted);
 }
 
 /* ===== DARK THEME ===== */
@@ -184,6 +190,12 @@
   --nim-code-attr: var(--code-attr, #92c5f8);
   --nim-code-variable: var(--code-variable, #4fc1ff);
   --nim-code-function: var(--code-function, #dcdcaa);
+
+  /* File status colors (for FilesEditedSidebar) */
+  --nim-file-new: #5eaa8d;
+  --nim-file-edited: #7aa2d4;
+  --nim-file-deleted: #c97a7a;
+  --nim-file-committed: var(--nim-text-muted);
 }
 
 /* ===== CRYSTAL DARK THEME ===== */
@@ -268,4 +280,10 @@
   --nim-code-attr: var(--code-attr, #60A5FA);
   --nim-code-variable: var(--code-variable, #34D399);
   --nim-code-function: var(--code-function, #A78BFA);
+
+  /* File status colors (for FilesEditedSidebar) */
+  --nim-file-new: #5eaa8d;
+  --nim-file-edited: #7aa2d4;
+  --nim-file-deleted: #c97a7a;
+  --nim-file-committed: var(--nim-text-muted);
 }

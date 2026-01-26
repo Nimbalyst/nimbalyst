@@ -14,6 +14,29 @@ interface FileEditsSidebarProps {
   onGroupByDirectoryChange?: (value: boolean) => void;
   /** If true, hide the internal controls (for when controls are rendered externally) */
   hideControls?: boolean;
+  /** Callback to open file in Files mode (main editor) */
+  onOpenInFiles?: (filePath: string) => void;
+  /** Callback to view diff for a file */
+  onViewDiff?: (filePath: string) => void;
+  /** Callback to copy file path */
+  onCopyPath?: (filePath: string) => void;
+  /** Callback to reveal file in system file browser */
+  onRevealInFinder?: (filePath: string) => void;
+  /** Whether to show checkboxes for file selection (Manual/Worktree mode) */
+  showCheckboxes?: boolean;
+  /** Set of selected file paths (for checkbox state) */
+  selectedFiles?: Set<string>;
+  /** Callback when file selection changes */
+  onSelectionChange?: (filePath: string, selected: boolean) => void;
+  /** Callback to select/deselect all files */
+  onSelectAll?: (selected: boolean) => void;
+}
+
+interface ContextMenuState {
+  isOpen: boolean;
+  x: number;
+  y: number;
+  filePath: string;
 }
 
 interface FileGitStatus {
@@ -36,7 +59,15 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
   pendingReviewFiles,
   groupByDirectory: groupByDirectoryProp,
   onGroupByDirectoryChange,
-  hideControls = false
+  hideControls = false,
+  onOpenInFiles,
+  onViewDiff,
+  onCopyPath,
+  onRevealInFinder,
+  showCheckboxes = false,
+  selectedFiles,
+  onSelectionChange,
+  onSelectAll
 }) => {
   const [gitStatus, setGitStatus] = useState<Record<string, FileGitStatus>>({});
   // Use prop if provided, otherwise use local state
@@ -44,6 +75,7 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
   const groupByDirectory = groupByDirectoryProp ?? localGroupByDirectory;
   const setGroupByDirectory = onGroupByDirectoryChange ?? setLocalGroupByDirectory;
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
+  const [contextMenu, setContextMenu] = useState<ContextMenuState>({ isOpen: false, x: 0, y: 0, filePath: '' });
 
   // Convert absolute path to relative path from workspace root
   const getRelativePath = (filePath: string): string => {
@@ -287,23 +319,60 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
     };
   }, [hideControls, expandAll, collapseAll]);
 
-  const getOperationIcon = (operation: string) => {
-    const iconClasses: Record<string, string> = {
-      create: 'text-[var(--nim-success)]',
-      edit: 'text-[var(--nim-primary)]',
-      delete: 'text-[var(--nim-error)]',
-      rename: 'text-[var(--nim-warning)]'
-    };
-    const iconNames: Record<string, string> = {
-      create: 'add',
-      edit: 'edit',
-      delete: 'delete',
-      rename: 'drive_file_rename_outline'
-    };
-    if (!iconNames[operation]) return null;
-    return (
-      <MaterialSymbol icon={iconNames[operation]} size={14} className={`file-edits-sidebar__icon w-3.5 h-3.5 ${iconClasses[operation] || ''}`} />
-    );
+  // Check if file has uncommitted changes (is selectable for commit)
+  const isFileCommitted = (filePath: string): boolean => {
+    const relativePath = getRelativePath(filePath);
+    const status = gitStatus[relativePath];
+    return !status || status.status === 'unchanged';
+  };
+
+  // Get file status color class based on operation and git status
+  const getFileStatusColor = (filePath: string, operation?: string): string => {
+    const relativePath = getRelativePath(filePath);
+    const status = gitStatus[relativePath];
+
+    // If file has no git changes (committed/unchanged), use committed color
+    const isCommitted = !status || status.status === 'unchanged';
+
+    if (isCommitted) {
+      return 'text-[var(--nim-file-committed)]';
+    }
+
+    // File has uncommitted changes - color by operation type
+    if (operation === 'delete') {
+      return 'text-[var(--nim-file-deleted)]';
+    }
+    if (operation === 'create') {
+      return 'text-[var(--nim-file-new)]';
+    }
+    // edit, rename, or unknown operation
+    return 'text-[var(--nim-file-edited)]';
+  };
+
+  // Get tooltip text for file status
+  const getFileStatusTooltip = (filePath: string, operation?: string): string => {
+    const relativePath = getRelativePath(filePath);
+    const status = gitStatus[relativePath];
+
+    const isCommitted = !status || status.status === 'unchanged';
+
+    if (isCommitted) {
+      if (operation === 'delete') {
+        return `${relativePath} - Deleted and committed`;
+      }
+      return `${relativePath} - Committed`;
+    }
+
+    // Build tooltip based on operation and git status
+    const operationText = {
+      create: 'Created',
+      edit: 'Edited',
+      delete: 'Deleted',
+      rename: 'Renamed'
+    }[operation || 'edit'] || 'Modified';
+
+    const gitStatusText = status ? ` (${status.status})` : '';
+    return `${relativePath} - ${operationText}${gitStatusText}`;
   };
 
   const formatFileName = (filePath: string) => {
@@ -312,77 +381,205 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
     return parts[parts.length - 1];
   };
 
-  // Render git status indicator
-  const renderGitStatus = (filePath: string) => {
-    const relativePath = getRelativePath(filePath);
-    const status = gitStatus[relativePath];
-    if (!status || status.status === 'unchanged') {
-      return null;
+  // Context menu handlers
+  const handleContextMenu = (e: React.MouseEvent, filePath: string) => {
+    e.preventDefault();
+    setContextMenu({
+      isOpen: true,
+      x: e.clientX,
+      y: e.clientY,
+      filePath
+    });
+  };
+
+  const closeContextMenu = () => {
+    setContextMenu({ isOpen: false, x: 0, y: 0, filePath: '' });
+  };
+
+  // Close context menu when clicking outside
+  useEffect(() => {
+    if (contextMenu.isOpen) {
+      const handleClick = () => closeContextMenu();
+      document.addEventListener('click', handleClick);
+      return () => document.removeEventListener('click', handleClick);
     }
+    return undefined;
+  }, [contextMenu.isOpen]);
 
-    const statusChar = {
-      modified: 'M',
-      staged: 'S',
-      untracked: '?',
-      deleted: 'D',
-      unchanged: ''
-    }[status.status];
+  const renderContextMenu = () => {
+    if (!contextMenu.isOpen) return null;
 
-    const statusBgColors: Record<string, string> = {
-      modified: 'bg-[var(--nim-warning)]',
-      staged: 'bg-[var(--nim-success)]',
-      untracked: 'bg-[var(--nim-text-faint)]',
-      deleted: 'bg-[var(--nim-error)]'
-    };
+    const hasContextActions = onOpenInFiles || onViewDiff || onCopyPath || onRevealInFinder;
+    if (!hasContextActions) return null;
 
     return (
-      <span
-        className={`file-edits-sidebar__git-status inline-flex items-center justify-center w-3.5 h-3.5 text-[0.65rem] font-semibold rounded-sm shrink-0 text-white ${statusBgColors[status.status] || ''} ${status.status === 'untracked' ? 'text-[var(--nim-bg)]' : ''}`}
-        title={`Git status: ${status.status}`}
+      <div
+        className="file-edits-sidebar__context-menu fixed z-50 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded-md shadow-lg py-1 min-w-[180px]"
+        style={{ left: contextMenu.x, top: contextMenu.y }}
+        onClick={(e) => e.stopPropagation()}
       >
-        {statusChar}
-      </span>
+        {onOpenInFiles && (
+          <button
+            className="file-edits-sidebar__context-menu-item w-full flex items-center gap-2 px-3 py-1.5 text-[0.8125rem] text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)] text-left"
+            onClick={() => {
+              onOpenInFiles(contextMenu.filePath);
+              closeContextMenu();
+            }}
+          >
+            <MaterialSymbol icon="open_in_new" size={16} className="text-[var(--nim-text-muted)]" />
+            Open in Files
+          </button>
+        )}
+        {onViewDiff && (
+          <button
+            className="file-edits-sidebar__context-menu-item w-full flex items-center gap-2 px-3 py-1.5 text-[0.8125rem] text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)] text-left"
+            onClick={() => {
+              onViewDiff(contextMenu.filePath);
+              closeContextMenu();
+            }}
+          >
+            <MaterialSymbol icon="difference" size={16} className="text-[var(--nim-text-muted)]" />
+            View Diff
+          </button>
+        )}
+        {(onOpenInFiles || onViewDiff) && (onCopyPath || onRevealInFinder) && (
+          <div className="file-edits-sidebar__context-menu-divider h-px bg-[var(--nim-border)] my-1" />
+        )}
+        {onCopyPath && (
+          <button
+            className="file-edits-sidebar__context-menu-item w-full flex items-center gap-2 px-3 py-1.5 text-[0.8125rem] text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)] text-left"
+            onClick={() => {
+              onCopyPath(contextMenu.filePath);
+              closeContextMenu();
+            }}
+          >
+            <MaterialSymbol icon="content_copy" size={16} className="text-[var(--nim-text-muted)]" />
+            Copy Path
+          </button>
+        )}
+        {onRevealInFinder && (
+          <button
+            className="file-edits-sidebar__context-menu-item w-full flex items-center gap-2 px-3 py-1.5 text-[0.8125rem] text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)] text-left"
+            onClick={() => {
+              onRevealInFinder(contextMenu.filePath);
+              closeContextMenu();
+            }}
+          >
+            <MaterialSymbol icon="folder_open" size={16} className="text-[var(--nim-text-muted)]" />
+            Reveal in Finder
+          </button>
+        )}
+      </div>
     );
   };
 
-  const renderFile = ({ filePath, totalAdded, totalRemoved, operation }: { filePath: string; totalAdded: number; totalRemoved: number; operation?: string }) => {
+  const renderFile = ({ filePath, operation }: { filePath: string; totalAdded: number; totalRemoved: number; operation?: string }, isInDirectory = false) => {
     const hasPendingReview = pendingReviewFiles?.has(filePath);
+    const fileColorClass = getFileStatusColor(filePath, operation);
+    const isDeleted = operation === 'delete';
+    const tooltip = getFileStatusTooltip(filePath, operation);
+    const committed = isFileCommitted(filePath);
+    const isSelected = selectedFiles?.has(filePath) ?? false;
+
+    // Handler to toggle file selection without triggering file click
+    const handleCheckboxClick = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      onSelectionChange?.(filePath, !isSelected);
+    };
+
     return (
       <button
         key={filePath}
         onClick={() => onFileClick?.(filePath)}
+        onContextMenu={(e) => handleContextMenu(e, filePath)}
         className={`file-edits-sidebar__file w-full text-left px-2 py-0.5 rounded border border-transparent transition-all bg-transparent hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-border)] ${hasPendingReview ? 'bg-[rgba(251,191,36,0.08)] border-[rgba(251,191,36,0.2)] hover:bg-[rgba(251,191,36,0.12)] hover:border-[rgba(251,191,36,0.3)]' : ''}`}
+        title={tooltip}
       >
-        <div className="file-edits-sidebar__file-content flex items-center gap-1.5">
-          {operation && (
-            <div className="file-edits-sidebar__file-operation-icon shrink-0">
-              {getOperationIcon(operation)}
-            </div>
+        <div className="file-edits-sidebar__file-content flex items-center gap-1">
+          {/* Placeholder for expand caret (to align with folder rows) - only in directory tree */}
+          {isInDirectory && (
+            <div className="file-edits-sidebar__caret-placeholder w-4 h-4 shrink-0" />
           )}
-          {renderGitStatus(filePath)}
+          {/* Checkbox for commit selection - only show when in checkbox mode */}
+          {showCheckboxes && (
+            committed ? (
+              // Placeholder for committed files (no checkbox)
+              <div className="file-edits-sidebar__checkbox-placeholder w-4 h-4 shrink-0" />
+            ) : (
+              // Checkbox for uncommitted files
+              <div
+                onClick={handleCheckboxClick}
+                className={`file-edits-sidebar__checkbox w-4 h-4 shrink-0 rounded-[3px] border-[1.5px] cursor-pointer flex items-center justify-center transition-all ${
+                  isSelected
+                    ? 'bg-[var(--nim-file-edited)] border-[var(--nim-file-edited)]'
+                    : 'border-[var(--nim-text-faint)] bg-transparent hover:border-[var(--nim-text-muted)]'
+                }`}
+              >
+                {isSelected && (
+                  <svg width="8" height="6" viewBox="0 0 8 6" fill="none" className="text-white">
+                    <path d="M1 3L3 5L7 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                )}
+              </div>
+            )
+          )}
           <div className="file-edits-sidebar__file-info flex-1 min-w-0">
-            <div className="file-edits-sidebar__file-name text-[0.8125rem] text-[var(--nim-text)] font-medium overflow-hidden text-ellipsis whitespace-nowrap" title={getRelativePath(filePath)}>
+            <div
+              className={`file-edits-sidebar__file-name text-[0.8125rem] font-medium overflow-hidden text-ellipsis whitespace-nowrap ${fileColorClass} ${isDeleted ? 'line-through' : ''}`}
+            >
               {formatFileName(filePath)}
             </div>
           </div>
-          {(totalAdded > 0 || totalRemoved > 0) && (
-            <div className="file-edits-sidebar__file-stats flex items-center gap-1 text-[0.6875rem] shrink-0">
-              {totalAdded > 0 && (
-                <span className="file-edits-sidebar__file-stats-added text-[var(--nim-success)]">+{totalAdded}</span>
-              )}
-              {totalRemoved > 0 && (
-                <span className="file-edits-sidebar__file-stats-removed text-[var(--nim-error)]">-{totalRemoved}</span>
-              )}
-            </div>
-          )}
         </div>
       </button>
     );
   };
 
+  // Helper to collect all file paths from a directory node recursively
+  const collectFilePaths = (node: DirectoryNode): string[] => {
+    const paths: string[] = [];
+    node.files.forEach(f => paths.push(f.filePath));
+    node.subdirectories.forEach(subdir => {
+      paths.push(...collectFilePaths(subdir));
+    });
+    return paths;
+  };
+
+  // Helper to check if all uncommitted files in a directory are selected
+  const getDirectorySelectionState = (node: DirectoryNode): 'none' | 'some' | 'all' => {
+    const allPaths = collectFilePaths(node);
+    const uncommittedPaths = allPaths.filter(p => !isFileCommitted(p));
+
+    if (uncommittedPaths.length === 0) return 'none'; // All files are committed
+
+    const selectedCount = uncommittedPaths.filter(p => selectedFiles?.has(p)).length;
+    if (selectedCount === 0) return 'none';
+    if (selectedCount === uncommittedPaths.length) return 'all';
+    return 'some';
+  };
+
+  // Toggle selection for all uncommitted files in a directory
+  const handleDirectoryCheckboxClick = (e: React.MouseEvent, node: DirectoryNode) => {
+    e.stopPropagation();
+    const allPaths = collectFilePaths(node);
+    const uncommittedPaths = allPaths.filter(p => !isFileCommitted(p));
+    const selectionState = getDirectorySelectionState(node);
+
+    // If none or some are selected, select all. If all are selected, deselect all.
+    const shouldSelect = selectionState !== 'all';
+    uncommittedPaths.forEach(p => {
+      onSelectionChange?.(p, shouldSelect);
+    });
+  };
+
   const renderDirectoryNode = (node: DirectoryNode): React.ReactNode => {
     const isExpanded = expandedFolders.has(node.path);
     const hasContent = node.files.length > 0 || node.subdirectories.size > 0;
+
+    // Check if directory has any uncommitted files (for checkbox visibility)
+    const allPaths = collectFilePaths(node);
+    const hasUncommittedFiles = allPaths.some(p => !isFileCommitted(p));
+    const selectionState = getDirectorySelectionState(node);
 
     return (
       <div key={node.path || 'root'} className="file-edits-sidebar__directory-node mb-0.5">
@@ -396,6 +593,35 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
               size={16}
               className="file-edits-sidebar__directory-chevron shrink-0 transition-transform text-[var(--nim-text-faint)]"
             />
+            {/* Directory checkbox - between caret and folder icon */}
+            {showCheckboxes && (
+              hasUncommittedFiles ? (
+                <div
+                  onClick={(e) => handleDirectoryCheckboxClick(e, node)}
+                  className={`file-edits-sidebar__checkbox w-4 h-4 shrink-0 rounded-[3px] border-[1.5px] cursor-pointer flex items-center justify-center transition-all ${
+                    selectionState === 'all'
+                      ? 'bg-[var(--nim-file-edited)] border-[var(--nim-file-edited)]'
+                      : selectionState === 'some'
+                        ? 'bg-[var(--nim-file-edited)] border-[var(--nim-file-edited)] opacity-60'
+                        : 'border-[var(--nim-text-faint)] bg-transparent hover:border-[var(--nim-text-muted)]'
+                  }`}
+                >
+                  {selectionState !== 'none' && (
+                    selectionState === 'all' ? (
+                      <svg width="8" height="6" viewBox="0 0 8 6" fill="none" className="text-white">
+                        <path d="M1 3L3 5L7 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    ) : (
+                      // Indeterminate state (dash)
+                      <div className="w-2 h-0.5 bg-white rounded-full" />
+                    )
+                  )}
+                </div>
+              ) : (
+                // Placeholder when no uncommitted files
+                <div className="file-edits-sidebar__checkbox-placeholder w-4 h-4 shrink-0" />
+              )
+            )}
             <MaterialSymbol
               icon={isExpanded ? "folder_open" : "folder"}
               size={16}
@@ -414,7 +640,7 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
             )}
 
             {/* Render files */}
-            {node.files.map(file => renderFile(file))}
+            {node.files.map(file => renderFile(file, true))}
           </div>
         )}
       </div>
@@ -461,6 +687,7 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
           editedFiles.map(file => renderFile(file))
         )}
       </div>
+      {renderContextMenu()}
     </div>
   );
 };

@@ -11,13 +11,20 @@ import { MaterialSymbol } from '@nimbalyst/runtime';
 import {
   gitStatusAtom,
   gitCommitsAtom,
-  stagedFilesAtom,
-  commitMessageAtom,
   isCommittingAtom,
   gitOperationModeAtom,
-  stageAllFilesAtom,
-  clearStagingAtom,
+  pendingProposalForWorkspaceAtom,
+  removePendingGitCommitProposalAtom,
 } from '../../store/atoms/gitOperations';
+import {
+  workstreamStagedFilesAtom,
+  workstreamCommitMessageAtom,
+  workstreamActiveProposalIdAtom,
+  setWorkstreamStagedFilesAtom,
+  setWorkstreamCommitMessageAtom,
+  setWorkstreamActiveProposalIdAtom,
+  clearWorkstreamGitStateAtom,
+} from '../../store/atoms/workstreamState';
 import { RebaseConflictDialog } from './RebaseConflictDialog';
 import { MergeConflictDialog } from './MergeConflictDialog';
 import { MergeConfirmDialog } from './MergeConfirmDialog';
@@ -43,6 +50,9 @@ interface WorktreeCommitInfo {
 
 interface GitOperationsPanelProps {
   workspacePath: string;
+  /** The workstream ID (parent session) - used for persisted git state */
+  workstreamId: string;
+  /** The active session ID - used for AI commit requests */
   sessionId: string;
   editedFiles: string[];
   /** The worktree ID if this is a worktree session */
@@ -54,22 +64,51 @@ interface GitOperationsPanelProps {
 }
 
 export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
-  ({ workspacePath, sessionId, editedFiles, worktreeId, worktreePath, onWorktreeArchived }) => {
+  ({ workspacePath, workstreamId, sessionId, editedFiles, worktreeId, worktreePath, onWorktreeArchived }) => {
     // Use useAtomValue for read-only, useSetAtom for write-only to minimize re-renders
     const gitStatus = useAtomValue(gitStatusAtom);
     const setGitStatus = useSetAtom(gitStatusAtom);
     const gitCommits = useAtomValue(gitCommitsAtom);
     const setGitCommits = useSetAtom(gitCommitsAtom);
-    const stagedFiles = useAtomValue(stagedFilesAtom);
-    const setStagedFiles = useSetAtom(stagedFilesAtom);
-    const commitMessage = useAtomValue(commitMessageAtom);
-    const setCommitMessage = useSetAtom(commitMessageAtom);
     const isCommitting = useAtomValue(isCommittingAtom);
     const setIsCommitting = useSetAtom(isCommittingAtom);
     const mode = useAtomValue(gitOperationModeAtom);
     const setMode = useSetAtom(gitOperationModeAtom);
-    const stageAll = useSetAtom(stageAllFilesAtom);
-    const clearStaging = useSetAtom(clearStagingAtom);
+
+    // Per-workstream git state (persisted)
+    const stagedFilesArr = useAtomValue(workstreamStagedFilesAtom(workstreamId));
+    const stagedFiles = new Set(stagedFilesArr); // Convert to Set for compatibility
+    const setStagedFilesAction = useSetAtom(setWorkstreamStagedFilesAtom);
+    const commitMessage = useAtomValue(workstreamCommitMessageAtom(workstreamId));
+    const setCommitMessageAction = useSetAtom(setWorkstreamCommitMessageAtom);
+    const activeProposalId = useAtomValue(workstreamActiveProposalIdAtom(workstreamId));
+    const setActiveProposalIdAction = useSetAtom(setWorkstreamActiveProposalIdAtom);
+    const clearGitState = useSetAtom(clearWorkstreamGitStateAtom);
+
+    // Helper functions to wrap atom actions with workstreamId
+    const setStagedFiles = useCallback((files: Set<string>) => {
+      setStagedFilesAction({ workstreamId, files: Array.from(files) });
+    }, [workstreamId, setStagedFilesAction]);
+
+    const setCommitMessage = useCallback((message: string) => {
+      setCommitMessageAction({ workstreamId, message });
+    }, [workstreamId, setCommitMessageAction]);
+
+    const setActiveProposalId = useCallback((proposalId: string | null) => {
+      setActiveProposalIdAction({ workstreamId, proposalId });
+    }, [workstreamId, setActiveProposalIdAction]);
+
+    const stageAll = useCallback((files: string[]) => {
+      setStagedFilesAction({ workstreamId, files });
+    }, [workstreamId, setStagedFilesAction]);
+
+    const clearStaging = useCallback(() => {
+      setStagedFilesAction({ workstreamId, files: [] });
+    }, [workstreamId, setStagedFilesAction]);
+
+    // Pending AI commit proposal - when AI proposes a commit via git_commit_proposal
+    const pendingProposal = useAtomValue(pendingProposalForWorkspaceAtom(workspacePath));
+    const removePendingProposal = useSetAtom(removePendingGitCommitProposalAtom);
 
     const [isExpanded, setIsExpanded] = useState(true);
     const [showHistory, setShowHistory] = useState(false);
@@ -104,6 +143,35 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
     // Track if worktree data has been loaded for the current worktreePath
     // This prevents redundant fetches when switching between manual/smart modes
     const worktreeDataLoadedForPath = useRef<string | null>(null);
+
+    // Track previous proposal ID to detect new proposals
+    const prevProposalIdRef = useRef<string | null>(null);
+
+    // When AI proposes a commit, populate the UI and switch to manual mode
+    useEffect(() => {
+      if (!pendingProposal) return;
+
+      // Only process if this is a new proposal
+      if (prevProposalIdRef.current === pendingProposal.proposalId) return;
+      prevProposalIdRef.current = pendingProposal.proposalId;
+
+      console.log('[GitOperationsPanel] Received AI commit proposal:', pendingProposal.proposalId);
+
+      // Store the proposal ID so we can send response when user commits
+      setActiveProposalId(pendingProposal.proposalId);
+
+      // Populate commit message
+      setCommitMessage(pendingProposal.commitMessage);
+
+      // Stage the proposed files
+      setStagedFiles(new Set(pendingProposal.filesToStage));
+
+      // Switch to manual mode so user can review/edit
+      setMode('manual');
+
+      // Expand the panel if collapsed
+      setIsExpanded(true);
+    }, [pendingProposal, setCommitMessage, setStagedFiles, setMode, setActiveProposalId]);
 
     // Fetch git status
     const fetchGitStatus = useCallback(async () => {
@@ -174,21 +242,36 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
 
     // Handle manual commit
     const handleManualCommit = useCallback(async () => {
-      if (!commitMessage.trim() || stagedFiles.size === 0) {
+      if (!commitMessage?.trim() || stagedFiles.size === 0) {
         return;
       }
 
       setIsCommitting(true);
       try {
         if (window.electronAPI) {
+          const filesToCommit = Array.from(stagedFiles);
           const result = (await window.electronAPI.invoke(
             'git:commit',
             workspacePath,
             commitMessage,
-            Array.from(stagedFiles)
+            filesToCommit
           )) as { success: boolean; commitHash?: string; error?: string };
 
           if (result.success) {
+            // If this was an AI-proposed commit, send response back to the MCP tool
+            if (activeProposalId) {
+              console.log('[GitOperationsPanel] Sending proposal response for:', activeProposalId);
+              window.electronAPI.sendMcpGitCommitProposalResult(activeProposalId, {
+                action: 'committed',
+                commitHash: result.commitHash,
+                filesCommitted: filesToCommit,
+                commitMessage: commitMessage,
+              });
+              // Remove the pending proposal and clear active ID
+              removePendingProposal(activeProposalId);
+              setActiveProposalId(null);
+            }
+
             setCommitMessage('');
             clearStaging();
             // Refresh git status and commits
@@ -200,10 +283,28 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
             setGitCommits(newCommits as any);
           } else {
             console.error('[GitOperationsPanel] Commit failed:', result.error);
+            // If this was an AI-proposed commit, send error response
+            if (activeProposalId) {
+              window.electronAPI.sendMcpGitCommitProposalResult(activeProposalId, {
+                action: 'cancelled',
+                error: result.error,
+              });
+              removePendingProposal(activeProposalId);
+              setActiveProposalId(null);
+            }
           }
         }
       } catch (error) {
         console.error('[GitOperationsPanel] Failed to commit:', error);
+        // If this was an AI-proposed commit, send error response
+        if (activeProposalId) {
+          window.electronAPI.sendMcpGitCommitProposalResult(activeProposalId, {
+            action: 'cancelled',
+            error: error instanceof Error ? error.message : 'Unknown error',
+          });
+          removePendingProposal(activeProposalId);
+          setActiveProposalId(null);
+        }
       } finally {
         setIsCommitting(false);
       }
@@ -216,6 +317,9 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
       clearStaging,
       setGitStatus,
       setGitCommits,
+      activeProposalId,
+      removePendingProposal,
+      setActiveProposalId,
     ]);
 
     // Handle smart commit (AI-assisted)
@@ -1055,71 +1159,69 @@ Please proceed with this strategy.`;
 
             {/* Manual Mode */}
             {mode === 'manual' && (
-              <div className="git-operations-panel__manual">
-                {/* Staging Area */}
-                <div className="git-operations-panel__section flex flex-col gap-2">
-                  <div className="git-operations-panel__section-header flex items-center justify-between text-[11px] font-semibold text-[var(--nim-text)]">
-                    <span>Changes ({editedFiles.length})</span>
-                    <div className="git-operations-panel__section-actions flex gap-2">
-                      <button
-                        onClick={() => stageAll(editedFiles)}
-                        disabled={editedFiles.length === 0}
-                        className="git-operations-panel__btn-text bg-transparent border-none text-[var(--nim-primary)] text-[10px] font-medium cursor-pointer p-0 hover:underline disabled:text-[var(--nim-text-faint)] disabled:cursor-not-allowed disabled:no-underline"
-                      >
-                        Stage All
-                      </button>
-                      <button
-                        onClick={() => clearStaging()}
-                        disabled={stagedFiles.size === 0}
-                        className="git-operations-panel__btn-text bg-transparent border-none text-[var(--nim-primary)] text-[10px] font-medium cursor-pointer p-0 hover:underline disabled:text-[var(--nim-text-faint)] disabled:cursor-not-allowed disabled:no-underline"
-                      >
-                        Clear
-                      </button>
-                    </div>
+              <div className="git-operations-panel__manual flex flex-col gap-2">
+                {/* AI Proposal indicator */}
+                {activeProposalId && (
+                  <div className="git-operations-panel__proposal-indicator flex items-center gap-1.5 p-1.5 bg-[rgba(139,92,246,0.1)] border border-[rgba(139,92,246,0.3)] rounded text-[10px] text-[var(--nim-text-muted)]">
+                    <MaterialSymbol icon="auto_awesome" size={14} className="text-[rgb(139,92,246)]" />
+                    <span className="flex-1">AI proposed commit - review and edit below</span>
+                    <button
+                      onClick={() => {
+                        // Cancel the proposal
+                        window.electronAPI.sendMcpGitCommitProposalResult(activeProposalId, {
+                          action: 'cancelled',
+                          error: 'User cancelled the commit',
+                        });
+                        removePendingProposal(activeProposalId);
+                        setActiveProposalId(null);
+                        setCommitMessage('');
+                        clearStaging();
+                      }}
+                      className="text-[var(--nim-text-faint)] hover:text-[var(--nim-text)] cursor-pointer"
+                      title="Cancel AI proposal"
+                    >
+                      <MaterialSymbol icon="close" size={14} />
+                    </button>
                   </div>
-                  <div className="git-operations-panel__file-list flex flex-col gap-1 max-h-[200px] overflow-y-auto border border-[var(--nim-border)] rounded p-1 bg-[var(--nim-bg)]">
-                    {editedFiles.map((filePath) => {
-                      const isStaged = stagedFiles.has(filePath);
-                      return (
-                        <div
-                          key={filePath}
-                          className="git-operations-panel__file-item flex items-center gap-2 p-1 text-[11px] text-[var(--nim-text)] hover:bg-[var(--nim-bg-tertiary)] hover:rounded-[3px]"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isStaged}
-                            onChange={() => toggleFileStaging(filePath)}
-                          />
-                          <span className="git-operations-panel__file-path flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
-                            {filePath.split('/').pop()}
-                          </span>
-                        </div>
-                      );
-                    })}
+                )}
+
+                {/* Staged count indicator */}
+                <div className="git-operations-panel__staged-info flex items-center justify-between text-[11px] text-[var(--nim-text-muted)]">
+                  <span>{stagedFiles.size} of {editedFiles.length} files selected</span>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => stageAll(editedFiles)}
+                      disabled={editedFiles.length === 0 || stagedFiles.size === editedFiles.length}
+                      className="git-operations-panel__btn-text bg-transparent border-none text-[var(--nim-primary)] text-[10px] font-medium cursor-pointer p-0 hover:underline disabled:text-[var(--nim-text-faint)] disabled:cursor-not-allowed disabled:no-underline"
+                    >
+                      Select All
+                    </button>
+                    <button
+                      onClick={() => clearStaging()}
+                      disabled={stagedFiles.size === 0}
+                      className="git-operations-panel__btn-text bg-transparent border-none text-[var(--nim-primary)] text-[10px] font-medium cursor-pointer p-0 hover:underline disabled:text-[var(--nim-text-faint)] disabled:cursor-not-allowed disabled:no-underline"
+                    >
+                      Clear
+                    </button>
                   </div>
                 </div>
 
                 {/* Commit Message */}
-                <div className="git-operations-panel__section flex flex-col gap-2 mt-3">
-                  <div className="git-operations-panel__section-header flex items-center justify-between text-[11px] font-semibold text-[var(--nim-text)]">
-                    <span>Commit Message</span>
-                  </div>
-                  <textarea
-                    className="git-operations-panel__commit-message w-full p-2 border border-[var(--nim-border)] rounded bg-[var(--nim-bg)] text-[var(--nim-text)] text-[11px] font-[var(--nim-font-mono)] resize-y focus:outline-none focus:border-[var(--nim-primary)]"
-                    value={commitMessage}
-                    onChange={(e) => setCommitMessage(e.target.value)}
-                    placeholder="Enter commit message..."
-                    rows={4}
-                  />
-                </div>
+                <textarea
+                  className="git-operations-panel__commit-message w-full p-2 border border-[var(--nim-border)] rounded bg-[var(--nim-bg)] text-[var(--nim-text)] text-[11px] font-[var(--nim-font-mono)] resize-y focus:outline-none focus:border-[var(--nim-primary)]"
+                  value={commitMessage}
+                  onChange={(e) => setCommitMessage(e.target.value)}
+                  placeholder="Enter commit message..."
+                  rows={3}
+                />
 
                 {/* Commit Button */}
                 <button
-                  className="git-operations-panel__commit-btn w-full p-2 border-none rounded bg-[var(--nim-primary)] text-white text-xs font-semibold cursor-pointer flex items-center justify-center gap-1.5 mt-3 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="git-operations-panel__commit-btn w-full p-2 border-none rounded bg-[var(--nim-primary)] text-white text-xs font-semibold cursor-pointer flex items-center justify-center gap-1.5 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
                   onClick={handleManualCommit}
-                  disabled={isCommitting || !commitMessage.trim() || stagedFiles.size === 0}
+                  disabled={isCommitting || !commitMessage?.trim() || stagedFiles.size === 0}
                 >
-                  {isCommitting ? 'Committing...' : 'Commit'}
+                  {isCommitting ? 'Committing...' : `Commit (${stagedFiles.size})`}
                 </button>
               </div>
             )}
