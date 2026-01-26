@@ -258,7 +258,7 @@ export function GenericTypeahead({
         {groupedOptions.map(({ section, options: sectionOptions }, groupIndex) => (
           <div key={section || groupIndex} className="generic-typeahead-section py-0.5 [&:not(:last-child)]:border-b [&:not(:last-child)]:border-nim">
             {section && (
-              <div className="generic-typeahead-section-header px-3 pt-1.5 pb-1 text-[0.6875rem] font-semibold text-nim-tertiary uppercase tracking-wide">{section}</div>
+              <div className="generic-typeahead-section-header px-3 pt-1.5 pb-1 text-[0.6875rem] font-semibold text-nim-faint uppercase tracking-wide">{section}</div>
             )}
             {sectionOptions.map((option) => {
               // Calculate visual index based on flat ordered list (matches navigation order)
@@ -277,11 +277,11 @@ export function GenericTypeahead({
                 >
                   {option.icon && (
                     typeof option.icon === 'string' ? (
-                      <span className="material-symbols-outlined generic-typeahead-option-icon text-lg shrink-0 text-nim-secondary">
+                      <span className="material-symbols-outlined generic-typeahead-option-icon text-lg shrink-0 text-nim-muted">
                         {option.icon}
                       </span>
                     ) : (
-                      <span className="generic-typeahead-option-icon text-lg shrink-0 text-nim-secondary">
+                      <span className="generic-typeahead-option-icon text-lg shrink-0 text-nim-muted">
                         {option.icon}
                       </span>
                     )
@@ -291,7 +291,7 @@ export function GenericTypeahead({
                       {option.label}
                     </div>
                     {option.description && (
-                      <div className="generic-typeahead-option-description text-xs text-nim-tertiary break-words leading-snug">
+                      <div className="generic-typeahead-option-description text-xs text-nim-faint break-words leading-snug">
                         {option.description}
                       </div>
                     )}

@@ -904,7 +904,7 @@ export async function initAgentModeSettings(): Promise<AgentModeSettings> {
     const defaultModel = await window.electronAPI.invoke('settings:get-default-ai-model');
     console.log('[appSettings] initAgentModeSettings: Loaded from main process:', defaultModel);
     const result = {
-      defaultModel: defaultModel || 'claude-code:sonnet',
+      defaultModel: defaultModel || defaultAgentModeSettings.defaultModel,
     };
     console.log('[appSettings] initAgentModeSettings: Returning:', result.defaultModel);
     return result;

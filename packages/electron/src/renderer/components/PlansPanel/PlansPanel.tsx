@@ -160,7 +160,7 @@ export function PlansPanel({ currentFilePath, onPlanSelect }: PlansPanelProps): 
   if (loading) {
     return (
       <div className="plans-panel flex flex-col h-full bg-nim">
-        <div className="plans-loading flex flex-col items-center justify-center py-10 px-5 text-nim-secondary gap-3">
+        <div className="plans-loading flex flex-col items-center justify-center py-10 px-5 text-nim-muted gap-3">
           <div className="spinner w-6 h-6 border-[3px] border-nim-secondary border-t-nim-accent rounded-full animate-spin"></div>
           <span>Loading plans...</span>
         </div>
@@ -193,7 +193,7 @@ export function PlansPanel({ currentFilePath, onPlanSelect }: PlansPanelProps): 
 
       <div className="plans-list flex-1 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-track-transparent scrollbar-thumb-nim-scrollbar hover:scrollbar-thumb-nim-scrollbar-hover">
         {filteredPlans.length === 0 ? (
-          <div className="plans-empty flex flex-col items-center justify-center py-[60px] px-5 text-nim-tertiary text-center">
+          <div className="plans-empty flex flex-col items-center justify-center py-[60px] px-5 text-nim-faint text-center">
             <span className="material-symbols-outlined text-5xl mb-3 opacity-50">description</span>
             <div className="plans-empty-text text-[13px] leading-normal">
               {searchTerm || statusFilter !== 'all' || priorityFilter !== 'all' || hideCompleted

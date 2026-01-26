@@ -94,7 +94,7 @@ export function PlanListItem({ plan, isActive, onClick }: PlanListItemProps): JS
           {plan.priority === 'high' && '!!'}
           {plan.priority === 'medium' && '!'}
         </span>
-        <span className="material-symbols-outlined plan-type-icon text-base text-nim-tertiary shrink-0 mt-px" title={plan.planType || 'plan'}>
+        <span className="material-symbols-outlined plan-type-icon text-base text-nim-faint shrink-0 mt-px" title={plan.planType || 'plan'}>
           {planTypeIcon}
         </span>
         <div className="plan-list-item-title flex-1 text-[13px] font-medium text-nim-primary leading-snug overflow-hidden text-ellipsis line-clamp-2">{plan.title}</div>
@@ -113,7 +113,7 @@ export function PlanListItem({ plan, isActive, onClick }: PlanListItemProps): JS
       )}
 
       <div className="plan-list-item-footer flex items-center justify-between gap-2">
-        <span className="plan-updated-time text-[11px] text-nim-tertiary">{formatDate(plan.lastUpdated)}</span>
+        <span className="plan-updated-time text-[11px] text-nim-faint">{formatDate(plan.lastUpdated)}</span>
         <span
           className="plan-status-badge text-[10px] px-1.5 py-0.5 rounded-sm border capitalize font-medium whitespace-nowrap"
           style={{
