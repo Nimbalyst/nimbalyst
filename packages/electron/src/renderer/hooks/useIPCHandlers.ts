@@ -10,10 +10,12 @@ import {
 } from 'rexical';
 import { editorRegistry } from '@nimbalyst/runtime/ai/EditorRegistry';
 import { SearchReplaceStateManager } from '@nimbalyst/runtime';
+import { store } from '@nimbalyst/runtime/store';
 import { aiApi } from '../services/aiApi';
 import { getSoundPlayer } from '../services/SoundPlayer';
 import { getFileName } from '../utils/pathUtils';
 import type { ContentMode } from '../types/WindowModeTypes';
+import { addPendingGitCommitProposalAtom } from '../store/atoms/gitOperations';
 
 const PLAN_STATUS_KEYS = new Set([
   'planId',
@@ -746,27 +748,46 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
       }));
     }
 
-    // Git commit proposal handler - registers pending proposals for the widget
+    // Git commit proposal handler - registers pending proposals for the widget and Jotai atom
     if ((window.electronAPI as any).onMcpGitCommitProposal) {
       cleanupFns.push((window.electronAPI as any).onMcpGitCommitProposal((data: {
         proposalId: string;
         workspacePath: string;
         sessionId: string;  // Required for proper session scoping
-        filesToStage: string[];
+        filesToStage: (string | { path: string; status?: string })[];
         commitMessage: string;
         reasoning?: string;
       }) => {
         console.log('[MCP] Git commit proposal received:', data.proposalId, 'sessionId:', data.sessionId);
-        // Dynamically import to avoid circular deps
+
+        // Normalize filesToStage to string paths
+        const normalizedFiles = data.filesToStage.map(f =>
+          typeof f === 'string' ? f : f.path
+        );
+
+        const timestamp = Date.now();
+
+        // Register in runtime's local Map (for GitCommitConfirmationWidget in transcript)
         import('@nimbalyst/runtime').then(({ registerPendingGitCommitProposal }) => {
           if (registerPendingGitCommitProposal) {
             registerPendingGitCommitProposal({
               ...data,
-              timestamp: Date.now(),
+              timestamp,
             });
           }
         }).catch(err => {
-          console.error('[MCP] Failed to register git commit proposal:', err);
+          console.error('[MCP] Failed to register git commit proposal in runtime:', err);
+        });
+
+        // Also register in Jotai atom (for GitOperationsPanel)
+        store.set(addPendingGitCommitProposalAtom, {
+          proposalId: data.proposalId,
+          workspacePath: data.workspacePath,
+          sessionId: data.sessionId,
+          filesToStage: normalizedFiles,
+          commitMessage: data.commitMessage,
+          reasoning: data.reasoning,
+          timestamp,
         });
       }));
     }
