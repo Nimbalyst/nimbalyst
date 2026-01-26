@@ -13,13 +13,14 @@ import {
   gitCommitsAtom,
   isCommittingAtom,
   gitOperationModeAtom,
-  pendingProposalForWorkspaceAtom,
+  pendingProposalForWorkstreamAtom,
   removePendingGitCommitProposalAtom,
 } from '../../store/atoms/gitOperations';
 import {
   workstreamStagedFilesAtom,
   workstreamCommitMessageAtom,
   workstreamActiveProposalIdAtom,
+  workstreamChildrenAtom,
   setWorkstreamStagedFilesAtom,
   setWorkstreamCommitMessageAtom,
   setWorkstreamActiveProposalIdAtom,
@@ -106,8 +107,12 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
       setStagedFilesAction({ workstreamId, files: [] });
     }, [workstreamId, setStagedFilesAction]);
 
+    // Get child session IDs for workstream-scoped proposal lookup
+    const childSessionIds = useAtomValue(workstreamChildrenAtom(workstreamId));
+
     // Pending AI commit proposal - when AI proposes a commit via git_commit_proposal
-    const pendingProposal = useAtomValue(pendingProposalForWorkspaceAtom(workspacePath));
+    // Use workstreamId + childSessionIds to scope proposals to this specific workstream
+    const pendingProposal = useAtomValue(pendingProposalForWorkstreamAtom({ workstreamId, childSessionIds }));
     const removePendingProposal = useSetAtom(removePendingGitCommitProposalAtom);
 
     const [isExpanded, setIsExpanded] = useState(true);

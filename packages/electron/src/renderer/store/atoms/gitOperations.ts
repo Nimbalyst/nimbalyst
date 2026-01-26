@@ -146,19 +146,31 @@ export const removePendingGitCommitProposalAtom = atom(
 );
 
 /**
- * Get pending proposal for a workspace (returns the most recent one).
+ * Get pending proposal for a specific workstream.
+ * Matches proposals where sessionId equals the workstreamId OR is a child session of the workstream.
+ * This properly scopes proposals to the correct workstream, preventing cross-session pollution.
+ *
+ * @param workstreamId - The workstream ID (parent session ID)
+ * @param childSessionIds - Array of child session IDs to also check
  */
-export const pendingProposalForWorkspaceAtom = atomFamily((workspacePath: string) =>
-  atom((get) => {
-    const proposals = get(pendingGitCommitProposalsAtom);
-    let mostRecent: PendingGitCommitProposal | null = null;
-    for (const proposal of proposals.values()) {
-      if (proposal.workspacePath === workspacePath) {
-        if (!mostRecent || proposal.timestamp > mostRecent.timestamp) {
-          mostRecent = proposal;
+export const pendingProposalForWorkstreamAtom = atomFamily(
+  ({ workstreamId, childSessionIds }: { workstreamId: string; childSessionIds: string[] }) =>
+    atom((get) => {
+      const proposals = get(pendingGitCommitProposalsAtom);
+      let mostRecent: PendingGitCommitProposal | null = null;
+
+      // Build a set of valid session IDs (workstream + all children)
+      const validSessionIds = new Set([workstreamId, ...childSessionIds]);
+
+      for (const proposal of proposals.values()) {
+        if (validSessionIds.has(proposal.sessionId)) {
+          if (!mostRecent || proposal.timestamp > mostRecent.timestamp) {
+            mostRecent = proposal;
+          }
         }
       }
-    }
-    return mostRecent;
-  })
+      return mostRecent;
+    }),
+  // Custom equality function for atomFamily key
+  (a, b) => a.workstreamId === b.workstreamId && JSON.stringify(a.childSessionIds) === JSON.stringify(b.childSessionIds)
 );
