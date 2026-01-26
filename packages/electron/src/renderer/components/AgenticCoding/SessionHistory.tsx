@@ -8,6 +8,7 @@ import { IndexBuildDialog } from './IndexBuildDialog';
 import { getTimeGroupKey, TimeGroupKey } from '../../utils/dateFormatting';
 import { getFileName } from '../../utils/pathUtils';
 import { KeyboardShortcuts, getShortcutDisplay } from '../../../shared/KeyboardShortcuts';
+import { MaterialSymbol } from '@nimbalyst/runtime';
 import {
   sessionListRootAtom,
   sessionListLoadingAtom,
@@ -317,6 +318,18 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   // FTS index build dialog state
   const [showIndexDialog, setShowIndexDialog] = useState(false);
   const [indexMessageCount, setIndexMessageCount] = useState(0);
+
+  // Card view context menu state
+  const [cardContextMenu, setCardContextMenu] = useState<{
+    sessionId?: string;
+    worktreeId?: string;
+    type: 'session' | 'workstream' | 'worktree';
+    x: number;
+    y: number;
+    isPinned?: boolean;
+    isArchived?: boolean;
+  } | null>(null);
+  const cardContextMenuRef = useRef<HTMLDivElement>(null);
   const [isIndexBuilding, setIsIndexBuilding] = useState(false);
   const [pendingSearchQuery, setPendingSearchQuery] = useState<string | null>(null); // Query to run after index build
 
@@ -905,7 +918,105 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     }
   };
 
-  // Close dropdowns when clicking outside
+  // Card context menu handlers
+  const handleCardContextMenu = useCallback((
+    e: React.MouseEvent,
+    type: 'session' | 'workstream' | 'worktree',
+    sessionId?: string,
+    worktreeId?: string,
+    isPinned?: boolean,
+    isArchived?: boolean
+  ) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setCardContextMenu({
+      type,
+      sessionId,
+      worktreeId,
+      x: e.clientX,
+      y: e.clientY,
+      isPinned,
+      isArchived
+    });
+  }, []);
+
+  const closeCardContextMenu = useCallback(() => {
+    setCardContextMenu(null);
+  }, []);
+
+  // Context menu action handlers
+  const handleCardRename = useCallback(() => {
+    if (!cardContextMenu) return;
+    closeCardContextMenu();
+
+    if (cardContextMenu.type === 'worktree' && cardContextMenu.worktreeId) {
+      const worktree = worktreeCache.get(cardContextMenu.worktreeId);
+      const currentName = worktree?.displayName || worktree?.name || '';
+      const newName = prompt('Rename worktree:', currentName);
+      if (newName && newName !== currentName) {
+        handleWorktreeRename(cardContextMenu.worktreeId, newName);
+      }
+    } else if (cardContextMenu.sessionId && onSessionRename) {
+      const session = sessions.find(s => s.id === cardContextMenu.sessionId);
+      const currentTitle = session?.title || '';
+      const newTitle = prompt('Rename session:', currentTitle);
+      if (newTitle && newTitle !== currentTitle) {
+        onSessionRename(cardContextMenu.sessionId, newTitle);
+      }
+    }
+  }, [cardContextMenu, closeCardContextMenu, worktreeCache, handleWorktreeRename, sessions, onSessionRename]);
+
+  const handleCardPinToggle = useCallback(() => {
+    if (!cardContextMenu) return;
+    closeCardContextMenu();
+
+    if (cardContextMenu.type === 'worktree' && cardContextMenu.worktreeId) {
+      handleWorktreePinToggle(cardContextMenu.worktreeId, !cardContextMenu.isPinned);
+    } else if (cardContextMenu.sessionId) {
+      handleSessionPinToggle(cardContextMenu.sessionId, !cardContextMenu.isPinned);
+    }
+  }, [cardContextMenu, closeCardContextMenu, handleWorktreePinToggle, handleSessionPinToggle]);
+
+  const handleCardBranch = useCallback(() => {
+    if (!cardContextMenu || !cardContextMenu.sessionId || !onSessionBranch) return;
+    closeCardContextMenu();
+    onSessionBranch(cardContextMenu.sessionId);
+  }, [cardContextMenu, closeCardContextMenu, onSessionBranch]);
+
+  const handleCardArchive = useCallback(() => {
+    if (!cardContextMenu) return;
+    closeCardContextMenu();
+
+    if (cardContextMenu.type === 'worktree' && cardContextMenu.worktreeId) {
+      handleArchiveWorktree(cardContextMenu.worktreeId);
+    } else if (cardContextMenu.sessionId) {
+      if (cardContextMenu.isArchived) {
+        handleUnarchiveSession(cardContextMenu.sessionId);
+      } else {
+        handleArchiveSession(cardContextMenu.sessionId);
+      }
+    }
+  }, [cardContextMenu, closeCardContextMenu, handleArchiveWorktree, handleArchiveSession, handleUnarchiveSession]);
+
+  const handleCardDelete = useCallback(() => {
+    if (!cardContextMenu || !cardContextMenu.sessionId) return;
+    closeCardContextMenu();
+    handleDeleteSession(cardContextMenu.sessionId);
+  }, [cardContextMenu, closeCardContextMenu, handleDeleteSession]);
+
+  const handleCardAddSession = useCallback(() => {
+    if (!cardContextMenu || !cardContextMenu.worktreeId || !onAddSessionToWorktree) return;
+    closeCardContextMenu();
+    onAddSessionToWorktree(cardContextMenu.worktreeId);
+  }, [cardContextMenu, closeCardContextMenu, onAddSessionToWorktree]);
+
+  const handleCardAddTerminal = useCallback(() => {
+    if (!cardContextMenu || !cardContextMenu.worktreeId || !onAddTerminalToWorktree) return;
+    closeCardContextMenu();
+    onAddTerminalToWorktree(cardContextMenu.worktreeId);
+  }, [cardContextMenu, closeCardContextMenu, onAddTerminalToWorktree]);
+
+  // Close dropdowns and context menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
@@ -915,10 +1026,41 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
       if (newDropdownOpen && !target.closest('.session-history-new-dropdown')) {
         setNewDropdownOpen(false);
       }
+      if (cardContextMenu && cardContextMenuRef.current && !cardContextMenuRef.current.contains(target)) {
+        closeCardContextMenu();
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [sortDropdownOpen, newDropdownOpen]);
+  }, [sortDropdownOpen, newDropdownOpen, cardContextMenu, closeCardContextMenu]);
+
+  // Adjust card context menu position to stay within viewport
+  const [adjustedCardMenuPosition, setAdjustedCardMenuPosition] = useState<{ x: number; y: number } | null>(null);
+  useEffect(() => {
+    if (cardContextMenu && cardContextMenuRef.current) {
+      const menu = cardContextMenuRef.current;
+      const rect = menu.getBoundingClientRect();
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+
+      let x = cardContextMenu.x;
+      let y = cardContextMenu.y;
+
+      // Adjust horizontal position if menu extends beyond right edge
+      if (x + rect.width > viewportWidth) {
+        x = viewportWidth - rect.width - 8; // 8px margin
+      }
+
+      // Adjust vertical position if menu extends beyond bottom edge
+      if (y + rect.height > viewportHeight) {
+        y = viewportHeight - rect.height - 8; // 8px margin
+      }
+
+      setAdjustedCardMenuPosition({ x, y });
+    } else {
+      setAdjustedCardMenuPosition(null);
+    }
+  }, [cardContextMenu]);
 
   // Group worktree sessions by worktree_id and compute worktree timestamps
   const worktreeGroupsData = useMemo(() => {
@@ -1759,6 +1901,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                         key={`worktree-card-${item.worktreeId}`}
                         className={`session-history-card ${isWorktreeActive ? 'active' : ''} ${worktreeData?.isPinned ? 'pinned' : ''} ${worktreeData?.isArchived ? 'archived' : ''}`}
                         onClick={() => firstSession && onSessionSelect(firstSession.id)}
+                        onContextMenu={(e) => handleCardContextMenu(e, 'worktree', undefined, item.worktreeId, worktreeData?.isPinned, worktreeData?.isArchived)}
                       >
                         <div className="session-history-card-icon">
                           <svg width="32" height="32" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2">
@@ -1814,6 +1957,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                         key={`workstream-card-${session.id}`}
                         className={`session-history-card ${session.id === activeSessionId || activeSessionParentId === session.id ? 'active' : ''} ${session.isPinned ? 'pinned' : ''} ${session.isArchived ? 'archived' : ''}`}
                         onClick={() => onSessionSelect(session.id)}
+                        onContextMenu={(e) => handleCardContextMenu(e, 'workstream', session.id, undefined, session.isPinned, session.isArchived)}
                       >
                         <div className="session-history-card-icon">
                           <svg width="32" height="32" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -1860,6 +2004,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                         key={`session-card-${session.id}`}
                         className={`session-history-card ${session.id === activeSessionId ? 'active' : ''} ${session.isPinned ? 'pinned' : ''} ${session.isArchived ? 'archived' : ''} ${loadedSessionIds.includes(session.id) ? 'loaded' : ''}`}
                         onClick={() => onSessionSelect(session.id)}
+                        onContextMenu={(e) => handleCardContextMenu(e, 'session', session.id, undefined, session.isPinned, session.isArchived)}
                       >
                         <div className="session-history-card-icon">
                           {session.sessionType === 'terminal' ? (
@@ -2045,6 +2190,153 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
           </>
         )}
       </div>
+
+      {/* Card view context menu */}
+      {cardContextMenu && (
+        <div
+          ref={cardContextMenuRef}
+          className="session-card-context-menu fixed z-[1000] min-w-[140px] p-1 bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-md shadow-[0_4px_12px_rgba(0,0,0,0.15)]"
+          style={{
+            left: (adjustedCardMenuPosition || cardContextMenu).x,
+            top: (adjustedCardMenuPosition || cardContextMenu).y
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Session menu items */}
+          {cardContextMenu.type === 'session' && (
+            <>
+              {onSessionRename && (
+                <button
+                  className="session-card-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
+                  onClick={handleCardRename}
+                >
+                  <MaterialSymbol icon="edit" size={14} />
+                  Rename
+                </button>
+              )}
+              <button
+                className="session-card-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
+                onClick={handleCardPinToggle}
+              >
+                <MaterialSymbol icon="push_pin" size={14} />
+                {cardContextMenu.isPinned ? 'Unpin' : 'Pin'}
+              </button>
+              {onSessionBranch && (
+                <button
+                  className="session-card-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
+                  onClick={handleCardBranch}
+                >
+                  <MaterialSymbol icon="fork_right" size={14} />
+                  Branch conversation
+                </button>
+              )}
+              <button
+                className="session-card-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
+                onClick={handleCardArchive}
+              >
+                {cardContextMenu.isArchived ? (
+                  <>
+                    <MaterialSymbol icon="unarchive" size={14} />
+                    Unarchive Session
+                  </>
+                ) : (
+                  <>
+                    <MaterialSymbol icon="archive" size={14} />
+                    Archive Session
+                  </>
+                )}
+              </button>
+              {onSessionDelete && (
+                <button
+                  className="session-card-context-menu-item destructive flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-error)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-error)] hover:text-white [&_svg]:shrink-0"
+                  onClick={handleCardDelete}
+                >
+                  <MaterialSymbol icon="delete" size={14} />
+                  Delete
+                </button>
+              )}
+            </>
+          )}
+
+          {/* Workstream menu items */}
+          {cardContextMenu.type === 'workstream' && (
+            <>
+              {onSessionRename && (
+                <button
+                  className="session-card-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
+                  onClick={handleCardRename}
+                >
+                  <MaterialSymbol icon="edit" size={14} />
+                  Rename
+                </button>
+              )}
+              <button
+                className="session-card-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
+                onClick={handleCardPinToggle}
+              >
+                <MaterialSymbol icon="push_pin" size={14} />
+                {cardContextMenu.isPinned ? 'Unpin' : 'Pin'}
+              </button>
+              <button
+                className="session-card-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
+                onClick={handleCardArchive}
+              >
+                {cardContextMenu.isArchived ? (
+                  <>
+                    <MaterialSymbol icon="unarchive" size={14} />
+                    Unarchive Workstream
+                  </>
+                ) : (
+                  <>
+                    <MaterialSymbol icon="archive" size={14} />
+                    Archive Workstream
+                  </>
+                )}
+              </button>
+            </>
+          )}
+
+          {/* Worktree menu items */}
+          {cardContextMenu.type === 'worktree' && (
+            <>
+              <button
+                className="session-card-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
+                onClick={handleCardPinToggle}
+              >
+                <MaterialSymbol icon="push_pin" size={14} />
+                {cardContextMenu.isPinned ? 'Unpin' : 'Pin'}
+              </button>
+              {onAddSessionToWorktree && (
+                <button
+                  className="session-card-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
+                  onClick={handleCardAddSession}
+                >
+                  <MaterialSymbol icon="add" size={14} />
+                  Add Session
+                </button>
+              )}
+              {onAddTerminalToWorktree && (
+                <button
+                  className="session-card-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
+                  onClick={handleCardAddTerminal}
+                >
+                  <MaterialSymbol icon="terminal" size={14} />
+                  Add Terminal
+                </button>
+              )}
+              <div className="session-card-context-menu-divider h-px my-1 bg-[var(--nim-border)]" />
+              <button
+                className="session-card-context-menu-item destructive flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-error)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[rgba(239,68,68,0.1)] [&_svg]:shrink-0"
+                onClick={handleCardArchive}
+              >
+                <MaterialSymbol icon="archive" size={14} />
+                Archive Worktree
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
       <ArchiveProgress />
       <IndexBuildDialog
         isOpen={showIndexDialog}
