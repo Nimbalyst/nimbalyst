@@ -125,6 +125,7 @@ export {
   sessionActiveChildAtom,
   sessionHasChildrenAtom,
   sessionOrChildProcessingAtom,
+  groupSessionStatusAtom,
   sessionParentIdAtom,
   loadSessionChildrenAtom,
   setActiveChildSessionAtom,

@@ -514,6 +514,42 @@ export const sessionOrChildProcessingAtom = atomFamily((sessionId: string) =>
 );
 
 /**
+ * Aggregated status for a group of sessions.
+ * Used by GroupCardStatus to show worktree/workstream status without violating hooks rules.
+ *
+ * The key is a JSON-serialized array of session IDs for stable atom identity.
+ * Returns { hasProcessing, hasPendingPrompt, hasUnread } for the group.
+ */
+export const groupSessionStatusAtom = atomFamily((sessionIdsKey: string) =>
+  atom((get) => {
+    const sessionIds: string[] = JSON.parse(sessionIdsKey);
+
+    let hasProcessing = false;
+    let hasPendingPrompt = false;
+    let hasUnread = false;
+
+    for (const sessionId of sessionIds) {
+      // Use sessionOrChildProcessingAtom to include children of workstreams
+      if (get(sessionOrChildProcessingAtom(sessionId))) {
+        hasProcessing = true;
+      }
+      if (get(sessionPendingPromptAtom(sessionId))) {
+        hasPendingPrompt = true;
+      }
+      if (get(sessionUnreadAtom(sessionId))) {
+        hasUnread = true;
+      }
+      // Early exit if all flags are true
+      if (hasProcessing && hasPendingPrompt && hasUnread) {
+        break;
+      }
+    }
+
+    return { hasProcessing, hasPendingPrompt, hasUnread };
+  })
+);
+
+/**
  * Per-session parent ID.
  * null for root sessions, set for child sessions.
  * Used to determine if session should be shown in main list or as a tab.

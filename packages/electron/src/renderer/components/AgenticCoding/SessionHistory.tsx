@@ -20,6 +20,7 @@ import {
   sessionOrChildProcessingAtom,
   sessionUnreadAtom,
   sessionPendingPromptAtom,
+  groupSessionStatusAtom,
   viewModeAtom,
   setViewModeAtom,
   type SessionListItem as SessionListItemType,
@@ -119,7 +120,7 @@ function generateWorkspaceColor(path: string): string {
 }
 
 // Component for rendering session status indicators in card view
-// NOT memoized - needs to re-render when atom values change
+// Uses same MaterialSymbol icons as SessionListItem for consistency
 const SessionCardStatus: React.FC<{ sessionId: string }> = ({ sessionId }) => {
   const isProcessing = useAtomValue(sessionOrChildProcessingAtom(sessionId));
   const hasUnread = useAtomValue(sessionUnreadAtom(sessionId));
@@ -128,29 +129,24 @@ const SessionCardStatus: React.FC<{ sessionId: string }> = ({ sessionId }) => {
   // Priority: processing > pending prompt > unread (same as SessionListItem)
   if (isProcessing) {
     return (
-      <div className="session-card-status-indicator processing" title="Processing">
-        <svg className="session-card-status-icon spinning" width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-        </svg>
+      <div className="session-card-status-indicator processing flex items-center justify-center text-[var(--nim-primary)]" title="Processing">
+        <MaterialSymbol icon="progress_activity" size={14} className="animate-spin" />
       </div>
     );
   }
 
   if (hasPendingPrompt) {
     return (
-      <div className="session-card-status-indicator pending" title="Waiting for your response">
-        <svg className="session-card-status-icon pulsing" width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
-          <path d="M12 8v5l3 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-        </svg>
+      <div className="session-card-status-indicator pending flex items-center justify-center text-[var(--nim-warning)] animate-pulse" title="Waiting for your response">
+        <MaterialSymbol icon="help" size={14} />
       </div>
     );
   }
 
   if (hasUnread) {
     return (
-      <div className="session-card-status-indicator unread" title="Unread response">
-        <div className="session-card-status-dot"></div>
+      <div className="session-card-status-indicator unread flex items-center justify-center text-[var(--nim-primary)]" title="Unread response">
+        <MaterialSymbol icon="circle" size={8} fill />
       </div>
     );
   }
@@ -159,60 +155,37 @@ const SessionCardStatus: React.FC<{ sessionId: string }> = ({ sessionId }) => {
 };
 
 // Component for rendering worktree/workstream status indicators (checks all child sessions)
-// IMPORTANT: Parent must use a stable key that includes the group ID to ensure
-// this component is remounted when sessionIds array length changes
+// Uses groupSessionStatusAtom to properly subscribe to processing/unread/pending state changes
+// for all sessions in the group without violating React hooks rules.
+// Uses same MaterialSymbol icons as SessionListItem for consistency.
 const GroupCardStatus: React.FC<{ sessionIds: string[] }> = ({ sessionIds }) => {
-  // Compute status by checking the session registry directly instead of subscribing to each atom
-  // This avoids the "changing number of hooks" issue entirely
-  const sessionRegistry = useAtomValue(sessionRegistryAtom);
+  // Create a stable key for the atom family by sorting and serializing session IDs
+  const sessionIdsKey = useMemo(() => JSON.stringify([...sessionIds].sort()), [sessionIds]);
 
-  const hasProcessing = useMemo(() => {
-    return sessionIds.some(id => {
-      const session = sessionRegistry.get(id);
-      return session?.isProcessing || session?.childProcessing;
-    });
-  }, [sessionIds, sessionRegistry]);
-
-  const hasPendingPrompt = useMemo(() => {
-    return sessionIds.some(id => {
-      const session = sessionRegistry.get(id);
-      return session?.hasPendingPrompt;
-    });
-  }, [sessionIds, sessionRegistry]);
-
-  const hasUnread = useMemo(() => {
-    return sessionIds.some(id => {
-      const session = sessionRegistry.get(id);
-      return session?.hasUnread;
-    });
-  }, [sessionIds, sessionRegistry]);
+  // Subscribe to the aggregated status atom - this properly reacts to state changes
+  const { hasProcessing, hasPendingPrompt, hasUnread } = useAtomValue(groupSessionStatusAtom(sessionIdsKey));
 
   // Priority: processing > pending prompt > unread (same as SessionListItem)
   if (hasProcessing) {
     return (
-      <div className="session-card-status-indicator processing" title="Processing">
-        <svg className="session-card-status-icon spinning" width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-        </svg>
+      <div className="session-card-status-indicator processing flex items-center justify-center text-[var(--nim-primary)]" title="Processing">
+        <MaterialSymbol icon="progress_activity" size={14} className="animate-spin" />
       </div>
     );
   }
 
   if (hasPendingPrompt) {
     return (
-      <div className="session-card-status-indicator pending" title="Waiting for your response">
-        <svg className="session-card-status-icon pulsing" width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
-          <path d="M12 8v5l3 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-        </svg>
+      <div className="session-card-status-indicator pending flex items-center justify-center text-[var(--nim-warning)] animate-pulse" title="Waiting for your response">
+        <MaterialSymbol icon="help" size={14} />
       </div>
     );
   }
 
   if (hasUnread) {
     return (
-      <div className="session-card-status-indicator unread" title="Unread response">
-        <div className="session-card-status-dot"></div>
+      <div className="session-card-status-indicator unread flex items-center justify-center text-[var(--nim-primary)]" title="Unread response">
+        <MaterialSymbol icon="circle" size={8} fill />
       </div>
     );
   }
