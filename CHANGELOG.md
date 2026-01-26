@@ -20,6 +20,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.5] - 2026-01-25
+
+
+### Added
+- Show AI errors in transcript instead of silent failures
+- Add refresh button to worktree tab in git operations panel
+- Enable auto-restart for dev server via loop mode
+- Add context menu support to session history card view
+- Enable worktree rebase with uncommitted changes via auto-stashing
+- Migrate to Tailwind CSS with unified theming system
+
+### Changed
+- Session names now reflect user's request, not agent's solution
+- ChatSidebar now uses user's default model for new sessions
+- Model switching, persistence, and defaults improved for AI sessions
+
+### Fixed
+- Remove redundant type comparison in extractModelForProvider
+- Correct CSS typo in SessionHistory.css
+- Restore card view toggle and styling for session history
+- Correct Tailwind CSS for worktree view and restore card view toggle
+- Display (1M) suffix for extended context Claude Code models
+- Use ModelIdentifier as single source of truth for default models
+- Resolve TypeScript strict mode errors across codebase
+
+### Refactored
+- Migrate extensions to unified --nim-* CSS variables
+- Migrate components from inline styles to Tailwind CSS
+- Remove unused CSS import from ChatSidebar
+
 ## [0.52.4] - 2026-01-25
 
 
