@@ -673,9 +673,10 @@ export const createChildSessionAtom = atom(
         // Set parent ID for the new child
         set(sessionParentIdAtom(result.sessionId), parentSessionId);
 
-        // Make it the active child (both atoms need to be updated)
+        // Make it the active child (both atoms need to be updated) and mark as read
         set(sessionActiveChildAtom(parentSessionId), result.sessionId);
         set(setWorkstreamActiveChildAtom, { workstreamId: parentSessionId, childId: result.sessionId });
+        set(markSessionReadAtom, result.sessionId);
 
         // Update unified workstream state
         const { addWorkstreamChildAtom } = await import('./workstreamState');
@@ -770,8 +771,9 @@ export const reparentSessionAtom = atom(
           childSessionIds: updatedNewChildren,
         });
 
-        // Make the reparented session the active child in the new parent
+        // Make the reparented session the active child in the new parent and mark as read
         set(setWorkstreamActiveChildAtom, { workstreamId: newParentId, childId: sessionId });
+        set(markSessionReadAtom, sessionId);
       }
 
       // 4. Update session list
@@ -954,10 +956,11 @@ export const convertToWorkstreamAtom = atom(
       }
       set(sessionChildrenAtom(parentSessionId), children);
 
-      // Set the new sibling as active (user wants to work in the new session)
+      // Set the new sibling as active (user wants to work in the new session) and mark as read
       if (siblingResult.success && siblingResult.sessionId) {
         set(sessionActiveChildAtom(parentSessionId), siblingResult.sessionId);
         set(setWorkstreamActiveChildAtom, { workstreamId: parentSessionId, childId: siblingResult.sessionId });
+        set(markSessionReadAtom, siblingResult.sessionId);
       }
 
       // Update unified workstream state
@@ -1204,10 +1207,23 @@ export const anyPendingPermissionAtom = atom((get) => {
 /**
  * Mark a session as read (clear unread).
  * Called when user views the session.
+ * Persists to database metadata for cross-device sync.
  */
 export const markSessionReadAtom = atom(null, (get, set, sessionId: string) => {
+  // Only persist if actually changing from unread to read
+  const wasUnread = get(sessionUnreadAtom(sessionId));
+
   set(sessionUnreadAtom(sessionId), false);
   set(sessionLastReadAtom(sessionId), Date.now());
+
+  // Persist to database metadata for cross-device sync
+  if (wasUnread) {
+    window.electronAPI?.invoke('ai:updateSessionMetadata', sessionId, {
+      metadata: { hasUnread: false },
+    }).catch((err: Error) => {
+      console.error('[sessions] Failed to persist unread state:', err);
+    });
+  }
 });
 
 /**
@@ -1357,7 +1373,7 @@ export const refreshSessionListAtom = atom(
       });
 
       if (result.success && Array.isArray(result.sessions)) {
-        const sessions: SessionListItem[] = result.sessions.map((s: any) => ({
+        const sessions = result.sessions.map((s: any) => ({
           id: s.id,
           name: s.title || s.name || 'Untitled Session',
           title: s.title || s.name || 'Untitled Session',
@@ -1374,6 +1390,7 @@ export const refreshSessionListAtom = atom(
           parentSessionId: s.parentSessionId || null,
           childCount: s.childCount || 0,
           uncommittedCount: s.uncommittedCount || 0,
+          hasUnread: s.hasUnread || false,  // For initializing unread atom from database
         }));
 
         // Debug: log sessions with uncommittedCount
@@ -1399,6 +1416,11 @@ export const refreshSessionListAtom = atom(
             childCount: s.childCount || 0,
             uncommittedCount: s.uncommittedCount || 0,
           });
+
+          // Initialize unread state from database metadata (for cross-device sync)
+          if (s.hasUnread) {
+            set(sessionUnreadAtom(s.id), true);
+          }
         }
         set(sessionRegistryAtom, registry);
       }

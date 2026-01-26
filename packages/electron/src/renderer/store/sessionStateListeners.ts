@@ -28,7 +28,10 @@ import {
   reloadSessionDataAtom,
   sessionListWorkspaceAtom,
   updateSessionStoreAtom,
+  selectedWorkstreamAtom,
+  sessionUnreadAtom,
 } from './atoms/sessions';
+import { workstreamActiveChildAtom } from './atoms/workstreamState';
 
 /**
  * Initialize global session state listeners.
@@ -81,9 +84,12 @@ export function initSessionStateListeners(): () => void {
    *
    * SessionTranscript also subscribes to this event for the active session,
    * but this handler provides a safety net for all other sessions.
+   *
+   * Also marks sessions as unread when they receive output messages while not being
+   * the currently viewed session.
    */
   const handleMessageLogged = (data: { sessionId: string; direction: string }) => {
-    const { sessionId } = data;
+    const { sessionId, direction } = data;
     const workspacePath = store.get(sessionListWorkspaceAtom);
 
     if (!workspacePath || !sessionId) {
@@ -98,6 +104,33 @@ export function initSessionStateListeners(): () => void {
     // Update session metadata with updatedAt timestamp
     // This automatically syncs both sessionStoreAtom and sessionRegistryAtom
     store.set(updateSessionStoreAtom, { sessionId, updates: { updatedAt: Date.now() } });
+
+    // Mark as unread if this is an output message (agent response) and the session
+    // is not currently being viewed
+    if (direction === 'output') {
+      const selectedWorkstream = store.get(selectedWorkstreamAtom(workspacePath));
+
+      // Determine the currently viewed session ID
+      // For a single session, it's the workstream ID itself
+      // For a workstream/worktree, it's the active child within it
+      let currentlyViewedSessionId: string | null = null;
+      if (selectedWorkstream) {
+        const activeChild = store.get(workstreamActiveChildAtom(selectedWorkstream.id));
+        currentlyViewedSessionId = activeChild || selectedWorkstream.id;
+      }
+
+      // If this message is for a session that's not currently viewed, mark it as unread
+      if (sessionId !== currentlyViewedSessionId) {
+        store.set(sessionUnreadAtom(sessionId), true);
+
+        // Persist to database metadata for cross-device sync
+        window.electronAPI?.invoke('ai:updateSessionMetadata', sessionId, {
+          metadata: { hasUnread: true },
+        }).catch((err: Error) => {
+          console.error('[sessionStateListeners] Failed to persist unread state:', err);
+        });
+      }
+    }
   };
 
   /**

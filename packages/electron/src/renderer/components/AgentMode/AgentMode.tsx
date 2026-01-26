@@ -31,7 +31,7 @@ import {
   initAgentModeLayout,
   initSessionEditors,
   addSessionFullAtom,
-  setWorkstreamActiveChildAtom,
+  setActiveSessionInWorkstreamAtom,
   loadSessionChildrenAtom,
   store,
   refreshSessionListAtom,
@@ -374,10 +374,10 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
         });
         console.log('[AgentMode] Parent children loaded');
 
-        // Now set the active child in the workstream state
-        store.set(setWorkstreamActiveChildAtom, {
+        // Now set the active child in the workstream state (and mark as read)
+        store.set(setActiveSessionInWorkstreamAtom, {
           workstreamId: sessionListItem.parentSessionId,
-          childId: sessionId,
+          sessionId,
         });
         console.log('[AgentMode] Active child set to:', sessionId);
 
@@ -442,10 +442,10 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
       workspacePath,
     });
 
-    // Set the clicked child as active
-    store.set(setWorkstreamActiveChildAtom, {
+    // Set the clicked child as active (and mark as read)
+    store.set(setActiveSessionInWorkstreamAtom, {
       workstreamId: parentId,
-      childId: childSessionId,
+      sessionId: childSessionId,
     });
 
     // Select the parent workstream
