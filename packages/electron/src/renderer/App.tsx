@@ -90,6 +90,7 @@ import {
 import { setStorageBackend } from '@nimbalyst/runtime';
 import { extensionPanelAIContextAtom } from './store/atoms/extensionPanels';
 import { setDiffTreeGroupByDirectoryAtom } from './store/atoms/projectState';
+import { toggleSessionHistoryCollapsedAtom } from './store/atoms/agentMode';
 
 logger.ui.info('App.tsx loading');
 logger.ui.info('About to import StravuEditor');
@@ -333,6 +334,7 @@ export default function App() {
   // Window mode - which view is active (files, agent, settings)
   const activeMode = useAtomValue(windowModeAtom);
   const setActiveMode = useSetAtom(setWindowModeAtom);
+  const toggleAgentCollapsed = useSetAtom(toggleSessionHistoryCollapsedAtom);
   // Keep a ref for use in callbacks that might have stale closures
   const activeModeStateRef = useRef<ContentMode>(activeMode);
   useEffect(() => {
@@ -1793,6 +1795,12 @@ export default function App() {
         }}
         activeExtensionPanel={activeExtensionPanel}
         onExtensionPanelChange={setActiveExtensionPanel}
+        onToggleFilesCollapsed={() => {
+          editorModeRef.current?.toggleSidebarCollapsed();
+        }}
+        onToggleAgentCollapsed={() => {
+          toggleAgentCollapsed();
+        }}
       />
 
       {/* Right: Main content area + Bottom Panel */}

@@ -98,9 +98,9 @@ export const SessionQuickOpen: React.FC<SessionQuickOpenProps> = ({
     if (isOpen && workspacePath) {
       window.electronAPI.invoke('sessions:list', workspacePath, { includeArchived: false })
         .then((result: { success: boolean; sessions: SessionItem[] }) => {
-          console.log('[SessionQuickOpen] sessions:list returned', result.sessions?.length, 'sessions');
+          // console.log('[SessionQuickOpen] sessions:list returned', result.sessions?.length, 'sessions');
           const sessionsWithParent = result.sessions?.filter(s => s.parentSessionId);
-          console.log('[SessionQuickOpen] Sessions with parentSessionId:', sessionsWithParent?.length, sessionsWithParent?.map(s => ({ id: s.id, title: s.title, parent: s.parentSessionId })));
+          // console.log('[SessionQuickOpen] Sessions with parentSessionId:', sessionsWithParent?.length, sessionsWithParent?.map(s => ({ id: s.id, title: s.title, parent: s.parentSessionId })));
           if (result.success && Array.isArray(result.sessions)) {
             setAllSessions(result.sessions);
           } else {

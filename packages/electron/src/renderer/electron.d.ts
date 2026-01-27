@@ -586,6 +586,7 @@ interface ElectronAPI {
     message?: string;
     conflictedFiles?: string[];
     conflictingCommits?: { ours: string[]; theirs: string[] };
+    untrackedFiles?: string[];
   }>;
   worktreeArchive: (worktreeId: string, workspacePath: string) => Promise<{
     success: boolean;

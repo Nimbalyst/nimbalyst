@@ -461,6 +461,7 @@
 .PlaygroundEditorTheme__ol1 {
   padding: 0;
   margin: 0;
+  list-style-type: decimal;
   list-style-position: inside;
 }
 .PlaygroundEditorTheme__ol2 {
@@ -490,6 +491,7 @@
 .PlaygroundEditorTheme__ul {
   padding: 0;
   margin: 0;
+  list-style-type: disc;
   list-style-position: inside;
   max-width: var(--max-text-width);
 }
@@ -497,10 +499,7 @@
   margin: 0 24px;
 }
 .PlaygroundEditorTheme__listItem::marker {
-  color: var(--listitem-marker-color);
-  background-color: var(--listitem-marker-background-color);
-  font-family: var(--listitem-marker-font-family);
-  font-size: var(--listitem-marker-font-size);
+  color: var(--nim-text);
 }
 .PlaygroundEditorTheme__listItemChecked,
 .PlaygroundEditorTheme__listItemUnchecked {

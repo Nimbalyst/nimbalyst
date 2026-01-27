@@ -1373,7 +1373,7 @@ export const refreshSessionListAtom = atom(
       });
 
       if (result.success && Array.isArray(result.sessions)) {
-        const sessions = result.sessions.map((s: any) => ({
+        const sessions: (SessionListItem & { hasUnread?: boolean })[] = result.sessions.map((s: any) => ({
           id: s.id,
           name: s.title || s.name || 'Untitled Session',
           title: s.title || s.name || 'Untitled Session',

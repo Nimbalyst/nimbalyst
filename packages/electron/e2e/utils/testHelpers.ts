@@ -194,6 +194,13 @@ export const PLAYWRIGHT_TEST_SELECTORS = {
   fileTreeFilterButtonTestId: '[data-testid="file-tree-filter-button"]',
   fileTreeQuickOpenButton: '[data-testid="file-tree-quick-open-button"]',
   aiSessionsButton: '[data-testid="ai-sessions-button"]',
+
+  // Git Operations Panel (Agent Mode)
+  gitOperationsPanel: '.git-operations-panel',
+  gitOperationsSmartMode: '[data-testid="git-operations-smart-mode"]',
+  gitOperationsCommitWithAiButton: '[data-testid="git-operations-commit-with-ai-button"]',
+  gitOperationsCommitButton: '[data-testid="git-operations-commit-button"]',
+  gitOperationsCommitMessage: '[data-testid="git-operations-commit-message"]',
 };
 
 /**

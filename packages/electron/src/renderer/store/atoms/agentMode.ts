@@ -24,33 +24,65 @@ import { selectedWorkstreamAtom, type WorkstreamType } from './sessions';
 // Types
 // ============================================================
 
-export interface AgentModeLayout {
-  /** Width of the session history panel in pixels */
-  sessionHistoryWidth: number;
-  /** Whether session history is collapsed (always false in agent mode) */
-  sessionHistoryCollapsed: boolean;
-  /** Width of the files edited sidebar in pixels */
-  filesEditedWidth: number;
-  /** Array of collapsed group keys (time groups like 'today', 'yesterday') */
+/**
+ * Layout state for agent mode session history panel.
+ * This shape is used both at runtime and for persistence.
+ */
+export interface SessionHistoryLayout {
+  width: number;
+  collapsed: boolean;
+  preCollapseWidth?: number;
   collapsedGroups: string[];
-  /** Sort order for sessions */
   sortOrder: 'updated' | 'created';
-  /** View mode for session history (list or card) */
   viewMode: 'list' | 'card';
+}
+
+/**
+ * Full agent mode layout state.
+ * This shape is used both at runtime and for persistence.
+ */
+export interface AgentModeLayout {
+  sessionHistoryLayout: SessionHistoryLayout;
+  filesEditedWidth: number;
+  todoPanelCollapsed: boolean;
 }
 
 // ============================================================
 // Main Layout Atom
 // ============================================================
 
-const DEFAULT_LAYOUT: AgentModeLayout = {
-  sessionHistoryWidth: 240,
-  sessionHistoryCollapsed: false,
-  filesEditedWidth: 256,
+const DEFAULT_SESSION_HISTORY_LAYOUT: SessionHistoryLayout = {
+  width: 240,
+  collapsed: false,
+  preCollapseWidth: undefined,
   collapsedGroups: [],
   sortOrder: 'updated',
   viewMode: 'list',
 };
+
+const DEFAULT_LAYOUT: AgentModeLayout = {
+  sessionHistoryLayout: DEFAULT_SESSION_HISTORY_LAYOUT,
+  filesEditedWidth: 256,
+  todoPanelCollapsed: false,
+};
+
+/**
+ * Deep merge persisted state with defaults.
+ * Handles missing fields from old persisted data.
+ */
+function mergeWithDefaults(persisted: Partial<AgentModeLayout> | undefined): AgentModeLayout {
+  const sessionHistoryLayout = {
+    ...DEFAULT_SESSION_HISTORY_LAYOUT,
+    ...persisted?.sessionHistoryLayout,
+  };
+  return {
+    ...DEFAULT_LAYOUT,
+    ...persisted,
+    sessionHistoryLayout,
+    // Ensure todoPanelCollapsed has a default if missing from old persisted data
+    todoPanelCollapsed: persisted?.todoPanelCollapsed ?? DEFAULT_LAYOUT.todoPanelCollapsed,
+  };
+}
 
 /**
  * Main atom for agent mode layout state.
@@ -68,12 +100,12 @@ let currentWorkspacePath: string | null = null;
 
 /** Session history panel width */
 export const sessionHistoryWidthAtom = atom(
-  (get) => get(agentModeLayoutAtom).sessionHistoryWidth
+  (get) => get(agentModeLayoutAtom).sessionHistoryLayout.width
 );
 
 /** Whether session history is collapsed */
 export const sessionHistoryCollapsedAtom = atom(
-  (get) => get(agentModeLayoutAtom).sessionHistoryCollapsed
+  (get) => get(agentModeLayoutAtom).sessionHistoryLayout.collapsed
 );
 
 /** Files edited sidebar width */
@@ -83,17 +115,22 @@ export const filesEditedWidthAtom = atom(
 
 /** Collapsed group keys */
 export const collapsedGroupsAtom = atom(
-  (get) => get(agentModeLayoutAtom).collapsedGroups
+  (get) => get(agentModeLayoutAtom).sessionHistoryLayout.collapsedGroups
 );
 
 /** Sort order for sessions */
 export const sortOrderAtom = atom(
-  (get) => get(agentModeLayoutAtom).sortOrder
+  (get) => get(agentModeLayoutAtom).sessionHistoryLayout.sortOrder
 );
 
 /** View mode for session history (list or card) */
 export const viewModeAtom = atom(
-  (get) => get(agentModeLayoutAtom).viewMode
+  (get) => get(agentModeLayoutAtom).sessionHistoryLayout.viewMode
+);
+
+/** Whether the todo panel is collapsed */
+export const todoPanelCollapsedAtom = atom(
+  (get) => get(agentModeLayoutAtom).todoPanelCollapsed
 );
 
 // ============================================================
@@ -109,19 +146,8 @@ function schedulePersist(workspacePath: string, layout: AgentModeLayout): void {
 
   persistTimer = setTimeout(async () => {
     try {
-      const state = {
-        agenticCodingWindowState: {
-          sessionHistoryLayout: {
-            width: layout.sessionHistoryWidth,
-            // Never save collapsed=true for agent mode - panel must always be visible
-            collapsed: false,
-            collapsedGroups: layout.collapsedGroups,
-            sortOrder: layout.sortOrder,
-            viewMode: layout.viewMode,
-          },
-          filesEditedWidth: layout.filesEditedWidth,
-        },
-      };
+      // Persist directly - runtime shape matches persisted shape
+      const state = { agenticCodingWindowState: layout };
       console.log('[agentMode] Persisting layout:', JSON.stringify(state, null, 2));
       const result = await window.electronAPI.invoke('workspace:update-state', workspacePath, state);
       console.log('[agentMode] Persist result:', result);
@@ -136,27 +162,41 @@ function schedulePersist(workspacePath: string, layout: AgentModeLayout): void {
 // ============================================================
 
 /**
- * Update agent mode layout with partial values.
- * Automatically persists to workspace state (debounced).
+ * Update session history layout with partial values.
  */
-export const setAgentModeLayoutAtom = atom(
+export const setSessionHistoryLayoutAtom = atom(
   null,
-  (get, set, updates: Partial<AgentModeLayout>) => {
+  (get, set, updates: Partial<SessionHistoryLayout>) => {
     const current = get(agentModeLayoutAtom);
-    const newLayout = { ...current, ...updates };
-
-    // Enforce: session history can never be collapsed in agent mode
-    if (newLayout.sessionHistoryCollapsed) {
-      newLayout.sessionHistoryCollapsed = false;
-    }
+    const newLayout: AgentModeLayout = {
+      ...current,
+      sessionHistoryLayout: { ...current.sessionHistoryLayout, ...updates },
+    };
 
     set(agentModeLayoutAtom, newLayout);
 
-    // Schedule persistence - use module-level workspace path
     if (!currentWorkspacePath) {
       throw new Error('[agentMode] Cannot persist layout - initAgentModeLayout not called');
     }
-    console.log('[agentMode] setAgentModeLayoutAtom - workspacePath:', currentWorkspacePath, 'updates:', updates);
+    schedulePersist(currentWorkspacePath, newLayout);
+  }
+);
+
+/**
+ * Update agent mode layout (top-level fields only).
+ * For sessionHistoryLayout updates, use setSessionHistoryLayoutAtom.
+ */
+export const setAgentModeLayoutAtom = atom(
+  null,
+  (get, set, updates: { filesEditedWidth?: number }) => {
+    const current = get(agentModeLayoutAtom);
+    const newLayout = { ...current, ...updates };
+
+    set(agentModeLayoutAtom, newLayout);
+
+    if (!currentWorkspacePath) {
+      throw new Error('[agentMode] Cannot persist layout - initAgentModeLayout not called');
+    }
     schedulePersist(currentWorkspacePath, newLayout);
   }
 );
@@ -167,7 +207,7 @@ export const setAgentModeLayoutAtom = atom(
 export const setSessionHistoryWidthAtom = atom(
   null,
   (get, set, width: number) => {
-    set(setAgentModeLayoutAtom, { sessionHistoryWidth: width });
+    set(setSessionHistoryLayoutAtom, { width });
   }
 );
 
@@ -177,7 +217,6 @@ export const setSessionHistoryWidthAtom = atom(
 export const setFilesEditedWidthAtom = atom(
   null,
   (get, set, width: number) => {
-    // Clamp width between 150 and 500 pixels
     const clampedWidth = Math.max(150, Math.min(500, width));
     set(setAgentModeLayoutAtom, { filesEditedWidth: clampedWidth });
   }
@@ -194,7 +233,7 @@ export const toggleCollapsedGroupAtom = atom(
     const newGroups = isCollapsed
       ? current.filter((g) => g !== groupKey)
       : [...current, groupKey];
-    set(setAgentModeLayoutAtom, { collapsedGroups: newGroups });
+    set(setSessionHistoryLayoutAtom, { collapsedGroups: newGroups });
   }
 );
 
@@ -204,7 +243,7 @@ export const toggleCollapsedGroupAtom = atom(
 export const setCollapsedGroupsAtom = atom(
   null,
   (get, set, groups: string[]) => {
-    set(setAgentModeLayoutAtom, { collapsedGroups: groups });
+    set(setSessionHistoryLayoutAtom, { collapsedGroups: groups });
   }
 );
 
@@ -214,7 +253,7 @@ export const setCollapsedGroupsAtom = atom(
 export const setSortOrderAtom = atom(
   null,
   (get, set, sortOrder: 'updated' | 'created') => {
-    set(setAgentModeLayoutAtom, { sortOrder });
+    set(setSessionHistoryLayoutAtom, { sortOrder });
   }
 );
 
@@ -224,7 +263,49 @@ export const setSortOrderAtom = atom(
 export const setViewModeAtom = atom(
   null,
   (get, set, viewMode: 'list' | 'card') => {
-    set(setAgentModeLayoutAtom, { viewMode });
+    set(setSessionHistoryLayoutAtom, { viewMode });
+  }
+);
+
+/**
+ * Toggle todo panel collapsed state.
+ */
+export const toggleTodoPanelCollapsedAtom = atom(
+  null,
+  (get, set) => {
+    const current = get(agentModeLayoutAtom);
+    const newLayout = { ...current, todoPanelCollapsed: !current.todoPanelCollapsed };
+
+    set(agentModeLayoutAtom, newLayout);
+
+    if (!currentWorkspacePath) {
+      throw new Error('[agentMode] Cannot persist layout - initAgentModeLayout not called');
+    }
+    schedulePersist(currentWorkspacePath, newLayout);
+  }
+);
+
+/**
+ * Toggle session history collapsed state.
+ * Preserves the width when collapsing and restores it when expanding.
+ */
+export const toggleSessionHistoryCollapsedAtom = atom(
+  null,
+  (get, set) => {
+    const layout = get(agentModeLayoutAtom).sessionHistoryLayout;
+    if (layout.collapsed) {
+      // Expanding - restore previous width
+      set(setSessionHistoryLayoutAtom, {
+        collapsed: false,
+        width: layout.preCollapseWidth ?? DEFAULT_SESSION_HISTORY_LAYOUT.width,
+      });
+    } else {
+      // Collapsing - save current width
+      set(setSessionHistoryLayoutAtom, {
+        collapsed: true,
+        preCollapseWidth: layout.width,
+      });
+    }
   }
 );
 
@@ -246,27 +327,18 @@ export async function initAgentModeLayout(workspacePath: string): Promise<void> 
       'workspace:get-state',
       workspacePath
     );
-    const result = workspaceState?.agenticCodingWindowState;
-    console.log('[agentMode] Full workspace state:', JSON.stringify(result, null, 2));
+    const agenticState = workspaceState?.agenticCodingWindowState;
+    const persisted = agenticState as Partial<AgentModeLayout> | undefined;
+    console.log('[agentMode] Full workspace state:', JSON.stringify(persisted, null, 2));
 
-    // Build restored layout with defaults for any missing fields
-    // This handles old persisted state that may be missing fields added later
-    const layout = result?.sessionHistoryLayout ?? {};
-    const restoredLayout: AgentModeLayout = {
-      sessionHistoryWidth: layout.width ?? DEFAULT_LAYOUT.sessionHistoryWidth,
-      // CRITICAL: Never collapse SessionHistory in agent mode
-      sessionHistoryCollapsed: false,
-      filesEditedWidth: result?.filesEditedWidth ?? DEFAULT_LAYOUT.filesEditedWidth,
-      collapsedGroups: layout.collapsedGroups ?? DEFAULT_LAYOUT.collapsedGroups,
-      sortOrder: layout.sortOrder ?? DEFAULT_LAYOUT.sortOrder,
-      viewMode: layout.viewMode ?? DEFAULT_LAYOUT.viewMode,
-    };
+    // Merge persisted state with defaults - same shape, just fill in missing fields
+    const restoredLayout = mergeWithDefaults(persisted);
     console.log('[agentMode] Restored layout:', restoredLayout);
     store.set(agentModeLayoutAtom, restoredLayout);
 
-    // Restore selected workstream if saved
-    if (result?.selectedWorkstream) {
-      const selection = result.selectedWorkstream as { type: WorkstreamType; id: string };
+    // Restore selected workstream if saved (stored alongside layout)
+    if (agenticState?.selectedWorkstream) {
+      const selection = agenticState.selectedWorkstream as { type: WorkstreamType; id: string };
       store.set(selectedWorkstreamAtom(workspacePath), selection);
     }
   } catch (err) {

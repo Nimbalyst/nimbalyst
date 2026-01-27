@@ -24,6 +24,7 @@ import {
   setWorkstreamStagedFilesAtom,
 } from '../../store/atoms/workstreamState';
 import { GitOperationsPanel } from './GitOperationsPanel';
+import { TodoPanel } from './TodoPanel';
 
 interface FilesEditedSidebarProps {
   /** The workstream ID (parent session ID) - files from all child sessions will be shown */
@@ -574,6 +575,11 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
         worktreePath={worktreePath}
         onWorktreeArchived={onWorktreeArchived}
       />
+
+      {/* Todo Panel - shows agent's current tasks */}
+      {activeSessionId && (
+        <TodoPanel sessionId={activeSessionId} />
+      )}
     </div>
   );
 });

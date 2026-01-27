@@ -167,20 +167,20 @@ Dev mode requires the signal file because `app.relaunch()` doesn't work when ele
 
 ### CRITICAL: Date/Timestamp Handling
 
-PostgreSQL TIMESTAMP columns store UTC time, but PGlite returns Date objects that JavaScript interprets as LOCAL time, creating a timezone mismatch.
+All timestamp columns use TIMESTAMPTZ (timestamp with time zone). With TIMESTAMPTZ, PGLite returns Date objects that already represent the correct instant in time.
 
 **Rules when working with database timestamps:**
 
-1. **DO**: Use `CURRENT_TIMESTAMP` for database inserts/updates
-```sql
-UPDATE ai_sessions SET updated_at = CURRENT_TIMESTAMP WHERE id = $1
-```
+1. **DO**: Use TIMESTAMPTZ for all timestamp columns (not TIMESTAMP without timezone)
 
-2. **DON'T**: Use `Date.now()` with `to_timestamp()` - causes double conversion
+2. **DO**: Pass Date objects directly when writing to TIMESTAMPTZ columns
+```typescript
+db.query('INSERT INTO ... VALUES ($1)', [new Date()])
+```
 
 3. **DO**: Retrieve timestamps through `toMillis()` function
 ```typescript
-const createdAt = toMillis(row.created_at);  // Converts UTC to proper epoch ms
+const createdAt = toMillis(row.created_at);  // Returns epoch milliseconds
 ```
 
 4. **DO**: Display with `toLocaleString()` for user's local timezone
@@ -188,7 +188,6 @@ const createdAt = toMillis(row.created_at);  // Converts UTC to proper epoch ms
 **Related files:**
 - `src/main/database/worker.js` - Database schema and comments
 - `src/main/services/PGLiteSessionStore.ts` - toMillis() implementation
-- `src/main/services/PGLiteAgentMessagesStore.ts` - Uses CURRENT_TIMESTAMP
 
 ## Renderer State Architecture
 

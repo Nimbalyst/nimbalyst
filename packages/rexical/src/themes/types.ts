@@ -110,6 +110,33 @@ export interface ExtendedThemeColors extends ThemeColors {
   'code-attr'?: string;
   'code-variable'?: string;
   'code-function'?: string;
+
+  // Terminal
+  'terminal-bg'?: string;
+  'terminal-fg'?: string;
+  'terminal-cursor'?: string;
+  'terminal-cursor-accent'?: string;
+  'terminal-selection'?: string;
+
+  // Terminal ANSI standard colors (0-7)
+  'terminal-ansi-black'?: string;
+  'terminal-ansi-red'?: string;
+  'terminal-ansi-green'?: string;
+  'terminal-ansi-yellow'?: string;
+  'terminal-ansi-blue'?: string;
+  'terminal-ansi-magenta'?: string;
+  'terminal-ansi-cyan'?: string;
+  'terminal-ansi-white'?: string;
+
+  // Terminal ANSI bright colors (8-15)
+  'terminal-ansi-bright-black'?: string;
+  'terminal-ansi-bright-red'?: string;
+  'terminal-ansi-bright-green'?: string;
+  'terminal-ansi-bright-yellow'?: string;
+  'terminal-ansi-bright-blue'?: string;
+  'terminal-ansi-bright-magenta'?: string;
+  'terminal-ansi-bright-cyan'?: string;
+  'terminal-ansi-bright-white'?: string;
 }
 
 /**

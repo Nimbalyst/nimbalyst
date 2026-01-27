@@ -107,6 +107,33 @@ const lightThemeColors: ExtendedThemeColors = {
   'code-attr': '#07a',
   'code-variable': '#e90',
   'code-function': '#dd4a68',
+
+  // Terminal
+  'terminal-bg': '#ffffff',
+  'terminal-fg': '#1f2937',
+  'terminal-cursor': '#2563eb',
+  'terminal-cursor-accent': '#ffffff',
+  'terminal-selection': 'rgba(0, 0, 0, 0.15)',
+
+  // Terminal ANSI standard colors (optimized for light background)
+  'terminal-ansi-black': '#1f2937',
+  'terminal-ansi-red': '#dc2626',
+  'terminal-ansi-green': '#16a34a',
+  'terminal-ansi-yellow': '#ca8a04',
+  'terminal-ansi-blue': '#2563eb',
+  'terminal-ansi-magenta': '#9333ea',
+  'terminal-ansi-cyan': '#0891b2',
+  'terminal-ansi-white': '#f3f4f6',
+
+  // Terminal ANSI bright colors
+  'terminal-ansi-bright-black': '#6b7280',
+  'terminal-ansi-bright-red': '#ef4444',
+  'terminal-ansi-bright-green': '#22c55e',
+  'terminal-ansi-bright-yellow': '#eab308',
+  'terminal-ansi-bright-blue': '#3b82f6',
+  'terminal-ansi-bright-magenta': '#a855f7',
+  'terminal-ansi-bright-cyan': '#06b6d4',
+  'terminal-ansi-bright-white': '#ffffff',
 };
 
 /**
@@ -189,6 +216,33 @@ const darkThemeColors: ExtendedThemeColors = {
   'code-attr': '#92c5f8',
   'code-variable': '#4fc1ff',
   'code-function': '#dcdcaa',
+
+  // Terminal
+  'terminal-bg': '#1a1a1a',
+  'terminal-fg': '#e5e5e5',
+  'terminal-cursor': '#60a5fa',
+  'terminal-cursor-accent': '#1a1a1a',
+  'terminal-selection': 'rgba(255, 255, 255, 0.2)',
+
+  // Terminal ANSI standard colors (Tailwind palette)
+  'terminal-ansi-black': '#000000',
+  'terminal-ansi-red': '#ef4444',
+  'terminal-ansi-green': '#22c55e',
+  'terminal-ansi-yellow': '#eab308',
+  'terminal-ansi-blue': '#3b82f6',
+  'terminal-ansi-magenta': '#a855f7',
+  'terminal-ansi-cyan': '#06b6d4',
+  'terminal-ansi-white': '#ffffff',
+
+  // Terminal ANSI bright colors
+  'terminal-ansi-bright-black': '#6b7280',
+  'terminal-ansi-bright-red': '#f87171',
+  'terminal-ansi-bright-green': '#4ade80',
+  'terminal-ansi-bright-yellow': '#facc15',
+  'terminal-ansi-bright-blue': '#60a5fa',
+  'terminal-ansi-bright-magenta': '#c084fc',
+  'terminal-ansi-bright-cyan': '#22d3ee',
+  'terminal-ansi-bright-white': '#ffffff',
 };
 
 /**
@@ -271,6 +325,33 @@ const crystalDarkThemeColors: ExtendedThemeColors = {
   'code-attr': '#60A5FA',
   'code-variable': '#34D399',
   'code-function': '#A78BFA',
+
+  // Terminal
+  'terminal-bg': '#020617',
+  'terminal-fg': '#e2e8f0',
+  'terminal-cursor': '#38bdf8',
+  'terminal-cursor-accent': '#020617',
+  'terminal-selection': 'rgba(148, 163, 184, 0.2)',
+
+  // Terminal ANSI standard colors (slate-tinted palette)
+  'terminal-ansi-black': '#0f172a',
+  'terminal-ansi-red': '#f87171',
+  'terminal-ansi-green': '#4ade80',
+  'terminal-ansi-yellow': '#fbbf24',
+  'terminal-ansi-blue': '#38bdf8',
+  'terminal-ansi-magenta': '#c084fc',
+  'terminal-ansi-cyan': '#22d3ee',
+  'terminal-ansi-white': '#f1f5f9',
+
+  // Terminal ANSI bright colors
+  'terminal-ansi-bright-black': '#64748b',
+  'terminal-ansi-bright-red': '#fca5a5',
+  'terminal-ansi-bright-green': '#86efac',
+  'terminal-ansi-bright-yellow': '#fde047',
+  'terminal-ansi-bright-blue': '#7dd3fc',
+  'terminal-ansi-bright-magenta': '#d8b4fe',
+  'terminal-ansi-bright-cyan': '#67e8f9',
+  'terminal-ansi-bright-white': '#ffffff',
 };
 
 // Built-in themes
@@ -405,6 +486,37 @@ export function registerThemeContribution(
   }
   if (!extColors['quote-border'] && extColors['border']) {
     derivedColors['quote-border'] = extColors['border'];
+  }
+
+  // Terminal colors: derive from extension's colors if not specified
+  if (!extColors['terminal-bg'] && extColors['bg-secondary']) {
+    derivedColors['terminal-bg'] = extColors['bg-secondary'];
+  }
+  if (!extColors['terminal-fg'] && extColors['text']) {
+    derivedColors['terminal-fg'] = extColors['text'];
+  }
+  if (!extColors['terminal-cursor'] && extColors['primary']) {
+    derivedColors['terminal-cursor'] = extColors['primary'];
+  }
+  if (!extColors['terminal-cursor-accent'] && (extColors['terminal-bg'] || extColors['bg-secondary'])) {
+    derivedColors['terminal-cursor-accent'] = extColors['terminal-bg'] || extColors['bg-secondary'];
+  }
+  if (!extColors['terminal-selection'] && extColors['bg-selected']) {
+    derivedColors['terminal-selection'] = extColors['bg-selected'];
+  }
+
+  // Terminal ANSI colors: derive from status colors if not specified
+  if (!extColors['terminal-ansi-red'] && extColors['error']) {
+    derivedColors['terminal-ansi-red'] = extColors['error'];
+  }
+  if (!extColors['terminal-ansi-green'] && extColors['success']) {
+    derivedColors['terminal-ansi-green'] = extColors['success'];
+  }
+  if (!extColors['terminal-ansi-yellow'] && extColors['warning']) {
+    derivedColors['terminal-ansi-yellow'] = extColors['warning'];
+  }
+  if (!extColors['terminal-ansi-blue'] && extColors['info']) {
+    derivedColors['terminal-ansi-blue'] = extColors['info'];
   }
 
   const theme: Theme = {

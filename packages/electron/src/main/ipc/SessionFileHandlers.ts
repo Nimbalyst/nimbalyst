@@ -2,11 +2,39 @@
  * IPC handlers for session-file link operations
  */
 
-import { SessionFilesRepository } from '@nimbalyst/runtime';
+import { SessionFilesRepository, type FileLinkType } from '@nimbalyst/runtime';
 import { logger } from '../utils/logger';
 import { safeHandle } from '../utils/ipcRegistry';
+import { BrowserWindow } from 'electron';
 
 export function setupSessionFileHandlers(): void {
+  /**
+   * Add a file link to a session (used by AI and tests)
+   */
+  safeHandle('session-files:add-link', async (event, sessionId: string, workspaceId: string, filePath: string, linkType: FileLinkType, metadata?: Record<string, any>) => {
+    try {
+      const link = await SessionFilesRepository.addFileLink({
+        sessionId,
+        workspaceId,
+        filePath,
+        linkType,
+        timestamp: Date.now(),
+        metadata,
+      });
+
+      // Notify renderer of the update
+      const window = BrowserWindow.fromWebContents(event.sender);
+      if (window) {
+        event.sender.send('session-files:updated', sessionId);
+      }
+
+      return { success: true, link };
+    } catch (error) {
+      logger.main.error('[SessionFileHandlers] Failed to add file link:', error);
+      return { success: false, error: String(error) };
+    }
+  });
+
   /**
    * Get all file links for a session
    */

@@ -113,28 +113,31 @@ export const themeIdAtom = atom<ThemeId>('dark');
 /**
  * Derived: full theme object.
  * Use this when you need more than just the theme ID.
+ * Falls back to dark theme if the ID is not found (e.g., extension theme).
  */
 export const themeAtom = atom((get) => {
   const id = get(themeIdAtom);
-  return themes[id];
+  return themes[id] ?? themes['dark'];
 });
 
 /**
  * Derived: is current theme dark?
  * Useful for components that only care about light vs dark.
+ * Defaults to true (dark) if theme is not found.
  */
 export const isDarkThemeAtom = atom((get) => {
   const theme = get(themeAtom);
-  return theme.isDark;
+  return theme?.isDark ?? true;
 });
 
 /**
  * Derived: theme colors only.
  * Use when you just need colors and don't care about other theme metadata.
+ * Falls back to dark theme colors if theme is not found.
  */
 export const themeColorsAtom = atom((get) => {
   const theme = get(themeAtom);
-  return theme.colors;
+  return theme?.colors ?? themes['dark'].colors;
 });
 
 /**

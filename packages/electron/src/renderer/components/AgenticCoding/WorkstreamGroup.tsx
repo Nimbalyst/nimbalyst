@@ -267,7 +267,7 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
 
         {/* Main clickable area - icon and content */}
         <div
-          className="workstream-group-main flex items-start gap-2 flex-1 min-w-0 py-2 pr-2 pl-1 cursor-pointer focus:outline-none focus-visible:outline-2 focus-visible:outline-[var(--nim-border-focus)] focus-visible:outline-offset-[-2px] focus-visible:rounded"
+          className="workstream-group-main flex items-start gap-2 flex-1 min-w-0 py-1 pr-2 pl-1 cursor-pointer focus:outline-none focus-visible:outline-2 focus-visible:outline-[var(--nim-border-focus)] focus-visible:outline-offset-[-2px] focus-visible:rounded"
           onClick={handleHeaderClick}
           role="button"
           tabIndex={0}

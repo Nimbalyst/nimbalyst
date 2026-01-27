@@ -20,6 +20,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.7] - 2026-01-26
+
+
+### Added
+- Collapsible todo panel in agent mode sidebar for tracking task progress
+- Collapsible left panel toggle for Files and Agent modes
+- Terminal integration with theme system for consistent styling
+
+### Fixed
+- Fallback to dark theme when configured theme ID is not found
+- Correct timezone handling for TIMESTAMPTZ session timestamps
+- Keep smart mode when AI proposes commit, show proposal UI inline
+- Restore processing state on renderer refresh
+- Handle WASM memory errors when restoring terminal scrollback
+
 ## [0.52.6] - 2026-01-26
 
 
