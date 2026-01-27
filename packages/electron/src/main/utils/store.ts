@@ -7,6 +7,7 @@ import type { OnboardingConfig } from '../../shared/types/workspace';
 import { DEFAULT_ONBOARDING_CONFIG } from '../../shared/types/workspace';
 import type { InstalledPackage } from '../../shared/toolPackages';
 import { AlphaFeatureTag, getDefaultAlphaFeatures, enableAllAlphaFeatures, ALPHA_FEATURES } from '../../shared/alphaFeatures';
+import { DeveloperFeatureTag, getDefaultDeveloperFeatures, DEVELOPER_FEATURES } from '../../shared/developerFeatures';
 
 // Theme can be a built-in theme or an extension theme ID (format: "extensionId:themeId")
 export type AppTheme = 'dark' | 'light' | 'system' | 'auto' | 'crystal-dark' | string;
@@ -111,6 +112,9 @@ interface AppStoreSchema {
   // Alpha feature flags - individual control over alpha features
   // Uses Record<AlphaFeatureTag, boolean> for dynamic feature registration
   alphaFeatures?: Record<AlphaFeatureTag, boolean>;
+  // Developer feature flags - features only available in developer mode
+  // Each feature can be individually toggled when developer mode is enabled
+  developerFeatures?: Record<DeveloperFeatureTag, boolean>;
 }
 
 /**
@@ -1454,5 +1458,59 @@ export function setAlphaFeatures(features: Record<AlphaFeatureTag, boolean>): vo
   const current = getAlphaFeatures();
   const merged = { ...current, ...features };
   getAppStore().set('alphaFeatures', merged);
+}
+
+// Developer Feature Flags
+// Features only available when developer mode is enabled
+// Uses dynamic registration from developerFeatures registry
+
+/**
+ * Get the developer feature flags.
+ * Returns all feature flags with defaults for any missing values.
+ * All features are enabled by default when developer mode is on.
+ */
+export function getDeveloperFeatures(): Record<DeveloperFeatureTag, boolean> {
+  const stored = getAppStore().get('developerFeatures');
+
+  if (!stored) {
+    // All developer features enabled by default
+    return getDefaultDeveloperFeatures();
+  }
+
+  // Merge stored values with defaults to handle new features added after initial storage
+  const defaults = getDefaultDeveloperFeatures();
+
+  // Ensure all registered features exist in stored object (for new features added later)
+  for (const feature of DEVELOPER_FEATURES) {
+    if (!(feature.tag in stored)) {
+      stored[feature.tag] = defaults[feature.tag];
+    }
+  }
+
+  return stored;
+}
+
+/**
+ * Set the developer feature flags.
+ * @param features Object containing feature flags (partial updates supported)
+ */
+export function setDeveloperFeatures(features: Record<DeveloperFeatureTag, boolean>): void {
+  // Merge with existing features to preserve other settings
+  const current = getDeveloperFeatures();
+  const merged = { ...current, ...features };
+  getAppStore().set('developerFeatures', merged);
+}
+
+/**
+ * Check if a developer feature is available.
+ * Feature is available if developer mode is enabled AND the specific feature is enabled.
+ */
+export function isDeveloperFeatureAvailable(tag: DeveloperFeatureTag): boolean {
+  const developerMode = isDeveloperMode();
+  if (!developerMode) {
+    return false;
+  }
+  const features = getDeveloperFeatures();
+  return features[tag] ?? false;
 }
 

@@ -18,6 +18,7 @@
 import { atom, type Atom } from 'jotai';
 import posthog from 'posthog-js';
 import { AlphaFeatureTag } from '../../../shared/alphaFeatures';
+import { DeveloperFeatureTag, DEVELOPER_FEATURES, getDefaultDeveloperFeatures, enableAllDeveloperFeatures, disableAllDeveloperFeatures, areAllDeveloperFeaturesEnabled } from '../../../shared/developerFeatures';
 
 // Voice type - all available OpenAI Realtime voices
 export type VoiceId = 'alloy' | 'ash' | 'ballad' | 'coral' | 'echo' | 'sage' | 'shimmer' | 'verse' | 'marin' | 'cedar';
@@ -1455,3 +1456,172 @@ export function refreshWorkspacePermissionsAtomFamily(workspacePath: string) {
     set(permissionsAtom, newState);
   });
 }
+
+// ============================================================================
+// PHASE 7: Developer Feature Settings
+// ============================================================================
+
+export interface DeveloperFeatureSettings {
+  /** Whether developer mode is enabled globally */
+  developerMode: boolean;
+  /** Individual feature toggles (only checked when developerMode is true) */
+  developerFeatures: Record<DeveloperFeatureTag, boolean>;
+}
+
+/**
+ * Default developer feature settings.
+ * All features are enabled by default when developer mode is on.
+ */
+const defaultDeveloperFeatureSettings: DeveloperFeatureSettings = {
+  developerMode: false,
+  developerFeatures: getDefaultDeveloperFeatures(),
+};
+
+/**
+ * The main developer feature settings atom.
+ * Should be initialized from IPC on app load.
+ */
+export const developerFeatureSettingsAtom = atom<DeveloperFeatureSettings>(defaultDeveloperFeatureSettings);
+
+/**
+ * Debounce timer for developer feature settings persistence.
+ */
+let developerFeaturePersistTimer: ReturnType<typeof setTimeout> | null = null;
+const DEVELOPER_FEATURE_PERSIST_DEBOUNCE_MS = 500;
+
+/**
+ * Persist developer feature settings to main process.
+ * Each setting has its own IPC endpoint, so we call them individually.
+ */
+function scheduleDeveloperFeaturePersist(
+  settings: DeveloperFeatureSettings,
+  changedKeys: (keyof DeveloperFeatureSettings)[]
+): void {
+  if (developerFeaturePersistTimer) {
+    clearTimeout(developerFeaturePersistTimer);
+  }
+  developerFeaturePersistTimer = setTimeout(async () => {
+    developerFeaturePersistTimer = null;
+    if (typeof window === 'undefined' || !window.electronAPI) return;
+
+    for (const key of changedKeys) {
+      switch (key) {
+        case 'developerMode':
+          await window.electronAPI.invoke('developer-mode:set', settings.developerMode);
+          break;
+        case 'developerFeatures':
+          await window.electronAPI.invoke('developer-features:set', settings.developerFeatures);
+          break;
+      }
+    }
+  }, DEVELOPER_FEATURE_PERSIST_DEBOUNCE_MS);
+}
+
+// === Derived read-only atoms (slices) ===
+
+/**
+ * Developer mode enabled state.
+ */
+export const developerModeAtom = atom(
+  (get) => get(developerFeatureSettingsAtom).developerMode
+);
+
+/**
+ * All developer features configuration.
+ */
+export const developerFeaturesAtom = atom(
+  (get) => get(developerFeatureSettingsAtom).developerFeatures
+);
+
+/**
+ * Check if a specific developer feature is available.
+ * Feature is available if developer mode is enabled AND the specific feature is enabled.
+ *
+ * This is an atom family pattern: a function that returns atoms dynamically.
+ * Each call with a unique tag returns the SAME cached atom instance.
+ *
+ * @example
+ * ```ts
+ * const isWorktreesAvailable = useAtomValue(developerFeatureAvailableAtom('worktrees'));
+ * if (isWorktreesAvailable) {
+ *   // Show worktree feature
+ * }
+ * ```
+ */
+const developerFeatureAtomCache = new Map<DeveloperFeatureTag, Atom<boolean>>();
+
+export function developerFeatureAvailableAtom(tag: DeveloperFeatureTag): Atom<boolean> {
+  let cached = developerFeatureAtomCache.get(tag);
+  if (!cached) {
+    cached = atom(
+      (get) => {
+        const settings = get(developerFeatureSettingsAtom);
+        return settings.developerMode && (settings.developerFeatures[tag] ?? false);
+      }
+    );
+    developerFeatureAtomCache.set(tag, cached);
+  }
+  return cached;
+}
+
+/**
+ * Developer feature: Worktrees available (convenience atom)
+ */
+export const worktreesFeatureAvailableAtom = developerFeatureAvailableAtom('worktrees');
+
+/**
+ * Developer feature: Terminal available (convenience atom)
+ */
+export const terminalFeatureAvailableAtom = developerFeatureAvailableAtom('terminal');
+
+// === Setter atoms ===
+
+/**
+ * Set developer feature settings (partial update).
+ * Merges with existing settings and triggers persist for changed keys only.
+ */
+export const setDeveloperFeatureSettingsAtom = atom(
+  null,
+  (get, set, updates: Partial<DeveloperFeatureSettings>) => {
+    const current = get(developerFeatureSettingsAtom);
+    const newSettings = { ...current, ...updates };
+    set(developerFeatureSettingsAtom, newSettings);
+
+    // Determine which keys changed for targeted persistence
+    const changedKeys = (Object.keys(updates) as (keyof DeveloperFeatureSettings)[]).filter(
+      (key) => updates[key] !== current[key]
+    );
+    if (changedKeys.length > 0) {
+      scheduleDeveloperFeaturePersist(newSettings, changedKeys);
+    }
+  }
+);
+
+/**
+ * Initialize developer feature settings from IPC.
+ * Call this once at app startup.
+ */
+export async function initDeveloperFeatureSettings(): Promise<DeveloperFeatureSettings> {
+  if (typeof window === 'undefined' || !window.electronAPI) {
+    return defaultDeveloperFeatureSettings;
+  }
+
+  try {
+    const [developerMode, developerFeatures] = await Promise.all([
+      window.electronAPI.invoke('developer-mode:get'),
+      window.electronAPI.invoke('developer-features:get'),
+    ]);
+
+    return {
+      developerMode: developerMode ?? false,
+      developerFeatures: developerFeatures ?? defaultDeveloperFeatureSettings.developerFeatures,
+    };
+  } catch (error) {
+    console.error('[appSettings] Failed to load developer feature settings:', error);
+  }
+
+  return defaultDeveloperFeatureSettings;
+}
+
+// Re-export developer feature helpers for use in UI
+export { DEVELOPER_FEATURES, areAllDeveloperFeaturesEnabled, enableAllDeveloperFeatures, disableAllDeveloperFeatures };

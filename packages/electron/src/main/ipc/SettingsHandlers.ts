@@ -4,7 +4,7 @@ import * as os from 'os';
 import * as fs from 'fs';
 import * as path from 'path';
 import { app } from 'electron';
-import { getWorkspaceState, updateWorkspaceState, getTheme, getThemeSync, isCompletionSoundEnabled, setCompletionSoundEnabled, getCompletionSoundType, setCompletionSoundType, CompletionSoundType, getReleaseChannel, setReleaseChannel, ReleaseChannel, getRecentItems, getDefaultAIModel, setDefaultAIModel, isAnalyticsEnabled, setAnalyticsEnabled, isMockupLMEnabled, setMockupLMEnabled, getSessionSyncConfig, setSessionSyncConfig, SessionSyncConfig, isExtensionDevToolsEnabled, setExtensionDevToolsEnabled, getAppSetting, setAppSetting, getAlphaFeatures, setAlphaFeatures } from '../utils/store';
+import { getWorkspaceState, updateWorkspaceState, getTheme, getThemeSync, isCompletionSoundEnabled, setCompletionSoundEnabled, getCompletionSoundType, setCompletionSoundType, CompletionSoundType, getReleaseChannel, setReleaseChannel, ReleaseChannel, getRecentItems, getDefaultAIModel, setDefaultAIModel, isAnalyticsEnabled, setAnalyticsEnabled, isMockupLMEnabled, setMockupLMEnabled, getSessionSyncConfig, setSessionSyncConfig, SessionSyncConfig, isExtensionDevToolsEnabled, setExtensionDevToolsEnabled, getAppSetting, setAppSetting, getAlphaFeatures, setAlphaFeatures, getDeveloperFeatures, setDeveloperFeatures, isDeveloperFeatureAvailable } from '../utils/store';
 import { logger } from '../utils/logger';
 import { SoundNotificationService } from '../services/SoundNotificationService';
 import { autoUpdaterService } from '../services/autoUpdater';
@@ -248,6 +248,21 @@ export function registerSettingsHandlers() {
     safeHandle('alpha-features:set', (_event, features: Record<string, boolean>) => {
         setAlphaFeatures(features as any);
         logger.store.info('[SettingsHandlers] Alpha features updated:', features);
+    });
+
+    // Developer feature flags (features only available in developer mode)
+    safeHandle('developer-features:get', () => {
+        return getDeveloperFeatures();
+    });
+
+    safeHandle('developer-features:set', (_event, features: Record<string, boolean>) => {
+        setDeveloperFeatures(features as any);
+        logger.store.info('[SettingsHandlers] Developer features updated:', features);
+    });
+
+    // Check if a specific developer feature is available (developer mode + feature enabled)
+    safeHandle('developer-features:is-available', (_event, tag: string) => {
+        return isDeveloperFeatureAvailable(tag as any);
     });
 
     // Get recent projects

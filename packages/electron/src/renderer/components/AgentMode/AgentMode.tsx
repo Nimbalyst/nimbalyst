@@ -13,7 +13,7 @@
 
 import React, { forwardRef, useImperativeHandle, useEffect, useCallback, useMemo, useRef, useState } from 'react';
 import { atom, useAtomValue, useSetAtom } from 'jotai';
-import { defaultAgentModelAtom } from '../../store/atoms/appSettings';
+import { defaultAgentModelAtom, worktreesFeatureAvailableAtom } from '../../store/atoms/appSettings';
 import { ResizablePanel } from '../AgenticCoding/ResizablePanel';
 import { SessionHistory } from '../AgenticCoding/SessionHistory';
 import { AgentWorkstreamPanel, type AgentWorkstreamPanelRef } from './AgentWorkstreamPanel';
@@ -83,6 +83,9 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
 
   // Git repo status for worktree feature
   const [isGitRepo, setIsGitRepo] = useState(false);
+
+  // Check if worktrees feature is available (developer mode + feature enabled)
+  const isWorktreesAvailable = useAtomValue(worktreesFeatureAvailableAtom);
 
   // Layout state from atoms
   const historyWidth = useAtomValue(sessionHistoryWidthAtom);
@@ -629,6 +632,7 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
   );
 
   // Content for the left side (session history)
+  // Only pass worktree props if the feature is available (developer mode + feature enabled)
   const leftContent = (
     <SessionHistory
       workspacePath={workspacePath}
@@ -640,8 +644,8 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
       onSessionRename={handleSessionRename}
       onSessionBranch={handleSessionBranch}
       onNewSession={createNewSession}
-      onNewWorktreeSession={createNewWorktreeSession}
-      onAddSessionToWorktree={addSessionToWorktree}
+      onNewWorktreeSession={isWorktreesAvailable ? createNewWorktreeSession : undefined}
+      onAddSessionToWorktree={isWorktreesAvailable ? addSessionToWorktree : undefined}
       isGitRepo={isGitRepo}
       collapsedGroups={collapsedGroups}
       onCollapsedGroupsChange={(groups) => setCollapsedGroups(groups)}

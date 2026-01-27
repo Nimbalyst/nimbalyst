@@ -27,6 +27,8 @@ import {
   initAIProviderSettings,
   agentModeSettingsAtom,
   initAgentModeSettings,
+  developerFeatureSettingsAtom,
+  initDeveloperFeatureSettings,
 } from './store/atoms/appSettings';
 
 // console.log('[RENDERER] Imports complete at', new Date().toISOString());
@@ -62,6 +64,9 @@ await Promise.all([
   }),
   initAgentModeSettings().then((settings) => {
     store.set(agentModeSettingsAtom, settings);
+  }),
+  initDeveloperFeatureSettings().then((settings) => {
+    store.set(developerFeatureSettingsAtom, settings);
   }),
 ]).catch(() => {
   // Ignore errors - settings will use defaults

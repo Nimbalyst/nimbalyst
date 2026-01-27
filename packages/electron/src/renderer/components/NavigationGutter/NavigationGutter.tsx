@@ -1,5 +1,6 @@
 import React from 'react';
 import { usePostHog } from 'posthog-js/react';
+import { useAtomValue } from 'jotai';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import type { ContentMode } from '../../types/WindowModeTypes';
 import { KeyboardShortcuts, getShortcutDisplay } from '../../../shared/KeyboardShortcuts';
@@ -8,6 +9,7 @@ import { SyncStatusButton } from '../SyncStatusButton/SyncStatusButton';
 import { TrustIndicator } from '../TrustIndicator';
 import { ExtensionDevIndicator } from '../ExtensionDevIndicator';
 import { useExtensionGutterButtons } from '../../extensions/panels/usePanels';
+import { terminalFeatureAvailableAtom } from '../../store/atoms/appSettings';
 
 export type NavigationMode = 'planning' | 'coding';
 export type SidebarView = 'files' | 'settings';
@@ -76,6 +78,9 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
 }) => {
   const posthog = usePostHog();
 
+  // Check if terminal feature is available (developer mode + feature enabled)
+  const isTerminalAvailable = useAtomValue(terminalFeatureAvailableAtom);
+
   // Get extension panel buttons from the panel registry
   const extensionPanelButtons = useExtensionGutterButtons();
   // Content mode buttons - primary navigation (top)
@@ -104,13 +109,15 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
   ];
 
   // Bottom panel buttons - positioned above settings
+  // Terminal button is only shown if the terminal feature is available (developer mode + feature enabled)
   const bottomPanelButtons: NavButton[] = [
-    {
+    // Only include terminal button if the feature is available
+    ...(isTerminalAvailable ? [{
       id: 'terminal',
       icon: 'terminal',
       label: 'Terminal (Ctrl+`)',
       onClick: onToggleTerminalPanel,
-    },
+    }] : []),
     {
       id: 'plan',
       icon: 'edit_note',

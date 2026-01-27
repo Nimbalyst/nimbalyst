@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useAtom } from 'jotai';
+import { useAtom, useAtomValue } from 'jotai';
 import { usePostHog } from 'posthog-js/react';
 import {
   advancedSettingsAtom,
@@ -7,6 +7,12 @@ import {
   resetWalkthroughsAtom,
   aiDebugSettingsAtom,
   setAIDebugSettingsAtom,
+  developerFeatureSettingsAtom,
+  setDeveloperFeatureSettingsAtom,
+  DEVELOPER_FEATURES,
+  areAllDeveloperFeaturesEnabled,
+  enableAllDeveloperFeatures,
+  disableAllDeveloperFeatures,
   type ReleaseChannel,
 } from '../../../store/atoms/appSettings';
 import { ALPHA_FEATURES, areAllAlphaFeaturesEnabled, enableAllAlphaFeatures, disableAllAlphaFeatures } from '../../../../shared/alphaFeatures';
@@ -29,48 +35,25 @@ export function AdvancedPanel() {
   const [, updateAIDebugSettings] = useAtom(setAIDebugSettingsAtom);
   const { showToolCalls, aiDebugLogging, showPromptAdditions } = aiDebugSettings;
 
-  // Developer mode - global app setting
-  const [developerMode, setDeveloperMode] = useState<boolean>(false);
-  const [developerModeLoading, setDeveloperModeLoading] = useState(true);
-
-  // Load developer mode from app settings
-  useEffect(() => {
-    const loadDeveloperMode = async () => {
-      try {
-        const enabled = await window.electronAPI.invoke('developer-mode:get');
-        setDeveloperMode(enabled ?? false);
-      } catch (error) {
-        console.error('Failed to load developer mode:', error);
-      } finally {
-        setDeveloperModeLoading(false);
-      }
-    };
-
-    loadDeveloperMode();
-  }, []);
+  // Developer feature settings from Jotai atoms
+  const [developerSettings] = useAtom(developerFeatureSettingsAtom);
+  const [, updateDeveloperSettings] = useAtom(setDeveloperFeatureSettingsAtom);
+  const { developerMode, developerFeatures } = developerSettings;
 
   // Handle developer mode change
   const handleDeveloperModeChange = async (enabled: boolean) => {
-    setDeveloperMode(enabled);
+    updateDeveloperSettings({ developerMode: enabled });
 
-    try {
-      await window.electronAPI.invoke('developer-mode:set', enabled);
+    // Track mode change in PostHog
+    if (posthog) {
+      posthog.capture('developer_mode_changed', {
+        developer_mode: enabled,
+        source: 'settings',
+        is_initial: false,
+      });
 
-      // Track mode change in PostHog
-      if (posthog) {
-        posthog.capture('developer_mode_changed', {
-          developer_mode: enabled,
-          source: 'settings',
-          is_initial: false,
-        });
-
-        // Update person property
-        posthog.people.set({ developer_mode: enabled });
-      }
-    } catch (error) {
-      console.error('Failed to save developer mode:', error);
-      // Revert on error
-      setDeveloperMode(!enabled);
+      // Update person property
+      posthog.people.set({ developer_mode: enabled });
     }
   };
 
@@ -86,10 +69,17 @@ export function AdvancedPanel() {
   } = settings;
   const isDevelopment = import.meta.env.DEV;
   const [showReleaseChannel, setShowReleaseChannel] = useState(false);
+  const [showFeaturesMenu, setShowFeaturesMenu] = useState(false);
 
   const handleTitleClick = (e: React.MouseEvent) => {
     if (e.metaKey || e.ctrlKey) {
       setShowReleaseChannel(true);
+    }
+  };
+
+  const handleModeClick = (e: React.MouseEvent) => {
+    if (e.metaKey || e.ctrlKey) {
+      setShowFeaturesMenu(prev => !prev);
     }
   };
 
@@ -110,7 +100,7 @@ export function AdvancedPanel() {
 
       {/* Application Mode - Always shown at the top */}
       <div className="provider-panel-section">
-          <h4 className="provider-panel-section-title">Application Mode</h4>
+          <h4 className="provider-panel-section-title" onClick={handleModeClick}>Application Mode</h4>
           <p className="provider-panel-hint">
             Choose between a simplified experience or full developer features for this project.
           </p>
@@ -118,7 +108,7 @@ export function AdvancedPanel() {
           <div className="mode-selection" style={{ display: 'flex', flexDirection: 'row', gap: '16px', marginTop: '12px' }}>
             <label
               className={`mode-option ${!developerMode ? 'selected' : ''}`}
-              onClick={() => !developerModeLoading && handleDeveloperModeChange(false)}
+              onClick={() => handleDeveloperModeChange(false)}
               style={{
                 display: 'flex',
                 flex: 1,
@@ -127,11 +117,10 @@ export function AdvancedPanel() {
                 background: !developerMode ? 'var(--surface-hover)' : 'var(--surface-secondary)',
                 border: `2px solid ${!developerMode ? 'var(--primary-color)' : 'var(--border-primary)'}`,
                 borderRadius: '12px',
-                cursor: developerModeLoading ? 'wait' : 'pointer',
+                cursor: 'pointer',
                 transition: 'all 0.15s ease',
                 position: 'relative',
                 boxShadow: !developerMode ? '0 0 0 3px rgba(88, 166, 255, 0.15)' : 'none',
-                opacity: developerModeLoading ? 0.6 : 1,
               }}
             >
               <input
@@ -139,7 +128,6 @@ export function AdvancedPanel() {
                 name="mode"
                 checked={!developerMode}
                 onChange={() => handleDeveloperModeChange(false)}
-                disabled={developerModeLoading}
                 style={{
                   position: 'absolute',
                   top: '12px',
@@ -191,7 +179,7 @@ export function AdvancedPanel() {
 
             <label
               className={`mode-option ${developerMode ? 'selected' : ''}`}
-              onClick={() => !developerModeLoading && handleDeveloperModeChange(true)}
+              onClick={() => handleDeveloperModeChange(true)}
               style={{
                 display: 'flex',
                 flex: 1,
@@ -200,11 +188,10 @@ export function AdvancedPanel() {
                 background: developerMode ? 'var(--surface-hover)' : 'var(--surface-secondary)',
                 border: `2px solid ${developerMode ? 'var(--primary-color)' : 'var(--border-primary)'}`,
                 borderRadius: '12px',
-                cursor: developerModeLoading ? 'wait' : 'pointer',
+                cursor: 'pointer',
                 transition: 'all 0.15s ease',
                 position: 'relative',
                 boxShadow: developerMode ? '0 0 0 3px rgba(88, 166, 255, 0.15)' : 'none',
-                opacity: developerModeLoading ? 0.6 : 1,
               }}
             >
               <input
@@ -212,7 +199,6 @@ export function AdvancedPanel() {
                 name="mode"
                 checked={developerMode}
                 onChange={() => handleDeveloperModeChange(true)}
-                disabled={developerModeLoading}
                 style={{
                   position: 'absolute',
                   top: '12px',
@@ -263,6 +249,90 @@ export function AdvancedPanel() {
             </label>
           </div>
         </div>
+
+      {/* Secret Features Menu - Cmd+Click on "Application Mode" title to show */}
+      {showFeaturesMenu && (
+        <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
+          <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">
+            Feature Availability
+          </h4>
+          <p className="text-sm leading-relaxed text-[var(--nim-text-muted)] mb-4">
+            See which features are available based on your current mode settings.
+          </p>
+
+          {/* Developer Features */}
+          <div className="mt-4 p-3 bg-nim-secondary rounded-md border border-nim">
+            {/* "All Developer Features" master toggle */}
+            <div className="setting-item mb-3 pb-3 border-b border-nim">
+              <label className="setting-label">
+                <input
+                  type="checkbox"
+                  checked={areAllDeveloperFeaturesEnabled(developerFeatures)}
+                  onChange={(e) => {
+                    const newFeatures = e.target.checked ? enableAllDeveloperFeatures() : disableAllDeveloperFeatures();
+                    updateDeveloperSettings({ developerFeatures: newFeatures });
+                  }}
+                  disabled={!developerMode}
+                  className="setting-checkbox"
+                />
+                <div className="setting-text">
+                  <span className="setting-name">All Developer Features</span>
+                  <span className="setting-description">
+                    Enable or disable all developer features at once
+                  </span>
+                </div>
+              </label>
+            </div>
+
+            {/* Individual developer feature toggles */}
+            {DEVELOPER_FEATURES.map((feature) => {
+              const isAvailable = developerMode && developerFeatures[feature.tag];
+              return (
+                <div key={feature.tag} className="setting-item py-2">
+                  <label className="setting-label">
+                    <input
+                      type="checkbox"
+                      checked={developerFeatures[feature.tag]}
+                      onChange={(e) => {
+                        updateDeveloperSettings({
+                          developerFeatures: {
+                            ...developerFeatures,
+                            [feature.tag]: e.target.checked,
+                          },
+                        });
+                      }}
+                      disabled={!developerMode}
+                      className="setting-checkbox"
+                    />
+                    <div className="setting-text">
+                      <span className="setting-name flex items-center gap-2">
+                        {feature.icon && (
+                          <span className="material-symbols-outlined text-sm">{feature.icon}</span>
+                        )}
+                        {feature.name}
+                        <span
+                          className={`text-xs px-2 py-0.5 rounded ${
+                            isAvailable
+                              ? 'bg-green-500/20 text-green-400'
+                              : 'bg-red-500/20 text-red-400'
+                          }`}
+                        >
+                          {isAvailable ? 'Available' : 'Hidden'}
+                        </span>
+                      </span>
+                      <span className="setting-description">{feature.description}</span>
+                    </div>
+                  </label>
+                </div>
+              );
+            })}
+          </div>
+
+          <p className="text-xs text-[var(--nim-text-faint)] mt-3">
+            Developer mode: {developerMode ? 'ON' : 'OFF'}
+          </p>
+        </div>
+      )}
 
       {showReleaseChannel && (
         <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
