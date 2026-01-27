@@ -112,9 +112,9 @@ test.describe('Welcome Modal', () => {
     await enableCheckbox.check();
     await page.waitForTimeout(300);
 
-    // All three options should be checked by default
+    // Two options should be checked by default (track command and CLAUDE.md)
     const checkboxes = page.locator('.claude-code-options input[type="checkbox"]');
-    expect(await checkboxes.count()).toBe(3);
+    expect(await checkboxes.count()).toBe(2);
 
     // Click Next to install
     await page.click('.welcome-modal-button.primary');
@@ -122,7 +122,6 @@ test.describe('Welcome Modal', () => {
 
     // Verify files were created
     const claudeDir = path.join(workspacePath, '.claude', 'commands');
-    expect(fs.existsSync(path.join(claudeDir, 'plan.md'))).toBe(true);
     expect(fs.existsSync(path.join(claudeDir, 'track.md'))).toBe(true);
     expect(fs.existsSync(path.join(workspacePath, 'CLAUDE.md'))).toBe(true);
 
@@ -132,7 +131,6 @@ test.describe('Welcome Modal', () => {
 
     const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
     expect(config.claudeCodeIntegration.enabled).toBe(true);
-    expect(config.claudeCodeIntegration.planCommandInstalled).toBe(true);
     expect(config.claudeCodeIntegration.trackCommandInstalled).toBe(true);
     expect(config.claudeCodeIntegration.claudeMdConfigured).toBe(true);
   });

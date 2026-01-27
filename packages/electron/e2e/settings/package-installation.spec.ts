@@ -75,22 +75,19 @@ test.describe('Package Installation', () => {
     await expect(developerCard.locator('text=v1.0.0')).toBeVisible();
 
     // Verify files were created
-    const planCommandPath = path.join(workspaceDir, '.claude/commands/plan.md');
     const trackCommandPath = path.join(workspaceDir, '.claude/commands/track.md');
     const bugSchemaPath = path.join(workspaceDir, '.nimbalyst/trackers/bug.yaml');
 
-    const planCommandExists = await fs.access(planCommandPath).then(() => true).catch(() => false);
     const trackCommandExists = await fs.access(trackCommandPath).then(() => true).catch(() => false);
     const bugSchemaExists = await fs.access(bugSchemaPath).then(() => true).catch(() => false);
 
-    expect(planCommandExists).toBe(true);
     expect(trackCommandExists).toBe(true);
     expect(bugSchemaExists).toBe(true);
 
     // Verify version metadata in files
-    const planContent = await fs.readFile(planCommandPath, 'utf8');
-    expect(planContent).toContain('packageVersion: 1.0.0');
-    expect(planContent).toContain('packageId: developer');
+    const trackContent = await fs.readFile(trackCommandPath, 'utf8');
+    expect(trackContent).toContain('packageVersion: 1.0.0');
+    expect(trackContent).toContain('packageId: core');
 
     const bugContent = await fs.readFile(bugSchemaPath, 'utf8');
     expect(bugContent).toContain('packageVersion: 1.0.0');
@@ -142,8 +139,8 @@ test.describe('Package Installation', () => {
     await showDetailsButton.click();
 
     // Should show command list
-    await expect(developerCard.locator('text=/plan')).toBeVisible();
     await expect(developerCard.locator('text=/track')).toBeVisible();
+    await expect(developerCard.locator('text=/mockup')).toBeVisible();
     await expect(developerCard.locator('text=/analyze-code')).toBeVisible();
     await expect(developerCard.locator('text=/write-tests')).toBeVisible();
 
@@ -189,9 +186,9 @@ test.describe('Package Installation', () => {
     await expect(developerCard.locator('button:has-text("Install")')).toBeVisible({ timeout: 3000 });
 
     // Verify files were removed
-    const planCommandPath = path.join(workspaceDir, '.claude/commands/plan.md');
-    const planCommandExists = await fs.access(planCommandPath).then(() => true).catch(() => false);
-    expect(planCommandExists).toBe(false);
+    const trackCommandPath = path.join(workspaceDir, '.claude/commands/track.md');
+    const trackCommandExists = await fs.access(trackCommandPath).then(() => true).catch(() => false);
+    expect(trackCommandExists).toBe(false);
   });
 
   test('should persist installation across app restarts', async () => {
@@ -248,19 +245,14 @@ test.describe('Package Installation', () => {
     await expect(page.locator('text=2 of 2 packages installed')).toBeVisible();
 
     // Verify both sets of files exist
-    const devPlanPath = path.join(workspaceDir, '.claude/commands/plan.md');
+    const coreTrackPath = path.join(workspaceDir, '.claude/commands/track.md');
     const pmRoadmapPath = path.join(workspaceDir, '.claude/commands/roadmap.md');
 
-    const devPlanExists = await fs.access(devPlanPath).then(() => true).catch(() => false);
+    const coreTrackExists = await fs.access(coreTrackPath).then(() => true).catch(() => false);
     const pmRoadmapExists = await fs.access(pmRoadmapPath).then(() => true).catch(() => false);
 
-    expect(devPlanExists).toBe(true);
+    expect(coreTrackExists).toBe(true);
     expect(pmRoadmapExists).toBe(true);
-
-    // Note: Both packages have /plan command - the Product Manager one should overwrite
-    const planContent = await fs.readFile(devPlanPath, 'utf8');
-    // Should be the Product Manager version (installed last)
-    expect(planContent).toContain('packageId: product-manager');
   });
 });
 
@@ -412,22 +404,22 @@ Command without version metadata.
     const claudeDir = path.join(workspaceDir, '.claude/commands');
     await fs.mkdir(claudeDir, { recursive: true });
 
-    // Create the two Core commands
-    await fs.writeFile(path.join(claudeDir, 'plan.md'), `---
-packageVersion: 1.0.0
-packageId: core
----
-
-# /plan Command
-Content here.
-`, 'utf8');
-
+    // Create Core commands
     await fs.writeFile(path.join(claudeDir, 'track.md'), `---
 packageVersion: 1.0.0
 packageId: core
 ---
 
 # /track Command
+Content here.
+`, 'utf8');
+
+    await fs.writeFile(path.join(claudeDir, 'mockup.md'), `---
+packageVersion: 1.0.0
+packageId: core
+---
+
+# /mockup Command
 Content here.
 `, 'utf8');
 

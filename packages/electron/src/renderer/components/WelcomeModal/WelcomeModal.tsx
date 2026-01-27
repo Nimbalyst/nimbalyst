@@ -25,7 +25,6 @@ const WelcomeModal: React.FC<WelcomeModalProps> = ({
   const [checkInPlans, setCheckInPlans] = useState(false);
   const [commandsLocation, setCommandsLocation] = useState<'project' | 'global'>('project');
   const [enableClaudeCode, setEnableClaudeCode] = useState(false);
-  const [installPlanCommand, setInstallPlanCommand] = useState(true);
   const [installTrackCommand, setInstallTrackCommand] = useState(true);
   const [configureCLAUDEmd, setConfigureCLAUDEmd] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -68,9 +67,6 @@ const WelcomeModal: React.FC<WelcomeModalProps> = ({
         await OnboardingService.saveConfig(workspacePath, config);
 
         // Install selected components
-        if (installPlanCommand) {
-          await OnboardingService.installPlanCommand(workspacePath);
-        }
         if (installTrackCommand) {
           await OnboardingService.installTrackCommand(workspacePath);
         }
@@ -354,18 +350,6 @@ const WelcomeModal: React.FC<WelcomeModalProps> = ({
                   <label className="checkbox-label flex items-start gap-2.5 cursor-pointer p-3 rounded-md transition-colors duration-200 mb-2 hover:bg-nim-hover">
                     <input
                       type="checkbox"
-                      checked={installPlanCommand}
-                      onChange={(e) => setInstallPlanCommand(e.target.checked)}
-                      className="mt-0.5 cursor-pointer w-[18px] h-[18px] shrink-0"
-                    />
-                    <span className="leading-normal text-nim">
-                      <strong className="block mb-1">/plan command</strong> - Create plan documents with proper structure
-                    </span>
-                  </label>
-
-                  <label className="checkbox-label flex items-start gap-2.5 cursor-pointer p-3 rounded-md transition-colors duration-200 mb-2 hover:bg-nim-hover">
-                    <input
-                      type="checkbox"
                       checked={installTrackCommand}
                       onChange={(e) => setInstallTrackCommand(e.target.checked)}
                       className="mt-0.5 cursor-pointer w-[18px] h-[18px] shrink-0"
@@ -392,9 +376,6 @@ const WelcomeModal: React.FC<WelcomeModalProps> = ({
                       <strong>What gets installed:</strong>
                     </p>
                     <ul className="m-0 pl-6 text-nim-muted">
-                      <li className="mb-1.5">
-                        <code className="px-1.5 py-0.5 rounded font-mono text-[13px] bg-nim-tertiary">{commandsLocation === 'project' ? '.claude' : '~/.claude'}/commands/plan.md</code> - Custom slash command
-                      </li>
                       <li className="mb-1.5">
                         <code className="px-1.5 py-0.5 rounded font-mono text-[13px] bg-nim-tertiary">{commandsLocation === 'project' ? '.claude' : '~/.claude'}/commands/track.md</code> - Tracking command
                       </li>
@@ -431,19 +412,6 @@ const WelcomeModal: React.FC<WelcomeModalProps> = ({
                   </div>
                 </button>
 
-                {enableClaudeCode && (
-                  <div
-                    className="plan-option-button flex items-start gap-4 p-4 rounded-lg cursor-pointer transition-all duration-200 text-left w-full bg-nim-secondary border-2 border-nim hover:border-nim-primary hover:bg-nim-hover hover:-translate-y-0.5 hover:shadow-lg"
-                    onClick={() => {}}
-                  >
-                    <div className="plan-option-content flex-1">
-                      <strong className="block mb-1 text-[15px] text-nim">Use Claude Agent</strong>
-                      <p className="m-0 text-sm leading-normal text-nim-muted">
-                        Type <code className="px-1.5 py-0.5 rounded font-mono text-[13px] bg-nim-tertiary">/plan [your idea]</code> in the AI chat to create a custom plan
-                      </p>
-                    </div>
-                  </div>
-                )}
 
                 <div className="plan-option-info py-3 px-4 rounded-md text-sm leading-normal bg-nim-tertiary text-nim-muted">
                   Plans are stored in the <code className="px-1.5 py-0.5 rounded font-mono bg-nim">plans/</code> directory as markdown files with
@@ -496,7 +464,7 @@ const WelcomeModal: React.FC<WelcomeModalProps> = ({
                 <h4 className="m-0 mb-3 text-base text-nim">Next steps:</h4>
                 <ul className="m-0 pl-6 text-nim-muted">
                   <li className="mb-2 leading-normal">Explore your example plan document</li>
-                  <li className="mb-2 leading-normal">Create your first real plan with {enableClaudeCode ? '/plan' : 'File → New Plan'}</li>
+                  <li className="mb-2 leading-normal">Create your first real plan with File → New Plan</li>
                   <li className="mb-2 leading-normal">Check out the plan view to see all your plans</li>
                   <li className="mb-2 leading-normal">Start organizing your work with the tracking system</li>
                 </ul>

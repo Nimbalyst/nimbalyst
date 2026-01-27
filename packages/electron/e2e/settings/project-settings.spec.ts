@@ -51,8 +51,8 @@ test('should open project settings and show action cards', async () => {
   const actionCards = page.locator('.action-card');
   const cardCount = await actionCards.count();
 
-  // Should have 7 action cards (3 commands + 4 trackers)
-  expect(cardCount).toBe(7);
+  // Should have 6 action cards (2 commands + 4 trackers)
+  expect(cardCount).toBe(6);
 
   // Check that Install All button is visible
   const installAllButton = page.locator('.install-all-button');
@@ -60,56 +60,3 @@ test('should open project settings and show action cards', async () => {
   await expect(installAllButton).toContainText('Install All');
 });
 
-test('should install /plan command when clicked', async () => {
-  // Open settings via test helper
-  await page.evaluate(() => {
-    (window as any).__testHelpers?.setActiveMode('files');
-    (window as any).__testHelpers?.setSidebarView('settings');
-  });
-
-  await page.waitForTimeout(500);
-
-  // Find the "Install /plan command" card
-  const planCard = page.locator('.action-card', {
-    has: page.locator('h4:has-text("Install /plan command")')
-  });
-
-  await expect(planCard).toBeVisible();
-
-  // Check that it's not completed initially
-  const checkbox = planCard.locator('input[type="checkbox"]');
-  await expect(checkbox).not.toBeChecked();
-
-  // Click the Install button
-  const installButton = planCard.locator('button:has-text("Install")');
-  await expect(installButton).toBeVisible();
-  await installButton.click();
-
-  // Wait for success message
-  await page.waitForSelector('.settings-message.success', { timeout: 5000 });
-  const successMessage = page.locator('.settings-message.success');
-  await expect(successMessage).toContainText('Install /plan command completed!');
-
-  // Verify file was actually created (this is the important part)
-  const planCommandPath = path.join(workspaceDir, '.claude', 'commands', 'plan.md');
-
-  // Wait for file to exist (gives file system time to sync)
-  let fileExists = false;
-  for (let i = 0; i < 10; i++) {
-    fileExists = await fs.access(planCommandPath).then(() => true).catch(() => false);
-    if (fileExists) break;
-    await page.waitForTimeout(100);
-  }
-  expect(fileExists).toBe(true);
-
-  // Verify file content
-  const content = await fs.readFile(planCommandPath, 'utf-8');
-  expect(content).toContain('Create a new plan document');
-  expect(content).toContain('File Naming and Location');
-
-  // UI should eventually update to show completion
-  // Note: We already verified the file was created, which is the critical part
-  const completedBadge = planCard.locator('.action-completed-badge');
-  await expect(completedBadge).toBeVisible({ timeout: 3000 });
-  await expect(completedBadge).toContainText('Installed');
-});

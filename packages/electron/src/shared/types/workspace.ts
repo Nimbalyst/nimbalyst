@@ -12,7 +12,6 @@ export interface OnboardingConfig {
   commandInstallToastDismissed?: boolean; // User clicked Skip on the commands install toast
   claudeCodeIntegration: {
     enabled: boolean;
-    planCommandInstalled: boolean;
     trackCommandInstalled: boolean;
     mockupCommandInstalled?: boolean;
     claudeMdConfigured: boolean;
@@ -31,7 +30,6 @@ export const DEFAULT_ONBOARDING_CONFIG: OnboardingConfig = {
   commandsLocation: 'project',
   claudeCodeIntegration: {
     enabled: false,
-    planCommandInstalled: false,
     trackCommandInstalled: false,
     claudeMdConfigured: false,
   },

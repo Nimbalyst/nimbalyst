@@ -23,10 +23,6 @@ const COMMAND_GROUPS: CommandGroup[] = [
     packageName: 'Essential for all workflows',
     commands: [
       {
-        name: '/plan',
-        description: 'Create structured planning documents with progress tracking',
-      },
-      {
         name: '/track',
         description: 'Log bugs, ideas, tasks, and decisions with unique IDs',
       },
