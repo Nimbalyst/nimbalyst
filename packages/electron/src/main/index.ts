@@ -45,7 +45,8 @@ import {
     markClaudeCodeInstallationChecked,
     setTheme,
     shouldShowDiscordInvitation,
-    updateWorkspaceState
+    updateWorkspaceState,
+    runMigrations
 } from './utils/store';
 import { registerMCPConfigHandlers } from './ipc/MCPConfigHandlers';
 import { registerClaudeCodePluginHandlers } from './ipc/ClaudeCodePluginHandlers';
@@ -481,6 +482,9 @@ app.whenReady().then(async () => {
     overrideConsole();
 
     logger.main.info('App ready');
+
+    // Run migrations based on version changes
+    runMigrations(app.getVersion());
 
     // Track app launch for Discord invitation
     const launchCount = incrementLaunchCount();

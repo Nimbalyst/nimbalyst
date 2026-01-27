@@ -6,7 +6,7 @@ import { logger } from './logger';
 import type { OnboardingConfig } from '../../shared/types/workspace';
 import { DEFAULT_ONBOARDING_CONFIG } from '../../shared/types/workspace';
 import type { InstalledPackage } from '../../shared/toolPackages';
-import { AlphaFeatureTag, getDefaultAlphaFeatures, enableAllAlphaFeatures, ALPHA_FEATURES } from '../../shared/alphaFeatures';
+import { AlphaFeatureTag, getDefaultAlphaFeatures, enableAllAlphaFeatures, areAllAlphaFeaturesEnabled, ALPHA_FEATURES } from '../../shared/alphaFeatures';
 import { DeveloperFeatureTag, getDefaultDeveloperFeatures, DEVELOPER_FEATURES } from '../../shared/developerFeatures';
 
 // Theme can be a built-in theme or an extension theme ID (format: "extensionId:themeId")
@@ -117,6 +117,8 @@ interface AppStoreSchema {
   // Developer feature flags - features only available in developer mode
   // Each feature can be individually toggled when developer mode is enabled
   developerFeatures?: Record<DeveloperFeatureTag, boolean>;
+  // Last known app version (for migrations)
+  lastKnownVersion?: string;
 }
 
 /**
@@ -1531,5 +1533,63 @@ export function isDeveloperFeatureAvailable(tag: DeveloperFeatureTag): boolean {
   }
   const features = getDeveloperFeatures();
   return features[tag] ?? false;
+}
+
+// ============================================================================
+// MIGRATIONS
+// ============================================================================
+
+/**
+ * Compare two semantic version strings.
+ * Returns true if versionA <= versionB.
+ */
+function versionLessThanOrEqual(versionA: string, versionB: string): boolean {
+  const parseVersion = (v: string) => {
+    const parts = v.split('.').map(Number);
+    return { major: parts[0] || 0, minor: parts[1] || 0, patch: parts[2] || 0 };
+  };
+
+  const a = parseVersion(versionA);
+  const b = parseVersion(versionB);
+
+  if (a.major !== b.major) return a.major < b.major;
+  if (a.minor !== b.minor) return a.minor < b.minor;
+  return a.patch <= b.patch;
+}
+
+/**
+ * Run app migrations based on version changes.
+ * Should be called once during app startup.
+ */
+export function runMigrations(currentVersion: string): void {
+  const lastKnownVersion = getAppStore().get('lastKnownVersion');
+
+  // First launch - no migration needed
+  if (!lastKnownVersion) {
+    logger.store.info('[Migrations] First launch, setting version to:', currentVersion);
+    getAppStore().set('lastKnownVersion', currentVersion);
+    return;
+  }
+
+  // Same version - no migration needed
+  if (lastKnownVersion === currentVersion) {
+    return;
+  }
+
+  logger.store.info('[Migrations] Running migrations from', lastKnownVersion, 'to', currentVersion);
+
+  // Migration for users on version <= 0.52.10
+  // If user had all alpha features enabled, turn on the new "Enable All Alpha Features" flag
+  if (versionLessThanOrEqual(lastKnownVersion, '0.52.10')) {
+    const alphaFeatures = getAppStore().get('alphaFeatures');
+    if (alphaFeatures && areAllAlphaFeaturesEnabled(alphaFeatures)) {
+      logger.store.info('[Migrations] User had all alpha features enabled, setting enableAllAlphaFeatures=true');
+      setEnableAllAlphaFeatures(true);
+    }
+  }
+
+  // Update last known version
+  getAppStore().set('lastKnownVersion', currentVersion);
+  logger.store.info('[Migrations] Migrations complete, version updated to:', currentVersion);
 }
 
