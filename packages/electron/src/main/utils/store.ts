@@ -112,6 +112,8 @@ interface AppStoreSchema {
   // Alpha feature flags - individual control over alpha features
   // Uses Record<AlphaFeatureTag, boolean> for dynamic feature registration
   alphaFeatures?: Record<AlphaFeatureTag, boolean>;
+  // Whether to automatically enable all new alpha features
+  enableAllAlphaFeatures?: boolean;
   // Developer feature flags - features only available in developer mode
   // Each feature can be individually toggled when developer mode is enabled
   developerFeatures?: Record<DeveloperFeatureTag, boolean>;
@@ -1413,15 +1415,31 @@ export function setMaxHeapSizeMB(sizeMB: number | undefined): void {
 // Uses dynamic registration from alphaFeatures registry
 
 /**
+ * Get whether "Enable All Alpha Features" is turned on.
+ */
+export function getEnableAllAlphaFeatures(): boolean {
+  return getAppStore().get('enableAllAlphaFeatures') ?? false;
+}
+
+/**
+ * Set whether "Enable All Alpha Features" is turned on.
+ */
+export function setEnableAllAlphaFeatures(enabled: boolean): void {
+  getAppStore().set('enableAllAlphaFeatures', enabled);
+}
+
+/**
  * Get the alpha feature flags.
  * Returns all feature flags with defaults for any missing values.
  *
+ * If "Enable All Alpha Features" is turned on, new features are automatically enabled.
  * Legacy behavior: If user was on alpha channel before individual feature flags
  * were implemented, enable all features by default to maintain their experience.
  */
 export function getAlphaFeatures(): Record<AlphaFeatureTag, boolean> {
   const stored = getAppStore().get('alphaFeatures');
   const releaseChannel = getReleaseChannel();
+  const enableAll = getEnableAllAlphaFeatures();
 
   // Check if this is a legacy alpha user (alpha channel but no feature flags set)
   const isLegacyAlphaUser = !stored && releaseChannel === 'alpha';
@@ -1442,7 +1460,8 @@ export function getAlphaFeatures(): Record<AlphaFeatureTag, boolean> {
   // Ensure all registered features exist in stored object (for new features added later)
   for (const feature of ALPHA_FEATURES) {
     if (!(feature.tag in stored)) {
-      stored[feature.tag] = defaults[feature.tag];
+      // If "Enable All Alpha Features" is on, enable new features automatically
+      stored[feature.tag] = enableAll ? true : defaults[feature.tag];
     }
   }
 

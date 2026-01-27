@@ -351,6 +351,8 @@ export interface AdvancedSettings {
   // Alpha feature flags - individual control over alpha features
   // Uses Record<AlphaFeatureTag, boolean> for dynamic feature registration
   alphaFeatures: Record<AlphaFeatureTag, boolean>;
+  // Whether to automatically enable all new alpha features
+  enableAllAlphaFeatures: boolean;
 }
 
 /**
@@ -368,7 +370,9 @@ const defaultAdvancedSettings: AdvancedSettings = {
     sync: false,
     'voice-mode': false,
     'claude-plugins': false,
+    'card-mode': false,
   } as Record<AlphaFeatureTag, boolean>,
+  enableAllAlphaFeatures: false,
 };
 
 /**
@@ -419,6 +423,9 @@ function scheduleAdvancedPersist(
           break;
         case 'alphaFeatures':
           await window.electronAPI.invoke('alpha-features:set', settings.alphaFeatures);
+          break;
+        case 'enableAllAlphaFeatures':
+          await window.electronAPI.invoke('alpha-features:set-enable-all', settings.enableAllAlphaFeatures);
           break;
         // walkthroughsViewedCount and walkthroughsTotalCount are read-only from main process
       }
@@ -571,7 +578,7 @@ export async function initAdvancedSettings(): Promise<AdvancedSettings> {
   }
 
   try {
-    const [channel, analyticsEnabled, extensionDevToolsEnabled, walkthroughState, maxHeapSizeMB, alphaFeatures] =
+    const [channel, analyticsEnabled, extensionDevToolsEnabled, walkthroughState, maxHeapSizeMB, alphaFeatures, enableAllAlphaFeatures] =
       await Promise.all([
         window.electronAPI.invoke('release-channel:get'),
         window.electronAPI.invoke('analytics:is-enabled'),
@@ -579,6 +586,7 @@ export async function initAdvancedSettings(): Promise<AdvancedSettings> {
         window.electronAPI.invoke('walkthroughs:get-state'),
         window.electronAPI.invoke('app-settings:get', 'maxHeapSizeMB'),
         window.electronAPI.invoke('alpha-features:get'),
+        window.electronAPI.invoke('alpha-features:get-enable-all'),
       ]);
 
     // Calculate viewed count (completed + dismissed)
@@ -595,6 +603,7 @@ export async function initAdvancedSettings(): Promise<AdvancedSettings> {
       walkthroughsTotalCount,
       maxHeapSizeMB: maxHeapSizeMB ?? 4096,
       alphaFeatures: alphaFeatures ?? defaultAdvancedSettings.alphaFeatures,
+      enableAllAlphaFeatures: enableAllAlphaFeatures ?? false,
     };
   } catch (error) {
     console.error('[appSettings] Failed to load advanced settings:', error);

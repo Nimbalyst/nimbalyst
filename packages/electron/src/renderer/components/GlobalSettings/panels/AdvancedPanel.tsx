@@ -66,6 +66,7 @@ export function AdvancedPanel() {
     walkthroughsTotalCount,
     maxHeapSizeMB,
     alphaFeatures,
+    enableAllAlphaFeatures,
   } = settings;
   const isDevelopment = import.meta.env.DEV;
   const [showReleaseChannel, setShowReleaseChannel] = useState(false);
@@ -367,17 +368,21 @@ export function AdvancedPanel() {
                   <label className="setting-label">
                     <input
                       type="checkbox"
-                      checked={areAllAlphaFeaturesEnabled(alphaFeatures)}
+                      checked={enableAllAlphaFeatures}
                       onChange={(e) => {
-                        const newFeatures = e.target.checked ? enableAllAlphaFeatures() : disableAllAlphaFeatures();
-                        updateSettings({ alphaFeatures: newFeatures });
+                        const enabled = e.target.checked;
+                        const newFeatures = enabled ? enableAllAlphaFeatures() : disableAllAlphaFeatures();
+                        updateSettings({
+                          enableAllAlphaFeatures: enabled,
+                          alphaFeatures: newFeatures
+                        });
                       }}
                       className="setting-checkbox"
                     />
                     <div className="setting-text">
-                      <span className="setting-name">All Alpha Features</span>
+                      <span className="setting-name">Enable All Alpha Features</span>
                       <span className="setting-description">
-                        Enable all alpha features at once. Individual features can still be toggled below.
+                        Automatically enable all current and future alpha features. Individual features can still be toggled below.
                       </span>
                     </div>
                   </label>
@@ -386,7 +391,7 @@ export function AdvancedPanel() {
                 {ALPHA_FEATURES.map((feature) => (
                   <div
                     key={feature.tag}
-                    className={`setting-item ${areAllAlphaFeaturesEnabled(alphaFeatures) ? 'opacity-60 pointer-events-none' : ''}`}
+                    className={`setting-item ${enableAllAlphaFeatures ? 'opacity-60 pointer-events-none' : ''}`}
                   >
                     <label className="setting-label">
                       <input
@@ -394,7 +399,7 @@ export function AdvancedPanel() {
                         checked={alphaFeatures[feature.tag] ?? false}
                         onChange={(e) => updateSettings({ alphaFeatures: { ...alphaFeatures, [feature.tag]: e.target.checked } })}
                         className="setting-checkbox"
-                        disabled={areAllAlphaFeaturesEnabled(alphaFeatures)}
+                        disabled={enableAllAlphaFeatures}
                       />
                       <div className="setting-text">
                         <span className="setting-name">{feature.name}</span>

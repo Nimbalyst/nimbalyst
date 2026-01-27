@@ -4,7 +4,7 @@ import * as os from 'os';
 import * as fs from 'fs';
 import * as path from 'path';
 import { app } from 'electron';
-import { getWorkspaceState, updateWorkspaceState, getTheme, getThemeSync, isCompletionSoundEnabled, setCompletionSoundEnabled, getCompletionSoundType, setCompletionSoundType, CompletionSoundType, getReleaseChannel, setReleaseChannel, ReleaseChannel, getRecentItems, getDefaultAIModel, setDefaultAIModel, isAnalyticsEnabled, setAnalyticsEnabled, isMockupLMEnabled, setMockupLMEnabled, getSessionSyncConfig, setSessionSyncConfig, SessionSyncConfig, isExtensionDevToolsEnabled, setExtensionDevToolsEnabled, getAppSetting, setAppSetting, getAlphaFeatures, setAlphaFeatures, getDeveloperFeatures, setDeveloperFeatures, isDeveloperFeatureAvailable } from '../utils/store';
+import { getWorkspaceState, updateWorkspaceState, getTheme, getThemeSync, isCompletionSoundEnabled, setCompletionSoundEnabled, getCompletionSoundType, setCompletionSoundType, CompletionSoundType, getReleaseChannel, setReleaseChannel, ReleaseChannel, getRecentItems, getDefaultAIModel, setDefaultAIModel, isAnalyticsEnabled, setAnalyticsEnabled, isMockupLMEnabled, setMockupLMEnabled, getSessionSyncConfig, setSessionSyncConfig, SessionSyncConfig, isExtensionDevToolsEnabled, setExtensionDevToolsEnabled, getAppSetting, setAppSetting, getAlphaFeatures, setAlphaFeatures, getEnableAllAlphaFeatures, setEnableAllAlphaFeatures, getDeveloperFeatures, setDeveloperFeatures, isDeveloperFeatureAvailable } from '../utils/store';
 import { logger } from '../utils/logger';
 import { SoundNotificationService } from '../services/SoundNotificationService';
 import { autoUpdaterService } from '../services/autoUpdater';
@@ -248,6 +248,15 @@ export function registerSettingsHandlers() {
     safeHandle('alpha-features:set', (_event, features: Record<string, boolean>) => {
         setAlphaFeatures(features as any);
         logger.store.info('[SettingsHandlers] Alpha features updated:', features);
+    });
+
+    safeHandle('alpha-features:get-enable-all', () => {
+        return getEnableAllAlphaFeatures();
+    });
+
+    safeHandle('alpha-features:set-enable-all', (_event, enabled: boolean) => {
+        setEnableAllAlphaFeatures(enabled);
+        logger.store.info('[SettingsHandlers] Enable all alpha features:', enabled);
     });
 
     // Developer feature flags (features only available in developer mode)
