@@ -39,6 +39,8 @@ import {
   updateSessionStoreAtom,
   sessionRegistryAtom,
   sessionStoreAtom,
+  pushNavigationEntryAtom,
+  isRestoringNavigationAtom,
 } from '../../store';
 import { errorNotificationService } from '../../services/ErrorNotificationService';
 import { initWorkstreamState, loadWorkstreamStates, workstreamStateAtom, workstreamActiveChildAtom, setWorktreeActiveSessionAtom } from '../../store/atoms/workstreamState';
@@ -151,6 +153,31 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
         setIsGitRepo(false);
       });
   }, [workspacePath]);
+
+  // Push navigation entry when selected workstream changes (unified cross-mode navigation)
+  const pushNavigationEntry = useSetAtom(pushNavigationEntryAtom);
+  const isRestoringNavigation = useAtomValue(isRestoringNavigationAtom);
+  const lastNavigationSessionIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    // Only track navigation when this mode is active
+    if (!isActive) return;
+
+    // Don't push while restoring (going back/forward)
+    if (isRestoringNavigation) return;
+
+    // Use the actual active session (either child session or parent workstream)
+    if (actualActiveSessionId && actualActiveSessionId !== lastNavigationSessionIdRef.current) {
+      lastNavigationSessionIdRef.current = actualActiveSessionId;
+      pushNavigationEntry({
+        mode: 'agent',
+        agent: {
+          workstreamId: selectedWorkstream?.id || actualActiveSessionId,
+          childSessionId: activeChildId || null,
+        },
+      });
+    }
+  }, [isActive, actualActiveSessionId, selectedWorkstream?.id, activeChildId, pushNavigationEntry, isRestoringNavigation]);
 
   // Create new session
   const createNewSession = useCallback(async () => {

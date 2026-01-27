@@ -94,54 +94,12 @@ export function useTabNavigation(options: UseTabNavigationOptions) {
     }, 100);
   }, [switchTab]);
 
-  // Listen for navigation commands from menu
-  useEffect(() => {
-    if (!enabled || !window.electronAPI) return;
+  // NOTE: IPC navigation commands (Cmd+[, Cmd+]) are now handled by App.tsx
+  // using unified cross-mode navigation history. This hook no longer listens
+  // for 'navigation:go-back' and 'navigation:go-forward' IPC events.
 
-    const handleGoBack = () => {
-      goBack();
-    };
-
-    const handleGoForward = () => {
-      goForward();
-    };
-
-    // Listen for menu commands
-    const unsubscribeBack = window.electronAPI.on('navigation:go-back', handleGoBack);
-    const unsubscribeForward = window.electronAPI.on('navigation:go-forward', handleGoForward);
-
-    return () => {
-      unsubscribeBack();
-      unsubscribeForward();
-    };
-  }, [enabled, goBack, goForward]);
-
-  // Listen for mouse back/forward button clicks
-  useEffect(() => {
-    if (!enabled) return;
-
-    const handleMouseButton = (event: MouseEvent) => {
-      // Mouse button 3 = back, button 4 = forward (side buttons on mice)
-      // See: https://developer.mozilla.org/en-US/docs/Web/API/MouseEvent/button
-      if (event.button === 3) {
-        event.preventDefault();
-        event.stopPropagation();
-        goBack();
-      } else if (event.button === 4) {
-        event.preventDefault();
-        event.stopPropagation();
-        goForward();
-      }
-    };
-
-    // Use auxclick which is specifically designed for non-primary mouse buttons
-    // This prevents double-firing that could occur if both mouseup and auxclick were used
-    document.addEventListener('auxclick', handleMouseButton);
-
-    return () => {
-      document.removeEventListener('auxclick', handleMouseButton);
-    };
-  }, [enabled, goBack, goForward]);
+  // NOTE: Mouse back/forward buttons are also handled by App.tsx unified navigation.
+  // See App.tsx for the centralized navigation handlers.
 
   // NOTE: Keyboard shortcuts are NOT handled here anymore. They're handled via:
   // 1. Electron menu accelerators (Meta+Alt+Left/Right) -> sends 'next-tab'/'previous-tab' IPC events

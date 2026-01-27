@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState, useImperativeHandle, forwardRef } from 'react';
+import { useSetAtom, useAtomValue } from 'jotai';
 import type { ConfigTheme } from 'rexical';
 import { useTabsActions, type TabData } from '../../contexts/TabsContext';
 import { store, editorDirtyAtom, makeEditorKey } from '@nimbalyst/runtime/store';
+import { pushNavigationEntryAtom, isRestoringNavigationAtom } from '../../store';
 import { useTabNavigation } from '../../hooks/useTabNavigation';
 import { handleWorkspaceFileSelect as handleWorkspaceFileSelectUtil } from '../../utils/workspaceFileOperations';
 import { createInitialFileContent, createMockupContent } from '../../utils/fileUtils';
@@ -195,6 +197,44 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
     const unsubscribe = tabsActions.subscribe(updateActiveTabForContext);
     return unsubscribe;
   }, [tabsActions]);
+
+  // Push navigation entry when active tab changes (unified cross-mode navigation)
+  const pushNavigationEntry = useSetAtom(pushNavigationEntryAtom);
+  const isRestoringNavigation = useAtomValue(isRestoringNavigationAtom);
+  const lastNavigationTabIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    // Only track navigation when this mode is active
+    if (!isActive) return;
+
+    const pushNavForActiveTab = () => {
+      // Don't push while restoring (going back/forward)
+      if (isRestoringNavigation) return;
+
+      const snapshot = tabsActions.getSnapshot();
+      const activeTabId = snapshot.activeTabId;
+      const activeTab = activeTabId ? snapshot.tabs.get(activeTabId) : null;
+
+      // Only push if the tab actually changed
+      if (activeTabId && activeTabId !== lastNavigationTabIdRef.current && activeTab) {
+        lastNavigationTabIdRef.current = activeTabId;
+        pushNavigationEntry({
+          mode: 'files',
+          files: {
+            tabId: activeTabId,
+            filePath: activeTab.filePath,
+          },
+        });
+      }
+    };
+
+    // Initial push for current tab
+    pushNavForActiveTab();
+
+    // Subscribe to future changes
+    const unsubscribe = tabsActions.subscribe(pushNavForActiveTab);
+    return unsubscribe;
+  }, [tabsActions, isActive, pushNavigationEntry, isRestoringNavigation]);
 
   // Handle tab close with save for dirty tabs
   // CRITICAL: Use tabsRef.current to avoid stale closure bug

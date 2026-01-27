@@ -333,3 +333,21 @@ export {
   clearFileMentionSearchAtom,
   type FileMentionReference,
 } from './atoms/fileMention';
+
+// Unified navigation history (cross-mode back/forward)
+export {
+  pushNavigationEntryAtom,
+  goBackAtom,
+  goForwardAtom,
+  canGoBackAtom,
+  canGoForwardAtom,
+  isRestoringNavigationAtom,
+  currentNavigationEntryAtom,
+  registerNavigationRestoreCallbacks,
+  initNavigationHistory,
+  clearNavigationHistory,
+  type NavigationEntry,
+  type FilesNavigationState,
+  type AgentNavigationState,
+  type SettingsHistoryState,
+} from './atoms/navigationHistory';

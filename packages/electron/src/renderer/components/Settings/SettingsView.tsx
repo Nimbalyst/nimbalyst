@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useAtom, useAtomValue } from 'jotai';
+import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { usePostHog } from 'posthog-js/react';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import { SettingsSidebar, type SettingsCategory } from './SettingsSidebar';
+import { pushNavigationEntryAtom, isRestoringNavigationAtom } from '../../store';
 
 // Import provider panels from GlobalSettings
 import { ClaudePanel } from '../GlobalSettings/panels/ClaudePanel';
@@ -136,6 +137,28 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
       setScope(initialScope);
     }
   }, [initialCategory, initialScope]);
+
+  // Push navigation entry when settings category/scope changes (unified cross-mode navigation)
+  const pushNavigationEntry = useSetAtom(pushNavigationEntryAtom);
+  const isRestoringNavigation = useAtomValue(isRestoringNavigationAtom);
+  const lastNavigationRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    // Don't push while restoring (going back/forward)
+    if (isRestoringNavigation) return;
+
+    const navKey = `${selectedCategory}:${scope}`;
+    if (navKey !== lastNavigationRef.current) {
+      lastNavigationRef.current = navKey;
+      pushNavigationEntry({
+        mode: 'settings',
+        settings: {
+          category: selectedCategory,
+          scope,
+        },
+      });
+    }
+  }, [selectedCategory, scope, pushNavigationEntry, isRestoringNavigation]);
 
   // When scope changes, ensure selected category is valid for that scope
   useEffect(() => {

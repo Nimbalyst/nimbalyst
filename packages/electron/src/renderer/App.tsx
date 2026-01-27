@@ -51,6 +51,11 @@ import {
   setSettingsInitialScopeAtom,
   incrementSettingsKeyAtom,
   clearSettingsNavigationAtom,
+  // Unified navigation history
+  goBackAtom,
+  goForwardAtom,
+  registerNavigationRestoreCallbacks,
+  initNavigationHistory,
 } from './store';
 import { TrackerBottomPanel, TrackerBottomPanelType } from './components/TrackerBottomPanel/TrackerBottomPanel.tsx';
 import { TerminalBottomPanel } from './components/TerminalBottomPanel';
@@ -333,6 +338,10 @@ export default function App() {
   useEffect(() => {
     activeModeStateRef.current = activeMode;
   }, [activeMode]);
+
+  // Unified navigation history (cross-mode back/forward)
+  const goBack = useSetAtom(goBackAtom);
+  const goForward = useSetAtom(goForwardAtom);
 
   // Expose test helpers for testing
   useEffect(() => {
@@ -887,6 +896,80 @@ export default function App() {
     // No-op: workspace mode doesn't use welcome tabs, always shows file tree
   }, []);
 
+  // Register unified navigation restore callbacks
+  // These are called when goBack/goForward restores a navigation entry
+  useEffect(() => {
+    registerNavigationRestoreCallbacks({
+      setMode: (mode) => {
+        setActiveMode(mode);
+      },
+      restoreFiles: (state) => {
+        // Switch to files mode and select the tab
+        if (editorModeRef.current) {
+          editorModeRef.current.selectFile(state.filePath);
+        }
+      },
+      restoreAgent: (state) => {
+        // Switch to agent mode and select the session
+        if (agentModeRef.current) {
+          agentModeRef.current.openSessionInTab(state.workstreamId);
+        }
+      },
+      restoreSettings: (state) => {
+        // Switch to settings mode and select the category
+        setSettingsInitialCategory(state.category as any);
+        setSettingsInitialScope(state.scope);
+        incrementSettingsKey();
+      },
+    });
+  }, []);
+
+  // Listen for unified navigation back/forward IPC events
+  useEffect(() => {
+    if (!window.electronAPI?.on) return;
+
+    const handleGoBack = () => {
+      console.log('[App] navigation:go-back received, using unified navigation');
+      goBack();
+    };
+
+    const handleGoForward = () => {
+      console.log('[App] navigation:go-forward received, using unified navigation');
+      goForward();
+    };
+
+    window.electronAPI.on('navigation:go-back', handleGoBack);
+    window.electronAPI.on('navigation:go-forward', handleGoForward);
+
+    return () => {
+      window.electronAPI.off?.('navigation:go-back', handleGoBack);
+      window.electronAPI.off?.('navigation:go-forward', handleGoForward);
+    };
+  }, [goBack, goForward]);
+
+  // Listen for mouse back/forward button clicks (unified navigation)
+  useEffect(() => {
+    const handleMouseButton = (event: MouseEvent) => {
+      // Mouse button 3 = back, button 4 = forward (side buttons on mice)
+      // See: https://developer.mozilla.org/en-US/docs/Web/API/MouseEvent/button
+      if (event.button === 3) {
+        event.preventDefault();
+        event.stopPropagation();
+        goBack();
+      } else if (event.button === 4) {
+        event.preventDefault();
+        event.stopPropagation();
+        goForward();
+      }
+    };
+
+    // Use auxclick which is specifically designed for non-primary mouse buttons
+    document.addEventListener('auxclick', handleMouseButton);
+
+    return () => {
+      document.removeEventListener('auxclick', handleMouseButton);
+    };
+  }, [goBack, goForward]);
 
   // Listen for IPC events from menu
   useEffect(() => {
@@ -1369,6 +1452,8 @@ export default function App() {
             // Initialize window mode from workspace state (await to prevent flash of wrong mode)
             if (initialState.workspacePath) {
               await initWindowMode(initialState.workspacePath);
+              // Initialize unified navigation history
+              await initNavigationHistory(initialState.workspacePath);
             }
           }
         }
