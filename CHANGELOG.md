@@ -20,6 +20,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.9] - 2026-01-27
+
+
+### Added
+- Unified cross-mode navigation history for seamless back/forward navigation across files
+- Enhanced keyboard shortcuts dialog with tabs and improved formatting
+- Unified onboarding flow with developer mode selection
+- Developer feature flags for worktrees and terminal
+
+### Changed
+- Remove developer section from keyboard shortcuts dialog
+
+### Fixed
+- Users with old databases can now start the app without errors
+- Make all onboarding fields optional except mode selection
+- Use standard --nim-* CSS variables in onboarding screens
+- Prevent race condition in navigation history restore
+- Make Cmd+Shift+A toggle AI chat panel correctly
+- Handle missing history array in navigation state restore
+- Restore list bullet and number visibility broken by Tailwind Preflight reset
+- Resolve remaining typecheck errors in session files, agent mode, and todo panel
+- Fix show archived sessions
+
 ## [0.52.7] - 2026-01-26
 
 
