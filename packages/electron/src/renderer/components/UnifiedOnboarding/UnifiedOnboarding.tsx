@@ -178,8 +178,7 @@ export const UnifiedOnboarding: React.FC<UnifiedOnboardingProps> = ({
 
   // Mode must be selected (required field)
   const isModeSelected = developerMode !== null;
-  // If social is selected, platform must also be selected for validation
-  const isSocialValid = referralSource !== 'social' || socialMediaPlatform !== '';
+  // Email validation (optional - only validate format if provided)
   const isEmailValid = email.trim() === '' || isValidEmail(email.trim());
 
   return (
@@ -369,7 +368,7 @@ export const UnifiedOnboarding: React.FC<UnifiedOnboardingProps> = ({
           <button
             className="unified-onboarding-submit"
             onClick={handleComplete}
-            disabled={!isModeSelected || (showDataCollection && (!isSocialValid || !isEmailValid))}
+            disabled={!isModeSelected || (showDataCollection && !isEmailValid)}
           >
             Get Started
           </button>
