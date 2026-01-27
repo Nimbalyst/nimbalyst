@@ -100,15 +100,6 @@ export function KeyboardShortcutsDialog({ isOpen, onClose }: KeyboardShortcutsDi
         { label: 'Switch to Window 1-9', shortcut: 'Cmd+1-9' }, // ApplicationMenu.ts - dynamically created
       ],
     },
-    {
-      title: 'Developer',
-      shortcuts: [
-        { label: 'Toggle Developer Tools', shortcut: KeyboardShortcuts.view.toggleDevTools }, // shared/KeyboardShortcuts.ts:65 - Cmd+Alt+I
-        { label: 'Reload', shortcut: KeyboardShortcuts.view.reload }, // shared/KeyboardShortcuts.ts:66 - Cmd+R
-        { label: 'Force Reload', shortcut: KeyboardShortcuts.view.forceReload }, // shared/KeyboardShortcuts.ts:67 - Cmd+Shift+R
-        { label: 'Refresh File Tree', shortcut: KeyboardShortcuts.developer.refreshFileTree }, // shared/KeyboardShortcuts.ts:85 - Cmd+Shift+F5
-      ],
-    },
   ];
 
   // Editor shortcuts are defined in: packages/rexical/src/plugins/ShortcutsPlugin/shortcuts.ts
