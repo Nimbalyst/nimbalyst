@@ -22,45 +22,45 @@ export const WorktreeOnboardingModal: React.FC<WorktreeOnboardingModalProps> = (
         className="worktree-onboarding-dialog nim-modal w-[90%] max-w-[480px] animate-[worktree-modal-appear_0.2s_ease]"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="worktree-onboarding-header flex flex-col items-center text-center px-7 pt-7 pb-5 border-b border-[var(--nim-border)]">
-          <span className="material-symbols-outlined worktree-onboarding-icon text-5xl text-[var(--nim-primary)] mb-4">
+        <div className="worktree-onboarding-header flex flex-col items-center text-center px-7 pt-7 pb-5 border-b border-nim">
+          <span className="material-symbols-outlined worktree-onboarding-icon text-5xl text-nim-primary mb-4">
             account_tree
           </span>
-          <h2 className="m-0 text-[22px] font-semibold text-[var(--nim-text)]">What is a Worktree?</h2>
+          <h2 className="m-0 text-[22px] font-semibold text-nim">What is a Worktree?</h2>
         </div>
 
         <div className="worktree-onboarding-content px-7 py-6">
-          <p className="worktree-onboarding-description m-0 mb-6 text-[15px] leading-relaxed text-[var(--nim-text-muted)] text-center [&_strong]:text-[var(--nim-text)]">
+          <p className="worktree-onboarding-description m-0 mb-6 text-[15px] leading-relaxed text-nim-muted text-center [&_strong]:text-nim">
             Worktrees create a git branch in an <strong>isolated directory</strong>, separate from your main repository.
             This gives you a safe place to make changes without affecting the rest of your code.
           </p>
 
           <div className="worktree-onboarding-benefits flex flex-col gap-4">
-            <div className="worktree-benefit flex items-start gap-3.5 p-3.5 px-4 bg-[var(--nim-bg-secondary)] rounded-[10px] border border-[var(--nim-border)]">
-              <span className="material-symbols-outlined benefit-icon text-2xl text-[var(--nim-primary)] shrink-0">shield</span>
+            <div className="worktree-benefit flex items-start gap-3.5 p-3.5 px-4 bg-nim-secondary rounded-[10px] border border-nim">
+              <span className="material-symbols-outlined benefit-icon text-2xl text-nim-primary shrink-0">shield</span>
               <div className="benefit-text flex flex-col gap-0.5">
-                <strong className="text-sm font-semibold text-[var(--nim-text)]">Safe experimentation</strong>
-                <span className="text-[13px] text-[var(--nim-text-muted)]">AI changes stay in a separate branch</span>
+                <strong className="text-sm font-semibold text-nim">Safe experimentation</strong>
+                <span className="text-[13px] text-nim-muted">AI changes stay in a separate branch</span>
               </div>
             </div>
-            <div className="worktree-benefit flex items-start gap-3.5 p-3.5 px-4 bg-[var(--nim-bg-secondary)] rounded-[10px] border border-[var(--nim-border)]">
-              <span className="material-symbols-outlined benefit-icon text-2xl text-[var(--nim-primary)] shrink-0">rate_review</span>
+            <div className="worktree-benefit flex items-start gap-3.5 p-3.5 px-4 bg-nim-secondary rounded-[10px] border border-nim">
+              <span className="material-symbols-outlined benefit-icon text-2xl text-nim-primary shrink-0">rate_review</span>
               <div className="benefit-text flex flex-col gap-0.5">
-                <strong className="text-sm font-semibold text-[var(--nim-text)]">Easy review</strong>
-                <span className="text-[13px] text-[var(--nim-text-muted)]">Review and merge changes when ready</span>
+                <strong className="text-sm font-semibold text-nim">Easy review</strong>
+                <span className="text-[13px] text-nim-muted">Review and merge changes when ready</span>
               </div>
             </div>
-            <div className="worktree-benefit flex items-start gap-3.5 p-3.5 px-4 bg-[var(--nim-bg-secondary)] rounded-[10px] border border-[var(--nim-border)]">
-              <span className="material-symbols-outlined benefit-icon text-2xl text-[var(--nim-primary)] shrink-0">stacks</span>
+            <div className="worktree-benefit flex items-start gap-3.5 p-3.5 px-4 bg-nim-secondary rounded-[10px] border border-nim">
+              <span className="material-symbols-outlined benefit-icon text-2xl text-nim-primary shrink-0">stacks</span>
               <div className="benefit-text flex flex-col gap-0.5">
-                <strong className="text-sm font-semibold text-[var(--nim-text)]">Parallel work</strong>
-                <span className="text-[13px] text-[var(--nim-text-muted)]">Run multiple experiments simultaneously</span>
+                <strong className="text-sm font-semibold text-nim">Parallel work</strong>
+                <span className="text-[13px] text-nim-muted">Run multiple experiments simultaneously</span>
               </div>
             </div>
           </div>
         </div>
 
-        <div className="worktree-onboarding-footer flex justify-end gap-3 px-7 py-5 border-t border-[var(--nim-border)]">
+        <div className="worktree-onboarding-footer flex justify-end gap-3 px-7 py-5 border-t border-nim">
           <button
             className="worktree-onboarding-secondary-button nim-btn-secondary px-5 py-2.5 text-sm font-medium rounded-lg"
             onClick={onCancel}
