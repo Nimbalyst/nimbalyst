@@ -1003,6 +1003,7 @@ export default function App() {
     window.electronAPI.on('set-content-mode', handleSetContentMode);
     window.electronAPI.on('agent:insert-plan-reference', handleInsertPlanReference);
     window.electronAPI.on('show-project-selection-dialog', handleShowProjectSelectionDialog);
+    // NOTE: toggle-ai-chat-panel is handled by EditorMode where the AI chat state lives
     // COMMENTED OUT - Cmd+K now switches to Agent mode
     // window.electronAPI.on('toggle-agent-palette', handleToggleAgentPalette);
 
@@ -1277,11 +1278,8 @@ export default function App() {
         }
         return;
       }
-      // Cmd+Shift+A (Mac) or Ctrl+Shift+A (Windows/Linux) for AI Chat
-      if (workspaceMode && (e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'a') {
-        e.preventDefault();
-        setIsAIChatCollapsed(prev => !prev);
-      }
+      // NOTE: Cmd+Shift+A for AI Chat is handled by the menu accelerator + IPC listener
+      // See 'toggle-ai-chat-panel' listener in the IPC events useEffect above
       // NOTE: Cmd+Shift+T handled by menu system (reopen-last-closed-tab IPC event)
       // Cmd+Y (Mac) or Ctrl+Y (Windows/Linux) for History - only in files mode
       if ((e.metaKey || e.ctrlKey) && e.key === 'y') {

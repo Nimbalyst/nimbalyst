@@ -769,6 +769,33 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
     return undefined;
   }, [workspacePath, selectedFolderPath, handleWorkspaceFileSelect]);
 
+  // Listen for toggle-ai-chat-panel IPC event (Cmd+Shift+A)
+  // Use ref to debounce rapid calls (can happen with menu accelerators)
+  const toggleAIChatInProgressRef = useRef(false);
+  useEffect(() => {
+    if (!window.electronAPI?.on) return;
+
+    const handleToggleAIChatPanel = () => {
+      // Debounce: if we're already processing a toggle, ignore duplicate calls
+      if (toggleAIChatInProgressRef.current) {
+        console.log('[EditorMode] handleToggleAIChatPanel: ignoring duplicate call');
+        return;
+      }
+      toggleAIChatInProgressRef.current = true;
+      // Reset the guard after a short delay to allow future toggles
+      setTimeout(() => { toggleAIChatInProgressRef.current = false; }, 100);
+
+      console.log('[EditorMode] handleToggleAIChatPanel IPC received');
+      setIsAIChatCollapsed(prev => !prev);
+    };
+
+    window.electronAPI.on('toggle-ai-chat-panel', handleToggleAIChatPanel);
+
+    return () => {
+      window.electronAPI.off?.('toggle-ai-chat-panel', handleToggleAIChatPanel);
+    };
+  }, []);
+
   // Handle new file creation with file type support
   const handleNewFile = useCallback(async (fileName: string, fileType: NewFileType) => {
     if (!workspacePath || !window.electronAPI) return;
