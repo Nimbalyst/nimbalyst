@@ -1439,7 +1439,7 @@ ${newLines.map(line => '+' + line).join('\n')}`;
    * @param worktreePath - Path to the worktree
    * @returns Array of changed file paths with their status
    */
-  async getChangedFiles(worktreePath: string): Promise<Array<{ path: string; status: 'added' | 'modified' | 'deleted' }>> {
+  async getChangedFiles(worktreePath: string): Promise<Array<{ path: string; status: 'added' | 'modified' | 'deleted'; staged: boolean }>> {
     if (!worktreePath) {
       throw new Error('worktreePath is required');
     }
@@ -1453,7 +1453,7 @@ ${newLines.map(line => '+' + line).join('\n')}`;
       // This shows files that need to be staged/committed, not the full branch diff
       const gitStatus = await git.status();
 
-      const changedFiles: Array<{ path: string; status: 'added' | 'modified' | 'deleted' }> = [];
+      const changedFiles: Array<{ path: string; status: 'added' | 'modified' | 'deleted'; staged: boolean }> = [];
 
       for (const file of gitStatus.files) {
         let status: 'added' | 'modified' | 'deleted';
@@ -1466,7 +1466,10 @@ ${newLines.map(line => '+' + line).join('\n')}`;
           status = 'modified';
         }
 
-        changedFiles.push({ path: file.path, status });
+        // A file is staged if its index status is not ' ' (space) or '?' (untracked)
+        const staged = file.index !== ' ' && file.index !== '?';
+
+        changedFiles.push({ path: file.path, status, staged });
       }
 
       logger.info('Found changed files', { count: changedFiles.length });

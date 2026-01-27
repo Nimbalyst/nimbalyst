@@ -51,13 +51,6 @@ export const commitMessageAtom = atom<string>('');
 export const isCommittingAtom = atom<boolean>(false);
 
 /**
- * Git operation mode: 'manual', 'smart' (AI-assisted), or 'worktree'.
- */
-export type GitOperationMode = 'manual' | 'smart' | 'worktree';
-
-export const gitOperationModeAtom = atom<GitOperationMode>('smart');
-
-/**
  * Per-file staging state.
  * Derived from stagedFilesAtom for efficient per-file subscriptions.
  */

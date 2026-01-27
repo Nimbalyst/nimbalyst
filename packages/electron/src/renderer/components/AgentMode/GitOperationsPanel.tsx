@@ -1,8 +1,12 @@
 /**
- * GitOperationsPanel - Unified git operations UI
+ * GitOperationsPanel - Context-aware git operations UI
  *
- * Provides both manual and smart (AI-assisted) commit modes.
- * Shows git status, staging area, commit history, and commit controls.
+ * Provides a unified interface that adapts based on context:
+ * - Commit Section (manual or AI-assisted) - for regular workspaces
+ * - Worktree Operations Section - for worktree sessions (uncommitted changes, rebase, merge, squash)
+ * - History Section (always visible, collapsible)
+ *
+ * Note: File selection (uncommitted changes) is now handled in FilesEditedSidebar
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -12,7 +16,6 @@ import {
   gitStatusAtom,
   gitCommitsAtom,
   isCommittingAtom,
-  gitOperationModeAtom,
   pendingProposalForWorkstreamAtom,
   removePendingGitCommitProposalAtom,
 } from '../../store/atoms/gitOperations';
@@ -73,8 +76,9 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
     const setGitCommits = useSetAtom(gitCommitsAtom);
     const isCommitting = useAtomValue(isCommittingAtom);
     const setIsCommitting = useSetAtom(isCommittingAtom);
-    const mode = useAtomValue(gitOperationModeAtom);
-    const setMode = useSetAtom(gitOperationModeAtom);
+
+    // Local state for commit workflow mode (manual vs smart)
+    const [commitMode, setCommitMode] = useState<'manual' | 'smart'>('smart');
 
     // Per-workstream git state (persisted)
     const stagedFilesArr = useAtomValue(workstreamStagedFilesAtom(workstreamId));
@@ -456,10 +460,10 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
       }
     }, [worktreePath]);
 
-    // Initial load for worktree mode - only fetch when entering worktree mode
+    // Initial load for worktree data - fetch when worktreePath exists
     // and data hasn't been loaded for this worktreePath yet
     useEffect(() => {
-      if (!worktreePath || mode !== 'worktree') return;
+      if (!worktreePath) return;
 
       // Skip if we've already loaded data for this worktreePath
       if (worktreeDataLoadedForPath.current === worktreePath) return;
@@ -476,7 +480,7 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
         worktreeDataLoadedForPath.current = worktreePath;
       };
       load();
-    }, [worktreePath, mode, loadWorktreeName, loadWorktreeChangedFiles, loadWorktreeCommits, loadWorktreeRepoRootBranch, loadWorktreeStatus]);
+    }, [worktreePath, loadWorktreeName, loadWorktreeChangedFiles, loadWorktreeCommits, loadWorktreeRepoRootBranch, loadWorktreeStatus]);
 
     // Reset the loaded flag when worktreePath changes (different worktree)
     useEffect(() => {
@@ -1129,7 +1133,7 @@ Please proceed with this strategy.`;
 
     return (
       <div className="git-operations-panel min-w-[200px] border-t border-[var(--nim-border)] bg-[var(--nim-bg-secondary)]">
-        {/* Header with mode toggle */}
+        {/* Header */}
         <div className="git-operations-panel__header flex items-center justify-between py-2 px-3 select-none text-xs font-medium text-[var(--nim-text)] border-b border-[var(--nim-border)]">
           <div
             className="git-operations-panel__header-left flex items-center gap-1.5 flex-1 cursor-pointer hover:opacity-80"
@@ -1138,44 +1142,13 @@ Please proceed with this strategy.`;
             <MaterialSymbol icon={isExpanded ? 'expand_more' : 'chevron_right'} size={16} />
             <MaterialSymbol icon="account_tree" size={14} />
             <span className="git-operations-panel__branch font-semibold text-[var(--nim-text)]">
-              {gitStatus.branch}
+              {worktreeId && worktreeName ? `worktree/${worktreeName}` : gitStatus.branch}
             </span>
-            {(gitStatus.ahead > 0 || gitStatus.behind > 0) && (
+            {!worktreeId && (gitStatus.ahead > 0 || gitStatus.behind > 0) && (
               <span className="git-operations-panel__sync-status text-[11px] text-[var(--nim-text-faint)] font-[var(--nim-font-mono)]">
                 {gitStatus.ahead > 0 && `↑${gitStatus.ahead}`}
                 {gitStatus.behind > 0 && ` ↓${gitStatus.behind}`}
               </span>
-            )}
-          </div>
-          <div className="git-operations-panel__mode-toggle flex rounded-[3px] overflow-hidden border border-[var(--nim-border)]">
-            <button
-              className={`px-1.5 py-0.5 border-none bg-transparent text-[var(--nim-text-muted)] text-[10px] font-medium cursor-pointer transition-all duration-150 border-r border-[var(--nim-border)] ${
-                mode === 'manual' ? 'bg-[var(--nim-bg-tertiary)] text-[var(--nim-text)]' : 'hover:bg-[var(--nim-bg-tertiary)] hover:opacity-60'
-              }`}
-              onClick={() => setMode('manual')}
-              title="Manual staging and commit"
-            >
-              Manual
-            </button>
-            <button
-              className={`px-1.5 py-0.5 border-none bg-transparent text-[var(--nim-text-muted)] text-[10px] font-medium cursor-pointer transition-all duration-150 ${
-                mode === 'smart' ? 'bg-[var(--nim-bg-tertiary)] text-[var(--nim-text)]' : 'hover:bg-[var(--nim-bg-tertiary)] hover:opacity-60'
-              }`}
-              onClick={() => setMode('smart')}
-              title="AI-assisted commit"
-            >
-              Smart
-            </button>
-            {worktreeId && (
-              <button
-                className={`px-1.5 py-0.5 border-none bg-transparent text-[var(--nim-text-muted)] text-[10px] font-medium cursor-pointer transition-all duration-150 ${
-                  mode === 'worktree' ? 'bg-[var(--nim-bg-tertiary)] text-[var(--nim-text)]' : 'hover:bg-[var(--nim-bg-tertiary)] hover:opacity-60'
-                }`}
-                onClick={() => setMode('worktree')}
-                title="Worktree operations"
-              >
-                Worktree
-              </button>
             )}
           </div>
         </div>
@@ -1183,143 +1156,122 @@ Please proceed with this strategy.`;
         {isExpanded && (
           <div className="git-operations-panel__content px-3 pb-3 flex flex-col gap-3">
 
-            {/* Manual Mode */}
-            {mode === 'manual' && (
-              <div className="git-operations-panel__manual flex flex-col gap-2">
-                {/* Staged count indicator */}
-                <div className="git-operations-panel__staged-info flex items-center justify-between text-[11px] text-[var(--nim-text-muted)]">
-                  <span>{stagedFiles.size} of {editedFiles.length} files selected</span>
-                  <div className="flex gap-2">
+            {/* Commit Section (always visible when not in worktree) */}
+            {!worktreeId && (
+              <div className="flex flex-col gap-2 pt-3">
+                {/* Commit mode toggle and header */}
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-semibold text-[var(--nim-text)]">Commit</span>
+                  <div className="flex rounded-[3px] overflow-hidden border border-[var(--nim-border)]">
                     <button
-                      onClick={() => stageAll(editedFiles)}
-                      disabled={editedFiles.length === 0 || stagedFiles.size === editedFiles.length}
-                      className="git-operations-panel__btn-text bg-transparent border-none text-[var(--nim-primary)] text-[10px] font-medium cursor-pointer p-0 hover:underline disabled:text-[var(--nim-text-faint)] disabled:cursor-not-allowed disabled:no-underline"
+                      className={`px-1.5 py-0.5 border-none bg-transparent text-[var(--nim-text-muted)] text-[10px] font-medium cursor-pointer transition-all duration-150 border-r border-[var(--nim-border)] ${
+                        commitMode === 'manual' ? 'bg-[var(--nim-bg-tertiary)] text-[var(--nim-text)]' : 'hover:bg-[var(--nim-bg-tertiary)] hover:opacity-60'
+                      }`}
+                      onClick={() => setCommitMode('manual')}
+                      title="Manual commit message"
                     >
-                      Select All
+                      Manual
                     </button>
                     <button
-                      onClick={() => clearStaging()}
-                      disabled={stagedFiles.size === 0}
-                      className="git-operations-panel__btn-text bg-transparent border-none text-[var(--nim-primary)] text-[10px] font-medium cursor-pointer p-0 hover:underline disabled:text-[var(--nim-text-faint)] disabled:cursor-not-allowed disabled:no-underline"
+                      className={`px-1.5 py-0.5 border-none bg-transparent text-[var(--nim-text-muted)] text-[10px] font-medium cursor-pointer transition-all duration-150 ${
+                        commitMode === 'smart' ? 'bg-[var(--nim-bg-tertiary)] text-[var(--nim-text)]' : 'hover:bg-[var(--nim-bg-tertiary)] hover:opacity-60'
+                      }`}
+                      onClick={() => setCommitMode('smart')}
+                      title="AI-assisted commit"
                     >
-                      Clear
+                      Smart
                     </button>
                   </div>
                 </div>
 
-                {/* Commit Message */}
-                <textarea
-                  className="git-operations-panel__commit-message w-full p-2 border border-[var(--nim-border)] rounded bg-[var(--nim-bg)] text-[var(--nim-text)] text-[11px] font-[var(--nim-font-mono)] resize-y focus:outline-none focus:border-[var(--nim-primary)]"
-                  value={commitMessage}
-                  onChange={(e) => setCommitMessage(e.target.value)}
-                  placeholder="Enter commit message..."
-                  rows={3}
-                />
-
-                {/* Commit Button */}
-                <button
-                  className="git-operations-panel__commit-btn w-full p-2 border-none rounded bg-[var(--nim-primary)] text-white text-xs font-semibold cursor-pointer flex items-center justify-center gap-1.5 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
-                  onClick={handleManualCommit}
-                  disabled={isCommitting || !commitMessage?.trim() || stagedFiles.size === 0}
-                >
-                  {isCommitting ? 'Committing...' : `Commit (${stagedFiles.size})`}
-                </button>
-              </div>
-            )}
-
-            {/* Smart Mode */}
-            {mode === 'smart' && (
-              <div className="git-operations-panel__smart flex flex-col gap-2" data-testid="git-operations-smart-mode">
-                {activeProposalId ? (
-                  // Show proposal UI when AI has proposed a commit
-                  <>
-                    {/* AI Proposal indicator with dismiss button */}
-                    <div className="git-operations-panel__proposal-indicator flex items-center gap-1.5 p-1.5 bg-[rgba(139,92,246,0.1)] border border-[rgba(139,92,246,0.3)] rounded text-[10px] text-[var(--nim-text-muted)]">
-                      <MaterialSymbol icon="auto_awesome" size={14} className="text-[rgb(139,92,246)]" />
-                      <span className="flex-1">AI proposed commit - review and edit</span>
-                      <button
-                        onClick={() => {
-                          // Dismiss the proposal
-                          window.electronAPI.sendMcpGitCommitProposalResult(activeProposalId, {
-                            action: 'cancelled',
-                            error: 'User dismissed the commit',
-                          });
-                          removePendingProposal(activeProposalId);
-                          clearGitState(workstreamId);
-                        }}
-                        className="text-[var(--nim-text-faint)] hover:text-[var(--nim-text)] cursor-pointer"
-                        title="Dismiss AI proposal"
-                      >
-                        <MaterialSymbol icon="close" size={14} />
-                      </button>
-                    </div>
-
-                    {/* Staged count indicator */}
-                    <div className="git-operations-panel__staged-info flex items-center justify-between text-[11px] text-[var(--nim-text-muted)]">
-                      <span>{stagedFiles.size} of {editedFiles.length} files selected</span>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => stageAll(editedFiles)}
-                          disabled={editedFiles.length === 0 || stagedFiles.size === editedFiles.length}
-                          className="git-operations-panel__btn-text bg-transparent border-none text-[var(--nim-primary)] text-[10px] font-medium cursor-pointer p-0 hover:underline disabled:text-[var(--nim-text-faint)] disabled:cursor-not-allowed disabled:no-underline"
-                        >
-                          Select All
-                        </button>
-                        <button
-                          onClick={() => clearStaging()}
-                          disabled={stagedFiles.size === 0}
-                          className="git-operations-panel__btn-text bg-transparent border-none text-[var(--nim-primary)] text-[10px] font-medium cursor-pointer p-0 hover:underline disabled:text-[var(--nim-text-faint)] disabled:cursor-not-allowed disabled:no-underline"
-                        >
-                          Clear
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Commit Message */}
+                {/* Manual commit workflow */}
+                {commitMode === 'manual' && (
+                  <div className="flex flex-col gap-2" data-testid="git-operations-manual-mode">
                     <textarea
-                      className="git-operations-panel__commit-message w-full p-2 border border-[var(--nim-border)] rounded bg-[var(--nim-bg)] text-[var(--nim-text)] text-[11px] font-[var(--nim-font-mono)] resize-y focus:outline-none focus:border-[var(--nim-primary)]"
+                      className="w-full p-2 border border-[var(--nim-border)] rounded bg-[var(--nim-bg)] text-[var(--nim-text)] text-[11px] font-[var(--nim-font-mono)] resize-y focus:outline-none focus:border-[var(--nim-primary)]"
                       value={commitMessage}
                       onChange={(e) => setCommitMessage(e.target.value)}
                       placeholder="Enter commit message..."
                       rows={3}
-                      data-testid="git-operations-commit-message"
                     />
-
-                    {/* Commit Button */}
                     <button
-                      className="git-operations-panel__commit-btn w-full p-2 border-none rounded bg-[var(--nim-primary)] text-white text-xs font-semibold cursor-pointer flex items-center justify-center gap-1.5 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="w-full p-2 border-none rounded bg-[var(--nim-primary)] text-white text-xs font-semibold cursor-pointer flex items-center justify-center gap-1.5 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
                       onClick={handleManualCommit}
                       disabled={isCommitting || !commitMessage?.trim() || stagedFiles.size === 0}
-                      data-testid="git-operations-commit-button"
                     >
                       {isCommitting ? 'Committing...' : `Commit (${stagedFiles.size})`}
                     </button>
-                  </>
-                ) : (
-                  // Show "Commit with AI" button when no proposal
-                  <>
-                    <p className="git-operations-panel__smart-desc text-xs text-[var(--nim-text-muted)] m-0 leading-normal">
-                      Let AI analyze your changes and propose a commit message.
-                    </p>
-                    <button
-                      className="git-operations-panel__commit-btn smart w-full p-2 border-none rounded text-white text-xs font-semibold cursor-pointer flex items-center justify-center gap-1.5 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed bg-gradient-to-br from-[var(--nim-primary)] to-[var(--nim-primary-hover)]"
-                      onClick={handleSmartCommit}
-                      disabled={!hasChanges}
-                      data-testid="git-operations-commit-with-ai-button"
-                    >
-                      <MaterialSymbol icon="auto_awesome" size={16} />
-                      Commit with AI
-                    </button>
-                  </>
+                  </div>
+                )}
+
+                {/* Smart commit workflow */}
+                {commitMode === 'smart' && (
+                  <div className="flex flex-col gap-2" data-testid="git-operations-smart-mode">
+                    {activeProposalId ? (
+                      <>
+                        {/* AI Proposal indicator with dismiss button */}
+                        <div className="flex items-center gap-1.5 p-1.5 bg-[rgba(139,92,246,0.1)] border border-[rgba(139,92,246,0.3)] rounded text-[10px] text-[var(--nim-text-muted)]">
+                          <MaterialSymbol icon="auto_awesome" size={14} className="text-[rgb(139,92,246)]" />
+                          <span className="flex-1">AI proposed commit - review and edit</span>
+                          <button
+                            onClick={() => {
+                              window.electronAPI.sendMcpGitCommitProposalResult(activeProposalId, {
+                                action: 'cancelled',
+                                error: 'User dismissed the commit',
+                              });
+                              removePendingProposal(activeProposalId);
+                              clearGitState(workstreamId);
+                            }}
+                            className="text-[var(--nim-text-faint)] hover:text-[var(--nim-text)] cursor-pointer"
+                            title="Dismiss AI proposal"
+                          >
+                            <MaterialSymbol icon="close" size={14} />
+                          </button>
+                        </div>
+                        <textarea
+                          className="w-full p-2 border border-[var(--nim-border)] rounded bg-[var(--nim-bg)] text-[var(--nim-text)] text-[11px] font-[var(--nim-font-mono)] resize-y focus:outline-none focus:border-[var(--nim-primary)]"
+                          value={commitMessage}
+                          onChange={(e) => setCommitMessage(e.target.value)}
+                          placeholder="Enter commit message..."
+                          rows={3}
+                          data-testid="git-operations-commit-message"
+                        />
+                        <button
+                          className="w-full p-2 border-none rounded bg-[var(--nim-primary)] text-white text-xs font-semibold cursor-pointer flex items-center justify-center gap-1.5 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                          onClick={handleManualCommit}
+                          disabled={isCommitting || !commitMessage?.trim() || stagedFiles.size === 0}
+                          data-testid="git-operations-commit-button"
+                        >
+                          {isCommitting ? 'Committing...' : `Commit (${stagedFiles.size})`}
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-xs text-[var(--nim-text-muted)] m-0 leading-normal">
+                          Let AI analyze your changes and propose a commit message.
+                        </p>
+                        <button
+                          className="w-full p-2 border-none rounded text-white text-xs font-semibold cursor-pointer flex items-center justify-center gap-1.5 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed bg-gradient-to-br from-[var(--nim-primary)] to-[var(--nim-primary-hover)]"
+                          onClick={handleSmartCommit}
+                          disabled={!hasChanges}
+                          data-testid="git-operations-commit-with-ai-button"
+                        >
+                          <MaterialSymbol icon="auto_awesome" size={16} />
+                          Commit with AI
+                        </button>
+                      </>
+                    )}
+                  </div>
                 )}
               </div>
             )}
 
-            {/* Worktree Mode */}
-            {mode === 'worktree' && worktreeId && (
-              <div className="flex flex-col gap-3">
-                {/* Refresh Button */}
-                <div className="flex justify-end mb-2">
+            {/* Worktree Operations Section (only when worktreeId exists) */}
+            {worktreeId && (
+              <div className="flex flex-col gap-3 pt-3">
+                {/* Section header with refresh button */}
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-semibold text-[var(--nim-text)]">Commit & Sync</span>
                   <button
                     onClick={async () => {
                       await Promise.all([
@@ -1334,52 +1286,6 @@ Please proceed with this strategy.`;
                     <MaterialSymbol icon="refresh" size={14} />
                     <span>Refresh</span>
                   </button>
-                </div>
-
-                {/* Uncommitted Changes */}
-                <div className="flex flex-col gap-2">
-                  <div className="flex items-center justify-between text-[11px] font-semibold text-[var(--nim-text)]">
-                    <span>Uncommitted Changes ({worktreeChangedFiles.length})</span>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handleWorktreeToggleAllStaged(true)}
-                        disabled={worktreeChangedFiles.length === 0}
-                        className="bg-transparent border-none text-[var(--nim-primary)] text-[10px] font-medium cursor-pointer p-0 hover:underline disabled:text-[var(--nim-text-faint)] disabled:cursor-not-allowed disabled:no-underline"
-                      >
-                        Stage All
-                      </button>
-                      <button
-                        onClick={() => handleWorktreeToggleAllStaged(false)}
-                        disabled={worktreeStagedCount === 0}
-                        className="bg-transparent border-none text-[var(--nim-primary)] text-[10px] font-medium cursor-pointer p-0 hover:underline disabled:text-[var(--nim-text-faint)] disabled:cursor-not-allowed disabled:no-underline"
-                      >
-                        Clear
-                      </button>
-                    </div>
-                  </div>
-                  {worktreeChangedFiles.length > 0 && (
-                    <div className="flex flex-col gap-1 max-h-[200px] overflow-y-auto border border-[var(--nim-border)] rounded p-1 bg-[var(--nim-bg)]">
-                      {worktreeChangedFiles.map((file) => (
-                        <div key={file.path} className="flex items-center gap-2 p-1 text-[11px] text-[var(--nim-text)] hover:bg-[var(--nim-bg-tertiary)] hover:rounded-[3px]">
-                          <input
-                            type="checkbox"
-                            checked={file.staged}
-                            onChange={() => handleWorktreeToggleStaged(file.path)}
-                          />
-                          <span className={`text-[10px] font-[var(--nim-font-mono)] font-semibold ${
-                            file.status === 'added' ? 'text-[var(--nim-success)]' :
-                            file.status === 'modified' ? 'text-[var(--nim-warning)]' :
-                            'text-[var(--nim-error)]'
-                          }`}>
-                            {file.status === 'added' ? 'A' : file.status === 'modified' ? 'M' : 'D'}
-                          </span>
-                          <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
-                            {file.path.split('/').pop()}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </div>
 
                 {/* Worktree Status Info */}

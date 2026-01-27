@@ -18,7 +18,6 @@ import { FileEditsSidebar as FileEditsSidebarComponent, MaterialSymbol } from '@
 import type { FileEditSummary } from '@nimbalyst/runtime';
 import { diffTreeGroupByDirectoryAtom, setDiffTreeGroupByDirectoryAtom } from '../../store/atoms/projectState';
 import { workstreamSessionsAtom, sessionTitleAtom } from '../../store/atoms/sessions';
-import { gitOperationModeAtom } from '../../store/atoms/gitOperations';
 import {
   workstreamStagedFilesAtom,
   setWorkstreamStagedFilesAtom,
@@ -67,6 +66,15 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
   const [pendingReviewFiles, setPendingReviewFiles] = useState<Set<string>>(new Set());
   const [filterSessionId, setFilterSessionId] = useState<string | null>(null);
   const [isClearing, setIsClearing] = useState(false);
+  const [otherUncommittedFiles, setOtherUncommittedFiles] = useState<string[]>([]);
+  const [otherFilesGitStatus, setOtherFilesGitStatus] = useState<Record<string, { status: string; gitStatusCode?: string }>>({});
+
+  // Worktree-specific state for uncommitted changes
+  const [worktreeChangedFiles, setWorktreeChangedFiles] = useState<Array<{
+    path: string;
+    status: 'added' | 'modified' | 'deleted';
+    staged: boolean;
+  }>>([]);
 
   // Get all session IDs in this workstream
   const workstreamSessions = useAtomValue(workstreamSessionsAtom(workstreamId));
@@ -77,11 +85,8 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
   const [groupByDirectory] = useAtom(diffTreeGroupByDirectoryAtom);
   const setDiffTreeGroupByDirectory = useSetAtom(setDiffTreeGroupByDirectoryAtom);
 
-  // Git operation mode - determines if checkboxes are shown
-  const gitOperationMode = useAtomValue(gitOperationModeAtom);
-  const showCheckboxes = gitOperationMode === 'manual' || gitOperationMode === 'worktree';
-
   // Staged files - used for checkbox state (per-workstream)
+  // Checkboxes are always shown in the new unified design
   const stagedFilesArr = useAtomValue(workstreamStagedFilesAtom(workstreamId));
   const stagedFiles = useMemo(() => new Set(stagedFilesArr), [stagedFilesArr]);
   const setStagedFilesAction = useSetAtom(setWorkstreamStagedFilesAtom);
@@ -110,37 +115,137 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
   }, [allFileEdits, filterSessionId]);
 
   // Memoize editedFiles array for GitOperationsPanel to prevent unnecessary re-renders
+  // Includes AI-edited files + other uncommitted files (for regular sessions)
+  // Or worktree changed files (for worktree sessions)
   const editedFilePaths = useMemo(() => {
-    return fileEdits.map((f) => f.filePath);
-  }, [fileEdits]);
+    if (worktreeId) {
+      // For worktrees, include worktree changed files
+      return [...fileEdits.map((f) => f.filePath), ...worktreeChangedFiles.map(f => f.path)];
+    }
+    // For regular sessions, include other uncommitted files
+    return [...fileEdits.map((f) => f.filePath), ...otherUncommittedFiles];
+  }, [fileEdits, otherUncommittedFiles, worktreeId, worktreeChangedFiles]);
+
+  // Helper to convert absolute path to relative path for worktree comparisons
+  const toRelativePath = useCallback((absolutePath: string) => {
+    if (worktreePath && absolutePath.startsWith(worktreePath)) {
+      return absolutePath.slice(worktreePath.length + 1);
+    }
+    return absolutePath;
+  }, [worktreePath]);
+
+  // For worktrees: compute the set of staged files from worktreeChangedFiles
+  // Convert relative paths to absolute for matching with fileEdits
+  const worktreeStagedFiles = useMemo(() => {
+    if (!worktreeId || !worktreePath) return new Set<string>();
+    // Return absolute paths so they match the selectedFiles expected by FileEditsSidebarComponent
+    return new Set(worktreeChangedFiles.filter(f => f.staged).map(f => `${worktreePath}/${f.path}`));
+  }, [worktreeId, worktreePath, worktreeChangedFiles]);
+
+  // For worktrees: filter out files that are already in the AI-edited list
+  const worktreeOnlyChangedFiles = useMemo(() => {
+    if (!worktreeId) return [];
+    // Convert AI-edited file paths to relative for comparison
+    const editedRelativePaths = new Set(fileEdits.map(f => toRelativePath(f.filePath)));
+    return worktreeChangedFiles.filter(f => !editedRelativePaths.has(f.path));
+  }, [worktreeId, worktreeChangedFiles, fileEdits, toRelativePath]);
+
+  // Handle worktree file staging toggle
+  const handleWorktreeToggleStaged = useCallback(async (filePath: string) => {
+    if (!worktreePath) return;
+
+    try {
+      // Convert to relative path if absolute
+      const relativePath = toRelativePath(filePath);
+      const file = worktreeChangedFiles.find(f => f.path === relativePath);
+      if (!file) return;
+
+      const newStaged = !file.staged;
+      await window.electronAPI.invoke('worktree:stage-file', worktreePath, relativePath, newStaged);
+
+      // Update local state
+      setWorktreeChangedFiles(prev =>
+        prev.map(f => f.path === relativePath ? { ...f, staged: newStaged } : f)
+      );
+    } catch (error) {
+      console.error('[FilesEditedSidebar] Failed to toggle worktree file staging:', error);
+    }
+  }, [worktreePath, worktreeChangedFiles, toRelativePath]);
+
+  // Handle worktree stage all / unstage all
+  const handleWorktreeToggleAllStaged = useCallback(async (stage: boolean) => {
+    if (!worktreePath) return;
+
+    try {
+      await window.electronAPI.invoke('worktree:stage-all', worktreePath, stage);
+
+      // Update local state
+      setWorktreeChangedFiles(prev =>
+        prev.map(f => ({ ...f, staged: stage }))
+      );
+    } catch (error) {
+      console.error('[FilesEditedSidebar] Failed to toggle all worktree file staging:', error);
+    }
+  }, [worktreePath]);
 
   // Handle file selection change (checkbox toggle)
+  // For worktrees, this stages/unstages the file in git
+  // For regular sessions, this updates the workstream staged files state
   const handleSelectionChange = useCallback((filePath: string, selected: boolean) => {
-    const newFiles = selected
-      ? [...stagedFilesArr, filePath]
-      : stagedFilesArr.filter(f => f !== filePath);
-    setStagedFilesAction({ workstreamId, files: newFiles });
-  }, [stagedFilesArr, setStagedFilesAction, workstreamId]);
+    if (worktreeId && worktreePath) {
+      // For worktrees, use git staging
+      handleWorktreeToggleStaged(filePath);
+    } else {
+      // For regular sessions, use workstream state
+      const newFiles = selected
+        ? [...stagedFilesArr, filePath]
+        : stagedFilesArr.filter(f => f !== filePath);
+      setStagedFilesAction({ workstreamId, files: newFiles });
+    }
+  }, [worktreeId, worktreePath, stagedFilesArr, setStagedFilesAction, workstreamId, handleWorktreeToggleStaged]);
 
   // Handle select all files
   const handleSelectAll = useCallback((selected: boolean) => {
-    if (selected) {
-      setStagedFilesAction({ workstreamId, files: editedFilePaths });
+    if (worktreeId && worktreePath) {
+      // For worktrees, stage/unstage all files
+      handleWorktreeToggleAllStaged(selected);
     } else {
-      setStagedFilesAction({ workstreamId, files: [] });
+      // For regular sessions, use workstream state
+      if (selected) {
+        setStagedFilesAction({ workstreamId, files: editedFilePaths });
+      } else {
+        setStagedFilesAction({ workstreamId, files: [] });
+      }
     }
-  }, [editedFilePaths, setStagedFilesAction, workstreamId]);
+  }, [worktreeId, worktreePath, editedFilePaths, setStagedFilesAction, workstreamId, handleWorktreeToggleAllStaged]);
 
   // Handle bulk selection change (for folder checkboxes)
-  const handleBulkSelectionChange = useCallback((filePaths: string[], selected: boolean) => {
-    const currentSet = new Set(stagedFilesArr);
-    if (selected) {
-      filePaths.forEach(fp => currentSet.add(fp));
+  const handleBulkSelectionChange = useCallback(async (filePaths: string[], selected: boolean) => {
+    if (worktreeId && worktreePath) {
+      // For worktrees, stage/unstage each file individually
+      for (const filePath of filePaths) {
+        const relativePath = toRelativePath(filePath);
+        const file = worktreeChangedFiles.find(f => f.path === relativePath);
+        if (file && file.staged !== selected) {
+          await window.electronAPI.invoke('worktree:stage-file', worktreePath, relativePath, selected);
+        }
+      }
+      // Refresh the worktree changed files
+      const result = await window.electronAPI.invoke('worktree:get-changed-files', worktreePath);
+      if (result.success && result.files) {
+        setWorktreeChangedFiles(result.files);
+      }
     } else {
-      filePaths.forEach(fp => currentSet.delete(fp));
+      // For regular sessions, use workstream state
+      const currentSet = new Set(stagedFilesArr);
+      if (selected) {
+        filePaths.forEach(fp => currentSet.add(fp));
+      } else {
+        filePaths.forEach(fp => currentSet.delete(fp));
+      }
+      setStagedFilesAction({ workstreamId, files: Array.from(currentSet) });
     }
-    setStagedFilesAction({ workstreamId, files: Array.from(currentSet) });
-  }, [stagedFilesArr, setStagedFilesAction, workstreamId]);
+  }, [worktreeId, worktreePath, worktreeChangedFiles, stagedFilesArr, setStagedFilesAction, workstreamId, toRelativePath]);
 
   // Listen for git status changes and prune committed files from staged set
   // This ensures that when files are committed (via any method), they're removed from staging
@@ -258,6 +363,99 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
       isCurrent = false;
     };
   }, [workstreamId, workspacePath, workstreamSessions]);
+
+  // Fetch worktree uncommitted files (for worktree sessions)
+  // Re-fetch when allFileEdits changes so newly edited files get their git status immediately
+  useEffect(() => {
+    if (!worktreePath || !worktreeId) {
+      setWorktreeChangedFiles([]);
+      return;
+    }
+
+    let isCurrent = true;
+
+    const fetchWorktreeChanges = async () => {
+      try {
+        if (typeof window !== 'undefined' && window.electronAPI) {
+          const result = await window.electronAPI.invoke('worktree:get-changed-files', worktreePath);
+          if (result.success && result.files && isCurrent) {
+            setWorktreeChangedFiles(result.files);
+          }
+        }
+      } catch (error) {
+        if (isCurrent) {
+          console.error('[FilesEditedSidebar] Failed to fetch worktree changes:', error);
+        }
+      }
+    };
+
+    fetchWorktreeChanges();
+
+    // Listen for git status changes to refresh
+    const handleGitStatusChanged = () => {
+      fetchWorktreeChanges();
+    };
+
+    const unsubscribe = window.electronAPI?.on('git:status-changed', handleGitStatusChanged);
+
+    return () => {
+      isCurrent = false;
+      unsubscribe?.();
+    };
+  }, [worktreePath, worktreeId, allFileEdits]);
+
+  // Fetch other uncommitted files (not edited by AI) - for regular sessions only
+  useEffect(() => {
+    if (!workspacePath || worktreeId) {
+      // Skip for worktrees - they use worktreeChangedFiles instead
+      setOtherUncommittedFiles([]);
+      return;
+    }
+
+    let isCurrent = true;
+
+    const fetchUncommittedFiles = async () => {
+      try {
+        if (typeof window !== 'undefined' && window.electronAPI) {
+          const result = await window.electronAPI.invoke('git:get-uncommitted-files', workspacePath);
+          if (result.success && result.files && isCurrent) {
+            // Filter out files that are already in the edited files list
+            const editedFilePaths = new Set(fileEdits.map(f => f.filePath));
+            const otherFiles = result.files.filter((filePath: string) => !editedFilePaths.has(filePath));
+            setOtherUncommittedFiles(otherFiles);
+
+            // Fetch git status for these files
+            if (otherFiles.length > 0) {
+              const statusResult = await window.electronAPI.invoke('git:get-file-status', workspacePath, otherFiles);
+              if (statusResult.success && isCurrent) {
+                setOtherFilesGitStatus(statusResult.fileStatus || {});
+              }
+            } else {
+              setOtherFilesGitStatus({});
+            }
+          }
+        }
+      } catch (error) {
+        if (isCurrent) {
+          console.error('[FilesEditedSidebar] Failed to fetch uncommitted files:', error);
+        }
+      }
+    };
+
+    fetchUncommittedFiles();
+
+    // Listen for git status changes to refresh the list
+    const handleGitStatusChanged = () => {
+      fetchUncommittedFiles();
+    };
+
+    const unsubscribe = window.electronAPI?.on('git:status-changed', handleGitStatusChanged);
+
+    return () => {
+      isCurrent = false;
+      unsubscribe?.();
+    };
+  }, [workspacePath, worktreeId, fileEdits]);
 
   // Listen for file tracking updates from any session in the workstream
   useEffect(() => {
@@ -545,24 +743,132 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
       )}
 
       {/* Files Content */}
-      <div className="files-edited-sidebar__content flex-1 overflow-hidden">
-        <FileEditsSidebarComponent
-          fileEdits={fileEdits}
-          onFileClick={onFileClick}
-          workspacePath={workspacePath}
-          pendingReviewFiles={pendingReviewFiles}
-          groupByDirectory={groupByDirectory}
-          onGroupByDirectoryChange={setGroupByDirectory}
-          hideControls
-          onOpenInFiles={handleOpenInFiles}
-          onCopyPath={handleCopyPath}
-          onRevealInFinder={handleRevealInFinder}
-          showCheckboxes={showCheckboxes}
-          selectedFiles={stagedFiles}
-          onSelectionChange={handleSelectionChange}
-          onSelectAll={handleSelectAll}
-          onBulkSelectionChange={handleBulkSelectionChange}
-        />
+      <div className="files-edited-sidebar__content flex-1 overflow-hidden flex flex-col">
+        <div className="flex-1 overflow-auto">
+          <FileEditsSidebarComponent
+            fileEdits={fileEdits}
+            onFileClick={onFileClick}
+            workspacePath={worktreePath || workspacePath}
+            pendingReviewFiles={pendingReviewFiles}
+            groupByDirectory={groupByDirectory}
+            onGroupByDirectoryChange={setGroupByDirectory}
+            hideControls
+            onOpenInFiles={handleOpenInFiles}
+            onCopyPath={handleCopyPath}
+            onRevealInFinder={handleRevealInFinder}
+            showCheckboxes={true}
+            selectedFiles={worktreeId ? worktreeStagedFiles : stagedFiles}
+            onSelectionChange={handleSelectionChange}
+            onSelectAll={handleSelectAll}
+            onBulkSelectionChange={handleBulkSelectionChange}
+          />
+        </div>
+
+        {/* Other Uncommitted Files Section */}
+        {!worktreeId && otherUncommittedFiles.length > 0 && (
+          <div className="border-t border-[var(--nim-border)] bg-[var(--nim-bg-secondary)]">
+            <div className="px-3 py-2 text-[11px] font-semibold text-[var(--nim-text-muted)] uppercase tracking-wide">
+              Other Uncommitted Files ({otherUncommittedFiles.length})
+            </div>
+            <div className="max-h-[200px] overflow-y-auto">
+              {otherUncommittedFiles.map((filePath) => {
+                const gitStatus = otherFilesGitStatus[filePath];
+                const statusCode = gitStatus?.gitStatusCode || '?';
+                const statusColor =
+                  statusCode.includes('M') ? 'text-[var(--nim-warning)]' :
+                  statusCode.includes('A') ? 'text-[var(--nim-success)]' :
+                  statusCode.includes('D') ? 'text-[var(--nim-error)]' :
+                  'text-[var(--nim-text-muted)]';
+
+                return (
+                  <div
+                    key={filePath}
+                    className="flex items-center gap-2 px-3 py-1.5 text-[11px] hover:bg-[var(--nim-bg-hover)] cursor-pointer"
+                    onClick={() => onFileClick(filePath)}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={stagedFiles.has(filePath)}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        handleSelectionChange(filePath, e.target.checked);
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      className="cursor-pointer"
+                    />
+                    <span className={`w-4 text-center font-[var(--nim-font-mono)] font-semibold text-[10px] ${statusColor}`}>
+                      {statusCode.charAt(0)}
+                    </span>
+                    <span className="flex-1 text-[var(--nim-text)] overflow-hidden text-ellipsis whitespace-nowrap" title={filePath}>
+                      {filePath.split('/').pop()}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Worktree Uncommitted Files Section - only shows files NOT already in Files Edited */}
+        {worktreeId && worktreeOnlyChangedFiles.length > 0 && (
+          <div className="border-t border-[var(--nim-border)] bg-[var(--nim-bg-secondary)]">
+            <div className="flex items-center justify-between px-3 py-2">
+              <span className="text-[11px] font-semibold text-[var(--nim-text-muted)] uppercase tracking-wide">
+                Other Uncommitted Files ({worktreeOnlyChangedFiles.length})
+              </span>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => handleWorktreeToggleAllStaged(true)}
+                  disabled={worktreeOnlyChangedFiles.length === 0 || worktreeOnlyChangedFiles.every(f => f.staged)}
+                  className="bg-transparent border-none text-[var(--nim-primary)] text-[10px] font-medium cursor-pointer p-0 hover:underline disabled:text-[var(--nim-text-faint)] disabled:cursor-not-allowed disabled:no-underline"
+                >
+                  Stage All
+                </button>
+                <button
+                  onClick={() => handleWorktreeToggleAllStaged(false)}
+                  disabled={!worktreeOnlyChangedFiles.some(f => f.staged)}
+                  className="bg-transparent border-none text-[var(--nim-primary)] text-[10px] font-medium cursor-pointer p-0 hover:underline disabled:text-[var(--nim-text-faint)] disabled:cursor-not-allowed disabled:no-underline"
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+            <div className="max-h-[200px] overflow-y-auto">
+              {worktreeOnlyChangedFiles.map((file) => {
+                const statusColor =
+                  file.status === 'added' ? 'text-[var(--nim-success)]' :
+                  file.status === 'modified' ? 'text-[var(--nim-warning)]' :
+                  'text-[var(--nim-error)]';
+                const statusChar = file.status === 'added' ? 'A' : file.status === 'modified' ? 'M' : 'D';
+
+                return (
+                  <div
+                    key={file.path}
+                    className="flex items-center gap-2 px-3 py-1.5 text-[11px] hover:bg-[var(--nim-bg-hover)] cursor-pointer"
+                    onClick={() => onFileClick(file.path)}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={file.staged}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        handleWorktreeToggleStaged(file.path);
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      className="cursor-pointer"
+                    />
+                    <span className={`w-4 text-center font-[var(--nim-font-mono)] font-semibold text-[10px] ${statusColor}`}>
+                      {statusChar}
+                    </span>
+                    <span className="flex-1 text-[var(--nim-text)] overflow-hidden text-ellipsis whitespace-nowrap" title={file.path}>
+                      {file.path.split('/').pop()}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Git Operations Panel */}

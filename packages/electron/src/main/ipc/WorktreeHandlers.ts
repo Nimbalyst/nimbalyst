@@ -1026,5 +1026,73 @@ export function registerWorktreeHandlers(): void {
     }
   });
 
+  /**
+   * Stage or unstage a file in a worktree
+   * @param worktreePath - Path to the worktree directory
+   * @param filePath - Relative path of the file to stage/unstage
+   * @param stage - true to stage, false to unstage
+   */
+  ipcMain.handle('worktree:stage-file', async (_event, worktreePath: string, filePath: string, stage: boolean) => {
+    try {
+      if (!worktreePath) {
+        throw new Error('worktreePath is required');
+      }
+      if (!filePath) {
+        throw new Error('filePath is required');
+      }
+
+      logger.info('Staging/unstaging file', { worktreePath, filePath, stage });
+
+      const simpleGit = (await import('simple-git')).default;
+      const git = simpleGit(worktreePath);
+
+      if (stage) {
+        await git.add(filePath);
+      } else {
+        await git.reset(['--', filePath]);
+      }
+
+      return { success: true };
+    } catch (error) {
+      logger.error('Failed to stage/unstage file:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to stage/unstage file',
+      };
+    }
+  });
+
+  /**
+   * Stage or unstage all files in a worktree
+   * @param worktreePath - Path to the worktree directory
+   * @param stage - true to stage all, false to unstage all
+   */
+  ipcMain.handle('worktree:stage-all', async (_event, worktreePath: string, stage: boolean) => {
+    try {
+      if (!worktreePath) {
+        throw new Error('worktreePath is required');
+      }
+
+      logger.info('Staging/unstaging all files', { worktreePath, stage });
+
+      const simpleGit = (await import('simple-git')).default;
+      const git = simpleGit(worktreePath);
+
+      if (stage) {
+        await git.add('-A');
+      } else {
+        await git.reset();
+      }
+
+      return { success: true };
+    } catch (error) {
+      logger.error('Failed to stage/unstage all files:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to stage/unstage all files',
+      };
+    }
+  });
+
   logger.info('Worktree handlers registered');
 }
