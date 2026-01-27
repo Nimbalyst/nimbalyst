@@ -44,14 +44,19 @@ export function UpdateToast(): React.ReactElement | null {
       newVersion: string;
       releaseNotes?: string;
       releaseDate?: string;
+      isManualCheck?: boolean;
     }) => {
       console.log('[UpdateToast] Update available:', data);
 
       // Check if reminder is suppressed for this version
-      const suppressed = await checkReminderSuppression(data.newVersion);
-      if (suppressed) {
-        console.log('[UpdateToast] Reminder suppressed for version:', data.newVersion);
-        return;
+      // Skip suppression for manual checks (user explicitly clicked "Check for Updates")
+      if (!data.isManualCheck) {
+        const suppressed = await checkReminderSuppression(data.newVersion);
+        if (suppressed) {
+          console.log('[UpdateToast] Reminder suppressed for version:', data.newVersion);
+          setState('idle');
+          return;
+        }
       }
 
       setCurrentVersion(data.currentVersion);

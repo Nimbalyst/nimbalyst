@@ -107,7 +107,8 @@ export class AutoUpdaterService {
         currentVersion: app.getVersion(),
         newVersion: info.version,
         releaseNotes: releaseNotes,
-        releaseDate: info.releaseDate
+        releaseDate: info.releaseDate,
+        isManualCheck: this.isManualCheck
       });
 
       this.sendToAllWindows('update-available', info);
