@@ -11,6 +11,19 @@ import {AnalyticsService} from "./analytics/AnalyticsService.ts";
 
 const execAsync = promisify(exec);
 
+// Cache for dynamically detected paths (populated asynchronously at startup)
+interface DetectedPaths {
+  homebrewPrefix?: string;
+  homebrewNodePath?: string;
+  nvmBinPath?: string;
+  shellPath?: string;
+  npmPrefix?: string;
+  yarnBin?: string;
+}
+
+let cachedDetectedPaths: DetectedPaths | null = null;
+let pathDetectionPromise: Promise<DetectedPaths> | null = null;
+
 interface InstallationStatus {
   installed: boolean;
   version?: string;
@@ -897,16 +910,196 @@ export class CLIManager {
 }
 
 /**
+ * Asynchronously detect paths for Homebrew, nvm, npm, yarn, and shell environment.
+ * This runs the expensive shell commands once and caches the results.
+ */
+async function detectPaths(): Promise<DetectedPaths> {
+  const detected: DetectedPaths = {};
+  const homeDir = os.homedir();
+
+  if (process.platform === 'darwin' || process.platform === 'linux') {
+    // Detect shell PATH
+    try {
+      const shell = process.env.SHELL || '/bin/zsh';
+      const shellName = path.basename(shell);
+
+      let command: string;
+      if (shellName === 'zsh') {
+        const sourceCommand =
+          `source /etc/zprofile 2>/dev/null || true; ` +
+          `source ${homeDir}/.zprofile 2>/dev/null || true; ` +
+          `source /etc/zshrc 2>/dev/null || true; ` +
+          `source ${homeDir}/.zshrc 2>/dev/null || true; `;
+        command = `${shell} -c '${sourceCommand}echo $PATH'`;
+      } else if (shellName === 'bash') {
+        const sourceCommand =
+          `source /etc/profile 2>/dev/null || true; ` +
+          `source ${homeDir}/.bash_profile 2>/dev/null || true; ` +
+          `source ${homeDir}/.bashrc 2>/dev/null || true; `;
+        command = `${shell} -c '${sourceCommand}echo $PATH'`;
+      } else {
+        command = `${shell} -ilc 'echo $PATH' 2>/dev/null`;
+      }
+
+      const { stdout } = await execAsync(command, { timeout: 3000, env: { HOME: homeDir } });
+      const shellPath = stdout.trim();
+      if (shellPath && shellPath.length > 0 && !shellPath.includes('command not found')) {
+        console.log(`[detectPaths] Got PATH from ${shellName}: ${shellPath.substring(0, 200)}...`);
+        detected.shellPath = shellPath;
+      }
+    } catch (e: any) {
+      console.warn('[detectPaths] Could not get PATH from shell:', e.message || e);
+    }
+
+    // Detect Homebrew (macOS only)
+    if (process.platform === 'darwin') {
+      const brewLocations = [
+        '/opt/homebrew/bin/brew',      // Apple Silicon default
+        '/usr/local/bin/brew',          // Intel Mac default
+        path.join(homeDir, '.brew/bin/brew')  // Custom install
+      ];
+
+      for (const brewPath of brewLocations) {
+        if (fsSync.existsSync(brewPath)) {
+          try {
+            const { stdout } = await execAsync(`${brewPath} --prefix`, { timeout: 2000 });
+            const brewPrefix = stdout.trim();
+            if (brewPrefix) {
+              console.log(`[detectPaths] Found homebrew at: ${brewPrefix}`);
+              detected.homebrewPrefix = brewPrefix;
+
+              // Check for node-specific paths from homebrew
+              const nodeBrewPath = path.join(brewPrefix, 'opt', 'node', 'bin');
+              if (fsSync.existsSync(nodeBrewPath)) {
+                detected.homebrewNodePath = nodeBrewPath;
+              }
+              break;
+            }
+          } catch (e) {
+            // Continue to next location
+          }
+        }
+      }
+    }
+
+    // Detect nvm
+    const nvmDir = process.env.NVM_DIR || path.join(homeDir, '.nvm');
+    const nvmCurrentPath = path.join(nvmDir, 'current', 'bin');
+
+    if (fsSync.existsSync(nvmCurrentPath)) {
+      detected.nvmBinPath = nvmCurrentPath;
+    } else {
+      // Try to run nvm to get the current version
+      try {
+        const shell = process.env.SHELL || '/bin/zsh';
+        const nvmCommand = `${shell} -c 'source ${nvmDir}/nvm.sh 2>/dev/null && nvm which current 2>/dev/null'`;
+
+        const { stdout } = await execAsync(nvmCommand, { timeout: 2000 });
+        const nvmWhich = stdout.trim();
+
+        if (nvmWhich && !nvmWhich.includes('command not found')) {
+          const nvmBinPath = path.dirname(nvmWhich);
+          console.log(`[detectPaths] Found active nvm node at: ${nvmBinPath}`);
+          detected.nvmBinPath = nvmBinPath;
+        }
+      } catch (e) {
+        // Try to find the latest installed version
+        const versionsPath = path.join(nvmDir, 'versions', 'node');
+        if (fsSync.existsSync(versionsPath)) {
+          try {
+            const versions = fsSync.readdirSync(versionsPath);
+            if (versions.length > 0) {
+              // Sort versions properly (handle semver)
+              versions.sort((a, b) => {
+                const parseVersion = (v: string) => {
+                  const match = v.match(/v?(\d+)\.(\d+)\.(\d+)/);
+                  return match ? [parseInt(match[1]), parseInt(match[2]), parseInt(match[3])] : [0, 0, 0];
+                };
+                const [aMajor, aMinor, aPatch] = parseVersion(a);
+                const [bMajor, bMinor, bPatch] = parseVersion(b);
+                if (aMajor !== bMajor) return bMajor - aMajor;
+                if (aMinor !== bMinor) return bMinor - aMinor;
+                return bPatch - aPatch;
+              });
+              const latestVersion = versions[0];
+              const latestBinPath = path.join(versionsPath, latestVersion, 'bin');
+              console.log(`[detectPaths] Using latest nvm version: ${latestVersion}`);
+              detected.nvmBinPath = latestBinPath;
+            }
+          } catch (e) {
+            console.warn('[detectPaths] Could not read nvm versions directory:', e);
+          }
+        }
+      }
+    }
+
+    // Detect npm global bin
+    try {
+      const { stdout } = await execAsync('npm config get prefix', { timeout: 2000, shell: '/bin/sh' });
+      const npmPrefix = stdout.trim();
+      if (npmPrefix && npmPrefix !== 'undefined') {
+        detected.npmPrefix = npmPrefix;
+      }
+    } catch (e) {
+      // Ignore if npm is not available
+    }
+
+    // Detect yarn global bin
+    try {
+      const { stdout } = await execAsync('yarn global bin', { timeout: 2000, shell: '/bin/sh' });
+      const yarnBin = stdout.trim();
+      if (yarnBin && yarnBin.length > 0) {
+        detected.yarnBin = yarnBin;
+      }
+    } catch (e) {
+      // Ignore if yarn is not available
+    }
+  }
+
+  return detected;
+}
+
+/**
+ * Initialize the enhanced PATH detection asynchronously.
+ * Call this at app startup to pre-populate the cache.
+ * The detection runs in the background and doesn't block startup.
+ */
+export async function initEnhancedPath(): Promise<void> {
+  if (pathDetectionPromise) {
+    await pathDetectionPromise;
+    return;
+  }
+
+  console.log('[initEnhancedPath] Starting async path detection...');
+  const startTime = Date.now();
+
+  pathDetectionPromise = detectPaths();
+
+  try {
+    cachedDetectedPaths = await pathDetectionPromise;
+    const duration = Date.now() - startTime;
+    console.log(`[initEnhancedPath] Path detection completed in ${duration}ms`);
+  } catch (e: any) {
+    console.error('[initEnhancedPath] Path detection failed:', e.message || e);
+    cachedDetectedPaths = {};
+  }
+}
+
+/**
  * Get an enhanced PATH that includes common CLI installation locations.
  * This is needed because GUI apps on macOS don't inherit the shell's PATH
  * when launched from Finder/dock, so commands like npx, node, uvx etc.
  * installed via Homebrew, nvm, or other tools won't be found.
+ *
+ * Uses cached values from async detection when available, with fallback
+ * to hardcoded defaults if detection hasn't completed.
  *
  * Used by:
  * - CLIManager for CLI tool installation/detection
  * - MCPConfigService for spawning MCP servers
  */
 export function getEnhancedPath(): string {
+  const detected = cachedDetectedPaths || {};
   // Add custom user-configured paths first (highest priority)
   const paths: string[] = [];
 
@@ -926,52 +1119,9 @@ export function getEnhancedPath(): string {
   }
 
   if (process.platform === 'darwin' || process.platform === 'linux') {
-    // Try to get PATH from user's actual shell environment
-    // This is more reliable than hardcoding paths
-    try {
-      const shell = process.env.SHELL || '/bin/zsh';
-      const shellName = path.basename(shell);
-      const homeDir = os.homedir();
-
-      // For packaged apps, explicitly source shell config files
-      // This ensures we get the full PATH with all version managers (nvm, volta, fnm, etc.)
-      let command: string;
-      if (shellName === 'zsh') {
-        // Source zsh config files in the correct order
-        const sourceCommand =
-          `source /etc/zprofile 2>/dev/null || true; ` +
-          `source ${homeDir}/.zprofile 2>/dev/null || true; ` +
-          `source /etc/zshrc 2>/dev/null || true; ` +
-          `source ${homeDir}/.zshrc 2>/dev/null || true; `;
-        command = `${shell} -c '${sourceCommand}echo $PATH'`;
-      } else if (shellName === 'bash') {
-        // Source bash config files
-        const sourceCommand =
-          `source /etc/profile 2>/dev/null || true; ` +
-          `source ${homeDir}/.bash_profile 2>/dev/null || true; ` +
-          `source ${homeDir}/.bashrc 2>/dev/null || true; `;
-        command = `${shell} -c '${sourceCommand}echo $PATH'`;
-      } else {
-        // For other shells, use interactive login shell
-        command = `${shell} -ilc 'echo $PATH' 2>/dev/null`;
-      }
-
-      const shellPath = execSync(command, {
-        encoding: 'utf8',
-        timeout: 3000,
-        env: { HOME: homeDir }
-      }).trim();
-
-      if (shellPath && shellPath.length > 0 && !shellPath.includes('command not found')) {
-        console.log(`[getEnhancedPath] Got PATH from ${shellName}: ${shellPath.substring(0, 200)}...`);
-        paths.push(shellPath);
-      } else {
-        console.warn(`[getEnhancedPath] Got empty or invalid PATH from ${shellName}`);
-      }
-    } catch (e: any) {
-      console.warn('[getEnhancedPath] Could not get PATH from shell:', e.message || e);
-      // This is expected to fail in some cases (shell not found, permission issues, etc.)
-      // We'll fall back to the hardcoded paths below
+    // Use cached shell PATH if available (populated asynchronously at startup)
+    if (detected.shellPath) {
+      paths.push(detected.shellPath);
     }
 
     // Common Unix paths
@@ -984,54 +1134,15 @@ export function getEnhancedPath(): string {
 
     // Add Homebrew paths for macOS
     if (process.platform === 'darwin') {
-      // Try to dynamically detect homebrew installation
-      try {
-        // First try to get homebrew prefix from the brew command itself
-        let brewPrefix: string | undefined;
-
-        // Try common brew locations
-        const brewLocations = [
-          '/opt/homebrew/bin/brew',      // Apple Silicon default
-          '/usr/local/bin/brew',          // Intel Mac default
-          path.join(homeDir, '.brew/bin/brew')  // Custom install
-        ];
-
-        for (const brewPath of brewLocations) {
-          if (fsSync.existsSync(brewPath)) {
-            try {
-              brewPrefix = execSync(`${brewPath} --prefix 2>/dev/null`, {
-                encoding: 'utf8',
-                timeout: 2000
-              }).trim();
-              if (brewPrefix) {
-                console.log(`[getEnhancedPath] Found homebrew at: ${brewPrefix}`);
-                paths.push(path.join(brewPrefix, 'bin'));
-                paths.push(path.join(brewPrefix, 'sbin'));
-
-                // Also add node-specific paths from homebrew
-                const nodeBrewPath = path.join(brewPrefix, 'opt', 'node', 'bin');
-                if (fsSync.existsSync(nodeBrewPath)) {
-                  paths.push(nodeBrewPath);
-                }
-                break;
-              }
-            } catch (e) {
-              // Continue to next location
-            }
-          }
+      // Use cached homebrew prefix if available
+      if (detected.homebrewPrefix) {
+        paths.push(path.join(detected.homebrewPrefix, 'bin'));
+        paths.push(path.join(detected.homebrewPrefix, 'sbin'));
+        if (detected.homebrewNodePath) {
+          paths.push(detected.homebrewNodePath);
         }
-
-        // If we didn't find brew dynamically, fall back to hardcoded paths
-        if (!brewPrefix) {
-          console.log('[getEnhancedPath] Could not detect homebrew installation, using default paths');
-          paths.push('/opt/homebrew/bin');
-          paths.push('/opt/homebrew/sbin');
-          paths.push('/usr/local/bin');
-          paths.push('/usr/local/sbin');
-        }
-      } catch (e: any) {
-        console.warn('[getEnhancedPath] Error detecting homebrew:', e.message || e);
-        // Fall back to common paths
+      } else {
+        // Fall back to common hardcoded paths
         paths.push('/opt/homebrew/bin');
         paths.push('/opt/homebrew/sbin');
         paths.push('/usr/local/bin');
@@ -1060,66 +1171,12 @@ export function getEnhancedPath(): string {
     // Node.js version manager paths
     const homeDir = os.homedir();
 
-    // NVM (Node Version Manager)
+    // NVM (Node Version Manager) - use cached path if available
     const nvmDir = process.env.NVM_DIR || path.join(homeDir, '.nvm');
-
-    // Try multiple strategies to find the active nvm node version
-    try {
-      // Strategy 1: Use 'current' symlink if it exists
-      const nvmCurrentPath = path.join(nvmDir, 'current', 'bin');
-      if (fsSync.existsSync(nvmCurrentPath)) {
-        paths.push(nvmCurrentPath);
-      } else {
-        // Strategy 2: Try to run nvm to get the current version
-        // This works if nvm is properly initialized in the shell
-        try {
-          const shell = process.env.SHELL || '/bin/zsh';
-          const shellName = path.basename(shell);
-
-          // Source nvm script and get current version
-          let nvmCommand: string;
-          if (shellName === 'zsh') {
-            nvmCommand = `${shell} -c 'source ${nvmDir}/nvm.sh 2>/dev/null && nvm which current 2>/dev/null'`;
-          } else if (shellName === 'bash') {
-            nvmCommand = `${shell} -c 'source ${nvmDir}/nvm.sh 2>/dev/null && nvm which current 2>/dev/null'`;
-          } else {
-            nvmCommand = `${shell} -c 'source ${nvmDir}/nvm.sh 2>/dev/null && nvm which current 2>/dev/null'`;
-          }
-
-          const nvmWhich = execSync(nvmCommand, {
-            encoding: 'utf8',
-            timeout: 2000
-          }).trim();
-
-          if (nvmWhich && !nvmWhich.includes('command not found')) {
-            // nvmWhich returns something like /Users/user/.nvm/versions/node/v22.19.0/bin/node
-            const nvmBinPath = path.dirname(nvmWhich);
-            console.log(`[getEnhancedPath] Found active nvm node at: ${nvmBinPath}`);
-            paths.push(nvmBinPath);
-          }
-        } catch (e) {
-          // Strategy 3: If we can't determine the current version, try to find the latest installed version
-          const versionsPath = path.join(nvmDir, 'versions', 'node');
-          if (fsSync.existsSync(versionsPath)) {
-            try {
-              const versions = fsSync.readdirSync(versionsPath);
-              if (versions.length > 0) {
-                // Sort versions and use the latest (simple alphabetical sort works for semver)
-                versions.sort().reverse();
-                const latestVersion = versions[0];
-                const latestBinPath = path.join(versionsPath, latestVersion, 'bin');
-                console.log(`[getEnhancedPath] Using latest nvm version: ${latestVersion}`);
-                paths.push(latestBinPath);
-              }
-            } catch (e) {
-              console.warn('[getEnhancedPath] Could not read nvm versions directory:', e);
-            }
-          }
-        }
-      }
-    } catch (e: any) {
-      console.warn('[getEnhancedPath] Error detecting nvm installation:', e.message || e);
-      // Fall back to just trying the 'current' symlink
+    if (detected.nvmBinPath) {
+      paths.push(detected.nvmBinPath);
+    } else {
+      // Fall back to trying the 'current' symlink
       paths.push(path.join(nvmDir, 'current', 'bin'));
     }
 
@@ -1134,32 +1191,14 @@ export function getEnhancedPath(): string {
     // asdf (version manager)
     paths.push(path.join(homeDir, '.asdf', 'shims'));
 
-    // Try to get npm global bin directory
-    try {
-      const npmPrefix = execSync('npm config get prefix 2>/dev/null', {
-        encoding: 'utf8',
-        shell: '/bin/sh',
-        timeout: 2000
-      }).trim();
-      if (npmPrefix && npmPrefix !== 'undefined') {
-        paths.push(path.join(npmPrefix, 'bin'));
-      }
-    } catch (e) {
-      // Ignore if npm is not available
+    // npm global bin directory (use cached value if available)
+    if (detected.npmPrefix) {
+      paths.push(path.join(detected.npmPrefix, 'bin'));
     }
 
-    // Try to get yarn global bin directory
-    try {
-      const yarnBin = execSync('yarn global bin 2>/dev/null', {
-        encoding: 'utf8',
-        shell: '/bin/sh',
-        timeout: 2000
-      }).trim();
-      if (yarnBin && yarnBin.length > 0) {
-        paths.push(yarnBin);
-      }
-    } catch (e) {
-      // Ignore if yarn is not available
+    // yarn global bin directory (use cached value if available)
+    if (detected.yarnBin) {
+      paths.push(detected.yarnBin);
     }
 
     // Yarn global paths (fallback if yarn command not available)

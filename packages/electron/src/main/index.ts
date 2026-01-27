@@ -57,7 +57,7 @@ import { registerTerminalHandlers, shutdownTerminalHandlers } from './ipc/Termin
 import { AIService } from './services/ai/AIService';
 import { detectFileWorkspace, suggestWorkspaceForFile, getAdditionalDirectoriesForWorkspace } from './utils/workspaceDetection';
 // import { AgentService } from './services/agents/AgentService';
-import { cliManager } from './services/CLIManager';
+import { cliManager, initEnhancedPath } from './services/CLIManager';
 import { registerWorkspaceWindow, registerExtensionTools, shutdownHttpServer, startMcpHttpServer, updateDocumentState } from './mcp/httpServer';
 import { SessionNamingService } from './services/SessionNamingService';
 import { ExtensionDevService } from './services/ExtensionDevService';
@@ -482,6 +482,11 @@ app.whenReady().then(async () => {
     overrideConsole();
 
     logger.main.info('App ready');
+
+    // Start async PATH detection early (doesn't block startup)
+    initEnhancedPath().catch(err => {
+        logger.main.warn('Failed to initialize enhanced PATH:', err);
+    });
 
     // Run migrations based on version changes
     runMigrations(app.getVersion());
