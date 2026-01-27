@@ -188,6 +188,30 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
     }
   }, [worktreePath]);
 
+  // Handle staging/unstaging a subset of worktree files (for "Other Uncommitted Files" section)
+  const handleWorktreeToggleSubsetStaged = useCallback(async (files: Array<{ path: string; staged: boolean }>, stage: boolean) => {
+    if (!worktreePath) return;
+
+    try {
+      // Stage/unstage each file individually
+      for (const file of files) {
+        if (file.staged !== stage) {
+          await window.electronAPI.invoke('worktree:stage-file', worktreePath, file.path, stage);
+        }
+      }
+
+      // Update local state
+      setWorktreeChangedFiles(prev =>
+        prev.map(f => {
+          const shouldUpdate = files.some(file => file.path === f.path);
+          return shouldUpdate ? { ...f, staged: stage } : f;
+        })
+      );
+    } catch (error) {
+      console.error('[FilesEditedSidebar] Failed to toggle worktree file subset staging:', error);
+    }
+  }, [worktreePath]);
+
   // Handle file selection change (checkbox toggle)
   // For worktrees, this stages/unstages the file in git
   // For regular sessions, this updates the workstream staged files state
@@ -365,7 +389,6 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
   }, [workstreamId, workspacePath, workstreamSessions]);
 
   // Fetch worktree uncommitted files (for worktree sessions)
-  // Re-fetch when allFileEdits changes so newly edited files get their git status immediately
   useEffect(() => {
     if (!worktreePath || !worktreeId) {
       setWorktreeChangedFiles([]);
@@ -402,7 +425,7 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
       isCurrent = false;
       unsubscribe?.();
     };
-  }, [worktreePath, worktreeId, allFileEdits]);
+  }, [worktreePath, worktreeId]);
 
   // Fetch other uncommitted files (not edited by AI) - for regular sessions only
   useEffect(() => {
@@ -820,14 +843,14 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
               </span>
               <div className="flex gap-2">
                 <button
-                  onClick={() => handleWorktreeToggleAllStaged(true)}
+                  onClick={() => handleWorktreeToggleSubsetStaged(worktreeOnlyChangedFiles, true)}
                   disabled={worktreeOnlyChangedFiles.length === 0 || worktreeOnlyChangedFiles.every(f => f.staged)}
                   className="bg-transparent border-none text-[var(--nim-primary)] text-[10px] font-medium cursor-pointer p-0 hover:underline disabled:text-[var(--nim-text-faint)] disabled:cursor-not-allowed disabled:no-underline"
                 >
                   Stage All
                 </button>
                 <button
-                  onClick={() => handleWorktreeToggleAllStaged(false)}
+                  onClick={() => handleWorktreeToggleSubsetStaged(worktreeOnlyChangedFiles, false)}
                   disabled={!worktreeOnlyChangedFiles.some(f => f.staged)}
                   className="bg-transparent border-none text-[var(--nim-primary)] text-[10px] font-medium cursor-pointer p-0 hover:underline disabled:text-[var(--nim-text-faint)] disabled:cursor-not-allowed disabled:no-underline"
                 >
@@ -847,7 +870,7 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
                   <div
                     key={file.path}
                     className="flex items-center gap-2 px-3 py-1.5 text-[11px] hover:bg-[var(--nim-bg-hover)] cursor-pointer"
-                    onClick={() => onFileClick(file.path)}
+                    onClick={() => onFileClick(`${worktreePath}/${file.path}`)}
                   >
                     <input
                       type="checkbox"

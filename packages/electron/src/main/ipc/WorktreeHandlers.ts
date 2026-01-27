@@ -5,7 +5,7 @@
  * Worktrees are stored in the database and managed via GitWorktreeService.
  */
 
-import { ipcMain } from 'electron';
+import { ipcMain, BrowserWindow } from 'electron';
 import log from 'electron-log/main';
 import { GitWorktreeService } from '../services/GitWorktreeService';
 import { WorktreeStore, createWorktreeStore } from '../services/WorktreeStore';
@@ -16,6 +16,18 @@ import { AnalyticsService } from '../services/analytics/AnalyticsService';
 import { getTerminalSessionManager } from '../services/TerminalSessionManager';
 
 const logger = log.scope('WorktreeHandlers');
+
+/**
+ * Emit git status changed event to all windows
+ */
+function emitGitStatusChanged(workspacePath: string): void {
+  const windows = BrowserWindow.getAllWindows();
+  for (const window of windows) {
+    if (!window.isDestroyed()) {
+      window.webContents.send('git:status-changed', { workspacePath });
+    }
+  }
+}
 
 /**
  * Register worktree IPC handlers
@@ -1052,6 +1064,9 @@ export function registerWorktreeHandlers(): void {
         await git.reset(['--', filePath]);
       }
 
+      // Emit git status changed event so UI updates
+      emitGitStatusChanged(worktreePath);
+
       return { success: true };
     } catch (error) {
       logger.error('Failed to stage/unstage file:', error);
@@ -1083,6 +1098,9 @@ export function registerWorktreeHandlers(): void {
       } else {
         await git.reset();
       }
+
+      // Emit git status changed event so UI updates
+      emitGitStatusChanged(worktreePath);
 
       return { success: true };
     } catch (error) {

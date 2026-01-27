@@ -910,6 +910,9 @@ ${newLines.map(line => '+' + line).join('\n')}`;
     try {
       // Stage files
       if (files && files.length > 0) {
+        // First unstage everything to ensure we only commit the specified files
+        await git.reset();
+        // Then stage only the specified files
         await git.add(files);
       } else {
         // Stage all changes
