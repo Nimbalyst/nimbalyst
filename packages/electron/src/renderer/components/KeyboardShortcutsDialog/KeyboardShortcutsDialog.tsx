@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { KeyboardShortcuts, getShortcutDisplay } from '../../../shared/KeyboardShortcuts';
 
 interface KeyboardShortcutsDialogProps {
@@ -14,77 +14,156 @@ interface ShortcutGroup {
   }>;
 }
 
+type TabId = 'general' | 'editor';
+
+const IS_MAC = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+
 export function KeyboardShortcutsDialog({ isOpen, onClose }: KeyboardShortcutsDialogProps) {
+  const [activeTab, setActiveTab] = useState<TabId>('general');
+
+  // Handle Escape key to close dialog
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
-  const shortcutGroups: ShortcutGroup[] = [
+  // All general shortcuts are defined in: packages/electron/src/shared/KeyboardShortcuts.ts
+  const generalShortcuts: ShortcutGroup[] = [
     {
       title: 'File',
       shortcuts: [
-        { label: 'New File / New Session', shortcut: KeyboardShortcuts.file.newFile },
-        { label: 'New Window', shortcut: KeyboardShortcuts.file.newWindow },
-        { label: 'Open File', shortcut: KeyboardShortcuts.file.open },
-        { label: 'Open Folder', shortcut: KeyboardShortcuts.file.openFolder },
-        { label: 'Save', shortcut: KeyboardShortcuts.file.save },
-        { label: 'Close Tab', shortcut: KeyboardShortcuts.file.closeTab },
-        { label: 'Close Project', shortcut: KeyboardShortcuts.file.closeProject },
-        { label: 'Quit', shortcut: KeyboardShortcuts.file.quit },
+        { label: 'New File / New Session', shortcut: KeyboardShortcuts.file.newFile }, // shared/KeyboardShortcuts.ts:9 - Cmd+N
+        { label: 'New Window', shortcut: KeyboardShortcuts.file.newWindow }, // shared/KeyboardShortcuts.ts:11 - Cmd+Shift+N
+        { label: 'Open File', shortcut: KeyboardShortcuts.file.open }, // shared/KeyboardShortcuts.ts:12 - Cmd+O
+        { label: 'Open Folder', shortcut: KeyboardShortcuts.file.openFolder }, // shared/KeyboardShortcuts.ts:13 - Cmd+Shift+O
+        { label: 'Save', shortcut: KeyboardShortcuts.file.save }, // shared/KeyboardShortcuts.ts:14 - Cmd+S
+        { label: 'Close Tab', shortcut: KeyboardShortcuts.file.closeTab }, // shared/KeyboardShortcuts.ts:15 - Cmd+W
+        { label: 'Reopen Closed Tab', shortcut: KeyboardShortcuts.file.reopenClosedTab }, // shared/KeyboardShortcuts.ts:16 - Cmd+Shift+T
+        { label: 'Close Project', shortcut: KeyboardShortcuts.file.closeProject }, // shared/KeyboardShortcuts.ts:17 - Cmd+Shift+W
+        { label: 'Quit', shortcut: KeyboardShortcuts.file.quit }, // shared/KeyboardShortcuts.ts:18 - Cmd+Q
       ],
     },
     {
       title: 'Edit',
       shortcuts: [
-        { label: 'Undo', shortcut: KeyboardShortcuts.edit.undo },
-        { label: 'Redo', shortcut: KeyboardShortcuts.edit.redo },
-        { label: 'Cut', shortcut: KeyboardShortcuts.edit.cut },
-        { label: 'Copy', shortcut: KeyboardShortcuts.edit.copy },
-        { label: 'Paste', shortcut: KeyboardShortcuts.edit.paste },
-        { label: 'Select All', shortcut: KeyboardShortcuts.edit.selectAll },
-        { label: 'Find', shortcut: KeyboardShortcuts.edit.find },
-        { label: 'Find and Replace', shortcut: KeyboardShortcuts.edit.findAndReplace },
-        { label: 'View Local History', shortcut: KeyboardShortcuts.edit.viewHistory },
-        { label: 'Approve Current Action', shortcut: KeyboardShortcuts.edit.approve },
-        { label: 'Reject Current Action', shortcut: KeyboardShortcuts.edit.reject },
+        { label: 'Undo', shortcut: KeyboardShortcuts.edit.undo }, // shared/KeyboardShortcuts.ts:23 - Cmd+Z
+        { label: 'Redo', shortcut: KeyboardShortcuts.edit.redo }, // shared/KeyboardShortcuts.ts:24 - Cmd+Shift+Z
+        { label: 'Cut', shortcut: KeyboardShortcuts.edit.cut }, // shared/KeyboardShortcuts.ts:25 - Cmd+X
+        { label: 'Copy', shortcut: KeyboardShortcuts.edit.copy }, // shared/KeyboardShortcuts.ts:26 - Cmd+C
+        { label: 'Paste', shortcut: KeyboardShortcuts.edit.paste }, // shared/KeyboardShortcuts.ts:28 - Cmd+V
+        { label: 'Select All', shortcut: KeyboardShortcuts.edit.selectAll }, // shared/KeyboardShortcuts.ts:29 - Cmd+A
+        { label: 'Find', shortcut: KeyboardShortcuts.edit.find }, // shared/KeyboardShortcuts.ts:30 - Cmd+F
+        { label: 'Find Next', shortcut: KeyboardShortcuts.edit.findNext }, // shared/KeyboardShortcuts.ts:31 - Cmd+G
+        { label: 'Find Previous', shortcut: KeyboardShortcuts.edit.findPrevious }, // shared/KeyboardShortcuts.ts:32 - Cmd+Shift+G
+        { label: 'View Local History', shortcut: KeyboardShortcuts.edit.viewHistory }, // shared/KeyboardShortcuts.ts:34 - Cmd+Y
+        { label: 'Approve Current Action', shortcut: KeyboardShortcuts.edit.approve }, // shared/KeyboardShortcuts.ts:35 - Cmd+Enter
+        { label: 'Reject Current Action', shortcut: KeyboardShortcuts.edit.reject }, // shared/KeyboardShortcuts.ts:36 - Cmd+Shift+Backspace
       ],
     },
     {
       title: 'View',
       shortcuts: [
-        { label: 'Files Mode', shortcut: KeyboardShortcuts.view.filesMode },
-        { label: 'Agent Mode', shortcut: KeyboardShortcuts.view.agentMode },
-        { label: 'Toggle AI Chat Panel', shortcut: KeyboardShortcuts.view.toggleAIChat },
-        { label: 'Toggle Bottom Panel', shortcut: KeyboardShortcuts.view.toggleBottomPanel },
-        { label: 'Navigate Back', shortcut: KeyboardShortcuts.view.navigateBack },
-        { label: 'Navigate Forward', shortcut: KeyboardShortcuts.view.navigateForward },
-        { label: 'Next Tab', shortcut: KeyboardShortcuts.view.nextTab },
-        { label: 'Previous Tab', shortcut: KeyboardShortcuts.view.prevTab },
-        { label: 'Actual Size', shortcut: KeyboardShortcuts.view.actualSize },
-        { label: 'Zoom In', shortcut: KeyboardShortcuts.view.zoomIn },
-        { label: 'Zoom Out', shortcut: KeyboardShortcuts.view.zoomOut },
-        { label: 'Toggle Full Screen', shortcut: KeyboardShortcuts.view.toggleFullScreen },
+        { label: 'Files Mode', shortcut: KeyboardShortcuts.view.filesMode }, // shared/KeyboardShortcuts.ts:42 - Cmd+E
+        { label: 'Agent Mode', shortcut: KeyboardShortcuts.view.agentMode }, // shared/KeyboardShortcuts.ts:43 - Cmd+K
+        { label: 'Toggle AI Chat Panel', shortcut: KeyboardShortcuts.view.toggleAIChat }, // shared/KeyboardShortcuts.ts:46 - Cmd+Shift+A
+        { label: 'Toggle Bottom Panel', shortcut: KeyboardShortcuts.view.toggleBottomPanel }, // shared/KeyboardShortcuts.ts:47 - Cmd+J
+        { label: 'Toggle Terminal Panel', shortcut: KeyboardShortcuts.view.toggleTerminalPanel }, // shared/KeyboardShortcuts.ts:48 - Ctrl+`
+        { label: 'Toggle Sidebar', shortcut: KeyboardShortcuts.view.toggleSidebar }, // shared/KeyboardShortcuts.ts:49 - Cmd+B
+        { label: 'Navigate Back', shortcut: KeyboardShortcuts.view.navigateBack }, // shared/KeyboardShortcuts.ts:52 - Cmd+[
+        { label: 'Navigate Forward', shortcut: KeyboardShortcuts.view.navigateForward }, // shared/KeyboardShortcuts.ts:53 - Cmd+]
+        { label: 'Next Tab', shortcut: KeyboardShortcuts.view.nextTab }, // shared/KeyboardShortcuts.ts:56 - Cmd+Option+Right
+        { label: 'Previous Tab', shortcut: KeyboardShortcuts.view.prevTab }, // shared/KeyboardShortcuts.ts:57 - Cmd+Option+Left
+        { label: 'Actual Size', shortcut: KeyboardShortcuts.view.actualSize }, // shared/KeyboardShortcuts.ts:60 - Cmd+0
+        { label: 'Zoom In', shortcut: KeyboardShortcuts.view.zoomIn }, // shared/KeyboardShortcuts.ts:61 - Cmd+Plus
+        { label: 'Zoom Out', shortcut: KeyboardShortcuts.view.zoomOut }, // shared/KeyboardShortcuts.ts:62 - Cmd+-
+        { label: 'Toggle Full Screen', shortcut: KeyboardShortcuts.view.toggleFullScreen }, // shared/KeyboardShortcuts.ts:70 - Ctrl+Cmd+F
       ],
     },
     {
       title: 'Window',
       shortcuts: [
-        { label: 'Project Manager', shortcut: KeyboardShortcuts.window.workspaceManager },
-        { label: 'Session Manager', shortcut: KeyboardShortcuts.window.sessionManager },
-        { label: 'Agentic Coding', shortcut: KeyboardShortcuts.window.agenticCoding },
-        { label: 'Settings', shortcut: KeyboardShortcuts.window.aiModels },
-        { label: 'Minimize', shortcut: KeyboardShortcuts.window.minimize },
-        { label: 'Switch to Window 1-9', shortcut: 'Cmd+1-9' },
+        { label: 'Project Manager', shortcut: KeyboardShortcuts.window.workspaceManager }, // shared/KeyboardShortcuts.ts:75 - Cmd+P
+        { label: 'Session Quick Open', shortcut: KeyboardShortcuts.window.sessionQuickOpen }, // shared/KeyboardShortcuts.ts:77 - Cmd+L
+        { label: 'Settings', shortcut: KeyboardShortcuts.window.aiModels }, // shared/KeyboardShortcuts.ts:79 - Cmd+,
+        { label: 'Minimize', shortcut: KeyboardShortcuts.window.minimize }, // shared/KeyboardShortcuts.ts:80 - Cmd+M
+        { label: 'Switch to Window 1-9', shortcut: 'Cmd+1-9' }, // ApplicationMenu.ts - dynamically created
       ],
     },
     {
       title: 'Developer',
       shortcuts: [
-        { label: 'Toggle Developer Tools', shortcut: KeyboardShortcuts.view.toggleDevTools },
-        { label: 'Reload', shortcut: KeyboardShortcuts.view.reload },
-        { label: 'Force Reload', shortcut: KeyboardShortcuts.view.forceReload },
-        { label: 'Refresh File Tree', shortcut: KeyboardShortcuts.developer.refreshFileTree },
+        { label: 'Toggle Developer Tools', shortcut: KeyboardShortcuts.view.toggleDevTools }, // shared/KeyboardShortcuts.ts:65 - Cmd+Alt+I
+        { label: 'Reload', shortcut: KeyboardShortcuts.view.reload }, // shared/KeyboardShortcuts.ts:66 - Cmd+R
+        { label: 'Force Reload', shortcut: KeyboardShortcuts.view.forceReload }, // shared/KeyboardShortcuts.ts:67 - Cmd+Shift+R
+        { label: 'Refresh File Tree', shortcut: KeyboardShortcuts.developer.refreshFileTree }, // shared/KeyboardShortcuts.ts:85 - Cmd+Shift+F5
       ],
     },
   ];
+
+  // Editor shortcuts are defined in: packages/rexical/src/plugins/ShortcutsPlugin/shortcuts.ts
+  const editorShortcuts: ShortcutGroup[] = [
+    {
+      title: 'Text Formatting',
+      shortcuts: [
+        { label: 'Bold', shortcut: IS_MAC ? '⌘+B' : 'Ctrl+B' }, // rexical shortcuts.ts:48 - BOLD
+        { label: 'Italic', shortcut: IS_MAC ? '⌘+I' : 'Ctrl+I' }, // rexical shortcuts.ts:49 - ITALIC
+        { label: 'Underline', shortcut: IS_MAC ? '⌘+U' : 'Ctrl+U' }, // rexical shortcuts.ts:50 - UNDERLINE
+        { label: 'Strikethrough', shortcut: IS_MAC ? '⌘+Shift+X' : 'Ctrl+Shift+X' }, // rexical shortcuts.ts:31 - STRIKETHROUGH
+        { label: 'Insert Link', shortcut: IS_MAC ? '⌘+K' : 'Ctrl+K' }, // rexical shortcuts.ts:51 - INSERT_LINK
+        { label: 'Clear Formatting', shortcut: IS_MAC ? '⌘+\\' : 'Ctrl+\\' }, // rexical shortcuts.ts:45 - CLEAR_FORMATTING
+      ],
+    },
+    {
+      title: 'Paragraph Formatting',
+      shortcuts: [
+        { label: 'Normal Text', shortcut: IS_MAC ? '⌘+Opt+0' : 'Ctrl+Alt+0' }, // rexical shortcuts.ts:16 - NORMAL
+        { label: 'Heading 1', shortcut: IS_MAC ? '⌘+Opt+1' : 'Ctrl+Alt+1' }, // rexical shortcuts.ts:17 - HEADING1
+        { label: 'Heading 2', shortcut: IS_MAC ? '⌘+Opt+2' : 'Ctrl+Alt+2' }, // rexical shortcuts.ts:18 - HEADING2
+        { label: 'Heading 3', shortcut: IS_MAC ? '⌘+Opt+3' : 'Ctrl+Alt+3' }, // rexical shortcuts.ts:19 - HEADING3
+        { label: 'Numbered List', shortcut: IS_MAC ? '⌘+Shift+7' : 'Ctrl+Shift+7' }, // rexical shortcuts.ts:20 - NUMBERED_LIST
+        { label: 'Bullet List', shortcut: IS_MAC ? '⌘+Shift+8' : 'Ctrl+Shift+8' }, // rexical shortcuts.ts:21 - BULLET_LIST
+        { label: 'Check List', shortcut: IS_MAC ? '⌘+Shift+9' : 'Ctrl+Shift+9' }, // rexical shortcuts.ts:22 - CHECK_LIST
+        { label: 'Code Block', shortcut: IS_MAC ? '⌘+Opt+C' : 'Ctrl+Alt+C' }, // rexical shortcuts.ts:23 - CODE_BLOCK
+        { label: 'Quote', shortcut: IS_MAC ? '⌃+Shift+Q' : 'Ctrl+Shift+Q' }, // rexical shortcuts.ts:24 - QUOTE
+      ],
+    },
+    {
+      title: 'Text Alignment',
+      shortcuts: [
+        { label: 'Left Align', shortcut: IS_MAC ? '⌘+Shift+L' : 'Ctrl+Shift+L' }, // rexical shortcuts.ts:37 - LEFT_ALIGN
+        { label: 'Center Align', shortcut: IS_MAC ? '⌘+Shift+E' : 'Ctrl+Shift+E' }, // rexical shortcuts.ts:35 - CENTER_ALIGN
+        { label: 'Right Align', shortcut: IS_MAC ? '⌘+Shift+R' : 'Ctrl+Shift+R' }, // rexical shortcuts.ts:38 - RIGHT_ALIGN
+        { label: 'Justify', shortcut: IS_MAC ? '⌘+Shift+J' : 'Ctrl+Shift+J' }, // rexical shortcuts.ts:36 - JUSTIFY_ALIGN
+        { label: 'Indent', shortcut: IS_MAC ? '⌘+]' : 'Ctrl+]' }, // rexical shortcuts.ts:43 - INDENT
+        { label: 'Outdent', shortcut: IS_MAC ? '⌘+[' : 'Ctrl+[' }, // rexical shortcuts.ts:44 - OUTDENT
+      ],
+    },
+    {
+      title: 'Text Case & Size',
+      shortcuts: [
+        { label: 'Lowercase', shortcut: IS_MAC ? '⌃+Shift+1' : 'Ctrl+Shift+1' }, // rexical shortcuts.ts:32 - LOWERCASE
+        { label: 'Uppercase', shortcut: IS_MAC ? '⌃+Shift+2' : 'Ctrl+Shift+2' }, // rexical shortcuts.ts:33 - UPPERCASE
+        { label: 'Capitalize', shortcut: IS_MAC ? '⌃+Shift+3' : 'Ctrl+Shift+3' }, // rexical shortcuts.ts:34 - CAPITALIZE
+        { label: 'Increase Font Size', shortcut: IS_MAC ? '⌘+Shift+.' : 'Ctrl+Shift+.' }, // rexical shortcuts.ts:28 - INCREASE_FONT_SIZE
+        { label: 'Decrease Font Size', shortcut: IS_MAC ? '⌘+Shift+,' : 'Ctrl+Shift+,' }, // rexical shortcuts.ts:29 - DECREASE_FONT_SIZE
+        { label: 'Subscript', shortcut: IS_MAC ? '⌘+,' : 'Ctrl+,' }, // rexical shortcuts.ts:41 - SUBSCRIPT
+        { label: 'Superscript', shortcut: IS_MAC ? '⌘+.' : 'Ctrl+.' }, // rexical shortcuts.ts:42 - SUPERSCRIPT
+      ],
+    },
+  ];
+
+  const shortcutGroups = activeTab === 'general' ? generalShortcuts : editorShortcuts;
 
   return (
     <div
@@ -92,7 +171,7 @@ export function KeyboardShortcutsDialog({ isOpen, onClose }: KeyboardShortcutsDi
       onClick={onClose}
     >
       <div
-        className="keyboard-shortcuts-dialog flex flex-col w-[90%] max-w-[900px] max-h-[85vh] rounded-lg border border-[var(--nim-border)] bg-[var(--nim-bg)] shadow-[0_8px_32px_rgba(0,0,0,0.3)]"
+        className="keyboard-shortcuts-dialog flex flex-col w-[90vw] max-w-[900px] h-[85vh] rounded-lg border border-[var(--nim-border)] bg-[var(--nim-bg)] shadow-[0_8px_32px_rgba(0,0,0,0.3)]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="keyboard-shortcuts-dialog-header flex items-center justify-between px-6 py-5 border-b border-[var(--nim-border)]">
@@ -107,17 +186,42 @@ export function KeyboardShortcutsDialog({ isOpen, onClose }: KeyboardShortcutsDi
             ×
           </button>
         </div>
-        <div className="keyboard-shortcuts-dialog-content overflow-y-auto p-6 grid grid-cols-[repeat(auto-fit,minmax(400px,1fr))] gap-8 max-[900px]:grid-cols-1 max-[600px]:p-5 max-[600px]:gap-6">
+
+        {/* Tab navigation */}
+        <div className="flex gap-1 px-6 pt-4 border-b border-[var(--nim-border)]">
+          <button
+            onClick={() => setActiveTab('general')}
+            className={`px-4 py-2 text-sm font-medium rounded-t-md transition-colors ${
+              activeTab === 'general'
+                ? 'bg-[var(--nim-bg-secondary)] text-[var(--nim-text)] border-b-2 border-[var(--nim-primary)]'
+                : 'text-[var(--nim-text-muted)] hover:text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]'
+            }`}
+          >
+            General
+          </button>
+          <button
+            onClick={() => setActiveTab('editor')}
+            className={`px-4 py-2 text-sm font-medium rounded-t-md transition-colors ${
+              activeTab === 'editor'
+                ? 'bg-[var(--nim-bg-secondary)] text-[var(--nim-text)] border-b-2 border-[var(--nim-primary)]'
+                : 'text-[var(--nim-text-muted)] hover:text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]'
+            }`}
+          >
+            Editor Formatting
+          </button>
+        </div>
+
+        <div className="keyboard-shortcuts-dialog-content overflow-y-auto flex-1 p-6 grid grid-cols-[repeat(auto-fit,minmax(350px,1fr))] gap-8 max-[900px]:grid-cols-1 max-[600px]:p-5 max-[600px]:gap-6">
           {shortcutGroups.map((group) => (
             <div key={group.title} className="keyboard-shortcuts-group flex flex-col gap-3">
               <h3 className="keyboard-shortcuts-group-title m-0 text-sm font-semibold text-[var(--nim-text-muted)] uppercase tracking-[0.5px]">
                 {group.title}
               </h3>
-              <div className="keyboard-shortcuts-list flex flex-col gap-2">
+              <div className="keyboard-shortcuts-list flex flex-col gap-1">
                 {group.shortcuts.map((item) => (
                   <div
                     key={item.label}
-                    className="keyboard-shortcut-item flex items-center justify-between py-2 gap-4"
+                    className="keyboard-shortcut-item flex items-center justify-between py-1.5 gap-4"
                   >
                     <span className="keyboard-shortcut-label text-[var(--nim-text)] text-sm flex-1">
                       {item.label}
@@ -130,6 +234,10 @@ export function KeyboardShortcutsDialog({ isOpen, onClose }: KeyboardShortcutsDi
               </div>
             </div>
           ))}
+        </div>
+
+        <div className="px-6 py-3 border-t border-[var(--nim-border)] text-[var(--nim-text-muted)] text-xs">
+          Press <kbd className="bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded px-1.5 py-0.5 mx-1">Esc</kbd> to close
         </div>
       </div>
     </div>
