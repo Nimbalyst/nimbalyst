@@ -95,10 +95,31 @@ const navigationHistoryAtom = atom<NavigationHistoryState>({
 });
 
 /**
- * Flag indicating we're in the middle of a back/forward navigation.
- * When true, navigation events should NOT be recorded to history.
+ * Counter for tracking in-flight navigation restorations.
+ * When > 0, navigation events should NOT be recorded to history.
+ * Uses a counter instead of boolean to handle rapid back/forward clicks correctly.
  */
-export const isRestoringNavigationAtom = atom<boolean>(false);
+const restoringNavigationCountAtom = atom<number>(0);
+
+/**
+ * Derived boolean for consumers - true when any restoration is in progress.
+ */
+export const isRestoringNavigationAtom = atom((get) => get(restoringNavigationCountAtom) > 0);
+
+/**
+ * Increment the restoring counter (call when starting a restore).
+ */
+const incrementRestoringAtom = atom(null, (get, set) => {
+  set(restoringNavigationCountAtom, get(restoringNavigationCountAtom) + 1);
+});
+
+/**
+ * Decrement the restoring counter (call when restore completes).
+ */
+const decrementRestoringAtom = atom(null, (get, set) => {
+  const current = get(restoringNavigationCountAtom);
+  set(restoringNavigationCountAtom, Math.max(0, current - 1));
+});
 
 // ============================================================
 // Read-Only Derived Atoms
@@ -288,8 +309,8 @@ export const goBackAtom = atom(null, (get, set) => {
     return;
   }
 
-  // Set restoring flag to prevent recording this navigation
-  set(isRestoringNavigationAtom, true);
+  // Increment restoring counter to prevent recording this navigation
+  set(incrementRestoringAtom);
 
   // Move back
   const newIndex = state.currentIndex - 1;
@@ -303,10 +324,15 @@ export const goBackAtom = atom(null, (get, set) => {
   // Restore the entry
   restoreEntry(entry);
 
-  // Clear restoring flag after a brief delay
-  setTimeout(() => {
-    store.set(isRestoringNavigationAtom, false);
-  }, 100);
+  // Decrement restoring counter after React has had time to process state updates
+  // Using requestAnimationFrame + setTimeout ensures we wait for:
+  // 1. React's batched state updates to flush
+  // 2. Any useEffect hooks triggered by the restore to complete
+  requestAnimationFrame(() => {
+    setTimeout(() => {
+      store.set(decrementRestoringAtom);
+    }, 0);
+  });
 });
 
 /**
@@ -319,8 +345,8 @@ export const goForwardAtom = atom(null, (get, set) => {
     return;
   }
 
-  // Set restoring flag to prevent recording this navigation
-  set(isRestoringNavigationAtom, true);
+  // Increment restoring counter to prevent recording this navigation
+  set(incrementRestoringAtom);
 
   // Move forward
   const newIndex = state.currentIndex + 1;
@@ -334,10 +360,15 @@ export const goForwardAtom = atom(null, (get, set) => {
   // Restore the entry
   restoreEntry(entry);
 
-  // Clear restoring flag after a brief delay
-  setTimeout(() => {
-    store.set(isRestoringNavigationAtom, false);
-  }, 100);
+  // Decrement restoring counter after React has had time to process state updates
+  // Using requestAnimationFrame + setTimeout ensures we wait for:
+  // 1. React's batched state updates to flush
+  // 2. Any useEffect hooks triggered by the restore to complete
+  requestAnimationFrame(() => {
+    setTimeout(() => {
+      store.set(decrementRestoringAtom);
+    }, 0);
+  });
 });
 
 // ============================================================
