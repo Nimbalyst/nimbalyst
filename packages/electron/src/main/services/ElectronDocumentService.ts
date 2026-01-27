@@ -352,6 +352,16 @@ export class ElectronDocumentService implements DocumentService {
           const stats = fsSync.statSync(fullPath);
 
           if (stats.isDirectory()) {
+            // Add directory as a mentionable document for @ mentions
+            const dirId = crypto.createHash('md5').update(relativePath + '/').digest('hex');
+            documents.push({
+              id: dirId,
+              name: item,
+              path: relativePath,
+              workspace: undefined,
+              lastModified: stats.mtime,
+              type: 'directory'
+            });
             // Recursively scan subdirectories with incremented depth
             documents.push(...this.scanDirectory(fullPath, relativePath, depth + 1, scanState));
           } else if (stats.isFile()) {

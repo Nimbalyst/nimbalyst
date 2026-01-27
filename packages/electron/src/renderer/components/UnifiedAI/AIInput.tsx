@@ -150,6 +150,9 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
     // Track if content starting with '#' came from a paste (to prevent memory mode activation)
     const pastedHashContentRef = useRef(false);
 
+    // Suppress typeahead re-trigger after a selection (prevents menu from reopening)
+    const justSelectedRef = useRef(false);
+
     // Voice mode state
     const [isVoiceActive, setIsVoiceActive] = useState(false);
     const showTranscription = useAtomValue(showTranscriptionAtom);
@@ -430,6 +433,13 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
 
     // Check for typeahead trigger when value or cursor changes (debounced for performance)
     useEffect(() => {
+      // Skip trigger detection if we just completed a typeahead selection.
+      // The value change from insertion would otherwise immediately re-open the menu.
+      if (justSelectedRef.current) {
+        justSelectedRef.current = false;
+        return;
+      }
+
       if (!textareaRef.current) return;
 
       const textarea = textareaRef.current;
@@ -523,7 +533,10 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
       let insertText: string;
 
       if (typeaheadMatch.trigger === '@') {
-        insertText = `@${option.data?.path || option.label}`;
+        const doc = option.data;
+        const isDirectory = doc?.type === 'directory';
+        const mentionPath = doc?.path || option.label;
+        insertText = `@${mentionPath}${isDirectory && !mentionPath.endsWith('/') ? '/' : ''}`;
       } else if (typeaheadMatch.trigger === '/') {
         const commandName = option.data?.name || option.id;
         insertText = `/${commandName}`;
@@ -536,6 +549,9 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
         typeaheadMatch,
         insertText
       );
+
+      // Suppress typeahead re-trigger from the value change caused by this selection
+      justSelectedRef.current = true;
 
       onChange(newValue);
 

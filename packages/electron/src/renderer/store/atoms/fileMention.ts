@@ -112,14 +112,15 @@ export const fileMentionOptionsAtom = atomFamily((workspacePath: string) =>
     const filtered = fuzzyFilterDocuments(documents, query, 50);
 
     return filtered.map(({ item: doc }) => {
+      const isDirectory = doc.type === 'directory';
       const dirPath = getDirectoryPath(doc.path);
       const truncatedPath = truncatePath(dirPath);
 
       return {
         id: doc.id,
-        label: doc.name,
+        label: isDirectory ? doc.name + '/' : doc.name,
         description: truncatedPath || undefined,
-        icon: getFileIcon(doc.name, 18),
+        icon: isDirectory ? 'folder' : getFileIcon(doc.name, 18),
         data: doc
       };
     });
