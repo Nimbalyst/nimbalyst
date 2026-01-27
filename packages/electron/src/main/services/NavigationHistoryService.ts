@@ -183,9 +183,17 @@ export class NavigationHistoryService {
 
   // Restore navigation state from persistence
   restoreNavigationState(windowId: number, state: NavigationState) {
+    // Defensive: handle malformed/old persisted state that may be missing history array
+    if (!state || !Array.isArray(state.history)) {
+      this.navigationStates.set(windowId, {
+        history: [],
+        currentIndex: -1
+      });
+      return;
+    }
     this.navigationStates.set(windowId, {
       history: [...state.history],
-      currentIndex: state.currentIndex
+      currentIndex: state.currentIndex ?? -1
     });
   }
 
