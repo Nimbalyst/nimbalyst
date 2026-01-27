@@ -907,8 +907,18 @@ export class CLIManager {
  * - MCPConfigService for spawning MCP servers
  */
 export function getEnhancedPath(): string {
-  // Add common npm global paths to PATH
+  // Add custom user-configured paths first (highest priority)
   const paths: string[] = [];
+
+  // Get custom PATH directories from app settings
+  const { getAppSetting } = require('../utils/store');
+  const customPathDirs = getAppSetting('customPathDirs');
+  if (customPathDirs && typeof customPathDirs === 'string' && customPathDirs.trim()) {
+    // Split by platform separator and add to paths
+    const separator = process.platform === 'win32' ? ';' : ':';
+    const customPaths = customPathDirs.split(separator).map(p => p.trim()).filter(Boolean);
+    paths.push(...customPaths);
+  }
 
   // Start with existing PATH
   if (process.env.PATH) {

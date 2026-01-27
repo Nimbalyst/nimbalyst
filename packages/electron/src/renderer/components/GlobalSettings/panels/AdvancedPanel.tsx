@@ -9,6 +9,7 @@ import {
   setAIDebugSettingsAtom,
   developerFeatureSettingsAtom,
   setDeveloperFeatureSettingsAtom,
+  customPathDirsAtom,
   DEVELOPER_FEATURES,
   areAllDeveloperFeaturesEnabled,
   enableAllDeveloperFeatures,
@@ -67,6 +68,7 @@ export function AdvancedPanel() {
     maxHeapSizeMB,
     alphaFeatures,
     enableAllAlphaFeatures,
+    customPathDirs,
   } = settings;
   const isDevelopment = import.meta.env.DEV;
   const [showReleaseChannel, setShowReleaseChannel] = useState(false);
@@ -536,6 +538,49 @@ export function AdvancedPanel() {
             <option value={12288}>12 GB</option>
             <option value={16384}>16 GB</option>
           </select>
+        </div>
+      </div>
+
+      <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
+        <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">Environment</h4>
+        <p className="text-sm leading-relaxed text-[var(--nim-text-muted)] mb-4">
+          Configure environment variables for AI tools and CLI commands.
+        </p>
+
+        <div className="setting-item py-3">
+          <div className="setting-text flex flex-col gap-0.5 mb-2">
+            <span className="setting-name text-sm font-medium text-[var(--nim-text)]">Custom PATH Directories</span>
+            <span className="setting-description text-xs leading-relaxed text-[var(--nim-text-muted)]">
+              Additional directories to add to the PATH environment variable for MCP server installation, CLI tool detection, and agent SDK operations.
+              {process.platform === 'win32'
+                ? ' Separate multiple directories with semicolons (;). Example: C:\\MyTools;C:\\Programs\\bin'
+                : ' Separate multiple directories with colons (:). Example: /opt/mytools/bin:/usr/local/custom/bin'}
+            </span>
+          </div>
+          <textarea
+            value={customPathDirs}
+            onChange={(e) => updateSettings({ customPathDirs: e.target.value })}
+            placeholder={process.platform === 'win32'
+              ? 'C:\\MyTools;C:\\Programs\\bin'
+              : '/opt/mytools/bin:/usr/local/custom/bin'}
+            rows={3}
+            className="w-full py-2 px-3 rounded-md text-sm bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] text-[var(--nim-text)] outline-none focus:border-[var(--nim-primary)] font-mono resize-none"
+            style={{
+              minHeight: '60px',
+              lineHeight: '1.5',
+            }}
+          />
+          <div className="mt-2 space-y-1">
+            <p className="text-xs text-[var(--nim-text-faint)]">
+              Changes take effect immediately for new sessions. These paths are added with highest priority.
+            </p>
+            <p className="text-xs text-[var(--nim-text-faint)]">
+              <strong>What uses this PATH:</strong> MCP server spawning (uvx, npx), Claude Code CLI detection, npm package installation.
+            </p>
+            <p className="text-xs text-[var(--nim-text-faint)]">
+              <strong>What doesn't use this:</strong> Claude Code's Bash tool commands (those use your shell's PATH).
+            </p>
+          </div>
         </div>
       </div>
 

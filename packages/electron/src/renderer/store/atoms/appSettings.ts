@@ -353,6 +353,8 @@ export interface AdvancedSettings {
   alphaFeatures: Record<AlphaFeatureTag, boolean>;
   // Whether to automatically enable all new alpha features
   enableAllAlphaFeatures: boolean;
+  // Custom directories to add to PATH (colon-separated on Unix, semicolon-separated on Windows)
+  customPathDirs: string;
 }
 
 /**
@@ -373,6 +375,7 @@ const defaultAdvancedSettings: AdvancedSettings = {
     'card-mode': false,
   } as Record<AlphaFeatureTag, boolean>,
   enableAllAlphaFeatures: false,
+  customPathDirs: '',
 };
 
 /**
@@ -426,6 +429,9 @@ function scheduleAdvancedPersist(
           break;
         case 'enableAllAlphaFeatures':
           await window.electronAPI.invoke('alpha-features:set-enable-all', settings.enableAllAlphaFeatures);
+          break;
+        case 'customPathDirs':
+          await window.electronAPI.invoke('app-settings:set', 'customPathDirs', settings.customPathDirs);
           break;
         // walkthroughsViewedCount and walkthroughsTotalCount are read-only from main process
       }
@@ -534,6 +540,13 @@ export const maxHeapSizeMBAtom = atom(
   (get) => get(advancedSettingsAtom).maxHeapSizeMB
 );
 
+/**
+ * Custom PATH directories.
+ */
+export const customPathDirsAtom = atom(
+  (get) => get(advancedSettingsAtom).customPathDirs
+);
+
 // === Setter atoms ===
 
 /**
@@ -578,7 +591,7 @@ export async function initAdvancedSettings(): Promise<AdvancedSettings> {
   }
 
   try {
-    const [channel, analyticsEnabled, extensionDevToolsEnabled, walkthroughState, maxHeapSizeMB, alphaFeatures, enableAllAlphaFeatures] =
+    const [channel, analyticsEnabled, extensionDevToolsEnabled, walkthroughState, maxHeapSizeMB, alphaFeatures, enableAllAlphaFeatures, customPathDirs] =
       await Promise.all([
         window.electronAPI.invoke('release-channel:get'),
         window.electronAPI.invoke('analytics:is-enabled'),
@@ -587,6 +600,7 @@ export async function initAdvancedSettings(): Promise<AdvancedSettings> {
         window.electronAPI.invoke('app-settings:get', 'maxHeapSizeMB'),
         window.electronAPI.invoke('alpha-features:get'),
         window.electronAPI.invoke('alpha-features:get-enable-all'),
+        window.electronAPI.invoke('app-settings:get', 'customPathDirs'),
       ]);
 
     // Calculate viewed count (completed + dismissed)
@@ -604,6 +618,7 @@ export async function initAdvancedSettings(): Promise<AdvancedSettings> {
       maxHeapSizeMB: maxHeapSizeMB ?? 4096,
       alphaFeatures: alphaFeatures ?? defaultAdvancedSettings.alphaFeatures,
       enableAllAlphaFeatures: enableAllAlphaFeatures ?? false,
+      customPathDirs: customPathDirs ?? '',
     };
   } catch (error) {
     console.error('[appSettings] Failed to load advanced settings:', error);
