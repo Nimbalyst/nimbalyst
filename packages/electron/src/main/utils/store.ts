@@ -1564,23 +1564,21 @@ function versionLessThanOrEqual(versionA: string, versionB: string): boolean {
 export function runMigrations(currentVersion: string): void {
   const lastKnownVersion = getAppStore().get('lastKnownVersion');
 
-  // First launch - no migration needed
-  if (!lastKnownVersion) {
-    logger.store.info('[Migrations] First launch, setting version to:', currentVersion);
-    getAppStore().set('lastKnownVersion', currentVersion);
-    return;
-  }
+  // Missing lastKnownVersion means user is upgrading from <= 0.52.10
+  // (versions before we started tracking lastKnownVersion)
+  const isUpgradingFromOldVersion = !lastKnownVersion;
 
   // Same version - no migration needed
-  if (lastKnownVersion === currentVersion) {
+  if (!isUpgradingFromOldVersion && lastKnownVersion === currentVersion) {
     return;
   }
 
-  logger.store.info('[Migrations] Running migrations from', lastKnownVersion, 'to', currentVersion);
+  logger.store.info('[Migrations] Running migrations from', lastKnownVersion || '(unknown/<=0.52.10)', 'to', currentVersion);
 
-  // Migration for users on version <= 0.52.10
+  // Migration for users upgrading from version <= 0.52.10
   // If user had all alpha features enabled, turn on the new "Enable All Alpha Features" flag
-  if (versionLessThanOrEqual(lastKnownVersion, '0.52.10')) {
+  // This ensures they get new features like 'card-mode' automatically
+  if (isUpgradingFromOldVersion || versionLessThanOrEqual(lastKnownVersion, '0.52.10')) {
     const alphaFeatures = getAppStore().get('alphaFeatures');
     if (alphaFeatures && areAllAlphaFeaturesEnabled(alphaFeatures)) {
       logger.store.info('[Migrations] User had all alpha features enabled, setting enableAllAlphaFeatures=true');
