@@ -88,6 +88,7 @@ export const KeyboardShortcuts = {
 
 /**
  * Get platform-specific shortcut display (for renderer)
+ * On macOS, modifiers are shown without + separators (e.g., ⌘⇧A not ⌘+⇧+A)
  */
 export function getShortcutDisplay(shortcut: string): string {
   return shortcut
@@ -95,7 +96,8 @@ export function getShortcutDisplay(shortcut: string): string {
     .replace('Ctrl', '⌃')
     .replace('Option', '⌥')
     .replace('Alt', '⌥')
-    .replace('Shift', '⇧');
+    .replace('Shift', '⇧')
+    .replace(/\+/g, '');
 }
 
 /**

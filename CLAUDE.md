@@ -378,32 +378,32 @@ Container queries respond to the actual container width, making them work correc
 
 #### CSS Variables: Canonical Naming Reference
 
-**CRITICAL: Always use the correct `--nim-*` variable names. These are the ONLY valid names:**
+**CRITICAL: Always use the correct \****\`--nim-*`**\*\* variable names. These are the ONLY valid names:**
 
 | Category | Variable Name | Usage | Tailwind Class |
-|----------|---------------|-------|----------------|
-| **Backgrounds** | | | |
+| --- | --- | --- | --- |
+| **Backgrounds** |  |  |  |
 | Main background | `--nim-bg` | Primary content areas | `bg-nim` |
 | Secondary background | `--nim-bg-secondary` | Sidebars, panels | `bg-nim-secondary` |
 | Tertiary background | `--nim-bg-tertiary` | Nested panels | `bg-nim-tertiary` |
 | Hover state | `--nim-bg-hover` | Interactive element hover | `bg-nim-hover` |
 | Selected state | `--nim-bg-selected` | Selected items | `bg-nim-selected` |
 | Active state | `--nim-bg-active` | Active/pressed state | `bg-nim-active` |
-| **Text Colors** | | | |
+| **Text Colors** |  |  |  |
 | Main text | `--nim-text` | Primary text content | `text-nim` |
 | Muted text | `--nim-text-muted` | Secondary text | `text-nim-muted` |
 | Faint text | `--nim-text-faint` | Tertiary/hint text | `text-nim-faint` |
 | Disabled text | `--nim-text-disabled` | Disabled state | `text-nim-disabled` |
-| **Borders** | | | |
+| **Borders** |  |  |  |
 | Default border | `--nim-border` | Standard borders | `border-nim` |
 | Focus border | `--nim-border-focus` | Focus states | `border-nim-focus` |
-| **Primary/Brand** | | | |
+| **Primary/Brand** |  |  |  |
 | Primary color | `--nim-primary` | Buttons, actions | `bg-nim-primary` |
 | Primary hover | `--nim-primary-hover` | Button hover | `bg-nim-primary-hover` |
-| **Links** | | | |
+| **Links** |  |  |  |
 | Link color | `--nim-link` | Hyperlinks | `text-nim-link` |
 | Link hover | `--nim-link-hover` | Link hover state | `text-nim-link-hover` |
-| **Status** | | | |
+| **Status** |  |  |  |
 | Success | `--nim-success` | Success states | `text-nim-success` |
 | Warning | `--nim-warning` | Warning states | `text-nim-warning` |
 | Error | `--nim-error` | Error states | `text-nim-error` |
@@ -467,7 +467,7 @@ This pattern is essential for:
 #### Common Tailwind Class Misuse
 
 | Wrong | Right | Reason |
-|-------|-------|--------|
+| --- | --- | --- |
 | `bg-nim-primary` for containers | `bg-nim` | Primary is for buttons/actions, not backgrounds |
 | `text-nim-primary` for text | `text-nim` | Primary is the brand color, nim is for text |
 | `bg-nim-primary` for panels | `bg-nim-secondary` | Use background hierarchy for panels |
@@ -651,6 +651,8 @@ planStatus:
 - **Don't git reset or git add -A without asking**
 - **Don't add Co-Authored-By lines to commit messages**
 - **Never restart Nimbalyst without explicit permission** - Always ask before using `restart_nimbalyst`
+
+**Keyboard Shortcuts**: When adding or modifying keyboard shortcuts, update `KeyboardShortcutsDialog.tsx` to keep the Help > Keyboard Shortcuts dialog in sync.
 
 ## Verifying Development Mode
 
