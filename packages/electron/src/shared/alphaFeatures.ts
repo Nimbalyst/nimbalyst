@@ -43,6 +43,12 @@ export const ALPHA_FEATURES: readonly AlphaFeatureDefinition[] = [
     description: 'Enable Claude Agent plugins and extensions management.',
     icon: 'widgets',
   },
+  {
+    tag: 'card-mode',
+    name: 'Card View Mode',
+    description: 'Enable card view mode for agent sessions panel.',
+    icon: 'grid_view',
+  },
 ] as const;
 
 /**
