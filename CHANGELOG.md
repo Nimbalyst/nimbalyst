@@ -20,6 +20,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.6] - 2026-01-26
+
+
+### Added
+- Restore session unread state with database persistence
+- Developer option to show prompt additions
+- Confirmation dialog when archiving worktrees
+- Persist user-resized column widths in CSV spreadsheet
+- Checkbox file selection in FilesEditedSidebar for Manual/Worktree commit modes
+- Slow query diagnostics to PGLite database layer
+- Dialog for untracked files conflict during worktree rebase
+
+### Changed
+- Replace xterm.js with ghostty-web for terminal emulation
+- Improve archive button labels in session history
+
+### Fixed
+- Restore visibility of ChatSidebar New button
+- Clicking on a session under a worktree/workstream now behaves consistently
+- Prevent text wrapping in session history new menu
+- Scope git commit proposals to workstream instead of workspace
+- Improve checkbox selection and auto-clear committed files in GitOperationsPanel
+- Apply theme colors to file tree resize handle
+- Reduce vertical padding in AI input panel
+- Populate GitOperationsPanel commit message from MCP git_commit_proposal
+- Ensure state persistence handles missing fields from old data
+- Correct disabled state styling for Generate button in image-generation
+- Use correct theme variables and Tailwind classes in image-generation lightbox
+- Image generation lightbox uses correct theme colors and closes on Escape
+- Optimize smart commit prompt to reduce unnecessary analysis
+- Show ModelSelector for sessions without model and process mobile prompts
+- Strip whitespace padding from terminal scrollback restoration
+- Process queued prompts when user cancels AskUserQuestion
+- Aggregate session status for worktrees/workstreams in card view
+- Archived sessions disappear immediately from agent sessions panel
+- Correct text color classes in dark mode
+
+### Refactored
+- Complete Tailwind migration across all packages
+
 ## [0.52.5] - 2026-01-25
 
 
