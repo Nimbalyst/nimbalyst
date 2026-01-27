@@ -205,7 +205,21 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
           if (scrollback && !disposed) {
             // Clean up the scrollback to remove trailing whitespace that was
             // added for a potentially different terminal width
-            terminal.write(cleanScrollback(scrollback));
+            const cleaned = cleanScrollback(scrollback);
+
+            // Write scrollback in chunks to avoid WASM memory issues
+            // and wrap in try-catch to prevent crashes from corrupted data
+            try {
+              const CHUNK_SIZE = 16384; // 16KB chunks
+              for (let i = 0; i < cleaned.length; i += CHUNK_SIZE) {
+                if (disposed) break;
+                terminal.write(cleaned.slice(i, i + CHUNK_SIZE));
+              }
+            } catch (writeError) {
+              console.warn('[TerminalPanel] Failed to restore scrollback, clearing corrupted data:', writeError);
+              // Clear the corrupted scrollback file to prevent future crashes
+              window.electronAPI.terminal.clearScrollback?.(sessionId);
+            }
           }
 
           // Listen for output from PTY

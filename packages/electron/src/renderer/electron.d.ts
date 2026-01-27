@@ -492,6 +492,7 @@ interface ElectronAPI {
     write: (terminalId: string, data: string) => Promise<void>;
     resize: (terminalId: string, cols: number, rows: number) => Promise<void>;
     getScrollback: (terminalId: string) => Promise<string>;
+    clearScrollback: (terminalId: string) => Promise<void>;
     destroy: (terminalId: string) => Promise<void>;
     getInfo: (terminalId: string) => Promise<any>;
 

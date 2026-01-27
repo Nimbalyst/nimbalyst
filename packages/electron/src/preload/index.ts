@@ -863,6 +863,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('terminal:resize', terminalId, cols, rows),
     getScrollback: (terminalId: string) =>
       ipcRenderer.invoke('terminal:get-scrollback', terminalId),
+    clearScrollback: (terminalId: string) =>
+      ipcRenderer.invoke('terminal:clear-scrollback', terminalId),
     destroy: (terminalId: string) =>
       ipcRenderer.invoke('terminal:destroy', terminalId),
     getInfo: (terminalId: string) =>

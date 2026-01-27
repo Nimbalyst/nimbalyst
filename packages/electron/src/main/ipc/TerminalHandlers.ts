@@ -242,6 +242,17 @@ export function registerTerminalHandlers(): void {
   });
 
   /**
+   * Clear scrollback buffer (used when scrollback is corrupted)
+   */
+  safeHandle('terminal:clear-scrollback', async (_event, sessionId: string) => {
+    if (!sessionId || typeof sessionId !== 'string') {
+      throw new Error('sessionId is required and must be a string');
+    }
+    await manager.clearScrollback(sessionId);
+    return { success: true };
+  });
+
+  /**
    * Destroy a terminal
    */
   safeHandle('terminal:destroy', async (_event, sessionId: string) => {

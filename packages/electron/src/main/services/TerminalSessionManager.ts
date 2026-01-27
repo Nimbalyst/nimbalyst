@@ -43,6 +43,7 @@ import {
   updateTerminalInstance,
   readScrollback,
   writeScrollback,
+  deleteScrollbackFile,
 } from '../utils/terminalStore';
 
 // Maximum scrollback buffer size (500KB)
@@ -190,6 +191,24 @@ export class TerminalSessionManager {
    */
   async getStoredScrollback(terminalId: string): Promise<string | null> {
     return readScrollback(terminalId);
+  }
+
+  /**
+   * Clear scrollback buffer (used when scrollback data is corrupted)
+   * Removes both in-memory buffer and persisted file
+   */
+  async clearScrollback(terminalId: string): Promise<void> {
+    console.log(`[TerminalSessionManager] Clearing scrollback for ${terminalId}`);
+
+    // Clear in-memory buffer if terminal is active
+    const terminal = this.terminals.get(terminalId);
+    if (terminal) {
+      terminal.scrollbackBuffer = '';
+      terminal.metadata.scrollback = '';
+    }
+
+    // Delete the scrollback file
+    await deleteScrollbackFile(terminalId);
   }
 
   private scheduleScrollbackPersist(sessionId: string): void {
