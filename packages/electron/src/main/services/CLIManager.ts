@@ -974,11 +974,65 @@ export function getEnhancedPath(): string {
 
     // Add Homebrew paths for macOS
     if (process.platform === 'darwin') {
-      paths.push('/opt/homebrew/bin');
-      paths.push('/opt/homebrew/sbin');
+      // Try to dynamically detect homebrew installation
+      try {
+        // First try to get homebrew prefix from the brew command itself
+        let brewPrefix: string | undefined;
+
+        // Try common brew locations
+        const brewLocations = [
+          '/opt/homebrew/bin/brew',      // Apple Silicon default
+          '/usr/local/bin/brew',          // Intel Mac default
+          path.join(homeDir, '.brew/bin/brew')  // Custom install
+        ];
+
+        for (const brewPath of brewLocations) {
+          if (fsSync.existsSync(brewPath)) {
+            try {
+              brewPrefix = execSync(`${brewPath} --prefix 2>/dev/null`, {
+                encoding: 'utf8',
+                timeout: 2000
+              }).trim();
+              if (brewPrefix) {
+                console.log(`[getEnhancedPath] Found homebrew at: ${brewPrefix}`);
+                paths.push(path.join(brewPrefix, 'bin'));
+                paths.push(path.join(brewPrefix, 'sbin'));
+
+                // Also add node-specific paths from homebrew
+                const nodeBrewPath = path.join(brewPrefix, 'opt', 'node', 'bin');
+                if (fsSync.existsSync(nodeBrewPath)) {
+                  paths.push(nodeBrewPath);
+                }
+                break;
+              }
+            } catch (e) {
+              // Continue to next location
+            }
+          }
+        }
+
+        // If we didn't find brew dynamically, fall back to hardcoded paths
+        if (!brewPrefix) {
+          console.log('[getEnhancedPath] Could not detect homebrew installation, using default paths');
+          paths.push('/opt/homebrew/bin');
+          paths.push('/opt/homebrew/sbin');
+          paths.push('/usr/local/bin');
+          paths.push('/usr/local/sbin');
+        }
+      } catch (e: any) {
+        console.warn('[getEnhancedPath] Error detecting homebrew:', e.message || e);
+        // Fall back to common paths
+        paths.push('/opt/homebrew/bin');
+        paths.push('/opt/homebrew/sbin');
+        paths.push('/usr/local/bin');
+        paths.push('/usr/local/sbin');
+      }
+
+      // Add common node version paths from homebrew
       paths.push('/usr/local/opt/node/bin');
       paths.push('/usr/local/opt/node@20/bin');
       paths.push('/usr/local/opt/node@18/bin');
+
       // MacPorts
       paths.push('/opt/local/bin');
       paths.push('/opt/local/sbin');
@@ -998,7 +1052,66 @@ export function getEnhancedPath(): string {
 
     // NVM (Node Version Manager)
     const nvmDir = process.env.NVM_DIR || path.join(homeDir, '.nvm');
-    paths.push(path.join(nvmDir, 'current', 'bin'));
+
+    // Try multiple strategies to find the active nvm node version
+    try {
+      // Strategy 1: Use 'current' symlink if it exists
+      const nvmCurrentPath = path.join(nvmDir, 'current', 'bin');
+      if (fsSync.existsSync(nvmCurrentPath)) {
+        paths.push(nvmCurrentPath);
+      } else {
+        // Strategy 2: Try to run nvm to get the current version
+        // This works if nvm is properly initialized in the shell
+        try {
+          const shell = process.env.SHELL || '/bin/zsh';
+          const shellName = path.basename(shell);
+
+          // Source nvm script and get current version
+          let nvmCommand: string;
+          if (shellName === 'zsh') {
+            nvmCommand = `${shell} -c 'source ${nvmDir}/nvm.sh 2>/dev/null && nvm which current 2>/dev/null'`;
+          } else if (shellName === 'bash') {
+            nvmCommand = `${shell} -c 'source ${nvmDir}/nvm.sh 2>/dev/null && nvm which current 2>/dev/null'`;
+          } else {
+            nvmCommand = `${shell} -c 'source ${nvmDir}/nvm.sh 2>/dev/null && nvm which current 2>/dev/null'`;
+          }
+
+          const nvmWhich = execSync(nvmCommand, {
+            encoding: 'utf8',
+            timeout: 2000
+          }).trim();
+
+          if (nvmWhich && !nvmWhich.includes('command not found')) {
+            // nvmWhich returns something like /Users/user/.nvm/versions/node/v22.19.0/bin/node
+            const nvmBinPath = path.dirname(nvmWhich);
+            console.log(`[getEnhancedPath] Found active nvm node at: ${nvmBinPath}`);
+            paths.push(nvmBinPath);
+          }
+        } catch (e) {
+          // Strategy 3: If we can't determine the current version, try to find the latest installed version
+          const versionsPath = path.join(nvmDir, 'versions', 'node');
+          if (fsSync.existsSync(versionsPath)) {
+            try {
+              const versions = fsSync.readdirSync(versionsPath);
+              if (versions.length > 0) {
+                // Sort versions and use the latest (simple alphabetical sort works for semver)
+                versions.sort().reverse();
+                const latestVersion = versions[0];
+                const latestBinPath = path.join(versionsPath, latestVersion, 'bin');
+                console.log(`[getEnhancedPath] Using latest nvm version: ${latestVersion}`);
+                paths.push(latestBinPath);
+              }
+            } catch (e) {
+              console.warn('[getEnhancedPath] Could not read nvm versions directory:', e);
+            }
+          }
+        }
+      }
+    } catch (e: any) {
+      console.warn('[getEnhancedPath] Error detecting nvm installation:', e.message || e);
+      // Fall back to just trying the 'current' symlink
+      paths.push(path.join(nvmDir, 'current', 'bin'));
+    }
 
     // Volta
     paths.push(path.join(homeDir, '.volta', 'bin'));
