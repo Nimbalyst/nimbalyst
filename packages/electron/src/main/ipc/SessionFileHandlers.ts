@@ -18,6 +18,7 @@ export function setupSessionFileHandlers(): void {
         workspaceId,
         filePath,
         linkType,
+        timestamp: Date.now(),
         metadata,
       });
 
