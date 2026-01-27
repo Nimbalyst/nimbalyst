@@ -20,6 +20,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.10] - 2026-01-27
+
+
+### Added
+- Custom PATH configuration in Advanced Settings for managing shell environment variables
+
+### Changed
+- Unified git operations UI for both regular and worktree sessions
+- Made PATH detection async to avoid blocking startup
+- Gated card view mode behind alpha feature flag
+- Made "Enable All Alpha Features" a stored state with migration for existing users
+
+### Fixed
+- Improved PATH detection for homebrew and nvm installations
+- Treat missing lastKnownVersion as upgrade from <=0.52.10
+
 ## [0.52.9] - 2026-01-27
 
 
