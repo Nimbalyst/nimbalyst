@@ -23,25 +23,16 @@ function toMillis(value: unknown): number {
   if (!value) return Date.now();
   if (typeof value === 'number') return value;
 
-  // PGlite returns Date objects that are already parsed as LOCAL time
-  // But PostgreSQL stores them as UTC, so we need to adjust
+  // With TIMESTAMPTZ columns, PGLite returns Date objects that already represent
+  // the correct instant in time. Just call getTime() to get epoch milliseconds.
   if (value instanceof Date) {
-    // Get the components as if they were UTC
-    const year = value.getFullYear();
-    const month = value.getMonth();
-    const day = value.getDate();
-    const hour = value.getHours();
-    const minute = value.getMinutes();
-    const second = value.getSeconds();
-    const ms = value.getMilliseconds();
-
-    // Create a UTC date from those components
-    return Date.UTC(year, month, day, hour, minute, second, ms);
+    return value.getTime();
   }
 
-  // Fallback for string timestamps
+  // Fallback for string timestamps (shouldn't happen with TIMESTAMPTZ, but just in case)
   const str = String(value).trim();
-  const hasTimezone = str.endsWith('Z') || str.includes('+') || /[0-9]-\d{2}:\d{2}$/. test(str);
+  // Detect timezone: ends with Z, contains +, or has negative offset like -05:00
+  const hasTimezone = str.endsWith('Z') || str.includes('+') || /-\d{2}:\d{2}$/.test(str);
   const utcStr = hasTimezone ? str : str.replace(' ', 'T') + 'Z';
   const parsed = new Date(utcStr).getTime();
   return Number.isNaN(parsed) ? Date.now() : parsed;

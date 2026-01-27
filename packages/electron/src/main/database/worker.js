@@ -4,23 +4,14 @@
  *
  * CRITICAL: Date/Timestamp Handling
  * ==================================
- * PostgreSQL TIMESTAMP columns store UTC time but return Date objects to JavaScript
- * that are parsed as LOCAL time. This creates a timezone mismatch.
- *
- * Example:
- *   - PostgreSQL stores: "2025-11-19 04:25:00" (UTC)
- *   - PGlite returns: Date object representing "2025-11-19 04:25:00 EST" (local)
- *   - This is WRONG - it should be converted to "2025-11-18 23:25:00 EST"
- *
- * Solution:
- *   - The toMillis() function in PGLiteSessionStore.ts handles this conversion
- *   - It treats Date object components as UTC and converts to proper epoch milliseconds
- *   - JavaScript's toLocaleString() then correctly displays in local timezone
+ * All timestamp columns use TIMESTAMPTZ (timestamp with time zone).
+ * With TIMESTAMPTZ, PGLite returns Date objects that already represent the
+ * correct instant in time. Simply call .getTime() to get epoch milliseconds.
  *
  * Rules:
- *   1. Always use CURRENT_TIMESTAMP for database inserts/updates (PostgreSQL handles as UTC)
- *   2. Never use Date.now() with to_timestamp() - causes double timezone conversion
- *   3. All timestamp retrieval must go through toMillis() for proper UTC conversion
+ *   1. Use TIMESTAMPTZ for all timestamp columns (not TIMESTAMP without timezone)
+ *   2. PGLite Date objects are correct - just use .getTime() for epoch ms
+ *   3. When writing: pass Date objects directly to TIMESTAMPTZ columns
  *   4. Display timestamps using toLocaleString() to show in user's local timezone
  */
 
