@@ -199,6 +199,7 @@ export {
   collapsedGroupsAtom,
   sortOrderAtom,
   viewModeAtom,
+  todoPanelCollapsedAtom,
   setAgentModeLayoutAtom,
   setSessionHistoryWidthAtom,
   setFilesEditedWidthAtom,
@@ -206,6 +207,7 @@ export {
   setCollapsedGroupsAtom,
   setSortOrderAtom,
   setViewModeAtom,
+  toggleTodoPanelCollapsedAtom,
   initAgentModeLayout,
   type AgentModeLayout,
 } from './atoms/agentMode';

@@ -44,6 +44,7 @@ export interface SessionHistoryLayout {
 export interface AgentModeLayout {
   sessionHistoryLayout: SessionHistoryLayout;
   filesEditedWidth: number;
+  todoPanelCollapsed: boolean;
 }
 
 // ============================================================
@@ -62,6 +63,7 @@ const DEFAULT_SESSION_HISTORY_LAYOUT: SessionHistoryLayout = {
 const DEFAULT_LAYOUT: AgentModeLayout = {
   sessionHistoryLayout: DEFAULT_SESSION_HISTORY_LAYOUT,
   filesEditedWidth: 256,
+  todoPanelCollapsed: false,
 };
 
 /**
@@ -77,6 +79,8 @@ function mergeWithDefaults(persisted: Partial<AgentModeLayout> | undefined): Age
     ...DEFAULT_LAYOUT,
     ...persisted,
     sessionHistoryLayout,
+    // Ensure todoPanelCollapsed has a default if missing from old persisted data
+    todoPanelCollapsed: persisted?.todoPanelCollapsed ?? DEFAULT_LAYOUT.todoPanelCollapsed,
   };
 }
 
@@ -122,6 +126,11 @@ export const sortOrderAtom = atom(
 /** View mode for session history (list or card) */
 export const viewModeAtom = atom(
   (get) => get(agentModeLayoutAtom).sessionHistoryLayout.viewMode
+);
+
+/** Whether the todo panel is collapsed */
+export const todoPanelCollapsedAtom = atom(
+  (get) => get(agentModeLayoutAtom).todoPanelCollapsed
 );
 
 // ============================================================
@@ -255,6 +264,24 @@ export const setViewModeAtom = atom(
   null,
   (get, set, viewMode: 'list' | 'card') => {
     set(setSessionHistoryLayoutAtom, { viewMode });
+  }
+);
+
+/**
+ * Toggle todo panel collapsed state.
+ */
+export const toggleTodoPanelCollapsedAtom = atom(
+  null,
+  (get, set) => {
+    const current = get(agentModeLayoutAtom);
+    const newLayout = { ...current, todoPanelCollapsed: !current.todoPanelCollapsed };
+
+    set(agentModeLayoutAtom, newLayout);
+
+    if (!currentWorkspacePath) {
+      throw new Error('[agentMode] Cannot persist layout - initAgentModeLayout not called');
+    }
+    schedulePersist(currentWorkspacePath, newLayout);
   }
 );
 
