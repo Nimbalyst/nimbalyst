@@ -20,6 +20,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.12] - 2026-01-28
+
+
+### Added
+- `/update-libs` command to update Anthropic Agent SDK and MCP library to latest versions
+
+### Fixed
+- Git operations (commit, status, diff) now work correctly in worktree sessions
+- Module import issue with store module in build
+
 ## [0.52.11] - 2026-01-28
 
 
