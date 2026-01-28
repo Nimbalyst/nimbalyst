@@ -970,6 +970,7 @@ ${message}`;
           data={pendingExitPlanConfirmation}
           workspacePath={workspacePath}
           worktreeId={worktreeId}
+          onFileClick={handleFileClick}
           onApprove={handleExitPlanModeApprove}
           onDeny={handleExitPlanModeDeny}
         />

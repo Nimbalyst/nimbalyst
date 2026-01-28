@@ -12,6 +12,7 @@ interface ExitPlanModeConfirmationProps {
   data: ExitPlanModeConfirmationData;
   workspacePath?: string;
   worktreeId?: string | null;
+  onFileClick?: (filePath: string) => void;
   onApprove: (requestId: string, sessionId: string) => void;
   onDeny: (requestId: string, sessionId: string) => void;
 }
@@ -24,6 +25,7 @@ export const ExitPlanModeConfirmation: React.FC<ExitPlanModeConfirmationProps> =
   data,
   workspacePath,
   worktreeId,
+  onFileClick,
   onApprove,
   onDeny
 }) => {
@@ -57,7 +59,7 @@ export const ExitPlanModeConfirmation: React.FC<ExitPlanModeConfirmationProps> =
   };
 
   const handleOpenPlanFile = useCallback(() => {
-    if (!data.planFilePath) return;
+    if (!data.planFilePath || !onFileClick) return;
 
     // Use worktree path if available, otherwise workspace path
     const basePath = worktreePath || workspacePath;
@@ -69,13 +71,9 @@ export const ExitPlanModeConfirmation: React.FC<ExitPlanModeConfirmationProps> =
       ? data.planFilePath
       : `${basePath}/${data.planFilePath}`;
 
-    window.electronAPI.invoke('workspace:open-file', {
-      workspacePath: basePath,
-      filePath: absolutePath,
-    }).catch((error: Error) => {
-      console.error('[ExitPlanModeConfirmation] Failed to open plan file:', error);
-    });
-  }, [data.planFilePath, worktreePath, workspacePath]);
+    // Use the same file click handler as the files edited sidebar
+    onFileClick(absolutePath);
+  }, [data.planFilePath, worktreePath, workspacePath, onFileClick]);
 
   return (
     <div className="exit-plan-mode-confirmation mx-4 my-3 p-4 bg-nim-secondary border border-nim rounded-lg">
