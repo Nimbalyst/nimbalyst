@@ -22,6 +22,10 @@ import {
   workstreamStagedFilesAtom,
   setWorkstreamStagedFilesAtom,
 } from '../../store/atoms/workstreamState';
+import {
+  sessionOtherFilesExpandedAtom,
+  toggleSessionOtherFilesExpandedAtom,
+} from '../../store/atoms/sessionEditors';
 import { GitOperationsPanel } from './GitOperationsPanel';
 import { TodoPanel } from './TodoPanel';
 
@@ -71,6 +75,10 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
   const [isClearing, setIsClearing] = useState(false);
   const [otherUncommittedFiles, setOtherUncommittedFiles] = useState<string[]>([]);
   const [otherFilesGitStatus, setOtherFilesGitStatus] = useState<Record<string, { status: string; gitStatusCode?: string }>>({});
+
+  // Persisted UI state for "Other Uncommitted Files" section
+  const isOtherFilesExpanded = useAtomValue(sessionOtherFilesExpandedAtom(workstreamId));
+  const toggleOtherFilesExpanded = useSetAtom(toggleSessionOtherFilesExpandedAtom);
 
   // Worktree-specific state for uncommitted changes
   const [worktreeChangedFiles, setWorktreeChangedFiles] = useState<Array<{
@@ -800,45 +808,57 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
         {/* Other Uncommitted Files Section */}
         {!worktreeId && otherUncommittedFiles.length > 0 && (
           <div className="border-t border-[var(--nim-border)] bg-[var(--nim-bg-secondary)]">
-            <div className="px-3 py-2 text-[11px] font-semibold text-[var(--nim-text-muted)] uppercase tracking-wide">
-              Other Uncommitted Files ({otherUncommittedFiles.length})
-            </div>
-            <div className="max-h-[200px] overflow-y-auto">
-              {otherUncommittedFiles.map((filePath) => {
-                const gitStatus = otherFilesGitStatus[filePath];
-                const statusCode = gitStatus?.gitStatusCode || '?';
-                const statusColor =
-                  statusCode.includes('M') ? 'text-[var(--nim-warning)]' :
-                  statusCode.includes('A') ? 'text-[var(--nim-success)]' :
-                  statusCode.includes('D') ? 'text-[var(--nim-error)]' :
-                  'text-[var(--nim-text-muted)]';
+            <button
+              onClick={() => toggleOtherFilesExpanded(workstreamId)}
+              className="w-full flex items-center gap-2 px-3 py-2 bg-transparent border-none cursor-pointer hover:bg-[var(--nim-bg-hover)]"
+            >
+              <MaterialSymbol
+                icon={isOtherFilesExpanded ? 'expand_more' : 'chevron_right'}
+                size={16}
+                className="text-[var(--nim-text-muted)]"
+              />
+              <span className="text-[11px] font-semibold text-[var(--nim-text-muted)] uppercase tracking-wide">
+                Other Uncommitted Files ({otherUncommittedFiles.length})
+              </span>
+            </button>
+            {isOtherFilesExpanded && (
+              <div className="max-h-[200px] overflow-y-auto">
+                {otherUncommittedFiles.map((filePath) => {
+                  const gitStatus = otherFilesGitStatus[filePath];
+                  const statusCode = gitStatus?.gitStatusCode || '?';
+                  const statusColor =
+                    statusCode.includes('M') ? 'text-[var(--nim-warning)]' :
+                    statusCode.includes('A') ? 'text-[var(--nim-success)]' :
+                    statusCode.includes('D') ? 'text-[var(--nim-error)]' :
+                    'text-[var(--nim-text-muted)]';
 
-                return (
-                  <div
-                    key={filePath}
-                    className="flex items-center gap-2 px-3 py-1.5 text-[11px] hover:bg-[var(--nim-bg-hover)] cursor-pointer"
-                    onClick={() => onFileClick(filePath)}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={stagedFiles.has(filePath)}
-                      onChange={(e) => {
-                        e.stopPropagation();
-                        handleSelectionChange(filePath, e.target.checked);
-                      }}
-                      onClick={(e) => e.stopPropagation()}
-                      className="cursor-pointer"
-                    />
-                    <span className={`w-4 text-center font-[var(--nim-font-mono)] font-semibold text-[10px] ${statusColor}`}>
-                      {statusCode.charAt(0)}
-                    </span>
-                    <span className="flex-1 text-[var(--nim-text)] overflow-hidden text-ellipsis whitespace-nowrap" title={filePath}>
-                      {filePath.split('/').pop()}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
+                  return (
+                    <div
+                      key={filePath}
+                      className="flex items-center gap-2 px-3 py-1.5 text-[11px] hover:bg-[var(--nim-bg-hover)] cursor-pointer"
+                      onClick={() => onFileClick(filePath)}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={stagedFiles.has(filePath)}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          handleSelectionChange(filePath, e.target.checked);
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        className="cursor-pointer"
+                      />
+                      <span className={`w-4 text-center font-[var(--nim-font-mono)] font-semibold text-[10px] ${statusColor}`}>
+                        {statusCode.charAt(0)}
+                      </span>
+                      <span className="flex-1 text-[var(--nim-text)] overflow-hidden text-ellipsis whitespace-nowrap" title={filePath}>
+                        {filePath.split('/').pop()}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 
@@ -846,60 +866,74 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
         {worktreeId && worktreeOnlyChangedFiles.length > 0 && (
           <div className="border-t border-[var(--nim-border)] bg-[var(--nim-bg-secondary)]">
             <div className="flex items-center justify-between px-3 py-2">
-              <span className="text-[11px] font-semibold text-[var(--nim-text-muted)] uppercase tracking-wide">
-                Other Uncommitted Files ({worktreeOnlyChangedFiles.length})
-              </span>
-              <div className="flex gap-2">
-                <button
+              <button
+                onClick={() => toggleOtherFilesExpanded(workstreamId)}
+                className="flex items-center gap-2 bg-transparent border-none cursor-pointer p-0 hover:opacity-80"
+              >
+                <MaterialSymbol
+                  icon={isOtherFilesExpanded ? 'expand_more' : 'chevron_right'}
+                  size={16}
+                  className="text-[var(--nim-text-muted)]"
+                />
+                <span className="text-[11px] font-semibold text-[var(--nim-text-muted)] uppercase tracking-wide">
+                  Other Uncommitted Files ({worktreeOnlyChangedFiles.length})
+                </span>
+              </button>
+              {isOtherFilesExpanded && (
+                <div className="flex gap-2">
+                  <button
                   onClick={() => handleWorktreeToggleSubsetStaged(worktreeOnlyChangedFiles, true)}
-                  disabled={worktreeOnlyChangedFiles.length === 0 || worktreeOnlyChangedFiles.every(f => f.staged)}
-                  className="bg-transparent border-none text-[var(--nim-primary)] text-[10px] font-medium cursor-pointer p-0 hover:underline disabled:text-[var(--nim-text-faint)] disabled:cursor-not-allowed disabled:no-underline"
-                >
-                  Stage All
-                </button>
-                <button
-                  onClick={() => handleWorktreeToggleSubsetStaged(worktreeOnlyChangedFiles, false)}
-                  disabled={!worktreeOnlyChangedFiles.some(f => f.staged)}
-                  className="bg-transparent border-none text-[var(--nim-primary)] text-[10px] font-medium cursor-pointer p-0 hover:underline disabled:text-[var(--nim-text-faint)] disabled:cursor-not-allowed disabled:no-underline"
-                >
-                  Clear
-                </button>
-              </div>
-            </div>
-            <div className="max-h-[200px] overflow-y-auto">
-              {worktreeOnlyChangedFiles.map((file) => {
-                const statusColor =
-                  file.status === 'added' ? 'text-[var(--nim-success)]' :
-                  file.status === 'modified' ? 'text-[var(--nim-warning)]' :
-                  'text-[var(--nim-error)]';
-                const statusChar = file.status === 'added' ? 'A' : file.status === 'modified' ? 'M' : 'D';
-
-                return (
-                  <div
-                    key={file.path}
-                    className="flex items-center gap-2 px-3 py-1.5 text-[11px] hover:bg-[var(--nim-bg-hover)] cursor-pointer"
-                    onClick={() => onFileClick(`${worktreePath}/${file.path}`)}
+                    disabled={worktreeOnlyChangedFiles.length === 0 || worktreeOnlyChangedFiles.every(f => f.staged)}
+                    className="bg-transparent border-none text-[var(--nim-primary)] text-[10px] font-medium cursor-pointer p-0 hover:underline disabled:text-[var(--nim-text-faint)] disabled:cursor-not-allowed disabled:no-underline"
                   >
-                    <input
-                      type="checkbox"
-                      checked={file.staged}
-                      onChange={(e) => {
-                        e.stopPropagation();
-                        handleWorktreeToggleStaged(file.path);
-                      }}
-                      onClick={(e) => e.stopPropagation()}
-                      className="cursor-pointer"
-                    />
-                    <span className={`w-4 text-center font-[var(--nim-font-mono)] font-semibold text-[10px] ${statusColor}`}>
-                      {statusChar}
-                    </span>
-                    <span className="flex-1 text-[var(--nim-text)] overflow-hidden text-ellipsis whitespace-nowrap" title={file.path}>
-                      {file.path.split('/').pop()}
-                    </span>
-                  </div>
-                );
-              })}
+                    Stage All
+                  </button>
+                  <button
+                  onClick={() => handleWorktreeToggleSubsetStaged(worktreeOnlyChangedFiles, false)}
+                    disabled={!worktreeOnlyChangedFiles.some(f => f.staged)}
+                    className="bg-transparent border-none text-[var(--nim-primary)] text-[10px] font-medium cursor-pointer p-0 hover:underline disabled:text-[var(--nim-text-faint)] disabled:cursor-not-allowed disabled:no-underline"
+                  >
+                    Clear
+                  </button>
+                </div>
+              )}
             </div>
+            {isOtherFilesExpanded && (
+              <div className="max-h-[200px] overflow-y-auto">
+                {worktreeOnlyChangedFiles.map((file) => {
+                  const statusColor =
+                    file.status === 'added' ? 'text-[var(--nim-success)]' :
+                    file.status === 'modified' ? 'text-[var(--nim-warning)]' :
+                    'text-[var(--nim-error)]';
+                  const statusChar = file.status === 'added' ? 'A' : file.status === 'modified' ? 'M' : 'D';
+
+                  return (
+                    <div
+                      key={file.path}
+                      className="flex items-center gap-2 px-3 py-1.5 text-[11px] hover:bg-[var(--nim-bg-hover)] cursor-pointer"
+                    onClick={() => onFileClick(`${worktreePath}/${file.path}`)}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={file.staged}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          handleWorktreeToggleStaged(file.path);
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        className="cursor-pointer"
+                      />
+                      <span className={`w-4 text-center font-[var(--nim-font-mono)] font-semibold text-[10px] ${statusColor}`}>
+                        {statusChar}
+                      </span>
+                      <span className="flex-1 text-[var(--nim-text)] overflow-hidden text-ellipsis whitespace-nowrap" title={file.path}>
+                        {file.path.split('/').pop()}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
       </div>

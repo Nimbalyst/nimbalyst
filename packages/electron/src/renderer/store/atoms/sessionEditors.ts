@@ -52,6 +52,8 @@ export interface SessionEditorState {
   activeTabKey: EditorKey | null;
   /** Whether the files edited sidebar is visible */
   filesSidebarVisible: boolean;
+  /** Whether the "Other Uncommitted Files" section is expanded */
+  otherFilesExpanded: boolean;
 }
 
 const DEFAULT_SESSION_EDITOR_STATE: SessionEditorState = {
@@ -59,6 +61,7 @@ const DEFAULT_SESSION_EDITOR_STATE: SessionEditorState = {
   splitRatio: 0.5, // Default 50/50 when split mode activated
   activeTabKey: null,
   filesSidebarVisible: true, // Show sidebar by default
+  otherFilesExpanded: false, // Collapsed by default
 };
 
 // ============================================================
@@ -112,6 +115,13 @@ export const sessionSplitRatioAtom = atomFamily((sessionId: string) =>
  */
 export const sessionFilesSidebarVisibleAtom = atomFamily((sessionId: string) =>
   atom((get) => get(sessionEditorStateAtom(sessionId)).filesSidebarVisible)
+);
+
+/**
+ * Other uncommitted files section expanded state for a specific session.
+ */
+export const sessionOtherFilesExpandedAtom = atomFamily((sessionId: string) =>
+  atom((get) => get(sessionEditorStateAtom(sessionId)).otherFilesExpanded)
 );
 
 /**
@@ -247,6 +257,20 @@ export const toggleSessionFilesSidebarAtom = atom(
   }
 );
 
+/**
+ * Toggle the "Other Uncommitted Files" section expanded state for a session.
+ * Persists the state to workspace storage.
+ */
+export const toggleSessionOtherFilesExpandedAtom = atom(
+  null,
+  (get, set, sessionId: string) => {
+    const state = get(sessionEditorStateAtom(sessionId));
+    const newState = { ...state, otherFilesExpanded: !state.otherFilesExpanded };
+    set(sessionEditorStateAtom(sessionId), newState);
+    schedulePersist(sessionId, newState);
+  }
+);
+
 // ============================================================
 // Persistence
 // ============================================================
@@ -292,6 +316,7 @@ function schedulePersist(sessionId: string, state: SessionEditorState): void {
             layoutMode: state.layoutMode,
             splitRatio: state.splitRatio,
             filesSidebarVisible: state.filesSidebarVisible,
+            otherFilesExpanded: state.otherFilesExpanded,
             openTabs: tabKeys.map((key) => ({
               key,
               isActive: key === store.get(sessionActiveTabKeyAtom(sessionId)),
@@ -348,6 +373,7 @@ export async function loadSessionEditorState(sessionId: string): Promise<void> {
         splitRatio: saved.splitRatio ?? 0.5,
         activeTabKey: null, // Will be set when tabs are restored
         filesSidebarVisible: saved.filesSidebarVisible ?? true,
+        otherFilesExpanded: saved.otherFilesExpanded ?? false,
       });
 
       // Restore tabs
