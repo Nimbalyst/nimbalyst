@@ -1008,7 +1008,7 @@ export const convertToWorkstreamAtom = atom(
         },
       });
 
-      return parentSessionId;
+      return { parentId: parentSessionId, siblingId: siblingResult.sessionId! };
     } catch (error) {
       console.error(`[sessions] Failed to convert session ${sessionId} to workstream:`, error);
       return null;

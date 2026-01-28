@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 
 export interface ExitPlanModeConfirmationData {
   requestId: string;
@@ -8,13 +8,20 @@ export interface ExitPlanModeConfirmationData {
   timestamp: number;
 }
 
+export interface ExitPlanModeResponse {
+  approved: boolean;
+  clearContext?: boolean;
+  feedback?: string;
+}
+
 interface ExitPlanModeConfirmationProps {
   data: ExitPlanModeConfirmationData;
   workspacePath?: string;
   worktreeId?: string | null;
   onFileClick?: (filePath: string) => void;
   onApprove: (requestId: string, sessionId: string) => void;
-  onDeny: (requestId: string, sessionId: string) => void;
+  onStartNewSession: (requestId: string, sessionId: string, planFilePath: string) => void;
+  onDeny: (requestId: string, sessionId: string, feedback?: string) => void;
 }
 
 /**
@@ -27,10 +34,14 @@ export const ExitPlanModeConfirmation: React.FC<ExitPlanModeConfirmationProps> =
   worktreeId,
   onFileClick,
   onApprove,
+  onStartNewSession,
   onDeny
 }) => {
   // For worktree sessions, we need to fetch the worktree path
   const [worktreePath, setWorktreePath] = useState<string | null>(null);
+  const [showFeedbackInput, setShowFeedbackInput] = useState(false);
+  const [feedback, setFeedback] = useState('');
+  const feedbackInputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     if (!worktreeId) {
@@ -50,12 +61,43 @@ export const ExitPlanModeConfirmation: React.FC<ExitPlanModeConfirmationProps> =
       });
   }, [worktreeId]);
 
+  useEffect(() => {
+    if (showFeedbackInput && feedbackInputRef.current) {
+      feedbackInputRef.current.focus();
+    }
+  }, [showFeedbackInput]);
+
+  const handleStartNewSession = () => {
+    if (data.planFilePath) {
+      onStartNewSession(data.requestId, data.sessionId, data.planFilePath);
+    } else {
+      // Fallback to simple approve if no plan file
+      onApprove(data.requestId, data.sessionId);
+    }
+  };
+
   const handleApprove = () => {
     onApprove(data.requestId, data.sessionId);
   };
 
-  const handleDeny = () => {
-    onDeny(data.requestId, data.sessionId);
+  const handleShowFeedbackInput = () => {
+    setShowFeedbackInput(true);
+  };
+
+  const handleSubmitFeedback = () => {
+    if (feedback.trim()) {
+      onDeny(data.requestId, data.sessionId, feedback.trim());
+    }
+  };
+
+  const handleFeedbackKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmitFeedback();
+    } else if (e.key === 'Escape') {
+      setShowFeedbackInput(false);
+      setFeedback('');
+    }
   };
 
   const handleOpenPlanFile = useCallback(() => {
@@ -110,19 +152,64 @@ export const ExitPlanModeConfirmation: React.FC<ExitPlanModeConfirmationProps> =
         </div>
       )}
 
-      <div className="exit-plan-mode-confirmation-actions flex gap-2">
+      <div className="exit-plan-mode-confirmation-question mb-3 text-[13px] text-nim">
+        Would you like to proceed?
+      </div>
+
+      <div className="exit-plan-mode-confirmation-actions flex flex-col gap-2">
         <button
-          className="exit-plan-mode-confirmation-button exit-plan-mode-confirmation-button-primary flex-1 px-4 py-2 rounded-md text-[13px] font-medium cursor-pointer border-none transition-opacity duration-150 hover:opacity-90 active:opacity-80 bg-nim-accent text-white"
+          className="exit-plan-mode-confirmation-button w-full px-4 py-2 rounded-md text-[13px] font-medium cursor-pointer border border-nim transition-colors duration-150 hover:bg-nim-hover active:opacity-80 bg-nim-tertiary text-nim text-left"
+          onClick={handleStartNewSession}
+        >
+          <span className="text-nim-muted mr-2">1.</span>
+          Yes, start new session to implement
+        </button>
+        <button
+          className="exit-plan-mode-confirmation-button w-full px-4 py-2 rounded-md text-[13px] font-medium cursor-pointer border border-nim transition-colors duration-150 hover:bg-nim-hover active:opacity-80 bg-nim-tertiary text-nim text-left"
           onClick={handleApprove}
         >
-          Start Coding
+          <span className="text-nim-muted mr-2">2.</span>
+          Yes
         </button>
-        <button
-          className="exit-plan-mode-confirmation-button exit-plan-mode-confirmation-button-secondary flex-1 px-4 py-2 rounded-md text-[13px] font-medium cursor-pointer border border-nim transition-opacity duration-150 hover:opacity-90 hover:bg-nim-hover active:opacity-80 bg-nim-tertiary text-nim-primary"
-          onClick={handleDeny}
-        >
-          Continue Planning
-        </button>
+        {!showFeedbackInput ? (
+          <button
+            className="exit-plan-mode-confirmation-button w-full px-4 py-2 rounded-md text-[13px] font-medium cursor-pointer border border-nim transition-colors duration-150 hover:bg-nim-hover active:opacity-80 bg-nim-tertiary text-nim text-left"
+            onClick={handleShowFeedbackInput}
+          >
+            <span className="text-nim-muted mr-2">3.</span>
+            Type here to tell Claude what to change
+          </button>
+        ) : (
+          <div className="exit-plan-mode-feedback-container flex flex-col gap-2">
+            <textarea
+              ref={feedbackInputRef}
+              value={feedback}
+              onChange={(e) => setFeedback(e.target.value)}
+              onKeyDown={handleFeedbackKeyDown}
+              placeholder="Tell Claude what to change in the plan..."
+              className="w-full px-3 py-2 rounded-md text-[13px] border border-nim bg-nim-tertiary text-nim placeholder:text-nim-muted resize-none focus:outline-none focus:border-nim-focus"
+              rows={3}
+            />
+            <div className="flex gap-2 justify-end">
+              <button
+                className="px-3 py-1 rounded-md text-[12px] cursor-pointer border border-nim transition-colors duration-150 hover:bg-nim-hover bg-nim-tertiary text-nim-muted"
+                onClick={() => {
+                  setShowFeedbackInput(false);
+                  setFeedback('');
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                className="px-3 py-1 rounded-md text-[12px] cursor-pointer border-none transition-colors duration-150 hover:opacity-90 bg-nim-primary text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                onClick={handleSubmitFeedback}
+                disabled={!feedback.trim()}
+              >
+                Send Feedback
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

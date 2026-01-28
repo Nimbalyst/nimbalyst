@@ -16,6 +16,7 @@
 
 import React, { useCallback, useRef, useImperativeHandle, forwardRef, useEffect, useState } from 'react';
 import { useAtom, useSetAtom, useAtomValue } from 'jotai';
+import { store } from '@nimbalyst/runtime/store';
 import { AgentTranscriptPanel, TodoItem, storeAskUserQuestionAnswers } from '@nimbalyst/runtime';
 import type { SessionData, ChatAttachment } from '@nimbalyst/runtime/ai/server/types';
 import { AIInput, AIInputRef } from './AIInput';
@@ -46,7 +47,11 @@ import {
   updateSessionStoreAtom,
   navigateSessionHistoryAtom,
   resetSessionHistoryAtom,
+  createChildSessionAtom,
+  sessionChildrenAtom,
+  sessionParentIdAtom,
 } from '../../store';
+import { convertToWorkstreamAtom } from '../../store/atoms/sessions';
 import { usePostHog } from 'posthog-js/react';
 import { setAgentModeSettingsAtom, showPromptAdditionsAtom } from '../../store/atoms/appSettings';
 
@@ -138,6 +143,12 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   const loadSessionData = useSetAtom(loadSessionDataAtom);
   const reloadSessionData = useSetAtom(reloadSessionDataAtom);
   const updateSessionStore = useSetAtom(updateSessionStoreAtom);
+
+  // Child session creation for "start new session" option
+  const createChildSession = useSetAtom(createChildSessionAtom);
+  const convertToWorkstream = useSetAtom(convertToWorkstreamAtom);
+  const sessionChildren = useAtomValue(sessionChildrenAtom(sessionId));
+  const sessionParentId = useAtomValue(sessionParentIdAtom(sessionId));
 
   // Still need full sessionData for certain operations (updating, checking loaded state)
   const sessionData = useAtomValue(sessionStoreAtom(sessionId));
@@ -267,15 +278,56 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   // ============================================================
   // Confirmation dialogs (ExitPlanMode, AskUserQuestion, ToolPermission)
   // ============================================================
+
+  // Restore pending ExitPlanMode confirmation from session metadata on load
   useEffect(() => {
-    const handleExitPlanModeConfirm = (data: ExitPlanModeConfirmationData) => {
+    const metadata = sessionData?.metadata as Record<string, unknown> | undefined;
+    console.log('[SessionTranscript] Checking for saved ExitPlanMode confirmation:', {
+      sessionId,
+      hasMetadata: !!metadata,
+      metadataKeys: metadata ? Object.keys(metadata) : [],
+      pendingExitPlanConfirmation: metadata?.pendingExitPlanConfirmation
+    });
+    const savedConfirmation = metadata?.pendingExitPlanConfirmation as ExitPlanModeConfirmationData | undefined;
+    if (savedConfirmation && savedConfirmation.sessionId === sessionId) {
+      console.log('[SessionTranscript] Restoring saved ExitPlanMode confirmation:', savedConfirmation);
+      setPendingExitPlanConfirmation(savedConfirmation);
+    }
+  }, [sessionId, sessionData?.metadata]);
+
+  useEffect(() => {
+    const handleExitPlanModeConfirm = async (data: ExitPlanModeConfirmationData) => {
       if (data.sessionId === sessionId) {
+        console.log('[SessionTranscript] Received ExitPlanMode confirmation:', data);
         setPendingExitPlanConfirmation(data);
+        // Persist to session metadata so it survives refresh
+        try {
+          console.log('[SessionTranscript] Persisting ExitPlanMode confirmation to metadata...');
+          const result = await window.electronAPI.invoke('sessions:update-metadata', sessionId, {
+            metadata: { pendingExitPlanConfirmation: data }
+          });
+          console.log('[SessionTranscript] Persist result:', result);
+
+          // Also update local session store so it's immediately available
+          if (sessionData) {
+            updateSessionStore({
+              sessionId,
+              updates: {
+                metadata: {
+                  ...(sessionData.metadata as Record<string, unknown> || {}),
+                  pendingExitPlanConfirmation: data
+                }
+              }
+            });
+          }
+        } catch (error) {
+          console.error('[SessionTranscript] Failed to persist ExitPlanMode confirmation:', error);
+        }
       }
     };
     const cleanup = window.electronAPI.on('ai:exitPlanModeConfirm', handleExitPlanModeConfirm);
     return () => { cleanup?.(); };
-  }, [sessionId]);
+  }, [sessionId, sessionData, updateSessionStore]);
 
   useEffect(() => {
     const handleAskUserQuestion = (data: AskUserQuestionData) => {
@@ -777,22 +829,107 @@ ${message}`;
   // Confirmation handlers
   const handleExitPlanModeApprove = useCallback(async (requestId: string, confirmSessionId: string) => {
     try {
-      await window.electronAPI.invoke('ai:exitPlanModeConfirmResponse', requestId, confirmSessionId, true);
+      await window.electronAPI.invoke('ai:exitPlanModeConfirmResponse', requestId, confirmSessionId, {
+        approved: true
+      });
       setPendingExitPlanConfirmation(null);
       setAiMode('agent');
+      // Clear from persisted metadata
+      await window.electronAPI.invoke('sessions:update-metadata', confirmSessionId, {
+        metadata: { pendingExitPlanConfirmation: null }
+      });
     } catch (error) {
       console.error('[SessionTranscript] Failed to send ExitPlanMode approval:', error);
     }
   }, [setAiMode]);
 
-  const handleExitPlanModeDeny = useCallback(async (requestId: string, confirmSessionId: string) => {
+  const handleExitPlanModeDeny = useCallback(async (requestId: string, confirmSessionId: string, feedback?: string) => {
     try {
-      await window.electronAPI.invoke('ai:exitPlanModeConfirmResponse', requestId, confirmSessionId, false);
+      await window.electronAPI.invoke('ai:exitPlanModeConfirmResponse', requestId, confirmSessionId, {
+        approved: false,
+        feedback
+      });
       setPendingExitPlanConfirmation(null);
+      // Clear from persisted metadata
+      await window.electronAPI.invoke('sessions:update-metadata', confirmSessionId, {
+        metadata: { pendingExitPlanConfirmation: null }
+      });
     } catch (error) {
       console.error('[SessionTranscript] Failed to send ExitPlanMode denial:', error);
     }
   }, []);
+
+  // Handler for "Start new session to implement" option
+  // Creates a child session with the plan file as context and sets up the implementation prompt
+  const handleExitPlanModeStartNewSession = useCallback(async (requestId: string, confirmSessionId: string, planFilePath: string) => {
+    try {
+      // First approve the ExitPlanMode so Claude finishes
+      await window.electronAPI.invoke('ai:exitPlanModeConfirmResponse', requestId, confirmSessionId, {
+        approved: true
+      });
+      setPendingExitPlanConfirmation(null);
+      setAiMode('agent');
+      // Clear from persisted metadata
+      await window.electronAPI.invoke('sessions:update-metadata', confirmSessionId, {
+        metadata: { pendingExitPlanConfirmation: null }
+      });
+
+      // Determine the parent session ID for creating a child
+      // If we have a parent (we're already in a workstream), use that parent
+      // Otherwise, use the current session as the parent (or convert to workstream)
+      const hasChildren = sessionChildren.length > 0;
+      let newSessionId: string | null = null;
+
+      if (hasChildren || sessionParentId) {
+        // Already part of a workstream hierarchy - create a child of the appropriate parent
+        // If sessionParentId exists, we're a child session - create sibling under the same parent
+        // If hasChildren, we're the root - create child under us
+        const parentId = sessionParentId || confirmSessionId;
+        newSessionId = await createChildSession({
+          parentSessionId: parentId,
+          workspacePath: workspacePath || '',
+          provider: 'claude-code',
+        });
+      } else {
+        // Single session - convert to workstream first, which creates a sibling session
+        const result = await convertToWorkstream({
+          sessionId: confirmSessionId,
+          workspacePath: workspacePath || '',
+        });
+        if (result?.siblingId) {
+          newSessionId = result.siblingId;
+        }
+      }
+
+      if (newSessionId) {
+        // Construct absolute plan path
+        const basePath = sessionData?.worktreePath || workspacePath;
+        const absolutePlanPath = planFilePath.startsWith('/')
+          ? planFilePath
+          : `${basePath}/${planFilePath}`;
+
+        // Save the draft input as an instruction to implement the plan
+        const implementationPrompt = `/implement ${absolutePlanPath}`;
+
+        // 1. Update the atom directly for immediate display when the new session mounts
+        store.set(sessionDraftInputAtom(newSessionId), implementationPrompt);
+
+        // 2. Persist to database for durability (async, no need to await)
+        window.electronAPI.invoke('ai:saveDraftInput', newSessionId, implementationPrompt, workspacePath)
+          .catch(err => console.error('[SessionTranscript] Failed to persist draft input:', err));
+
+        console.log('[SessionTranscript] Created new session for implementation:', newSessionId, 'with prompt:', implementationPrompt);
+
+        // The atom operations (createChildSession/convertToWorkstream) already update:
+        // - sessionActiveChildAtom (sets new session as active)
+        // - setSelectedWorkstreamAtom (navigates to workstream)
+        // - workstreamState atoms
+        // So the parent components will automatically switch to the new session
+      }
+    } catch (error) {
+      console.error('[SessionTranscript] Failed to start new session for implementation:', error);
+    }
+  }, [setAiMode, sessionChildren, sessionParentId, workspacePath, createChildSession, convertToWorkstream, sessionData?.worktreePath]);
 
   const handleAskUserQuestionSubmit = useCallback(async (questionId: string, confirmSessionId: string, answers: Record<string, string>) => {
     try {
@@ -972,6 +1109,7 @@ ${message}`;
           worktreeId={worktreeId}
           onFileClick={handleFileClick}
           onApprove={handleExitPlanModeApprove}
+          onStartNewSession={handleExitPlanModeStartNewSession}
           onDeny={handleExitPlanModeDeny}
         />
       )}

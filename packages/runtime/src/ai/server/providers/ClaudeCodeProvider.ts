@@ -61,9 +61,9 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   private editedFilesThisTurn: Set<string> = new Set(); // Track files edited in current turn
   private markMessagesAsHidden: boolean = false; // Flag to mark next messages as hidden
 
-  // ExitPlanMode confirmation flow - stores pending confirmation resolvers
+  // ExitPlanMode confirmation response type
   private pendingExitPlanModeConfirmations: Map<string, {
-    resolve: (approved: boolean) => void;
+    resolve: (response: { approved: boolean; clearContext?: boolean; feedback?: string }) => void;
     reject: (error: Error) => void;
   }> = new Map();
 
@@ -1896,11 +1896,16 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   /**
    * Resolve a pending ExitPlanMode confirmation request
    * Called by AIService when renderer responds to confirmation prompt
+   * @param requestId - Unique ID for this confirmation request
+   * @param response - User's response containing:
+   *   - approved: Whether to exit plan mode
+   *   - clearContext: If true, clear the session context for a fresh start
+   *   - feedback: Optional feedback message when denying (continue planning)
    */
-  public resolveExitPlanModeConfirmation(requestId: string, approved: boolean): void {
+  public resolveExitPlanModeConfirmation(requestId: string, response: { approved: boolean; clearContext?: boolean; feedback?: string }): void {
     const pending = this.pendingExitPlanModeConfirmations.get(requestId);
     if (pending) {
-      pending.resolve(approved);
+      pending.resolve(response);
       this.pendingExitPlanModeConfirmations.delete(requestId);
       // TODO: Debug logging - uncomment if needed
     } else {
@@ -2940,7 +2945,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         const planSummary = toolInput?.plan || '';
 
         // Create a promise that will be resolved when user responds
-        const confirmationPromise = new Promise<boolean>((resolve, reject) => {
+        const confirmationPromise = new Promise<{ approved: boolean; clearContext?: boolean; feedback?: string }>((resolve, reject) => {
           this.pendingExitPlanModeConfirmations.set(requestId, { resolve, reject });
 
           // Set up abort handler
@@ -2962,12 +2967,13 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         });
 
         try {
-          const approved = await confirmationPromise;
+          const response = await confirmationPromise;
 
-          if (approved) {
+          if (response.approved) {
             // User approved - update our mode state and allow ExitPlanMode to proceed
             // TODO: Debug logging - uncomment if needed
             this.currentMode = 'agent';
+
             return {
               hookSpecificOutput: {
                 hookEventName: 'PreToolUse' as const,
@@ -2976,12 +2982,16 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             };
           } else {
             // User denied - keep in planning mode
+            // Include feedback in the denial reason if provided
+            const feedbackText = response.feedback
+              ? `\n\nUser feedback: "${response.feedback}"`
+              : '';
             // TODO: Debug logging - uncomment if needed
             return {
               hookSpecificOutput: {
                 hookEventName: 'PreToolUse' as const,
                 permissionDecision: 'deny' as const,
-                permissionDecisionReason: `The user chose to continue planning. Please refine the plan further before attempting to exit plan mode.`
+                permissionDecisionReason: `The user chose to continue planning.${feedbackText}`
               }
             };
           }

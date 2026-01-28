@@ -526,6 +526,19 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
       }
     }, [value, provider, isMemoryMode, enterMemoryMode, exitMemoryMode]);
 
+    // Detect /plan command trigger - immediately switch to planning mode when user types "/plan"
+    useEffect(() => {
+      // Match "/plan" at start, followed by end of string or whitespace (not "/planning" or "/planify")
+      const planCommandMatch = value.match(/^\/plan(?:\s|$)/);
+      if (planCommandMatch && mode !== 'planning' && onModeChange) {
+        // Switch to planning mode immediately
+        onModeChange('planning');
+        // Remove the /plan prefix, keeping any text after it
+        const remainingText = value.slice(planCommandMatch[0].length);
+        onChange(remainingText);
+      }
+    }, [value, mode, onModeChange, onChange]);
+
     // Handle typeahead option selection
     const handleTypeaheadSelect = useCallback((option: TypeaheadOption) => {
       if (!typeaheadMatch || !textareaRef.current) return;

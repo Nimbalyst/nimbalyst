@@ -3003,8 +3003,8 @@ export class AIService {
     });
 
     // Handle ExitPlanMode confirmation response from renderer
-    safeHandle('ai:exitPlanModeConfirmResponse', async (event, requestId: string, sessionId: string, approved: boolean) => {
-      logger.main.info(`[AIService] ExitPlanMode confirmation response: requestId=${requestId}, approved=${approved}`);
+    safeHandle('ai:exitPlanModeConfirmResponse', async (event, requestId: string, sessionId: string, response: { approved: boolean; clearContext?: boolean; feedback?: string }) => {
+      logger.main.info(`[AIService] ExitPlanMode confirmation response: requestId=${requestId}, approved=${response.approved}, clearContext=${response.clearContext}, hasFeedback=${!!response.feedback}`);
 
       // Use repository directly - we just need session metadata (provider type),
       // not the full session load with messages
@@ -3023,7 +3023,7 @@ export class AIService {
 
       // Check if this is a ClaudeCodeProvider with the resolve method
       if (typeof (provider as any).resolveExitPlanModeConfirmation === 'function') {
-        (provider as any).resolveExitPlanModeConfirmation(requestId, approved);
+        (provider as any).resolveExitPlanModeConfirmation(requestId, response);
         return { success: true };
       } else {
         logger.main.warn(`[AIService] Provider does not support ExitPlanMode confirmation: ${session.provider}`);
