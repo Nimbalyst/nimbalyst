@@ -32,6 +32,8 @@ interface FilesEditedSidebarProps {
   activeSessionId: string | null;
   workspacePath: string;
   onFileClick: (filePath: string) => void;
+  /** Callback to open file in Files mode (switches to Files mode and opens the file) */
+  onOpenInFilesMode?: (filePath: string) => void;
   width?: number;
   /** The worktree ID if this is a worktree session */
   worktreeId?: string | null;
@@ -57,6 +59,7 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
   activeSessionId,
   workspacePath,
   onFileClick,
+  onOpenInFilesMode,
   width = 256,
   worktreeId,
   worktreePath,
@@ -657,8 +660,13 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
   // Context menu handlers
   const handleOpenInFiles = useCallback((filePath: string) => {
     // Navigate to the file in Files mode (main editor)
-    onFileClick(filePath);
-  }, [onFileClick]);
+    if (onOpenInFilesMode) {
+      onOpenInFilesMode(filePath);
+    } else {
+      // Fallback to opening in agent mode if no Files mode handler provided
+      onFileClick(filePath);
+    }
+  }, [onOpenInFilesMode, onFileClick]);
 
   const handleViewDiff = useCallback(async (filePath: string) => {
     // Open diff view for the file
