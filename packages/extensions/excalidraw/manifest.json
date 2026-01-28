@@ -53,6 +53,18 @@
       }
     ],
     "nodes": ["ExcalidrawNode"],
-    "transformers": ["EXCALIDRAW_TRANSFORMER"]
+    "transformers": ["EXCALIDRAW_TRANSFORMER"],
+    "claudePlugin": {
+      "path": "claude-plugin",
+      "displayName": "Excalidraw Diagrams",
+      "description": "Create flowcharts, architecture diagrams, and visual drawings",
+      "enabledByDefault": true,
+      "commands": [
+        {
+          "name": "excalidraw",
+          "description": "Create a diagram using Excalidraw"
+        }
+      ]
+    }
   }
 }

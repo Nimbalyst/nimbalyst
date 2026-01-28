@@ -1,0 +1,42 @@
+{
+  "id": "com.nimbalyst.planning",
+  "name": "Planning",
+  "version": "1.0.0",
+  "description": "Structured planning and tracking with YAML frontmatter",
+  "author": "Nimbalyst",
+  "apiVersion": "1.0.0",
+  "permissions": {
+    "filesystem": true,
+    "ai": true
+  },
+  "contributions": {
+    "claudePlugin": {
+      "path": "claude-plugin",
+      "displayName": "Planning Tools",
+      "description": "Structured planning and tracking with YAML frontmatter",
+      "enabledByDefault": true,
+      "commands": [
+        {
+          "name": "plan",
+          "description": "Create a structured plan document"
+        },
+        {
+          "name": "implement",
+          "description": "Execute a plan with progress tracking"
+        },
+        {
+          "name": "track",
+          "description": "Track bugs, tasks, ideas, and other items"
+        },
+        {
+          "name": "track-bug",
+          "description": "Quick bug tracking"
+        },
+        {
+          "name": "track-idea",
+          "description": "Quick idea tracking"
+        }
+      ]
+    }
+  }
+}

@@ -239,13 +239,15 @@ export const CustomEditorWrapper: React.FC<CustomEditorWrapperProps> = ({
   }
 
   return (
-    <CustomEditorErrorBoundary
-      key={resetKey}
-      extensionId={extensionId}
-      componentName={componentName}
-      onReset={handleReset}
-    >
-      <CustomEditorComponent host={host} />
-    </CustomEditorErrorBoundary>
+    <div className="custom-editor-wrapper flex-1 w-full h-full min-h-0 overflow-hidden">
+      <CustomEditorErrorBoundary
+        key={resetKey}
+        extensionId={extensionId}
+        componentName={componentName}
+        onReset={handleReset}
+      >
+        <CustomEditorComponent host={host} />
+      </CustomEditorErrorBoundary>
+    </div>
   );
 };

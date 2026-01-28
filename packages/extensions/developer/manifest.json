@@ -15,6 +15,12 @@
       "git_commit_proposal",
       "git_status",
       "git_log"
-    ]
+    ],
+    "claudePlugin": {
+      "path": "claude-plugin",
+      "displayName": "Developer Tools",
+      "description": "Git commit workflows using Nimbalyst's interactive commit widget",
+      "enabledByDefault": true
+    }
   }
 }

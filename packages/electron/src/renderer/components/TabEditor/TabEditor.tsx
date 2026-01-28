@@ -560,6 +560,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         const newContent = contentRef.current; // Use current content ref to get actual disk content
 
         logger.ui.info(`[TabEditor] Restoring pending AI edit on mount: tagId=${pendingTag.id}, status=${pendingTag.status}`);
+        logger.ui.info(`[TabEditor] Diff content check: oldContentLength=${oldContent?.length}, newContentLength=${newContent?.length}, baseline=${!!baseline}, pendingTagContent=${pendingTag.content?.length}`);
 
         // If content differs, apply the diff
         if (oldContent !== newContent) {
@@ -2370,7 +2371,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
               // Built-in editors (no extensionId) are rendered directly
               if (registration.extensionId) {
                 return (
-                  <>
+                  <div className="custom-editor-container flex flex-col flex-1 min-h-0 overflow-hidden">
                     {showCustomEditorDiffBar && (
                       <UnifiedDiffHeader
                         filePath={filePath}
@@ -2391,14 +2392,14 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                       extensionId={registration.extensionId}
                       componentName={registration.componentName}
                     />
-                  </>
+                  </div>
                 );
               }
 
               // Built-in custom editors (e.g., mockup editor) rendered directly
               const CustomEditor = registration.component;
               return (
-                <>
+                <div className="custom-editor-container flex flex-col flex-1 min-h-0 overflow-hidden">
                   {showCustomEditorDiffBar && (
                     <UnifiedDiffHeader
                       filePath={filePath}
@@ -2416,7 +2417,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                     key={filePath}
                     host={editorHost}
                   />
-                </>
+                </div>
               );
             }
 

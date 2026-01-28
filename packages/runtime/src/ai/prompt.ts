@@ -267,22 +267,7 @@ When asked about your identity, say that you are Claude Code running inside Nimb
     base += buildSessionNamingSection();
   }
 
-  // Add MockupLM instructions
-  base += `
-
-## MockupLM - Visual Planning
-
-For any planning, UI mockups, or visual design requests, create a \`.mockup.html\` file with HTML/CSS. If you are already implementing, you do not need to create a MockupLM file, only for planning. The purpose is to share and iterate on designs with the user.
-
-The user may draw annotations on the mockup (circles, arrows, highlights). You can ONLY see these annotations by using the \`mcp__nimbalyst-mcp__capture_mockup_screenshot\` tool - they are not in the HTML source.
-
-**Workflow:**
-1. Create mockup file (e.g., \`plans/feature.mockup.html\`) with HTML and inline CSS
-2. Use Task tool to spawn a sub-agent that will iteratively verify and fix the mockup:
-   - Capture screenshot with \`mcp__nimbalyst-mcp__capture_mockup_screenshot\`
-   - Analyze for layout/visual issues AND user annotations
-   - Fix with Edit tool
-   - Re-capture and repeat until correct`;
+  // NOTE: MockupLM instructions removed - now provided via mockuplm extension's claude plugin skill
 
   if (!hasDocument) {
     return base + `

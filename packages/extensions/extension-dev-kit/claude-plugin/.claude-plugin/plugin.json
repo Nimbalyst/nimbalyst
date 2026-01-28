@@ -1,12 +1,10 @@
 {
   "name": "extension-dev-kit",
   "version": "1.0.0",
-  "description": "Commands for creating and developing Nimbalyst extensions",
+  "description": "Commands and tools for creating and developing Nimbalyst extensions",
   "author": {
     "name": "Nimbalyst",
-    "email": "support@nimbalyst.com",
     "url": "https://nimbalyst.com"
   },
-  "license": "MIT",
-  "keywords": ["extension", "scaffold", "template", "development"]
+  "keywords": ["extension", "scaffold", "template", "development", "build", "reload"]
 }

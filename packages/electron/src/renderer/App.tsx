@@ -70,11 +70,9 @@ import { registerExtensionSystem, setExtensionWorkspacePath } from './plugins/re
 import { SettingsView } from './components/Settings/SettingsView';
 import type { SettingsCategory } from './components/Settings/SettingsSidebar';
 import { loadCustomTrackers } from './services/CustomTrackerLoader';
-import { customEditorRegistry } from './components/CustomEditors';
-import { MockupViewer } from './components/CustomEditors/MockupEditor/MockupViewer';
 import { MockupPickerMenuHost } from './components/MockupPickerMenu';
 import { ExtensionHostComponents } from './components/ExtensionHostComponents';
-import { ClaudeCommandsToast } from './components/ClaudeCommandsToast';
+// ClaudeCommandsToast removed - commands now provided via extension-based claude plugins
 import { UpdateToast } from './components/UpdateToast';
 import { ProjectTrustToast } from './components/ProjectTrustToast';
 // NOTE: PostHogSurvey now managed by DialogProvider
@@ -162,18 +160,8 @@ export default function App() {
         initializePanelRegistry();
         logger.ui.info('[Extensions] Panel registry initialized');
 
-        // Conditionally register MockupLM based on settings
-        const mockupLMEnabled = await window.electronAPI.invoke('mockupLM:is-enabled');
-        if (mockupLMEnabled) {
-          customEditorRegistry.register({
-            extensions: ['.mockup.html'],
-            component: MockupViewer,
-            name: 'MockupLM',
-            supportsAI: true,
-            supportsSourceMode: true,
-          });
-          logger.ui.info('[CustomEditors] MockupLM editor registered');
-        }
+        // NOTE: MockupLM is now registered via the extension system (com.nimbalyst.mockuplm)
+        // The manifest's customEditors contribution handles registration automatically
 
         logger.ui.info('[CustomEditors] Custom editors registration complete');
       } catch (error) {
@@ -294,8 +282,7 @@ export default function App() {
   // NOTE: UnifiedOnboarding state now managed by DialogProvider via useOnboarding hook
 
   // Claude commands install toast state
-  const [showCommandsToast, setShowCommandsToast] = useState(false);
-  const hasCheckedCommandsRef = useRef(false);
+  // Commands toast removed - commands now provided via extension-based claude plugins
 
   // Settings deep link state - now using atoms
   const settingsInitialCategory = useAtomValue(settingsInitialCategoryAtom);
@@ -335,7 +322,7 @@ export default function App() {
   const goForward = useSetAtom(goForwardAtom);
 
   // Onboarding dialogs (UnifiedOnboarding, WindowsClaudeCodeWarning) - managed via DialogProvider
-  const { checkAndShowCommandsToast } = useOnboarding({
+  useOnboarding({
     workspacePath,
     workspaceMode,
     isInitializing,
@@ -930,21 +917,7 @@ export default function App() {
   }, []);
 
   // NOTE: Windows Claude Code warning and onboarding IPC listeners moved to useOnboarding hook
-
-  // Listen for show-commands-toast IPC event (from Developer menu)
-  useEffect(() => {
-    if (!window.electronAPI?.on) return;
-
-    const handleShowCommandsToast = () => {
-      setShowCommandsToast(true);
-    };
-
-    window.electronAPI.on('show-commands-toast', handleShowCommandsToast);
-
-    return () => {
-      window.electronAPI.off?.('show-commands-toast', handleShowCommandsToast);
-    };
-  }, []);
+  // NOTE: show-commands-toast IPC listener removed - commands now via extension-based plugins
 
   // Listen for show-trust-toast IPC event (from Developer menu)
   useEffect(() => {
@@ -961,30 +934,7 @@ export default function App() {
     };
   }, []);
 
-  // Check if Claude commands need to be installed (show toast)
-  // Uses checkAndShowCommandsToast from useOnboarding which waits for onboarding dialogs to close
-  useEffect(() => {
-    const checkCommands = async () => {
-      if (hasCheckedCommandsRef.current) return;
-
-      const shouldShow = await checkAndShowCommandsToast();
-      if (shouldShow) {
-        hasCheckedCommandsRef.current = true;
-        setShowCommandsToast(true);
-        posthog?.capture('claude_commands_toast_shown');
-      }
-    };
-
-    // Small delay to ensure smooth transition after other dialogs
-    const timeout = setTimeout(checkCommands, 500);
-    return () => clearTimeout(timeout);
-  }, [workspacePath, checkAndShowCommandsToast]);
-
-  // Reset commands check when workspace changes
-  useEffect(() => {
-    hasCheckedCommandsRef.current = false;
-    setShowCommandsToast(false);
-  }, [workspacePath]);
+  // NOTE: Commands toast check removed - commands now via extension-based plugins
 
   // Update window title for files mode - agent mode sets title directly from AgenticPanel
   useEffect(() => {
@@ -1713,38 +1663,7 @@ export default function App() {
       {/* DiscordInvitation is now managed by DialogProvider */}
       {/* WindowsClaudeCodeWarning is now managed by DialogProvider via useOnboarding hook */}
       {/* UnifiedOnboarding is now managed by DialogProvider via useOnboarding hook */}
-      {showCommandsToast && workspacePath && (
-        <ClaudeCommandsToast
-          onInstallAll={async () => {
-            posthog?.capture('claude_commands_toast_install_all');
-            try {
-              await OnboardingService.installAllCommands(workspacePath);
-              setShowCommandsToast(false);
-            } catch (error) {
-              console.error('[App] Failed to install commands:', error);
-            }
-          }}
-          onOpenSettings={() => {
-            posthog?.capture('claude_commands_toast_settings');
-            setShowCommandsToast(false);
-            // Use setTimeout to ensure state updates are flushed before switching modes
-            setSettingsInitialCategory('tool-packages');
-            setSettingsInitialScope('project');
-            incrementSettingsKey(); // Force SettingsView remount
-            // Defer mode change to next tick so initial values are set first
-            setTimeout(() => setActiveMode('settings'), 0);
-          }}
-          onSkip={async () => {
-            posthog?.capture('claude_commands_toast_skip');
-            try {
-              await OnboardingService.dismissCommandInstallToast(workspacePath);
-              setShowCommandsToast(false);
-            } catch (error) {
-              console.error('[App] Failed to dismiss toast:', error);
-            }
-          }}
-        />
-      )}
+      {/* ClaudeCommandsToast removed - commands now via extension-based plugins */}
       <ErrorToastContainer />
       <MockupPickerMenuHost />
       <ExtensionHostComponents />

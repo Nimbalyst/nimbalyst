@@ -1,5 +1,5 @@
 /**
- * MockupViewer - Custom editor for .mockup.html files
+ * MockupEditor - Custom editor for .mockup.html files
  *
  * Uses the EditorHost API via useEditorHost hook for all host communication:
  * - Content loading and state management
@@ -9,19 +9,28 @@
  * - Diff mode via host.onDiffRequested() + host.reportDiffResult()
  */
 
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo, forwardRef } from 'react';
 import type { EditorHostProps } from '@nimbalyst/runtime';
 import { useEditorHost } from '@nimbalyst/runtime';
-import { logger } from '../../../utils/logger';
-import { captureMockupComposite } from './screenshotUtils';
-import { renderMockupHtml } from './mockupDomUtils';
+import { captureMockupComposite } from '../utils/screenshotUtils';
+import { renderMockupHtml } from '../utils/mockupDomUtils';
 import { MockupDiffViewer } from './MockupDiffViewer';
-import {
-  FloatingEditorActions,
-  FloatingEditorButton,
-} from '../../FloatingEditorActions';
 
-export const MockupViewer: React.FC<EditorHostProps> = ({ host }) => {
+// Declare window extensions for electron API
+declare global {
+  interface Window {
+    electronAPI: {
+      invoke: (channel: string, ...args: any[]) => Promise<any>;
+      on: (channel: string, callback: (...args: any[]) => void) => () => void;
+    };
+    __mockupFilePath?: string;
+    __mockupSelectedElement?: any;
+    __mockupDrawing?: string | null;
+    __mockupAnnotationTimestamp?: number | null;
+  }
+}
+
+export const MockupEditor = forwardRef<any, EditorHostProps>(function MockupEditor({ host }, ref) {
   const { filePath, fileName, theme, isActive } = host;
 
   // Refs for clearAllAnnotations (defined early so hook can reference)
@@ -65,7 +74,7 @@ export const MockupViewer: React.FC<EditorHostProps> = ({ host }) => {
   // Use the EditorHost hook for content management
   // This handles: content loading, file change subscriptions, save handling, dirty state
   const editorHostOptions = useMemo(() => ({
-    logPrefix: '[MockupViewer]',
+    logPrefix: '[MockupEditor]',
     onExternalChange: () => {
       // Clear annotations when content changes externally
       clearAllAnnotations();
@@ -98,9 +107,12 @@ export const MockupViewer: React.FC<EditorHostProps> = ({ host }) => {
     if (!host.onDiffRequested) return;
 
     return host.onDiffRequested((config) => {
-      logger.ui.info('[MockupViewer] Diff requested:', {
+      console.log('[MockupEditor] Diff requested:', {
         tagId: config.tagId,
         sessionId: config.sessionId,
+        originalContentLength: config.originalContent?.length,
+        modifiedContentLength: config.modifiedContent?.length,
+        originalContentPreview: config.originalContent?.substring(0, 100),
       });
       setDiffData(config);
     });
@@ -117,7 +129,7 @@ export const MockupViewer: React.FC<EditorHostProps> = ({ host }) => {
     }
 
     return host.onDiffCleared(async () => {
-      logger.ui.info('[MockupViewer] Diff cleared');
+      console.log('[MockupEditor] Diff cleared');
       setDiffData(null);
 
       // Reload content from disk via EditorHost to show the accepted/current content
@@ -125,9 +137,9 @@ export const MockupViewer: React.FC<EditorHostProps> = ({ host }) => {
       try {
         const newContent = await host.loadContent();
         setReloadedContent(newContent);
-        logger.ui.info('[MockupViewer] Reloaded content from disk after diff cleared');
+        console.log('[MockupEditor] Reloaded content from disk after diff cleared');
       } catch (error) {
-        logger.ui.error('[MockupViewer] Failed to reload content after diff cleared:', error);
+        console.error('[MockupEditor] Failed to reload content after diff cleared:', error);
       }
     });
   }, [host]);
@@ -256,7 +268,7 @@ export const MockupViewer: React.FC<EditorHostProps> = ({ host }) => {
   // Expose file path to window for AI context
   useEffect(() => {
     if (isActive) {
-      (window as any).__mockupFilePath = filePath;
+      window.__mockupFilePath = filePath;
       const hasAnnotations = !!(drawingDataUrl || selectedElement);
       const event = new CustomEvent('mockup-annotation-changed', {
         detail: {
@@ -269,7 +281,7 @@ export const MockupViewer: React.FC<EditorHostProps> = ({ host }) => {
       });
       window.dispatchEvent(event);
     } else {
-      delete (window as any).__mockupFilePath;
+      delete window.__mockupFilePath;
       const event = new CustomEvent('mockup-annotation-changed', {
         detail: {
           filePath: '',
@@ -283,29 +295,29 @@ export const MockupViewer: React.FC<EditorHostProps> = ({ host }) => {
     }
 
     return () => {
-      delete (window as any).__mockupFilePath;
+      delete window.__mockupFilePath;
     };
   }, [filePath, isActive, annotationTimestamp, drawingDataUrl, selectedElement]);
 
   // Expose selected element and drawing for AI context
   useEffect(() => {
-    (window as any).__mockupSelectedElement = selectedElement;
+    window.__mockupSelectedElement = selectedElement;
     return () => {
-      delete (window as any).__mockupSelectedElement;
+      delete window.__mockupSelectedElement;
     };
   }, [selectedElement]);
 
   useEffect(() => {
-    (window as any).__mockupDrawing = drawingDataUrl;
+    window.__mockupDrawing = drawingDataUrl;
     return () => {
-      delete (window as any).__mockupDrawing;
+      delete window.__mockupDrawing;
     };
   }, [drawingDataUrl]);
 
   useEffect(() => {
-    (window as any).__mockupAnnotationTimestamp = annotationTimestamp;
+    window.__mockupAnnotationTimestamp = annotationTimestamp;
     return () => {
-      delete (window as any).__mockupAnnotationTimestamp;
+      delete window.__mockupAnnotationTimestamp;
     };
   }, [annotationTimestamp]);
 
@@ -521,7 +533,7 @@ export const MockupViewer: React.FC<EditorHostProps> = ({ host }) => {
     const handleCaptureRequest = async (data: { requestId: string; filePath: string }) => {
       if (data.filePath !== filePath) return;
 
-      logger.ui.info('[MockupViewer] Received MCP screenshot request');
+      console.log('[MockupEditor] Received MCP screenshot request');
 
       try {
         if (!iframeRef.current) {
@@ -784,15 +796,17 @@ export const MockupViewer: React.FC<EditorHostProps> = ({ host }) => {
 
         {/* Floating action buttons */}
         {host.supportsSourceMode && (
-          <FloatingEditorActions>
-            <FloatingEditorButton
-              icon="code"
-              label="View Source"
+          <div className="absolute bottom-4 right-4 flex gap-2 z-[1000]">
+            <button
               onClick={() => host.toggleSourceMode?.()}
-            />
-          </FloatingEditorActions>
+              className="px-3 py-2 text-xs bg-nim-secondary border border-nim rounded text-nim cursor-pointer hover:bg-nim-hover"
+              title="View Source"
+            >
+              View Source
+            </button>
+          </div>
         )}
       </div>
     </div>
   );
-};
+});

@@ -1,5 +1,3 @@
-import { logger } from '../../../utils/logger';
-
 interface RenderOptions {
   onAfterRender?: (doc: Document) => void;
 }
@@ -37,6 +35,6 @@ export function renderMockupHtml(
 
     options?.onAfterRender?.(doc);
   } catch (error) {
-    logger.ui.error('[MockupRenderer] Failed to render mockup HTML:', error);
+    console.error('[MockupRenderer] Failed to render mockup HTML:', error);
   }
 }

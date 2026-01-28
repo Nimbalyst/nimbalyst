@@ -1329,9 +1329,9 @@ export function getExtensionLoader(): ExtensionLoader {
 export async function initializeExtensions(): Promise<void> {
   const loader = getExtensionLoader();
 
-  // console.info('[ExtensionLoader] Discovering extensions...');
+  console.info('[ExtensionLoader] Discovering extensions...');
   const discovered = await loader.discoverExtensions();
-  // console.info(`[ExtensionLoader] Found ${discovered.length} extension(s)`);
+  console.info(`[ExtensionLoader] Found ${discovered.length} extension(s):`, discovered.map(d => d.manifest.id));
 
   for (const ext of discovered) {
     // Check persisted enabled state, passing manifest's defaultEnabled
