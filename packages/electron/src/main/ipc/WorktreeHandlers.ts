@@ -870,8 +870,9 @@ export function registerWorktreeHandlers(): void {
         logger.warn('Some sessions failed to archive', { worktreeId, failedCount: failedSessions, totalCount: sessionIds.length });
       }
 
-      // Mark the worktree as archived immediately (before cleanup, so UI shows it as archived right away)
-      await worktreeStore.updateArchived(worktreeId, true);
+      // NOTE: We do NOT mark the worktree as archived here.
+      // The worktree is only marked as archived AFTER the disk deletion succeeds.
+      // This ensures we never have a worktree marked as archived that still exists on disk.
 
       // Calculate worktree age for analytics
       const worktreeAgeDays = Math.floor((Date.now() - worktree.createdAt) / (1000 * 60 * 60 * 24));
@@ -885,16 +886,21 @@ export function registerWorktreeHandlers(): void {
         failed_sessions: failedSessions,
       });
 
-      // Step 2: Queue the slow cleanup work
+      // Step 4: Queue the slow cleanup work
       const cleanupCallback = async () => {
         try {
           // Update status to show we're removing the worktree
           archiveProgressManager.updateTaskStatus(worktreeId, 'removing-worktree');
 
-          // Remove the git worktree from disk
+          // Remove the git worktree from disk (throws if directory still exists after cleanup)
           await gitWorktreeService.deleteWorktree(worktree.path, workspacePath);
 
-          logger.info('Worktree cleanup completed', { worktreeId });
+          logger.info('Worktree cleanup completed, now marking as archived in database', { worktreeId });
+
+          // Only mark as archived AFTER disk deletion is confirmed
+          await worktreeStore.updateArchived(worktreeId, true);
+
+          logger.info('Worktree marked as archived in database', { worktreeId });
 
           // Track successful completion
           const durationMs = Date.now() - archiveStartTime;
@@ -903,6 +909,16 @@ export function registerWorktreeHandlers(): void {
             duration_ms: durationMs,
           });
         } catch (error) {
+          // Unarchive the sessions since the cleanup failed
+          logger.warn('Cleanup failed, unarchiving sessions', { worktreeId, error });
+          for (const sessionId of sessionIds) {
+            try {
+              await AISessionsRepository.updateMetadata(sessionId, { isArchived: false });
+            } catch (unarchiveErr) {
+              logger.error('Failed to unarchive session after cleanup failure', { sessionId, worktreeId, error: unarchiveErr });
+            }
+          }
+
           // Track failure
           analyticsService.sendEvent('worktree_archive_failed', {
             error_type: error instanceof Error ? error.constructor.name : 'Unknown',

@@ -262,6 +262,7 @@ export class GitWorktreeService {
    *
    * @param worktreePath - Path to the worktree to delete
    * @param workspacePath - Path to the main repository (needed for git operations)
+   * @throws Error if the worktree directory still exists after all cleanup attempts
    */
   async deleteWorktree(worktreePath: string, workspacePath: string): Promise<void> {
     if (!worktreePath) {
@@ -274,39 +275,81 @@ export class GitWorktreeService {
     logger.info('Deleting worktree', { worktreePath, workspacePath });
 
     const git: SimpleGit = simpleGit(workspacePath);
+    let branchName: string | null = null;
 
-    try {
-      // Get the branch name before removing
-      const worktreeGit: SimpleGit = simpleGit(worktreePath);
-      let branchName: string | null = null;
-
+    // Step 1: Get the branch name before removing (best effort)
+    if (fs.existsSync(worktreePath)) {
       try {
+        const worktreeGit: SimpleGit = simpleGit(worktreePath);
         branchName = await worktreeGit.revparse(['--abbrev-ref', 'HEAD']);
         logger.info('Found branch for worktree', { branchName });
       } catch (error) {
         logger.warn('Failed to get branch name, continuing with worktree removal', { error });
       }
+    }
 
-      // Remove the worktree
+    // Step 2: Try git worktree remove first (the clean way)
+    let gitRemoveSucceeded = false;
+    try {
       await git.raw(['worktree', 'remove', worktreePath, '--force']);
-      logger.info('Worktree removed', { worktreePath });
+      logger.info('Git worktree remove succeeded', { worktreePath });
+      gitRemoveSucceeded = true;
+    } catch (error) {
+      logger.warn('Git worktree remove failed, will try fallback cleanup', { error, worktreePath });
+    }
 
-      // Delete the branch if we found it
-      if (branchName && branchName !== 'HEAD') {
-        try {
-          await git.deleteLocalBranch(branchName, true); // force delete
-          logger.info('Branch deleted', { branchName });
-        } catch (error) {
-          logger.warn('Failed to delete branch', { error, branchName });
-          // Continue even if branch deletion fails
-        }
+    // Step 3: If git worktree remove failed or directory still exists, try fallbacks
+    if (fs.existsSync(worktreePath)) {
+      logger.info('Worktree directory still exists, attempting fallback cleanup', { worktreePath });
+
+      // Fallback 1: Try git worktree prune to clean up stale worktree entries
+      try {
+        await git.raw(['worktree', 'prune']);
+        logger.info('Git worktree prune completed', { workspacePath });
+      } catch (pruneError) {
+        logger.warn('Git worktree prune failed', { pruneError });
       }
 
-      logger.info('Worktree deletion complete', { worktreePath });
-    } catch (error) {
-      logger.error('Failed to delete worktree', { error, worktreePath });
-      throw new Error(`Failed to delete worktree: ${error instanceof Error ? error.message : String(error)}`);
+      // Fallback 2: Force remove the directory with fs.rm
+      try {
+        fs.rmSync(worktreePath, { recursive: true, force: true });
+        logger.info('Fallback fs.rmSync succeeded', { worktreePath });
+      } catch (fsError) {
+        logger.error('Fallback fs.rmSync failed', { fsError, worktreePath });
+      }
     }
+
+    // Step 4: Final verification - the directory MUST be gone
+    if (fs.existsSync(worktreePath)) {
+      const errorMsg = `Failed to delete worktree directory: ${worktreePath} still exists after all cleanup attempts`;
+      logger.error(errorMsg);
+      throw new Error(errorMsg);
+    }
+
+    logger.info('Worktree directory confirmed deleted', { worktreePath });
+
+    // Step 5: Delete the branch if we found it (best effort, don't fail if this doesn't work)
+    if (branchName && branchName !== 'HEAD') {
+      try {
+        await git.deleteLocalBranch(branchName, true); // force delete
+        logger.info('Branch deleted', { branchName });
+      } catch (error) {
+        logger.warn('Failed to delete branch', { error, branchName });
+        // Continue even if branch deletion fails - the important part (directory removal) succeeded
+      }
+    }
+
+    // Step 6: Run a final prune to clean up any stale worktree references
+    if (!gitRemoveSucceeded) {
+      try {
+        await git.raw(['worktree', 'prune']);
+        logger.info('Final git worktree prune completed');
+      } catch (pruneError) {
+        logger.warn('Final git worktree prune failed', { pruneError });
+      }
+    }
+
+    logger.info('Worktree deletion complete', { worktreePath });
   }
 
   /**
