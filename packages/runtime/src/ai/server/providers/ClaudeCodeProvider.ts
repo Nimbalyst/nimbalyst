@@ -737,9 +737,10 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
 
       // Log the raw input to the SDK (include attachments in metadata for UI restoration)
+      // CRITICAL: Must await to ensure user message is persisted before proceeding
       if (sessionId) {
         const metadataToLog = attachments && attachments.length > 0 ? { attachments } : undefined;
-        this.logAgentMessage(sessionId, 'claude-code', 'input', JSON.stringify({
+        await this.logAgentMessage(sessionId, 'claude-code', 'input', JSON.stringify({
           prompt: message,
           options: {
             model: options.model,
@@ -854,7 +855,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
           const chunk = rawChunk as any;
           chunkCount++;
 
-          // Log raw SDK chunks to database
+          // Log raw SDK chunks to database (non-blocking for streaming performance)
           // Extract SDK-provided uuid for deduplication in sync
           if (sessionId) {
             const rawChunkJson = typeof chunk === 'string'
@@ -862,7 +863,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
               : JSON.stringify(chunk);
             // Non-string chunks from SDK have a uuid field we can use for deduplication
             const providerMessageId = typeof chunk !== 'string' ? chunk.uuid : undefined;
-            this.logAgentMessage(sessionId, 'claude-code', 'output', rawChunkJson, undefined, hideMessages, providerMessageId);
+            this.logAgentMessageNonBlocking(sessionId, 'claude-code', 'output', rawChunkJson, undefined, hideMessages, providerMessageId);
           }
 
           // if (chunkCount <= 5) {
@@ -964,9 +965,9 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                   if (!toolName) {
                   } else if (isMcpTool) {
                     // MCP tools are handled by the SDK, but we need to log the tool_use for reconstruction
-                    // The result will come later in a tool_result block
+                    // The result will come later in a tool_result block (non-blocking for streaming)
                     if (sessionId) {
-                      this.logAgentMessage(sessionId, 'claude-code', 'output', JSON.stringify({
+                      this.logAgentMessageNonBlocking(sessionId, 'claude-code', 'output', JSON.stringify({
                         type: 'assistant',
                         message: {
                           content: [{
@@ -1021,10 +1022,10 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                   // Only emit tool call if we executed it ourselves and have a result
                   // SDK-native tools will be emitted when their result arrives
                   if (executionResult !== undefined) {
-                    // Log tool call and result to database in format that UI can reconstruct
+                    // Log tool call and result to database in format that UI can reconstruct (non-blocking for streaming)
                     if (sessionId) {
                       // Log the tool_use block
-                      this.logAgentMessage(sessionId, 'claude-code', 'output', JSON.stringify({
+                      this.logAgentMessageNonBlocking(sessionId, 'claude-code', 'output', JSON.stringify({
                         type: 'assistant',
                         message: {
                           content: [{
@@ -1037,7 +1038,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                       }), undefined, hideMessages);
 
                       // Log the tool_result block
-                      this.logAgentMessage(sessionId, 'claude-code', 'output', JSON.stringify({
+                      this.logAgentMessageNonBlocking(sessionId, 'claude-code', 'output', JSON.stringify({
                         type: 'assistant',
                         message: {
                           content: [{
@@ -1087,10 +1088,10 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                     }
 
 
-                    // Log ONLY the tool_result block to database
+                    // Log ONLY the tool_result block to database (non-blocking for streaming)
                     // The tool_use block was already logged by raw chunk logging at line 264
                     if (sessionId) {
-                      this.logAgentMessage(sessionId, 'claude-code', 'output', JSON.stringify({
+                      this.logAgentMessageNonBlocking(sessionId, 'claude-code', 'output', JSON.stringify({
                         type: 'assistant',
                         message: {
                           content: [{
@@ -1138,10 +1139,10 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
             if (isMcpTool) {
               // MCP tools are handled by the SDK, but we need to log the tool_use for reconstruction
-              // The result will come later in a tool_result block
+              // The result will come later in a tool_result block (non-blocking for streaming)
               if (sessionId) {
                 const mcpToolId = toolChunk.id || `tool-${toolCallCount}`;
-                this.logAgentMessage(sessionId, 'claude-code', 'output', JSON.stringify({
+                this.logAgentMessageNonBlocking(sessionId, 'claude-code', 'output', JSON.stringify({
                   type: 'assistant',
                   message: {
                     content: [{
@@ -1197,10 +1198,10 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             // Only emit tool call if we executed it ourselves and have a result
             // SDK-native tools will be emitted when their result arrives
             if (executionResult !== undefined) {
-              // Log tool call and result to database in format that UI can reconstruct
+              // Log tool call and result to database in format that UI can reconstruct (non-blocking for streaming)
               if (sessionId) {
                 // Log the tool_use block
-                this.logAgentMessage(sessionId, 'claude-code', 'output', JSON.stringify({
+                this.logAgentMessageNonBlocking(sessionId, 'claude-code', 'output', JSON.stringify({
                   type: 'assistant',
                   message: {
                     content: [{
@@ -1213,7 +1214,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                 }), undefined, hideMessages);
 
                 // Log the tool_result block
-                this.logAgentMessage(sessionId, 'claude-code', 'output', JSON.stringify({
+                this.logAgentMessageNonBlocking(sessionId, 'claude-code', 'output', JSON.stringify({
                   type: 'assistant',
                   message: {
                     content: [{
@@ -1448,10 +1449,10 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                     }
 
 
-                    // Log ONLY the tool_result block to database
+                    // Log ONLY the tool_result block to database (non-blocking for streaming)
                     // The tool_use block was already logged when the tool was first called
                     if (sessionId) {
-                      this.logAgentMessage(sessionId, 'claude-code', 'output', JSON.stringify({
+                      this.logAgentMessageNonBlocking(sessionId, 'claude-code', 'output', JSON.stringify({
                         type: 'assistant',
                         message: {
                           content: [{

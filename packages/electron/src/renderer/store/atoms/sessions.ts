@@ -1098,8 +1098,19 @@ export const updateSessionDataAtom = atom(
 );
 
 /**
+ * Track pending reloads per session to prevent concurrent race conditions.
+ * When multiple reload requests come in rapidly (e.g., multiple message-logged events),
+ * only the latest fetch should update the state to avoid stale data overwrites.
+ */
+const pendingReloads = new Map<string, { version: number; aborted: boolean }>();
+
+/**
  * Reload session data from database.
  * Called after message-logged events, etc.
+ *
+ * Uses version tracking to prevent race conditions when multiple reloads
+ * are triggered in rapid succession (e.g., from multiple message-logged events).
+ * Only the most recent reload will update the atom state.
  */
 export const reloadSessionDataAtom = atom(
   null,
@@ -1108,8 +1119,25 @@ export const reloadSessionDataAtom = atom(
       return;
     }
 
+    // Create a new version for this reload request
+    const existingPending = pendingReloads.get(sessionId);
+    if (existingPending) {
+      // Mark the existing reload as aborted - it should not update state
+      existingPending.aborted = true;
+    }
+
+    const currentVersion = (existingPending?.version || 0) + 1;
+    const thisReload = { version: currentVersion, aborted: false };
+    pendingReloads.set(sessionId, thisReload);
+
     try {
       const sessionData = await window.electronAPI.aiLoadSession(sessionId, workspacePath);
+
+      // Check if this reload was superseded by a newer one
+      if (thisReload.aborted) {
+        return;
+      }
+
       if (sessionData) {
         const current = get(sessionStoreAtom(sessionId));
 
@@ -1118,17 +1146,34 @@ export const reloadSessionDataAtom = atom(
           const dbMessages = sessionData.messages || [];
           const localMessages = current.messages || [];
 
-          const latestDbTimestamp = dbMessages.length > 0
-            ? Math.max(...dbMessages.map((m: Message) => m.timestamp || 0))
-            : 0;
+          // Use message count as a simple heuristic - DB should always have >= messages
+          // If DB has fewer messages than local, something is wrong - use DB as truth
+          // This prevents stale local state from overwriting fresh DB state
+          const dbMessageCount = dbMessages.length;
+          const localMessageCount = localMessages.length;
 
-          const localOnlyMessages = localMessages.filter((localMsg: Message) => {
-            const localTs = localMsg.timestamp || 0;
-            return localTs > latestDbTimestamp &&
-              !dbMessages.some((dbMsg: Message) => dbMsg.timestamp === localTs);
-          });
+          if (dbMessageCount >= localMessageCount) {
+            // DB has all messages - just use DB state
+            sessionData.messages = dbMessages;
+          } else {
+            // DB has fewer messages - this could indicate:
+            // 1. Optimistic messages not yet persisted (normal case)
+            // 2. A bug in persistence (concerning)
+            // Preserve local-only messages that have timestamps newer than any DB message
+            const latestDbTimestamp = dbMessages.length > 0
+              ? Math.max(...dbMessages.map((m: Message) => m.timestamp || 0))
+              : 0;
 
-          sessionData.messages = [...dbMessages, ...localOnlyMessages];
+            const localOnlyMessages = localMessages.filter((localMsg: Message) => {
+              const localTs = localMsg.timestamp || 0;
+              // Only keep if timestamp is newer than all DB messages
+              // AND it doesn't match any DB message timestamp (to avoid duplicates)
+              return localTs > latestDbTimestamp &&
+                !dbMessages.some((dbMsg: Message) => dbMsg.timestamp === localTs);
+            });
+
+            sessionData.messages = [...dbMessages, ...localOnlyMessages];
+          }
 
           // Preserve read state
           const preservedTimestamp = current.lastReadMessageTimestamp || 0;
@@ -1141,11 +1186,20 @@ export const reloadSessionDataAtom = atom(
           }
         }
 
-        set(sessionStoreAtom(sessionId), sessionData);
-        set(sessionArchivedAtom(sessionId), sessionData.isArchived || false);
+        // Final check before updating state - ensure we weren't superseded
+        if (!thisReload.aborted) {
+          set(sessionStoreAtom(sessionId), sessionData);
+          set(sessionArchivedAtom(sessionId), sessionData.isArchived || false);
+        }
       }
     } catch (error) {
       console.error(`[sessions] Failed to reload session ${sessionId}:`, error);
+    } finally {
+      // Clean up if this was the latest reload
+      const currentPending = pendingReloads.get(sessionId);
+      if (currentPending?.version === currentVersion) {
+        pendingReloads.delete(sessionId);
+      }
     }
   }
 );

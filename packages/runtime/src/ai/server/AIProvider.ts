@@ -184,13 +184,15 @@ export abstract class BaseAIProvider extends EventEmitter implements AIProvider 
    * Log an agent message to the audit table
    * This should be called for both input (user/system to AI) and output (AI response) messages
    *
+   * IMPORTANT: This method MUST be awaited for critical messages (user input and final output)
+   * to ensure they are persisted before continuing. Fire-and-forget usage can cause message loss.
+   *
    * Returns a Promise that resolves when the message is saved.
-   * Callers can await this for final output messages to ensure the database write
-   * completes before signaling completion to the UI.
-   * For input messages and streaming chunks, the Promise can be ignored (fire-and-forget).
    * Emits 'message:logged' event after successful write to trigger UI updates.
+   *
+   * @throws Error if the database write fails - callers must handle this appropriately
    */
-  protected logAgentMessage(
+  protected async logAgentMessage(
     sessionId: string,
     source: string, // Provider name (e.g., 'claude', 'claude-code', 'openai')
     direction: 'input' | 'output',
@@ -203,28 +205,53 @@ export abstract class BaseAIProvider extends EventEmitter implements AIProvider 
     // This same timestamp must be used for message.created_at, session.updated_at, and sync index
     const createdAt = new Date();
 
-    return AgentMessagesRepository.create({
-      sessionId,
-      source,
-      direction,
-      content,
-      metadata,
-      hidden,
-      createdAt,
-      providerMessageId,
-    }).then(() => {
+    try {
+      await AgentMessagesRepository.create({
+        sessionId,
+        source,
+        direction,
+        content,
+        metadata,
+        hidden,
+        createdAt,
+        providerMessageId,
+      });
       // Emit event to notify listeners that new message was written to database
       // Include hidden flag so sync handlers can skip hidden messages
       this.emit('message:logged', { sessionId, direction, hidden: hidden ?? false });
-    }).catch(error => {
-      // Don't fail the request if logging fails - just log the error
+    } catch (error) {
+      // Log error details for debugging but re-throw to let callers handle appropriately
       console.error('[BaseAIProvider] Failed to log agent message:', error);
       console.error('[BaseAIProvider] Failed message details:', { sessionId, source, direction, contentLength: content.length });
-    });
+      throw error;
+    }
   }
 
   /**
-   * Log an error to the database
+   * Log an agent message without blocking execution.
+   * Use this ONLY for streaming chunks where some loss is acceptable.
+   * NEVER use this for user input messages or final output messages.
+   *
+   * Errors are logged but not propagated.
+   */
+  protected logAgentMessageNonBlocking(
+    sessionId: string,
+    source: string,
+    direction: 'input' | 'output',
+    content: string,
+    metadata?: Record<string, unknown>,
+    hidden?: boolean,
+    providerMessageId?: string
+  ): void {
+    this.logAgentMessage(sessionId, source, direction, content, metadata, hidden, providerMessageId)
+      .catch(error => {
+        // For non-blocking calls, we've already logged the error in logAgentMessage
+        // Just suppress the unhandled rejection
+      });
+  }
+
+  /**
+   * Log an error to the database (non-blocking)
    * Helper method to reduce duplication across provider implementations
    * @param hidden - If true, marks the error message as hidden (won't appear in UI)
    */
@@ -240,7 +267,8 @@ export abstract class BaseAIProvider extends EventEmitter implements AIProvider 
 
     const isAuthError = errorType === 'authentication_error';
 
-    this.logAgentMessage(sessionId, providerName, 'output', JSON.stringify({
+    // Use non-blocking for error logging - errors are secondary to the main message flow
+    this.logAgentMessageNonBlocking(sessionId, providerName, 'output', JSON.stringify({
       type: 'error',
       error: error.message,
       source,

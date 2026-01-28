@@ -133,8 +133,9 @@ export class ClaudeProvider extends BaseAIProvider {
     }
 
     // Log the input message
+    // CRITICAL: Must await to ensure user message is persisted before proceeding
     if (sessionId) {
-      this.logAgentMessage(sessionId, 'claude', 'input', message);
+      await this.logAgentMessage(sessionId, 'claude', 'input', message);
     }
 
     // Check if current message has attachments
