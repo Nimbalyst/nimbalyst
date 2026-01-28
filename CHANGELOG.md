@@ -20,6 +20,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.14] - 2026-01-28
+
+
+### Added
+- Display worktree name in terminal tabs for better identification
+- YAML frontmatter instructions in plan mode prompt for structured plan metadata
+- ExitPlanMode now supports options: new session, approve, or continue with feedback
+
+### Changed
+- Plan mode agent now chooses plan name with validation on exit
+- Plan implementation uses natural prompt instead of /implement command
+- AskUserQuestion widget now uses 90% width for better display
+- Plan mode workflow now works more like the CLI
+
+### Fixed
+- Plan file link now opens correctly in workstream editor tabs
+- Developer mode selection from onboarding now properly updates Jotai atom
+
+### Removed
+- /plan slash command removed from Nimbalyst (plan mode is now internal)
+
 ## [0.52.13] - 2026-01-28
 
 
