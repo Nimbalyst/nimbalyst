@@ -1489,11 +1489,30 @@ export const refreshSessionListAtom = atom(
 /**
  * Initialize the session list for a workspace.
  * Call this when the workspace is opened.
+ *
+ * This function is deduplicated - if called multiple times for the same workspace
+ * while an init is already in progress, subsequent calls will return the existing promise.
+ * This prevents redundant database queries when multiple components mount simultaneously.
  */
+let initInProgress: Promise<void> | null = null;
+let lastInitWorkspacePath: string | null = null;
+
 export async function initSessionList(workspacePath: string): Promise<void> {
+  // If same workspace init is already in progress, return existing promise
+  if (initInProgress && lastInitWorkspacePath === workspacePath) {
+    return initInProgress;
+  }
+
+  lastInitWorkspacePath = workspacePath;
   store.set(sessionListWorkspaceAtom, workspacePath);
-  // Trigger initial load
-  await store.set(refreshSessionListAtom);
+
+  // Trigger initial load and track the promise
+  initInProgress = store.set(refreshSessionListAtom);
+  try {
+    await initInProgress;
+  } finally {
+    initInProgress = null;
+  }
 }
 
 /**

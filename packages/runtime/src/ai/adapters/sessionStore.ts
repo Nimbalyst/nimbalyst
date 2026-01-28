@@ -66,6 +66,12 @@ export interface SessionStore {
   create(payload: CreateSessionPayload): Promise<void>;
   updateMetadata(sessionId: string, metadata: UpdateSessionMetadataPayload): Promise<void>;
   get(sessionId: string): Promise<SessionData | null>;
+  /**
+   * Batch fetch multiple sessions by IDs.
+   * More efficient than calling get() multiple times.
+   * Returns sessions in arbitrary order (not necessarily matching input order).
+   */
+  getMany?(sessionIds: string[]): Promise<SessionData[]>;
   list(workspaceId: string, options?: SessionListOptions): Promise<SessionListItem[]>;
   search(workspaceId: string, query: string, options?: SessionListOptions): Promise<SessionListItem[]>;
   delete(sessionId: string): Promise<void>;

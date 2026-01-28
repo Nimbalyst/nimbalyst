@@ -383,6 +383,58 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
       } satisfies ChatSession;
     },
 
+    async getMany(sessionIds: string[]): Promise<ChatSession[]> {
+      if (sessionIds.length === 0) return [];
+      await ensureReady();
+
+      // Use ANY($1::uuid[]) for batch query - much more efficient than N individual queries
+      const { rows } = await db.query<any>(
+        `SELECT s.*,
+         EXTRACT(EPOCH FROM s.last_read_timestamp) * 1000 AS last_read_ms,
+         w.path AS worktree_path,
+         w.workspace_id AS worktree_project_path,
+         branched_from.provider_session_id AS branched_from_provider_session_id
+         FROM ai_sessions s
+         LEFT JOIN worktrees w ON s.worktree_id = w.id
+         LEFT JOIN ai_sessions branched_from ON s.branched_from_session_id = branched_from.id
+         WHERE s.id = ANY($1::uuid[])`,
+        [sessionIds]
+      );
+
+      return rows.map((row: any) => {
+        const metadata = row.metadata ?? {};
+        return {
+          id: row.id,
+          provider: row.provider,
+          model: row.model ?? undefined,
+          sessionType: row.session_type ?? undefined,
+          mode: row.mode ?? undefined,
+          title: row.title ?? undefined,
+          draftInput: row.draft_input ?? undefined,
+          messages: [],
+          workspacePath: row.workspace_id,
+          worktreeId: row.worktree_id ?? undefined,
+          worktreePath: row.worktree_path ?? undefined,
+          worktreeProjectPath: row.worktree_project_path ?? undefined,
+          parentSessionId: row.parent_session_id ?? null,
+          createdAt: toMillis(row.created_at),
+          updatedAt: toMillis(row.updated_at),
+          metadata,
+          documentContext: row.document_context ?? undefined,
+          providerConfig: row.provider_config ?? undefined,
+          providerSessionId: row.provider_session_id ?? undefined,
+          lastReadMessageTimestamp: row.last_read_ms ? Number(row.last_read_ms) : undefined,
+          hasBeenNamed: row.has_been_named ?? false,
+          isArchived: row.is_archived ?? false,
+          isPinned: row.is_pinned ?? false,
+          branchedFromSessionId: row.branched_from_session_id ?? undefined,
+          branchPointMessageId: row.branch_point_message_id ? parseInt(row.branch_point_message_id) : undefined,
+          branchedAt: row.branched_at ? toMillis(row.branched_at) : undefined,
+          branchedFromProviderSessionId: row.branched_from_provider_session_id ?? undefined,
+        } satisfies ChatSession;
+      });
+    },
+
     async list(workspaceId: string, options?: SessionListOptions): Promise<SessionListItem[]> {
       const startTime = performance.now();
       await ensureReady();

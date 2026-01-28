@@ -11,6 +11,50 @@ const sessionManager = new SessionManager();
 // Track if handlers are registered to prevent double registration
 let handlersRegistered = false;
 
+// ============================================================
+// Git Status Cache
+// Caches uncommitted file sets to avoid repeated git status calls
+// when multiple components request session lists simultaneously.
+// ============================================================
+interface GitStatusCache {
+    uncommittedFiles: Set<string>;
+    timestamp: number;
+}
+
+const gitStatusCache = new Map<string, GitStatusCache>();
+const GIT_STATUS_CACHE_TTL_MS = 5000; // 5 second cache
+
+/**
+ * Get uncommitted files with caching.
+ * Avoids spawning git status multiple times in rapid succession.
+ */
+async function getCachedUncommittedFiles(workspacePath: string): Promise<Set<string>> {
+    const cached = gitStatusCache.get(workspacePath);
+    if (cached && Date.now() - cached.timestamp < GIT_STATUS_CACHE_TTL_MS) {
+        return cached.uncommittedFiles;
+    }
+
+    const simpleGit = (await import('simple-git')).default;
+    const git = simpleGit(workspacePath);
+    const status = await git.status();
+
+    const uncommittedFiles = new Set([
+        ...status.modified,
+        ...status.created,
+        ...status.not_added,
+        ...status.deleted,
+        ...status.renamed.map(r => r.to),
+        ...status.staged
+    ]);
+
+    gitStatusCache.set(workspacePath, {
+        uncommittedFiles,
+        timestamp: Date.now()
+    });
+
+    return uncommittedFiles;
+}
+
 export async function registerSessionHandlers() {
     if (handlersRegistered) {
         console.log('[SessionHandlers] Handlers already registered, skipping');
@@ -228,21 +272,10 @@ export async function registerSessionHandlers() {
 
             // Get uncommitted file counts for all sessions
             // Count files edited by each session that are currently uncommitted in git
+            // Uses cached git status to avoid redundant git spawns
             const uncommittedMap = new Map<string, number>();
             try {
-                const simpleGit = (await import('simple-git')).default;
-                const git = simpleGit(workspacePath);
-                const status = await git.status();
-
-                // Get all currently uncommitted files (modified, staged, or untracked)
-                const uncommittedFiles = new Set([
-                    ...status.modified,
-                    ...status.created,
-                    ...status.not_added,
-                    ...status.deleted,
-                    ...status.renamed.map(r => r.to),
-                    ...status.staged
-                ]);
+                const uncommittedFiles = await getCachedUncommittedFiles(workspacePath);
 
                 if (uncommittedFiles.size > 0) {
                     const { database } = await import('../database/PGLiteDatabaseWorker');
@@ -323,21 +356,10 @@ export async function registerSessionHandlers() {
             );
 
             // Calculate uncommitted file counts per session
+            // Uses cached git status to avoid redundant git spawns
             const uncommittedMap = new Map<string, number>();
             try {
-                const simpleGit = (await import('simple-git')).default;
-                const git = simpleGit(workspacePath);
-                const status = await git.status();
-
-                // Get all currently uncommitted files
-                const uncommittedFiles = new Set([
-                    ...status.modified,
-                    ...status.created,
-                    ...status.not_added,
-                    ...status.deleted,
-                    ...status.renamed.map(r => r.to),
-                    ...status.staged
-                ]);
+                const uncommittedFiles = await getCachedUncommittedFiles(workspacePath);
 
                 if (uncommittedFiles.size > 0) {
                     // Get the session IDs we care about (children of this parent)
@@ -486,12 +508,19 @@ export async function registerSessionHandlers() {
     safeHandle('sessions:search', async (event, workspacePath: string, query: string, options?: { includeArchived?: boolean }) => {
         try {
             const entries = await AISessionsRepository.search(workspacePath, query, options);
-            const sessions = [];
 
-            for (const entry of entries) {
-                const session = await AISessionsRepository.get(entry.id);
-                if (session) {
-                    sessions.push({
+            // Use batch query instead of N individual get() calls
+            const sessionIds = entries.map(e => e.id);
+            const sessionsData = await AISessionsRepository.getMany(sessionIds);
+
+            // Create a map for O(1) lookups to merge with entry data
+            const sessionMap = new Map(sessionsData.map(s => [s.id, s]));
+
+            const sessions = entries
+                .map(entry => {
+                    const session = sessionMap.get(entry.id);
+                    if (!session) return null;
+                    return {
                         id: session.id,
                         createdAt: session.createdAt,
                         updatedAt: session.updatedAt,
@@ -502,11 +531,11 @@ export async function registerSessionHandlers() {
                         sessionType: session.sessionType || 'chat',
                         messageCount: entry.messageCount || 0,
                         isArchived: entry.isArchived || false,
-                        worktreeId: session.worktreeId,  // Include worktreeId from session data
+                        worktreeId: session.worktreeId,
                         metadata: session.metadata || {}
-                    });
-                }
-            }
+                    };
+                })
+                .filter((s): s is NonNullable<typeof s> => s !== null);
 
             return { success: true, sessions };
         } catch (error) {
@@ -642,33 +671,26 @@ export async function registerSessionHandlers() {
             const listEntries = await AISessionsRepository.list(workspaceId);
             const entriesMap = new Map(listEntries.map(entry => [entry.id, entry]));
 
-            // Load full session data for each session ID
-            const sessions = await Promise.all(
-                sessionIds.map(async (sessionId: string) => {
-                    try {
-                        const session = await AISessionsRepository.get(sessionId);
-                        const entry = entriesMap.get(sessionId);
+            // Use batch query instead of N individual get() calls
+            const sessionsData = await AISessionsRepository.getMany(sessionIds);
 
-                        return session ? {
-                            id: session.id,
-                            title: session.title || 'Untitled Session',
-                            provider: session.provider,
-                            model: session.model,
-                            createdAt: session.createdAt,
-                            updatedAt: session.updatedAt,
-                            messageCount: entry?.messageCount || 0
-                        } : null;
-                    } catch (err) {
-                        console.error(`[SessionHandlers] Failed to load session ${sessionId}:`, err);
-                        return null;
-                    }
+            // Map and enrich with entry data
+            const sessions = sessionsData
+                .map(session => {
+                    const entry = entriesMap.get(session.id);
+                    return {
+                        id: session.id,
+                        title: session.title || 'Untitled Session',
+                        provider: session.provider,
+                        model: session.model,
+                        createdAt: session.createdAt,
+                        updatedAt: session.updatedAt,
+                        messageCount: entry?.messageCount || 0
+                    };
                 })
-            );
-
-            // Filter out nulls and sort by most recent first
-            return sessions
-                .filter(s => s !== null)
                 .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+
+            return sessions;
         } catch (error) {
             console.error('[SessionHandlers] Error getting sessions by file:', error);
             return [];
@@ -792,21 +814,10 @@ export async function registerSessionHandlers() {
 
     // Get uncommitted file counts per session (lightweight, for updating after git commits)
     // Returns counts for ALL sessions that have edited files, including 0 for fully committed sessions
+    // Uses cached git status when called in rapid succession
     safeHandle('sessions:get-uncommitted-counts', async (event, workspacePath: string) => {
         try {
-            const simpleGit = (await import('simple-git')).default;
-            const git = simpleGit(workspacePath);
-            const status = await git.status();
-
-            // Get all currently uncommitted files
-            const uncommittedFiles = new Set([
-                ...status.modified,
-                ...status.created,
-                ...status.not_added,
-                ...status.deleted,
-                ...status.renamed.map(r => r.to),
-                ...status.staged
-            ]);
+            const uncommittedFiles = await getCachedUncommittedFiles(workspacePath);
 
             const { database } = await import('../database/PGLiteDatabaseWorker');
 

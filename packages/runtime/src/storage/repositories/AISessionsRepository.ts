@@ -50,6 +50,18 @@ export const AISessionsRepository = {
     return await requireStore().get(sessionId);
   },
 
+  async getMany(sessionIds: string[]): Promise<SessionData[]> {
+    const store = requireStore();
+    if (store.getMany) {
+      return await store.getMany(sessionIds);
+    }
+    // Fallback for stores that don't implement batch query (less efficient)
+    const results = await Promise.all(
+      sessionIds.map(id => store.get(id))
+    );
+    return results.filter((s): s is SessionData => s !== null);
+  },
+
   async list(workspaceId: string, options?: SessionListOptions): Promise<SessionListItem[]> {
     return await requireStore().list(workspaceId, options);
   },

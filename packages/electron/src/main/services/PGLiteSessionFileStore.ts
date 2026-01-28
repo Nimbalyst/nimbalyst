@@ -95,6 +95,29 @@ export function createPGLiteSessionFileStore(db: PGliteLike, ensureDbReady?: Ens
       return rows.map(rowToFileLink);
     },
 
+    async getFilesBySessionMany(sessionIds: string[], linkType?: FileLinkType): Promise<FileLink[]> {
+      if (sessionIds.length === 0) return [];
+      await ensureReady();
+
+      // Use ANY($1::text[]) for batch query - single query instead of N
+      // Note: session_id is text type in session_files table
+      const params: any[] = [sessionIds];
+      let sql = `
+        SELECT * FROM session_files
+        WHERE session_id = ANY($1::text[])
+      `;
+
+      if (linkType) {
+        sql += ` AND link_type = $2`;
+        params.push(linkType);
+      }
+
+      sql += ` ORDER BY timestamp ASC`;
+
+      const { rows } = await db.query<any>(sql, params);
+      return rows.map(rowToFileLink);
+    },
+
     async getSessionsByFile(workspaceId: string, filePath: string, linkType?: FileLinkType): Promise<string[]> {
       await ensureReady();
 

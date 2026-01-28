@@ -8,6 +8,11 @@ export interface SessionFileStore {
   ensureReady(): Promise<void>;
   addFileLink(link: Omit<FileLink, 'id'>): Promise<FileLink>;
   getFilesBySession(sessionId: string, linkType?: FileLinkType): Promise<FileLink[]>;
+  /**
+   * Batch fetch file links for multiple sessions.
+   * More efficient than calling getFilesBySession() multiple times.
+   */
+  getFilesBySessionMany?(sessionIds: string[], linkType?: FileLinkType): Promise<FileLink[]>;
   getSessionsByFile(workspaceId: string, filePath: string, linkType?: FileLinkType): Promise<string[]>;
   deleteFileLink(id: string): Promise<void>;
   deleteSessionLinks(sessionId: string): Promise<void>;
@@ -88,6 +93,23 @@ export const SessionFilesRepository = {
    */
   async getFilesBySession(sessionId: string, linkType?: FileLinkType): Promise<FileLink[]> {
     return await requireStore().getFilesBySession(sessionId, linkType);
+  },
+
+  /**
+   * Batch fetch file links for multiple sessions.
+   * More efficient than calling getFilesBySession() multiple times.
+   */
+  async getFilesBySessionMany(sessionIds: string[], linkType?: FileLinkType): Promise<FileLink[]> {
+    if (sessionIds.length === 0) return [];
+    const store = requireStore();
+    if (store.getFilesBySessionMany) {
+      return await store.getFilesBySessionMany(sessionIds, linkType);
+    }
+    // Fallback for stores that don't implement batch query
+    const results = await Promise.all(
+      sessionIds.map(id => store.getFilesBySession(id, linkType))
+    );
+    return results.flat();
   },
 
   /**

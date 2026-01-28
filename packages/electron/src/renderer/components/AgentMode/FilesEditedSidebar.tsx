@@ -354,33 +354,23 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
     const fetchFileEdits = async () => {
       try {
         if (typeof window !== 'undefined' && window.electronAPI) {
-          const allEdits: FileEditWithSession[] = [];
-
-          // Fetch edits from all sessions in the workstream
-          await Promise.all(
-            workstreamSessions.map(async (sessionId) => {
-              const result = await window.electronAPI.invoke(
-                'session-files:get-by-session',
-                sessionId,
-                'edited'
-              );
-              if (result.success && result.files) {
-                const edits: FileEditWithSession[] = result.files.map((f: any) => ({
-                  filePath: f.filePath,
-                  linkType: 'edited' as const,
-                  operation: f.metadata?.operation,
-                  linesAdded: f.metadata?.linesAdded,
-                  linesRemoved: f.metadata?.linesRemoved,
-                  timestamp: f.createdAt || new Date().toISOString(),
-                  sessionId,
-                }));
-                allEdits.push(...edits);
-              }
-            })
+          // Use batch query instead of N individual calls
+          const result = await window.electronAPI.invoke(
+            'session-files:get-by-sessions',
+            workstreamSessions,
+            'edited'
           );
 
-          // Only update state if this effect is still current (workstream hasn't changed)
-          if (isCurrent) {
+          if (result.success && result.files && isCurrent) {
+            const allEdits: FileEditWithSession[] = result.files.map((f: any) => ({
+              filePath: f.filePath,
+              linkType: 'edited' as const,
+              operation: f.metadata?.operation,
+              linesAdded: f.metadata?.linesAdded,
+              linesRemoved: f.metadata?.linesRemoved,
+              timestamp: f.createdAt || new Date().toISOString(),
+              sessionId: f.sessionId,
+            }));
             setAllFileEdits(allEdits);
           }
         }

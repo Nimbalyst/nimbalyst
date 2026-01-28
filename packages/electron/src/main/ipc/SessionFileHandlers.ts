@@ -2,10 +2,38 @@
  * IPC handlers for session-file link operations
  */
 
-import { SessionFilesRepository, type FileLinkType } from '@nimbalyst/runtime';
+import { SessionFilesRepository, type FileLinkType, type FileLink } from '@nimbalyst/runtime';
 import { logger } from '../utils/logger';
 import { safeHandle } from '../utils/ipcRegistry';
 import { BrowserWindow } from 'electron';
+
+// ============================================================
+// Session Files Cache
+// Short-lived cache to prevent duplicate queries when multiple
+// components mount simultaneously and request the same session's files.
+// Uses in-flight promise deduplication to prevent concurrent identical queries.
+// ============================================================
+interface SessionFilesCache {
+  files: FileLink[];
+  timestamp: number;
+}
+
+const sessionFilesCache = new Map<string, SessionFilesCache>();
+const sessionFilesInFlight = new Map<string, Promise<FileLink[]>>();
+const SESSION_FILES_CACHE_TTL_MS = 2000; // 2 second cache
+
+function getCacheKey(sessionId: string, linkType?: string): string {
+  return linkType ? `${sessionId}:${linkType}` : sessionId;
+}
+
+function invalidateSessionCache(sessionId: string): void {
+  // Remove all cache entries for this session (with and without linkType)
+  for (const key of sessionFilesCache.keys()) {
+    if (key === sessionId || key.startsWith(`${sessionId}:`)) {
+      sessionFilesCache.delete(key);
+    }
+  }
+}
 
 export function setupSessionFileHandlers(): void {
   /**
@@ -22,6 +50,9 @@ export function setupSessionFileHandlers(): void {
         metadata,
       });
 
+      // Invalidate cache for this session since files changed
+      invalidateSessionCache(sessionId);
+
       // Notify renderer of the update
       const window = BrowserWindow.fromWebContents(event.sender);
       if (window) {
@@ -36,14 +67,58 @@ export function setupSessionFileHandlers(): void {
   });
 
   /**
-   * Get all file links for a session
+   * Get all file links for a session (with short-lived cache and in-flight deduplication)
    */
   safeHandle('session-files:get-by-session', async (event, sessionId: string, linkType?: string) => {
     try {
-      const files = await SessionFilesRepository.getFilesBySession(sessionId, linkType as any);
-      return { success: true, files };
+      const cacheKey = getCacheKey(sessionId, linkType);
+
+      // Return cached result if still fresh
+      const cached = sessionFilesCache.get(cacheKey);
+      if (cached && Date.now() - cached.timestamp < SESSION_FILES_CACHE_TTL_MS) {
+        return { success: true, files: cached.files };
+      }
+
+      // If a query is already in flight for this key, wait for it instead of starting another
+      const inFlight = sessionFilesInFlight.get(cacheKey);
+      if (inFlight) {
+        const files = await inFlight;
+        return { success: true, files };
+      }
+
+      // Start a new query and track it as in-flight
+      const queryPromise = SessionFilesRepository.getFilesBySession(sessionId, linkType as any);
+      sessionFilesInFlight.set(cacheKey, queryPromise);
+
+      try {
+        const files = await queryPromise;
+
+        // Cache the result
+        sessionFilesCache.set(cacheKey, {
+          files,
+          timestamp: Date.now()
+        });
+
+        return { success: true, files };
+      } finally {
+        // Remove from in-flight map when done
+        sessionFilesInFlight.delete(cacheKey);
+      }
     } catch (error) {
       logger.main.error('[SessionFileHandlers] Failed to get files by session:', error);
+      return { success: false, error: String(error), files: [] };
+    }
+  });
+
+  /**
+   * Batch get file links for multiple sessions (more efficient than N individual calls)
+   */
+  safeHandle('session-files:get-by-sessions', async (event, sessionIds: string[], linkType?: string) => {
+    try {
+      const files = await SessionFilesRepository.getFilesBySessionMany(sessionIds, linkType as any);
+      return { success: true, files };
+    } catch (error) {
+      logger.main.error('[SessionFileHandlers] Failed to batch get files by sessions:', error);
       return { success: false, error: String(error), files: [] };
     }
   });
