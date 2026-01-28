@@ -33,6 +33,10 @@ export interface DocumentContext {
   worktreeId?: string;  // ID of the associated worktree
   worktreePath?: string;  // Path to the worktree directory
   worktreeProjectPath?: string;  // Path to the parent project (for permission lookups)
+
+  // Plan mode context
+  planFilePath?: string;  // Path to the plan file for planning mode
+  planExists?: boolean;   // Whether the plan file already exists
 }
 
 export interface ChatAttachment {

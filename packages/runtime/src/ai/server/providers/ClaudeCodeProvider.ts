@@ -3499,7 +3499,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     const isVoiceMode = (documentContext as any)?.isVoiceMode;
     const voiceModeCodingAgentPrompt = (documentContext as any)?.voiceModeCodingAgentPrompt;
 
-    console.log('[CLAUDE-CODE] buildSystemPrompt - sessionType:', sessionType);
 
     const prompt = buildClaudeCodeSystemPrompt({
       sessionType,

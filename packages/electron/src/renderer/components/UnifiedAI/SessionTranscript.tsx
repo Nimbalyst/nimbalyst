@@ -531,8 +531,80 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
       return;
     }
 
-    const message = draftInput.trim();
+    let message = draftInput.trim();
     const attachments = draftAttachments;
+
+    // Intercept /plan command - strip it and switch to planning mode
+    // Match "/plan" only when followed by whitespace or end of string (not "/planning" or "/planify")
+    let overrideMode = aiMode;
+    let prependPlanModeInstructions = false;
+    const planCommandMatch = message.match(/^\/plan(?:\s|$)/);
+
+    if (planCommandMatch) {
+      overrideMode = 'planning';
+      // Remove /plan from the message, keeping the rest
+      message = message.slice(planCommandMatch[0].length).trim();
+
+      // If this is a mid-session switch (there are already messages), flag to prepend instructions
+      if (messages.length > 0 && aiMode !== 'planning') {
+        prependPlanModeInstructions = true;
+      }
+
+      // Update mode in atom and session metadata - must succeed before proceeding
+      setAiMode('planning');
+      try {
+        await window.electronAPI.invoke('sessions:update-metadata', sessionId, { mode: 'planning' });
+      } catch (error) {
+        console.error('[SessionTranscript] Failed to update session mode:', error);
+        // Revert local state since persistence failed
+        setAiMode(aiMode);
+        // Show error to user
+        const errorMessage = {
+          id: `error-${Date.now()}`,
+          role: 'assistant' as const,
+          content: 'Failed to switch to planning mode. Please try again.',
+          timestamp: Date.now(),
+          isError: true,
+        };
+        updateSessionStore({
+          sessionId,
+          updates: {
+            messages: [...messages, errorMessage],
+          },
+        });
+        return;
+      }
+
+      // If no message after /plan, don't send (just switched mode)
+      if (!message) {
+        setDraftInput('');
+        setDraftAttachments([]);
+        return;
+      }
+    }
+
+    // If switching to planning mode mid-session, prepend plan mode activation message
+    if (prependPlanModeInstructions) {
+      message = `<PLAN_MODE_ACTIVATED>
+The user has activated plan mode. From this point forward, you are in PLANNING MODE ONLY.
+
+You MUST NOT:
+- Make any code edits (except to the plan file)
+- Run any non-readonly tools
+- Execute any commands
+- Make any changes to the system
+
+You MUST:
+- Explore the codebase using Read, Glob, Grep tools
+- Ask questions using AskUserQuestion to clarify requirements
+- Write and iteratively update a plan file
+- Call ExitPlanMode when ready for approval
+
+The plan file path will be provided in the system prompt.
+</PLAN_MODE_ACTIVATED>
+
+${message}`;
+    }
 
     setDraftInput('');
     setDraftAttachments([]);
@@ -559,7 +631,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
         content: documentContext?.content,
         fileType: documentContext?.fileType,
         attachments: attachments.length > 0 ? attachments : undefined,
-        mode: aiMode,
+        mode: overrideMode,
       };
 
       await window.electronAPI.invoke('ai:sendMessage', message, docContext, sessionId, workspacePath);

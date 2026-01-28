@@ -1900,10 +1900,41 @@ export class AIService {
         }
 
         // Add sessionType, mode, attachments, and worktree info to documentContext for provider to use in system prompt
+        // For planning mode, add plan file path
+        const effectiveMode = (documentContext as any)?.mode ?? session.mode;
+        let planFilePath: string | undefined;
+        let planExists = false;
+
+        if (effectiveMode === 'planning' && workspacePath) {
+          const path = await import('path');
+          const fs = await import('fs');
+
+          // Default plan file path: plans/plan-<timestamp>.md
+          const plansDir = path.join(workspacePath, 'plans');
+          const timestamp = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+          planFilePath = path.join(plansDir, `plan-${timestamp}.md`);
+
+          // Check if plan file already exists
+          try {
+            await fs.promises.access(planFilePath);
+            planExists = true;
+          } catch {
+            // File doesn't exist, which is fine
+            planExists = false;
+          }
+
+          // Ensure plans directory exists
+          try {
+            await fs.promises.mkdir(plansDir, { recursive: true });
+          } catch (err) {
+            console.error('[AIService] Failed to create plans directory:', err);
+          }
+        }
+
         const contextWithSession = documentContext ? {
           ...documentContext,
           sessionType: (documentContext as any)?.sessionType ?? session.sessionType,
-          mode: (documentContext as any)?.mode ?? session.mode,
+          mode: effectiveMode,
           permissionsPath,  // For worktree sessions, this is the parent project path
           attachments,
           // Include worktree context so provider can warn Claude Code about the isolated environment
@@ -1913,9 +1944,12 @@ export class AIService {
           // Include branch tracking for session forking (Claude Code SDK forkSession)
           branchedFromSessionId: session.branchedFromSessionId,
           branchedFromProviderSessionId: session.branchedFromProviderSessionId,
+          // Include plan file path for planning mode
+          planFilePath,
+          planExists,
         } as any : {
           sessionType: session.sessionType,
-          mode: session.mode,
+          mode: effectiveMode,
           permissionsPath,
           attachments,
           worktreeId: session.worktreeId,
@@ -1924,6 +1958,9 @@ export class AIService {
           // Include branch tracking for session forking (Claude Code SDK forkSession)
           branchedFromSessionId: session.branchedFromSessionId,
           branchedFromProviderSessionId: session.branchedFromProviderSessionId,
+          // Include plan file path for planning mode
+          planFilePath,
+          planExists,
         } as any;
 
         // Update MCP document state for Claude Code provider so it knows which file-scoped tools to show
