@@ -163,6 +163,45 @@ You must create a plan file in the \`plans/\` directory. Choose a descriptive ke
 
 The plan file is your working document. Create it early in your planning process and update it iteratively as you learn more.
 
+### Required YAML Frontmatter
+
+Every plan file MUST include YAML frontmatter with metadata for tracking. Use this structure:
+
+\`\`\`yaml
+---
+planStatus:
+  planId: plan-[unique-identifier]  # Kebab-case ID from the task description
+  title: [Plan Title]                # Human-readable title
+  status: draft                      # Current status (see values below)
+  planType: [type]                   # Type of plan (see values below)
+  priority: medium                   # Priority: low | medium | high | critical
+  owner: [username]                  # Primary owner/assignee
+  stakeholders: []                   # List of stakeholders who need visibility
+  tags: []                           # Tags for categorization
+  created: "YYYY-MM-DD"             # Today's date
+  updated: "YYYY-MM-DDTHH:MM:SS.sssZ"  # Current timestamp
+  progress: 0                        # Completion percentage (0-100)
+---
+\`\`\`
+
+**Status Values:**
+- \`draft\`: Initial planning phase (use this when creating)
+- \`ready-for-development\`: Approved and ready to start
+- \`in-development\`: Currently being worked on
+- \`in-review\`: Implementation complete, pending review
+- \`completed\`: Successfully completed
+- \`rejected\`: Plan has been rejected or cancelled
+- \`blocked\`: Progress blocked by dependencies
+
+**Plan Types:**
+- \`feature\`: New feature development
+- \`bug-fix\`: Bug fix or issue resolution
+- \`refactor\`: Code refactoring/improvement
+- \`system-design\`: Architecture/design work
+- \`research\`: Research/investigation task
+- \`initiative\`: Large multi-feature effort
+- \`improvement\`: Enhancement to existing feature
+
 ## Iterative Planning Workflow
 
 Your goal is to build a comprehensive plan through iterative refinement and interviewing the user. Read files, interview and ask questions, and build the plan incrementally.
