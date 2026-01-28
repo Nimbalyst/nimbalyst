@@ -12,6 +12,7 @@ interface TerminalInstance {
   shellPath: string;
   cwd: string;
   worktreeId?: string;
+  worktreeName?: string;
   createdAt: number;
   lastActiveAt: number;
   historyFile?: string;
@@ -47,6 +48,16 @@ export const TerminalTab: React.FC<TerminalTabProps> = ({
     return `.../${parts.slice(-2).join('/')}`;
   };
 
+  // Get the display name for the tab
+  // For worktree terminals, show the worktree name
+  // For regular terminals, show the generic title
+  const getDisplayName = (): string => {
+    if (terminal.worktreeId && terminal.worktreeName) {
+      return terminal.worktreeName;
+    }
+    return terminal.title;
+  };
+
   const handleCloseClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     onClose();
@@ -69,14 +80,15 @@ export const TerminalTab: React.FC<TerminalTabProps> = ({
       aria-selected={isActive}
       title={`${terminal.title}\n${terminal.cwd}\nShell: ${terminal.shellName}`}
     >
-      <MaterialSymbol icon={getShellIcon(terminal.shellName)} size={14} />
-      <span className="terminal-tab-title overflow-hidden text-ellipsis shrink min-w-0">{terminal.title}</span>
-      {terminal.worktreeId && (
-        <span className="terminal-tab-worktree-badge flex items-center justify-center p-px bg-[var(--nim-accent-subtle)] rounded-sm text-[var(--nim-primary)] shrink-0" title="Worktree terminal">
-          <MaterialSymbol icon="alt_route" size={12} />
-        </span>
+      {terminal.worktreeId ? (
+        <MaterialSymbol icon="alt_route" size={14} title="Worktree terminal" />
+      ) : (
+        <MaterialSymbol icon={getShellIcon(terminal.shellName)} size={14} />
       )}
-      <span className={`terminal-tab-cwd text-[10px] overflow-hidden text-ellipsis shrink min-w-0 ${isActive ? 'text-[var(--nim-text-muted)]' : 'text-[var(--nim-text-faint)]'}`}>{getAbbreviatedCwd(terminal.cwd)}</span>
+      <span className="terminal-tab-title overflow-hidden text-ellipsis shrink min-w-0">{getDisplayName()}</span>
+      {!terminal.worktreeId && (
+        <span className={`terminal-tab-cwd text-[10px] overflow-hidden text-ellipsis shrink min-w-0 ${isActive ? 'text-[var(--nim-text-muted)]' : 'text-[var(--nim-text-faint)]'}`}>{getAbbreviatedCwd(terminal.cwd)}</span>
+      )}
       <button
         className="terminal-tab-close hidden group-hover:flex items-center justify-center w-4 h-4 p-0 bg-transparent border-none text-[var(--nim-text-faint)] cursor-pointer rounded-sm shrink-0 ml-0.5 transition-colors duration-150 hover:bg-[var(--nim-bg-tertiary)] hover:text-[var(--nim-text)]"
         onClick={handleCloseClick}

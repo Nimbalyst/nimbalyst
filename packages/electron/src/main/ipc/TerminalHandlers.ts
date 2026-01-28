@@ -25,9 +25,36 @@ import {
   updateTerminalInstance,
   type TerminalInstance,
 } from '../utils/terminalStore';
+import { getDatabase } from '../database/initialize';
+import { createWorktreeStore } from '../services/WorktreeStore';
 
 // Track if handlers are registered
 let handlersRegistered = false;
+
+/**
+ * Fetch worktree display name from the database
+ * Returns displayName if available, otherwise falls back to branch name
+ */
+async function fetchWorktreeName(worktreeId: string): Promise<string | undefined> {
+  try {
+    const db = getDatabase();
+    if (db) {
+      const worktreeStore = createWorktreeStore(db);
+      const worktree = await worktreeStore.get(worktreeId);
+      if (worktree) {
+        if (worktree.displayName) {
+          return worktree.displayName;
+        }
+        // Strip 'worktree/' prefix from branch name if present
+        const branch = worktree.branch;
+        return branch.startsWith('worktree/') ? branch.slice('worktree/'.length) : branch;
+      }
+    }
+  } catch (err) {
+    console.warn('[TerminalHandlers] Failed to fetch worktree name:', err);
+  }
+  return undefined;
+}
 
 export function registerTerminalHandlers(): void {
   if (handlersRegistered) {
@@ -66,6 +93,9 @@ export function registerTerminalHandlers(): void {
 
         const terminalInfo = manager.getTerminalInfo(terminalId);
 
+        // Fetch worktree name if worktreeId is provided
+        const worktreeName = payload.worktreeId ? await fetchWorktreeName(payload.worktreeId) : undefined;
+
         // Create terminal instance in store
         const instance: TerminalInstance = {
           id: terminalId,
@@ -74,6 +104,7 @@ export function registerTerminalHandlers(): void {
           shellPath: terminalInfo?.shell.path || '',
           cwd: terminalInfo?.cwd || terminalCwd,
           worktreeId: payload.worktreeId,
+          worktreeName,
           createdAt: now,
           lastActiveAt: now,
           historyFile: terminalInfo?.historyFile,
@@ -129,6 +160,9 @@ export function registerTerminalHandlers(): void {
 
         const terminalInfo = manager.getTerminalInfo(terminalId);
 
+        // Fetch worktree name if worktreeId is provided
+        const worktreeName = payload.worktreeId ? await fetchWorktreeName(payload.worktreeId) : undefined;
+
         // Create terminal instance in store
         const instance: TerminalInstance = {
           id: terminalId,
@@ -137,6 +171,7 @@ export function registerTerminalHandlers(): void {
           shellPath: terminalInfo?.shell.path || '',
           cwd: terminalInfo?.cwd || terminalCwd,
           worktreeId: payload.worktreeId,
+          worktreeName,
           createdAt: now,
           lastActiveAt: now,
           historyFile: terminalInfo?.historyFile,

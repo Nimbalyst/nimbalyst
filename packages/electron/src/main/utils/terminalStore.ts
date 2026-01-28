@@ -35,6 +35,8 @@ export interface TerminalInstance {
   cwd: string;
   /** Optional worktree association */
   worktreeId?: string;
+  /** Worktree display name (for tab display when associated with a worktree) */
+  worktreeName?: string;
   /** Creation timestamp (epoch ms) */
   createdAt: number;
   /** Last active timestamp (epoch ms) */
