@@ -153,16 +153,14 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
     // This prevents redundant fetches when switching between manual/smart modes
     const worktreeDataLoadedForPath = useRef<string | null>(null);
 
-    // Track previous proposal ID to detect new proposals
-    const prevProposalIdRef = useRef<string | null>(null);
-
     // When AI proposes a commit, populate the UI (but stay in current mode)
+    // Uses activeProposalId (persisted in Jotai) for deduplication instead of a ref,
+    // because refs reset on unmount when switching between workstreams.
     useEffect(() => {
       if (!pendingProposal) return;
 
-      // Only process if this is a new proposal
-      if (prevProposalIdRef.current === pendingProposal.proposalId) return;
-      prevProposalIdRef.current = pendingProposal.proposalId;
+      // Skip if this proposal was already processed
+      if (activeProposalId === pendingProposal.proposalId) return;
 
       // Store the proposal ID so we can send response when user commits
       setActiveProposalId(pendingProposal.proposalId);
@@ -173,12 +171,9 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
       // Stage the proposed files
       setStagedFiles(new Set(pendingProposal.filesToStage));
 
-      // Don't switch modes - stay in smart mode but show proposal UI
-      // The smart mode section will detect activeProposalId and show the commit form
-
       // Expand the panel if collapsed
       setIsExpanded(true);
-    }, [pendingProposal, setCommitMessage, setStagedFiles, setActiveProposalId]);
+    }, [pendingProposal, activeProposalId, setCommitMessage, setStagedFiles, setActiveProposalId]);
 
     // When pending proposal disappears but we still have activeProposalId,
     // it means the commit was completed via the transcript widget - clear our state
