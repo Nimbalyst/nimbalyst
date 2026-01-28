@@ -20,6 +20,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.13] - 2026-01-28
+
+
+### Added
+- Collapsible "Other Uncommitted Files" section in git commit panel with persisted state
+
+### Fixed
+- Session list refresh handling and increased slow query threshold
+- Timezone handling in AI Usage Report graph
+- Dialog overlay issues by extracting DialogProvider
+- "Open in Files Mode" context menu now correctly switches to Files mode
+
 ## [0.52.12] - 2026-01-28
 
 
