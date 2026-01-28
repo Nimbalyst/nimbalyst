@@ -30,8 +30,12 @@ export function fuzzyMatch(query: string, target: string): FuzzyMatchResult {
   const queryLower = query.toLowerCase();
   const targetLower = target.toLowerCase();
 
-  // Quick check: all query chars must exist in target (in order)
-  if (!containsAllCharsInOrder(queryLower, targetLower)) {
+  // Quick check: all non-delimiter query chars must exist in target (in order)
+  // Delimiters are stripped because strategies like delimiter-separated matching
+  // treat them as separators, not literal characters to match.
+  const queryCharsOnly = queryLower.split('').filter(c => !isDelimiter(c)).join('');
+  const targetCharsOnly = targetLower.split('').filter(c => !isDelimiter(c)).join('');
+  if (!containsAllCharsInOrder(queryCharsOnly, targetCharsOnly)) {
     return { matches: false, score: 0, matchedIndices: [] };
   }
 
@@ -39,6 +43,7 @@ export function fuzzyMatch(query: string, target: string): FuzzyMatchResult {
   const strategies = [
     exactSubstringMatch(queryLower, targetLower, target),
     camelCaseMatch(query, target),
+    delimiterSeparatedMatch(query, target),
     fuzzySubsequenceMatch(queryLower, targetLower),
   ];
 
@@ -158,6 +163,89 @@ function camelCaseMatch(query: string, target: string): FuzzyMatchResult {
   const score = 0.6 + (0.2 * partCoverage) + (0.2 * charCoverage);
 
   return { matches: true, score: Math.min(score, 1), matchedIndices };
+}
+
+/**
+ * Delimiter-separated prefix matching - "tra-bug" matches "tracker-bugs"
+ * Activates when the query contains delimiters (dashes, underscores, dots, spaces).
+ * Splits both query and target on delimiters/CamelCase boundaries, then checks
+ * if each query segment is a prefix of a target segment (in order).
+ */
+function delimiterSeparatedMatch(query: string, target: string): FuzzyMatchResult {
+  // Only activate if query contains at least one delimiter
+  if (!query.split('').some(isDelimiter)) {
+    return { matches: false, score: 0, matchedIndices: [] };
+  }
+
+  const querySegments = splitCamelCase(query);
+  if (querySegments.length < 2) {
+    return { matches: false, score: 0, matchedIndices: [] };
+  }
+
+  const targetParts = splitCamelCase(target);
+
+  // Calculate character offsets for each target part in the original string
+  // Must account for delimiter characters between parts
+  const partOffsets = computePartOffsets(target, targetParts);
+
+  // Match each query segment as prefix of target parts (in order)
+  const matchedIndices: number[] = [];
+  let partIndex = 0;
+
+  for (const segment of querySegments) {
+    const segmentLower = segment.toLowerCase();
+    let found = false;
+
+    for (let i = partIndex; i < targetParts.length; i++) {
+      const partLower = targetParts[i].toLowerCase();
+      if (partLower.startsWith(segmentLower)) {
+        const startOffset = partOffsets[i];
+        for (let j = 0; j < segment.length; j++) {
+          matchedIndices.push(startOffset + j);
+        }
+        partIndex = i + 1;
+        found = true;
+        break;
+      }
+    }
+
+    if (!found) {
+      return { matches: false, score: 0, matchedIndices: [] };
+    }
+  }
+
+  const partCoverage = querySegments.length / targetParts.length;
+  const charCoverage = matchedIndices.length / target.length;
+  const score = 0.55 + (0.2 * partCoverage) + (0.2 * charCoverage);
+
+  return { matches: true, score: Math.min(score, 0.95), matchedIndices };
+}
+
+/**
+ * Compute the starting character offset of each part in the original string.
+ * splitCamelCase strips delimiters, so we need to find where each part
+ * actually starts in the original string.
+ */
+function computePartOffsets(original: string, parts: string[]): number[] {
+  const offsets: number[] = [];
+  let searchFrom = 0;
+
+  for (const part of parts) {
+    const idx = original.indexOf(part, searchFrom);
+    if (idx === -1) {
+      // Fallback: try case-insensitive search
+      const lowerOriginal = original.toLowerCase();
+      const lowerPart = part.toLowerCase();
+      const fallbackIdx = lowerOriginal.indexOf(lowerPart, searchFrom);
+      offsets.push(fallbackIdx >= 0 ? fallbackIdx : searchFrom);
+      searchFrom = (fallbackIdx >= 0 ? fallbackIdx : searchFrom) + part.length;
+    } else {
+      offsets.push(idx);
+      searchFrom = idx + part.length;
+    }
+  }
+
+  return offsets;
 }
 
 /**

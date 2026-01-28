@@ -544,43 +544,37 @@
 .nim-ol1 {
   padding: 0;
   margin: 0;
-  list-style-type: decimal;
-  list-style-position: inside;
+  list-style: decimal inside;
 }
 
 .nim-ol2 {
   padding: 0;
   margin: 0;
-  list-style-type: upper-alpha;
-  list-style-position: inside;
+  list-style: upper-alpha inside;
 }
 
 .nim-ol3 {
   padding: 0;
   margin: 0;
-  list-style-type: lower-alpha;
-  list-style-position: inside;
+  list-style: lower-alpha inside;
 }
 
 .nim-ol4 {
   padding: 0;
   margin: 0;
-  list-style-type: upper-roman;
-  list-style-position: inside;
+  list-style: upper-roman inside;
 }
 
 .nim-ol5 {
   padding: 0;
   margin: 0;
-  list-style-type: lower-roman;
-  list-style-position: inside;
+  list-style: lower-roman inside;
 }
 
 .nim-ul {
   padding: 0;
   margin: 0;
-  list-style-type: disc;
-  list-style-position: inside;
+  list-style: disc inside;
   max-width: var(--max-text-width);
 }
 
@@ -792,6 +786,120 @@ table.nim-diff-add {
 
 .mermaid-container.nim-diff-add .mermaid-header {
   background: var(--nim-diff-add-bg);
+}
+
+/* Mermaid SVG dark theme overrides.
+   Mermaid renders inline styles, so !important is needed to override them.
+   Uses CSS variables so they adapt to any dark theme variant. */
+[data-theme="dark"] .mermaid-render-container svg,
+[data-theme="crystal-dark"] .mermaid-render-container svg {
+  /* Node/box fills */
+  & .node rect,
+  & .node circle,
+  & .node ellipse,
+  & .node polygon,
+  & .node path {
+    fill: var(--nim-bg-tertiary) !important;
+    stroke: var(--nim-border) !important;
+  }
+
+  /* All text in the diagram */
+  & text,
+  & .nodeLabel,
+  & .label,
+  & .edgeLabel,
+  & .node .label {
+    fill: var(--nim-text) !important;
+    color: var(--nim-text) !important;
+  }
+
+  /* Edge/arrow lines */
+  & .edge path,
+  & .flowchart-link,
+  & path.transition {
+    stroke: var(--nim-text-muted) !important;
+  }
+
+  /* Arrowheads */
+  & marker path {
+    fill: var(--nim-text-muted) !important;
+    stroke: var(--nim-text-muted) !important;
+  }
+
+  /* Edge labels background */
+  & .edgeLabel rect,
+  & .edgeLabel span {
+    background-color: var(--nim-bg) !important;
+    fill: var(--nim-bg) !important;
+    color: var(--nim-text) !important;
+  }
+
+  /* Cluster/subgraph backgrounds */
+  & .cluster rect {
+    fill: var(--nim-bg-secondary) !important;
+    stroke: var(--nim-border) !important;
+  }
+
+  & .cluster text {
+    fill: var(--nim-text-muted) !important;
+  }
+
+  /* Sequence diagram actors */
+  & .actor {
+    fill: var(--nim-bg-tertiary) !important;
+    stroke: var(--nim-border) !important;
+  }
+
+  & .actor-line {
+    stroke: var(--nim-text-muted) !important;
+  }
+
+  & text.actor > tspan {
+    fill: var(--nim-text) !important;
+  }
+
+  /* Sequence diagram signals/messages */
+  & .messageLine0,
+  & .messageLine1 {
+    stroke: var(--nim-text-muted) !important;
+  }
+
+  & .messageText {
+    fill: var(--nim-text) !important;
+  }
+
+  /* Notes */
+  & .note {
+    fill: var(--nim-bg-tertiary) !important;
+    stroke: var(--nim-border) !important;
+  }
+
+  & .noteText > tspan {
+    fill: var(--nim-text) !important;
+  }
+
+  /* Activation boxes in sequence diagrams */
+  & .activation0,
+  & .activation1,
+  & .activation2 {
+    fill: var(--nim-bg-hover) !important;
+    stroke: var(--nim-border) !important;
+  }
+
+  /* Loop/alt/opt boxes */
+  & .loopLine {
+    stroke: var(--nim-border) !important;
+  }
+
+  & .loopText > tspan,
+  & .labelText > tspan {
+    fill: var(--nim-text-muted) !important;
+  }
+
+  /* Title text */
+  & text.titleText {
+    fill: var(--nim-text) !important;
+  }
 }
 
 .nim-code.nim-diff-add,

@@ -141,8 +141,8 @@ This is the third paragraph.
 
     // Get the actual paragraph nodes to see what's creating separate groups
     const paragraphInfo = await page.evaluate(() => {
-      const content = document.querySelector('.PlaygroundEditorTheme__paragraph');
-      const allParagraphs = document.querySelectorAll('.PlaygroundEditorTheme__paragraph');
+      const content = document.querySelector('.nim-paragraph');
+      const allParagraphs = document.querySelectorAll('.nim-paragraph');
 
       const paragraphs = Array.from(allParagraphs).map((p: any) => {
         const classList = Array.from(p.classList) as string[];

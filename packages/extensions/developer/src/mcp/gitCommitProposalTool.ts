@@ -79,6 +79,13 @@ The commit message should follow these guidelines:
       };
     }
 
+    if (!filesToStage || filesToStage.length === 0) {
+      return {
+        success: false,
+        error: 'No files to commit. All files may be ignored by .gitignore or already committed.',
+      };
+    }
+
     // Return the proposal data
     // This will be rendered by the GitCommitConfirmationWidget
     return {

@@ -1234,20 +1234,28 @@ export default function App() {
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent): void => {
-      // Cmd+E for Files mode
+      // Cmd+E for Files mode (toggle sidebar if already in files mode)
       if ((e.metaKey || e.ctrlKey) && e.key === 'e') {
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
-        setActiveMode('files');
+        if (activeMode === 'files') {
+          editorModeRef.current?.toggleSidebarCollapsed();
+        } else {
+          setActiveMode('files');
+        }
         return;
       }
-      // Cmd+K for Agent mode
+      // Cmd+K for Agent mode (toggle session history if already in agent mode)
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
-        setActiveMode('agent');
+        if (activeMode === 'agent') {
+          toggleAgentCollapsed();
+        } else {
+          setActiveMode('agent');
+        }
         return;
       }
       // Cmd+O (Mac) or Ctrl+O (Windows/Linux) for Quick Open

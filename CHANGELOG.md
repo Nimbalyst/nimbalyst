@@ -20,6 +20,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.11] - 2026-01-28
+
+
+### Added
+- Folder @ mentions in AI chat input with delimiter-separated fuzzy matching
+- Project-focused File menu items replacing generic Open Folder and Recent Files
+
+### Changed
+- Cmd+E and Cmd+K now toggle left panel when already in that mode
+- Files-edited sidebar title now reflects session type (Workstream vs Worktree)
+- Image generation feature gated behind alpha flag
+
+### Fixed
+- Auto-updater spinner no longer gets stuck after clicking "Remind me later"
+- Git commit panel sync issues when staging/unstaging files
+- Git commit proposal now properly rejects when no files to commit
+- Diff highlighting broken after theme changes
+
 ## [0.52.10] - 2026-01-27
 
 

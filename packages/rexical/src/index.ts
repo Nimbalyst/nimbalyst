@@ -33,8 +33,6 @@ export { ToolbarContext } from './context/ToolbarContext';
 export { RuntimeSettingsProvider, useRuntimeSettings } from './context/RuntimeSettingsContext';
 
 // Themes
-export { default as PlaygroundEditorTheme } from './themes/PlaygroundEditorTheme';
-/** @deprecated Use NimbalystEditorTheme instead */
 export { default as NimbalystEditorTheme } from './themes/NimbalystEditorTheme';
 export { PRINT_STYLESHEET, wrapWithPrintStyles } from './themes/PrintTheme';
 

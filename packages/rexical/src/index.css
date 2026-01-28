@@ -8,8 +8,6 @@
 
 @import 'https://fonts.googleapis.com/css?family=Reenie+Beanie';
 @import './themes/NimbalystTheme.css';
-@import './themes/DarkEditorTheme.css';
-@import './themes/CrystalDarkTheme.css';
 
 .stravu-editor {
   margin: 0;
@@ -63,7 +61,7 @@ header h1 {
   border-radius: 0;
   width: 100%;
   height: 100%;
-  color: #000;
+  color: var(--nim-text);
   position: relative;
   line-height: 1.7;
   font-weight: 400;
@@ -325,7 +323,7 @@ header h1 {
 }
 
 .typeahead-popover ul li.selected {
-  background: #eee;
+  background: var(--nim-bg-hover);
 }
 
 .typeahead-popover li {
@@ -360,7 +358,7 @@ header h1 {
 }
 
 .typeahead-popover li:hover {
-  background-color: #eee;
+  background-color: var(--nim-bg-hover);
 }
 
 .typeahead-popover li .text {
@@ -660,9 +658,9 @@ i.page-break,
   margin: 12px 12px;
   padding: 8px 12px;
   border-radius: 15px;
-  background-color: #eee;
+  background-color: var(--nim-bg-tertiary);
   font-size: 15px;
-  color: rgb(5, 5, 5);
+  color: var(--nim-text);
   border: 0;
   outline: 0;
   position: relative;
@@ -676,7 +674,7 @@ i.page-break,
   padding: 8px 12px;
   border-radius: 15px;
   font-size: 15px;
-  color: rgb(5, 5, 5);
+  color: var(--nim-text);
   border: 0;
   outline: 0;
   position: relative;
@@ -689,62 +687,56 @@ i.page-break,
   width: calc(100% - 33px);
 }
 
-.link-editor div.link-edit {
-  background-image: url(images/icons/pencil-fill.svg);
-  background-size: 16px;
-  background-position: center;
-  background-repeat: no-repeat;
+.link-editor div.link-edit,
+.link-editor div.link-trash,
+.link-editor div.link-cancel,
+.link-editor div.link-confirm {
   width: 35px;
   vertical-align: -0.25em;
   position: absolute;
-  right: 30px;
   top: 0;
   bottom: 0;
   cursor: pointer;
+  background-color: var(--nim-text-muted);
+  -webkit-mask-size: 16px;
+  mask-size: 16px;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+
+.link-editor div.link-edit:hover,
+.link-editor div.link-trash:hover,
+.link-editor div.link-cancel:hover,
+.link-editor div.link-confirm:hover {
+  background-color: var(--nim-text);
+}
+
+.link-editor div.link-edit {
+  -webkit-mask-image: url(images/icons/pencil-fill.svg);
+  mask-image: url(images/icons/pencil-fill.svg);
+  right: 30px;
 }
 
 .link-editor div.link-trash {
-  background-image: url(images/icons/trash.svg);
-  background-size: 16px;
-  background-position: center;
-  background-repeat: no-repeat;
-  width: 35px;
-  vertical-align: -0.25em;
-  position: absolute;
+  -webkit-mask-image: url(images/icons/trash.svg);
+  mask-image: url(images/icons/trash.svg);
   right: 0;
-  top: 0;
-  bottom: 0;
-  cursor: pointer;
 }
 
 .link-editor div.link-cancel {
-  background-image: url(images/icons/close.svg);
-  background-size: 16px;
-  background-position: center;
-  background-repeat: no-repeat;
-  width: 35px;
-  vertical-align: -0.25em;
+  -webkit-mask-image: url(images/icons/close.svg);
+  mask-image: url(images/icons/close.svg);
   margin-right: 28px;
-  position: absolute;
   right: 0;
-  top: 0;
-  bottom: 0;
-  cursor: pointer;
 }
 
 .link-editor div.link-confirm {
-  background-image: url(images/icons/success-alt.svg);
-  background-size: 16px;
-  background-position: center;
-  background-repeat: no-repeat;
-  width: 35px;
-  vertical-align: -0.25em;
+  -webkit-mask-image: url(images/icons/success-alt.svg);
+  mask-image: url(images/icons/success-alt.svg);
   margin-right: 2px;
-  position: absolute;
   right: 0;
-  top: 0;
-  bottom: 0;
-  cursor: pointer;
 }
 
 .link-editor .link-input a {

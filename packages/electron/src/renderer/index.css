@@ -1,9 +1,5 @@
-/* Import theme variables FIRST - must be defined before Tailwind processes them */
-@import '../../../rexical/src/themes/PlaygroundEditorTheme.css';
-@import '../../../rexical/src/themes/DarkEditorTheme.css';
-@import '../../../rexical/src/themes/CrystalDarkTheme.css';
-
-/* Import unified theme system CSS variables (--nim-* prefix) */
+/* Import theme CSS - editor class styles and unified CSS variables (--nim-* prefix) */
+@import '../../../rexical/src/themes/NimbalystEditorTheme.css';
 @import '../../../rexical/src/themes/NimbalystTheme.css';
 
 /* Material Symbols font */

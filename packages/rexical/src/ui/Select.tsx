@@ -22,12 +22,12 @@ export default function Select({
 }: SelectProps): JSX.Element {
   return (
     <div className="Input__wrapper flex flex-row items-center mb-[10px]">
-      <label style={{marginTop: '-1em'}} className="Input__label flex flex-1 text-[#666] dark:text-[var(--nim-text-muted)]">
+      <label style={{marginTop: '-1em'}} className="Input__label flex flex-1 text-nim-muted">
         {label}
       </label>
       <select
         {...other}
-        className={className || 'select min-w-[160px] max-w-[290px] border border-[var(--nim-border)] rounded-[0.25em] py-[0.25em] px-[0.5em] text-base cursor-pointer leading-[1.4] bg-gradient-to-b from-white to-[#e5e5e5] appearance-none z-[1] outline-none font-inherit'}>
+        className={className || 'select min-w-[160px] max-w-[290px] border border-nim rounded-[0.25em] py-[0.25em] px-[0.5em] text-base cursor-pointer leading-[1.4] bg-nim-secondary text-nim appearance-none z-[1] outline-none font-inherit dark:[color-scheme:dark]'}>
         {children}
       </select>
     </div>

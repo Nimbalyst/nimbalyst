@@ -72,14 +72,14 @@ function PortalImpl({
       className="Modal__overlay flex justify-center items-center fixed flex-col inset-0 bg-black/60 z-[100]"
       role="dialog">
       <div
-        className="Modal__modal p-5 min-h-[100px] min-w-[300px] flex flex-col relative rounded-[10px] bg-white shadow-[0_0_20px_0_#444] dark:bg-[var(--nim-bg-secondary)] dark:text-[var(--nim-text)] dark:shadow-[0_0_20px_0_rgba(0,0,0,0.8)]"
+        className="Modal__modal p-5 min-h-[100px] min-w-[300px] flex flex-col relative rounded-[10px] bg-nim-secondary text-nim shadow-[0_0_20px_0_rgba(0,0,0,0.4)]"
         tabIndex={-1}
         ref={modalRef}>
-        <h2 className="Modal__title text-[#444] m-0 pb-[10px] border-b border-[#ccc] dark:text-[var(--nim-text)] dark:border-[var(--nim-border)]">
+        <h2 className="Modal__title text-nim m-0 pb-[10px] border-b border-nim">
           {title}
         </h2>
         <button
-          className="Modal__closeButton border-0 absolute right-5 rounded-[20px] flex justify-center items-center w-[30px] h-[30px] text-center cursor-pointer bg-[#eee] hover:bg-[#ddd] dark:bg-[var(--nim-bg-tertiary)] dark:text-[var(--nim-text)] dark:hover:bg-[var(--nim-bg-hover)]"
+          className="Modal__closeButton border-0 absolute right-5 rounded-[20px] flex justify-center items-center w-[30px] h-[30px] text-center cursor-pointer bg-nim-tertiary text-nim hover:bg-nim-hover"
           aria-label="Close modal"
           type="button"
           onClick={onClose}>

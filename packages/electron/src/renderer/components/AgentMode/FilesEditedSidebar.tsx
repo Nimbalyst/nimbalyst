@@ -671,7 +671,9 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
       {/* Header with Files label and controls */}
       <div className="files-edited-sidebar__header flex items-center gap-2 px-3 py-2 border-b border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] shrink-0">
         <MaterialSymbol icon="description" size={16} />
-        <span className="files-edited-sidebar__title font-medium text-[var(--nim-text)]">Files Edited</span>
+        <span className="files-edited-sidebar__title font-medium text-[var(--nim-text)]">
+          {worktreeId ? 'Files Edited in Worktree' : hasMultipleSessions ? 'Files Edited in Workstream' : 'Files Edited in AI Session'}
+        </span>
         {/* Controls */}
         <div className="files-edited-sidebar__controls ml-auto flex gap-1">
           <button

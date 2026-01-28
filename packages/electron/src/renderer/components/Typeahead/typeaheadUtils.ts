@@ -59,9 +59,13 @@ export function extractTriggerMatch(
     // Extract query from trigger to cursor
     const query = textBeforeCursor.substring(lastTriggerIndex + trigger.length);
 
-    // Query ends on double-space (intentional break) or newline
-    // Single spaces are allowed to support files with spaces in names
-    if (/\s{2}|[\n\r]/.test(query)) {
+    // Query ends on:
+    // - Double-space (intentional break)
+    // - Newline
+    // - "/ " (completed folder mention -- no filename starts with a space)
+    // - ".ext " (completed file mention -- file extension followed by space)
+    // Single spaces are otherwise allowed to support files with spaces in names.
+    if (/\s{2}|[\n\r]|\/\s|\.[a-zA-Z0-9]+\s/.test(query)) {
       continue;
     }
 

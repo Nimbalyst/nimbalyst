@@ -31,57 +31,57 @@ body {
 }
 
 /* Text direction */
-.PlaygroundEditorTheme__ltr {
+.nim-ltr {
   text-align: left;
 }
 
-.PlaygroundEditorTheme__rtl {
+.nim-rtl {
   text-align: right;
 }
 
 /* Paragraph */
-.PlaygroundEditorTheme__paragraph {
+.nim-paragraph {
   margin: 0 0 0.5em 0;
   position: relative;
 }
 
 /* Headings */
-.PlaygroundEditorTheme__h1 {
+.nim-h1 {
   font-size: 28px;
   color: #050505;
   font-weight: 500;
   margin: 1em 0 0.5em 0;
 }
 
-.PlaygroundEditorTheme__h2 {
+.nim-h2 {
   font-size: 20px;
   color: #4d4c4c;
   font-weight: 600;
   margin: 1em 0 0.5em 0;
 }
 
-.PlaygroundEditorTheme__h3 {
+.nim-h3 {
   font-size: 16px;
   color: rgb(101, 103, 107);
   font-weight: 600;
   margin: 1em 0 0.5em 0;
 }
 
-.PlaygroundEditorTheme__h4 {
+.nim-h4 {
   font-size: 14px;
   color: rgb(101, 103, 107);
   font-weight: 600;
   margin: 1em 0 0.5em 0;
 }
 
-.PlaygroundEditorTheme__h5 {
+.nim-h5 {
   font-size: 12px;
   color: rgb(101, 103, 107);
   font-weight: 600;
   margin: 1em 0 0.5em 0;
 }
 
-.PlaygroundEditorTheme__h6 {
+.nim-h6 {
   font-size: 10px;
   color: rgb(101, 103, 107);
   font-weight: 600;
@@ -89,43 +89,43 @@ body {
 }
 
 /* Text formatting */
-.PlaygroundEditorTheme__textBold {
+.nim-text-bold {
   font-weight: bold;
 }
 
-.PlaygroundEditorTheme__textItalic {
+.nim-text-italic {
   font-style: italic;
 }
 
-.PlaygroundEditorTheme__textUnderline {
+.nim-text-underline {
   text-decoration: underline;
 }
 
-.PlaygroundEditorTheme__textStrikethrough {
+.nim-text-strikethrough {
   text-decoration: line-through;
 }
 
-.PlaygroundEditorTheme__textUnderlineStrikethrough {
+.nim-text-underline-strikethrough {
   text-decoration: underline line-through;
 }
 
-.PlaygroundEditorTheme__textSubscript {
+.nim-text-subscript {
   font-size: 0.8em;
   vertical-align: sub;
 }
 
-.PlaygroundEditorTheme__textSuperscript {
+.nim-text-superscript {
   font-size: 0.8em;
   vertical-align: super;
 }
 
-.PlaygroundEditorTheme__textHighlight {
+.nim-text-highlight {
   background: rgba(255, 212, 0, 0.14);
   border-bottom: 2px solid rgba(255, 212, 0, 0.3);
 }
 
 /* Inline code */
-.PlaygroundEditorTheme__textCode {
+.nim-text-code {
   background-color: rgb(240, 242, 245);
   padding: 1px 0.25rem;
   font-family: Menlo, Consolas, Monaco, monospace;
@@ -134,13 +134,13 @@ body {
 }
 
 /* Links */
-.PlaygroundEditorTheme__link {
+.nim-link {
   color: rgb(33, 111, 219);
   text-decoration: none;
 }
 
 /* Quote */
-.PlaygroundEditorTheme__quote {
+.nim-quote {
   margin: 0 0 10px 20px;
   font-size: 15px;
   color: rgb(101, 103, 107);
@@ -149,7 +149,7 @@ body {
 }
 
 /* Hashtag */
-.PlaygroundEditorTheme__hashtag {
+.nim-hashtag {
   background-color: rgba(88, 144, 255, 0.15);
   border-radius: 4px;
   padding-left: 3px;
@@ -158,7 +158,7 @@ body {
 }
 
 /* Code blocks */
-.PlaygroundEditorTheme__code {
+.nim-code {
   background-color: rgb(240, 242, 245);
   font-family: Menlo, Consolas, Monaco, monospace;
   display: block;
@@ -173,7 +173,7 @@ body {
   page-break-inside: avoid;
 }
 
-.PlaygroundEditorTheme__code:before {
+.nim-code:before {
   content: attr(data-gutter);
   position: absolute;
   background-color: #eee;
@@ -188,82 +188,82 @@ body {
 }
 
 /* Code syntax highlighting */
-.PlaygroundEditorTheme__tokenComment {
+.nim-token-comment {
   color: slategray;
 }
 
-.PlaygroundEditorTheme__tokenPunctuation {
+.nim-token-punctuation {
   color: #999;
 }
 
-.PlaygroundEditorTheme__tokenProperty {
+.nim-token-property {
   color: #905;
 }
 
-.PlaygroundEditorTheme__tokenSelector {
+.nim-token-selector {
   color: #690;
 }
 
-.PlaygroundEditorTheme__tokenOperator {
+.nim-token-operator {
   color: #9a6e3a;
 }
 
-.PlaygroundEditorTheme__tokenAttr {
+.nim-token-attr {
   color: #07a;
 }
 
-.PlaygroundEditorTheme__tokenVariable {
+.nim-token-variable {
   color: #e90;
 }
 
-.PlaygroundEditorTheme__tokenFunction {
+.nim-token-function {
   color: #dd4a68;
 }
 
 /* Lists */
-.PlaygroundEditorTheme__ol1,
-.PlaygroundEditorTheme__ol2,
-.PlaygroundEditorTheme__ol3,
-.PlaygroundEditorTheme__ol4,
-.PlaygroundEditorTheme__ol5 {
+.nim-ol1,
+.nim-ol2,
+.nim-ol3,
+.nim-ol4,
+.nim-ol5 {
   padding: 0;
   margin: 0;
   list-style-position: inside;
 }
 
-.PlaygroundEditorTheme__ol2 {
+.nim-ol2 {
   list-style-type: upper-alpha;
 }
 
-.PlaygroundEditorTheme__ol3 {
+.nim-ol3 {
   list-style-type: lower-alpha;
 }
 
-.PlaygroundEditorTheme__ol4 {
+.nim-ol4 {
   list-style-type: upper-roman;
 }
 
-.PlaygroundEditorTheme__ol5 {
+.nim-ol5 {
   list-style-type: lower-roman;
 }
 
-.PlaygroundEditorTheme__ul {
+.nim-ul {
   padding: 0;
   margin: 0;
   list-style-position: inside;
 }
 
-.PlaygroundEditorTheme__listItem {
+.nim-list-item {
   margin: 0 24px;
 }
 
-.PlaygroundEditorTheme__nestedListItem {
+.nim-nested-list-item {
   list-style-type: none;
 }
 
 /* Checkbox lists */
-.PlaygroundEditorTheme__listItemChecked,
-.PlaygroundEditorTheme__listItemUnchecked {
+.nim-list-item-checked,
+.nim-list-item-unchecked {
   position: relative;
   margin-left: 8px;
   margin-right: 8px;
@@ -272,12 +272,12 @@ body {
   list-style-type: none;
 }
 
-.PlaygroundEditorTheme__listItemChecked {
+.nim-list-item-checked {
   text-decoration: line-through;
 }
 
-.PlaygroundEditorTheme__listItemUnchecked:before,
-.PlaygroundEditorTheme__listItemChecked:before {
+.nim-list-item-unchecked:before,
+.nim-list-item-checked:before {
   content: '';
   width: 16px;
   height: 16px;
@@ -287,18 +287,18 @@ body {
   position: absolute;
 }
 
-.PlaygroundEditorTheme__listItemUnchecked:before {
+.nim-list-item-unchecked:before {
   border: 1px solid #999;
   border-radius: 2px;
 }
 
-.PlaygroundEditorTheme__listItemChecked:before {
+.nim-list-item-checked:before {
   border: 1px solid rgb(61, 135, 245);
   border-radius: 2px;
   background-color: #3d87f5;
 }
 
-.PlaygroundEditorTheme__listItemChecked:after {
+.nim-list-item-checked:after {
   content: '';
   border-color: #fff;
   border-style: solid;
@@ -313,12 +313,12 @@ body {
 }
 
 /* Tables */
-.PlaygroundEditorTheme__tableScrollableWrapper {
+.nim-table-scrollable-wrapper {
   overflow-x: visible;
   margin: 0 0 16px 0;
 }
 
-.PlaygroundEditorTheme__table {
+.nim-table {
   border-collapse: collapse;
   border-spacing: 0;
   table-layout: fixed;
@@ -326,7 +326,7 @@ body {
   page-break-inside: avoid;
 }
 
-.PlaygroundEditorTheme__tableCell {
+.nim-table-cell {
   border: 1px solid #bbb;
   vertical-align: top;
   text-align: start;
@@ -334,28 +334,28 @@ body {
   min-width: 50px;
 }
 
-.PlaygroundEditorTheme__tableCellHeader {
+.nim-table-cell-header {
   background-color: #f2f3f5;
   text-align: start;
   font-weight: bold;
 }
 
 /* Hide table UI elements */
-.PlaygroundEditorTheme__tableAddColumns,
-.PlaygroundEditorTheme__tableAddRows,
-.PlaygroundEditorTheme__tableCellResizer,
-.PlaygroundEditorTheme__tableCellActionButtonContainer,
-.PlaygroundEditorTheme__tableCellActionButton {
+.nim-table-add-columns,
+.nim-table-add-rows,
+.nim-table-cell-resizer,
+.nim-table-cell-action-button-container,
+.nim-table-cell-action-button {
   display: none !important;
 }
 
 /* Horizontal rule */
-.PlaygroundEditorTheme__hr {
+.nim-hr {
   border: none;
   margin: 1em 0;
 }
 
-.PlaygroundEditorTheme__hr:after {
+.nim-hr:after {
   content: '';
   display: block;
   height: 2px;
@@ -363,13 +363,13 @@ body {
 }
 
 /* Layout containers */
-.PlaygroundEditorTheme__layoutContainer {
+.nim-layout-container {
   display: grid;
   gap: 10px;
   margin: 10px 0;
 }
 
-.PlaygroundEditorTheme__layoutItem {
+.nim-layout-item {
   border: 1px dashed #ddd;
   padding: 8px 16px;
   min-width: 0;
@@ -454,35 +454,35 @@ body {
 }
 
 /* Diff styling - show diffs but simplified for print */
-.PlaygroundEditorTheme__diffAdd {
+.nim-diff-add {
   background-color: #e6ffed;
   border-radius: 2px;
 }
 
-.PlaygroundEditorTheme__diffRemove {
+.nim-diff-remove {
   background-color: #ffebe9;
   text-decoration: line-through;
   border-radius: 2px;
 }
 
 /* Hide diff styling on empty paragraphs */
-.PlaygroundEditorTheme__diffAdd:has(br:only-child),
-.PlaygroundEditorTheme__diffRemove:has(br:only-child) {
+.nim-diff-add:has(br:only-child),
+.nim-diff-remove:has(br:only-child) {
   background-color: transparent;
 }
 
 /* Marks/highlights */
-.PlaygroundEditorTheme__mark {
+.nim-mark {
   background: rgba(255, 212, 0, 0.14);
   border-bottom: 2px solid rgba(255, 212, 0, 0.3);
   padding-bottom: 2px;
 }
 
 /* Hide UI-only elements */
-.PlaygroundEditorTheme__blockCursor,
-.PlaygroundEditorTheme__autocomplete,
-.PlaygroundEditorTheme__tableCellSelected::after,
-.PlaygroundEditorTheme__hrSelected {
+.nim-block-cursor,
+.nim-autocomplete,
+.nim-table-cell-selected::after,
+.nim-hr-selected {
   display: none !important;
 }
 
@@ -492,8 +492,8 @@ body {
     padding: 0;
   }
 
-  .PlaygroundEditorTheme__code,
-  .PlaygroundEditorTheme__table,
+  .nim-code,
+  .nim-table,
   .Collapsible__container {
     page-break-inside: avoid;
   }
@@ -522,7 +522,7 @@ export function wrapWithPrintStyles(content: string): string {
   <style>${PRINT_STYLESHEET}</style>
 </head>
 <body class="pdf-export">
-  <div class="PlaygroundEditorTheme__root">
+  <div class="nim-root">
     ${content}
   </div>
 </body>

@@ -12,6 +12,7 @@ import { DocumentService } from '../../core/DocumentService';
 import documentLinkStyles from './DocumentLinkPlugin.css?inline';
 import { TypeaheadMenuOption } from "rexical";
 import { fuzzyFilterDocuments } from '../../utils/fuzzyMatch';
+import { MaterialSymbol } from "../../ui";
 
 const DOCUMENT_REFERENCE_STYLE_ID = 'document-reference-styles';
 
@@ -194,7 +195,7 @@ export function DocumentLinkPlugin({
         secondaryText: truncatedPath || undefined,
         // Full path in tooltip for hover
         tooltip: doc.path,
-        icon: '📄',
+        icon: <MaterialSymbol style={{ fontSize: 16, verticalAlign: 'middle' }} icon={'description'}/>,
         // Don't use sections - removes the heavy uppercase headers
         // section: doc.workspace || 'Documents',
         keywords: [doc.name, doc.workspace, doc.path].filter(Boolean) as string[],

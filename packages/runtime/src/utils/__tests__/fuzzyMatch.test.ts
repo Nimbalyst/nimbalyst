@@ -56,6 +56,55 @@ describe('fuzzyMatch', () => {
     });
   });
 
+  describe('delimiter-separated matching', () => {
+    it('matches dash-separated prefixes', () => {
+      const result = fuzzyMatch('tra-bug', 'tracker-bugs.md');
+      expect(result.matches).toBe(true);
+      expect(result.score).toBeGreaterThan(0.55);
+    });
+
+    it('matches dot-separated prefixes', () => {
+      const result = fuzzyMatch('ses.file', 'session-files.ts');
+      expect(result.matches).toBe(true);
+      expect(result.score).toBeGreaterThan(0.55);
+    });
+
+    it('matches underscore-separated prefixes', () => {
+      const result = fuzzyMatch('my_comp', 'my_component.tsx');
+      expect(result.matches).toBe(true);
+      expect(result.score).toBeGreaterThan(0.55);
+    });
+
+    it('scores higher than fuzzy subsequence for same target', () => {
+      const delimiterResult = fuzzyMatch('tra-bug', 'tracker-bugs.md');
+      // Compare with a pure subsequence match of equivalent scattered chars
+      const subsequenceResult = fuzzyMatch('trbg', 'tracker-bugs.md');
+      expect(delimiterResult.score).toBeGreaterThan(subsequenceResult.score);
+    });
+
+    it('requires segments to match in order', () => {
+      const result = fuzzyMatch('bug-tra', 'tracker-bugs.md');
+      // "bug" does not match "tracker" as prefix, so delimiter match fails.
+      // May still match via fuzzy subsequence but with a low score.
+      // The delimiter strategy specifically should not match out-of-order.
+      expect(result.score).toBeLessThanOrEqual(0.5);
+    });
+
+    it('does not activate for single-segment queries without delimiters', () => {
+      // Single word without delimiters should use substring/subsequence, not delimiter match
+      const result = fuzzyMatch('tracker', 'tracker-bugs.md');
+      expect(result.matches).toBe(true);
+      // Should match via substring, not delimiter
+      expect(result.score).toBeGreaterThan(0.5);
+    });
+
+    it('matches mixed delimiter types against target', () => {
+      const result = fuzzyMatch('elec-rend', 'electron-renderer');
+      expect(result.matches).toBe(true);
+      expect(result.score).toBeGreaterThan(0.55);
+    });
+  });
+
   describe('fuzzy subsequence matching', () => {
     it('matches scattered characters in order', () => {
       const result = fuzzyMatch('trbg', 'tracker-bugs.md');

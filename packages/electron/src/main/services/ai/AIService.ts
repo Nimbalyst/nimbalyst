@@ -312,8 +312,12 @@ async function attachMentionedFiles(
         continue;
       }
 
-      // Check file size
+      // Check file size and type
       const stats = fs.statSync(resolvedPath);
+      if (stats.isDirectory()) {
+        // Directory mentions are handled by agent providers via MCP tools
+        continue;
+      }
       if (stats.size > MAX_FILE_SIZE) {
         logger.main.warn(`[AIService] @ mentioned file too large (${stats.size} bytes): ${mentionedPath}`);
         continue;
@@ -715,6 +719,22 @@ export class AIService {
       // Listen for index changes and insert queued prompts into the queued_prompts table
       if (syncProvider.onIndexChange) {
         syncProvider.onIndexChange(async (sessionId, entry) => {
+            // Notify renderer about session list changes
+            // This ensures new sessions from mobile appear immediately in the UI
+            // Use getCachedIndexEntry to get project_id without database lookup
+            if (syncProvider.getCachedIndexEntry) {
+              const cachedEntry = syncProvider.getCachedIndexEntry(sessionId);
+              if (cachedEntry?.project_id) {
+                const targetWindow = findWindowByWorkspace(cachedEntry.project_id);
+                if (targetWindow && !targetWindow.isDestroyed()) {
+                  targetWindow.webContents.send('sessions:refresh-list', {
+                    workspacePath: cachedEntry.project_id,
+                    sessionId
+                  });
+                }
+              }
+            }
+
             // Only process if there are queuedPrompts in the broadcast
             if (entry.queuedPrompts && entry.queuedPrompts.length > 0) {
               logger.main.info('[AIService] Received queuedPrompts from mobile via onIndexChange:', {
@@ -937,6 +957,15 @@ export class AIService {
               }]);
             } else {
               logger.main.warn('[AIService] Cannot sync session - syncSessionsToIndex not available');
+            }
+
+            // Notify renderer to refresh session list
+            if (targetWindow && !targetWindow.isDestroyed()) {
+              logger.main.info('[AIService] Notifying renderer to refresh session list after mobile session creation');
+              targetWindow.webContents.send('sessions:refresh-list', {
+                workspacePath,
+                sessionId: session.id
+              });
             }
 
             // Send success response

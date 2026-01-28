@@ -16,42 +16,39 @@ interface MermaidComponentProps {
 }
 
 // Dynamic import to avoid bundling mermaid when not needed
-// Uses singleton promise pattern to prevent race conditions during concurrent loads
-let mermaidPromise: Promise<any> | null = null;
-let currentTheme: string | null = null;
+let mermaidModule: any = null;
+let mermaidLoadPromise: Promise<any> | null = null;
+let lastInitTheme: string | null = null;
 
 async function loadMermaid(isDarkTheme: boolean): Promise<any> {
-  const theme = isDarkTheme ? 'dark' : 'default';
+  const themeKey = isDarkTheme ? 'dark' : 'light';
 
-  // If theme changed, force re-initialization
-  if (currentTheme !== null && currentTheme !== theme) {
-    mermaidPromise = null;
-  }
-
-  if (!mermaidPromise) {
-    currentTheme = theme;
-    mermaidPromise = (async () => {
+  if (!mermaidLoadPromise) {
+    mermaidLoadPromise = (async () => {
       const module = await import('mermaid');
-      // In mermaid v11+, use the named export or default
       const mermaid = module.default || (module as any).mermaid || module;
-
-      // Check if we got a valid mermaid instance
       if (typeof mermaid.initialize !== 'function') {
         console.error('Invalid mermaid instance:', mermaid);
         throw new Error('Failed to load mermaid module');
       }
-
-      mermaid.initialize({
-        startOnLoad: false,
-        theme: theme,
-        securityLevel: 'antiscript',
-        fontFamily: 'monospace',
-      });
+      mermaidModule = mermaid;
       return mermaid;
     })();
   }
 
-  return mermaidPromise;
+  await mermaidLoadPromise;
+
+  if (lastInitTheme !== themeKey) {
+    lastInitTheme = themeKey;
+    mermaidModule.initialize({
+      startOnLoad: false,
+      theme: isDarkTheme ? 'dark' : 'default',
+      securityLevel: 'antiscript',
+      fontFamily: 'monospace',
+    });
+  }
+
+  return mermaidModule;
 }
 
 function MermaidDiagram({ content, id, renderKey }: { content: string; id: string; renderKey: number }) {

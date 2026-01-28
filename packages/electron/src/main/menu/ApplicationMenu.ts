@@ -184,15 +184,12 @@ function createWindowListMenu(): any[] {
     return menuItems;
 }
 
-// Create the recent submenu
+// Create the recent projects submenu
 async function createRecentSubmenu(): Promise<any[]> {
     const recentWorkspaces = await getRecentItems('workspaces');
-    const recentDocuments = await getRecentItems('documents');
     const submenu: any[] = [];
 
-    // Recent Workspaces section
     if (recentWorkspaces.length > 0) {
-        submenu.push({ label: 'Recent Projects', enabled: false });
         recentWorkspaces.forEach(workspace => {
             submenu.push({
                 label: workspace.name,
@@ -216,77 +213,25 @@ async function createRecentSubmenu(): Promise<any[]> {
                         const items = getRecentItems('workspaces').filter(item => item.path !== workspace.path);
                         store.set('recent.workspaces', items);
                         updateApplicationMenu();
-                        dialog.showErrorBox('Workspace Not Found', `The workspace "${workspace.name}" could not be found at:\n${workspace.path}`);
+                        dialog.showErrorBox('Project Not Found', `The project "${workspace.name}" could not be found at:\n${workspace.path}`);
                     }
                 }
             });
         });
 
-        if (recentDocuments.length > 0) {
-            submenu.push({ type: 'separator' });
-        }
-    }
-
-    // Recent Documents section
-    if (recentDocuments.length > 0) {
-        submenu.push({ label: 'Recent Documents', enabled: false });
-        recentDocuments.forEach(doc => {
-            submenu.push({
-                label: doc.name,
-                click: async () => {
-                    // Check if file exists
-                    if (existsSync(doc.path)) {
-                        // Check if file is already open
-                        const existingWindow = findWindowByFilePath(doc.path);
-                        if (existingWindow) {
-                            existingWindow.focus();
-                        } else {
-                            // Open in new window
-                            const window = createWindow(true);
-                            window.once('ready-to-show', () => {
-                                loadFileIntoWindow(window, doc.path);
-                            });
-                        }
-                    } else {
-                        // Remove from recent if doesn't exist
-                        const items = getRecentItems('documents').filter(item => item.path !== doc.path);
-                        store.set('recent.documents', items);
-                        updateApplicationMenu();
-                        dialog.showErrorBox('File Not Found', `The file "${doc.name}" could not be found at:\n${doc.path}`);
-                    }
-                }
-            });
-        });
-    }
-
-    // Clear Recent options
-    if (recentWorkspaces.length > 0 || recentDocuments.length > 0) {
         submenu.push({ type: 'separator' });
-
-        if (recentWorkspaces.length > 0) {
-            submenu.push({
-                label: 'Clear Recent Projects',
-                click: async () => {
-                    clearRecentItems('workspaces');
-                    updateApplicationMenu();
-                }
-            });
-        }
-
-        if (recentDocuments.length > 0) {
-            submenu.push({
-                label: 'Clear Recent Documents',
-                click: async () => {
-                    clearRecentItems('documents');
-                    updateApplicationMenu();
-                }
-            });
-        }
+        submenu.push({
+            label: 'Clear Recent Projects',
+            click: async () => {
+                clearRecentItems('workspaces');
+                updateApplicationMenu();
+            }
+        });
     }
 
     // If no recent items
     if (submenu.length === 0) {
-        submenu.push({ label: 'No Recent Items', enabled: false });
+        submenu.push({ label: 'No Recent Projects', enabled: false });
     }
 
     return submenu;
@@ -508,43 +453,22 @@ export async function createApplicationMenu() {
                     }
                 },
                 {
-                    label: 'Open Folder...',
+                    label: 'Open Project...',
                     accelerator: KeyboardShortcuts.file.openFolder,
                     click: async () => {
                         // Track menu action
                         AnalyticsService.getInstance().sendEvent('menu_action_used', {
                             menu: 'file',
-                            action: 'open_folder',
+                            action: 'open_project',
                             hasKeyboardEquivalent: true,
                         });
 
-                        const result = await dialog.showOpenDialog({
-                            properties: ['openDirectory']
-                        });
-
-                        if (!result.canceled && result.filePaths.length > 0) {
-                            const workspacePath = result.filePaths[0];
-                            // Add to recent.workspaces
-                            addToRecentItems('workspaces', workspacePath, basename(workspacePath));
-
-                            // Check for saved workspace window state
-                            const savedState = getWorkspaceWindowState(workspacePath);
-
-                            // Create window with saved bounds if available
-                            const window = createWindow(false, true, workspacePath, savedState?.bounds);
-
-                            // Restore dev tools if they were open
-                            if (savedState?.devToolsOpen) {
-                                window.webContents.once('did-finish-load', () => {
-                                    window.webContents.openDevTools();
-                                });
-                            }
-                        }
+                        createWorkspaceManagerWindow();
                     }
                 },
                 { type: 'separator' },
                 {
-                    label: 'Recent Files',
+                    label: 'Recent Projects',
                     submenu: await createRecentSubmenu()
                 },
                 ...(process.platform !== 'darwin' ? [

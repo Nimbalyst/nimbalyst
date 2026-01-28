@@ -245,33 +245,6 @@
 }
 
 /* ============================================
-   LIST ITEMS
-   ============================================ */
-
-/* Interactive list item */
-.nim-list-item {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.5rem 0.75rem;
-  border-radius: 0.25rem;
-  cursor: pointer;
-  transition: background-color 0.15s;
-  color: var(--nim-text);
-}
-
-.nim-list-item:hover {
-  background: var(--nim-bg-hover);
-}
-
-.nim-list-item.selected,
-.nim-list-item[aria-selected="true"] {
-  background: var(--nim-bg-selected);
-  border-left: 3px solid var(--nim-primary);
-  padding-left: 9px;
-}
-
-/* ============================================
    BADGES / TAGS
    ============================================ */
 
