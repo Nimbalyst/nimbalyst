@@ -165,11 +165,11 @@ export function createWindow(
         let backgroundColor = '#ffffff'; // Default to white for light theme
 
         if (currentTheme === 'dark') {
-            backgroundColor = '#2d2d2d'; // Matches --nim-bg in DarkEditorTheme.css
+            backgroundColor = '#2d2d2d'; // Matches --nim-bg in NimbalystTheme.css (dark)
         } else if (currentTheme === 'crystal-dark') {
-            backgroundColor = '#0f172a'; // Matches --nim-bg in CrystalDarkTheme.css
+            backgroundColor = '#0f172a'; // Matches --nim-bg in NimbalystTheme.css (crystal-dark)
         } else if (currentTheme === 'light') {
-            backgroundColor = '#ffffff'; // Matches --nim-bg in PlaygroundEditorTheme.css
+            backgroundColor = '#ffffff'; // Matches --nim-bg in NimbalystTheme.css (light)
         } else {
             // system/auto - use nativeTheme which should match prefers-color-scheme
             backgroundColor = nativeTheme.shouldUseDarkColors ? '#2d2d2d' : '#ffffff';

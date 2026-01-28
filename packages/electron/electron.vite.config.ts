@@ -269,7 +269,7 @@ export default defineConfig({
         '@stravu-editor/runtime': '@nimbalyst/runtime',
         '@stravu/runtime': '@nimbalyst/runtime',
         '@nimbalyst/runtime': runtimeSrcDir,
-        'rexical/styles': resolve(__dirname, '../rexical/src/themes/PlaygroundEditorTheme.css'),
+        'rexical/styles': resolve(__dirname, '../rexical/src/themes/NimbalystEditorTheme.css'),
         'rexical': resolve(__dirname, '../rexical/src')
       },
       dedupe: [

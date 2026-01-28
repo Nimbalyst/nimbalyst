@@ -716,7 +716,7 @@ function TableCellActionMenuContainer({
   const checkTableCellOverflow = useCallback(
     (tableCellParentNodeDOM: HTMLElement): boolean => {
       const scrollableContainer = tableCellParentNodeDOM.closest(
-        '.PlaygroundEditorTheme__tableScrollableWrapper',
+        '.nim-table-scrollable-wrapper',
       );
       if (scrollableContainer) {
         const containerRect = (

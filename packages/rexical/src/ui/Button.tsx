@@ -35,10 +35,9 @@ export default function Button({
       className={joinClasses(
         'Button__root',
         'border-0 rounded-[5px] cursor-pointer text-sm',
-        'bg-[#eee] text-[#333] hover:bg-[#ddd]',
-        'dark:bg-[var(--nim-bg-tertiary)] dark:text-[var(--nim-text)] dark:hover:bg-[var(--nim-bg-hover)]',
+        'bg-nim-tertiary text-nim hover:bg-nim-hover',
         small ? 'py-[5px] px-[10px] text-[13px]' : 'py-[10px] px-[15px]',
-        disabled && 'Button__disabled cursor-not-allowed dark:bg-[var(--nim-bg-secondary)] dark:text-[var(--nim-text-muted)] hover:bg-[#eee] dark:hover:bg-[var(--nim-bg-secondary)]',
+        disabled && 'Button__disabled cursor-not-allowed bg-nim-secondary text-nim-muted hover:bg-nim-secondary',
         className,
       )}
       onClick={onClick}

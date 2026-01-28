@@ -284,9 +284,9 @@ test.describe('AI Tool Simulator', () => {
       const allAdded: string[] = [];
 
       allEditors.forEach((ed) => {
-        const removed = Array.from(ed.querySelectorAll('.PlaygroundEditorTheme__diffRemove') || [])
+        const removed = Array.from(ed.querySelectorAll('.nim-diff-remove') || [])
           .map(el => el.textContent?.trim());
-        const added = Array.from(ed.querySelectorAll('.PlaygroundEditorTheme__diffAdd') || [])
+        const added = Array.from(ed.querySelectorAll('.nim-diff-add') || [])
           .map(el => el.textContent?.trim());
         allRemoved.push(...removed);
         allAdded.push(...added);
@@ -325,9 +325,9 @@ test.describe('AI Tool Simulator', () => {
       const allAdded: string[] = [];
 
       allEditors.forEach((ed) => {
-        const removed = Array.from(ed.querySelectorAll('.PlaygroundEditorTheme__diffRemove') || [])
+        const removed = Array.from(ed.querySelectorAll('.nim-diff-remove') || [])
           .map(el => el.textContent?.trim());
-        const added = Array.from(ed.querySelectorAll('.PlaygroundEditorTheme__diffAdd') || [])
+        const added = Array.from(ed.querySelectorAll('.nim-diff-add') || [])
           .map(el => el.textContent?.trim());
         allRemoved.push(...removed);
         allAdded.push(...added);

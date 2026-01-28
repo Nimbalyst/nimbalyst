@@ -24,13 +24,13 @@ export default function FileInput({
 }: Props): JSX.Element {
   return (
     <div className="Input__wrapper flex flex-row items-center mb-[10px]">
-      <label className="Input__label flex flex-1 text-[#666] dark:text-[var(--nim-text-muted)]">
+      <label className="Input__label flex flex-1 text-nim-muted">
         {label}
       </label>
       <input
         type="file"
         accept={accept}
-        className="Input__input flex flex-[2] border border-[#999] py-[7px] px-[10px] text-base rounded-[5px] min-w-0 bg-white text-[#333] dark:border-[var(--nim-border)] dark:bg-[var(--nim-bg-secondary)] dark:text-[var(--nim-text)]"
+        className="Input__input flex flex-[2] border border-nim py-[7px] px-[10px] text-base rounded-[5px] min-w-0 bg-nim-secondary text-nim dark:[color-scheme:dark]"
         onChange={(e) => onChange(e.target.files)}
         data-test-id={dataTestId}
       />

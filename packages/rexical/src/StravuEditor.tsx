@@ -26,7 +26,7 @@ import { useTheme } from './context/ThemeContext';
 import { RuntimeSettingsProvider } from './context/RuntimeSettingsContext';
 import { useResponsiveWidth } from './hooks/useResponsiveWidth';
 import Editor from './Editor';
-import PlaygroundEditorTheme from './themes/PlaygroundEditorTheme';
+import NimbalystEditorTheme from './themes/NimbalystEditorTheme';
 import EditorNodes from "./nodes/EditorNodes";
 import { pluginRegistry } from './plugins/PluginRegistry';
 import { getEditorTransformers } from './markdown';
@@ -70,12 +70,12 @@ function StravuEditor({config}: StravuEditorProps): JSX.Element {
             // Return undefined for truly empty editor
             return undefined;
         })(),
-        namespace: 'StravuEditor',
+        namespace: 'Nimbalyst',
         nodes: [...EditorNodes,  ...pluginRegistry.getAllNodes()],
         onError: (error: Error) => {
             throw error;
         },
-        theme: PlaygroundEditorTheme,
+        theme: NimbalystEditorTheme,
         editable: mergedConfig.editable !== undefined ? mergedConfig.editable : true,
     };
 
