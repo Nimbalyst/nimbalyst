@@ -92,6 +92,7 @@ import { setStorageBackend } from '@nimbalyst/runtime';
 import { extensionPanelAIContextAtom } from './store/atoms/extensionPanels';
 import { setDiffTreeGroupByDirectoryAtom } from './store/atoms/projectState';
 import { toggleSessionHistoryCollapsedAtom } from './store/atoms/agentMode';
+import { setDeveloperFeatureSettingsAtom } from './store/atoms/appSettings';
 
 logger.ui.info('App.tsx loading');
 logger.ui.info('About to import StravuEditor');
@@ -322,6 +323,7 @@ export default function App() {
   const activeMode = useAtomValue(windowModeAtom);
   const setActiveMode = useSetAtom(setWindowModeAtom);
   const toggleAgentCollapsed = useSetAtom(toggleSessionHistoryCollapsedAtom);
+  const updateDeveloperSettings = useSetAtom(setDeveloperFeatureSettingsAtom);
   // Keep a ref for use in callbacks that might have stale closures
   const activeModeStateRef = useRef<ContentMode>(activeMode);
   useEffect(() => {
