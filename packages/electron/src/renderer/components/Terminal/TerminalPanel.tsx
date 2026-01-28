@@ -7,6 +7,7 @@
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { init, Terminal, FitAddon, type ITheme } from 'ghostty-web';
+import { TerminalContextMenu } from './TerminalContextMenu';
 
 // Type for terminal API is defined in electron.d.ts
 
@@ -164,6 +165,26 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
   const [hasExited, setHasExited] = useState(false);
   const [exitCode, setExitCode] = useState<number | null>(null);
   const [initError, setInitError] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+
+  // Handle context menu
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY });
+  }, []);
+
+  const handleCloseContextMenu = useCallback(() => {
+    setContextMenu(null);
+  }, []);
+
+  const handleClearTerminal = useCallback(() => {
+    // Clear the visual terminal (ANSI escape: clear screen + move cursor home)
+    if (terminalInstanceRef.current) {
+      terminalInstanceRef.current.write('\x1B[2J\x1B[H');
+    }
+    // Clear the persisted scrollback
+    window.electronAPI.terminal.clearScrollback(sessionId);
+  }, [sessionId]);
 
   // Handle terminal restart after exit
   const handleRestart = useCallback(async () => {
@@ -421,7 +442,17 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
           overflow: 'hidden',
         }}
         data-testid="terminal-container"
+        onContextMenu={handleContextMenu}
       />
+
+      {contextMenu && (
+        <TerminalContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={handleCloseContextMenu}
+          onClear={handleClearTerminal}
+        />
+      )}
 
       {!isInitialized && !hasExited && !initError && (
         <div
