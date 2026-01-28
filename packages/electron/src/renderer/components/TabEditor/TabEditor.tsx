@@ -2244,7 +2244,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       },
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filePath, fileName, workspaceId, theme, extensionStorage]); // Recreate when file, workspace, theme, or storage changes
+  }, [filePath, fileName, workspaceId, extensionStorage]); // Recreate when file, workspace, or storage changes (theme accessed via themeRef)
 
   // Register manual save function for custom editors
   // This ensures saveTabById works when closing dirty custom editor tabs
