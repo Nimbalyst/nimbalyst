@@ -53,7 +53,8 @@ export const HistoricalGraph: React.FC<HistoricalGraphProps> = ({ workspaceId })
   }
 
   const chartData = data.map((point) => ({
-    date: new Date(point.timestamp).toLocaleDateString(),
+    // Use UTC date formatting since timestamps are truncated to UTC midnight
+    date: new Date(point.timestamp).toLocaleDateString(undefined, { timeZone: 'UTC' }),
     'Input Tokens': point.inputTokens,
     'Output Tokens': point.outputTokens,
     Sessions: point.sessionCount,
