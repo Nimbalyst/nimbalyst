@@ -16,6 +16,9 @@ import { getSoundPlayer } from '../services/SoundPlayer';
 import { getFileName } from '../utils/pathUtils';
 import type { ContentMode } from '../types/WindowModeTypes';
 import { addPendingGitCommitProposalAtom } from '../store/atoms/gitOperations';
+import { dialogRef } from '../contexts/DialogContext';
+import { DIALOG_IDS } from '../dialogs';
+import type { AgentCommandPaletteData } from '../dialogs';
 
 const PLAN_STATUS_KEYS = new Set([
   'planId',
@@ -967,10 +970,16 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     if (window.electronAPI.onToggleAgentPalette) {
       cleanupFns.push(window.electronAPI.onToggleAgentPalette(() => {
         console.log('Toggle agent palette command received from menu');
-        if (stateRef.current.workspaceMode) {
-          handlersRef.current.setIsAgentPaletteVisible(true);
+        if (stateRef.current.workspaceMode && stateRef.current.workspacePath && dialogRef.current) {
+          dialogRef.current.open<AgentCommandPaletteData>(DIALOG_IDS.AGENT_COMMAND_PALETTE, {
+            workspacePath: stateRef.current.workspacePath,
+            documentContext: {
+              content: getContentRef.current?.() || '',
+              filePath: currentFilePathRef.current || undefined
+            }
+          });
         } else {
-          console.log('Not in workspace mode, agent palette not available');
+          console.log('Not in workspace mode or dialogRef not ready, agent palette not available');
         }
       }));
     }
@@ -987,7 +996,9 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     if ((window.electronAPI as any).onOpenKeyboardShortcuts) {
       cleanupFns.push((window.electronAPI as any).onOpenKeyboardShortcuts(() => {
         console.log('Open keyboard shortcuts dialog command received from menu');
-        handlersRef.current.setIsKeyboardShortcutsDialogOpen(true);
+        if (dialogRef.current) {
+          dialogRef.current.open(DIALOG_IDS.KEYBOARD_SHORTCUTS, {});
+        }
       }));
     }
 

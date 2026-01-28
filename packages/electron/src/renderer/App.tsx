@@ -11,25 +11,26 @@ import { useIPCHandlers } from './hooks/useIPCHandlers';
 import { useWindowLifecycle } from './hooks/useWindowLifecycle';
 import { useTheme } from './hooks/useTheme';
 import { useConfirmDialog } from './hooks/useConfirmDialog';
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
+import { useOnboarding } from './hooks/useOnboarding';
 // NOTE: useDocumentContext removed - we build documentContext manually now
 import { handleWorkspaceFileSelect as handleWorkspaceFileSelectUtil } from './utils/workspaceFileOperations';
 import { createInitialFileContent } from './utils/fileUtils';
 import { aiToolService } from './services/AIToolService';
 import { editorRegistry } from '@nimbalyst/runtime/ai/EditorRegistry';
 import { WorkspaceWelcome } from './components/WorkspaceWelcome.tsx';
-import { QuickOpen } from './components/QuickOpen';
-import { SessionQuickOpen } from './components/SessionQuickOpen';
-import { PromptQuickOpen } from './components/PromptQuickOpen';
-import { AgentCommandPalette } from './components/AgentCommandPalette';
+// Dialog system - new centralized dialog management
+import { DialogProvider, dialogRef } from './contexts/DialogContext';
+import { initializeDialogs, DIALOG_IDS } from './dialogs';
+import type { ProjectSelectionData, ErrorDialogData } from './dialogs';
+import { NavigationDialogKeyboardHandler } from './components/NavigationDialogKeyboardHandler';
 import { ConfirmDialog } from './components/ConfirmDialog/ConfirmDialog';
-import { DiscordInvitation } from './components/DiscordInvitation/DiscordInvitation';
-import { WindowsClaudeCodeWarning } from './components/WindowsClaudeCodeWarning/WindowsClaudeCodeWarning';
-import { KeyboardShortcutsDialog } from './components/KeyboardShortcutsDialog/KeyboardShortcutsDialog';
-import { ErrorDialog } from './components/ErrorDialog/ErrorDialog';
+// NOTE: DiscordInvitation, KeyboardShortcutsDialog, ApiKeyDialog now managed by DialogProvider
+// NOTE: WindowsClaudeCodeWarning now managed by DialogProvider
+// NOTE: ErrorDialog now managed by DialogProvider
 import { ErrorToastContainer } from './components/ErrorToast/ErrorToast';
-import { ApiKeyDialog } from './components/ApiKeyDialog';
-import { ProjectSelectionDialog } from './components/ProjectSelectionDialog/ProjectSelectionDialog';
-import { UnifiedOnboarding, type OnboardingData } from './components/UnifiedOnboarding/UnifiedOnboarding';
+// NOTE: ProjectSelectionDialog now managed by DialogProvider
+// NOTE: UnifiedOnboarding now managed by DialogProvider
 import { WorkspaceManager } from './components/WorkspaceManager/WorkspaceManager.tsx';
 import { AIUsageReport } from './components/AIUsageReport';
 import { DatabaseBrowser } from './components/DatabaseBrowser/DatabaseBrowser';
@@ -76,7 +77,7 @@ import { ExtensionHostComponents } from './components/ExtensionHostComponents';
 import { ClaudeCommandsToast } from './components/ClaudeCommandsToast';
 import { UpdateToast } from './components/UpdateToast';
 import { ProjectTrustToast } from './components/ProjectTrustToast';
-import { PostHogSurvey } from './components/PostHogSurvey';
+// NOTE: PostHogSurvey now managed by DialogProvider
 import { NotificationSessionChecker } from './components/NotificationSessionChecker';
 import OnboardingService from './services/OnboardingService';
 import { WalkthroughProvider } from './walkthroughs';
@@ -135,6 +136,12 @@ export default function App() {
    // IMPORTANT: This state must be declared before the useEffect that uses it
   // and before any conditional early returns (workspace-manager, usage-report, etc.)
   const [extensionsReady, setExtensionsReady] = useState(false);
+
+  // Initialize dialog system (must run early, before any dialogs are opened)
+  useEffect(() => {
+    initializeDialogs();
+    logger.ui.info('[Dialogs] Dialog system initialized');
+  }, []);
 
   // Register custom editors and extensions based on settings
   useEffect(() => {
@@ -267,43 +274,23 @@ export default function App() {
   const [workspacePath, setWorkspacePath] = useState<string | null>(null);
   const [workspaceName, setWorkspaceName] = useState<string | null>(null);
   // NOTE: fileTree, sidebarWidth, isNewFileDialogOpen, newFileDirectory, isHistoryDialogOpen moved to EditorMode
-  const [isQuickOpenVisible, setIsQuickOpenVisible] = useState(false);
-  const [isSessionQuickOpenVisible, setIsSessionQuickOpenVisible] = useState(false);
-  const [isPromptQuickOpenVisible, setIsPromptQuickOpenVisible] = useState(false);
-  const [isAgentPaletteVisible, setIsAgentPaletteVisible] = useState(false);
+  // NOTE: Navigation dialogs (QuickOpen, SessionQuickOpen, PromptQuickOpen, AgentCommandPalette) are now managed by DialogProvider
   // NOTE: isAIChatCollapsed, aiChatWidth moved to EditorMode for workspace mode
   // These are kept for potential single-file mode or agent mode use
   const [isAIChatCollapsed, setIsAIChatCollapsed] = useState(false);
   const [aiChatWidth, setAIChatWidth] = useState<number>(350);
-  const [isKeyboardShortcutsDialogOpen, setIsKeyboardShortcutsDialogOpen] = useState(false);
-  const [isDiscordInvitationOpen, setIsDiscordInvitationOpen] = useState(false);
-  const [isPostHogSurveyOpen, setIsPostHogSurveyOpen] = useState(false);
-  const [isWindowsClaudeCodeWarningOpen, setIsWindowsClaudeCodeWarningOpen] = useState(false);
+  // NOTE: KeyboardShortcutsDialog, DiscordInvitation, PostHogSurvey, ApiKeyDialog are now managed by DialogProvider
+  // NOTE: WindowsClaudeCodeWarning now managed by DialogProvider via useOnboarding hook
   const [isAIChatStateLoaded, setIsAIChatStateLoaded] = useState(false);
   // Planning mode for AI sidebar (Claude Code safety). Default ON
   const [aiPlanningModeEnabled, setAIPlanningModeEnabled] = useState<boolean>(true);
-  const [isApiKeyDialogOpen, setIsApiKeyDialogOpen] = useState(false);
   // Force show trust toast (when user wants to change permission mode)
   const [forceShowTrustToast, setForceShowTrustToast] = useState(false);
   const [sessionToLoad, setSessionToLoad] = useState<{ sessionId: string; workspacePath?: string } | null>(null);
   const [currentAISessionId, setCurrentAISessionId] = useState<string | null>(null);
-  const [diffError, setDiffError] = useState<{ isOpen: boolean; title: string; message: string; details?: any }>({
-    isOpen: false,
-    title: '',
-    message: '',
-    details: undefined
-  });
-  const [projectSelection, setProjectSelection] = useState<{
-    isOpen: boolean;
-    filePath: string;
-    fileName: string;
-    suggestedWorkspace?: string;
-  } | null>(null);
+  // NOTE: diffError and projectSelection are now managed by DialogProvider
 
-  // Unified onboarding state (combines old onboarding + feature walkthrough)
-  const [isUnifiedOnboardingOpen, setIsUnifiedOnboardingOpen] = useState(false);
-  // Forced user mode for testing from developer menu (null = auto-detect)
-  const [onboardingForcedMode, setOnboardingForcedMode] = useState<'new' | 'existing' | null>(null);
+  // NOTE: UnifiedOnboarding state now managed by DialogProvider via useOnboarding hook
 
   // Claude commands install toast state
   const [showCommandsToast, setShowCommandsToast] = useState(false);
@@ -345,6 +332,14 @@ export default function App() {
   const goBack = useSetAtom(goBackAtom);
   const goForward = useSetAtom(goForwardAtom);
 
+  // Onboarding dialogs (UnifiedOnboarding, WindowsClaudeCodeWarning) - managed via DialogProvider
+  const { checkAndShowCommandsToast } = useOnboarding({
+    workspacePath,
+    workspaceMode,
+    isInitializing,
+    setActiveMode,
+  });
+
   // Expose test helpers for testing
   useEffect(() => {
     // Always expose in development
@@ -376,154 +371,7 @@ export default function App() {
   // Agent panel plan reference (for launching from plan status)
   const [agentPlanReference, setAgentPlanReference] = useState<string | null>(null);
 
-  // Check for first-time user after initialization completes
-  // Check for unified onboarding on first launch
-  // Set to true to force the onboarding to display (for development/testing)
-  const FORCE_UNIFIED_ONBOARDING = false;
-
-  useEffect(() => {
-    // Only check after initialization is complete
-    if (isInitializing) return;
-
-    const checkUnifiedOnboarding = async () => {
-      // Skip in Playwright tests
-      if ((window as any).PLAYWRIGHT) {
-        return;
-      }
-
-      // Only show in workspace mode windows
-      if (!workspaceMode) {
-        return;
-      }
-
-      // Force display if flag is set (for development/testing)
-      if (FORCE_UNIFIED_ONBOARDING) {
-        setIsUnifiedOnboardingOpen(true);
-        return;
-      }
-
-      // Small delay to let other windows start up first
-      await new Promise(resolve => setTimeout(resolve, 100));
-
-      // Check if unified onboarding has been completed
-      const state = await window.electronAPI.invoke('onboarding:get');
-
-      // Only check the new unified onboarding flag - ignore old onboarding flags
-      // This ensures ALL users see the new unified flow, even if they completed old onboarding
-      if (state.unifiedOnboardingCompleted) {
-        return;
-      }
-
-      // Show unified onboarding
-      setIsUnifiedOnboardingOpen(true);
-    };
-
-    checkUnifiedOnboarding();
-  }, [isInitializing, workspaceMode]);
-
-  // Handle unified onboarding completion
-  const handleUnifiedOnboardingComplete = useCallback(async (data: OnboardingData) => {
-    const roleToStore = data.customRole || data.role || undefined;
-
-    // Store onboarding data in electron-store (app settings)
-    await window.electronAPI.invoke('onboarding:update', {
-      userRole: roleToStore,
-      userEmail: data.email || undefined,
-      referralSource: data.referralSource || undefined,
-      unifiedOnboardingCompleted: true,
-      onboardingCompleted: true // Keep for backward compatibility
-    });
-
-    // Store developer mode globally in app settings
-    await window.electronAPI.invoke('developer-mode:set', data.developerMode);
-
-    if (posthog) {
-      // Set person properties (persist to user profile)
-      const personProperties: Record<string, string | boolean> = {
-        developer_mode: data.developerMode,
-      };
-      if (data.email) {
-        personProperties.email = data.email;
-      }
-      if (data.role) {
-        personProperties.user_role = data.customRole || data.role;
-      }
-      if (data.referralSource) {
-        personProperties.referral_source = data.referralSource;
-      }
-      posthog.people.set(personProperties);
-
-      // Submit survey response (role and referral source)
-      // Survey ID: 019becdc-8139-0000-0946-e76c18c36ef7 (Onboarding Profile Survey)
-      const surveyId = '019becdc-8139-0000-0946-e76c18c36ef7';
-      if (data.role || data.referralSource) {
-        const surveyPayload: Record<string, string> = {
-          $survey_id: surveyId,
-          $survey_name: 'Onboarding Profile Survey',
-        };
-        // Map role value to survey choice label
-        const roleLabels: Record<string, string> = {
-          developer: 'Software Developer',
-          product_manager: 'Product Manager',
-          designer: 'Designer',
-          writer: 'Writer / Content',
-          researcher: 'Researcher',
-          marketing: 'Marketing',
-          sales: 'Sales',
-          finance: 'Finance',
-          student: 'Student',
-          hobbyist: 'Hobbyist / Personal Use',
-          other: 'Other',
-        };
-        // Map referral value to survey choice label
-        const referralLabels: Record<string, string> = {
-          search: 'Search',
-          social: 'Social Media',
-          friend: 'Friend',
-          ai: 'AI',
-          ad: 'Ad',
-          other: 'Other',
-        };
-
-        if (data.role) {
-          surveyPayload['$survey_response'] = data.customRole || roleLabels[data.role] || data.role;
-        }
-        if (data.referralSource) {
-          // Handle social:Platform format
-          const referralKey = data.referralSource.startsWith('social:') ? 'social' : data.referralSource;
-          surveyPayload['$survey_response_1'] = referralLabels[referralKey] || data.referralSource;
-        }
-        posthog.capture('survey sent', surveyPayload);
-      }
-
-      // Track mode selection event (initial)
-      posthog.capture('developer_mode_changed', {
-        developer_mode: data.developerMode,
-        source: 'onboarding',
-        is_initial: true,
-      });
-    }
-
-    // Close the dialog
-    setIsUnifiedOnboardingOpen(false);
-  }, [posthog, workspacePath]);
-
-  // Handle unified onboarding skip
-  const handleUnifiedOnboardingSkip = useCallback(async () => {
-    // Mark as completed to prevent re-showing
-    await window.electronAPI.invoke('onboarding:update', {
-      unifiedOnboardingCompleted: true,
-      onboardingCompleted: true // Keep for backward compatibility
-    });
-
-    // Track skip event
-    if (posthog) {
-      posthog.capture('unified_onboarding_skipped');
-    }
-
-    // Close the dialog
-    setIsUnifiedOnboardingOpen(false);
-  }, [posthog]);
+  // NOTE: Onboarding check and handlers moved to useOnboarding hook
 
   // Load custom trackers when workspace is available
   useEffect(() => {
@@ -977,10 +825,6 @@ export default function App() {
   useEffect(() => {
     if (!window.electronAPI?.on) return;
 
-    const handleToggleAgentPalette = () => {
-      setIsAgentPaletteVisible(prev => !prev);
-    };
-
     const handleSetContentMode = (mode: ContentMode) => {
       console.log('[App] handleSetContentMode called with mode:', mode);
       setActiveMode(mode);
@@ -993,12 +837,24 @@ export default function App() {
 
     const handleShowProjectSelectionDialog = (data: { filePath: string; fileName: string; suggestedWorkspace?: string }) => {
       console.log('[App] handleShowProjectSelectionDialog called with data:', data);
-      setProjectSelection({
-        isOpen: true,
-        filePath: data.filePath,
-        fileName: data.fileName,
-        suggestedWorkspace: data.suggestedWorkspace
-      });
+      if (dialogRef.current) {
+        dialogRef.current.open<ProjectSelectionData>(DIALOG_IDS.PROJECT_SELECTION, {
+          filePath: data.filePath,
+          fileName: data.fileName,
+          suggestedWorkspace: data.suggestedWorkspace,
+          onSelectProject: async (selectedWorkspacePath) => {
+            await window.electronAPI.invoke('project-selected', {
+              filePath: data.filePath,
+              workspacePath: selectedWorkspacePath
+            });
+          },
+          onCancel: () => {
+            window.electronAPI.invoke('project-selection-cancelled', {
+              filePath: data.filePath
+            });
+          }
+        });
+      }
     };
 
     // console.log('[App] Setting up IPC listener for set-content-mode');
@@ -1053,7 +909,13 @@ export default function App() {
 
     const handleShowDiscordInvitation = () => {
       console.log('[App] Received show-discord-invitation event');
-      setIsDiscordInvitationOpen(true);
+      if (dialogRef.current) {
+        dialogRef.current.open(DIALOG_IDS.DISCORD_INVITATION, {
+          onDismiss: () => {
+            // No additional action needed - dialog will close automatically
+          }
+        });
+      }
     };
 
     window.electronAPI.on('show-discord-invitation', handleShowDiscordInvitation);
@@ -1065,85 +927,7 @@ export default function App() {
     };
   }, []);
 
-  // Check for Windows Claude Code warning after other dialogs close
-  // This shows after feature walkthrough and onboarding are dismissed
-  useEffect(() => {
-    // Only check after initialization is complete
-    if (isInitializing) return;
-
-    // Skip in Playwright tests
-    if ((window as any).PLAYWRIGHT) return;
-
-    // Only show in workspace mode windows
-    if (!workspaceMode) return;
-
-    // Only run on Windows
-    if (navigator.platform !== 'Win32') return;
-
-    // Wait for feature walkthrough and onboarding to be closed first
-    if (isUnifiedOnboardingOpen) return;
-
-    const checkWindowsWarning = async () => {
-      try {
-        // Check if we should show the warning (Windows only, not dismissed)
-        const shouldShow = await window.electronAPI.invoke('claude-code:should-show-windows-warning');
-        if (!shouldShow) return;
-
-        // Check if Claude Code is installed
-        const installation = await window.electronAPI.cliCheckClaudeCodeWindowsInstallation();
-        if (installation.claudeCodeVersion) {
-          // Claude Code is installed, no warning needed
-          return;
-        }
-
-        // Show the warning
-        setIsWindowsClaudeCodeWarningOpen(true);
-      } catch (error) {
-        console.error('[App] Error checking Windows Claude Code warning:', error);
-      }
-    };
-
-    // Small delay to ensure smooth transition after other dialogs
-    const timeout = setTimeout(checkWindowsWarning, 500);
-    return () => clearTimeout(timeout);
-  }, [isInitializing, workspaceMode, isUnifiedOnboardingOpen]);
-
-  // Listen for show-unified-onboarding IPC event (from Developer menu)
-  useEffect(() => {
-    if (!window.electronAPI?.on) return;
-
-    const handleShowUnifiedOnboarding = (options?: { forceNewUser?: boolean; forceExistingUser?: boolean }) => {
-      if (options?.forceNewUser) {
-        setOnboardingForcedMode('new');
-      } else if (options?.forceExistingUser) {
-        setOnboardingForcedMode('existing');
-      } else {
-        setOnboardingForcedMode(null);
-      }
-      setIsUnifiedOnboardingOpen(true);
-    };
-
-    window.electronAPI.on('show-unified-onboarding', handleShowUnifiedOnboarding);
-
-    return () => {
-      window.electronAPI.off?.('show-unified-onboarding', handleShowUnifiedOnboarding);
-    };
-  }, []);
-
-  // Listen for show-windows-claude-code-warning IPC event (from Developer menu)
-  useEffect(() => {
-    if (!window.electronAPI?.on) return;
-
-    const handleShowWindowsWarning = () => {
-      setIsWindowsClaudeCodeWarningOpen(true);
-    };
-
-    window.electronAPI.on('show-windows-claude-code-warning', handleShowWindowsWarning);
-
-    return () => {
-      window.electronAPI.off?.('show-windows-claude-code-warning', handleShowWindowsWarning);
-    };
-  }, []);
+  // NOTE: Windows Claude Code warning and onboarding IPC listeners moved to useOnboarding hook
 
   // Listen for show-commands-toast IPC event (from Developer menu)
   useEffect(() => {
@@ -1176,33 +960,23 @@ export default function App() {
   }, []);
 
   // Check if Claude commands need to be installed (show toast)
+  // Uses checkAndShowCommandsToast from useOnboarding which waits for onboarding dialogs to close
   useEffect(() => {
     const checkCommands = async () => {
-      if (!workspacePath || !workspaceMode) return;
       if (hasCheckedCommandsRef.current) return;
 
-      // Skip in Playwright tests
-      if ((window as any).PLAYWRIGHT) return;
-
-      // Wait for other dialogs to close first
-      if (isUnifiedOnboardingOpen || isWindowsClaudeCodeWarningOpen) return;
-
-      try {
-        const needsInstall = await OnboardingService.needsCommandInstallation(workspacePath);
-        if (needsInstall) {
-          hasCheckedCommandsRef.current = true;
-          setShowCommandsToast(true);
-          posthog?.capture('claude_commands_toast_shown');
-        }
-      } catch (error) {
-        console.error('[App] Error checking command installation:', error);
+      const shouldShow = await checkAndShowCommandsToast();
+      if (shouldShow) {
+        hasCheckedCommandsRef.current = true;
+        setShowCommandsToast(true);
+        posthog?.capture('claude_commands_toast_shown');
       }
     };
 
     // Small delay to ensure smooth transition after other dialogs
     const timeout = setTimeout(checkCommands, 500);
     return () => clearTimeout(timeout);
-  }, [workspacePath, workspaceMode, isUnifiedOnboardingOpen, isWindowsClaudeCodeWarningOpen]);
+  }, [workspacePath, checkAndShowCommandsToast]);
 
   // Reset commands check when workspace changes
   useEffect(() => {
@@ -1231,109 +1005,19 @@ export default function App() {
     window.electronAPI.setTitle(title);
   }, [workspaceMode, workspaceName, activeMode]);
 
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent): void => {
-      // Cmd+E for Files mode (toggle sidebar if already in files mode)
-      if ((e.metaKey || e.ctrlKey) && e.key === 'e') {
-        e.preventDefault();
-        e.stopPropagation();
-        e.stopImmediatePropagation();
-        if (activeMode === 'files') {
-          editorModeRef.current?.toggleSidebarCollapsed();
-        } else {
-          setActiveMode('files');
-        }
-        return;
-      }
-      // Cmd+K for Agent mode (toggle session history if already in agent mode)
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault();
-        e.stopPropagation();
-        e.stopImmediatePropagation();
-        if (activeMode === 'agent') {
-          toggleAgentCollapsed();
-        } else {
-          setActiveMode('agent');
-        }
-        return;
-      }
-      // Cmd+O (Mac) or Ctrl+O (Windows/Linux) for Quick Open
-      if ((e.metaKey || e.ctrlKey) && e.key === 'o') {
-        e.preventDefault();
-        e.stopPropagation();
-        e.stopImmediatePropagation();
-        if (workspaceMode) {
-          setIsQuickOpenVisible(true);
-        }
-        return;
-      }
-      // Cmd+L (Mac) or Ctrl+L (Windows/Linux) for Session Quick Open
-      if ((e.metaKey || e.ctrlKey) && e.key === 'l' && !e.shiftKey) {
-        e.preventDefault();
-        e.stopPropagation();
-        e.stopImmediatePropagation();
-        if (workspaceMode) {
-          setIsSessionQuickOpenVisible(true);
-        }
-        return;
-      }
-      // Cmd+Shift+L (Mac) or Ctrl+Shift+L (Windows/Linux) for Prompt Quick Open
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'L' || e.key === 'l')) {
-        e.preventDefault();
-        e.stopPropagation();
-        e.stopImmediatePropagation();
-        if (workspaceMode) {
-          setIsPromptQuickOpenVisible(true);
-        }
-        return;
-      }
-      // NOTE: Cmd+Shift+A for AI Chat is handled by the menu accelerator + IPC listener
-      // See 'toggle-ai-chat-panel' listener in the IPC events useEffect above
-      // NOTE: Cmd+Shift+T handled by menu system (reopen-last-closed-tab IPC event)
-      // Cmd+Y (Mac) or Ctrl+Y (Windows/Linux) for History - only in files mode
-      if ((e.metaKey || e.ctrlKey) && e.key === 'y') {
-        e.preventDefault();
-        // Only open history dialog when in files mode
-        if (workspaceMode && activeModeStateRef.current === 'files' && editorModeRef.current) {
-          editorModeRef.current.openHistoryDialog();
-        }
-      }
-      // Bottom panel keyboard shortcuts (mutually exclusive)
-      // Cmd+Shift+P for Plans panel
-      if (workspaceMode && (e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'p') {
-        e.preventDefault();
-        setBottomPanel(prev => prev === 'plan' ? null : 'plan');
-        setTerminalPanelVisible(false);
-      }
-      // Cmd+Shift+B for Bugs panel
-      if (workspaceMode && (e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'b') {
-        e.preventDefault();
-        setBottomPanel(prev => prev === 'bug' ? null : 'bug');
-        setTerminalPanelVisible(false);
-      }
-      // Cmd+Shift+K for Tasks panel
-      if (workspaceMode && (e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'k') {
-        e.preventDefault();
-        setBottomPanel(prev => prev === 'task' ? null : 'task');
-        setTerminalPanelVisible(false);
-      }
-      // Cmd+` (macOS) or Ctrl+` (Windows/Linux) for Terminal panel
-      if (workspaceMode && e.code === 'Backquote' && !e.shiftKey && !e.altKey &&
-          (e.metaKey || e.ctrlKey)) {
-        e.preventDefault();
-        e.stopPropagation();
-        setTerminalPanelVisible(prev => {
-          if (!prev) setBottomPanel(null); // Close tracker when opening terminal
-          return !prev;
-        });
-      }
-    };
-
-    // Use capture phase to intercept before any other handlers (like Lexical's)
-    window.addEventListener('keydown', handleKeyDown, true);
-    return () => window.removeEventListener('keydown', handleKeyDown, true);
-  }, [workspaceMode, activeMode]);
+  // Keyboard shortcuts (Cmd+E, Cmd+K, Cmd+Y, bottom panel shortcuts, terminal toggle)
+  useKeyboardShortcuts({
+    activeMode,
+    workspaceMode,
+    setActiveMode,
+    activeModeStateRef,
+    editorModeRef,
+    bottomPanel,
+    setBottomPanel,
+    terminalPanelVisible,
+    setTerminalPanelVisible,
+    toggleAgentCollapsed,
+  });
 
   // Listen for terminal:show events (from worktree terminal button)
   useEffect(() => {
@@ -1515,7 +1199,7 @@ export default function App() {
     activeMode,
 
     // State setters
-    setIsApiKeyDialogOpen,
+    setIsApiKeyDialogOpen: () => {}, // Unused - ApiKeyDialog now managed by DialogProvider
     setWorkspaceMode,
     setWorkspacePath,
     setWorkspaceName,
@@ -1523,8 +1207,8 @@ export default function App() {
     setAIChatWidth,
     setIsAIChatStateLoaded,
     setSessionToLoad,
-    setIsKeyboardShortcutsDialogOpen,
-    setIsAgentPaletteVisible,
+    setIsKeyboardShortcutsDialogOpen: () => {}, // Unused - KeyboardShortcutsDialog now managed by DialogProvider
+    setIsAgentPaletteVisible: () => {}, // Unused - AgentCommandPalette now managed by DialogProvider
     setAIPlanningMode: setAIPlanningModeEnabled,
     setTheme,
 
@@ -1749,6 +1433,20 @@ export default function App() {
   }
 
   return (
+    <DialogProvider workspacePath={workspacePath || undefined}>
+    {/* Navigation dialog keyboard shortcuts - must be inside DialogProvider */}
+    <NavigationDialogKeyboardHandler
+      workspaceMode={workspaceMode}
+      workspacePath={workspacePath}
+      currentFilePath={currentFilePathRef.current}
+      onFileSelect={handleQuickOpenFileSelect}
+      onSessionSelect={handleSessionQuickOpenSelect}
+      onPromptSelect={handlePromptQuickOpenSelect}
+      documentContext={{
+        content: getContentRef.current ? getContentRef.current() : '',
+        filePath: currentFilePathRef.current || undefined
+      }}
+    />
     <WalkthroughProvider currentMode={activeMode}>
     <div data-layout="root-container" className="h-screen flex flex-row">
       {/* Left: Navigation Gutter - full height */}
@@ -1795,7 +1493,9 @@ export default function App() {
           setTimeout(() => setActiveMode('settings'), 0);
         }}
         onOpenFeedback={() => {
-          setIsPostHogSurveyOpen(true);
+          if (dialogRef.current) {
+            dialogRef.current.open(DIALOG_IDS.POSTHOG_SURVEY, {});
+          }
         }}
         onChangeTrustMode={() => {
           // Show the trust toast so user can pick a new mode
@@ -1862,7 +1562,15 @@ export default function App() {
                       getContentRef.current = getContentFn;
                     }}
                     onCloseWorkspace={handleCloseWorkspace}
-                    onOpenQuickSearch={() => setIsQuickOpenVisible(true)}
+                    onOpenQuickSearch={() => {
+                      if (dialogRef.current && workspacePath) {
+                        dialogRef.current.open(DIALOG_IDS.QUICK_OPEN, {
+                          workspacePath,
+                          currentFilePath: currentFilePathRef.current,
+                          onFileSelect: handleQuickOpenFileSelect,
+                        });
+                      }
+                    }}
                     onSwitchToAgentMode={handleSwitchToAgentMode}
                   />
                 </TabsProvider>
@@ -1885,7 +1593,14 @@ export default function App() {
                   workspaceName={workspaceName || ''}
                   isActive={activeMode === 'agent'}
                   onFileOpen={handleWorkspaceFileSelect}
-                  onOpenQuickSearch={() => setIsSessionQuickOpenVisible(true)}
+                  onOpenQuickSearch={() => {
+                    if (dialogRef.current && workspacePath) {
+                      dialogRef.current.open(DIALOG_IDS.SESSION_QUICK_OPEN, {
+                        workspacePath,
+                        onSessionSelect: handleSessionQuickOpenSelect,
+                      });
+                    }
+                  }}
                 />
               ) : (
                 <div className="flex-1 flex items-center justify-center text-nim-muted">
@@ -1979,80 +1694,10 @@ export default function App() {
         )}
       </div>
 
-      {/* Dialogs - rendered at root level */}
-      {workspacePath && (
-        <>
-          <QuickOpen
-            isOpen={isQuickOpenVisible}
-            onClose={() => setIsQuickOpenVisible(false)}
-            workspacePath={workspacePath}
-            currentFilePath={currentFilePathRef.current}
-            onFileSelect={handleQuickOpenFileSelect}
-          />
-          <SessionQuickOpen
-            isOpen={isSessionQuickOpenVisible}
-            onClose={() => setIsSessionQuickOpenVisible(false)}
-            workspacePath={workspacePath}
-            onSessionSelect={handleSessionQuickOpenSelect}
-          />
-          <PromptQuickOpen
-            isOpen={isPromptQuickOpenVisible}
-            onClose={() => setIsPromptQuickOpenVisible(false)}
-            workspacePath={workspacePath}
-            onSessionSelect={handlePromptQuickOpenSelect}
-          />
-          <AgentCommandPalette
-            isOpen={isAgentPaletteVisible}
-            onClose={() => setIsAgentPaletteVisible(false)}
-            workspacePath={workspacePath}
-            documentContext={{
-              content: getContentRef.current ? getContentRef.current() : '',
-              filePath: currentFilePathRef.current || undefined
-            }}
-          />
-        </>
-      )}
-      <KeyboardShortcutsDialog
-        isOpen={isKeyboardShortcutsDialogOpen}
-        onClose={() => setIsKeyboardShortcutsDialogOpen(false)}
-      />
-      <ApiKeyDialog
-        isOpen={isApiKeyDialogOpen}
-        onClose={() => setIsApiKeyDialogOpen(false)}
-        onOpenPreferences={() => {
-          setIsApiKeyDialogOpen(false);
-          setActiveMode('settings');
-        }}
-      />
-      {projectSelection && (
-        <ProjectSelectionDialog
-          isOpen={projectSelection.isOpen}
-          fileName={projectSelection.fileName}
-          suggestedWorkspace={projectSelection.suggestedWorkspace}
-          onSelectProject={async (selectedWorkspacePath) => {
-            // Send IPC event to main process with selected project
-            await window.electronAPI.invoke('project-selected', {
-              filePath: projectSelection.filePath,
-              workspacePath: selectedWorkspacePath
-            });
-            setProjectSelection(null);
-          }}
-          onCancel={() => {
-            // User cancelled - just open file without workspace
-            window.electronAPI.invoke('project-selection-cancelled', {
-              filePath: projectSelection.filePath
-            });
-            setProjectSelection(null);
-          }}
-        />
-      )}
-      <ErrorDialog
-        isOpen={diffError.isOpen}
-        onClose={() => setDiffError(prev => ({ ...prev, isOpen: false }))}
-        title={diffError.title}
-        message={diffError.message}
-        details={diffError.details}
-      />
+      {/* Navigation dialogs (QuickOpen, SessionQuickOpen, PromptQuickOpen, AgentCommandPalette) */}
+      {/* are now managed by DialogProvider and rendered automatically */}
+
+      {/* KeyboardShortcutsDialog, ApiKeyDialog, ProjectSelectionDialog, ErrorDialog are now managed by DialogProvider */}
       <ConfirmDialog
         isOpen={confirmDialog.isOpen}
         title={confirmDialog.options.title}
@@ -2063,33 +1708,9 @@ export default function App() {
         onConfirm={confirmDialog.handleConfirm}
         onCancel={confirmDialog.handleCancel}
       />
-      <DiscordInvitation
-        isOpen={isDiscordInvitationOpen}
-        onClose={() => setIsDiscordInvitationOpen(false)}
-        onDismiss={() => setIsDiscordInvitationOpen(false)}
-      />
-      <WindowsClaudeCodeWarning
-        isOpen={isWindowsClaudeCodeWarningOpen}
-        onClose={() => {
-          posthog.capture('windows_claude_code_warning_closed');
-          setIsWindowsClaudeCodeWarningOpen(false);
-        }}
-        onDismiss={() => {
-          posthog.capture('windows_claude_code_warning_dismissed_forever');
-          setIsWindowsClaudeCodeWarningOpen(false)
-        }}
-        onOpenSettings={() => {
-          posthog.capture('windows_claude_code_warning_shown');
-          setIsWindowsClaudeCodeWarningOpen(false);
-          setActiveMode('settings');
-        }}
-      />
-      <UnifiedOnboarding
-        isOpen={isUnifiedOnboardingOpen}
-        onComplete={handleUnifiedOnboardingComplete}
-        onSkip={handleUnifiedOnboardingSkip}
-        forcedMode={onboardingForcedMode}
-      />
+      {/* DiscordInvitation is now managed by DialogProvider */}
+      {/* WindowsClaudeCodeWarning is now managed by DialogProvider via useOnboarding hook */}
+      {/* UnifiedOnboarding is now managed by DialogProvider via useOnboarding hook */}
       {showCommandsToast && workspacePath && (
         <ClaudeCommandsToast
           onInstallAll={async () => {
@@ -2138,10 +1759,9 @@ export default function App() {
         forceShow={forceShowTrustToast}
         onDismiss={() => setForceShowTrustToast(false)}
       />
-      {isPostHogSurveyOpen && (
-        <PostHogSurvey onClose={() => setIsPostHogSurveyOpen(false)} />
-      )}
+      {/* PostHogSurvey is now managed by DialogProvider */}
     </div>
     </WalkthroughProvider>
+    </DialogProvider>
   );
 }

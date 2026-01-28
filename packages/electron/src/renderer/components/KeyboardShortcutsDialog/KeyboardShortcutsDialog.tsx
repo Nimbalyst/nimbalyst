@@ -158,7 +158,7 @@ export function KeyboardShortcutsDialog({ isOpen, onClose }: KeyboardShortcutsDi
 
   return (
     <div
-      className="keyboard-shortcuts-dialog-overlay nim-overlay backdrop-blur"
+      className="keyboard-shortcuts-dialog-overlay nim-overlay"
       onClick={onClose}
     >
       <div
