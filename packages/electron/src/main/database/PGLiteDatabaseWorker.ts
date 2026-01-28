@@ -361,7 +361,7 @@ export class PGLiteDatabaseWorker {
   }
 
   // Threshold for logging slow queries (milliseconds)
-  private static SLOW_QUERY_THRESHOLD_MS = 500;
+  private static SLOW_QUERY_THRESHOLD_MS = 2000;
 
   /**
    * Execute a query

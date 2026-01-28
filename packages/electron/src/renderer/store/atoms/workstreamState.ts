@@ -722,7 +722,7 @@ export async function loadWorkstreamStates(workspacePath: string): Promise<void>
     const map = new Map<string, WorkstreamState>();
     for (const [id, state] of Object.entries(saved)) {
       map.set(id, state as WorkstreamState);
-      console.log('[workstreamState] Restored state for', id, ':', state);
+      // console.log('[workstreamState] Restored state for', id, ':', state);
     }
     store.set(workstreamStatesAtom, map);
     store.set(workstreamStatesLoadedAtom, true);
