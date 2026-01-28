@@ -25,21 +25,9 @@ export function setupClaudeCodeEnvironment(): NodeJS.ProcessEnv {
   const homedir = os.homedir();
   const username = os.userInfo().username;
 
-  // Get custom PATH directories from app settings (Electron context)
-  let customPaths: string[] = [];
-  try {
-    // Import dynamically to avoid circular dependencies
-    const { getAppSetting } = require('../../electron/src/main/utils/store');
-    const customPathDirs = getAppSetting('customPathDirs');
-    if (customPathDirs && typeof customPathDirs === 'string' && customPathDirs.trim()) {
-      const separator = process.platform === 'win32' ? ';' : ':';
-      customPaths = customPathDirs.split(separator).map(p => p.trim()).filter(Boolean);
-    }
-  } catch (error) {
-    // Silently ignore errors (settings might not be available in some contexts)
-  }
-
   // Platform-specific environment setup
+  // NOTE: Custom PATH directories from app settings are handled by the electron package
+  // (CLIManager.getEnhancedPath) and should already be in process.env.PATH when this is called.
   if (platform === 'win32') {
     // Windows environment setup
     env.USERPROFILE = homedir;
@@ -51,7 +39,6 @@ export function setupClaudeCodeEnvironment(): NodeJS.ProcessEnv {
     const pathSeparator = ';';
     const appData = env.APPDATA || path.join(homedir, 'AppData', 'Roaming');
     const commonPaths = [
-      ...customPaths,  // Custom paths first (highest priority)
       env.PATH || '',
       path.join(appData, 'npm'),  // npm global bin directory
       path.join(homedir, 'AppData', 'Roaming', 'npm'),  // fallback npm path
@@ -72,7 +59,6 @@ export function setupClaudeCodeEnvironment(): NodeJS.ProcessEnv {
     // Unix PATH - preserve existing and add common locations
     const pathSeparator = ':';
     const commonPaths = [
-      ...customPaths,  // Custom paths first (highest priority)
       env.PATH || '',
       '/usr/local/bin',
       '/usr/bin',

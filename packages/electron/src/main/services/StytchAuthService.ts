@@ -23,6 +23,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { logger } from '../utils/logger';
 import { STYTCH_CONFIG } from '@nimbalyst/runtime';
+import { getSessionSyncConfig } from '../utils/store';
 
 // Stytch types
 interface StytchUser {
@@ -592,8 +593,6 @@ export async function refreshSession(serverUrl?: string): Promise<boolean> {
  */
 function getSyncServerUrl(): string | null {
   try {
-    // Import dynamically to avoid circular dependency
-    const { getSessionSyncConfig } = require('../utils/store');
     const config = getSessionSyncConfig();
     return config?.serverUrl || null;
   } catch {

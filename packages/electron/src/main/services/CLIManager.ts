@@ -8,6 +8,7 @@ import * as os from 'os';
 import { promisify } from 'util';
 import { simpleGit } from 'simple-git';
 import {AnalyticsService} from "./analytics/AnalyticsService.ts";
+import { getAppSetting } from '../utils/store';
 
 const execAsync = promisify(exec);
 
@@ -1104,7 +1105,6 @@ export function getEnhancedPath(): string {
   const paths: string[] = [];
 
   // Get custom PATH directories from app settings
-  const { getAppSetting } = require('../utils/store');
   const customPathDirs = getAppSetting('customPathDirs');
   if (customPathDirs && typeof customPathDirs === 'string' && customPathDirs.trim()) {
     // Split by platform separator and add to paths
