@@ -2907,7 +2907,33 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       // }
 
       if (toolName === 'ExitPlanMode' && this.currentMode === 'planning') {
-        // TODO: Debug logging - uncomment if needed
+        // Validate planFilePath - must be a valid .md file path in plans/ directory
+        const planFilePath = toolInput?.planFilePath;
+
+        // Check if planFilePath is missing or invalid
+        if (!planFilePath || typeof planFilePath !== 'string') {
+          return {
+            hookSpecificOutput: {
+              hookEventName: 'PreToolUse' as const,
+              permissionDecision: 'deny' as const,
+              permissionDecisionReason: `ExitPlanMode requires a 'planFilePath' parameter with the path to your plan file (e.g., 'plans/add-dark-mode.md'). Please call ExitPlanMode again with the correct planFilePath parameter.`
+            }
+          };
+        }
+
+        // Validate it looks like a valid plan file path
+        const isValidPlanPath = planFilePath.endsWith('.md') &&
+          (planFilePath.startsWith('plans/') || planFilePath.includes('/plans/'));
+
+        if (!isValidPlanPath) {
+          return {
+            hookSpecificOutput: {
+              hookEventName: 'PreToolUse' as const,
+              permissionDecision: 'deny' as const,
+              permissionDecisionReason: `Invalid planFilePath: '${planFilePath}'. The planFilePath must be a .md file in the plans/ directory (e.g., 'plans/add-dark-mode.md'). Please call ExitPlanMode again with the correct planFilePath parameter.`
+            }
+          };
+        }
 
         // Generate unique request ID for this confirmation
         const requestId = `exit-plan-${sessionId}-${Date.now()}`;
@@ -2931,6 +2957,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
           requestId,
           sessionId,
           planSummary,
+          planFilePath,
           timestamp: Date.now()
         });
 

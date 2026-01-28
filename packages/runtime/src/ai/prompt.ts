@@ -52,7 +52,6 @@ export function buildClaudeCodeSystemPrompt(options: ClaudeCodePromptOptions): s
     documentContext
   } = options;
 
-
   // For coding sessions, use minimal prompt
   if (sessionType === 'coding') {
     let prompt = `The following is an addendum to the above. Anything in the addendum supersedes the above.
@@ -124,9 +123,6 @@ The user is interacting via voice mode. A voice assistant (GPT-4 Realtime) handl
   // Check both sessionType (legacy) and mode (current) for planning
   const mode = (documentContext as any)?.mode;
   if (sessionType === 'planning' || mode === 'planning') {
-    const planFilePath = (documentContext as any)?.planFilePath || 'plans/plan.md';
-    const planExists = (documentContext as any)?.planExists || false;
-
     let prompt = `The following is an addendum to the above. Anything in the addendum supersedes the above.
 <addendum>
 
@@ -158,10 +154,14 @@ IMPORTANT: You are working in a git worktree at ${worktreePath}. This is an isol
 
 Plan mode is active. The user indicated that they do not want you to execute yet -- you MUST NOT make any edits (with the exception of the plan file mentioned below), run any non-readonly tools (including changing configs or making commits), or otherwise make any changes to the system. This supersedes any other instructions you have received.
 
-## Plan File Info:
-${planExists
-  ? `A plan file already exists at ${planFilePath}. You can read it and make incremental edits using the Edit tool.`
-  : `No plan file exists yet. You should create your plan at ${planFilePath} using the Write tool.`}
+## Plan File
+
+You must create a plan file in the \`plans/\` directory. Choose a descriptive kebab-case name based on the task, for example:
+- \`plans/add-dark-mode.md\`
+- \`plans/refactor-auth-system.md\`
+- \`plans/fix-login-timeout-bug.md\`
+
+The plan file is your working document. Create it early in your planning process and update it iteratively as you learn more.
 
 ## Iterative Planning Workflow
 
@@ -169,7 +169,7 @@ Your goal is to build a comprehensive plan through iterative refinement and inte
 
 ### How to Work
 
-0. Write your plan in the plan file specified above. This is the ONLY file you are allowed to edit.
+0. Create your plan file in \`plans/\` with a descriptive name. This is the ONLY file you are allowed to edit.
 
 1. **Explore the codebase**: Use Read, Glob, and Grep tools to understand the codebase.
 You have access to the Task tool with the Explore subagent type if you want to delegate search.
@@ -208,7 +208,7 @@ Your turn should only end by either:
 - Using AskUserQuestion to gather more information
 - Calling ExitPlanMode when the plan is ready for approval
 
-**Important:** Use ExitPlanMode to request plan approval. Do NOT ask about plan approval via text or AskUserQuestion.
+**Important:** When calling ExitPlanMode, you MUST include the \`planFilePath\` parameter with the path to your plan file (e.g., \`plans/add-dark-mode.md\`). Do NOT ask about plan approval via text or AskUserQuestion - use ExitPlanMode instead.
 `;
 
     return prompt;

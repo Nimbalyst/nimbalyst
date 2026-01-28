@@ -1,14 +1,17 @@
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 
 export interface ExitPlanModeConfirmationData {
   requestId: string;
   sessionId: string;
   planSummary: string;
+  planFilePath?: string;
   timestamp: number;
 }
 
 interface ExitPlanModeConfirmationProps {
   data: ExitPlanModeConfirmationData;
+  workspacePath?: string;
+  worktreeId?: string | null;
   onApprove: (requestId: string, sessionId: string) => void;
   onDeny: (requestId: string, sessionId: string) => void;
 }
@@ -19,9 +22,32 @@ interface ExitPlanModeConfirmationProps {
  */
 export const ExitPlanModeConfirmation: React.FC<ExitPlanModeConfirmationProps> = ({
   data,
+  workspacePath,
+  worktreeId,
   onApprove,
   onDeny
 }) => {
+  // For worktree sessions, we need to fetch the worktree path
+  const [worktreePath, setWorktreePath] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!worktreeId) {
+      setWorktreePath(null);
+      return;
+    }
+
+    // Fetch worktree path from worktree ID
+    window.electronAPI.invoke('worktree:get', worktreeId)
+      .then((result: { success: boolean; worktree?: { path: string } }) => {
+        if (result?.success && result.worktree?.path) {
+          setWorktreePath(result.worktree.path);
+        }
+      })
+      .catch((error: Error) => {
+        console.error('[ExitPlanModeConfirmation] Failed to fetch worktree path:', error);
+      });
+  }, [worktreeId]);
+
   const handleApprove = () => {
     onApprove(data.requestId, data.sessionId);
   };
@@ -29,6 +55,27 @@ export const ExitPlanModeConfirmation: React.FC<ExitPlanModeConfirmationProps> =
   const handleDeny = () => {
     onDeny(data.requestId, data.sessionId);
   };
+
+  const handleOpenPlanFile = useCallback(() => {
+    if (!data.planFilePath) return;
+
+    // Use worktree path if available, otherwise workspace path
+    const basePath = worktreePath || workspacePath;
+    if (!basePath) return;
+
+    // Construct absolute path from base + relative plan file path
+    // The planFilePath from the agent is relative (e.g., "plans/add-dark-mode.md")
+    const absolutePath = data.planFilePath.startsWith('/')
+      ? data.planFilePath
+      : `${basePath}/${data.planFilePath}`;
+
+    window.electronAPI.invoke('workspace:open-file', {
+      workspacePath: basePath,
+      filePath: absolutePath,
+    }).catch((error: Error) => {
+      console.error('[ExitPlanModeConfirmation] Failed to open plan file:', error);
+    });
+  }, [data.planFilePath, worktreePath, workspacePath]);
 
   return (
     <div className="exit-plan-mode-confirmation mx-4 my-3 p-4 bg-nim-secondary border border-nim rounded-lg">
@@ -43,6 +90,18 @@ export const ExitPlanModeConfirmation: React.FC<ExitPlanModeConfirmationProps> =
           Ready to exit planning mode?
         </span>
       </div>
+
+      {data.planFilePath && (
+        <div className="exit-plan-mode-confirmation-file mb-3 p-2 bg-nim-tertiary rounded-md text-[13px]">
+          <span className="text-nim-muted">Plan file: </span>
+          <button
+            onClick={handleOpenPlanFile}
+            className="text-nim-link hover:text-nim-link-hover hover:underline cursor-pointer bg-transparent border-none p-0 font-mono text-[13px]"
+          >
+            {data.planFilePath}
+          </button>
+        </div>
+      )}
 
       {data.planSummary && (
         <div className="exit-plan-mode-confirmation-plan mb-4 p-3 bg-nim-tertiary rounded-md text-[13px]">

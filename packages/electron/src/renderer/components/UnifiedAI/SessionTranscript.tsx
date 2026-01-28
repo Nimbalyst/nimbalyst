@@ -40,6 +40,7 @@ import {
   sessionModelAtom,
   sessionArchivedAtom,
   sessionProcessingAtom,
+  sessionWorktreeIdAtom,
   loadSessionDataAtom,
   reloadSessionDataAtom,
   updateSessionStoreAtom,
@@ -133,6 +134,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   const [currentModel, setCurrentModel] = useAtom(sessionModelAtom(sessionId));
   const [isArchived, setIsArchived] = useAtom(sessionArchivedAtom(sessionId));
   const [isProcessing, setIsProcessing] = useAtom(sessionProcessingAtom(sessionId));
+  const worktreeId = useAtomValue(sessionWorktreeIdAtom(sessionId));
   const loadSessionData = useSetAtom(loadSessionDataAtom);
   const reloadSessionData = useSetAtom(reloadSessionDataAtom);
   const updateSessionStore = useSetAtom(updateSessionStoreAtom);
@@ -966,6 +968,8 @@ ${message}`;
       {pendingExitPlanConfirmation && (
         <ExitPlanModeConfirmation
           data={pendingExitPlanConfirmation}
+          workspacePath={workspacePath}
+          worktreeId={worktreeId}
           onApprove={handleExitPlanModeApprove}
           onDeny={handleExitPlanModeDeny}
         />
