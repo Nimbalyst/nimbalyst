@@ -107,7 +107,7 @@ export const AskUserQuestionConfirmation: React.FC<AskUserQuestionConfirmationPr
   };
 
   return (
-    <div className="ask-user-question-confirmation mx-3 my-4 p-4 flex flex-col max-h-[400px] rounded-lg border border-[var(--nim-border)] bg-[var(--nim-bg-secondary)]">
+    <div className="ask-user-question-confirmation w-[90%] mx-auto my-4 p-4 flex flex-col max-h-[400px] rounded-lg border border-[var(--nim-border)] bg-[var(--nim-bg-secondary)]">
       <div className="ask-user-question-confirmation-header flex items-center gap-2 mb-3 shrink-0">
         <span className="ask-user-question-confirmation-icon flex items-center justify-center text-[var(--nim-primary)]">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
