@@ -56,6 +56,7 @@ import {
   setFilesEditedWidthAtom,
 } from '../../store/atoms/agentMode';
 import { ArchiveWorktreeDialog } from './ArchiveWorktreeDialog';
+import { useArchiveWorktreeDialog } from '../../hooks/useArchiveWorktreeDialog';
 
 export interface AgentWorkstreamPanelRef {
   closeActiveTab: () => void;
@@ -405,7 +406,6 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
         const result = await window.electronAPI.invoke('worktree:get', sessionWorktreeId);
         if (result?.success && result.worktree) {
           setWorktreePath(result.worktree.path);
-          // console.log('[AgentWorkstreamPanel] Resolved worktree path:', result.worktree.path);
         } else {
           console.error('[AgentWorkstreamPanel] Failed to resolve worktree path:', result?.error);
           setWorktreePath(null);
@@ -421,12 +421,13 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
   const [isDraggingVertical, setIsDraggingVertical] = useState(false);
   const [isDraggingSidebar, setIsDraggingSidebar] = useState(false);
 
-  // State for archive confirmation dialog (worktrees only)
-  const [showArchiveDialog, setShowArchiveDialog] = useState(false);
-  const [archiveDialogData, setArchiveDialogData] = useState<{
-    hasUncommittedChanges: boolean;
-    uncommittedFileCount: number;
-  } | null>(null);
+  // Archive worktree dialog hook
+  const {
+    dialogState: archiveDialogState,
+    showDialog: showArchiveDialog,
+    closeDialog: closeArchiveDialog,
+    confirmArchive,
+  } = useArchiveWorktreeDialog();
 
   // Ref for the content container (used for resize calculations)
   const contentRef = useRef<HTMLDivElement>(null);
@@ -463,53 +464,19 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
     toggleSidebar(workstreamId);
   }, [workstreamId, toggleSidebar]);
 
-  // Archive dialog handlers
+  // Archive dialog handler
   const handleShowArchiveDialog = useCallback(async () => {
-    // Check for uncommitted changes before showing the dialog
-    if (worktreePath) {
-      try {
-        const result = await window.electronAPI.worktreeGetStatus(worktreePath);
-        if (result.success && result.status) {
-          setArchiveDialogData({
-            hasUncommittedChanges: result.status.hasUncommittedChanges,
-            uncommittedFileCount: result.status.modifiedFileCount,
-          });
-        } else {
-          // If we can't get status, show dialog without warning
-          setArchiveDialogData(null);
-        }
-      } catch (error) {
-        console.error('[AgentWorkstreamPanel] Failed to get worktree status:', error);
-        setArchiveDialogData(null);
-      }
-    }
-    setShowArchiveDialog(true);
-  }, [worktreePath]);
+    if (!sessionWorktreeId || !worktreePath) return;
+    await showArchiveDialog({
+      worktreeId: sessionWorktreeId,
+      worktreeName: worktreePath.split('/').pop() || 'worktree',
+      worktreePath,
+    });
+  }, [sessionWorktreeId, worktreePath, showArchiveDialog]);
 
   const handleConfirmArchive = useCallback(async () => {
-    setShowArchiveDialog(false);
-    setArchiveDialogData(null);
-    if (!sessionWorktreeId) return;
-
-    try {
-      // Use the proper worktree archive API (same as right-click context menu)
-      const result = await window.electronAPI.worktreeArchive(sessionWorktreeId, workspacePath);
-
-      if (result.success) {
-        // Callback will trigger refresh of session list
-        onWorktreeArchived?.();
-      } else {
-        console.error('[AgentWorkstreamPanel] Failed to archive worktree:', result.error);
-      }
-    } catch (error) {
-      console.error('[AgentWorkstreamPanel] Failed to archive worktree:', error);
-    }
-  }, [sessionWorktreeId, workspacePath, onWorktreeArchived]);
-
-  const handleCancelArchive = useCallback(() => {
-    setShowArchiveDialog(false);
-    setArchiveDialogData(null);
-  }, []);
+    await confirmArchive(workspacePath, onWorktreeArchived);
+  }, [workspacePath, onWorktreeArchived, confirmArchive]);
 
   // Open a terminal in the worktree directory
   const handleOpenTerminal = useCallback(async () => {
@@ -797,13 +764,13 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
       )}
 
       {/* Archive worktree confirmation dialog */}
-      {showArchiveDialog && sessionWorktreeId && (
+      {archiveDialogState && (
         <ArchiveWorktreeDialog
-          worktreeName={worktreePath?.split('/').pop() || 'worktree'}
+          worktreeName={archiveDialogState.worktreeName}
           onArchive={handleConfirmArchive}
-          onKeep={handleCancelArchive}
-          hasUncommittedChanges={archiveDialogData?.hasUncommittedChanges}
-          uncommittedFileCount={archiveDialogData?.uncommittedFileCount}
+          onKeep={closeArchiveDialog}
+          hasUncommittedChanges={archiveDialogState.hasUncommittedChanges}
+          uncommittedFileCount={archiveDialogState.uncommittedFileCount}
         />
       )}
     </div>

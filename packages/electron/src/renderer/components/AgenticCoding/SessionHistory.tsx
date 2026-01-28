@@ -5,6 +5,8 @@ import { SessionListItem } from './SessionListItem';
 import { WorkstreamGroup } from './WorkstreamGroup';
 import { ArchiveProgress } from './ArchiveProgress';
 import { IndexBuildDialog } from './IndexBuildDialog';
+import { ArchiveWorktreeDialog } from '../AgentMode/ArchiveWorktreeDialog';
+import { useArchiveWorktreeDialog } from '../../hooks/useArchiveWorktreeDialog';
 import { getTimeGroupKey, TimeGroupKey } from '../../utils/dateFormatting';
 import { getFileName } from '../../utils/pathUtils';
 import { KeyboardShortcuts, getShortcutDisplay } from '../../../shared/KeyboardShortcuts';
@@ -311,6 +313,14 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   const cardContextMenuRef = useRef<HTMLDivElement>(null);
   const [isIndexBuilding, setIsIndexBuilding] = useState(false);
   const [pendingSearchQuery, setPendingSearchQuery] = useState<string | null>(null); // Query to run after index build
+
+  // Archive worktree dialog hook
+  const {
+    dialogState: archiveWorktreeDialogState,
+    showDialog: showArchiveWorktreeDialog,
+    closeDialog: closeArchiveWorktreeDialog,
+    confirmArchive: confirmArchiveWorktree,
+  } = useArchiveWorktreeDialog();
 
   // Track scroll position to restore after refresh
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -682,42 +692,52 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     }
   };
 
+  // Show confirmation dialog before archiving worktree
   const handleArchiveWorktree = async (worktreeId: string) => {
-    try {
-      // Get sessions for this worktree to notify parent to close tabs
-      const worktreeSessions = allSessions.filter(s => s.worktree_id === worktreeId);
+    // Get worktree info from cache
+    const worktreeData = worktreeCache.get(worktreeId);
+    const worktreeName = worktreeData?.displayName || worktreeData?.name || worktreeData?.path?.split('/').pop() || 'worktree';
+    const worktreePath = worktreeData?.path || '';
 
-      // Archive the worktree (this queues the cleanup task)
-      const result = await window.electronAPI.worktreeArchive(worktreeId, workspacePath);
-
-      if (result.success) {
-        // Remove worktree sessions from atom state immediately (optimistic update)
-        worktreeSessions.forEach(session => {
-          removeSessionFromAtom(session.id);
-        });
-        // Also remove from filtered list for immediate feedback
-        setSessions(prev => prev.filter(s => s.worktree_id !== worktreeId));
-
-        // Notify parent to close tabs for archived sessions
-        worktreeSessions.forEach(session => {
-          if (onSessionArchive) {
-            onSessionArchive(session.id);
-          }
-        });
-
-        // Remove from worktree cache
-        setWorktreeCache(prev => {
-          const newCache = new Map(prev);
-          newCache.delete(worktreeId);
-          return newCache;
-        });
-      } else {
-        console.error('[SessionHistory] Failed to archive worktree:', result.error);
-      }
-    } catch (err) {
-      console.error('[SessionHistory] Failed to archive worktree:', err);
-    }
+    await showArchiveWorktreeDialog({
+      worktreeId,
+      worktreeName,
+      worktreePath,
+    });
   };
+
+  // Handle archive confirmation - clean up sessions and cache after successful archive
+  const handleConfirmArchiveWorktree = useCallback(async () => {
+    if (!archiveWorktreeDialogState) return;
+
+    const worktreeId = archiveWorktreeDialogState.worktreeId;
+
+    // Get sessions for this worktree to notify parent to close tabs
+    const worktreeSessions = allSessions.filter(s => s.worktree_id === worktreeId);
+
+    await confirmArchiveWorktree(workspacePath, () => {
+      // Remove worktree sessions from atom state immediately (optimistic update)
+      worktreeSessions.forEach(session => {
+        removeSessionFromAtom(session.id);
+      });
+      // Also remove from filtered list for immediate feedback
+      setSessions(prev => prev.filter(s => s.worktree_id !== worktreeId));
+
+      // Notify parent to close tabs for archived sessions
+      worktreeSessions.forEach(session => {
+        if (onSessionArchive) {
+          onSessionArchive(session.id);
+        }
+      });
+
+      // Remove from worktree cache
+      setWorktreeCache(prev => {
+        const newCache = new Map(prev);
+        newCache.delete(worktreeId);
+        return newCache;
+      });
+    });
+  }, [archiveWorktreeDialogState, allSessions, workspacePath, confirmArchiveWorktree, removeSessionFromAtom, onSessionArchive]);
 
   const handleUnarchiveSession = async (sessionId: string) => {
     try {
@@ -2352,6 +2372,17 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
         onBuild={handleBuildIndex}
         onSkip={handleSkipIndex}
       />
+
+      {/* Archive worktree confirmation dialog */}
+      {archiveWorktreeDialogState && (
+        <ArchiveWorktreeDialog
+          worktreeName={archiveWorktreeDialogState.worktreeName}
+          onArchive={handleConfirmArchiveWorktree}
+          onKeep={closeArchiveWorktreeDialog}
+          hasUncommittedChanges={archiveWorktreeDialogState.hasUncommittedChanges}
+          uncommittedFileCount={archiveWorktreeDialogState.uncommittedFileCount}
+        />
+      )}
     </div>
   );
 };
