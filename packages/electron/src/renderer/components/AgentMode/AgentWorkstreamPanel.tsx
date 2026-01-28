@@ -423,6 +423,10 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
 
   // State for archive confirmation dialog (worktrees only)
   const [showArchiveDialog, setShowArchiveDialog] = useState(false);
+  const [archiveDialogData, setArchiveDialogData] = useState<{
+    hasUncommittedChanges: boolean;
+    uncommittedFileCount: number;
+  } | null>(null);
 
   // Ref for the content container (used for resize calculations)
   const contentRef = useRef<HTMLDivElement>(null);
@@ -460,12 +464,31 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
   }, [workstreamId, toggleSidebar]);
 
   // Archive dialog handlers
-  const handleShowArchiveDialog = useCallback(() => {
+  const handleShowArchiveDialog = useCallback(async () => {
+    // Check for uncommitted changes before showing the dialog
+    if (worktreePath) {
+      try {
+        const result = await window.electronAPI.worktreeGetStatus(worktreePath);
+        if (result.success && result.status) {
+          setArchiveDialogData({
+            hasUncommittedChanges: result.status.hasUncommittedChanges,
+            uncommittedFileCount: result.status.modifiedFileCount,
+          });
+        } else {
+          // If we can't get status, show dialog without warning
+          setArchiveDialogData(null);
+        }
+      } catch (error) {
+        console.error('[AgentWorkstreamPanel] Failed to get worktree status:', error);
+        setArchiveDialogData(null);
+      }
+    }
     setShowArchiveDialog(true);
-  }, []);
+  }, [worktreePath]);
 
   const handleConfirmArchive = useCallback(async () => {
     setShowArchiveDialog(false);
+    setArchiveDialogData(null);
     if (!sessionWorktreeId) return;
 
     try {
@@ -485,6 +508,7 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
 
   const handleCancelArchive = useCallback(() => {
     setShowArchiveDialog(false);
+    setArchiveDialogData(null);
   }, []);
 
   // Open a terminal in the worktree directory
@@ -778,6 +802,8 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
           worktreeName={worktreePath?.split('/').pop() || 'worktree'}
           onArchive={handleConfirmArchive}
           onKeep={handleCancelArchive}
+          hasUncommittedChanges={archiveDialogData?.hasUncommittedChanges}
+          uncommittedFileCount={archiveDialogData?.uncommittedFileCount}
         />
       )}
     </div>

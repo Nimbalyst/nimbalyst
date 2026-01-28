@@ -1545,6 +1545,8 @@ Please proceed with this strategy.`;
             onArchive={handleArchiveWorktree}
             onKeep={handleKeepWorktree}
             contextMessage="Merge successful!"
+            hasUncommittedChanges={worktreeHasUncommittedChanges}
+            uncommittedFileCount={worktreeChangedFiles.length}
           />
         )}
 

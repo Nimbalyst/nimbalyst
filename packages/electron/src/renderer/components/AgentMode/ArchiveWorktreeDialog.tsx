@@ -7,6 +7,10 @@ interface ArchiveWorktreeDialogProps {
   onKeep: () => void;
   /** Optional message to show (e.g., "Merge successful!" after a merge) */
   contextMessage?: string;
+  /** Whether the worktree has uncommitted changes that will be lost */
+  hasUncommittedChanges?: boolean;
+  /** Number of uncommitted files (for display) */
+  uncommittedFileCount?: number;
 }
 
 export function ArchiveWorktreeDialog({
@@ -14,6 +18,8 @@ export function ArchiveWorktreeDialog({
   onArchive,
   onKeep,
   contextMessage,
+  hasUncommittedChanges,
+  uncommittedFileCount,
 }: ArchiveWorktreeDialogProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
 
@@ -54,6 +60,22 @@ export function ArchiveWorktreeDialog({
             {contextMessage ? `${contextMessage} ` : ''}Are you sure you want to archive{' '}
             <strong className="font-medium text-[var(--nim-text)]">{worktreeName}</strong>?
           </p>
+
+          {hasUncommittedChanges && (
+            <div className="archive-worktree-warning flex items-start gap-3 mb-4 p-3 rounded-lg bg-[var(--nim-warning)]/10 border border-[var(--nim-warning)]/30">
+              <MaterialSymbol icon="warning" size={20} className="text-[var(--nim-warning)] shrink-0 mt-0.5" />
+              <div>
+                <p className="m-0 text-sm font-medium text-[var(--nim-warning)]">
+                  Uncommitted changes will be lost
+                </p>
+                <p className="m-0 mt-1 text-[0.8125rem] text-[var(--nim-text-muted)]">
+                  This worktree has {uncommittedFileCount === 1 ? '1 file' : `${uncommittedFileCount} files`} with uncommitted changes.
+                  These changes will be permanently deleted.
+                </p>
+              </div>
+            </div>
+          )}
+
           <p className="archive-worktree-dialog-info m-0 text-[0.8125rem] text-[var(--nim-text-faint)]">
             Archiving will remove the worktree from disk and mark all associated sessions as archived.
           </p>
