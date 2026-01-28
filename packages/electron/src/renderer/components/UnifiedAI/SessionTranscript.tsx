@@ -909,7 +909,8 @@ ${message}`;
           : `${basePath}/${planFilePath}`;
 
         // Save the draft input as an instruction to implement the plan
-        const implementationPrompt = `/implement ${absolutePlanPath}`;
+        // This matches Claude Code's ExitPlanMode flow - reference the plan file for context
+        const implementationPrompt = `Implement the plan at ${absolutePlanPath}. Start with updating your todo list if applicable.`;
 
         // 1. Update the atom directly for immediate display when the new session mounts
         store.set(sessionDraftInputAtom(newSessionId), implementationPrompt);
