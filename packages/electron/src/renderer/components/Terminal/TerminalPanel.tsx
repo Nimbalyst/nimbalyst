@@ -58,6 +58,64 @@ function cleanScrollback(raw: string): string {
   return raw.replace(/[ \t]+\r(?!\n)/g, '\r');
 }
 
+/**
+ * Sanitize scrollback data to remove invalid code points that could crash the terminal.
+ *
+ * When scrollback data gets corrupted (e.g., WASM memory issues, incomplete writes),
+ * it may contain invalid code points outside the valid Unicode range (0x0 - 0x10FFFF).
+ * The terminal's render loop will crash with "Invalid code point" errors when trying
+ * to render these. This function validates each character and replaces invalid ones.
+ *
+ * Returns null if the data is severely corrupted (>1% invalid characters), indicating
+ * the scrollback should be discarded entirely.
+ */
+function sanitizeScrollback(raw: string): string | null {
+  const MAX_VALID_CODE_POINT = 0x10FFFF;
+  let invalidCount = 0;
+  let result = '';
+
+  for (let i = 0; i < raw.length; i++) {
+    const codePoint = raw.codePointAt(i);
+
+    // Handle undefined (shouldn't happen but be safe)
+    if (codePoint === undefined) {
+      invalidCount++;
+      continue;
+    }
+
+    // Check if code point is valid Unicode
+    if (codePoint > MAX_VALID_CODE_POINT || codePoint < 0) {
+      invalidCount++;
+      // Replace invalid code point with Unicode replacement character
+      result += '\uFFFD';
+      continue;
+    }
+
+    // For surrogate pairs (code points > 0xFFFF), we need to handle both chars
+    if (codePoint > 0xFFFF) {
+      result += String.fromCodePoint(codePoint);
+      i++; // Skip the low surrogate
+    } else {
+      result += raw[i];
+    }
+  }
+
+  // If more than 1% of characters are invalid, the data is severely corrupted
+  const invalidRatio = invalidCount / raw.length;
+  if (invalidRatio > 0.01) {
+    console.warn(
+      `[TerminalPanel] Scrollback severely corrupted: ${invalidCount}/${raw.length} invalid characters (${(invalidRatio * 100).toFixed(1)}%)`
+    );
+    return null;
+  }
+
+  if (invalidCount > 0) {
+    console.warn(`[TerminalPanel] Sanitized ${invalidCount} invalid code points from scrollback`);
+  }
+
+  return result;
+}
+
 // Get terminal theme colors from CSS variables
 function getTerminalTheme(): ITheme {
   const getCSSVar = (name: string, fallback: string): string => {
@@ -203,22 +261,32 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
           // Restore scrollback if available
           const scrollback = await window.electronAPI.terminal.getScrollback(sessionId);
           if (scrollback && !disposed) {
-            // Clean up the scrollback to remove trailing whitespace that was
-            // added for a potentially different terminal width
-            const cleaned = cleanScrollback(scrollback);
+            // Sanitize the scrollback to remove invalid code points that could crash
+            // the terminal's render loop. This must happen BEFORE any write attempts.
+            const sanitized = sanitizeScrollback(scrollback);
 
-            // Write scrollback in chunks to avoid WASM memory issues
-            // and wrap in try-catch to prevent crashes from corrupted data
-            try {
-              const CHUNK_SIZE = 16384; // 16KB chunks
-              for (let i = 0; i < cleaned.length; i += CHUNK_SIZE) {
-                if (disposed) break;
-                terminal.write(cleaned.slice(i, i + CHUNK_SIZE));
-              }
-            } catch (writeError) {
-              console.warn('[TerminalPanel] Failed to restore scrollback, clearing corrupted data:', writeError);
-              // Clear the corrupted scrollback file to prevent future crashes
+            if (sanitized === null) {
+              // Data is severely corrupted, discard it entirely
+              console.warn('[TerminalPanel] Discarding severely corrupted scrollback data');
               window.electronAPI.terminal.clearScrollback?.(sessionId);
+            } else {
+              // Clean up the scrollback to remove trailing whitespace that was
+              // added for a potentially different terminal width
+              const cleaned = cleanScrollback(sanitized);
+
+              // Write scrollback in chunks to avoid WASM memory issues
+              // and wrap in try-catch to prevent crashes from corrupted data
+              try {
+                const CHUNK_SIZE = 16384; // 16KB chunks
+                for (let i = 0; i < cleaned.length; i += CHUNK_SIZE) {
+                  if (disposed) break;
+                  terminal.write(cleaned.slice(i, i + CHUNK_SIZE));
+                }
+              } catch (writeError) {
+                console.warn('[TerminalPanel] Failed to restore scrollback, clearing corrupted data:', writeError);
+                // Clear the corrupted scrollback file to prevent future crashes
+                window.electronAPI.terminal.clearScrollback?.(sessionId);
+              }
             }
           }
 
