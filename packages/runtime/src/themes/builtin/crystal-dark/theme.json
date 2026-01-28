@@ -1,0 +1,23 @@
+{
+  "id": "crystal-dark",
+  "name": "Crystal Dark",
+  "version": "1.0.0",
+  "author": "Nimbalyst",
+  "description": "Crystal-clear dark theme inspired by GitHub dark",
+  "isDark": true,
+  "colors": {
+    "bg": "#0d1117",
+    "bg-secondary": "#161b22",
+    "bg-tertiary": "#21262d",
+    "text": "#c9d1d9",
+    "text-muted": "#8b949e",
+    "border": "#30363d",
+    "primary": "#58a6ff",
+    "link": "#58a6ff",
+    "success": "#3fb950",
+    "warning": "#d29922",
+    "error": "#f85149",
+    "info": "#58a6ff"
+  },
+  "tags": ["dark", "crystal", "github"]
+}

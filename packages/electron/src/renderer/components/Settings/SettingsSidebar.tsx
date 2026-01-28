@@ -16,6 +16,7 @@ export type SettingsCategory =
   | 'notifications'
   | 'voice-mode'
   | 'sync'
+  | 'themes'
   | 'advanced'
   | 'mcp-servers'
   | 'installed-extensions'
@@ -85,6 +86,11 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
           id: 'notifications',
           name: 'Notifications',
           icon: <MaterialSymbol icon="notifications" size={16} />,
+        },
+        {
+          id: 'themes',
+          name: 'Themes',
+          icon: <MaterialSymbol icon="palette" size={16} />,
         },
         {
           id: 'voice-mode',

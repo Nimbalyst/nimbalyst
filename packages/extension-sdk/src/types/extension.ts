@@ -78,47 +78,6 @@ export interface NewFileMenuContribution {
 // Import panel types from panel.ts
 import type { PanelContribution, SettingsPanelContribution } from './panel';
 
-/**
- * Theme contribution for extensions.
- * Extensions can provide custom color themes that users can select.
- */
-export interface ThemeContribution {
-  /** Unique theme ID within this extension (will be namespaced as extensionId:themeId) */
-  id: string;
-
-  /** Display name for the theme (shown in theme picker) */
-  name: string;
-
-  /** Whether this is a dark theme (determines base theme for fallbacks) */
-  isDark: boolean;
-
-  /**
-   * Theme color values. Only include colors you want to override.
-   * Missing colors will fall back to the appropriate base theme (light or dark).
-   *
-   * Available color keys:
-   * - bg, bg-secondary, bg-tertiary, bg-hover, bg-selected, bg-active
-   * - text, text-muted, text-faint, text-disabled
-   * - border, border-focus
-   * - primary, primary-hover
-   * - link, link-hover
-   * - success, warning, error, info
-   */
-  colors: Partial<Record<ThemeColorKey, string>>;
-}
-
-/**
- * Available theme color keys.
- * Extensions can override any of these colors.
- */
-export type ThemeColorKey =
-  | 'bg' | 'bg-secondary' | 'bg-tertiary' | 'bg-hover' | 'bg-selected' | 'bg-active'
-  | 'text' | 'text-muted' | 'text-faint' | 'text-disabled'
-  | 'border' | 'border-focus'
-  | 'primary' | 'primary-hover'
-  | 'link' | 'link-hover'
-  | 'success' | 'warning' | 'error' | 'info';
-
 export interface ExtensionContributions {
   /** Custom editors for specific file types */
   customEditors?: CustomEditorContribution[];
@@ -149,12 +108,6 @@ export interface ExtensionContributions {
    * Use this for managing extension configuration like database connections.
    */
   settingsPanel?: SettingsPanelContribution;
-
-  /**
-   * Custom themes that users can select.
-   * Extensions can provide color themes that override the built-in themes.
-   */
-  themes?: ThemeContribution[];
 }
 
 export interface CustomEditorContribution {

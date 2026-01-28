@@ -2,7 +2,6 @@ import { useEffect } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import type { ConfigTheme } from 'rexical';
 import { themeIdAtom, setThemeAtom, store, type ThemeId } from '@nimbalyst/runtime/store';
-import { getExtensionLoader } from '@nimbalyst/runtime';
 import { getBaseThemeColors, type ExtendedThemeColors } from 'rexical';
 
 /**
@@ -107,9 +106,6 @@ const CSS_VAR_MAP: Record<keyof ExtendedThemeColors, string> = {
   'terminal-ansi-bright-white': '--terminal-ansi-bright-white',
 };
 
-// Track currently applied extension theme for cleanup
-let currentExtensionThemeId: string | null = null;
-
 /**
  * Initialize theme from main process and set up IPC listener.
  * Called once at app startup to sync the atom with main process state.
@@ -119,8 +115,8 @@ export function initializeTheme(): void {
   const mainProcessTheme = window.electronAPI?.getThemeSync?.() || 'light';
   store.set(themeIdAtom, mainProcessTheme as ThemeId);
 
-  // Apply the theme (handles both built-in and extension themes)
-  applyThemeToDOM(mainProcessTheme as ThemeId);
+  // Apply the theme (handles both built-in and custom themes)
+  void applyThemeToDOM(mainProcessTheme as ThemeId);
 
   // Listen for theme changes from the menu (Window > Theme) or other windows
   if (window.electronAPI?.on) {
@@ -130,77 +126,99 @@ export function initializeTheme(): void {
       // Update atom (this will re-render all subscribing components)
       store.set(themeIdAtom, resolvedTheme);
 
-      // Update DOM immediately (handles both built-in and extension themes)
-      applyThemeToDOM(resolvedTheme);
+      // Update DOM immediately (handles both built-in and custom themes)
+      void applyThemeToDOM(resolvedTheme);
     });
   }
 }
 
 /**
  * Apply theme to DOM (classList and data-theme attribute).
- * Handles both built-in themes and extension themes.
+ * For custom themes, also applies CSS variables.
  */
-function applyThemeToDOM(theme: ThemeId): void {
+async function applyThemeToDOM(theme: ThemeId): Promise<void> {
   const root = document.documentElement;
 
-  // Check if this is an extension theme
-  if (isExtensionTheme(theme)) {
-    // Apply extension theme (which sets base theme + CSS variables)
-    applyExtensionTheme(theme);
-    return;
-  }
+  // Determine if this is a custom theme or built-in
+  const builtInThemes = ['light', 'dark', 'crystal-dark'];
+  const isBuiltIn = builtInThemes.includes(theme);
 
-  // Clear any extension theme when switching to built-in
-  clearExtensionTheme();
+  if (isBuiltIn) {
+    // Built-in themes use classes only
+    let targetClass = '';
 
-  // Apply built-in theme
-  let targetClass = '';
-  let targetDataTheme = '';
+    if (theme === 'dark') {
+      targetClass = 'dark-theme';
+    } else if (theme === 'light') {
+      targetClass = 'light-theme';
+    } else if (theme === 'crystal-dark') {
+      targetClass = 'crystal-dark-theme';
+    }
 
-  if (theme === 'dark') {
-    targetClass = 'dark-theme';
-    targetDataTheme = 'dark';
-  } else if (theme === 'light') {
-    targetClass = 'light-theme';
-    targetDataTheme = 'light';
-  } else if (theme === 'crystal-dark') {
-    targetClass = 'crystal-dark-theme';
-    targetDataTheme = 'crystal-dark';
+    root.classList.remove('dark-theme', 'light-theme', 'crystal-dark-theme');
+    root.classList.add(targetClass);
+    root.setAttribute('data-theme', theme);
+
+    // Clear any custom CSS variables
+    clearCustomThemeVariables();
   } else {
-    // Fallback to light
-    console.warn('[useTheme] Unexpected theme:', theme);
-    targetClass = 'light-theme';
-    targetDataTheme = 'light';
-  }
+    // Custom theme - fetch and apply colors
+    try {
+      const themeData = await window.electronAPI.invoke('theme:get', theme);
 
-  root.classList.remove('dark-theme', 'light-theme', 'crystal-dark-theme');
-  root.classList.add(targetClass);
-  root.setAttribute('data-theme', targetDataTheme);
+      // Set base class based on isDark
+      const baseClass = themeData.isDark ? 'dark-theme' : 'light-theme';
+      root.classList.remove('dark-theme', 'light-theme', 'crystal-dark-theme');
+      root.classList.add(baseClass);
+      root.setAttribute('data-theme', theme);
+
+      // Get base colors for fallbacks
+      const baseColors = getBaseThemeColors(themeData.isDark);
+
+      // Apply theme colors as CSS variables
+      for (const [key, cssVar] of Object.entries(CSS_VAR_MAP)) {
+        const colorKey = key as keyof ExtendedThemeColors;
+        const themeColor = themeData.colors[colorKey];
+        const baseColor = baseColors[colorKey];
+
+        // Use theme color if provided, otherwise base color
+        const value = themeColor || baseColor;
+        if (value) {
+          root.style.setProperty(cssVar, value);
+        }
+      }
+
+      console.info(`[useTheme] Applied custom theme: ${themeData.name} (${theme})`);
+    } catch (error) {
+      console.error('[useTheme] Failed to load theme:', theme, error);
+      // Fallback to light theme
+      root.classList.remove('dark-theme', 'light-theme', 'crystal-dark-theme');
+      root.classList.add('light-theme');
+      root.setAttribute('data-theme', 'light');
+      clearCustomThemeVariables();
+    }
+  }
+}
+
+/**
+ * Clear custom theme CSS variables.
+ */
+function clearCustomThemeVariables(): void {
+  const root = document.documentElement;
+  for (const cssVar of Object.values(CSS_VAR_MAP)) {
+    root.style.removeProperty(cssVar);
+  }
 }
 
 /**
  * Get the effective base theme for a theme ID.
- * For built-in themes, returns as-is.
- * For extension themes, looks up isDark and returns 'dark' or 'light'.
  */
 function getEffectiveBaseTheme(themeId: string): ConfigTheme {
-  // Built-in themes pass through
-  if (themeId === 'light' || themeId === 'dark' || themeId === 'crystal-dark') {
-    return themeId;
-  }
+  // All standalone themes are either light or dark based
+  const darkThemes = ['dark', 'crystal-dark', 'solarized-dark', 'monokai'];
 
-  // Extension theme - look up whether it's dark
-  if (isExtensionTheme(themeId)) {
-    try {
-      const loader = getExtensionLoader();
-      const themes = loader.getThemes();
-      const theme = themes.find(t => t.id === themeId);
-      if (theme) {
-        return theme.isDark ? 'dark' : 'light';
-      }
-    } catch {
-      // Extension system not ready, fall back to light
-    }
+  if (darkThemes.includes(themeId)) {
+    return 'dark';
   }
 
   return 'light';
@@ -233,7 +251,7 @@ export function useTheme() {
   // When theme atom changes, also update DOM
   // This handles programmatic theme changes from within React
   useEffect(() => {
-    applyThemeToDOM(themeId as ThemeId);
+    void applyThemeToDOM(themeId as ThemeId);
   }, [themeId]);
 
   return { theme, themeId, setTheme };
@@ -256,195 +274,30 @@ export function getTheme(): ThemeId {
 }
 
 /**
- * Check if a theme ID is an extension theme (format: extensionId:themeId).
+ * Get all available themes (built-in + user-installed).
+ * Fetches from the theme system via IPC.
  */
-export function isExtensionTheme(themeId: string): boolean {
-  return themeId.includes(':');
-}
-
-/**
- * Get all available themes (built-in + extension themes).
- */
-export function getAllAvailableThemes(): Array<{
+export async function getAllAvailableThemesAsync(): Promise<Array<{
   id: string;
   name: string;
   isDark: boolean;
-  isExtension: boolean;
-}> {
-  const builtInThemes = [
-    { id: 'light', name: 'Light', isDark: false, isExtension: false },
-    { id: 'dark', name: 'Dark', isDark: true, isExtension: false },
-    { id: 'crystal-dark', name: 'Crystal Dark', isDark: true, isExtension: false },
-  ];
-
+}>> {
   try {
-    const loader = getExtensionLoader();
-    const extensionThemes = loader.getThemes().map(t => ({
-      id: t.id,
-      name: t.name,
-      isDark: t.isDark,
-      isExtension: true,
+    const themeManifests = await window.electronAPI.invoke('theme:list');
+
+    return themeManifests.map((manifest: any) => ({
+      id: manifest.id,
+      name: manifest.name,
+      isDark: manifest.isDark,
     }));
-
-    return [...builtInThemes, ...extensionThemes];
-  } catch {
-    // Extension system may not be initialized yet
-    return builtInThemes;
-  }
-}
-
-/**
- * Apply an extension theme by setting CSS variables on the document root.
- * Extension themes are layered on top of a base theme (light or dark).
- */
-export function applyExtensionTheme(themeId: string): boolean {
-  if (!isExtensionTheme(themeId)) {
-    console.warn('[useTheme] Not an extension theme:', themeId);
-    return false;
-  }
-
-  try {
-    const loader = getExtensionLoader();
-    const themes = loader.getThemes();
-    const theme = themes.find(t => t.id === themeId);
-
-    if (!theme) {
-      console.error('[useTheme] Extension theme not found:', themeId);
-      return false;
-    }
-
-    const root = document.documentElement;
-
-    // First, apply the base theme (light or dark) for proper fallbacks
-    const baseTheme = theme.isDark ? 'dark' : 'light';
-    root.classList.remove('dark-theme', 'light-theme', 'crystal-dark-theme');
-    root.classList.add(`${baseTheme}-theme`);
-    root.setAttribute('data-theme', baseTheme);
-
-    // Get base colors for fallbacks
-    const baseColors = getBaseThemeColors(theme.isDark);
-
-    // Derive missing colors from extension's colors for better consistency
-    const extColors = theme.colors as Record<string, string>;
-    const derivedColors: Record<string, string> = {};
-
-    // Table colors: derive from extension's background colors if not specified
-    if (!extColors['table-header'] && extColors['bg-secondary']) {
-      derivedColors['table-header'] = extColors['bg-secondary'];
-    }
-    if (!extColors['table-cell'] && extColors['bg']) {
-      derivedColors['table-cell'] = extColors['bg'];
-    }
-    if (!extColors['table-stripe'] && extColors['bg-tertiary']) {
-      derivedColors['table-stripe'] = extColors['bg-tertiary'];
-    }
-    if (!extColors['table-border'] && extColors['border']) {
-      derivedColors['table-border'] = extColors['border'];
-    }
-
-    // Code block colors
-    if (!extColors['code-bg'] && extColors['bg-secondary']) {
-      derivedColors['code-bg'] = extColors['bg-secondary'];
-    }
-    if (!extColors['code-text'] && extColors['text']) {
-      derivedColors['code-text'] = extColors['text'];
-    }
-    if (!extColors['code-border'] && extColors['border']) {
-      derivedColors['code-border'] = extColors['border'];
-    }
-
-    // Toolbar colors
-    if (!extColors['toolbar-bg'] && extColors['bg']) {
-      derivedColors['toolbar-bg'] = extColors['bg'];
-    }
-    if (!extColors['toolbar-border'] && extColors['border']) {
-      derivedColors['toolbar-border'] = extColors['border'];
-    }
-
-    // Quote colors
-    if (!extColors['quote-text'] && extColors['text-muted']) {
-      derivedColors['quote-text'] = extColors['text-muted'];
-    }
-    if (!extColors['quote-border'] && extColors['border']) {
-      derivedColors['quote-border'] = extColors['border'];
-    }
-
-    // Terminal colors: derive from extension's colors if not specified
-    if (!extColors['terminal-bg'] && extColors['bg-secondary']) {
-      derivedColors['terminal-bg'] = extColors['bg-secondary'];
-    }
-    if (!extColors['terminal-fg'] && extColors['text']) {
-      derivedColors['terminal-fg'] = extColors['text'];
-    }
-    if (!extColors['terminal-cursor'] && extColors['primary']) {
-      derivedColors['terminal-cursor'] = extColors['primary'];
-    }
-    if (!extColors['terminal-cursor-accent']) {
-      derivedColors['terminal-cursor-accent'] =
-        extColors['terminal-bg'] || extColors['bg-secondary'] || derivedColors['terminal-bg'];
-    }
-    if (!extColors['terminal-selection'] && extColors['bg-selected']) {
-      derivedColors['terminal-selection'] = extColors['bg-selected'];
-    }
-
-    // Terminal ANSI colors: derive from status colors if not specified
-    if (!extColors['terminal-ansi-red'] && extColors['error']) {
-      derivedColors['terminal-ansi-red'] = extColors['error'];
-    }
-    if (!extColors['terminal-ansi-green'] && extColors['success']) {
-      derivedColors['terminal-ansi-green'] = extColors['success'];
-    }
-    if (!extColors['terminal-ansi-yellow'] && extColors['warning']) {
-      derivedColors['terminal-ansi-yellow'] = extColors['warning'];
-    }
-    if (!extColors['terminal-ansi-blue'] && extColors['info']) {
-      derivedColors['terminal-ansi-blue'] = extColors['info'];
-    }
-
-    // Apply all theme colors as CSS variables
-    // Start with base colors, then derived colors, then extension overrides
-    const allColors = { ...baseColors, ...derivedColors, ...theme.colors };
-
-    for (const [key, cssVar] of Object.entries(CSS_VAR_MAP)) {
-      const colorKey = key as keyof ExtendedThemeColors;
-      const value = allColors[colorKey];
-      if (value) {
-        root.style.setProperty(cssVar, value);
-      }
-    }
-
-    // Mark as extension theme for cleanup
-    root.setAttribute('data-extension-theme', themeId);
-    currentExtensionThemeId = themeId;
-
-    console.info(`[useTheme] Applied extension theme: ${theme.name} (${themeId})`);
-    return true;
   } catch (error) {
-    console.error('[useTheme] Failed to apply extension theme:', error);
-    return false;
+    console.error('[useTheme] Failed to fetch themes:', error);
+    // Fallback to built-in themes only
+    return [
+      { id: 'light', name: 'Light', isDark: false },
+      { id: 'dark', name: 'Dark', isDark: true },
+      { id: 'crystal-dark', name: 'Crystal Dark', isDark: true },
+    ];
   }
 }
 
-/**
- * Clear any extension theme overrides, restoring the base theme.
- */
-export function clearExtensionTheme(): void {
-  const root = document.documentElement;
-
-  // Remove extension theme marker
-  root.removeAttribute('data-extension-theme');
-
-  // Clear all --nim-* CSS variable overrides
-  for (const cssVar of Object.values(CSS_VAR_MAP)) {
-    root.style.removeProperty(cssVar);
-  }
-
-  currentExtensionThemeId = null;
-}
-
-/**
- * Get the currently applied extension theme ID, if any.
- */
-export function getCurrentExtensionTheme(): string | null {
-  return currentExtensionThemeId;
-}

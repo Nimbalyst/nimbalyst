@@ -2,36 +2,30 @@ import { BrowserWindow, nativeTheme } from 'electron';
 import { getTheme, getThemeIsDark } from '../utils/store';
 
 /**
- * Check if a theme ID is an extension theme (format: extensionId:themeId).
- */
-function isExtensionTheme(themeId: string): boolean {
-  return themeId.includes(':');
-}
-
-/**
  * Determine if the current theme is dark.
- * For extension themes, uses the stored isDark value.
+ * For custom themes, uses the stored isDark value.
  * For built-in themes, uses hardcoded values.
  */
 function isCurrentThemeDark(currentTheme: string): boolean {
     // Built-in dark themes
-    if (currentTheme === 'dark' || currentTheme === 'crystal-dark') {
+    const darkThemes = ['dark', 'crystal-dark', 'solarized-dark', 'monokai'];
+    if (darkThemes.includes(currentTheme)) {
         return true;
     }
+
     // Built-in light themes
-    if (currentTheme === 'light') {
+    const lightThemes = ['light', 'solarized-light'];
+    if (lightThemes.includes(currentTheme)) {
         return false;
     }
+
     // System theme - check OS preference
     if (currentTheme === 'system') {
         return nativeTheme.shouldUseDarkColors;
     }
-    // Extension themes - use stored isDark value (defaults to false if not set)
-    if (isExtensionTheme(currentTheme)) {
-        return getThemeIsDark() ?? false;
-    }
-    // Unknown theme - default to light
-    return false;
+
+    // For any other themes (future custom themes), use stored isDark value
+    return getThemeIsDark() ?? false;
 }
 
 // Function to update native theme

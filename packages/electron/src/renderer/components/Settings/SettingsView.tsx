@@ -21,6 +21,7 @@ import { ToolPackagesPanel } from './panels/ToolPackagesPanel';
 import { ProjectPermissionsPanel } from './panels/ProjectPermissionsPanel';
 import { ProviderOverrideWrapper } from './panels/ProviderOverrideWrapper';
 import { InstalledExtensionsPanel } from './panels/InstalledExtensionsPanel';
+import { ThemesPanel } from './panels/ThemesPanel';
 import { walkthroughs } from '../../walkthroughs';
 import {
   aiProviderSettingsAtom,
@@ -550,6 +551,13 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
         );
       case 'sync':
         return <SyncPanel />;
+      case 'themes':
+        return (
+          <ThemesPanel
+            scope={scope}
+            workspacePath={workspacePath ?? undefined}
+          />
+        );
       default:
         return null;
     }

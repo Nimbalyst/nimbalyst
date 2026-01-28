@@ -1,12 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { MaterialSymbol } from '@nimbalyst/runtime';
-import { getExtensionLoader } from '@nimbalyst/runtime';
 import {
-  getAllAvailableThemes,
-  isExtensionTheme,
-  applyExtensionTheme,
-  clearExtensionTheme,
-  getCurrentExtensionTheme,
+  getAllAvailableThemesAsync,
 } from '../../hooks/useTheme';
 
 type BuiltInTheme = 'light' | 'dark' | 'crystal-dark';
@@ -23,27 +18,22 @@ export const ThemeToggleButton: React.FC<ThemeToggleButtonProps> = ({ className 
   });
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [availableThemes, setAvailableThemes] = useState<ReturnType<typeof getAllAvailableThemes>>([]);
+  const [availableThemes, setAvailableThemes] = useState<Array<{
+    id: string;
+    name: string;
+    isDark: boolean;
+  }>>([]);
   const menuRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
   // Load available themes
   useEffect(() => {
-    const loadThemes = () => {
-      setAvailableThemes(getAllAvailableThemes());
+    const loadThemes = async () => {
+      const themes = await getAllAvailableThemesAsync();
+      setAvailableThemes(themes);
     };
 
     loadThemes();
-
-    // Subscribe to extension changes to update theme list
-    try {
-      const loader = getExtensionLoader();
-      const unsubscribe = loader.subscribe(loadThemes);
-      return unsubscribe;
-    } catch {
-      // Extension system not available
-      return undefined;
-    }
   }, []);
 
   // Listen for theme changes from other sources (like the menu)
@@ -51,10 +41,6 @@ export const ThemeToggleButton: React.FC<ThemeToggleButtonProps> = ({ className 
     if (!window.electronAPI?.on) return;
 
     const handleThemeChange = (newTheme: string) => {
-      // Clear extension theme when switching to built-in
-      if (!isExtensionTheme(newTheme)) {
-        clearExtensionTheme();
-      }
       setCurrentTheme(newTheme);
     };
 
@@ -95,23 +81,12 @@ export const ThemeToggleButton: React.FC<ThemeToggleButtonProps> = ({ className 
     const isDark = theme?.isDark ?? false;
 
     // Send theme change to main process for persistence and cross-window sync
-    // Include isDark so main process knows how to style title bars for extension themes
     if (window.electronAPI?.send) {
       window.electronAPI.send('set-theme', themeId, isDark);
-    }
-
-    // Apply extension theme if applicable (or clear if switching to built-in)
-    if (isExtensionTheme(themeId)) {
-      applyExtensionTheme(themeId);
-    } else {
-      clearExtensionTheme();
     }
   }, [availableThemes]);
 
   const getThemeIcon = (themeId: string, isDark: boolean): string => {
-    if (isExtensionTheme(themeId)) {
-      return isDark ? 'palette' : 'palette';
-    }
     switch (themeId) {
       case 'light':
         return 'light_mode';
@@ -142,9 +117,6 @@ export const ThemeToggleButton: React.FC<ThemeToggleButtonProps> = ({ className 
     }
   };
 
-  const builtInThemes = availableThemes.filter(t => !t.isExtension);
-  const extensionThemes = availableThemes.filter(t => t.isExtension);
-
   return (
     <div className="relative">
       <button
@@ -166,8 +138,7 @@ export const ThemeToggleButton: React.FC<ThemeToggleButtonProps> = ({ className 
           role="menu"
           aria-label="Theme selection"
         >
-          {/* Built-in themes */}
-          {builtInThemes.map(theme => (
+          {availableThemes.map(theme => (
             <button
               key={theme.id}
               className="theme-menu-item flex items-center gap-2 w-full py-2 px-3 border-none bg-transparent text-nim text-[13px] text-left cursor-pointer rounded transition-colors duration-100 hover:bg-nim-hover"
@@ -185,31 +156,6 @@ export const ThemeToggleButton: React.FC<ThemeToggleButtonProps> = ({ className 
               )}
             </button>
           ))}
-
-          {/* Extension themes */}
-          {extensionThemes.length > 0 && (
-            <>
-              <div className="theme-menu-divider h-px bg-nim-border my-1" role="separator" />
-              {extensionThemes.map(theme => (
-                <button
-                  key={theme.id}
-                  className="theme-menu-item flex items-center gap-2 w-full py-2 px-3 border-none bg-transparent text-nim text-[13px] text-left cursor-pointer rounded transition-colors duration-100 hover:bg-nim-hover"
-                  onClick={() => selectTheme(theme.id)}
-                  role="menuitem"
-                >
-                  <span className="theme-icon w-5 flex justify-center flex-shrink-0">
-                    <MaterialSymbol icon={getThemeIcon(theme.id, theme.isDark)} size={18} />
-                  </span>
-                  <span className="theme-name flex-1 whitespace-nowrap">{theme.name}</span>
-                  {currentTheme === theme.id && (
-                    <span className="theme-check w-4 flex justify-center flex-shrink-0">
-                      <MaterialSymbol icon="check" size={16} />
-                    </span>
-                  )}
-                </button>
-              ))}
-            </>
-          )}
         </div>
       )}
     </div>

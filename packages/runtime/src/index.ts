@@ -125,3 +125,5 @@ export { DocumentPathProvider, useDocumentPath } from './DocumentPathContext';
 export * from './editors';
 // Sync types (for capacitor)
 export type { SessionIndexEntry } from './sync/types';
+// Themes
+export * from './themes';
