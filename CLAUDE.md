@@ -64,6 +64,7 @@ packages/
 - **Install dependencies**: `npm install` at repository root
 - **Uses npm workspaces** (not pnpm)
 - Packages can reference each other via workspace protocol
+- **IMPORTANT: Preserve `peer: true` flags in package-lock.json** - The lock file contains `peer: true` flags for optional native dependencies (like esbuild platform binaries). Running `npm install` with certain npm versions or configurations can strip these flags, breaking CI. If you see `peer: true` flags disappearing from package-lock.json diffs, investigate before committing.
 
 ### Package-Specific Documentation
 For detailed information about specific packages, see their CLAUDE.md files:
