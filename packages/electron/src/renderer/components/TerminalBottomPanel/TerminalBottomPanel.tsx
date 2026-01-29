@@ -123,7 +123,7 @@ export const TerminalBottomPanel: React.FC<TerminalBottomPanelProps> = ({
         // Reload from backend to get the new terminal
         await loadTerminals(workspacePath);
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('[TerminalBottomPanel] Failed to create terminal:', error);
     }
   }, [workspacePath, terminals.length]);
@@ -147,39 +147,53 @@ export const TerminalBottomPanel: React.FC<TerminalBottomPanelProps> = ({
       if (currentActive) {
         await window.electronAPI.terminal.setActive(workspacePath, currentActive);
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('[TerminalBottomPanel] Failed to close terminal:', error);
     }
+  }, [workspacePath]);
+
+  // Helper to delete multiple terminals in parallel
+  const deleteTerminals = useCallback(async (terminalIds: string[]): Promise<void> => {
+    // Optimistically remove all from atom state first
+    for (const id of terminalIds) {
+      removeTerminalFromList(id);
+    }
+
+    // Then delete from backend in parallel
+    await Promise.all(
+      terminalIds.map(id =>
+        window.electronAPI.terminal.delete(workspacePath, id).catch((err: unknown) => {
+          console.error(`[TerminalBottomPanel] Failed to delete terminal ${id}:`, err);
+        })
+      )
+    );
   }, [workspacePath]);
 
   // Close all terminals except the specified one
   const handleCloseOthers = useCallback(async (terminalId: string) => {
     try {
-      const terminalsToClose = terminals.filter(t => t.id !== terminalId);
-      for (const terminal of terminalsToClose) {
-        await window.electronAPI.terminal.delete(workspacePath, terminal.id);
-        removeTerminalFromList(terminal.id);
-      }
+      const terminalIds = terminals.filter(t => t.id !== terminalId).map(t => t.id);
+      await deleteTerminals(terminalIds);
 
       setActiveTerminal(terminalId);
       await window.electronAPI.terminal.setActive(workspacePath, terminalId);
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('[TerminalBottomPanel] Failed to close other terminals:', error);
     }
-  }, [workspacePath, terminals]);
+  }, [workspacePath, terminals, deleteTerminals]);
 
   // Close all terminals
   const handleCloseAll = useCallback(async () => {
     try {
-      for (const terminal of terminals) {
-        await window.electronAPI.terminal.delete(workspacePath, terminal.id);
-        removeTerminalFromList(terminal.id);
-      }
+      const terminalIds = terminals.map(t => t.id);
+      await deleteTerminals(terminalIds);
+
       setActiveTerminal(undefined);
-    } catch (error) {
+      await window.electronAPI.terminal.setActive(workspacePath, undefined);
+    } catch (error: unknown) {
       console.error('[TerminalBottomPanel] Failed to close all terminals:', error);
     }
-  }, [workspacePath, terminals]);
+  }, [workspacePath, terminals, deleteTerminals]);
 
   // Close terminals to the right of the specified one
   const handleCloseToRight = useCallback(async (terminalId: string) => {
@@ -187,11 +201,8 @@ export const TerminalBottomPanel: React.FC<TerminalBottomPanelProps> = ({
       const terminalIndex = terminals.findIndex(t => t.id === terminalId);
       if (terminalIndex === -1) return;
 
-      const terminalsToClose = terminals.slice(terminalIndex + 1);
-      for (const terminal of terminalsToClose) {
-        await window.electronAPI.terminal.delete(workspacePath, terminal.id);
-        removeTerminalFromList(terminal.id);
-      }
+      const terminalIds = terminals.slice(terminalIndex + 1).map(t => t.id);
+      await deleteTerminals(terminalIds);
 
       // If active terminal was to the right, switch to the clicked one
       const activeIndex = terminals.findIndex(t => t.id === activeTerminalId);
@@ -199,10 +210,10 @@ export const TerminalBottomPanel: React.FC<TerminalBottomPanelProps> = ({
         setActiveTerminal(terminalId);
         await window.electronAPI.terminal.setActive(workspacePath, terminalId);
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('[TerminalBottomPanel] Failed to close terminals to the right:', error);
     }
-  }, [workspacePath, terminals, activeTerminalId]);
+  }, [workspacePath, terminals, activeTerminalId, deleteTerminals]);
 
   // Close panel
   const handleClose = useCallback(() => {

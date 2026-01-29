@@ -200,6 +200,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
   const hasExitedRef = useRef(false); // Ref to track exit state for callbacks
   const hasAutoRestartedRef = useRef(false); // Track if we've already auto-restarted (prevent loops)
   const initStartTimeRef = useRef<number>(0); // Track when initialization started
+  const disposedRef = useRef(false); // Ref to track disposed state for async callbacks
   const [exitCode, setExitCode] = useState<number | null>(null);
   const [initError, setInitError] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
@@ -245,6 +246,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
   useEffect(() => {
     if (!isActive || !terminalRef.current) return;
 
+    disposedRef.current = false;
     let disposed = false;
     let terminal: Terminal | null = null;
     let fitAddon: FitAddon | null = null;
@@ -346,7 +348,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
 
               const writeChunks = async () => {
                 for (let i = 0; i < cleaned.length; i += CHUNK_SIZE) {
-                  if (disposed) return;
+                  if (disposed || !terminal) return;
 
                   // Check timeout
                   if (Date.now() - startTime > MAX_RESTORE_TIME_MS) {
@@ -401,12 +403,12 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
               const QUICK_EXIT_THRESHOLD_MS = 2000;
 
               if (timeSinceInit < QUICK_EXIT_THRESHOLD_MS && !hasAutoRestartedRef.current) {
-                console.log(`[TerminalPanel] Terminal ${terminalId} exited quickly (${timeSinceInit}ms), auto-restarting once`);
                 hasAutoRestartedRef.current = true;
                 hasExitedRef.current = false;
                 // Restart after a brief delay to let things settle
+                // Use ref to check disposed state at time of execution (not closure)
                 setTimeout(() => {
-                  if (!disposed) {
+                  if (!disposedRef.current) {
                     handleRestart();
                   }
                 }, 100);
@@ -461,6 +463,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
 
     return () => {
       disposed = true;
+      disposedRef.current = true;
       resizeObserver?.disconnect();
       unsubscribeOutput?.();
       unsubscribeExited?.();

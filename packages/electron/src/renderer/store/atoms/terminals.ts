@@ -99,7 +99,9 @@ export function initTerminalListeners(workspacePath: string): () => void {
   // Note: electronAPI.on strips the event object, so data is the first arg
   const handleTerminalListChanged = (data: { workspacePath: string }) => {
     if (data.workspacePath === workspacePath) {
-      loadTerminals(workspacePath);
+      loadTerminals(workspacePath).catch((err: unknown) => {
+        console.error('[terminals] Failed to reload terminals after list change:', err);
+      });
     }
   };
 
