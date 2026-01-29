@@ -519,9 +519,12 @@ app.whenReady().then(async () => {
         const errorMessage = error instanceof Error ? error.message : String(error);
 
         // Detect WASM runtime crash (PGLite uses WASM internally)
+        // Note: 'Aborted' comes from worker.js when it detects RuntimeError or WASM abort
         const isWasmRuntimeCrash = errorMessage.includes('exit(1)') ||
                                    errorMessage.includes('Program terminated') ||
-                                   errorMessage.includes('ExitStatus');
+                                   errorMessage.includes('ExitStatus') ||
+                                   errorMessage.includes('Aborted') ||
+                                   errorMessage.includes('DATABASE_INIT_FAILED');
 
         // Send analytics about the failure
         try {
@@ -546,19 +549,27 @@ app.whenReady().then(async () => {
 
         // Show appropriate error dialog
         if (isWasmRuntimeCrash) {
+            // Get database path for the error message (use actual expanded path)
+            const dbPath = join(app.getPath('userData'), 'pglite-db');
+
             dialog.showErrorBox(
-                'Database Initialization Failed',
-                `The database system failed to start due to a system-level issue.\n\n` +
-                `This can sometimes happen when system resources are constrained.\n\n` +
-                `Please try:\n` +
-                `1. Restart the application\n` +
-                `2. If that doesn't work, restart your computer\n\n` +
-                `The application will now close.`
+                'Nimbalyst - Database Initialization Failed',
+                `The database system failed to start.\n\n` +
+                `This usually indicates:\n` +
+                `1. Another process has the database locked\n` +
+                `2. Database files are corrupted\n` +
+                `3. Insufficient file system permissions\n\n` +
+                `To fix this:\n` +
+                `1. Close any other Nimbalyst windows\n` +
+                `2. Restart your computer (clears stale locks)\n` +
+                `3. If the problem persists, delete the database folder:\n` +
+                `   ${dbPath}\n\n` +
+                `Nimbalyst will now close.`
             );
         } else {
             dialog.showErrorBox(
-                'Database Initialization Failed',
-                `Failed to initialize the database system.\n\nError: ${errorMessage}\n\nThe application cannot continue without the database.`
+                'Nimbalyst - Database Initialization Failed',
+                `Failed to initialize the database system.\n\nError: ${errorMessage}\n\nNimbalyst cannot continue without the database.`
             );
         }
 

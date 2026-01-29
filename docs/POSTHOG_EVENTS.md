@@ -205,6 +205,8 @@ All events include `$session_id` property automatically. Dev users are marked wi
 | `database_corruption_detected` | `PGLiteDatabaseWorker.ts:131` | Database corruption detected during initialization | `hasBackups` | v0.45.25 (2025-11-14) |  |
 | `database_corruption_recovery_choice` | `PGLiteDatabaseWorker.ts:153, 215, 222, 272` | User makes a choice in database corruption recovery dialog | `choice` (restore_from_backup/start_fresh/auto_fresh)<br/>`confirmed` (for start_fresh)<br/>`reason` (for auto_fresh) | v0.45.25 (2025-11-14) |  |
 | `database_corruption_restore_result` | `PGLiteDatabaseWorker.ts:165, 185, 232, 253` | Result of attempting to restore from backup | `success`<br/>`source` (current/previous)<br/>`errorType` (verification_failed/restore_failed)<br/>`trigger` (cancel_start_fresh) | v0.45.25 (2025-11-14) |  |
+| `database_init_failed_with_backups` | `PGLiteDatabaseWorker.ts:333` | Database initialization failed but backups are available | `hasBackups` (always true) | (pending release) |  |
+| `database_init_failed_recovery_choice` | `PGLiteDatabaseWorker.ts:343, 399, 408` | User makes a choice in init failure recovery dialog | `choice` (restore_from_backup/start_fresh)<br/>`confirmed` (for start_fresh) | (pending release) |  |
 | `known_error` | Various (see Known Error IDs below) | A recognized error condition occurs that we want to track and monitor | `errorId` (see Known Error IDs)<br/>`context` (where the error occurred)<br/>`errorMessage` (optional, truncated) | (pending release as of c597008b) |  |
 | `feature_first_use` | `AIService.ts:406`<br/>`WindowManager.ts:230`<br/>`AnalyticsHandlers.ts:45` | User uses a feature for the first time | `feature`<br/>`daysSinceInstall` | v0.45.25 (2025-11-14) |  |
 

@@ -40,7 +40,7 @@ process.on('uncaughtException', (error: Error & { code?: string }) => {
 
   // For other uncaught exceptions, show the native dialog
   console.error('[Bootstrap] Uncaught exception:', error);
-  dialog.showErrorBox('Uncaught Exception', `${error.name}: ${error.message}\n\n${error.stack || ''}`);
+  dialog.showErrorBox('Nimbalyst - Uncaught Exception', `${error.name}: ${error.message}\n\n${error.stack || ''}`);
 });
 
 // Parse --user-data-dir from command line args or environment variable

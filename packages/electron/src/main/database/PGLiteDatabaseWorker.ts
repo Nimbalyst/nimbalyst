@@ -35,6 +35,88 @@ export class PGLiteDatabaseWorker {
   private analytics = AnalyticsService.getInstance();
   private backupService: DatabaseBackupService | null = null;
 
+  // ============================================================================
+  // Helper methods for dialogs and common operations
+  // ============================================================================
+
+  /**
+   * Show an error dialog and quit the application
+   */
+  private showErrorAndQuit(title: string, message: string, detail?: string): void {
+    dialog.showMessageBox({
+      type: 'error',
+      title: `Nimbalyst - ${title}`,
+      message,
+      detail,
+      buttons: ['Quit']
+    }).then(() => app.quit()).catch((err) => {
+      logger.main.error('[PGLite Worker] Dialog error:', err);
+      app.quit();
+    });
+  }
+
+  /**
+   * Show an info dialog (non-blocking)
+   */
+  private showInfoDialog(title: string, message: string, detail?: string): void {
+    dialog.showMessageBox({
+      type: 'info',
+      title: `Nimbalyst - ${title}`,
+      message,
+      detail,
+      buttons: ['OK']
+    }).catch(() => {});
+  }
+
+  /**
+   * Show the "Start Fresh?" confirmation dialog
+   * @returns true if user confirmed, false if cancelled
+   */
+  private async showStartFreshConfirmation(): Promise<boolean> {
+    const response = await dialog.showMessageBox({
+      type: 'warning',
+      title: 'Nimbalyst - Start Fresh?',
+      message: 'This will clear your AI chat sessions.',
+      detail: 'Your files will not be affected, but all AI chat history will be permanently deleted.\n\nAre you sure you want to continue?',
+      buttons: ['Cancel', 'Yes, Start Fresh'],
+      defaultId: 0,
+      cancelId: 0
+    });
+    return response.response === 1;
+  }
+
+  /**
+   * Recreate the worker and re-initialize the database
+   * @throws Error if re-initialization fails
+   */
+  private async recreateWorkerAndReinit(): Promise<void> {
+    this.createWorker();
+    await this.sendMessage('init');
+  }
+
+  /**
+   * Delete the database directory for a fresh start
+   */
+  private async deleteDatabaseDirectory(): Promise<void> {
+    const fs = await import('fs');
+    const dataDir = path.join(app.getPath('userData'), 'pglite-db');
+    if (fs.existsSync(dataDir)) {
+      fs.rmSync(dataDir, { recursive: true, force: true });
+      logger.main.info('[PGLite Worker] Deleted database directory');
+    }
+  }
+
+  /**
+   * Format an error for display in a dialog
+   */
+  private formatError(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
+  }
+
+  // ============================================================================
+  // Main initialization methods
+  // ============================================================================
+
   /**
    * Initialize the database worker
    */
@@ -181,17 +263,9 @@ export class PGLiteDatabaseWorker {
 
               // Worker was closed during restore - recreate it
               logger.main.info('[PGLite Worker] Recreating worker thread after restore...');
-              this.createWorker();
+              await this.recreateWorkerAndReinit();
 
-              // Re-initialize with restored database
-              await this.sendMessage('init');
-
-              dialog.showMessageBox({
-                type: 'info',
-                title: 'Database Restored',
-                message: `Your database has been successfully restored from the ${restoreResult.source} backup.`,
-                buttons: ['OK']
-              }).catch(() => {});
+              this.showInfoDialog('Database Restored', `Your database has been successfully restored from the ${restoreResult.source} backup.`);
             } else {
               logger.main.error('[PGLite Worker] Failed to restore from backup:', restoreResult.error);
               this.analytics.sendEvent('database_corruption_restore_result', {
@@ -199,29 +273,15 @@ export class PGLiteDatabaseWorker {
                 errorType: restoreResult.error?.includes('verification') ? 'verification_failed' : 'restore_failed'
               });
 
-              dialog.showMessageBox({
-                type: 'error',
-                title: 'Restore Failed',
-                message: 'Failed to restore from backup. Starting with a fresh database.',
-                detail: restoreResult.error,
-                buttons: ['OK']
-              }).catch(() => {});
+              this.showInfoDialog('Restore Failed', 'Failed to restore from backup. Starting with a fresh database.', restoreResult.error);
             }
           } else {
             // User clicked "Start Fresh" - show confirmation dialog
             logger.main.info('[PGLite Worker] User clicked Start Fresh - showing confirmation');
 
-            const confirmResponse = await dialog.showMessageBox({
-              type: 'warning',
-              title: 'Start Fresh?',
-              message: 'This will clear your AI chat sessions.',
-              detail: 'Your files will not be affected, but all AI chat history will be permanently deleted.\n\nAre you sure you want to continue?',
-              buttons: ['Cancel', 'Yes, Start Fresh'],
-              defaultId: 0,
-              cancelId: 0
-            });
+            const confirmed = await this.showStartFreshConfirmation();
 
-            if (confirmResponse.response === 1) {
+            if (confirmed) {
               // User confirmed starting fresh
               logger.main.info('[PGLite Worker] User confirmed starting fresh');
               this.analytics.sendEvent('database_corruption_recovery_choice', {
@@ -249,17 +309,9 @@ export class PGLiteDatabaseWorker {
 
                 // Worker was closed during restore - recreate it
                 logger.main.info('[PGLite Worker] Recreating worker thread after restore...');
-                this.createWorker();
+                await this.recreateWorkerAndReinit();
 
-                // Re-initialize with restored database
-                await this.sendMessage('init');
-
-                dialog.showMessageBox({
-                  type: 'info',
-                  title: 'Database Restored',
-                  message: `Your database has been successfully restored from the ${restoreResult.source} backup.`,
-                  buttons: ['OK']
-                }).catch(() => {});
+                this.showInfoDialog('Database Restored', `Your database has been successfully restored from the ${restoreResult.source} backup.`);
               } else {
                 logger.main.error('[PGLite Worker] Failed to restore from backup:', restoreResult.error);
                 this.analytics.sendEvent('database_corruption_restore_result', {
@@ -268,13 +320,7 @@ export class PGLiteDatabaseWorker {
                   trigger: 'cancel_start_fresh'
                 });
 
-                dialog.showMessageBox({
-                  type: 'error',
-                  title: 'Restore Failed',
-                  message: 'Failed to restore from backup. Starting with a fresh database.',
-                  detail: restoreResult.error,
-                  buttons: ['OK']
-                }).catch(() => {});
+                this.showInfoDialog('Restore Failed', 'Failed to restore from backup. Starting with a fresh database.', restoreResult.error);
               }
             }
           }
@@ -288,7 +334,7 @@ export class PGLiteDatabaseWorker {
 
           dialog.showMessageBox({
             type: 'warning',
-            title: 'Database Recovered',
+            title: 'Nimbalyst - Database Recovered',
             message: 'The application database was corrupted and has been automatically repaired.',
             detail: `A fresh database has been created. Your old data has been backed up to:\n\n${initResult.dataDir}.backup-[timestamp]\n\nYour document files have not been lost - they are still on disk. Only the internal application database (AI chat sessions and document history) needs to be rebuilt.`,
             buttons: ['OK']
@@ -308,20 +354,108 @@ export class PGLiteDatabaseWorker {
 
       // Check for database locked error (another instance running)
       if (error?.message?.includes('DATABASE_LOCKED') || error?.message?.includes('locked by another process')) {
-        dialog.showMessageBox({
-          type: 'error',
-          title: 'Database Locked',
-          message: 'Another instance of Nimbalyst is already running.',
-          detail: 'The database is locked by another process. Please close the other instance before starting a new one.\n\nRunning multiple instances simultaneously can cause data corruption.',
-          buttons: ['Quit']
-        }).then(() => {
-          app.quit();
-        }).catch(() => {
-          app.quit();
-        });
-
+        this.showErrorAndQuit(
+          'Database Locked',
+          'Another instance of Nimbalyst is already running.',
+          'The database is locked by another process. Please close the other instance before starting a new one.\n\nRunning multiple instances simultaneously can cause data corruption.'
+        );
         // Don't re-throw - we're quitting
         return;
+      }
+
+      // Check for DATABASE_INIT_FAILED - offer restore if backups exist
+      if (error?.message?.includes('DATABASE_INIT_FAILED') || error?.message?.includes('Aborted')) {
+        const hasBackups = this.backupService && this.backupService.hasBackups();
+
+        if (hasBackups) {
+          logger.main.info('[PGLite Worker] Init failed but backups available - offering restore');
+          this.analytics.sendEvent('database_init_failed_with_backups', {
+            hasBackups: true
+          });
+
+          // Use shared recovery dialog with Quit option (since app can't continue without recovery)
+          const response = await dialog.showMessageBox(this.getRecoveryDialogOptions(true));
+
+          if (response.response === 0) {
+            // Restore from backup
+            logger.main.info('[PGLite Worker] User chose to restore from backup after init failure');
+            this.analytics.sendEvent('database_init_failed_recovery_choice', {
+              choice: 'restore_from_backup'
+            });
+
+            // backupService is guaranteed non-null here (checked via hasBackups above)
+            const restoreResult = await this.backupService!.restoreFromBackup();
+
+            if (restoreResult.success) {
+              logger.main.info(`[PGLite Worker] Successfully restored from ${restoreResult.source} backup`);
+
+              // Recreate worker and try again
+              try {
+                await this.recreateWorkerAndReinit();
+              } catch (reinitError) {
+                logger.main.error('[PGLite Worker] Re-initialization after restore failed:', reinitError);
+                this.showErrorAndQuit('Initialization Failed', 'Database was restored but failed to initialize.', this.formatError(reinitError));
+                return;
+              }
+
+              this.showInfoDialog('Database Restored', `Your database has been restored from the ${restoreResult.source} backup.`);
+              this.initialized = true;
+              return;
+            } else {
+              logger.main.error('[PGLite Worker] Restore failed:', restoreResult.error);
+              this.showErrorAndQuit('Restore Failed', 'Failed to restore from backup.', restoreResult.error || 'Unknown error');
+              return;
+            }
+          } else if (response.response === 1) {
+            // Start fresh - show confirmation dialog first
+            logger.main.info('[PGLite Worker] User clicked Start Fresh - showing confirmation');
+
+            const confirmed = await this.showStartFreshConfirmation();
+
+            if (!confirmed) {
+              // User cancelled - quit since we can't continue without recovery
+              logger.main.info('[PGLite Worker] User cancelled start fresh');
+              this.analytics.sendEvent('database_init_failed_recovery_choice', {
+                choice: 'start_fresh',
+                confirmed: false
+              });
+              app.quit();
+              return;
+            }
+
+            logger.main.info('[PGLite Worker] User confirmed start fresh after init failure');
+            this.analytics.sendEvent('database_init_failed_recovery_choice', {
+              choice: 'start_fresh',
+              confirmed: true
+            });
+
+            try {
+              await this.deleteDatabaseDirectory();
+
+              // Recreate worker and try again
+              try {
+                await this.recreateWorkerAndReinit();
+              } catch (reinitError) {
+                logger.main.error('[PGLite Worker] Re-initialization after delete failed:', reinitError);
+                this.showErrorAndQuit('Initialization Failed', 'Failed to initialize fresh database.', this.formatError(reinitError));
+                return;
+              }
+
+              this.showInfoDialog('Database Reset', 'A fresh database has been created.', 'Your previous AI chat sessions could not be recovered, but your document files are safe.');
+
+              this.initialized = true;
+              return;
+            } catch (deleteError) {
+              logger.main.error('[PGLite Worker] Failed to delete database directory:', deleteError);
+              this.showErrorAndQuit('Delete Failed', 'Failed to delete corrupted database.', this.formatError(deleteError));
+              return;
+            }
+          } else {
+            // User chose Quit
+            app.quit();
+            return;
+          }
+        }
       }
 
       // The worker should have already provided a detailed error message
@@ -542,9 +676,10 @@ export class PGLiteDatabaseWorker {
   }
 
   /**
-   * Get the recovery dialog options (shared between real recovery and dev menu preview)
+   * Get the recovery dialog options (shared between corruption recovery, init failure, and dev menu preview)
+   * @param includeQuit - If true, adds a "Quit" button for cases where the app cannot continue without recovery
    */
-  private getRecoveryDialogOptions(): Electron.MessageBoxOptions {
+  private getRecoveryDialogOptions(includeQuit: boolean = false): Electron.MessageBoxOptions {
     const backupStatus = this.backupService?.getBackupStatus();
     const backupTimestamp = backupStatus?.currentBackup?.timestamp
       || backupStatus?.previousBackup?.timestamp
@@ -563,16 +698,20 @@ export class PGLiteDatabaseWorker {
       });
     }
 
+    const buttons = includeQuit
+      ? ['Restore (Recommended)', 'Start Fresh', 'Quit']
+      : ['Restore (Recommended)', 'Start Fresh'];
+
     return {
       type: 'info',
-      title: 'Restore Your Data',
+      title: 'Nimbalyst - Restore Your Data',
       message: 'No file data has been lost.',
       detail: backupDateStr
         ? `Your files are safe, but your chat history will need to be restored from a backup dated ${backupDateStr}.`
         : `Your files are safe and your AI chat sessions can be restored from a recent backup.`,
-      buttons: ['Restore (Recommended)', 'Start Fresh'],
+      buttons,
       defaultId: 0,
-      cancelId: 1
+      cancelId: includeQuit ? 2 : 1
     };
   }
 
@@ -582,12 +721,7 @@ export class PGLiteDatabaseWorker {
    */
   async showRecoveryDialog(): Promise<void> {
     if (!this.backupService || !this.backupService.hasBackups()) {
-      dialog.showMessageBox({
-        type: 'info',
-        title: 'No Backups Available',
-        message: 'No backups are available to test the recovery dialog.',
-        buttons: ['OK']
-      });
+      this.showInfoDialog('No Backups Available', 'No backups are available to test the recovery dialog.');
       return;
     }
 
