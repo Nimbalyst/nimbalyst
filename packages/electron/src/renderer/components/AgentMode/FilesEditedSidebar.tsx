@@ -688,7 +688,7 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
     // Reveal file in system file browser
     if (typeof window !== 'undefined' && window.electronAPI) {
       try {
-        await window.electronAPI.invoke('shell:show-item-in-folder', filePath);
+        await window.electronAPI.invoke('show-in-finder', filePath);
       } catch (error) {
         console.error('[FilesEditedSidebar] Failed to reveal in finder:', error);
       }
