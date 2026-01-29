@@ -4,26 +4,27 @@
  * Similar to TrackerBottomPanel but contains multiple terminal instances
  * in a tabbed interface. Terminals are stored in a dedicated terminal store
  * separate from AI sessions.
+ *
+ * Uses Jotai atoms for terminal list state to enable reactive updates when
+ * terminals are created or deleted (e.g., from worktree archiving).
  */
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { useAtomValue } from 'jotai';
 import { MaterialSymbol } from '@nimbalyst/runtime';
+import { store } from '@nimbalyst/runtime/store';
 import { TerminalPanel } from '../Terminal/TerminalPanel';
 import { TerminalTab } from './TerminalTab';
 import { usePostHog } from 'posthog-js/react';
-
-// Type for terminal instance from electron API
-interface TerminalInstance {
-  id: string;
-  title: string;
-  shellName: string;
-  shellPath: string;
-  cwd: string;
-  worktreeId?: string;
-  createdAt: number;
-  lastActiveAt: number;
-  historyFile?: string;
-}
+import {
+  terminalListAtom,
+  activeTerminalIdAtom,
+  loadTerminals,
+  setActiveTerminal,
+  removeTerminalFromList,
+  initTerminalListeners,
+  type TerminalInstance,
+} from '../../store/atoms/terminals';
 
 interface TerminalBottomPanelProps {
   workspacePath: string;
@@ -44,49 +45,35 @@ export const TerminalBottomPanel: React.FC<TerminalBottomPanelProps> = ({
   minHeight = 150,
   maxHeight = 600,
 }) => {
-  const [terminals, setTerminals] = useState<TerminalInstance[]>([]);
-  const [activeTerminalId, setActiveTerminalId] = useState<string | undefined>();
+  // Use Jotai atoms for terminal state - enables reactive updates from IPC events
+  const terminals = useAtomValue(terminalListAtom);
+  const activeTerminalId = useAtomValue(activeTerminalIdAtom);
   const [isResizing, setIsResizing] = useState(false);
   const resizeStartY = useRef<number>(0);
   const resizeStartHeight = useRef<number>(0);
   const posthog = usePostHog();
 
-  // Load terminals from store on mount and when workspace changes
+  // Load terminals and set up IPC listeners on mount
   useEffect(() => {
-    let mounted = true;
-
-    const loadTerminals = async () => {
-      try {
-        const state = await window.electronAPI.terminal.getWorkspaceState(workspacePath);
-        if (mounted) {
-          // Convert terminals record to array in tab order
-          const terminalList = state.tabOrder
-            .map(id => state.terminals[id])
-            .filter((t): t is TerminalInstance => t !== undefined);
-          setTerminals(terminalList);
-          setActiveTerminalId(state.activeTerminalId);
-        }
-      } catch (error) {
-        console.error('[TerminalBottomPanel] Failed to load terminals:', error);
-      }
-    };
-
-    loadTerminals();
+    // Initial load
+    loadTerminals(workspacePath);
 
     // Listen for external terminal creation (e.g., from worktree button)
     const handleTerminalCreated = (event: Event) => {
       const customEvent = event as CustomEvent<{ terminalId: string }>;
       if (customEvent.detail?.terminalId) {
-        // Reload terminals to get the new one
-        loadTerminals();
+        loadTerminals(workspacePath);
       }
     };
 
     window.addEventListener('terminal:created', handleTerminalCreated);
 
+    // Set up IPC listeners for terminal list changes
+    const cleanupListeners = initTerminalListeners(workspacePath);
+
     return () => {
-      mounted = false;
       window.removeEventListener('terminal:created', handleTerminalCreated);
+      cleanupListeners();
     };
   }, [workspacePath]);
 
@@ -133,11 +120,8 @@ export const TerminalBottomPanel: React.FC<TerminalBottomPanelProps> = ({
       });
 
       if (result.success && result.instance) {
-        setTerminals(prev => [...prev, result.instance!]);
-        setActiveTerminalId(result.terminalId);
-
-        // Persist active terminal
-        await window.electronAPI.terminal.setActive(workspacePath, result.terminalId);
+        // Reload from backend to get the new terminal
+        await loadTerminals(workspacePath);
       }
     } catch (error) {
       console.error('[TerminalBottomPanel] Failed to create terminal:', error);
@@ -146,7 +130,7 @@ export const TerminalBottomPanel: React.FC<TerminalBottomPanelProps> = ({
 
   // Switch to terminal tab
   const handleSelectTerminal = useCallback(async (terminalId: string) => {
-    setActiveTerminalId(terminalId);
+    setActiveTerminal(terminalId);
     await window.electronAPI.terminal.setActive(workspacePath, terminalId);
   }, [workspacePath]);
 
@@ -155,20 +139,70 @@ export const TerminalBottomPanel: React.FC<TerminalBottomPanelProps> = ({
     try {
       await window.electronAPI.terminal.delete(workspacePath, terminalId);
 
-      setTerminals(prev => {
-        const filtered = prev.filter(t => t.id !== terminalId);
-        // If closing active terminal, switch to another one
-        if (activeTerminalId === terminalId) {
-          const newActive = filtered[0]?.id;
-          setActiveTerminalId(newActive);
-          window.electronAPI.terminal.setActive(workspacePath, newActive);
-        }
-        return filtered;
-      });
+      // Optimistically remove from atom
+      removeTerminalFromList(terminalId);
+
+      // If we closed the active terminal, the atom helper updates active too
+      const currentActive = store.get(activeTerminalIdAtom);
+      if (currentActive) {
+        await window.electronAPI.terminal.setActive(workspacePath, currentActive);
+      }
     } catch (error) {
       console.error('[TerminalBottomPanel] Failed to close terminal:', error);
     }
-  }, [workspacePath, activeTerminalId]);
+  }, [workspacePath]);
+
+  // Close all terminals except the specified one
+  const handleCloseOthers = useCallback(async (terminalId: string) => {
+    try {
+      const terminalsToClose = terminals.filter(t => t.id !== terminalId);
+      for (const terminal of terminalsToClose) {
+        await window.electronAPI.terminal.delete(workspacePath, terminal.id);
+        removeTerminalFromList(terminal.id);
+      }
+
+      setActiveTerminal(terminalId);
+      await window.electronAPI.terminal.setActive(workspacePath, terminalId);
+    } catch (error) {
+      console.error('[TerminalBottomPanel] Failed to close other terminals:', error);
+    }
+  }, [workspacePath, terminals]);
+
+  // Close all terminals
+  const handleCloseAll = useCallback(async () => {
+    try {
+      for (const terminal of terminals) {
+        await window.electronAPI.terminal.delete(workspacePath, terminal.id);
+        removeTerminalFromList(terminal.id);
+      }
+      setActiveTerminal(undefined);
+    } catch (error) {
+      console.error('[TerminalBottomPanel] Failed to close all terminals:', error);
+    }
+  }, [workspacePath, terminals]);
+
+  // Close terminals to the right of the specified one
+  const handleCloseToRight = useCallback(async (terminalId: string) => {
+    try {
+      const terminalIndex = terminals.findIndex(t => t.id === terminalId);
+      if (terminalIndex === -1) return;
+
+      const terminalsToClose = terminals.slice(terminalIndex + 1);
+      for (const terminal of terminalsToClose) {
+        await window.electronAPI.terminal.delete(workspacePath, terminal.id);
+        removeTerminalFromList(terminal.id);
+      }
+
+      // If active terminal was to the right, switch to the clicked one
+      const activeIndex = terminals.findIndex(t => t.id === activeTerminalId);
+      if (activeIndex > terminalIndex) {
+        setActiveTerminal(terminalId);
+        await window.electronAPI.terminal.setActive(workspacePath, terminalId);
+      }
+    } catch (error) {
+      console.error('[TerminalBottomPanel] Failed to close terminals to the right:', error);
+    }
+  }, [workspacePath, terminals, activeTerminalId]);
 
   // Close panel
   const handleClose = useCallback(() => {
@@ -243,13 +277,18 @@ export const TerminalBottomPanel: React.FC<TerminalBottomPanelProps> = ({
       <div className="terminal-bottom-panel flex flex-col h-full bg-[var(--nim-bg)] overflow-hidden">
         <div className="terminal-bottom-panel-header flex items-center justify-between h-8 px-1.5 bg-[var(--nim-bg-secondary)] border-b border-[var(--nim-border)] shrink-0">
           <div className="terminal-bottom-panel-tabs flex gap-0.5 items-center overflow-x-auto flex-1 min-w-0 [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:bg-[var(--nim-bg-tertiary)] [&::-webkit-scrollbar-thumb]:rounded-sm">
-            {terminals.map((terminal) => (
+            {terminals.map((terminal, index) => (
               <TerminalTab
                 key={terminal.id}
                 terminal={terminal}
                 isActive={activeTerminalId === terminal.id}
+                terminalIndex={index}
+                terminalCount={terminals.length}
                 onSelect={() => handleSelectTerminal(terminal.id)}
                 onClose={() => handleCloseTerminal(terminal.id)}
+                onCloseOthers={() => handleCloseOthers(terminal.id)}
+                onCloseAll={handleCloseAll}
+                onCloseToRight={() => handleCloseToRight(terminal.id)}
               />
             ))}
             <button

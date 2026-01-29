@@ -2,8 +2,9 @@
  * TerminalTab - Tab component for terminal instances in the bottom panel
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { MaterialSymbol } from '@nimbalyst/runtime';
+import { TerminalTabContextMenu } from './TerminalTabContextMenu';
 
 interface TerminalInstance {
   id: string;
@@ -21,16 +22,27 @@ interface TerminalInstance {
 interface TerminalTabProps {
   terminal: TerminalInstance;
   isActive: boolean;
+  terminalIndex: number;
+  terminalCount: number;
   onSelect: () => void;
   onClose: () => void;
+  onCloseOthers: () => void;
+  onCloseAll: () => void;
+  onCloseToRight: () => void;
 }
 
 export const TerminalTab: React.FC<TerminalTabProps> = ({
   terminal,
   isActive,
+  terminalIndex,
+  terminalCount,
   onSelect,
   onClose,
+  onCloseOthers,
+  onCloseAll,
+  onCloseToRight,
 }) => {
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   // Get shell icon based on shell name
   const getShellIcon = (shellName: string): string => {
     const name = shellName.toLowerCase();
@@ -70,16 +82,24 @@ export const TerminalTab: React.FC<TerminalTabProps> = ({
     }
   };
 
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ x: e.clientX, y: e.clientY });
+  };
+
   return (
-    <div
-      className={`terminal-tab group flex items-center gap-1 px-2 py-1 bg-transparent border-none text-xs cursor-pointer rounded whitespace-nowrap max-w-[200px] transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)] ${isActive ? 'active bg-[var(--nim-bg)] text-[var(--nim-text)] font-medium' : 'text-[var(--nim-text-muted)]'}`}
-      onClick={onSelect}
-      onKeyDown={handleKeyDown}
-      role="tab"
-      tabIndex={0}
-      aria-selected={isActive}
-      title={`${terminal.title}\n${terminal.cwd}\nShell: ${terminal.shellName}`}
-    >
+    <>
+      <div
+        className={`terminal-tab group flex items-center gap-1 px-2 py-1 bg-transparent border-none text-xs cursor-pointer rounded whitespace-nowrap max-w-[200px] transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)] ${isActive ? 'active bg-[var(--nim-bg)] text-[var(--nim-text)] font-medium' : 'text-[var(--nim-text-muted)]'}`}
+        onClick={onSelect}
+        onKeyDown={handleKeyDown}
+        onContextMenu={handleContextMenu}
+        role="tab"
+        tabIndex={0}
+        aria-selected={isActive}
+        title={`${terminal.title}\n${terminal.cwd}\nShell: ${terminal.shellName}`}
+      >
       {terminal.worktreeId ? (
         <MaterialSymbol icon="alt_route" size={14} title="Worktree terminal" />
       ) : (
@@ -97,5 +117,21 @@ export const TerminalTab: React.FC<TerminalTabProps> = ({
         <MaterialSymbol icon="close" size={12} />
       </button>
     </div>
+
+      {contextMenu && (
+        <TerminalTabContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          terminalId={terminal.id}
+          terminalCount={terminalCount}
+          terminalIndex={terminalIndex}
+          onClose={() => setContextMenu(null)}
+          onCloseTab={onClose}
+          onCloseOthers={onCloseOthers}
+          onCloseAll={onCloseAll}
+          onCloseToRight={onCloseToRight}
+        />
+      )}
+    </>
   );
 };
