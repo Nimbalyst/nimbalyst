@@ -372,6 +372,27 @@ export const UnifiedOnboarding: React.FC<UnifiedOnboardingProps> = ({
           >
             Get Started
           </button>
+          <p className="unified-onboarding-legal-links">
+            By continuing, you agree to our{' '}
+            <a
+              href="https://nimbalyst.com/terms-of-service"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="unified-onboarding-link"
+            >
+              Terms of Service
+            </a>{' '}
+            and{' '}
+            <a
+              href="https://nimbalyst.com/privacy-policy"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="unified-onboarding-link"
+            >
+              Privacy Policy
+            </a>
+            .
+          </p>
         </div>
       </div>
     </div>

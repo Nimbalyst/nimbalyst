@@ -433,6 +433,29 @@
   color: var(--nim-text-faint);
 }
 
+.disclaimer-text + .disclaimer-text {
+  margin-top: 8px;
+}
+
+.unified-onboarding-link {
+  color: var(--nim-link);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.unified-onboarding-link:hover {
+  color: var(--nim-link-hover);
+  text-decoration: underline;
+}
+
+.unified-onboarding-legal-links {
+  margin: 12px 0 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--nim-text-faint);
+  text-align: center;
+}
+
 .unified-onboarding-footer {
   padding: 16px 32px;
   border-top: 1px solid var(--nim-border);
@@ -443,6 +466,7 @@
 }
 
 .unified-onboarding-footer-single {
+  flex-direction: column;
   justify-content: center;
 }
 
