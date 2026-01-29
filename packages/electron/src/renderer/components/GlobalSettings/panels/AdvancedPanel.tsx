@@ -10,11 +10,15 @@ import {
   developerFeatureSettingsAtom,
   setDeveloperFeatureSettingsAtom,
   customPathDirsAtom,
+  externalEditorSettingsAtom,
+  setExternalEditorSettingsAtom,
+  EXTERNAL_EDITOR_NAMES,
   DEVELOPER_FEATURES,
   areAllDeveloperFeaturesEnabled,
   enableAllDeveloperFeatures,
   disableAllDeveloperFeatures,
   type ReleaseChannel,
+  type ExternalEditorType,
 } from '../../../store/atoms/appSettings';
 import { ALPHA_FEATURES, areAllAlphaFeaturesEnabled, enableAllAlphaFeatures as enableAllAlphaFeaturesUtil, disableAllAlphaFeatures } from '../../../../shared/alphaFeatures';
 
@@ -44,6 +48,11 @@ export function AdvancedPanel() {
   const [developerSettings] = useAtom(developerFeatureSettingsAtom);
   const [, updateDeveloperSettings] = useAtom(setDeveloperFeatureSettingsAtom);
   const { developerMode, developerFeatures } = developerSettings;
+
+  // External editor settings from Jotai atoms
+  const [externalEditorSettings] = useAtom(externalEditorSettingsAtom);
+  const [, updateExternalEditorSettings] = useAtom(setExternalEditorSettingsAtom);
+  const { editorType: externalEditorType, customPath: externalEditorCustomPath } = externalEditorSettings;
 
   // Handle developer mode change
   const handleDeveloperModeChange = async (enabled: boolean) => {
@@ -500,6 +509,55 @@ export function AdvancedPanel() {
             <span className="text-[13px] text-[var(--nim-text-faint)]">
               Show all guides again from the beginning
             </span>
+          </div>
+        )}
+      </div>
+
+      <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
+        <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">External Editor</h4>
+        <p className="text-sm leading-relaxed text-[var(--nim-text-muted)] mb-4">
+          Configure a preferred external editor to open files from the file tree context menu.
+        </p>
+
+        <div className="setting-item py-3">
+          <div className="setting-text flex flex-col gap-0.5">
+            <span className="setting-name text-sm font-medium text-[var(--nim-text)]">Preferred Editor</span>
+            <span className="setting-description text-xs leading-relaxed text-[var(--nim-text-muted)]">
+              Select an external editor for the "Open in..." context menu option.
+            </span>
+          </div>
+          <select
+            value={externalEditorType}
+            onChange={(e) => updateExternalEditorSettings({ editorType: e.target.value as ExternalEditorType })}
+            className="setting-select mt-2 w-full py-2 px-3 pr-9 rounded-md text-sm bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] text-[var(--nim-text)] outline-none appearance-none bg-[url('data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2012%2012%22%3E%3Cpath%20fill%3D%22%236b7280%22%20d%3D%22M3%204.5L6%207.5L9%204.5%22%2F%3E%3C%2Fsvg%3E')] bg-no-repeat bg-[right_12px_center] focus:border-[var(--nim-primary)]"
+          >
+            <option value="none">None</option>
+            <option value="vscode">VS Code</option>
+            <option value="cursor">Cursor</option>
+            <option value="webstorm">WebStorm</option>
+            <option value="sublime">Sublime Text</option>
+            <option value="vim">Vim (opens in Terminal)</option>
+            <option value="nvim">Neovim (opens in Terminal)</option>
+            <option value="custom">Custom...</option>
+          </select>
+        </div>
+
+        {externalEditorType === 'custom' && (
+          <div className="setting-item py-3">
+            <div className="setting-text flex flex-col gap-0.5 mb-2">
+              <span className="setting-name text-sm font-medium text-[var(--nim-text)]">Custom Editor Command</span>
+              <span className="setting-description text-xs leading-relaxed text-[var(--nim-text-muted)]">
+                Enter the command or path to your preferred editor executable.
+                The file path will be passed as the first argument.
+              </span>
+            </div>
+            <input
+              type="text"
+              value={externalEditorCustomPath || ''}
+              onChange={(e) => updateExternalEditorSettings({ customPath: e.target.value })}
+              placeholder={process.platform === 'win32' ? 'C:\\Program Files\\Editor\\editor.exe' : '/usr/local/bin/myeditor'}
+              className="w-full py-2 px-3 rounded-md text-sm bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] text-[var(--nim-text)] outline-none focus:border-[var(--nim-primary)] font-mono"
+            />
           </div>
         )}
       </div>

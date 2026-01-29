@@ -29,6 +29,8 @@ import {
   initAgentModeSettings,
   developerFeatureSettingsAtom,
   initDeveloperFeatureSettings,
+  externalEditorSettingsAtom,
+  initExternalEditorSettings,
 } from './store/atoms/appSettings';
 
 // console.log('[RENDERER] Imports complete at', new Date().toISOString());
@@ -67,6 +69,9 @@ await Promise.all([
   }),
   initDeveloperFeatureSettings().then((settings) => {
     store.set(developerFeatureSettingsAtom, settings);
+  }),
+  initExternalEditorSettings().then((settings) => {
+    store.set(externalEditorSettingsAtom, settings);
   }),
 ]).catch(() => {
   // Ignore errors - settings will use defaults

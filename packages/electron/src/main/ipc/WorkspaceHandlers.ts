@@ -3,7 +3,7 @@ import { readFileSync, readdirSync, statSync, existsSync, promises as fsPromises
 import * as fs from 'fs';
 import { join, basename, dirname, extname } from 'path';
 import * as path from 'path';
-import { exec, execFile } from 'child_process';
+import { exec, execFile, spawn } from 'child_process';
 import { promisify } from 'util';
 import os from 'os';
 import * as chardet from 'chardet';
@@ -23,7 +23,8 @@ import {
     addWorkspaceRecentFile,
     store,
     getWorkspaceState,
-    updateWorkspaceState
+    updateWorkspaceState,
+    getAppSetting
 } from '../utils/store';
 import { loadFileIntoWindow } from '../file/FileOperations';
 import { safeHandle, safeOn } from '../utils/ipcRegistry';
@@ -875,6 +876,84 @@ export function registerWorkspaceHandlers() {
         } catch (error: any) {
             console.error('Error showing in finder:', error);
             return { success: false, error: error.message };
+        }
+    });
+
+    // Open file/folder in external editor
+    safeHandle('open-in-external-editor', async (event, filePath: string) => {
+        if (!filePath) {
+            return { success: false, error: 'File path is required' };
+        }
+
+        const editorType = getAppSetting('externalEditorType') as string | undefined;
+        const customPath = getAppSetting('externalEditorCustomPath') as string | undefined;
+
+        if (!editorType || editorType === 'none') {
+            return { success: false, error: 'No external editor configured' };
+        }
+
+        // Map editor type to command
+        const editorCommands: Record<string, string> = {
+            vscode: 'code',
+            cursor: 'cursor',
+            webstorm: 'webstorm',
+            sublime: 'subl',
+            vim: 'vim',
+            nvim: 'nvim',
+        };
+
+        let command: string;
+        if (editorType === 'custom') {
+            if (!customPath) {
+                return { success: false, error: 'Custom editor path not configured' };
+            }
+            command = customPath;
+        } else {
+            command = editorCommands[editorType];
+            if (!command) {
+                return { success: false, error: `Unknown editor type: ${editorType}` };
+            }
+        }
+
+        try {
+            // For terminal-based editors (vim, nvim), we need special handling
+            const isTerminalEditor = editorType === 'vim' || editorType === 'nvim';
+
+            if (isTerminalEditor && process.platform === 'darwin') {
+                // On macOS, open terminal with the editor
+                // Use osascript to open Terminal.app with the command
+                const escapedPath = filePath.replace(/'/g, "'\\''");
+                const script = `tell application "Terminal"
+                    activate
+                    do script "${command} '${escapedPath}'"
+                end tell`;
+                spawn('osascript', ['-e', script], {
+                    detached: true,
+                    stdio: 'ignore',
+                }).unref();
+            } else {
+                // For GUI editors, spawn directly
+                const child = spawn(command, [filePath], {
+                    detached: true,
+                    stdio: 'ignore',
+                });
+                child.unref();
+            }
+
+            // Track analytics
+            const analytics = AnalyticsService.getInstance();
+            const fileExt = extname(filePath).toLowerCase();
+            const isDirectory = existsSync(filePath) && statSync(filePath).isDirectory();
+            analytics.sendEvent('file_opened_in_external_editor', {
+                editor_type: editorType,
+                file_extension: isDirectory ? 'directory' : fileExt,
+                is_directory: isDirectory,
+            });
+
+            return { success: true };
+        } catch (error: any) {
+            console.error('Error opening file in external editor:', error);
+            return { success: false, error: error.message || 'Failed to open external editor' };
         }
     });
 

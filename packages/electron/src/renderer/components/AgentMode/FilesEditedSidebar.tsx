@@ -19,6 +19,13 @@ import type { FileEditSummary } from '@nimbalyst/runtime';
 import { diffTreeGroupByDirectoryAtom, setDiffTreeGroupByDirectoryAtom } from '../../store/atoms/projectState';
 import { workstreamSessionsAtom, sessionTitleAtom } from '../../store/atoms/sessions';
 import {
+  hasExternalEditorAtom,
+  externalEditorNameAtom,
+  openInExternalEditorAtom,
+  revealInFinderAtom,
+  copyFilePathAtom,
+} from '../../store/atoms/appSettings';
+import {
   workstreamStagedFilesAtom,
   setWorkstreamStagedFilesAtom,
 } from '../../store/atoms/workstreamState';
@@ -101,6 +108,13 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
   const stagedFilesArr = useAtomValue(workstreamStagedFilesAtom(workstreamId));
   const stagedFiles = useMemo(() => new Set(stagedFilesArr), [stagedFilesArr]);
   const setStagedFilesAction = useSetAtom(setWorkstreamStagedFilesAtom);
+
+  // File action atoms
+  const hasExternalEditor = useAtomValue(hasExternalEditorAtom);
+  const externalEditorName = useAtomValue(externalEditorNameAtom);
+  const openInExternalEditor = useSetAtom(openInExternalEditorAtom);
+  const revealInFinder = useSetAtom(revealInFinderAtom);
+  const copyFilePath = useSetAtom(copyFilePathAtom);
 
   const setGroupByDirectory = useCallback((value: boolean) => {
     if (workspacePath) {
@@ -678,22 +692,16 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
   }, [workspacePath]);
 
   const handleCopyPath = useCallback((filePath: string) => {
-    // Copy file path to clipboard
-    navigator.clipboard.writeText(filePath).catch(error => {
-      console.error('[FilesEditedSidebar] Failed to copy path:', error);
-    });
-  }, []);
+    copyFilePath(filePath);
+  }, [copyFilePath]);
 
-  const handleRevealInFinder = useCallback(async (filePath: string) => {
-    // Reveal file in system file browser
-    if (typeof window !== 'undefined' && window.electronAPI) {
-      try {
-        await window.electronAPI.invoke('show-in-finder', filePath);
-      } catch (error) {
-        console.error('[FilesEditedSidebar] Failed to reveal in finder:', error);
-      }
-    }
-  }, []);
+  const handleRevealInFinder = useCallback((filePath: string) => {
+    revealInFinder(filePath);
+  }, [revealInFinder]);
+
+  const handleOpenInExternalEditor = useCallback((filePath: string) => {
+    openInExternalEditor(filePath);
+  }, [openInExternalEditor]);
 
   return (
     <div className="files-edited-sidebar shrink-0 flex flex-col h-full bg-[var(--nim-bg-secondary)]" style={{ width }}>
@@ -787,6 +795,8 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
             onOpenInFiles={handleOpenInFiles}
             onCopyPath={handleCopyPath}
             onRevealInFinder={handleRevealInFinder}
+            onOpenInExternalEditor={hasExternalEditor ? handleOpenInExternalEditor : undefined}
+            externalEditorName={externalEditorName}
             showCheckboxes={true}
             selectedFiles={worktreeId ? worktreeStagedFiles : stagedFiles}
             onSelectionChange={handleSelectionChange}

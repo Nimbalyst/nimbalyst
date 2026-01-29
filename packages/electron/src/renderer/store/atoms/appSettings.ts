@@ -1649,3 +1649,199 @@ export async function initDeveloperFeatureSettings(): Promise<DeveloperFeatureSe
 
 // Re-export developer feature helpers for use in UI
 export { DEVELOPER_FEATURES, areAllDeveloperFeaturesEnabled, enableAllDeveloperFeatures, disableAllDeveloperFeatures };
+
+// ============================================================================
+// PHASE 8: External Editor Settings
+// ============================================================================
+
+/**
+ * External editor type options.
+ * 'none' means no external editor is configured.
+ */
+export type ExternalEditorType = 'none' | 'vscode' | 'cursor' | 'webstorm' | 'sublime' | 'vim' | 'nvim' | 'custom';
+
+/**
+ * Display names for external editors.
+ */
+export const EXTERNAL_EDITOR_NAMES: Record<ExternalEditorType, string> = {
+  none: 'None',
+  vscode: 'VS Code',
+  cursor: 'Cursor',
+  webstorm: 'WebStorm',
+  sublime: 'Sublime Text',
+  vim: 'Vim',
+  nvim: 'Neovim',
+  custom: 'Custom',
+};
+
+/**
+ * External editor settings.
+ */
+export interface ExternalEditorSettings {
+  editorType: ExternalEditorType;
+  customPath?: string;
+}
+
+/**
+ * Default external editor settings.
+ */
+const defaultExternalEditorSettings: ExternalEditorSettings = {
+  editorType: 'none',
+  customPath: '',
+};
+
+/**
+ * The main external editor settings atom.
+ * Should be initialized from IPC on app load.
+ */
+export const externalEditorSettingsAtom = atom<ExternalEditorSettings>(defaultExternalEditorSettings);
+
+/**
+ * Debounce timer for external editor settings persistence.
+ */
+let externalEditorPersistTimer: ReturnType<typeof setTimeout> | null = null;
+const EXTERNAL_EDITOR_PERSIST_DEBOUNCE_MS = 500;
+
+/**
+ * Persist external editor settings to main process.
+ */
+function scheduleExternalEditorPersist(settings: ExternalEditorSettings): void {
+  if (externalEditorPersistTimer) {
+    clearTimeout(externalEditorPersistTimer);
+  }
+  externalEditorPersistTimer = setTimeout(async () => {
+    externalEditorPersistTimer = null;
+    if (typeof window !== 'undefined' && window.electronAPI) {
+      await window.electronAPI.invoke('external-editor:set-settings', settings);
+    }
+  }, EXTERNAL_EDITOR_PERSIST_DEBOUNCE_MS);
+}
+
+// === Derived read-only atoms (slices) ===
+
+/**
+ * External editor type.
+ */
+export const externalEditorTypeAtom = atom(
+  (get) => get(externalEditorSettingsAtom).editorType
+);
+
+/**
+ * Custom external editor path.
+ */
+export const externalEditorCustomPathAtom = atom(
+  (get) => get(externalEditorSettingsAtom).customPath
+);
+
+/**
+ * Whether an external editor is configured.
+ */
+export const hasExternalEditorAtom = atom(
+  (get) => get(externalEditorSettingsAtom).editorType !== 'none'
+);
+
+// === Setter atoms ===
+
+/**
+ * Set external editor settings (partial update).
+ * Merges with existing settings and triggers persist.
+ */
+export const setExternalEditorSettingsAtom = atom(
+  null,
+  (get, set, updates: Partial<ExternalEditorSettings>) => {
+    const current = get(externalEditorSettingsAtom);
+    const newSettings = { ...current, ...updates };
+    set(externalEditorSettingsAtom, newSettings);
+    scheduleExternalEditorPersist(newSettings);
+  }
+);
+
+/**
+ * Initialize external editor settings from IPC.
+ * Call this once at app startup.
+ */
+export async function initExternalEditorSettings(): Promise<ExternalEditorSettings> {
+  if (typeof window === 'undefined' || !window.electronAPI) {
+    return defaultExternalEditorSettings;
+  }
+
+  try {
+    const settings = await window.electronAPI.invoke('external-editor:get-settings');
+    if (settings) {
+      return {
+        editorType: settings.editorType ?? defaultExternalEditorSettings.editorType,
+        customPath: settings.customPath ?? defaultExternalEditorSettings.customPath,
+      };
+    }
+  } catch (error) {
+    console.error('[appSettings] Failed to load external editor settings:', error);
+  }
+
+  return defaultExternalEditorSettings;
+}
+
+/**
+ * Derived atom for the external editor display name.
+ * Returns undefined if no editor is configured.
+ */
+export const externalEditorNameAtom = atom((get) => {
+  const editorType = get(externalEditorTypeAtom);
+  if (editorType === 'none') return undefined;
+  return EXTERNAL_EDITOR_NAMES[editorType];
+});
+
+// ============================================================================
+// FILE ACTIONS
+// Action atoms for common file operations. Components can use these directly
+// without prop drilling callbacks.
+// ============================================================================
+
+/**
+ * Action atom to open a file in the configured external editor.
+ * No-op if no external editor is configured.
+ */
+export const openInExternalEditorAtom = atom(
+  null,
+  async (get, _set, filePath: string) => {
+    const hasEditor = get(hasExternalEditorAtom);
+    if (!hasEditor) return;
+
+    if (typeof window !== 'undefined' && window.electronAPI) {
+      try {
+        await window.electronAPI.openInExternalEditor(filePath);
+      } catch (error) {
+        console.error('[appSettings] Failed to open in external editor:', error);
+      }
+    }
+  }
+);
+
+/**
+ * Action atom to reveal a file in the system file browser (Finder on macOS).
+ */
+export const revealInFinderAtom = atom(
+  null,
+  async (_get, _set, filePath: string) => {
+    if (typeof window !== 'undefined' && window.electronAPI) {
+      try {
+        await window.electronAPI.invoke('show-in-finder', filePath);
+      } catch (error) {
+        console.error('[appSettings] Failed to reveal in finder:', error);
+      }
+    }
+  }
+);
+
+/**
+ * Action atom to copy a file path to the clipboard.
+ */
+export const copyFilePathAtom = atom(
+  null,
+  async (_get, _set, filePath: string) => {
+    try {
+      await navigator.clipboard.writeText(filePath);
+    } catch (error) {
+      console.error('[appSettings] Failed to copy path to clipboard:', error);
+    }
+  }
+);

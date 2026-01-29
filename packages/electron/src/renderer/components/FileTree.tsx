@@ -562,13 +562,6 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, showIcon
     }
   }, []);
 
-  const handleShowInFinder = useCallback(async (filePath: string) => {
-    const result = await window.electronAPI.showInFinder(filePath);
-    if (!result.success) {
-      console.error('Failed to show in finder:', result.error);
-    }
-  }, []);
-
   // Drag and drop handlers
   const handleDragStart = useCallback((e: React.DragEvent, item: FileTreeItem) => {
     // Prevent dragging by the icon
@@ -851,7 +844,6 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, showIcon
           onDelete={handleDelete}
           onDeleteMultiple={handleDeleteMultiple}
           onOpenInDefaultApp={handleOpenInDefaultApp}
-          onShowInFinder={handleShowInFinder}
           onNewFile={onNewFile}
           onNewFolder={onNewFolder}
           onViewHistory={onViewHistory}

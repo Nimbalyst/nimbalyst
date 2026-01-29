@@ -50,6 +50,10 @@ interface AgentTranscriptPanelProps {
   groupByDirectory?: boolean;
   /** Callback when groupByDirectory changes */
   onGroupByDirectoryChange?: (value: boolean) => void;
+  /** Optional: Callback to open file in external editor */
+  onOpenInExternalEditor?: (filePath: string) => void;
+  /** Optional: Display name for external editor (e.g., "VS Code") */
+  externalEditorName?: string;
   /** Optional: Callback to trigger /compact command */
   onCompact?: () => void;
   /** Optional: Prompt additions for debugging (system prompt and user message additions) */
@@ -82,6 +86,8 @@ const AgentTranscriptPanelComponent: React.FC<AgentTranscriptPanelProps> = ({
   pendingReviewFiles,
   groupByDirectory,
   onGroupByDirectoryChange,
+  onOpenInExternalEditor,
+  externalEditorName,
   onCompact,
   promptAdditions
 }) => {
@@ -333,6 +339,8 @@ const AgentTranscriptPanelComponent: React.FC<AgentTranscriptPanelProps> = ({
                   pendingReviewFiles={pendingReviewFiles}
                   groupByDirectory={groupByDirectory}
                   onGroupByDirectoryChange={onGroupByDirectoryChange}
+                  onOpenInExternalEditor={onOpenInExternalEditor}
+                  externalEditorName={externalEditorName}
                 />
               </div>
 

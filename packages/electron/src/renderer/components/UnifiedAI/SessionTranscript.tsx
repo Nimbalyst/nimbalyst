@@ -53,7 +53,7 @@ import {
 } from '../../store';
 import { convertToWorkstreamAtom } from '../../store/atoms/sessions';
 import { usePostHog } from 'posthog-js/react';
-import { setAgentModeSettingsAtom, showPromptAdditionsAtom } from '../../store/atoms/appSettings';
+import { setAgentModeSettingsAtom, showPromptAdditionsAtom, hasExternalEditorAtom, externalEditorNameAtom, openInExternalEditorAtom } from '../../store/atoms/appSettings';
 
 interface Todo {
   status: 'pending' | 'in_progress' | 'completed';
@@ -164,6 +164,11 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   // Show prompt additions setting (dev mode only)
   const showPromptAdditions = useAtomValue(showPromptAdditionsAtom);
 
+  // File action atoms
+  const hasExternalEditor = useAtomValue(hasExternalEditorAtom);
+  const externalEditorName = useAtomValue(externalEditorNameAtom);
+  const openInExternalEditor = useSetAtom(openInExternalEditorAtom);
+
   // Local state
   const [todos, setTodos] = useState<Todo[]>([]);
   const [queuedPrompts, setQueuedPrompts] = useState<any[]>([]);
@@ -202,6 +207,23 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
       loadSessionData({ sessionId, workspacePath });
     }
   }, [sessionId, workspacePath, sessionData, loadSessionData]);
+
+  // ============================================================
+  // Auto-focus input when session data loads
+  // ============================================================
+  const hasFocusedRef = useRef(false);
+  useEffect(() => {
+    // Only focus once per session, and only after sessionData is available
+    if (!sessionData || hasFocusedRef.current) return;
+    hasFocusedRef.current = true;
+
+    // Use setTimeout to ensure the DOM is ready after render
+    // (RAF can be cancelled by rapid re-renders before it executes)
+    setTimeout(() => {
+      console.log('[SessionTranscript] Auto-focusing input, inputRef:', inputRef.current);
+      inputRef.current?.focus();
+    }, 0);
+  }, [sessionData]);
 
   // ============================================================
   // Subscribe to IPC events for session updates
@@ -723,6 +745,10 @@ ${message}`;
     onFileClick?.(filePath);
   }, [onFileClick]);
 
+  const handleOpenInExternalEditor = useCallback((filePath: string) => {
+    openInExternalEditor(filePath);
+  }, [openInExternalEditor]);
+
   const handleCompact = useCallback(async () => {
     if (!sessionData) return;
 
@@ -1092,6 +1118,8 @@ ${message}`;
           pendingReviewFiles={pendingReviewFiles}
           groupByDirectory={groupByDirectory}
           onGroupByDirectoryChange={setGroupByDirectory}
+          onOpenInExternalEditor={hasExternalEditor ? handleOpenInExternalEditor : undefined}
+          externalEditorName={externalEditorName}
           onCompact={handleCompact}
           promptAdditions={promptAdditions}
         />

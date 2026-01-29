@@ -245,6 +245,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   renameFile: (oldPath: string, newName: string) => ipcRenderer.invoke('rename-file', oldPath, newName),
   deleteFile: (filePath: string) => ipcRenderer.invoke('delete-file', filePath),
   openInDefaultApp: (filePath: string) => ipcRenderer.invoke('open-in-default-app', filePath),
+  openInExternalEditor: (filePath: string) => ipcRenderer.invoke('open-in-external-editor', filePath),
   openSessionManager: (filterWorkspace?: string) => ipcRenderer.invoke('open-session-manager', filterWorkspace),
   showInFinder: (filePath: string) => ipcRenderer.invoke('show-in-finder', filePath),
   moveFile: (sourcePath: string, targetPath: string) => ipcRenderer.invoke('move-file', sourcePath, targetPath),

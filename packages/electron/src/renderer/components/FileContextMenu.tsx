@@ -1,6 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import type { NewFileType, ExtensionFileType } from './NewFileMenu';
+import {
+  hasExternalEditorAtom,
+  externalEditorNameAtom,
+  openInExternalEditorAtom,
+  revealInFinderAtom,
+  copyFilePathAtom,
+} from '../store/atoms/appSettings';
 
 interface FileContextMenuProps {
   x: number;
@@ -13,7 +21,6 @@ interface FileContextMenuProps {
   onDelete: (filePath: string) => void;
   onDeleteMultiple?: (filePaths: string[]) => void;
   onOpenInDefaultApp: (filePath: string) => void;
-  onShowInFinder: (filePath: string) => void;
   onNewFile?: (folderPath: string, fileType: NewFileType) => void;
   onNewFolder?: (folderPath: string) => void;
   onViewHistory?: (filePath: string) => void;
@@ -34,7 +41,6 @@ export function FileContextMenu({
   onDelete,
   onDeleteMultiple,
   onOpenInDefaultApp,
-  onShowInFinder,
   onNewFile,
   onNewFolder,
   onViewHistory,
@@ -47,6 +53,13 @@ export function FileContextMenu({
   const [newName, setNewName] = useState(fileName);
   const inputRef = useRef<HTMLInputElement>(null);
   const [adjustedPosition, setAdjustedPosition] = useState({ x, y });
+
+  // File action atoms
+  const hasExternalEditor = useAtomValue(hasExternalEditorAtom);
+  const externalEditorName = useAtomValue(externalEditorNameAtom);
+  const openInExternalEditor = useSetAtom(openInExternalEditorAtom);
+  const revealInFinder = useSetAtom(revealInFinderAtom);
+  const copyFilePath = useSetAtom(copyFilePathAtom);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -152,18 +165,19 @@ export function FileContextMenu({
     onClose();
   };
 
-  const handleShowInFinder = () => {
-    onShowInFinder(filePath);
+  const handleOpenInExternalEditor = () => {
+    openInExternalEditor(filePath);
     onClose();
   };
 
-  const handleCopyPath = async () => {
-    try {
-      await navigator.clipboard.writeText(filePath);
-      onClose();
-    } catch (error) {
-      console.error('Failed to copy path to clipboard:', error);
-    }
+  const handleShowInFinder = () => {
+    revealInFinder(filePath);
+    onClose();
+  };
+
+  const handleCopyPath = () => {
+    copyFilePath(filePath);
+    onClose();
   };
 
   const handleDelete = () => {
@@ -299,6 +313,12 @@ export function FileContextMenu({
             </div>
           )}
           {(onNewFile || onNewFolder) && <div className={separatorClasses} />}
+          {hasExternalEditor && (
+            <div className={menuItemClasses} onClick={handleOpenInExternalEditor}>
+              <MaterialSymbol icon="open_in_new" size={18} />
+              <span>Open in {externalEditorName}</span>
+            </div>
+          )}
           {onViewWorkspaceHistory && (
             <div className={menuItemClasses} onClick={() => { onViewWorkspaceHistory(filePath); onClose(); }}>
               <MaterialSymbol icon="history" size={18} />
@@ -314,6 +334,12 @@ export function FileContextMenu({
             <MaterialSymbol icon="launch" size={18} />
             <span>Open in Default App</span>
           </div>
+          {hasExternalEditor && (
+            <div className={menuItemClasses} onClick={handleOpenInExternalEditor}>
+              <MaterialSymbol icon="open_in_new" size={18} />
+              <span>Open in {externalEditorName}</span>
+            </div>
+          )}
           {onViewHistory && (
             <div className={menuItemClasses} onClick={() => { onViewHistory(filePath); onClose(); }}>
               <MaterialSymbol icon="history" size={18} />

@@ -22,6 +22,10 @@ interface FileEditsSidebarProps {
   onCopyPath?: (filePath: string) => void;
   /** Callback to reveal file in system file browser */
   onRevealInFinder?: (filePath: string) => void;
+  /** Callback to open file in external editor */
+  onOpenInExternalEditor?: (filePath: string) => void;
+  /** Display name for the external editor (e.g., "VS Code") */
+  externalEditorName?: string;
   /** Whether to show checkboxes for file selection (Manual/Worktree mode) */
   showCheckboxes?: boolean;
   /** Set of selected file paths (for checkbox state) */
@@ -66,6 +70,8 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
   onViewDiff,
   onCopyPath,
   onRevealInFinder,
+  onOpenInExternalEditor,
+  externalEditorName,
   showCheckboxes = false,
   selectedFiles,
   onSelectionChange,
@@ -412,7 +418,7 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
   const renderContextMenu = () => {
     if (!contextMenu.isOpen) return null;
 
-    const hasContextActions = onOpenInFiles || onViewDiff || onCopyPath || onRevealInFinder;
+    const hasContextActions = onOpenInFiles || onViewDiff || onCopyPath || onRevealInFinder || onOpenInExternalEditor;
     if (!hasContextActions) return null;
 
     return (
@@ -445,7 +451,19 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
             View Diff
           </button>
         )}
-        {(onOpenInFiles || onViewDiff) && (onCopyPath || onRevealInFinder) && (
+        {onOpenInExternalEditor && externalEditorName && (
+          <button
+            className="file-edits-sidebar__context-menu-item w-full flex items-center gap-2 px-3 py-1.5 text-[0.8125rem] text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)] text-left"
+            onClick={() => {
+              onOpenInExternalEditor(contextMenu.filePath);
+              closeContextMenu();
+            }}
+          >
+            <MaterialSymbol icon="open_in_new" size={16} className="text-[var(--nim-text-muted)]" />
+            Open in {externalEditorName}
+          </button>
+        )}
+        {(onOpenInFiles || onViewDiff || onOpenInExternalEditor) && (onCopyPath || onRevealInFinder) && (
           <div className="file-edits-sidebar__context-menu-divider h-px bg-[var(--nim-border)] my-1" />
         )}
         {onCopyPath && (

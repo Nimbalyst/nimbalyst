@@ -115,6 +115,7 @@ interface ElectronAPI {
   renameFile: (oldPath: string, newName: string) => Promise<{ success: boolean; newPath?: string; error?: string }>;
   deleteFile: (filePath: string) => Promise<{ success: boolean; error?: string }>;
   openInDefaultApp: (filePath: string) => Promise<{ success: boolean; error?: string }>;
+  openInExternalEditor: (filePath: string) => Promise<{ success: boolean; error?: string }>;
   openSessionManager: (filterWorkspace?: string) => Promise<void>;
   showInFinder: (filePath: string) => Promise<{ success: boolean; error?: string }>;
   moveFile: (sourcePath: string, targetPath: string) => Promise<{ success: boolean; newPath?: string; error?: string }>;

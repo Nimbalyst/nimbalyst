@@ -1,6 +1,14 @@
 import React, { useCallback, useEffect, useRef, useState, memo } from 'react';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { Tab } from './TabManager';
 import { useTabDirty, useTabHasUnacceptedChanges } from '../../hooks/useTabState';
+import {
+  hasExternalEditorAtom,
+  externalEditorNameAtom,
+  openInExternalEditorAtom,
+  revealInFinderAtom,
+  copyFilePathAtom,
+} from '../../store/atoms/appSettings';
 
 // Separate component for dirty indicator - subscribes to its own tab's dirty state
 // This allows only this component to re-render when dirty state changes
@@ -202,6 +210,13 @@ export const TabBar: React.FC<TabBarProps> = ({
   onToggleAIChat,
   isAIChatCollapsed = false
 }) => {
+  // File action atoms
+  const hasExternalEditor = useAtomValue(hasExternalEditorAtom);
+  const externalEditorName = useAtomValue(externalEditorNameAtom);
+  const openInExternalEditor = useSetAtom(openInExternalEditorAtom);
+  const revealInFinder = useSetAtom(revealInFinderAtom);
+  const copyFilePath = useSetAtom(copyFilePathAtom);
+
   const [contextMenuTab, setContextMenuTab] = useState<string | null>(null);
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
   const [adjustedContextMenuPosition, setAdjustedContextMenuPosition] = useState<{ x: number; y: number } | null>(null);
@@ -343,6 +358,36 @@ export const TabBar: React.FC<TabBarProps> = ({
     }
     closeContextMenu();
   }, [contextMenuTab, onViewHistory, closeContextMenu]);
+
+  const handleOpenInExternalEditor = useCallback(() => {
+    if (contextMenuTab) {
+      const tab = tabs.find(t => t.id === contextMenuTab);
+      if (tab) {
+        openInExternalEditor(tab.filePath);
+      }
+    }
+    closeContextMenu();
+  }, [contextMenuTab, openInExternalEditor, tabs, closeContextMenu]);
+
+  const handleShowInFinder = useCallback(() => {
+    if (contextMenuTab) {
+      const tab = tabs.find(t => t.id === contextMenuTab);
+      if (tab) {
+        revealInFinder(tab.filePath);
+      }
+    }
+    closeContextMenu();
+  }, [contextMenuTab, revealInFinder, tabs, closeContextMenu]);
+
+  const handleCopyPath = useCallback(() => {
+    if (contextMenuTab) {
+      const tab = tabs.find(t => t.id === contextMenuTab);
+      if (tab) {
+        copyFilePath(tab.filePath);
+      }
+    }
+    closeContextMenu();
+  }, [contextMenuTab, copyFilePath, tabs, closeContextMenu]);
 
   // Drag and drop handlers
   const handleDragStart = useCallback((e: React.DragEvent, index: number) => {
@@ -734,6 +779,18 @@ export const TabBar: React.FC<TabBarProps> = ({
               </div>
             </>
           )}
+          <div className="context-menu-separator h-px bg-[var(--nim-border)] my-1" />
+          {hasExternalEditor && (
+            <div className="context-menu-item px-4 py-2 text-[13px] text-[var(--nim-text-muted)] cursor-pointer transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]" onClick={handleOpenInExternalEditor}>
+              Open in {externalEditorName}
+            </div>
+          )}
+          <div className="context-menu-item px-4 py-2 text-[13px] text-[var(--nim-text-muted)] cursor-pointer transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]" onClick={handleShowInFinder}>
+            Show in Finder
+          </div>
+          <div className="context-menu-item px-4 py-2 text-[13px] text-[var(--nim-text-muted)] cursor-pointer transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]" onClick={handleCopyPath}>
+            Copy Path
+          </div>
           <div className="context-menu-separator h-px bg-[var(--nim-border)] my-1" />
           <div className="context-menu-item px-4 py-2 text-[13px] text-[var(--nim-text-muted)] cursor-pointer transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]" onClick={() => { onTabClose(contextMenuTab); closeContextMenu(); }}>
             Close

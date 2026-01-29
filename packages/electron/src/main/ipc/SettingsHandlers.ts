@@ -4,7 +4,7 @@ import * as os from 'os';
 import * as fs from 'fs';
 import * as path from 'path';
 import { app } from 'electron';
-import { getWorkspaceState, updateWorkspaceState, getTheme, getThemeSync, isCompletionSoundEnabled, setCompletionSoundEnabled, getCompletionSoundType, setCompletionSoundType, CompletionSoundType, getReleaseChannel, setReleaseChannel, ReleaseChannel, getRecentItems, getDefaultAIModel, setDefaultAIModel, isAnalyticsEnabled, setAnalyticsEnabled, isMockupLMEnabled, setMockupLMEnabled, getSessionSyncConfig, setSessionSyncConfig, SessionSyncConfig, isExtensionDevToolsEnabled, setExtensionDevToolsEnabled, getAppSetting, setAppSetting, getAlphaFeatures, setAlphaFeatures, getEnableAllAlphaFeatures, setEnableAllAlphaFeatures, getDeveloperFeatures, setDeveloperFeatures, isDeveloperFeatureAvailable } from '../utils/store';
+import { getWorkspaceState, updateWorkspaceState, getTheme, getThemeSync, isCompletionSoundEnabled, setCompletionSoundEnabled, getCompletionSoundType, setCompletionSoundType, CompletionSoundType, getReleaseChannel, setReleaseChannel, ReleaseChannel, getRecentItems, getDefaultAIModel, setDefaultAIModel, isAnalyticsEnabled, setAnalyticsEnabled, getSessionSyncConfig, setSessionSyncConfig, SessionSyncConfig, isExtensionDevToolsEnabled, setExtensionDevToolsEnabled, getAppSetting, setAppSetting, getAlphaFeatures, setAlphaFeatures, getEnableAllAlphaFeatures, setEnableAllAlphaFeatures, getDeveloperFeatures, setDeveloperFeatures, isDeveloperFeatureAvailable } from '../utils/store';
 import { getEnhancedPath } from '../services/CLIManager';
 import { logger } from '../utils/logger';
 import { SoundNotificationService } from '../services/SoundNotificationService';
@@ -348,15 +348,7 @@ export function registerSettingsHandlers() {
         setAnalyticsEnabled(enabled);
     });
 
-    // MockupLM settings
-    safeHandle('mockupLM:is-enabled', () => {
-        return isMockupLMEnabled();
-    });
-
-    safeHandle('mockupLM:set-enabled', (_event, enabled: boolean) => {
-        setMockupLMEnabled(enabled);
-        logger.store.info(`[SettingsHandlers] MockupLM ${enabled ? 'enabled' : 'disabled'}`);
-    });
+    // NOTE: MockupLM settings handlers removed - MockupLM now managed via extension system
 
     // Claude Code settings
     safeHandle('claudeCode:get-settings', async () => {
@@ -869,6 +861,25 @@ export function registerSettingsHandlers() {
             }
         });
         return StytchAuth.getAuthState();
+    });
+
+    // ============================================================
+    // External Editor Settings
+    // ============================================================
+
+    safeHandle('external-editor:get-settings', () => {
+        const editorType = getAppSetting('externalEditorType') ?? 'none';
+        const customPath = getAppSetting('externalEditorCustomPath') ?? '';
+        return { editorType, customPath };
+    });
+
+    safeHandle('external-editor:set-settings', (_event, settings: { editorType: string; customPath?: string }) => {
+        if (!settings) {
+            throw new Error('Settings object is required for external-editor:set-settings');
+        }
+        setAppSetting('externalEditorType', settings.editorType);
+        setAppSetting('externalEditorCustomPath', settings.customPath ?? '');
+        logger.store.info(`[SettingsHandlers] External editor settings updated: ${settings.editorType}`);
     });
 
     // Switch Stytch environment (dev only - signs out and switches to test/live)
