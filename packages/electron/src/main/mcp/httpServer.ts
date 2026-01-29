@@ -715,8 +715,42 @@ async function tryCreateServer(port: number): Promise<any> {
             }
           });
 
-          // Also update git_commit_proposal description to reference session files
-          // This is handled by the extension tool, but we add guidance here too
+          // Add the git commit proposal tool - works with get_session_edited_files
+          builtInTools.push({
+            name: 'developer_git_commit_proposal',
+            description: 'Propose a git commit for user confirmation. This displays an interactive commit confirmation widget where the user can review and approve/reject the commit. Use get_session_edited_files first to find files edited during the session, then call this tool with the files to stage and a commit message. The tool will wait for user confirmation and return the result (committed or cancelled).',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                filesToStage: {
+                  type: 'array',
+                  description: 'Array of file paths to stage for the commit. Can be strings or objects with path and status.',
+                  items: {
+                    oneOf: [
+                      { type: 'string' },
+                      {
+                        type: 'object',
+                        properties: {
+                          path: { type: 'string' },
+                          status: { type: 'string', enum: ['added', 'modified', 'deleted'] }
+                        },
+                        required: ['path']
+                      }
+                    ]
+                  }
+                },
+                commitMessage: {
+                  type: 'string',
+                  description: 'The commit message to propose. Should follow commit message guidelines (concise, describes the change).'
+                },
+                reasoning: {
+                  type: 'string',
+                  description: 'Optional explanation of why these files were selected and this commit message was chosen.'
+                }
+              },
+              required: ['filesToStage', 'commitMessage']
+            }
+          });
         }
 
         // Get extension tools for the current workspace/file
