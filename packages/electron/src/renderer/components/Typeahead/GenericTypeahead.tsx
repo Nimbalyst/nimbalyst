@@ -189,8 +189,9 @@ export function GenericTypeahead({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [anchorElement, onClose]);
 
-  // Handle option click
-  const handleOptionClick = useCallback((option: TypeaheadOption, index: number) => {
+  // Handle option click - use mousedown to fire before blur closes the menu
+  const handleOptionMouseDown = useCallback((e: React.MouseEvent, option: TypeaheadOption) => {
+    e.preventDefault(); // Prevent blur from firing
     if (option.disabled) return;
     onSelect(option);
   }, [onSelect]);
@@ -272,7 +273,7 @@ export function GenericTypeahead({
                   className={`generic-typeahead-option flex items-center gap-2 px-3 py-1.5 cursor-pointer transition-colors duration-150 ${
                     isSelected ? 'selected bg-nim-hover' : ''
                   } ${option.disabled ? 'disabled opacity-50 cursor-not-allowed' : ''}`}
-                  onClick={() => handleOptionClick(option, visualIndex)}
+                  onMouseDown={(e) => handleOptionMouseDown(e, option)}
                   onMouseEnter={() => handleOptionMouseEnter(visualIndex)}
                 >
                   {option.icon && (

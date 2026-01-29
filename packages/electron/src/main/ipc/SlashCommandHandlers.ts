@@ -49,10 +49,19 @@ export function registerSlashCommandHandlers() {
       }));
 
       // Merge: built-in first, then project, then user, then plugins
+      // Deduplicate by command name (first occurrence wins)
       const allCommands = [...commands, ...pluginSlashCommands];
+      const seen = new Set<string>();
+      const deduplicatedCommands = allCommands.filter(cmd => {
+        if (seen.has(cmd.name)) {
+          return false;
+        }
+        seen.add(cmd.name);
+        return true;
+      });
 
-      // console.log(`[SlashCommandHandlers] Returning ${allCommands.length} slash commands (${commands.length} standard + ${pluginSlashCommands.length} plugins) for workspace: ${workspacePath}`);
-      return allCommands;
+      // console.log(`[SlashCommandHandlers] Returning ${deduplicatedCommands.length} slash commands (deduped from ${allCommands.length}) for workspace: ${workspacePath}`);
+      return deduplicatedCommands;
     } catch (error) {
       console.error('[SlashCommandHandlers] Error listing slash commands:', error);
       return [];
