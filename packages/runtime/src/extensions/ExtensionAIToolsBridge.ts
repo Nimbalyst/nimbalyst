@@ -73,7 +73,7 @@ export function getMCPToolDefinitions(): MCPToolDefinition[] {
   for (const extension of loader.getLoadedExtensions()) {
     if (!extension.enabled) continue;
 
-    const extensionTools = extension.module.aiTools || [];
+    const extensionTools = Array.isArray(extension.module.aiTools) ? extension.module.aiTools : [];
     const customEditors = extension.manifest.contributions?.customEditors || [];
 
     // Get file patterns from custom editors for this extension
@@ -275,7 +275,7 @@ export function registerExtensionTools(extension: LoadedExtension): void {
   //   'tools found'
   // );
 
-  if (!module.aiTools || module.aiTools.length === 0) {
+  if (!module.aiTools || !Array.isArray(module.aiTools) || module.aiTools.length === 0) {
     return;
   }
 
