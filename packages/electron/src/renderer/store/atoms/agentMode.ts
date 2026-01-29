@@ -329,11 +329,11 @@ export async function initAgentModeLayout(workspacePath: string): Promise<void> 
     );
     const agenticState = workspaceState?.agenticCodingWindowState;
     const persisted = agenticState as Partial<AgentModeLayout> | undefined;
-    console.log('[agentMode] Full workspace state:', JSON.stringify(persisted, null, 2));
+    // console.log('[agentMode] Full workspace state:', JSON.stringify(persisted, null, 2));
 
     // Merge persisted state with defaults - same shape, just fill in missing fields
     const restoredLayout = mergeWithDefaults(persisted);
-    console.log('[agentMode] Restored layout:', restoredLayout);
+    // console.log('[agentMode] Restored layout:', restoredLayout);
     store.set(agentModeLayoutAtom, restoredLayout);
 
     // Restore selected workstream if saved (stored alongside layout)

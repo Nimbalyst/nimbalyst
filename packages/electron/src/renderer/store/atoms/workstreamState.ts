@@ -713,11 +713,11 @@ export async function loadWorkstreamStates(workspacePath: string): Promise<void>
 
   try {
     const workspaceState = await window.electronAPI.invoke('workspace:get-state', workspacePath);
-    console.log('[workstreamState] Full workspace state:', JSON.stringify(workspaceState, null, 2));
+    // console.log('[workstreamState] Full workspace state:', JSON.stringify(workspaceState, null, 2));
 
     // Load workstream states
     const saved = workspaceState?.workstreamStates ?? {};
-    console.log('[workstreamState] workstreamStates field:', JSON.stringify(saved, null, 2));
+    // console.log('[workstreamState] workstreamStates field:', JSON.stringify(saved, null, 2));
 
     const map = new Map<string, WorkstreamState>();
     for (const [id, state] of Object.entries(saved)) {
@@ -727,7 +727,7 @@ export async function loadWorkstreamStates(workspacePath: string): Promise<void>
     store.set(workstreamStatesAtom, map);
     store.set(workstreamStatesLoadedAtom, true);
 
-    console.log('[workstreamState] Loaded states for', map.size, 'workstreams');
+    // console.log('[workstreamState] Loaded states for', map.size, 'workstreams');
 
     // Load worktree active sessions
     const worktreeActiveSessions = workspaceState?.worktreeActiveSessions ?? {};
@@ -736,7 +736,7 @@ export async function loadWorkstreamStates(workspacePath: string): Promise<void>
       worktreeMap.set(worktreeId, sessionId as string);
     }
     store.set(worktreeActiveSessionMapAtom, worktreeMap);
-    console.log('[workstreamState] Loaded active sessions for', worktreeMap.size, 'worktrees');
+    // console.log('[workstreamState] Loaded active sessions for', worktreeMap.size, 'worktrees');
   } catch (err) {
     console.error('[workstreamState] Failed to load states:', err);
     // Still mark as loaded so UI doesn't hang
