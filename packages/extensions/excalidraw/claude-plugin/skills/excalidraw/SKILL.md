@@ -1,6 +1,6 @@
 ---
 name: excalidraw
-description: Create diagrams and visual drawings using Excalidraw (.excalidraw files). Use when the user wants flowcharts, architecture diagrams, system diagrams, entity relationship diagrams, sketches, or any visual diagram.
+description: Create diagrams and visual drawings using Excalidraw (.excalidraw files). Use when the user wants flowcharts, architecture diagrams, system diagrams, sketches, or any visual diagram. For database schemas and entity relationship diagrams, use the DataModelLM extension instead.
 ---
 
 # Excalidraw Diagrams
@@ -12,10 +12,15 @@ Excalidraw is Nimbalyst's whiteboard-style diagram editor for creating flowchart
 - Flowcharts and process diagrams
 - Architecture diagrams
 - System design diagrams
-- Entity relationship diagrams
 - Sequence diagrams
 - Mind maps
-- Any visual diagram or sketch
+- Network diagrams
+- User flow diagrams
+- General visual diagrams and sketches
+
+## When NOT to Use Excalidraw
+
+- **Database schemas / Entity relationship diagrams** - Use DataModelLM extension instead (creates `.datamodel` files with Prisma schema)
 
 ## File Format
 

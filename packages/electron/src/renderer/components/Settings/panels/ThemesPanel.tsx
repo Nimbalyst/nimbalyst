@@ -346,6 +346,16 @@ export const ThemesPanel: React.FC<ThemesPanelProps> = ({ scope, workspacePath }
                 </div>
               </div>
             )}
+            {(['solarized-dark', 'solarized-light', 'monokai'].includes(selectedTheme.id)) && (
+              <div className="flex items-start justify-between pt-2 border-t border-nim mt-2">
+                <span className="text-nim-muted">License:</span>
+                <span className="text-nim text-right max-w-[60%]">
+                  {selectedTheme.id.startsWith('solarized')
+                    ? 'MIT License © 2011 Ethan Schoonover'
+                    : 'MIT License © 2006 Wimer Hazenberg'}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Color preview */}

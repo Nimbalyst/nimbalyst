@@ -19,7 +19,8 @@ import type {
 
 const THEME_MANIFEST_FILENAME = 'theme.json';
 const MAX_THEME_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
-const ALLOWED_FILE_EXTENSIONS = ['.json', '.png', '.jpg', '.jpeg', '.svg', '.webp'];
+const ALLOWED_FILE_EXTENSIONS = ['.json', '.png', '.jpg', '.jpeg', '.svg', '.webp', '.md', ''];
+const ALLOWED_NO_EXTENSION_FILES = ['LICENSE', 'README', 'NOTICE'];
 
 /**
  * Valid CSS color formats.
@@ -267,8 +268,14 @@ export class ThemeLoader {
       const files = await this.platformService.readDirectory(themePath);
       for (const file of files) {
         const ext = this.platformService.getExtension(file);
-        if (!ALLOWED_FILE_EXTENSIONS.includes(ext)) {
-          errors.push(`Disallowed file type in theme directory: '${file}'. Themes can only contain ${ALLOWED_FILE_EXTENSIONS.join(', ')} files.`);
+        const baseName = this.platformService.getBaseName(file);
+
+        // Allow files with permitted extensions or specifically allowed files without extensions
+        const hasAllowedExtension = ALLOWED_FILE_EXTENSIONS.includes(ext);
+        const isAllowedNoExtFile = ext === '' && ALLOWED_NO_EXTENSION_FILES.includes(baseName);
+
+        if (!hasAllowedExtension && !isAllowedNoExtFile) {
+          errors.push(`Disallowed file type in theme directory: '${file}'. Themes can only contain image files, .json, .md, and LICENSE/README/NOTICE files.`);
         }
       }
     } catch (err) {

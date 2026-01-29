@@ -14,10 +14,13 @@ Diagram request: $ARGUMENTS
    - Flowchart / process diagram
    - Architecture diagram
    - System design
-   - Entity relationship diagram
    - Sequence diagram
    - Mind map
+   - Network diagram
+   - User flow diagram
    - Other visual diagram
+
+   **Note**: For database schemas and entity relationship diagrams, use the DataModelLM extension instead.
 
 2. **Create or open file**
    - Create a new `.excalidraw` file if needed

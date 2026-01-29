@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "author": "Wimer Hazenberg (adapted for Nimbalyst)",
   "description": "The iconic dark theme for developers",
+  "license": "MIT",
   "isDark": true,
   "colors": {
     "bg": "#272822",

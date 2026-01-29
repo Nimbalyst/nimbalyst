@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "author": "Ethan Schoonover (adapted for Nimbalyst)",
   "description": "Precision colors for machines and people - dark variant",
+  "license": "MIT",
   "isDark": true,
   "colors": {
     "bg": "#002b36",
