@@ -488,6 +488,7 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
         cwd: worktreePath,
         worktreeId: sessionWorktreeId,
         title: `Terminal (${worktreePath.split('/').pop()})`,
+        source: 'worktree',
       });
 
       if (result.success && result.terminalId) {

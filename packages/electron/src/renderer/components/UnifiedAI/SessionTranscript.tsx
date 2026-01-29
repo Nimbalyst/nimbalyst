@@ -834,6 +834,12 @@ ${message}`;
       });
       setPendingExitPlanConfirmation(null);
       setAiMode('agent');
+
+      // Track exit plan mode response
+      posthog?.capture('exit_plan_mode_response', {
+        decision: 'approved',
+      });
+
       // Clear from persisted metadata
       await window.electronAPI.invoke('sessions:update-metadata', confirmSessionId, {
         metadata: { pendingExitPlanConfirmation: null }
@@ -841,7 +847,7 @@ ${message}`;
     } catch (error) {
       console.error('[SessionTranscript] Failed to send ExitPlanMode approval:', error);
     }
-  }, [setAiMode]);
+  }, [setAiMode, posthog]);
 
   const handleExitPlanModeDeny = useCallback(async (requestId: string, confirmSessionId: string, feedback?: string) => {
     try {
@@ -850,6 +856,13 @@ ${message}`;
         feedback
       });
       setPendingExitPlanConfirmation(null);
+
+      // Track exit plan mode response
+      posthog?.capture('exit_plan_mode_response', {
+        decision: 'denied',
+        has_feedback: !!feedback,
+      });
+
       // Clear from persisted metadata
       await window.electronAPI.invoke('sessions:update-metadata', confirmSessionId, {
         metadata: { pendingExitPlanConfirmation: null }
@@ -857,7 +870,7 @@ ${message}`;
     } catch (error) {
       console.error('[SessionTranscript] Failed to send ExitPlanMode denial:', error);
     }
-  }, []);
+  }, [posthog]);
 
   // Handler for "Start new session to implement" option
   // Creates a child session with the plan file as context and sets up the implementation prompt
@@ -869,6 +882,11 @@ ${message}`;
       });
       setPendingExitPlanConfirmation(null);
       setAiMode('agent');
+
+      // Track exit plan mode response
+      posthog?.capture('exit_plan_mode_response', {
+        decision: 'start_new_session',
+      });
       // Clear from persisted metadata
       await window.electronAPI.invoke('sessions:update-metadata', confirmSessionId, {
         metadata: { pendingExitPlanConfirmation: null }
@@ -930,7 +948,7 @@ ${message}`;
     } catch (error) {
       console.error('[SessionTranscript] Failed to start new session for implementation:', error);
     }
-  }, [setAiMode, sessionChildren, sessionParentId, workspacePath, createChildSession, convertToWorkstream, sessionData?.worktreePath]);
+  }, [setAiMode, sessionChildren, sessionParentId, workspacePath, createChildSession, convertToWorkstream, sessionData?.worktreePath, posthog]);
 
   const handleAskUserQuestionSubmit = useCallback(async (questionId: string, confirmSessionId: string, answers: Record<string, string>) => {
     try {

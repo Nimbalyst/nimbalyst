@@ -79,9 +79,12 @@ All events include `$session_id` property automatically. Dev users are marked wi
 
 | Event Name | File(s) | Trigger | Properties | First Added (Public) | Significant Changes |
 | --- | --- | --- | --- | --- | --- |
-| `worktree_archived` | `WorktreeHandlers.ts:719` | User archives a worktree (sessions archived immediately, cleanup queued) | `session_count`<br/>`worktree_age_days`<br/>`failed_sessions` | (pending release as of 6d0b51b5) |  |
-| `worktree_archive_completed` | `WorktreeHandlers.ts:741` | Worktree cleanup completes successfully | `session_count`<br/>`duration_ms` | (pending release as of 6d0b51b5) |  |
-| `worktree_archive_failed` | `WorktreeHandlers.ts:747, 771` | Worktree archive fails | `error_type`<br/>`stage` (archiving-sessions/removing-worktree) | (pending release as of 6d0b51b5) |  |
+| `worktree_created` | `WorktreeHandlers.ts:115` | User creates a new git worktree | `duration_ms` | (pending release) |  |
+| `worktree_archived` | `WorktreeHandlers.ts:897` | User archives a worktree (sessions archived immediately, cleanup queued) | `session_count`<br/>`worktree_age_days`<br/>`failed_sessions`<br/>`has_uncommitted_changes`<br/>`has_unmerged_changes` | (pending release as of 6d0b51b5) | (pending release): Added has_uncommitted_changes and has_unmerged_changes |
+| `worktree_archive_completed` | `WorktreeHandlers.ts:921` | Worktree cleanup completes successfully | `session_count`<br/>`duration_ms` | (pending release as of 6d0b51b5) |  |
+| `worktree_archive_failed` | `WorktreeHandlers.ts:937, 961` | Worktree archive fails | `error_type`<br/>`stage` (archiving-sessions/removing-worktree) | (pending release as of 6d0b51b5) |  |
+| `worktree_rebase_attempted` | `WorktreeHandlers.ts:804` | User initiates rebase of worktree from base branch | `success`<br/>`had_conflicts`<br/>`had_untracked_files_conflict` | (pending release) |  |
+| `worktree_merge_attempted` | `WorktreeHandlers.ts:756` | User initiates merge of worktree to main branch | `success`<br/>`had_conflicts` | (pending release) |  |
 
 ### Theme Management
 
@@ -108,8 +111,8 @@ All events include `$session_id` property automatically. Dev users are marked wi
 
 | Event Name | File(s) | Trigger | Properties | First Added (Public) | Significant Changes |
 | --- | --- | --- | --- | --- | --- |
-| `create_ai_session` | `AIService.ts:455` | User creates new AI chat session | `provider` | v0.45.25 (2025-11-14) |  |
-| `ai_message_sent` | `AIService.ts:1591` | User sends message in AI chat | `provider`<br/>`hasDocumentContext`<br/>`hasAttachments`<br/>`contentMode` (files/agent/unknown)<br/>`fileExtension` (optional, when document open)<br/>`usedSlashCommand` (optional)<br/>`slashCommandName` (optional)<br/>`slashCommandPackageId` (optional) | v0.45.25 (2025-11-14) | v0.47.2 (2025-12-10): Added usedSlashCommand, slashCommandName, slashCommandPackageId properties<br/>(pending release as of 5698aa25): Added fileExtension property |
+| `create_ai_session` | `AIService.ts:1451` | User creates new AI chat session | `provider`<br/>`is_worktree_session` (boolean)<br/>`is_workstream_child` (boolean) | v0.45.25 (2025-11-14) | (pending release): Added is_worktree_session and is_workstream_child properties |
+| `ai_message_sent` | `AIService.ts:1822` | User sends message in AI chat | `provider`<br/>`hasDocumentContext`<br/>`hasAttachments`<br/>`contentMode` (files/agent/unknown)<br/>`sessionMode` (optional, planning/agent)<br/>`fileExtension` (optional, when document open)<br/>`usedSlashCommand` (optional)<br/>`slashCommandName` (optional)<br/>`slashCommandPackageId` (optional) | v0.45.25 (2025-11-14) | v0.47.2 (2025-12-10): Added usedSlashCommand, slashCommandName, slashCommandPackageId properties<br/>(pending release as of 5698aa25): Added fileExtension property<br/>(pending release): Added sessionMode property |
 | `ai_message_queued` | `AIService.ts:2517, 640` | User queues message while AI is busy processing | `provider`<br/>`source` (local/mobile)<br/>`hasDocumentContext`<br/>`hasAttachments`<br/>`fileExtension` (optional, local only when document open) | (pending release as of f891af91) | (pending release as of 5698aa25): Added fileExtension property |
 | `ai_response_received` | `AIService.ts:1092, 1326` | AI provider returns response | `provider`<br/>`responseType` (text/tool_use/error)<br/>`toolsUsed`<br/>`usedChartTool` | v0.45.25 (2025-11-14) | (pending release as of f74f38fb): Added usedChartTool property |
 | `ai_response_streamed` | `AIService.ts:1100` | AI response finishes streaming | `provider`<br/>`chunkCount` (0-9, 10-49, 50-99, 100+)<br/>`totalLength` (0-99, 100-499, 500-999, 1000+) | v0.45.25 (2025-11-14) |  |
@@ -120,6 +123,8 @@ All events include `$session_id` property automatically. Dev users are marked wi
 | `ai_diff_accepted` | `DiffApprovalBar.tsx:315, 436`<br/>`TabEditor.tsx:1382` | User accepts diff or all diffs (markdown/code/mockup) | `acceptType` (partial/all)<br/>`replacementCount`<br/>`fileType` (mockup, optional) | v0.45.25 (2025-11-14) |  |
 | `ai_diff_rejected` | `DiffApprovalBar.tsx:380, 450`<br/>`TabEditor.tsx:1442` | User rejects diff or all diffs (markdown/code/mockup) | `rejectType` (partial/all)<br/>`replacementCount`<br/>`fileType` (mockup, optional) | v0.45.25 (2025-11-14) |  |
 | `session_reparented` | `SessionListItem.tsx:290` | User drags session to change parent (workstream reassignment) | `had_previous_parent`<br/>`workspace_path` | (pending release) |  |
+| `exit_plan_mode_response` | `SessionTranscript.tsx:838, 862, 891` | User responds to plan completion confirmation | `decision` (approved/denied/start_new_session)<br/>`has_feedback` (boolean, for denied only) | (pending release) |  |
+| `git_commit_proposal_response` | `GitCommitConfirmationWidget.tsx:600, 672` | User responds to AI-generated git commit proposal | `action` (committed/cancelled/error)<br/>`file_count` (1-5/6-10/11-20/20+)<br/>`success` (boolean, for committed only) | (pending release) |  |
 
 ### Claude Code (MCP)
 
@@ -140,7 +145,7 @@ All events include `$session_id` property automatically. Dev users are marked wi
 
 | Event Name | File(s) | Trigger | Properties | First Added (Public) | Significant Changes |
 | --- | --- | --- | --- | --- | --- |
-| `terminal_session_created` | `TerminalHandlers.ts:75` | User creates a new terminal session | `shell` (zsh/bash/fish/unknown) | (pending release as of 9830e6b0) |  |
+| `terminal_created` | `TerminalHandlers.ts:118` | User creates a new terminal session | `shell` (zsh/bash/fish/unknown)<br/>`source` (panel/worktree) | (pending release as of 9830e6b0) | (pending release): Added source property |
 
 ### AI Tool Execution
 
@@ -227,6 +232,9 @@ The `known_error` event uses an `errorId` property to identify specific error co
 | `claude_commands_toast_install_all` | `App.tsx:1654` | User clicks "Install All" on commands toast | None | v0.47.2 (2025-12-10) |  |
 | `claude_commands_toast_settings` | `App.tsx:1663` | User clicks "Settings" on commands toast | None | v0.47.2 (2025-12-10) |  |
 | `claude_commands_toast_skip` | `App.tsx:1673` | User clicks "Skip" on commands toast | None | v0.47.2 (2025-12-10) |  |
+| `windows_claude_code_warning_shown` | `useOnboarding.ts:186` | User clicks "Open Settings" in Windows Claude Code warning dialog | None | (pending release) |  |
+| `windows_claude_code_warning_closed` | `useOnboarding.ts:178` | User closes Windows Claude Code warning dialog | None | (pending release) |  |
+| `windows_claude_code_warning_dismissed_forever` | `useOnboarding.ts:182` | User clicks "Don't show again" on Windows Claude Code warning | None | (pending release) |  |
 
 ### Surveys & Feedback
 

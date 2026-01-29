@@ -112,6 +112,12 @@ export function registerWorktreeHandlers(): void {
         timings,
       });
 
+      // Track worktree creation
+      const analyticsService = AnalyticsService.getInstance();
+      analyticsService.sendEvent('worktree_created', {
+        duration_ms: totalDuration,
+      });
+
       return {
         success: true,
         worktree,
@@ -735,6 +741,13 @@ export function registerWorktreeHandlers(): void {
 
       const result = await gitWorktreeService.mergeToMain(worktreePath, mainRepoPath);
 
+      // Track merge attempt
+      const analyticsService = AnalyticsService.getInstance();
+      analyticsService.sendEvent('worktree_merge_attempted', {
+        success: result.success,
+        had_conflicts: !!(result.conflictedFiles && result.conflictedFiles.length > 0),
+      });
+
       return {
         success: result.success,
         message: result.message,
@@ -742,6 +755,14 @@ export function registerWorktreeHandlers(): void {
       };
     } catch (error) {
       logger.error('Failed to merge to main:', error);
+
+      // Track merge failure
+      const analyticsService = AnalyticsService.getInstance();
+      analyticsService.sendEvent('worktree_merge_attempted', {
+        success: false,
+        had_conflicts: false,
+      });
+
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to merge to main',
@@ -783,6 +804,14 @@ export function registerWorktreeHandlers(): void {
 
       const result = await gitWorktreeService.rebaseFromBase(worktreePath, worktree.baseBranch);
 
+      // Track rebase attempt
+      const analyticsService = AnalyticsService.getInstance();
+      analyticsService.sendEvent('worktree_rebase_attempted', {
+        success: result.success,
+        had_conflicts: !!(result.conflictedFiles && result.conflictedFiles.length > 0),
+        had_untracked_files_conflict: !!(result.untrackedFiles && result.untrackedFiles.length > 0),
+      });
+
       return {
         success: result.success,
         message: result.message,
@@ -792,6 +821,15 @@ export function registerWorktreeHandlers(): void {
       };
     } catch (error) {
       logger.error('Failed to rebase worktree:', error);
+
+      // Track rebase failure
+      const analyticsService = AnalyticsService.getInstance();
+      analyticsService.sendEvent('worktree_rebase_attempted', {
+        success: false,
+        had_conflicts: false,
+        had_untracked_files_conflict: false,
+      });
+
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to rebase worktree',
@@ -847,6 +885,17 @@ export function registerWorktreeHandlers(): void {
       const sessionIds = await worktreeStore.getWorktreeSessions(worktreeId);
       logger.info('Found sessions for worktree', { worktreeId, sessionCount: sessionIds.length });
 
+      // Get worktree git status for analytics (before archiving)
+      let hasUncommittedChanges = false;
+      let hasUnmergedChanges = false;
+      try {
+        const gitStatus = await gitWorktreeService.getWorktreeStatus(worktree.path, worktree.baseBranch);
+        hasUncommittedChanges = gitStatus.hasUncommittedChanges;
+        hasUnmergedChanges = !gitStatus.isMerged;
+      } catch (statusError) {
+        logger.warn('Failed to get worktree status for analytics', { worktreeId, error: statusError });
+      }
+
       // Step 2: Kill any running terminal processes for these sessions
       const terminalManager = getTerminalSessionManager();
       await terminalManager.destroyTerminalsForSessions(sessionIds);
@@ -884,6 +933,8 @@ export function registerWorktreeHandlers(): void {
         session_count: sessionIds.length,
         worktree_age_days: worktreeAgeDays,
         failed_sessions: failedSessions,
+        has_uncommitted_changes: hasUncommittedChanges,
+        has_unmerged_changes: hasUnmergedChanges,
       });
 
       // Step 4: Queue the slow cleanup work

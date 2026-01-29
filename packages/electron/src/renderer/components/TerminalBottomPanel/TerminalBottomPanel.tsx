@@ -129,6 +129,7 @@ export const TerminalBottomPanel: React.FC<TerminalBottomPanelProps> = ({
       const result = await window.electronAPI.terminal.create(workspacePath, {
         cwd: workspacePath,
         title: `Terminal ${terminals.length + 1}`,
+        source: 'panel',
       });
 
       if (result.success && result.instance) {

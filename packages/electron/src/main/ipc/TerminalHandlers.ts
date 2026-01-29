@@ -78,6 +78,7 @@ export function registerTerminalHandlers(): void {
         cwd?: string;
         worktreeId?: string;
         title?: string;
+        source?: 'panel' | 'worktree';
       }
     ) => {
       try {
@@ -117,6 +118,7 @@ export function registerTerminalHandlers(): void {
         // Track terminal creation
         AnalyticsService.getInstance().sendEvent('terminal_created', {
           shell: terminalInfo?.shell.name || 'unknown',
+          source: payload.source || 'panel',
         });
 
         return {

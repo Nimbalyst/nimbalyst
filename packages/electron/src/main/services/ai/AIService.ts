@@ -1448,7 +1448,11 @@ export class AIService {
       // the index for pendingExecution flags. We do NOT call watchSession() here because
       // it creates a WebSocket connection per session, causing performance issues.
 
-      this.analytics.sendEvent('create_ai_session', { provider });
+      this.analytics.sendEvent('create_ai_session', {
+        provider,
+        is_worktree_session: !!session.worktreeId,
+        is_workstream_child: !!session.parentSessionId,
+      });
       return session;
     });
 
@@ -1823,6 +1827,8 @@ export class AIService {
         attachmentCount: attachments?.length || 0,
         messageLength: bucketMessageLength(message.length),
         contentMode: contentMode || 'unknown',
+        // Include session mode (planning/agent) when available
+        ...(session.mode && { sessionMode: session.mode }),
         // Include file extension when document context is present
         ...(fileExtension && { fileExtension }),
         // Slash command tracking - only included if a Nimbalyst package command was used

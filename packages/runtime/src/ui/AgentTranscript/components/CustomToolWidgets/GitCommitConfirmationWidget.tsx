@@ -15,6 +15,7 @@
  */
 
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import { usePostHog } from 'posthog-js/react';
 import { MaterialSymbol } from '../../../..';
 import type { CustomToolWidgetProps } from './index';
 
@@ -267,6 +268,8 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
   workspacePath,
   sessionId,
 }) => {
+  const posthog = usePostHog();
+
   // Extract data from tool call
   const toolCall = message.toolCall;
   if (!toolCall) {
@@ -596,6 +599,14 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
         setLocalResult(result);
         setHasResponded(true);
 
+        // Track git commit proposal response
+        const fileCountBucket = filesToStage.size <= 5 ? '1-5' : filesToStage.size <= 10 ? '6-10' : filesToStage.size <= 20 ? '11-20' : '20+';
+        posthog?.capture('git_commit_proposal_response', {
+          action: result.success ? 'committed' : 'error',
+          file_count: fileCountBucket,
+          success: result.success,
+        });
+
         // Send the result back to httpServer to complete the MCP tool call
         if (pendingProposal && window.electronAPI.sendMcpGitCommitProposalResult) {
           console.log('[GitCommitWidget] Sending result back to httpServer:', pendingProposal.proposalId, result.success ? 'committed' : 'cancelled');
@@ -634,13 +645,20 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
     } finally {
       setIsCommitting(false);
     }
-  }, [sessionId, commitWorkspacePath, filesToStage, commitMessage, pendingProposal, initialFilesToStage, initialCommitMessage]);
+  }, [sessionId, commitWorkspacePath, filesToStage, commitMessage, pendingProposal, initialFilesToStage, initialCommitMessage, posthog]);
 
   const handleCancel = useCallback(() => {
     if (hasResponded) return; // Prevent double-response
 
     setLocalResult({ success: false, error: 'Cancelled' });
     setHasResponded(true);
+
+    // Track git commit proposal response
+    const fileCountBucket = filesToStage.size <= 5 ? '1-5' : filesToStage.size <= 10 ? '6-10' : filesToStage.size <= 20 ? '11-20' : '20+';
+    posthog?.capture('git_commit_proposal_response', {
+      action: 'cancelled',
+      file_count: fileCountBucket,
+    });
 
     // Send cancel result back to httpServer
     if (pendingProposal && window.electronAPI?.sendMcpGitCommitProposalResult) {
@@ -649,7 +667,7 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
       });
       removePendingProposal(sessionId, initialFilesToStage, initialCommitMessage, 'cancelled');
     }
-  }, [sessionId, pendingProposal, initialFilesToStage, initialCommitMessage, hasResponded]);
+  }, [sessionId, pendingProposal, initialFilesToStage, initialCommitMessage, hasResponded, filesToStage.size, posthog]);
 
   if (!commitWorkspacePath) {
     return null;

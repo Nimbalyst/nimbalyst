@@ -461,7 +461,7 @@ interface ElectronAPI {
     };
 
     // New terminal store API
-    create: (workspacePath: string, options?: { cwd?: string; worktreeId?: string; title?: string }) => Promise<{
+    create: (workspacePath: string, options?: { cwd?: string; worktreeId?: string; title?: string; source?: 'panel' | 'worktree' }) => Promise<{
       success: boolean;
       terminalId?: string;
       shell?: { name: string; path: string };
