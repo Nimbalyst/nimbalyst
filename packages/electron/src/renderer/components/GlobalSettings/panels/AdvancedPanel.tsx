@@ -16,7 +16,7 @@ import {
   disableAllDeveloperFeatures,
   type ReleaseChannel,
 } from '../../../store/atoms/appSettings';
-import { ALPHA_FEATURES, areAllAlphaFeaturesEnabled, enableAllAlphaFeatures, disableAllAlphaFeatures } from '../../../../shared/alphaFeatures';
+import { ALPHA_FEATURES, areAllAlphaFeaturesEnabled, enableAllAlphaFeatures as enableAllAlphaFeaturesUtil, disableAllAlphaFeatures } from '../../../../shared/alphaFeatures';
 
 /**
  * AdvancedPanel - Self-contained settings panel for advanced options.
@@ -391,7 +391,7 @@ export function AdvancedPanel() {
                       checked={enableAllAlphaFeatures}
                       onChange={(e) => {
                         const enabled = e.target.checked;
-                        const newFeatures = enabled ? enableAllAlphaFeatures() : disableAllAlphaFeatures();
+                        const newFeatures = enabled ? enableAllAlphaFeaturesUtil() : disableAllAlphaFeatures();
                         updateSettings({
                           enableAllAlphaFeatures: enabled,
                           alphaFeatures: newFeatures

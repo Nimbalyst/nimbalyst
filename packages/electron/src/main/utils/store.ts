@@ -1575,15 +1575,12 @@ export function runMigrations(currentVersion: string): void {
 
   logger.store.info('[Migrations] Running migrations from', lastKnownVersion || '(unknown/<=0.52.10)', 'to', currentVersion);
 
-  // Migration for users upgrading from version <= 0.52.10
-  // If user had all alpha features enabled, turn on the new "Enable All Alpha Features" flag
+  // Migration for users upgrading from version <= 0.52.15
+  // Enable all alpha features for all users upgrading from older versions
   // This ensures they get new features like 'card-mode' automatically
-  if (isUpgradingFromOldVersion || versionLessThanOrEqual(lastKnownVersion, '0.52.10')) {
-    const alphaFeatures = getAppStore().get('alphaFeatures');
-    if (alphaFeatures && areAllAlphaFeaturesEnabled(alphaFeatures)) {
-      logger.store.info('[Migrations] User had all alpha features enabled, setting enableAllAlphaFeatures=true');
-      setEnableAllAlphaFeatures(true);
-    }
+  if (isUpgradingFromOldVersion || versionLessThanOrEqual(lastKnownVersion, '0.52.15')) {
+    logger.store.info('[Migrations] Enabling all alpha features for user upgrading from older version');
+    setEnableAllAlphaFeatures(true);
   }
 
   // Update last known version
