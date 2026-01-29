@@ -22,6 +22,47 @@ import type { CustomToolWidgetProps } from './index';
 const askUserQuestionAnswersStore: Map<string, string> = new Map();
 
 /**
+ * Global store for pending AskUserQuestion questions.
+ * Keyed by questionId, tracks questions waiting for user input.
+ * This prevents the widget from rendering as "submitted" while the interactive
+ * confirmation dialog is showing.
+ */
+const pendingQuestionsStore: Map<string, { sessionId: string; questionId: string }> = new Map();
+
+/**
+ * Register a pending question (called when ai:askUserQuestion event is received).
+ */
+export function registerPendingQuestion(questionId: string, sessionId: string): void {
+  pendingQuestionsStore.set(questionId, { sessionId, questionId });
+}
+
+/**
+ * Unregister a pending question (called when question is answered or cancelled).
+ */
+export function unregisterPendingQuestion(questionId: string): void {
+  pendingQuestionsStore.delete(questionId);
+}
+
+/**
+ * Check if a question is pending (waiting for user input).
+ */
+export function isQuestionPending(questionId: string): boolean {
+  return pendingQuestionsStore.has(questionId);
+}
+
+/**
+ * Check if a session has any pending questions.
+ */
+export function sessionHasPendingQuestion(sessionId: string): boolean {
+  for (const pending of pendingQuestionsStore.values()) {
+    if (pending.sessionId === sessionId) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Store answers for AskUserQuestion.
  * Called from AISessionView when answers are submitted.
  */
@@ -123,11 +164,29 @@ function isOptionSelected(answer: string | undefined, optionLabel: string, multi
 
 export const AskUserQuestionWidget: React.FC<CustomToolWidgetProps> = ({
   message,
+  sessionId,
 }) => {
+  // Force re-render when pending questions change
+  const [, forceUpdate] = useState({});
+  useEffect(() => {
+    // Subscribe to changes in pending questions for this session
+    // We use a simple polling approach since the global store doesn't have reactive updates
+    const interval = setInterval(() => {
+      forceUpdate({});
+    }, 100);
+    return () => clearInterval(interval);
+  }, [sessionId]);
+
   const tool = message.toolCall;
   if (!tool) return null;
 
   const questions = parseQuestions(tool.arguments);
+
+  // Check if this session has a pending question - if so, don't render the widget
+  // The interactive AskUserQuestionConfirmation component handles the pending state
+  if (sessionHasPendingQuestion(sessionId)) {
+    return null;
+  }
 
   // Try to get answers from multiple sources:
   // 1. tool.arguments.answers (if SDK updated the input)
@@ -170,7 +229,6 @@ export const AskUserQuestionWidget: React.FC<CustomToolWidgetProps> = ({
   const isCompleted = hasAnswers || hasResult;
 
   // Don't render the widget if the tool hasn't completed yet
-  // The interactive AskUserQuestionConfirmation component handles the pending state
   if (!isCompleted) {
     return null;
   }

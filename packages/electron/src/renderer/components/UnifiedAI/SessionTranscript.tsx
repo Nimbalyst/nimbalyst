@@ -17,7 +17,7 @@
 import React, { useCallback, useRef, useImperativeHandle, forwardRef, useEffect, useState } from 'react';
 import { useAtom, useSetAtom, useAtomValue } from 'jotai';
 import { store } from '@nimbalyst/runtime/store';
-import { AgentTranscriptPanel, TodoItem, storeAskUserQuestionAnswers } from '@nimbalyst/runtime';
+import { AgentTranscriptPanel, TodoItem, storeAskUserQuestionAnswers, registerPendingQuestion, unregisterPendingQuestion } from '@nimbalyst/runtime';
 import type { SessionData, ChatAttachment } from '@nimbalyst/runtime/ai/server/types';
 import { AIInput, AIInputRef } from './AIInput';
 import { PromptQueueList } from './PromptQueueList';
@@ -50,6 +50,7 @@ import {
   createChildSessionAtom,
   sessionChildrenAtom,
   sessionParentIdAtom,
+  sessionWaitingForQuestionAtom,
 } from '../../store';
 import { convertToWorkstreamAtom } from '../../store/atoms/sessions';
 import { usePostHog } from 'posthog-js/react';
@@ -190,6 +191,9 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     timestamp: number;
   } | null>(null);
 
+  // Track mode at last message send to detect mode transitions via toggle button
+  const lastSentModeRef = useRef<AIMode | null>(null);
+
   // Track if we're currently queueing a message (prevents double-submission)
   const [isQueueing, setIsQueueing] = useState(false);
 
@@ -215,6 +219,14 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
       loadSessionData({ sessionId, workspacePath });
     }
   }, [sessionId, workspacePath, sessionData, loadSessionData]);
+
+  // Initialize lastSentModeRef when session loads with existing messages
+  // This ensures mode transitions are detected correctly for existing sessions
+  useEffect(() => {
+    if (sessionData && messages.length > 0 && lastSentModeRef.current === null) {
+      lastSentModeRef.current = aiMode;
+    }
+  }, [sessionData, messages.length, aiMode]);
 
   // ============================================================
   // Auto-focus input when session data loads
@@ -349,18 +361,55 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     return () => { cleanup?.(); };
   }, [sessionId, sessionData, updateSessionStore]);
 
+  // Restore pending AskUserQuestion from session metadata on load
+  // Even if the SDK session was interrupted, we still show the question so the user
+  // can answer it - the submit handler will fall back to sending answers as a message.
   useEffect(() => {
-    const handleAskUserQuestion = (data: AskUserQuestionData) => {
+    const metadata = sessionData?.metadata as Record<string, unknown> | undefined;
+    const savedQuestion = metadata?.pendingAskUserQuestion as AskUserQuestionData | undefined;
+    if (savedQuestion && savedQuestion.sessionId === sessionId) {
+      console.log('[SessionTranscript] Restoring saved AskUserQuestion:', savedQuestion);
+      setPendingAskUserQuestion(savedQuestion);
+      // Register in global store so widget knows not to render as completed
+      registerPendingQuestion(savedQuestion.questionId, sessionId);
+    }
+  }, [sessionId, sessionData?.metadata]);
+
+  useEffect(() => {
+    const handleAskUserQuestion = async (data: AskUserQuestionData) => {
       if (data.sessionId === sessionId) {
         setPendingAskUserQuestion(prev => {
           if (prev && prev.questionId === data.questionId) return prev;
           return data;
         });
+        // Register in global store so widget knows not to render as completed
+        registerPendingQuestion(data.questionId, sessionId);
+        // Persist to session metadata so it survives navigation
+        try {
+          console.log('[SessionTranscript] Persisting AskUserQuestion to metadata...');
+          await window.electronAPI.invoke('sessions:update-metadata', sessionId, {
+            metadata: { pendingAskUserQuestion: data }
+          });
+          // Also update local session store so it's immediately available
+          if (sessionData) {
+            updateSessionStore({
+              sessionId,
+              updates: {
+                metadata: {
+                  ...(sessionData.metadata as Record<string, unknown> || {}),
+                  pendingAskUserQuestion: data
+                }
+              }
+            });
+          }
+        } catch (error) {
+          console.error('[SessionTranscript] Failed to persist AskUserQuestion:', error);
+        }
       }
     };
     const cleanup = window.electronAPI.on('ai:askUserQuestion', handleAskUserQuestion);
     return () => { cleanup?.(); };
-  }, [sessionId]);
+  }, [sessionId, sessionData, updateSessionStore]);
 
   useEffect(() => {
     const handleAskUserQuestionAnswered = (data: { questionId: string; sessionId: string; answers: Record<string, string> }) => {
@@ -373,14 +422,34 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   }, [sessionId]);
 
   useEffect(() => {
-    const handleSessionCancelled = (data: { sessionId: string }) => {
+    const handleSessionCancelled = async (data: { sessionId: string }) => {
       if (data.sessionId === sessionId) {
-        setPendingAskUserQuestion(null);
+        setPendingAskUserQuestion(prev => {
+          // Unregister from global store before clearing
+          if (prev) {
+            unregisterPendingQuestion(prev.questionId);
+          }
+          return null;
+        });
+        // Clear from persisted metadata
+        try {
+          await window.electronAPI.invoke('sessions:update-metadata', sessionId, {
+            metadata: { pendingAskUserQuestion: null }
+          });
+        } catch (error) {
+          console.error('[SessionTranscript] Failed to clear AskUserQuestion from metadata:', error);
+        }
       }
     };
     const cleanup = window.electronAPI.on('ai:sessionCancelled', handleSessionCancelled);
     return () => { cleanup?.(); };
   }, [sessionId]);
+
+  // Sync pendingAskUserQuestion state to atom for sidebar indicator
+  const setWaitingForQuestion = useSetAtom(sessionWaitingForQuestionAtom(sessionId));
+  useEffect(() => {
+    setWaitingForQuestion(pendingAskUserQuestion !== null);
+  }, [pendingAskUserQuestion, setWaitingForQuestion]);
 
   useEffect(() => {
     const handleToolPermission = (data: ToolPermissionData) => {
@@ -611,7 +680,8 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     // Intercept /plan command - strip it and switch to planning mode
     // Match "/plan" only when followed by whitespace or end of string (not "/planning" or "/planify")
     let overrideMode = aiMode;
-    let prependPlanModeInstructions = false;
+    let includePlanModeInstructions = false;
+    let includePlanModeDeactivation = false;
     const planCommandMatch = message.match(/^\/plan(?:\s|$)/);
 
     if (planCommandMatch) {
@@ -619,10 +689,8 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
       // Remove /plan from the message, keeping the rest
       message = message.slice(planCommandMatch[0].length).trim();
 
-      // If this is a mid-session switch (there are already messages), flag to prepend instructions
-      if (messages.length > 0 && aiMode !== 'planning') {
-        prependPlanModeInstructions = true;
-      }
+      // Always include plan mode instructions when switching to planning mode
+      includePlanModeInstructions = true;
 
       // Update mode in atom and session metadata - must succeed before proceeding
       setAiMode('planning');
@@ -655,6 +723,21 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
         setDraftAttachments([]);
         return;
       }
+    } else {
+      // Check if we're in planning mode - always include instructions for first message or mode transition
+      if (overrideMode === 'planning') {
+        // Include plan mode instructions if:
+        // 1. First message of session (messages.length === 0)
+        // 2. Mode transition from agent to planning (lastSentModeRef was agent)
+        if (messages.length === 0 || (lastSentModeRef.current !== null && lastSentModeRef.current === 'agent')) {
+          includePlanModeInstructions = true;
+        }
+      } else if (overrideMode === 'agent') {
+        // Check for mode transition from planning to agent
+        if (lastSentModeRef.current !== null && lastSentModeRef.current === 'planning') {
+          includePlanModeDeactivation = true;
+        }
+      }
     }
 
     // Intercept /clear command - create new session attached to current
@@ -675,10 +758,14 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
       return; // Don't send the /clear message to the AI
     }
 
-    // If switching to planning mode mid-session, prepend plan mode activation message
-    if (prependPlanModeInstructions) {
-      message = `<PLAN_MODE_ACTIVATED>
-The user has activated plan mode. From this point forward, you are in PLANNING MODE ONLY.
+    // If in planning mode, append plan mode instructions with full details
+    // Wrapped in NIMBALYST_SYSTEM_MESSAGE to hide from UI but still send to AI
+    if (includePlanModeInstructions) {
+      message = `${message}
+
+<NIMBALYST_SYSTEM_MESSAGE>
+<PLAN_MODE_ACTIVATED>
+You are in PLANNING MODE ONLY.
 
 You MUST NOT:
 - Make any code edits (except to the plan file)
@@ -689,13 +776,60 @@ You MUST NOT:
 You MUST:
 - Explore the codebase using Read, Glob, Grep tools
 - Ask questions using AskUserQuestion to clarify requirements
-- Write and iteratively update a plan file
+- Write and iteratively update a plan file in the plans/ directory
 - Call ExitPlanMode when ready for approval
 
-The plan file path will be provided in the system prompt.
-</PLAN_MODE_ACTIVATED>
+## Plan File
 
-${message}`;
+You must create a plan file in the plans/ directory. Choose a descriptive kebab-case name based on the task, for example:
+- plans/add-dark-mode.md
+- plans/refactor-auth-system.md
+- plans/fix-login-timeout-bug.md
+
+The plan file is your working document. Create it early in your planning process and update it iteratively as you learn more.
+
+### Required YAML Frontmatter
+
+Every plan file MUST include YAML frontmatter with metadata for tracking:
+
+\`\`\`yaml
+---
+planStatus:
+  planId: plan-[unique-identifier]
+  title: [Plan Title]
+  status: draft
+  planType: [feature|bug-fix|refactor|system-design|research|initiative|improvement]
+  priority: medium
+  owner: [username]
+  stakeholders: []
+  tags: []
+  created: "YYYY-MM-DD"
+  updated: "YYYY-MM-DDTHH:MM:SS.sssZ"
+  progress: 0
+---
+\`\`\`
+
+## Iterative Planning Workflow
+
+Your goal is to build a comprehensive plan through iterative refinement:
+
+1. Create your plan file in plans/ with a descriptive name
+2. Explore the codebase using Read, Glob, and Grep tools
+3. Interview the user using AskUserQuestion to clarify requirements
+4. Write to the plan file iteratively as you learn more
+5. End your turn by either using AskUserQuestion or calling ExitPlanMode when ready
+</PLAN_MODE_ACTIVATED>
+</NIMBALYST_SYSTEM_MESSAGE>`;
+    }
+
+    // If switching to agent mode, append plan mode deactivation message
+    // Wrapped in NIMBALYST_SYSTEM_MESSAGE to hide from UI but still send to AI
+    if (includePlanModeDeactivation) {
+      message = `${message}
+
+<NIMBALYST_SYSTEM_MESSAGE>
+<PLAN_MODE_DEACTIVATED>The planning restrictions no longer apply.</PLAN_MODE_DEACTIVATED>
+</NIMBALYST_SYSTEM_MESSAGE>`;
     }
 
     setDraftInput('');
@@ -704,11 +838,15 @@ ${message}`;
     // Optimistically set processing state - will be confirmed by session:started event
     setIsProcessing(true);
 
+    // Track the mode at send time for detecting future mode transitions via toggle
+    lastSentModeRef.current = overrideMode;
+
     const userMessage = {
       id: `msg-${Date.now()}`,
       role: 'user' as const,
       content: message,
       timestamp: Date.now(),
+      mode: overrideMode,
     };
     updateSessionStore({
       sessionId,
@@ -774,6 +912,7 @@ ${message}`;
       role: 'user' as const,
       content: message,
       timestamp: Date.now(),
+      mode: aiMode,
     };
     updateSessionStore({
       sessionId,
@@ -993,21 +1132,53 @@ ${message}`;
   }, [setAiMode, sessionChildren, sessionParentId, workspacePath, createChildSession, convertToWorkstream, sessionData?.worktreePath, posthog]);
 
   const handleAskUserQuestionSubmit = useCallback(async (questionId: string, confirmSessionId: string, answers: Record<string, string>) => {
-    try {
-      storeAskUserQuestionAnswers(answers);
-      await window.electronAPI.invoke('claude-code:answer-question', { questionId, answers });
-      setPendingAskUserQuestion(null);
-    } catch (error) {
-      console.error('[SessionTranscript] Failed to submit AskUserQuestion answers:', error);
-    }
-  }, []);
+    storeAskUserQuestionAnswers(answers);
+    // Unregister from global store so widget can render as completed
+    unregisterPendingQuestion(questionId);
+    setPendingAskUserQuestion(null);
+    // Clear from persisted metadata
+    await window.electronAPI.invoke('sessions:update-metadata', confirmSessionId, {
+      metadata: { pendingAskUserQuestion: null }
+    }).catch(err => console.error('[SessionTranscript] Failed to clear question metadata:', err));
 
-  const handleAskUserQuestionCancel = useCallback(async (questionId: string) => {
+    try {
+      // Try to answer via SDK first
+      await window.electronAPI.invoke('claude-code:answer-question', { questionId, answers });
+    } catch (error) {
+      // SDK doesn't have this question anymore (session was interrupted)
+      // Fall back to sending answers as a hidden text message to continue the conversation
+      console.log('[SessionTranscript] SDK question not found, sending answers as message');
+      const answersText = Object.entries(answers)
+        .map(([q, a]) => `"${q}": "${a}"`)
+        .join('\n');
+      const fallbackMessage = `<NIMBALYST_SYSTEM_MESSAGE>
+<USER_QUESTION_ANSWERS>
+The user has answered your previous questions:
+${answersText}
+</USER_QUESTION_ANSWERS>
+</NIMBALYST_SYSTEM_MESSAGE>`;
+
+      try {
+        await window.electronAPI.invoke('ai:sendMessage', fallbackMessage, { mode: aiMode }, confirmSessionId, workspacePath);
+      } catch (sendError) {
+        console.error('[SessionTranscript] Failed to send fallback message:', sendError);
+      }
+    }
+  }, [aiMode, workspacePath]);
+
+  const handleAskUserQuestionCancel = useCallback(async (questionId: string, confirmSessionId: string) => {
     try {
       await window.electronAPI.invoke('claude-code:cancel-question', { questionId });
+      // Unregister from global store
+      unregisterPendingQuestion(questionId);
       setPendingAskUserQuestion(null);
+      // Clear from persisted metadata
+      await window.electronAPI.invoke('sessions:update-metadata', confirmSessionId, {
+        metadata: { pendingAskUserQuestion: null }
+      });
     } catch (error) {
       console.error('[SessionTranscript] Failed to cancel AskUserQuestion:', error);
+      unregisterPendingQuestion(questionId);
       setPendingAskUserQuestion(null);
     }
   }, []);

@@ -3030,6 +3030,14 @@ export class AIService {
       // Check if this is a ClaudeCodeProvider with the resolve method
       if (typeof (provider as any).resolveExitPlanModeConfirmation === 'function') {
         (provider as any).resolveExitPlanModeConfirmation(requestId, response);
+
+        // Emit resolved event so the sidebar indicator updates
+        const { BrowserWindow } = await import('electron');
+        const windows = BrowserWindow.getAllWindows().filter(w => !w.isDestroyed());
+        for (const win of windows) {
+          win.webContents.send('ai:exitPlanModeResolved', { sessionId });
+        }
+
         return { success: true };
       } else {
         logger.main.warn(`[AIService] Provider does not support ExitPlanMode confirmation: ${session.provider}`);

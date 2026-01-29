@@ -73,6 +73,8 @@ export {
   sessionUnreadAtom,
   sessionPendingPromptAtom,
   sessionPendingPermissionAtom,
+  sessionWaitingForQuestionAtom,
+  sessionWaitingForPlanApprovalAtom,
   sessionLastReadAtom,
   sessionDraftInputAtom,
   sessionDraftAttachmentsAtom,

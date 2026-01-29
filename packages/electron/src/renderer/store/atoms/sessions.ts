@@ -133,6 +133,24 @@ export const sessionPendingPermissionAtom = atomFamily((_sessionId: string) =>
 );
 
 /**
+ * Per-session waiting for question response state.
+ * Set when the AskUserQuestion tool is waiting for user input.
+ * Shows a distinct icon in the sidebar (not the processing spinner).
+ */
+export const sessionWaitingForQuestionAtom = atomFamily((_sessionId: string) =>
+  atom(false)
+);
+
+/**
+ * Per-session waiting for plan approval state.
+ * Set when the ExitPlanMode tool is waiting for user approval.
+ * Shows a distinct icon in the sidebar (not the processing spinner).
+ */
+export const sessionWaitingForPlanApprovalAtom = atomFamily((_sessionId: string) =>
+  atom(false)
+);
+
+/**
  * Last read timestamp per session.
  * Used to calculate unread message count.
  */
@@ -1239,6 +1257,8 @@ export const cleanupSessionAtom = atom(null, (get, set, sessionId: string) => {
   sessionUnreadAtom.remove(sessionId);
   sessionPendingPromptAtom.remove(sessionId);
   sessionPendingPermissionAtom.remove(sessionId);
+  sessionWaitingForQuestionAtom.remove(sessionId);
+  sessionWaitingForPlanApprovalAtom.remove(sessionId);
   sessionLastReadAtom.remove(sessionId);
   sessionDraftInputAtom.remove(sessionId);
   sessionDraftAttachmentsAtom.remove(sessionId);

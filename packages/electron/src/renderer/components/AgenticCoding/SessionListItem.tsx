@@ -2,20 +2,32 @@ import React, { useState, useCallback, useEffect, useRef, memo } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { MaterialSymbol, ProviderIcon } from '@nimbalyst/runtime';
 import { getRelativeTimeString } from '../../utils/dateFormatting';
-import { sessionOrChildProcessingAtom, sessionUnreadAtom, sessionPendingPromptAtom, reparentSessionAtom, refreshSessionListAtom } from '../../store';
+import { sessionOrChildProcessingAtom, sessionUnreadAtom, sessionPendingPromptAtom, sessionWaitingForQuestionAtom, sessionWaitingForPlanApprovalAtom, reparentSessionAtom, refreshSessionListAtom } from '../../store';
 
 /**
  * Combined status indicator that subscribes to this session's state atoms.
- * Shows processing, pending prompt, or unread status (in priority order).
+ * Shows waiting for input, processing, pending prompt, or unread status (in priority order).
  * Only this component re-renders when the session's state changes.
  */
 const SessionStatusIndicator = memo<{ sessionId: string; messageCount?: number }>(({ sessionId, messageCount }) => {
   // Use aggregated atom that checks this session AND any children (for workstreams)
+  const isWaitingForQuestion = useAtomValue(sessionWaitingForQuestionAtom(sessionId));
+  const isWaitingForPlanApproval = useAtomValue(sessionWaitingForPlanApprovalAtom(sessionId));
   const isProcessing = useAtomValue(sessionOrChildProcessingAtom(sessionId));
   const hasPendingPrompt = useAtomValue(sessionPendingPromptAtom(sessionId));
   const hasUnread = useAtomValue(sessionUnreadAtom(sessionId));
 
-  // Priority: processing > pending prompt > unread > message count
+  // Priority: waiting for input > processing > pending prompt > unread > message count
+  // Both AskUserQuestion and ExitPlanMode show the same "waiting for input" indicator
+  if (isWaitingForQuestion || isWaitingForPlanApproval) {
+    const title = isWaitingForQuestion ? 'Waiting for your answer' : 'Waiting for plan approval';
+    return (
+      <div className="session-list-item-status waiting-for-input flex items-center justify-center w-5 h-5 text-[var(--nim-warning)] animate-pulse" title={title}>
+        <MaterialSymbol icon="contact_support" size={14} />
+      </div>
+    );
+  }
+
   if (isProcessing) {
     return (
       <div className="session-list-item-status processing flex items-center justify-center w-5 h-5 text-[var(--nim-primary)] opacity-80" title="Processing...">

@@ -30,6 +30,8 @@ import {
   updateSessionStoreAtom,
   selectedWorkstreamAtom,
   sessionUnreadAtom,
+  sessionWaitingForQuestionAtom,
+  sessionWaitingForPlanApprovalAtom,
 } from './atoms/sessions';
 import { workstreamActiveChildAtom } from './atoms/workstreamState';
 
@@ -69,6 +71,9 @@ export function initSessionStateListeners(): () => void {
       case 'session:error':
       case 'session:interrupted':
         store.set(sessionProcessingAtom(sessionId), false);
+        // Also clear waiting states - if session ended, no longer waiting
+        store.set(sessionWaitingForQuestionAtom(sessionId), false);
+        store.set(sessionWaitingForPlanApprovalAtom(sessionId), false);
         break;
 
       default:
@@ -146,6 +151,52 @@ export function initSessionStateListeners(): () => void {
     store.set(updateSessionStoreAtom, { sessionId, updates: { title, updatedAt: Date.now() } });
   };
 
+  /**
+   * Handle AskUserQuestion events globally.
+   * This ensures the sidebar indicator shows when a session is waiting for a question answer,
+   * even if the SessionTranscript component isn't mounted (e.g., inactive tabs).
+   */
+  const handleAskUserQuestion = (data: { sessionId: string; questionId: string }) => {
+    const { sessionId } = data;
+    console.log('[sessionStateListeners] handleAskUserQuestion received:', { sessionId, questionId: data.questionId });
+    if (!sessionId) return;
+    store.set(sessionWaitingForQuestionAtom(sessionId), true);
+    console.log('[sessionStateListeners] Set sessionWaitingForQuestionAtom to true for:', sessionId);
+  };
+
+  /**
+   * Handle AskUserQuestion answered/cancelled events globally.
+   * Clears the waiting indicator when the user answers or cancels the question.
+   */
+  const handleAskUserQuestionResolved = (data: { sessionId: string }) => {
+    const { sessionId } = data;
+    if (!sessionId) return;
+    store.set(sessionWaitingForQuestionAtom(sessionId), false);
+  };
+
+  /**
+   * Handle ExitPlanMode confirmation events globally.
+   * This ensures the sidebar indicator shows when a session is waiting for plan approval,
+   * even if the SessionTranscript component isn't mounted (e.g., inactive tabs).
+   */
+  const handleExitPlanModeConfirm = (data: { sessionId: string; requestId: string }) => {
+    const { sessionId } = data;
+    console.log('[sessionStateListeners] handleExitPlanModeConfirm received:', { sessionId, requestId: data.requestId });
+    if (!sessionId) return;
+    store.set(sessionWaitingForPlanApprovalAtom(sessionId), true);
+    console.log('[sessionStateListeners] Set sessionWaitingForPlanApprovalAtom to true for:', sessionId);
+  };
+
+  /**
+   * Handle ExitPlanMode response events globally.
+   * Clears the waiting indicator when the user approves or denies the plan.
+   */
+  const handleExitPlanModeResolved = (data: { sessionId: string }) => {
+    const { sessionId } = data;
+    if (!sessionId) return;
+    store.set(sessionWaitingForPlanApprovalAtom(sessionId), false);
+  };
+
   // First, subscribe to the session state manager (IPC call to register this window)
   window.electronAPI.sessionState.subscribe()
     .then((result: any) => {
@@ -177,9 +228,22 @@ export function initSessionStateListeners(): () => void {
   // Subscribe to message logged events
   let cleanupMessageLogged: (() => void) | undefined;
   let cleanupTitleUpdated: (() => void) | undefined;
+  let cleanupAskUserQuestion: (() => void) | undefined;
+  let cleanupAskUserQuestionAnswered: (() => void) | undefined;
+  let cleanupSessionCancelled: (() => void) | undefined;
+  let cleanupExitPlanModeConfirm: (() => void) | undefined;
+  let cleanupExitPlanModeResolved: (() => void) | undefined;
   if (window.electronAPI?.on) {
+    console.log('[sessionStateListeners] Setting up IPC event listeners for AskUserQuestion and ExitPlanMode');
     cleanupMessageLogged = window.electronAPI.on('ai:message-logged', handleMessageLogged);
     cleanupTitleUpdated = window.electronAPI.on('session:title-updated', handleTitleUpdated);
+    cleanupAskUserQuestion = window.electronAPI.on('ai:askUserQuestion', handleAskUserQuestion);
+    cleanupAskUserQuestionAnswered = window.electronAPI.on('ai:askUserQuestionAnswered', handleAskUserQuestionResolved);
+    cleanupSessionCancelled = window.electronAPI.on('ai:sessionCancelled', handleAskUserQuestionResolved);
+    cleanupExitPlanModeConfirm = window.electronAPI.on('ai:exitPlanModeConfirm', handleExitPlanModeConfirm);
+    cleanupExitPlanModeResolved = window.electronAPI.on('ai:exitPlanModeResolved', handleExitPlanModeResolved);
+  } else {
+    console.warn('[sessionStateListeners] window.electronAPI.on not available!');
   }
 
   // Return cleanup function
@@ -188,5 +252,10 @@ export function initSessionStateListeners(): () => void {
     window.electronAPI.sessionState?.unsubscribe?.();
     cleanupMessageLogged?.();
     cleanupTitleUpdated?.();
+    cleanupAskUserQuestion?.();
+    cleanupAskUserQuestionAnswered?.();
+    cleanupSessionCancelled?.();
+    cleanupExitPlanModeConfirm?.();
+    cleanupExitPlanModeResolved?.();
   };
 }

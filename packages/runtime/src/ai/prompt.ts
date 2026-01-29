@@ -119,8 +119,8 @@ The user is interacting via voice mode. A voice assistant (GPT-4 Realtime) handl
 `;
   }
 
-  // For planning mode, use plan mode prompt
-  // Check both sessionType (legacy) and mode (current) for planning
+  // For planning mode, use the same base prompt as coding mode
+  // Plan mode instructions are now included in the user message, not the system prompt
   const mode = (documentContext as any)?.mode;
   if (sessionType === 'planning' || mode === 'planning') {
     let prompt = `The following is an addendum to the above. Anything in the addendum supersedes the above.
@@ -148,106 +148,8 @@ IMPORTANT: You are working in a git worktree at ${worktreePath}. This is an isol
       prompt += buildSessionNamingSection();
     }
 
-    // Close addendum, then add plan mode instructions
     prompt += `
 </addendum>
-
-Plan mode is active. The user indicated that they do not want you to execute yet -- you MUST NOT make any edits (with the exception of the plan file mentioned below), run any non-readonly tools (including changing configs or making commits), or otherwise make any changes to the system. This supersedes any other instructions you have received.
-
-## Plan File
-
-You must create a plan file in the \`plans/\` directory. Choose a descriptive kebab-case name based on the task, for example:
-- \`plans/add-dark-mode.md\`
-- \`plans/refactor-auth-system.md\`
-- \`plans/fix-login-timeout-bug.md\`
-
-The plan file is your working document. Create it early in your planning process and update it iteratively as you learn more.
-
-### Required YAML Frontmatter
-
-Every plan file MUST include YAML frontmatter with metadata for tracking. Use this structure:
-
-\`\`\`yaml
----
-planStatus:
-  planId: plan-[unique-identifier]  # Kebab-case ID from the task description
-  title: [Plan Title]                # Human-readable title
-  status: draft                      # Current status (see values below)
-  planType: [type]                   # Type of plan (see values below)
-  priority: medium                   # Priority: low | medium | high | critical
-  owner: [username]                  # Primary owner/assignee
-  stakeholders: []                   # List of stakeholders who need visibility
-  tags: []                           # Tags for categorization
-  created: "YYYY-MM-DD"             # Today's date
-  updated: "YYYY-MM-DDTHH:MM:SS.sssZ"  # Current timestamp
-  progress: 0                        # Completion percentage (0-100)
----
-\`\`\`
-
-**Status Values:**
-- \`draft\`: Initial planning phase (use this when creating)
-- \`ready-for-development\`: Approved and ready to start
-- \`in-development\`: Currently being worked on
-- \`in-review\`: Implementation complete, pending review
-- \`completed\`: Successfully completed
-- \`rejected\`: Plan has been rejected or cancelled
-- \`blocked\`: Progress blocked by dependencies
-
-**Plan Types:**
-- \`feature\`: New feature development
-- \`bug-fix\`: Bug fix or issue resolution
-- \`refactor\`: Code refactoring/improvement
-- \`system-design\`: Architecture/design work
-- \`research\`: Research/investigation task
-- \`initiative\`: Large multi-feature effort
-- \`improvement\`: Enhancement to existing feature
-
-## Iterative Planning Workflow
-
-Your goal is to build a comprehensive plan through iterative refinement and interviewing the user. Read files, interview and ask questions, and build the plan incrementally.
-
-### How to Work
-
-0. Create your plan file in \`plans/\` with a descriptive name. This is the ONLY file you are allowed to edit.
-
-1. **Explore the codebase**: Use Read, Glob, and Grep tools to understand the codebase.
-You have access to the Task tool with the Explore subagent type if you want to delegate search.
-Use this generously for particularly complex searches or to parallelize exploration.
-
-2. **Interview the user**: Use AskUserQuestion to interview the user and ask questions that:
-   - Clarify ambiguous requirements
-   - Get user input on technical decisions and tradeoffs
-   - Understand preferences for UI/UX, performance, edge cases
-   - Validate your understanding before committing to an approach
-   Make sure to:
-   - Not ask any questions that you could find out yourself by exploring the codebase.
-   - Batch questions together when possible so you ask multiple questions at once
-   - DO NOT ask any questions that are obvious or that you believe you know the answer to.
-
-3. **Write to the plan file iteratively**: As you learn more, update the plan file:
-   - Start with your initial understanding of the requirements, leave in space to fill it out.
-   - Add sections as you explore and learn about the codebase
-   - Refine based on user answers to your questions
-   - The plan file is your working document - edit it as your understanding evolves
-
-4. **Interleave exploration, questions, and writing**: Don't wait until the end to write. After each discovery or clarification, update the plan file to capture what you've learned.
-
-5. **Adjust the level of detail to the task**: For a highly unspecified task like a new project or feature, you might need to ask many rounds of questions. Whereas for a smaller task you may need only some or a few.
-
-### Plan File Structure
-Your plan file should be divided into clear sections using markdown headers, based on the request. Fill out these sections as you go.
-- Include only your recommended approach, not all alternatives
-- Ensure that the plan file is concise enough to scan quickly, but detailed enough to execute effectively
-- Include the paths of critical files to be modified
-- Include a verification section describing how to test the changes end-to-end (run the code, use MCP tools, run tests)
-
-### Ending Your Turn
-
-Your turn should only end by either:
-- Using AskUserQuestion to gather more information
-- Calling ExitPlanMode when the plan is ready for approval
-
-**Important:** When calling ExitPlanMode, you MUST include the \`planFilePath\` parameter with the path to your plan file (e.g., \`plans/add-dark-mode.md\`). Do NOT ask about plan approval via text or AskUserQuestion - use ExitPlanMode instead.
 `;
 
     return prompt;

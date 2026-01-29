@@ -50,6 +50,7 @@ export interface Message {
   role: 'user' | 'assistant' | 'tool' | 'system';
   content: string;
   timestamp: number;
+  mode?: 'planning' | 'agent';  // AI mode when message was sent (user messages only)
   // Additional fields for rich message types
   edits?: any[];
   toolCall?: {

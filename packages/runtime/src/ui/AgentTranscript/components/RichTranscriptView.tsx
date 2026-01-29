@@ -1027,6 +1027,11 @@ export const RichTranscriptView = React.forwardRef<
                     const isTool = message.role === 'tool';
                     const isCollapsed = collapsedMessages.has(index);
 
+                    // Debug: log user messages with their mode
+                    if (isUser) {
+                      console.log('[RichTranscriptView] User message mode:', message.mode, 'content:', message.content.slice(0, 50));
+                    }
+
                     // Find tool messages that should be grouped with this message
                     const toolMessagesBefore: { message: Message, index: number }[] = [];
                     if (message.role === 'assistant') {
@@ -1088,6 +1093,14 @@ export const RichTranscriptView = React.forwardRef<
                               <span className="rich-transcript-message-sender font-medium text-[var(--nim-text)] text-sm">
                                 {isUser ? 'You' : ''}
                               </span>
+                              {isUser && message.mode === 'planning' && (
+                                <span
+                                  className="text-[10px] rounded-full font-medium"
+                                  style={{ backgroundColor: '#3b82f6', color: 'white', padding: '2px 6px' }}
+                                >
+                                  Plan
+                                </span>
+                              )}
                               <span className="rich-transcript-message-time text-xs text-[var(--nim-text-faint)]">
                                 {formatMessageTime(message.timestamp)}
                               </span>
