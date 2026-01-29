@@ -1137,6 +1137,16 @@ export async function createApplicationMenu() {
                         });
                     }
                 },
+                {
+                    label: 'Open User Data Directory',
+                    click: async () => {
+                        const userDataPath = app.getPath('userData');
+                        shell.openPath(userDataPath).catch((err: any) => {
+                            console.error('Failed to open user data directory:', err);
+                            dialog.showErrorBox('Error', `Could not open user data directory at: ${userDataPath}`);
+                        });
+                    }
+                },
                 { type: 'separator' },
                 {
                     label: 'Show Dialogs',

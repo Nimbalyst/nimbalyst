@@ -23,8 +23,119 @@ class PGLiteWorker {
   constructor() {
     this.db = null;
     this.dataDir = path.join(workerData.userDataPath, 'pglite-db');
+    // Our own lock file with actual PID - separate from PGLite's postmaster.pid
+    this.lockFilePath = path.join(workerData.userDataPath, 'nimbalyst-db.pid');
     console.log('[PGLite Worker] Worker thread instantiated, dataDir:', this.dataDir);
     this.setupMessageHandler();
+  }
+
+  /**
+   * Acquire exclusive lock on the database using a PID file.
+   * This prevents multiple Nimbalyst instances from corrupting the database.
+   *
+   * Lock file format:
+   *   Line 1: PID of the owning process
+   *   Line 2: Start timestamp (ISO format)
+   *   Line 3: Hostname
+   *
+   * @returns {Object} { acquired: boolean, error?: Error }
+   */
+  acquireLock() {
+    const fs = require('fs');
+    const os = require('os');
+
+    try {
+      if (fs.existsSync(this.lockFilePath)) {
+        // Lock file exists - check if the owning process is still running
+        const lockContent = fs.readFileSync(this.lockFilePath, 'utf8');
+        const lines = lockContent.split('\n');
+        const lockPid = parseInt(lines[0], 10);
+        const lockTimestamp = lines[1] || 'unknown';
+        const lockHostname = lines[2] || 'unknown';
+
+        if (!lockPid || isNaN(lockPid)) {
+          // Invalid lock file - remove it
+          console.log('[PGLite Worker] Removing invalid lock file (no valid PID)');
+          fs.unlinkSync(this.lockFilePath);
+        } else {
+          // Check if the process is still running
+          let isRunning = false;
+          try {
+            // process.kill with signal 0 tests if process exists without killing it
+            process.kill(lockPid, 0);
+            isRunning = true;
+          } catch (e) {
+            // ESRCH: No such process (stale lock from crash)
+            // EPERM: Process exists but we can't signal it (still running, different user)
+            isRunning = e.code === 'EPERM';
+          }
+
+          if (isRunning) {
+            // Another instance is actually running - block!
+            const error = new Error(
+              `Database is locked by another Nimbalyst process.\n\n` +
+              `Lock holder PID: ${lockPid}\n` +
+              `Lock acquired: ${lockTimestamp}\n` +
+              `Lock host: ${lockHostname}\n\n` +
+              `Please close the other instance before starting a new one, ` +
+              `or data corruption may occur.`
+            );
+            error.code = 'DATABASE_LOCKED';
+            error.lockPid = lockPid;
+            return { acquired: false, error };
+          } else {
+            // Process is dead - stale lock from a crash
+            console.log(`[PGLite Worker] Removing stale lock file from crashed process (PID ${lockPid} no longer running)`);
+            console.log(`[PGLite Worker] Previous lock was acquired at: ${lockTimestamp}`);
+            fs.unlinkSync(this.lockFilePath);
+          }
+        }
+      }
+
+      // Create our lock file with current process info
+      const lockContent = [
+        process.pid.toString(),
+        new Date().toISOString(),
+        os.hostname()
+      ].join('\n');
+
+      fs.writeFileSync(this.lockFilePath, lockContent, { mode: 0o644 });
+      console.log(`[PGLite Worker] Acquired database lock (PID: ${process.pid})`);
+      return { acquired: true };
+
+    } catch (error) {
+      if (error.code === 'DATABASE_LOCKED') {
+        return { acquired: false, error };
+      }
+      // Unexpected error - log but try to continue
+      console.error('[PGLite Worker] Error acquiring lock:', error);
+      return { acquired: true }; // Proceed anyway for filesystem errors
+    }
+  }
+
+  /**
+   * Release the database lock by removing our PID file.
+   * Only removes if we own the lock (our PID matches).
+   */
+  releaseLock() {
+    const fs = require('fs');
+
+    try {
+      if (fs.existsSync(this.lockFilePath)) {
+        // Verify we own this lock before removing
+        const lockContent = fs.readFileSync(this.lockFilePath, 'utf8');
+        const lockPid = parseInt(lockContent.split('\n')[0], 10);
+
+        if (lockPid === process.pid) {
+          fs.unlinkSync(this.lockFilePath);
+          console.log(`[PGLite Worker] Released database lock (PID: ${process.pid})`);
+        } else {
+          console.warn(`[PGLite Worker] Lock file owned by different PID (${lockPid}), not removing`);
+        }
+      }
+    } catch (error) {
+      console.warn('[PGLite Worker] Error releasing lock:', error);
+    }
   }
 
   setupMessageHandler() {
@@ -96,6 +207,27 @@ class PGLiteWorker {
         fs.mkdirSync(parentDir, { recursive: true });
       }
 
+      // Acquire our exclusive lock BEFORE touching PGLite
+      // This prevents multiple Nimbalyst instances from corrupting the database
+      const lockResult = this.acquireLock();
+      if (!lockResult.acquired) {
+        throw lockResult.error;
+      }
+
+      // Also clean up any stale PGLite postmaster.pid files from previous crashes
+      // PGLite uses -42 as a sentinel value, not a real PID, so we can't reliably
+      // detect if another PGLite instance is running from it. Our nimbalyst-db.pid
+      // is the authoritative lock.
+      try {
+        const postmasterPidPath = path.join(this.dataDir, 'postmaster.pid');
+        if (fs.existsSync(postmasterPidPath)) {
+          console.log('[PGLite Worker] Removing stale postmaster.pid (our lock is authoritative)');
+          fs.unlinkSync(postmasterPidPath);
+        }
+      } catch (e) {
+        console.warn('[PGLite Worker] Could not remove stale postmaster.pid:', e.message);
+      }
+
       // Attempt to initialize database, with automatic recovery on corruption
       let initAttempt = 0;
       const maxAttempts = 2;
@@ -104,56 +236,6 @@ class PGLiteWorker {
         initAttempt++;
 
         try {
-          // Check for lock files before initialization
-          // If another process has the database open, we should NOT proceed
-          try {
-            const lockPath = path.join(this.dataDir, 'postmaster.pid');
-            if (fs.existsSync(lockPath)) {
-              // Read the PID from the lock file
-              const lockContent = fs.readFileSync(lockPath, 'utf8');
-              const pid = parseInt(lockContent.split('\n')[0], 10);
-
-              if (pid && !isNaN(pid)) {
-                // Check if that process is still running
-                let isRunning = false;
-                try {
-                  // process.kill with signal 0 checks if process exists without killing it
-                  process.kill(pid, 0);
-                  isRunning = true;
-                } catch (e) {
-                  // ESRCH means process doesn't exist (stale lock)
-                  // EPERM means process exists but we can't signal it (still running)
-                  isRunning = e.code === 'EPERM';
-                }
-
-                if (isRunning) {
-                  // Another instance has the database open - abort!
-                  const error = new Error(
-                    `Database is locked by another process (PID: ${pid}).\n\n` +
-                    `Another instance of Nimbalyst appears to be running.\n` +
-                    `Please close it before starting a new instance, or data corruption may occur.`
-                  );
-                  error.code = 'DATABASE_LOCKED';
-                  throw error;
-                } else {
-                  // Process is dead - this is a stale lock from a crash
-                  console.log('[PGLite Worker] Removing stale lock file from previous crash (PID', pid, 'not running):', lockPath);
-                  fs.unlinkSync(lockPath);
-                }
-              } else {
-                // Couldn't parse PID - remove the lock file
-                console.log('[PGLite Worker] Removing unparseable lock file:', lockPath);
-                fs.unlinkSync(lockPath);
-              }
-            }
-          } catch (lockError) {
-            if (lockError.code === 'DATABASE_LOCKED') {
-              throw lockError; // Re-throw our custom error
-            }
-            console.warn('[PGLite Worker] Failed to check/remove lock file:', lockError);
-            // Continue anyway for other errors - PGlite will handle it
-          }
-
           // Create PGlite instance
           // Use file-based storage for persistent data
           console.log('[PGLite Worker] Creating PGlite instance at:', this.dataDir);
@@ -991,17 +1073,19 @@ class PGLiteWorker {
         await this.db.close();
         console.log('[PGLite Worker] Database closed successfully');
 
-        // Explicitly remove lock file if it still exists
-        // This is critical for Windows where forced shutdowns may not clean up properly
+        // Release our application-level lock
+        this.releaseLock();
+
+        // Also clean up PGLite's internal postmaster.pid if present
         const fs = require('fs');
-        const lockPath = path.join(this.dataDir, 'postmaster.pid');
+        const postmasterPidPath = path.join(this.dataDir, 'postmaster.pid');
         try {
-          if (fs.existsSync(lockPath)) {
-            fs.unlinkSync(lockPath);
-            console.log('[PGLite Worker] Removed lock file after close');
+          if (fs.existsSync(postmasterPidPath)) {
+            fs.unlinkSync(postmasterPidPath);
+            console.log('[PGLite Worker] Removed PGLite postmaster.pid after close');
           }
         } catch (lockError) {
-          console.warn('[PGLite Worker] Failed to remove lock file after close:', lockError);
+          console.warn('[PGLite Worker] Failed to remove postmaster.pid after close:', lockError);
         }
 
         this.db = null;
