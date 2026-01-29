@@ -283,7 +283,12 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
   }
 
   // Parse files - can be strings or objects with path and status
-  const rawFiles: FileInput[] = args.filesToStage || [];
+  // Ensure rawFiles is always an array even if args.filesToStage is malformed
+  // Memoize to prevent infinite loop - args.filesToStage reference is stable
+  const rawFiles: FileInput[] = useMemo(
+    () => Array.isArray(args.filesToStage) ? args.filesToStage : [],
+    [args.filesToStage]
+  );
   const filesWithStatus: FileWithStatus[] = useMemo(
     () => rawFiles.map(normalizeFileInput),
     [rawFiles]
