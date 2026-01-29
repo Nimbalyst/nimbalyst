@@ -67,10 +67,44 @@ function cleanScrollback(raw: string): string {
  * The terminal's render loop will crash with "Invalid code point" errors when trying
  * to render these. This function validates each character and replaces invalid ones.
  *
- * Returns null if the data is severely corrupted (>1% invalid characters), indicating
- * the scrollback should be discarded entirely.
+ * Also detects null bytes and other binary corruption that can cause WASM memory
+ * access errors in Ghostty's parser.
+ *
+ * Returns null if the data is severely corrupted (>1% invalid characters or contains
+ * null bytes), indicating the scrollback should be discarded entirely.
  */
 function sanitizeScrollback(raw: string): string | null {
+  // Quick check for null bytes - indicates binary corruption
+  // Null bytes should never appear in terminal output and cause WASM memory errors
+  if (raw.includes('\x00')) {
+    console.warn('[TerminalPanel] Scrollback contains null bytes, discarding corrupted data');
+    return null;
+  }
+
+  // Check for excessive unexpected control characters (outside of ESC sequences)
+  // Control chars 0x01-0x06, 0x0E-0x1A (excluding common ones like \t, \n, \r, \x1b)
+  // High density of these indicates binary corruption
+  let suspiciousControlCount = 0;
+  for (let i = 0; i < raw.length; i++) {
+    const code = raw.charCodeAt(i);
+    // Count control chars that shouldn't appear frequently in terminal output
+    // 0x01-0x06 (SOH, STX, ETX, EOT, ENQ, ACK) and 0x0E-0x1A (SO, SI, DLE, etc.)
+    // Exclude: 0x07 (BEL - used in escape sequences), 0x08 (BS), 0x09 (TAB),
+    // 0x0A (LF), 0x0B (VT), 0x0C (FF), 0x0D (CR), 0x1B (ESC)
+    if ((code >= 0x01 && code <= 0x06) || (code >= 0x0E && code <= 0x1A)) {
+      suspiciousControlCount++;
+    }
+  }
+
+  // If more than 0.5% are suspicious control characters, likely binary corruption
+  const suspiciousRatio = suspiciousControlCount / raw.length;
+  if (suspiciousRatio > 0.005) {
+    console.warn(
+      `[TerminalPanel] Scrollback contains excessive control characters (${suspiciousControlCount}/${raw.length}, ${(suspiciousRatio * 100).toFixed(2)}%), discarding`
+    );
+    return null;
+  }
+
   const MAX_VALID_CODE_POINT = 0x10FFFF;
   let invalidCount = 0;
   let result = '';
@@ -163,6 +197,9 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
   const fitAddonRef = useRef<FitAddon | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const [hasExited, setHasExited] = useState(false);
+  const hasExitedRef = useRef(false); // Ref to track exit state for callbacks
+  const hasAutoRestartedRef = useRef(false); // Track if we've already auto-restarted (prevent loops)
+  const initStartTimeRef = useRef<number>(0); // Track when initialization started
   const [exitCode, setExitCode] = useState<number | null>(null);
   const [initError, setInitError] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
@@ -188,6 +225,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
 
   // Handle terminal restart after exit
   const handleRestart = useCallback(async () => {
+    hasExitedRef.current = false; // Reset ref for callbacks
     setHasExited(false);
     setExitCode(null);
     setInitError(null);
@@ -217,6 +255,9 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
 
     const initTerminal = async () => {
       try {
+        // Track when initialization started for quick-exit detection
+        initStartTimeRef.current = Date.now();
+
         // Initialize ghostty WASM first
         await ensureGhosttyInit();
 
@@ -295,15 +336,46 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
               // added for a potentially different terminal width
               const cleaned = cleanScrollback(sanitized);
 
-              // Write scrollback in chunks to avoid WASM memory issues
-              // and wrap in try-catch to prevent crashes from corrupted data
-              try {
-                const CHUNK_SIZE = 16384; // 16KB chunks
+              // Write scrollback in chunks to avoid WASM memory issues.
+              // Use smaller chunks and yield between them to keep UI responsive.
+              // If writing takes too long or fails, clear the corrupted data.
+              const CHUNK_SIZE = 8192; // 8KB chunks (smaller for smoother UI)
+              const MAX_RESTORE_TIME_MS = 2000; // Abort if restoration takes too long
+              const startTime = Date.now();
+              let writeError: Error | null = null;
+
+              const writeChunks = async () => {
                 for (let i = 0; i < cleaned.length; i += CHUNK_SIZE) {
-                  if (disposed) break;
-                  terminal.write(cleaned.slice(i, i + CHUNK_SIZE));
+                  if (disposed) return;
+
+                  // Check timeout
+                  if (Date.now() - startTime > MAX_RESTORE_TIME_MS) {
+                    console.warn('[TerminalPanel] Scrollback restoration timeout, clearing data');
+                    window.electronAPI.terminal.clearScrollback?.(sessionId);
+                    return;
+                  }
+
+                  try {
+                    terminal.write(cleaned.slice(i, i + CHUNK_SIZE));
+                  } catch (err) {
+                    writeError = err instanceof Error ? err : new Error(String(err));
+                    break;
+                  }
+
+                  // Yield to the event loop every few chunks to keep UI responsive
+                  if ((i / CHUNK_SIZE) % 4 === 3) {
+                    await new Promise(resolve => setTimeout(resolve, 0));
+                  }
                 }
-              } catch (writeError) {
+              };
+
+              try {
+                await writeChunks();
+              } catch (err) {
+                writeError = err instanceof Error ? err : new Error(String(err));
+              }
+
+              if (writeError) {
                 console.warn('[TerminalPanel] Failed to restore scrollback, clearing corrupted data:', writeError);
                 // Clear the corrupted scrollback file to prevent future crashes
                 window.electronAPI.terminal.clearScrollback?.(sessionId);
@@ -321,6 +393,26 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
           // Listen for PTY exit
           unsubscribeExited = window.electronAPI.terminal.onExited((data) => {
             if (data.sessionId === terminalId && !disposed) {
+              hasExitedRef.current = true; // Update ref immediately for callbacks
+
+              // Auto-restart if terminal exits very quickly after init (likely a stale/broken session)
+              // Only do this once to prevent infinite restart loops
+              const timeSinceInit = Date.now() - initStartTimeRef.current;
+              const QUICK_EXIT_THRESHOLD_MS = 2000;
+
+              if (timeSinceInit < QUICK_EXIT_THRESHOLD_MS && !hasAutoRestartedRef.current) {
+                console.log(`[TerminalPanel] Terminal ${terminalId} exited quickly (${timeSinceInit}ms), auto-restarting once`);
+                hasAutoRestartedRef.current = true;
+                hasExitedRef.current = false;
+                // Restart after a brief delay to let things settle
+                setTimeout(() => {
+                  if (!disposed) {
+                    handleRestart();
+                  }
+                }, 100);
+                return; // Don't show exit UI, we're restarting
+              }
+
               setHasExited(true);
               setExitCode(data.exitCode);
               onExit?.(data.exitCode);
@@ -328,12 +420,13 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
           });
 
           // Send input to PTY
+          // Use ref instead of state to avoid stale closure issues
           inputDisposable = terminal.onData((data) => {
             if (!disposed) {
               // If terminal has exited and user presses Enter, restart it
-              if (hasExited && data === '\r') {
+              if (hasExitedRef.current && data === '\r') {
                 handleRestart();
-              } else if (!hasExited) {
+              } else if (!hasExitedRef.current) {
                 window.electronAPI.terminal.write(sessionId, data);
               }
             }
@@ -377,7 +470,9 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
       terminalInstanceRef.current = null;
       fitAddonRef.current = null;
     };
-  }, [terminalId, workspacePath, isActive, hasExited, handleRestart, onExit]);
+  // Note: hasExited is NOT in deps - we use hasExitedRef instead to avoid
+  // effect re-runs when terminal exits (which would dispose and recreate it)
+  }, [terminalId, workspacePath, isActive, handleRestart, onExit]);
 
   // Focus terminal when becoming active
   useEffect(() => {
