@@ -187,6 +187,11 @@ export class ElectronDocumentService implements DocumentService {
                          cachedState.mtime !== stats.mtime;
 
       if (needsUpdate) {
+        // Skip directories - they don't have frontmatter
+        if (newDoc.type === 'directory') {
+          continue;
+        }
+
         // TODO: Debug logging - uncomment if needed for troubleshooting
         // console.log(`[DocumentService] File needs update: ${newDoc.path} (oldDoc=${!!oldDoc}, cachedState=${!!cachedState}, mtimeChanged=${cachedState?.mtime !== stats.mtime})`);
         try {
