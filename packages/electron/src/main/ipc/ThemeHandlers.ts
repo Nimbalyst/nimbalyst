@@ -94,17 +94,18 @@ async function getUserThemesDir(): Promise<string> {
 function getBuiltInThemesDir(): string {
   // Built-in themes are in the runtime package
   // In development: packages/runtime/src/themes/builtin
-  // In production: app.asar/node_modules/@nimbalyst/runtime/dist/themes/builtin
-  const appPath = app.getAppPath();
+  // In production: Resources/node_modules/@nimbalyst/runtime/dist/themes/builtin (extraResources)
   const isDev = !app.isPackaged;
 
   if (isDev) {
+    const appPath = app.getAppPath();
     // Development: appPath is packages/electron, so go up one level to packages/
     // then into runtime/src/themes/builtin
     return path.join(appPath, '..', 'runtime', 'src', 'themes', 'builtin');
   } else {
-    // Production: Themes are bundled with runtime package
-    return path.join(appPath, 'node_modules', '@nimbalyst', 'runtime', 'dist', 'themes', 'builtin');
+    // Production: Themes are in extraResources (Resources/ not app.asar/)
+    // process.resourcesPath points to app.asar/../ (the Resources directory)
+    return path.join(process.resourcesPath, 'node_modules', '@nimbalyst', 'runtime', 'dist', 'themes', 'builtin');
   }
 }
 
