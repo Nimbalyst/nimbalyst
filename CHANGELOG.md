@@ -20,6 +20,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.17] - 2026-01-29
+
+
+### Added
+- "Open in External Editor" context menu option with configurable editor path
+- License attribution for third-party themes
+
+### Changed
+- Themes separated from extension system for faster loading
+- Improved installed extensions panel layout and organization
+- Built-in commands and mockup editor migrated to extension system
+
+### Fixed
+- PID-based database locking to prevent corruption when multiple instances attempt to open
+- Slash command menu now responds to clicks and shows no duplicates
+- Extension MCP tools now register correctly when workspace path is set
+- Prevent extension initialization crash when aiTools is not an array
+- Prevent infinite render loop in GitCommitConfirmationWidget
+- Stop EISDIR errors when scanning .nimbalyst directories
+- Smart commit prompt now correctly references developer_git_commit_proposal tool
+- "Reveal in Finder" context menu now works correctly
+
+### Removed
+- Redundant database queries at startup
+
 ## [0.52.16] - 2026-01-29
 
 
