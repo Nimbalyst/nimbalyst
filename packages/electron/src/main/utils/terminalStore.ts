@@ -245,6 +245,16 @@ export function listTerminals(workspacePath: string): TerminalInstance[] {
 }
 
 /**
+ * Get all terminal IDs associated with a specific worktree
+ */
+export function getTerminalsByWorktreeId(workspacePath: string, worktreeId: string): string[] {
+  const state = getWorkspaceTerminalState(workspacePath);
+  return Object.values(state.terminals)
+    .filter((t): t is TerminalInstance => t !== undefined && t.worktreeId === worktreeId)
+    .map(t => t.id);
+}
+
+/**
  * Set the active terminal
  */
 export function setActiveTerminal(workspacePath: string, terminalId: string | undefined): void {

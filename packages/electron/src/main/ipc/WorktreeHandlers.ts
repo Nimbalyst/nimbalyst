@@ -14,6 +14,7 @@ import { archiveProgressManager } from '../services/ArchiveProgressManager';
 import { AISessionsRepository } from '@nimbalyst/runtime/storage/repositories/AISessionsRepository';
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
 import { getTerminalSessionManager } from '../services/TerminalSessionManager';
+import { getTerminalsByWorktreeId, deleteTerminalInstance } from '../utils/terminalStore';
 
 const logger = log.scope('WorktreeHandlers');
 
@@ -25,6 +26,19 @@ function emitGitStatusChanged(workspacePath: string): void {
   for (const window of windows) {
     if (!window.isDestroyed()) {
       window.webContents.send('git:status-changed', { workspacePath });
+    }
+  }
+}
+
+/**
+ * Emit terminal list changed event to all windows
+ * Used when terminals are deleted (e.g., when archiving a worktree)
+ */
+function emitTerminalListChanged(workspacePath: string): void {
+  const windows = BrowserWindow.getAllWindows();
+  for (const window of windows) {
+    if (!window.isDestroyed()) {
+      window.webContents.send('terminal:list-changed', { workspacePath });
     }
   }
 }
@@ -900,6 +914,29 @@ export function registerWorktreeHandlers(): void {
       const terminalManager = getTerminalSessionManager();
       await terminalManager.destroyTerminalsForSessions(sessionIds);
       logger.info('Destroyed terminal processes for worktree sessions', { worktreeId });
+
+      // Step 2b: Delete terminals associated with this worktree
+      // Terminals have a worktreeId field that links them to the worktree.
+      // When the worktree is archived, these terminals become orphaned and will
+      // fail to start (cwd doesn't exist), so we clean them up here.
+      const worktreeTerminalIds = getTerminalsByWorktreeId(workspacePath, worktreeId);
+      if (worktreeTerminalIds.length > 0) {
+        logger.info('Deleting terminals associated with worktree', { worktreeId, terminalCount: worktreeTerminalIds.length });
+        for (const terminalId of worktreeTerminalIds) {
+          try {
+            // Kill the terminal process if it's running
+            await terminalManager.destroyTerminal(terminalId);
+            // Delete from the terminal store
+            deleteTerminalInstance(workspacePath, terminalId);
+          } catch (err) {
+            logger.warn('Failed to delete worktree terminal', { terminalId, worktreeId, error: err });
+          }
+        }
+        logger.info('Deleted terminals for worktree', { worktreeId, deletedCount: worktreeTerminalIds.length });
+
+        // Notify renderer to refresh terminal list
+        emitTerminalListChanged(workspacePath);
+      }
 
       // Step 3: Archive all sessions for this worktree immediately (fast feedback)
       logger.info('Archiving sessions for worktree', { worktreeId, sessionCount: sessionIds.length });
