@@ -2,6 +2,43 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { resolve } from 'path';
 import dts from 'vite-plugin-dts';
+import { copyFileSync, mkdirSync, readdirSync, statSync } from 'fs';
+import { join } from 'path';
+
+// Plugin to copy theme JSON files to dist
+function copyThemes() {
+  return {
+    name: 'copy-themes',
+    closeBundle() {
+      const srcThemesDir = resolve(__dirname, 'src/themes/builtin');
+      const distThemesDir = resolve(__dirname, 'dist/themes/builtin');
+
+      // Recursively copy themes directory
+      const copyDir = (src: string, dest: string) => {
+        mkdirSync(dest, { recursive: true });
+        const entries = readdirSync(src);
+
+        for (const entry of entries) {
+          const srcPath = join(src, entry);
+          const destPath = join(dest, entry);
+
+          if (statSync(srcPath).isDirectory()) {
+            copyDir(srcPath, destPath);
+          } else {
+            copyFileSync(srcPath, destPath);
+          }
+        }
+      };
+
+      try {
+        copyDir(srcThemesDir, distThemesDir);
+        console.log('✓ Copied theme files to dist/themes/builtin');
+      } catch (err) {
+        console.error('Failed to copy theme files:', err);
+      }
+    }
+  };
+}
 
 export default defineConfig(({ mode }) => ({
   plugins: [
@@ -11,7 +48,8 @@ export default defineConfig(({ mode }) => ({
       include: ['src'],
       exclude: ['src/ai/server/providers/mcp-stdio-server.ts'],
       logDiagnostics: false
-    })
+    }),
+    copyThemes()
   ],
   build: {
     lib: {
