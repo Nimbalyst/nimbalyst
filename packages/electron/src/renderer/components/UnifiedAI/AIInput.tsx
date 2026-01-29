@@ -621,6 +621,13 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
         }
       }
 
+      // Handle Shift+Tab to toggle plan mode (only for Claude Code provider)
+      if (e.key === 'Tab' && e.shiftKey && provider === 'claude-code' && onModeChange && mode) {
+        e.preventDefault();
+        onModeChange(mode === 'planning' ? 'agent' : 'planning');
+        return;
+      }
+
       // Handle memory mode keyboard shortcuts
       if (isMemoryMode && !typeaheadMatch) {
         // Arrow keys toggle between user/project memory target
