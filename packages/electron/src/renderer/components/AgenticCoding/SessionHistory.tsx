@@ -1112,7 +1112,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
 
   // Create unified list items that can be a session, workstream, or worktree group
   type UnifiedListItem =
-    | { type: 'session'; session: SessionItem; timestamp: number }
+    | { type: 'session'; session: SessionItem; timestamp: number; isWorktreeSession?: boolean }
     | { type: 'workstream'; session: SessionItem; sessions: SessionItem[]; timestamp: number }
     | { type: 'worktree'; worktreeId: string; sessions: SessionItem[]; timestamp: number };
 
@@ -1161,21 +1161,37 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
       }
     }
 
-    // Add worktree groups as single items
+    // Add worktree groups as single items (only if they have 2+ sessions)
+    // Single-session worktrees are displayed as flat session items
     for (const [worktreeId, data] of worktreeGroupsData) {
-      // For 'created' sort, use the worktree's actual creation time, not the latest session time
-      let timestamp = data.timestamp;
-      if (sortBy === 'created') {
-        const worktreeData = worktreeCache.get(worktreeId);
-        timestamp = worktreeData?.createdAt || 0;
-      }
-      const item = { type: 'worktree' as const, worktreeId, sessions: data.sessions, timestamp };
+      if (data.sessions.length === 1) {
+        // Single session in worktree - display as a regular session item (flat, not grouped)
+        // but with the worktree icon to indicate it's a worktree session
+        const session = data.sessions[0];
+        const timestamp = timestampField === 'updatedAt' ? (session.updatedAt || session.createdAt) : session.createdAt;
+        const item = { type: 'session' as const, session, timestamp, isWorktreeSession: true };
 
-      const worktreeData = worktreeCache.get(worktreeId);
-      if (worktreeData?.isPinned) {
-        pinnedItems.push(item);
+        if (session.isPinned) {
+          pinnedItems.push(item);
+        } else {
+          items.push(item);
+        }
       } else {
-        items.push(item);
+        // Multiple sessions in worktree - display as a worktree group hierarchy
+        // For 'created' sort, use the worktree's actual creation time, not the latest session time
+        let timestamp = data.timestamp;
+        if (sortBy === 'created') {
+          const worktreeData = worktreeCache.get(worktreeId);
+          timestamp = worktreeData?.createdAt || 0;
+        }
+        const item = { type: 'worktree' as const, worktreeId, sessions: data.sessions, timestamp };
+
+        const worktreeData = worktreeCache.get(worktreeId);
+        if (worktreeData?.isPinned) {
+          pinnedItems.push(item);
+        } else {
+          items.push(item);
+        }
       }
     }
 
@@ -2203,6 +2219,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                           hasPendingPrompt={session.hasPendingPrompt}
                           sessionType={session.sessionType}
                           isWorkstream={false}
+                          isWorktreeSession={item.isWorktreeSession}
                           parentSessionId={session.parentSessionId}
                           projectPath={session.projectPath}
                           uncommittedCount={session.uncommittedCount}
