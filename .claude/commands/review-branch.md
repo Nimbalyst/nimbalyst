@@ -2,7 +2,9 @@
 name: review-branch
 description: Review all changes in current branch (read-only analysis)
 ---
-Perform a comprehensive read-only review of the current git branch changes.
+Perform a comprehensive read-only review of code changes.
+
+**Scope:** By default, review the current git branch changes using the command below. However, if the user specifies a different scope (e.g., specific files, a directory, a PR, or a commit range), respect that and adjust your review accordingly.
 
 **CRITICAL: This is a READ-ONLY review. Do NOT:**
 - Make any code changes
@@ -12,13 +14,23 @@ Perform a comprehensive read-only review of the current git branch changes.
 
 **Steps:**
 
-1. Run this command to determine the base branch and gather all git info at once:
+1. **Gather changes** - For default branch review, run this command:
 ```bash
 MAIN_WORKTREE=$(git worktree list | head -1 | awk '{print $1}'); CURRENT_DIR=$(git rev-parse --show-toplevel); if [ "$MAIN_WORKTREE" != "$CURRENT_DIR" ]; then BASE=$(git -C "$MAIN_WORKTREE" branch --show-current); else BASE="main"; fi; echo "=== Base branch: $BASE ===" && echo "" && echo "=== STATUS ===" && git status && echo "" && echo "=== COMMIT LOG ===" && git log $BASE..HEAD --oneline && echo "" && echo "=== COMMITTED CHANGES ===" && git diff $BASE...HEAD && echo "" && echo "=== UNCOMMITTED CHANGES ===" && git diff HEAD
 ```
-   - If in a worktree, this uses the repo root's current branch as the base (not main)
-   - If not in a worktree, uses `main` as the base branch (unless the user specifies otherwise)
-   - **IMPORTANT**: This includes BOTH committed changes (vs base branch) AND uncommitted/unstaged changes
+  - If in a worktree, this uses the repo root's current branch as the base (not main)
+  - If not in a worktree, uses `main` as the base branch (unless the user specifies otherwise)
+  - **IMPORTANT**: This includes BOTH committed changes (vs base branch) AND uncommitted/unstaged changes
+
+2. **Parallel Analysis** - After gathering the diff, launch sub-agents IN PARALLEL using the Task tool to analyze each area concurrently:
+  - Sub-agent 1: Security Issues analysis
+  - Sub-agent 2: Performance Concerns analysis
+  - Sub-agent 3: Cross-Platform Compatibility analysis
+  - Sub-agent 4: Type Safety and DRY Violations analysis
+  - Sub-agent 5: Potential Bugs and Cleanup analysis
+  - Sub-agent 6: Analytics Events and CLAUDE.md Documentation analysis
+
+   Each sub-agent should receive the diff content and return findings for its specific area. Wait for all sub-agents to complete, then synthesize their findings into the final report.
 
 **Analysis Required:**
 
@@ -26,22 +38,6 @@ Provide your review in the following format:
 
 ## Branch Summary
 [Brief 2-3 sentence description of what this branch does]
-
-## Quick Review Checklist
-
-| Category | Status | Notes |
-| --- | --- | --- |
-| Database Changes | ✅ None / ⚠️ Schema / ⚠️ Migration | [Brief description if any] |
-| Security Issues | ✅ None Found / ⚠️ See Below / ❌ Critical | [Count if any] |
-| Performance Concerns | ✅ None Found / ⚠️ See Below | [Brief assessment] |
-| Cross-Platform Compatibility | ✅ Compatible / ⚠️ See Below / ❌ Blocking | [Issues if any] |
-| Dependencies | ✅ No Changes / ⚠️ Added/Updated | [List if any] |
-| Logging | ✅ Appropriate / ⚠️ Too Verbose / ⚠️ Insufficient | [Brief assessment] |
-| Type Safety | ✅ Fully Typed / ⚠️ Some Any Types / ❌ Missing Types | [Issues if any] |
-| Potential Bugs | ✅ None Found / ⚠️ See Below | [Count if any] |
-| Junk/Cleanup | ✅ Clean / ⚠️ See Below | [Items if any] |
-| Analytics Events | ✅ Not Needed / ✅ Already Added / ⚠️ Should Add | [See docs/ANALYTICS_GUIDE.md] |
-| CLAUDE.md Updates | ✅ Not Needed / ⚠️ Should Update | [See criteria below] |
 
 ## Detailed Findings
 
@@ -94,6 +90,14 @@ Provide your review in the following format:
 
 ### Type Safety Issues
 [List any `any` types, missing type definitions, or type assertions that should be reviewed]
+
+### DRY (Don't Repeat Yourself) Violations
+[Identify duplicated code that should be extracted into shared utilities, functions, or components:]
+- Repeated logic blocks across files
+- Copy-pasted code with minor variations
+- Similar patterns that could be abstracted
+- Missed opportunities to use existing utilities
+[Note "None found" if clean]
 
 ### Potential Bugs
 [List specific scenarios that should be tested, edge cases not handled, null checks missing, etc.]
@@ -177,6 +181,36 @@ If analytics should be added, suggest specific events following the naming conve
 | path/to/file1.ts | [Explain what changed and why - focus on WHAT and WHY, not line-by-line details] |
 | path/to/file2.ts | [Explain what changed and why - focus on WHAT and WHY, not line-by-line details] |
 | path/to/file3.tsx | [Explain what changed and why - focus on WHAT and WHY, not line-by-line details] |
+
+## Quick Review Checklist
+
+| Category | Status | Notes |
+| --- | --- | --- |
+| Database Changes | ✅ None / ⚠️ Schema / ⚠️ Migration | [Brief description if any] |
+| Security Issues | ✅ None Found / ⚠️ See Below / ❌ Critical | [Count if any] |
+| Performance Concerns | ✅ None Found / ⚠️ See Below | [Brief assessment] |
+| Cross-Platform Compatibility | ✅ Compatible / ⚠️ See Below / ❌ Blocking | [Issues if any] |
+| Dependencies | ✅ No Changes / ⚠️ Added/Updated | [List if any] |
+| Logging | ✅ Appropriate / ⚠️ Too Verbose / ⚠️ Insufficient | [Brief assessment] |
+| Type Safety | ✅ Fully Typed / ⚠️ Some Any Types / ❌ Missing Types | [Issues if any] |
+| DRY Violations | ✅ None Found / ⚠️ See Below | [Count if any] |
+| Potential Bugs | ✅ None Found / ⚠️ See Below | [Count if any] |
+| Junk/Cleanup | ✅ Clean / ⚠️ See Below | [Items if any] |
+| Analytics Events | ✅ Not Needed / ✅ Already Added / ⚠️ Should Add | [See docs/ANALYTICS_GUIDE.md] |
+| CLAUDE.md Updates | ✅ Not Needed / ⚠️ Should Update | [See criteria below] |
+
+## Selected Actions
+
+Based on the review findings, here are the recommended actions:
+
+1. [First actionable item from findings - e.g., "Fix security issue in UserAuth.ts:45"]
+2. [Second actionable item - e.g., "Add null check in processData function"]
+3. [Third actionable item - e.g., "Extract duplicate validation logic to shared utility"]
+4. [Continue numbering all actionable items identified in the review]
+
+[If no actions needed, state: "No actions required - branch is ready for merge."]
+
+**To proceed:** Reply with the numbers of the actions you want taken (e.g., "1, 3, 5" or "all").
 
 ---
 
