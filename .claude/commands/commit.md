@@ -2,7 +2,7 @@
 name: commit
 description: Create a git commit with concise, bullet-point commit message
 ---
-Create a git commit following these steps:
+Prepare a git commit following these steps:
 
 1. Run `git status` and `git diff` to see changes
 2. Review recent commits (`git log --oneline -5`) to match the style
@@ -14,8 +14,7 @@ Create a git commit following these steps:
   - Keep each line under 72 characters
   - No emojis
 4. Stage relevant files with `git add`
-5. Create the commit with your message
-6. Run `git status` to confirm
+5. Run the `developer_git_commit_proposal` command to propose the commit to the user and let them commit
 
 **Commit Message Guidelines:**
 - Lead with the problem solved or capability added, not the technique used
@@ -27,7 +26,7 @@ Create a git commit following these steps:
 
 **Issue Linking (for auto-close):**
 - If fixing a Linear issue, include `Fixes NIM-XXX` on its own line after the title
-- For GitHub issues, use `Fixes #XXX` or `Closes #XXX`
+- For GitHub issues, use `Fixes #XXX` or `Closes ````#XXX`
 
 **Important:**
 - Do NOT add "Co-Authored-By" or any attribution lines

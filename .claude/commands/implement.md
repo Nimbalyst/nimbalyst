@@ -98,6 +98,7 @@ If the plan file:
 - **Be thorough**: Read all sections of the plan before starting implementation
 - **Track blockers**: If you encounter blockers, update plan status to `blocked` and document the issue
 - **Preserve structure**: Don't modify the plan's existing structure, only add the task list and update frontmatter/checkboxes
+- **Typecheck:** Run typechecks to ensure code will compile
 
 ## Integration with TodoWrite
 
