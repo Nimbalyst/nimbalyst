@@ -11,6 +11,7 @@ import {
   initializeExtensions,
   initializeExtensionAIToolsBridge,
   setOnToolsChangedCallback,
+  getMCPToolDefinitions,
   executeExtensionTool,
   setEnabledStateProvider,
   setConfigurationServiceProvider,
@@ -400,7 +401,18 @@ function setupExtensionStatusListener(): void {
  * Should be called when workspace changes.
  */
 export function setExtensionWorkspacePath(workspacePath: string | null): void {
+  const wasNull = currentWorkspacePath === null;
   currentWorkspacePath = workspacePath;
+
+  // If workspace path was just set (not null anymore), register extension tools
+  // This handles the case where tools were loaded before workspace was known
+  if (wasNull && workspacePath && window.electronAPI?.registerExtensionTools) {
+    const tools = getMCPToolDefinitions();
+    if (tools.length > 0) {
+      console.log(`[ExtensionSystem] Registering ${tools.length} extension tools for workspace: ${workspacePath}`);
+      window.electronAPI.registerExtensionTools(workspacePath, tools);
+    }
+  }
 }
 
 /**
