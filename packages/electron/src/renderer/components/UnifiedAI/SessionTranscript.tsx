@@ -83,6 +83,12 @@ export interface SessionTranscriptProps {
   onCloseAndArchive?: (sessionId: string) => void;
   onSessionTitleChanged?: (sessionId: string, title: string) => void;
 
+  // Clear session callback (for files mode - creates new standalone session)
+  onClearSession?: () => void;
+
+  // Clear agent session callback (for agent mode - creates new session in worktree or workstream)
+  onClearAgentSession?: () => void;
+
   // Document context (for chat mode where parent provides it)
   documentContext?: {
     filePath?: string;
@@ -122,6 +128,8 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   onTodoClick,
   onCloseAndArchive,
   onSessionTitleChanged,
+  onClearSession,
+  onClearAgentSession,
   documentContext,
 }, ref) => {
   const posthog = usePostHog();
@@ -649,6 +657,24 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
       }
     }
 
+    // Intercept /clear command - create new session attached to current
+    const clearCommandMatch = message.match(/^\/clear(?:\s|$)/);
+    if (clearCommandMatch) {
+      // Clear the draft input immediately
+      setDraftInput('');
+      setDraftAttachments([]);
+
+      if (mode === 'chat') {
+        // Files mode: Create a new standalone session (same as +new button)
+        onClearSession?.();
+      } else {
+        // Agent mode: Let parent component handle session creation
+        // (handles worktree sessions, workstreams, and single sessions properly)
+        onClearAgentSession?.();
+      }
+      return; // Don't send the /clear message to the AI
+    }
+
     // If switching to planning mode mid-session, prepend plan mode activation message
     if (prependPlanModeInstructions) {
       message = `<PLAN_MODE_ACTIVATED>
@@ -719,7 +745,7 @@ ${message}`;
       });
       setIsProcessing(false);
     }
-  }, [sessionId, sessionData, draftInput, draftAttachments, isLoading, documentContext, aiMode, workspacePath, setDraftInput, setDraftAttachments, resetHistory, updateSessionStore, handleQueue, setIsProcessing, messages]);
+  }, [sessionId, sessionData, draftInput, draftAttachments, isLoading, documentContext, aiMode, workspacePath, setDraftInput, setDraftAttachments, resetHistory, updateSessionStore, handleQueue, setIsProcessing, messages, mode, onClearSession, onClearAgentSession]);
 
   const handleCancel = useCallback(async () => {
     try {

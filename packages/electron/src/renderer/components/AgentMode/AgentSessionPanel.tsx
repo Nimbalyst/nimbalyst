@@ -23,6 +23,7 @@ export interface AgentSessionPanelProps {
   sessionId: string;
   workspacePath: string;
   onFileClick?: (filePath: string) => void;
+  onClearAgentSession?: () => void;
 }
 
 /**
@@ -36,6 +37,7 @@ export const AgentSessionPanel = forwardRef<AgentSessionPanelRef, AgentSessionPa
   sessionId,
   workspacePath,
   onFileClick,
+  onClearAgentSession,
 }, ref) => {
   const transcriptRef = useRef<SessionTranscriptRef>(null);
 
@@ -61,6 +63,7 @@ export const AgentSessionPanel = forwardRef<AgentSessionPanelRef, AgentSessionPa
         mode="agent"
         hideSidebar={true}
         onFileClick={handleFileClick}
+        onClearAgentSession={onClearAgentSession}
       />
     </div>
   );

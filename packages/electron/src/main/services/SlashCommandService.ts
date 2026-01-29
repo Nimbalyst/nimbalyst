@@ -124,7 +124,7 @@ export class SlashCommandService {
   private getBuiltinCommandDescription(name: string): string {
     const descriptions: Record<string, string> = {
       'compact': 'Reduces conversation history by summarizing older messages',
-      'clear': 'Starts a fresh conversation by clearing previous history',
+      'clear': 'Start a new conversation session (in agent mode, stays attached to current workstream/worktree)',
       'context': 'Show context information about the current session',
       'cost': 'Display token usage and cost information for the session',
       'init': 'Initialize or reinitialize the Claude Code session',

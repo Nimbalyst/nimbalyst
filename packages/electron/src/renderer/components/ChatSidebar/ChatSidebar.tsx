@@ -336,6 +336,7 @@ export const ChatSidebar = forwardRef<ChatSidebarRef, ChatSidebarProps>(({
         mode="chat"
         hideSidebar={true}
         onFileClick={handleFileClick}
+        onClearSession={handleNewSession}
         documentContext={effectiveDocumentContext}
       />
     </div>

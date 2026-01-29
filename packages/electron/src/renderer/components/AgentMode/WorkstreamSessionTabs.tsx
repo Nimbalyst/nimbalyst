@@ -177,6 +177,7 @@ export const WorkstreamSessionTabs: React.FC<WorkstreamSessionTabsProps> = React
           sessionId={activeSessionId}
           workspacePath={workspacePath}
           onFileClick={onFileClick}
+          onClearAgentSession={handleNewSession}
         />
       </div>
     </div>
