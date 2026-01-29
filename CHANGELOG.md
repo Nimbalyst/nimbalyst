@@ -20,6 +20,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.16] - 2026-01-29
+
+
+### Added
+- Terms of Service and Privacy Policy links in onboarding flow
+- Single-session worktrees now display as flat items with worktree icon for better visibility
+- Current PATH shown in Advanced Settings for debugging environment issues
+- Terminal tab context menu with Clear option and list refresh listener
+- Analytics tracking for worktrees, plan mode, and git commits
+- Warning when archiving worktree with uncommitted changes
+
+### Changed
+- Review-branch command now supports flexible review scopes and parallel sub-agent processing
+- Archive worktree dialog logic extracted into reusable hook
+
+### Fixed
+- Alpha features toggle crash and auto-enable for upgrading users
+- Database init failure now shows recovery options instead of crashing
+- Terminal cleanup improved to prevent stale closures during auto-restart
+- Terminals associated with archived worktrees are now properly deleted
+- Terminal scrollback restoration and error handling improved
+- Worktree deletion now ensures disk cleanup before marking as archived
+- Sessions losing messages (speculative fix)
+- Terminal crash from corrupted scrollback with invalid code points
+
 ## [0.52.14] - 2026-01-28
 
 
