@@ -188,9 +188,9 @@ jobs:
         run: |
           if [ "${{ matrix.platform }}" == "mac" ]; then
             if [ "${{ github.ref_type }}" == "tag" ] || [ "${{ inputs.release }}" == "true" ]; then
-              npm run build:mac:notarized -- --${{ matrix.arch }} --dmg --zip
+              npm run build:mac:notarized -- --${{ matrix.arch }} --mac dmg zip
             else
-              npm run build:mac:local -- --${{ matrix.arch }} --dmg --zip
+              npm run build:mac:local -- --${{ matrix.arch }} --mac dmg zip
             fi
           elif [ "${{ matrix.platform }}" == "win" ]; then
             npm run build:win
