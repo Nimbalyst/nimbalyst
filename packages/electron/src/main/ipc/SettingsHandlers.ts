@@ -5,6 +5,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { app } from 'electron';
 import { getWorkspaceState, updateWorkspaceState, getTheme, getThemeSync, isCompletionSoundEnabled, setCompletionSoundEnabled, getCompletionSoundType, setCompletionSoundType, CompletionSoundType, getReleaseChannel, setReleaseChannel, ReleaseChannel, getRecentItems, getDefaultAIModel, setDefaultAIModel, isAnalyticsEnabled, setAnalyticsEnabled, isMockupLMEnabled, setMockupLMEnabled, getSessionSyncConfig, setSessionSyncConfig, SessionSyncConfig, isExtensionDevToolsEnabled, setExtensionDevToolsEnabled, getAppSetting, setAppSetting, getAlphaFeatures, setAlphaFeatures, getEnableAllAlphaFeatures, setEnableAllAlphaFeatures, getDeveloperFeatures, setDeveloperFeatures, isDeveloperFeatureAvailable } from '../utils/store';
+import { getEnhancedPath } from '../services/CLIManager';
 import { logger } from '../utils/logger';
 import { SoundNotificationService } from '../services/SoundNotificationService';
 import { autoUpdaterService } from '../services/autoUpdater';
@@ -73,6 +74,12 @@ export function registerSettingsHandlers() {
 
     safeHandle('app-settings:set', (_event, key: string, value: unknown) => {
         setAppSetting(key, value);
+    });
+
+    // Get the enhanced PATH that Nimbalyst uses for spawning processes
+    // This includes custom user paths, detected paths, and common system paths
+    safeHandle('environment:get-enhanced-path', () => {
+        return getEnhancedPath();
     });
 
     // ============================================================

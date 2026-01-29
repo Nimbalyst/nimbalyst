@@ -31,6 +31,10 @@ export function AdvancedPanel() {
   const [, updateSettings] = useAtom(setAdvancedSettingsAtom);
   const [, resetWalkthroughs] = useAtom(resetWalkthroughsAtom);
 
+  // Current enhanced PATH (fetched from main process)
+  const [enhancedPath, setEnhancedPath] = useState<string>('');
+  const [showEnhancedPath, setShowEnhancedPath] = useState(false);
+
   // AI debug settings from Jotai atoms
   const [aiDebugSettings] = useAtom(aiDebugSettingsAtom);
   const [, updateAIDebugSettings] = useAtom(setAIDebugSettingsAtom);
@@ -73,6 +77,20 @@ export function AdvancedPanel() {
   const isDevelopment = import.meta.env.DEV;
   const [showReleaseChannel, setShowReleaseChannel] = useState(false);
   const [showFeaturesMenu, setShowFeaturesMenu] = useState(false);
+
+  // Fetch enhanced PATH when user clicks to show it
+  useEffect(() => {
+    if (showEnhancedPath && !enhancedPath) {
+      window.electronAPI.environment.getEnhancedPath().then(setEnhancedPath);
+    }
+  }, [showEnhancedPath, enhancedPath]);
+
+  // Refresh enhanced PATH when custom paths change
+  useEffect(() => {
+    if (showEnhancedPath) {
+      window.electronAPI.environment.getEnhancedPath().then(setEnhancedPath);
+    }
+  }, [customPathDirs, showEnhancedPath]);
 
   const handleTitleClick = (e: React.MouseEvent) => {
     if (e.metaKey || e.ctrlKey) {
@@ -580,6 +598,39 @@ export function AdvancedPanel() {
             <p className="text-xs text-[var(--nim-text-faint)]">
               <strong>What doesn't use this:</strong> Claude Code's Bash tool commands (those use your shell's PATH).
             </p>
+          </div>
+
+          {/* Show current PATH toggle */}
+          <div className="mt-4">
+            <button
+              onClick={() => setShowEnhancedPath(!showEnhancedPath)}
+              className="text-xs text-[var(--nim-link)] hover:text-[var(--nim-link-hover)] cursor-pointer"
+            >
+              {showEnhancedPath ? 'Hide current PATH' : 'Show current PATH'}
+            </button>
+
+            {showEnhancedPath && enhancedPath && (
+              <div className="mt-2">
+                <div className="text-xs text-[var(--nim-text-muted)] mb-1">
+                  Current PATH used by Nimbalyst:
+                </div>
+                <div
+                  className="p-2 rounded-md text-xs bg-[var(--nim-bg-tertiary)] border border-[var(--nim-border)] text-[var(--nim-text-muted)] font-mono overflow-x-auto"
+                  style={{
+                    maxHeight: '200px',
+                    overflowY: 'auto',
+                    wordBreak: 'break-all',
+                    whiteSpace: 'pre-wrap',
+                  }}
+                >
+                  {enhancedPath.split(process.platform === 'win32' ? ';' : ':').map((path, index) => (
+                    <div key={index} className="py-0.5">
+                      {path}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

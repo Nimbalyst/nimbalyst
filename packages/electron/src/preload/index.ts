@@ -689,6 +689,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getLocalIP: () => ipcRenderer.invoke('network:get-local-ip'),
   },
 
+  // Environment utilities
+  environment: {
+    /** Get the enhanced PATH that Nimbalyst uses for spawning processes (includes custom paths, detected paths, system paths) */
+    getEnhancedPath: () => ipcRenderer.invoke('environment:get-enhanced-path') as Promise<string>,
+  },
+
   // Stytch Authentication (for account-based sync)
   stytch: {
     getAuthState: () => ipcRenderer.invoke('stytch:get-auth-state'),

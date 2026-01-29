@@ -336,6 +336,12 @@ interface ElectronAPI {
     getLocalIP: () => Promise<string | null>;
   };
 
+  // Environment utilities
+  environment: {
+    /** Get the enhanced PATH that Nimbalyst uses for spawning processes */
+    getEnhancedPath: () => Promise<string>;
+  };
+
   // Stytch Authentication (for account-based sync)
   stytch: {
     getAuthState: () => Promise<{
