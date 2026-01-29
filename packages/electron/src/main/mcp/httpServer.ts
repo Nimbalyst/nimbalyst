@@ -715,40 +715,63 @@ async function tryCreateServer(port: number): Promise<any> {
             }
           });
 
-          // Add the git commit proposal tool - works with get_session_edited_files
+          // Git commit proposal tool - must be built-in (not from extension) because:
+          // 1. The built-in handler waits for user confirmation before returning to Claude
+          // 2. Extension tools return immediately, which doesn't allow Claude to see the result
           builtInTools.push({
             name: 'developer_git_commit_proposal',
-            description: 'Propose a git commit for user confirmation. This displays an interactive commit confirmation widget where the user can review and approve/reject the commit. Use get_session_edited_files first to find files edited during the session, then call this tool with the files to stage and a commit message. The tool will wait for user confirmation and return the result (committed or cancelled).',
+            description: `Propose files and commit message for a git commit.
+
+IMPORTANT: Before calling this tool, you MUST:
+1. Call get_session_edited_files to get ALL files edited in this session
+2. Cross-reference with git status to find which session files have uncommitted changes
+3. Include ALL session-edited files that have changes - do not cherry-pick a subset
+
+This tool will present an interactive widget to the user where they can review
+and adjust your proposal before committing.
+
+The commit message should follow these guidelines:
+- Start with type prefix: feat:, fix:, refactor:, docs:, test:, chore:
+- Focus on IMPACT and WHY, not implementation details
+- Title describes user-visible outcome or bug fixed
+- Use bullet points (dash prefix) only for multiple distinct changes
+- Keep lines under 72 characters
+- No emojis
+- Lead with problem solved or capability added, not technique used`,
             inputSchema: {
               type: 'object',
               properties: {
                 filesToStage: {
                   type: 'array',
-                  description: 'Array of file paths to stage for the commit. Can be strings or objects with path and status.',
                   items: {
                     oneOf: [
                       { type: 'string' },
                       {
                         type: 'object',
                         properties: {
-                          path: { type: 'string' },
-                          status: { type: 'string', enum: ['added', 'modified', 'deleted'] }
+                          path: { type: 'string', description: 'File path relative to workspace root' },
+                          status: {
+                            type: 'string',
+                            enum: ['added', 'modified', 'deleted'],
+                            description: 'Git status of the file'
+                          }
                         },
-                        required: ['path']
+                        required: ['path', 'status']
                       }
                     ]
-                  }
+                  },
+                  description: 'Array of file paths (strings) or file objects with path and status (added/modified/deleted)',
                 },
                 commitMessage: {
                   type: 'string',
-                  description: 'The commit message to propose. Should follow commit message guidelines (concise, describes the change).'
+                  description: 'Proposed commit message following the guidelines above',
                 },
                 reasoning: {
                   type: 'string',
-                  description: 'Optional explanation of why these files were selected and this commit message was chosen.'
-                }
+                  description: 'Explanation of why these files were selected and why this commit message is appropriate',
+                },
               },
-              required: ['filesToStage', 'commitMessage']
+              required: ['filesToStage', 'commitMessage', 'reasoning']
             }
           });
         }
@@ -766,9 +789,14 @@ async function tryCreateServer(port: number): Promise<any> {
         // }
 
         const allTools = [...builtInTools, ...extensionToolSchemas];
-        // Debug logging - uncomment if needed for troubleshooting tool registration
-        // console.log('[MCP Server] Returning tools:', allTools.map(t => t.name).join(', '));
-        // console.log('[MCP Server] voice_agent_speak in list?', allTools.some(t => t.name === 'voice_agent_speak'));
+
+        // Check for duplicate tool names
+        const toolNames = allTools.map(t => t.name);
+        const duplicates = toolNames.filter((name, idx) => toolNames.indexOf(name) !== idx);
+        if (duplicates.length > 0) {
+          console.error('[MCP Server] DUPLICATE TOOL NAMES DETECTED:', duplicates);
+          console.error('[MCP Server] All tool names:', toolNames.join(', '));
+        }
 
         return {
           tools: allTools
