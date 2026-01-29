@@ -343,7 +343,7 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
       // Send message to AI session to propose commit based on session work
       if (window.electronAPI && sessionId && workspacePath) {
         try {
-          const message = 'Use git_commit_proposal to create a commit for the work done in this session. Include all session-edited files that have uncommitted changes.';
+          const message = 'Use the developer_git_commit_proposal tool to create a commit for the work done in this session. First call get_session_edited_files to find all files edited, then cross-reference with git status to include all session-edited files that have uncommitted changes.';
           const docContext = {
             filePath: undefined,
             content: undefined,
