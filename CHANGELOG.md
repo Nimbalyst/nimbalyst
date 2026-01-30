@@ -20,6 +20,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.21] - 2026-01-30
+
+
+### Added
+- "No uncommitted changes" message when session has committed all its files
+- File scope filter and root checkbox to Files Edited sidebar
+- Cmd+Alt+W keyboard shortcut to create new worktree
+- Environment variables UI in Claude Code settings
+- Helpful error dialog for Bedrock MCP tool incompatibility
+- Analytics tracking for configured AI provider in claude_code_session_started event
+
+### Fixed
+- Text selection now enabled in AI session transcripts
+- Dropdown positioning, keyboard shortcuts, and IPC type safety improvements
+- New session dropdown menu no longer hidden behind search input
+- Login popup formatting improved with line breaks
+
 ## [0.52.20] - 2026-01-30
 
 
