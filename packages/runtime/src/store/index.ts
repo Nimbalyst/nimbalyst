@@ -53,3 +53,15 @@ export {
   reorderTabsAtom,
   type TabMetadata,
 } from './atoms/editors';
+
+// Pending question atoms
+export {
+  sessionPendingQuestionIdAtom,
+  sessionHasPendingQuestionAtom,
+  registerPendingQuestion,
+  clearPendingQuestionForSession,
+  isQuestionPending,
+  sessionHasPendingQuestion,
+  cleanupSessionPendingQuestion,
+  type PendingQuestionData,
+} from './atoms/pendingQuestions';

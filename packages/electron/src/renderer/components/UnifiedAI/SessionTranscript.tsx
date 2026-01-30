@@ -17,7 +17,8 @@
 import React, { useCallback, useRef, useImperativeHandle, forwardRef, useEffect, useState } from 'react';
 import { useAtom, useSetAtom, useAtomValue } from 'jotai';
 import { store } from '@nimbalyst/runtime/store';
-import { AgentTranscriptPanel, TodoItem, storeAskUserQuestionAnswers, registerPendingQuestion, unregisterPendingQuestion } from '@nimbalyst/runtime';
+import { AgentTranscriptPanel, TodoItem, storeAskUserQuestionAnswers } from '@nimbalyst/runtime';
+import { registerPendingQuestion, clearPendingQuestionForSession } from '@nimbalyst/runtime/store';
 import type { SessionData, ChatAttachment } from '@nimbalyst/runtime/ai/server/types';
 import { AIInput, AIInputRef } from './AIInput';
 import { PromptQueueList } from './PromptQueueList';
@@ -430,13 +431,9 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   useEffect(() => {
     const handleSessionCancelled = async (data: { sessionId: string }) => {
       if (data.sessionId === sessionId) {
-        setPendingAskUserQuestion(prev => {
-          // Unregister from global store before clearing
-          if (prev) {
-            unregisterPendingQuestion(prev.questionId);
-          }
-          return null;
-        });
+        // Clear pending question from global Jotai store
+        clearPendingQuestionForSession(sessionId);
+        setPendingAskUserQuestion(null);
         await updateSessionMetadataField(sessionId, 'pendingAskUserQuestion', null, null, updateSessionStore);
       }
     };
@@ -1123,8 +1120,8 @@ Your goal is to build a comprehensive plan through iterative refinement:
 
   const handleAskUserQuestionSubmit = useCallback(async (questionId: string, confirmSessionId: string, answers: Record<string, string>) => {
     storeAskUserQuestionAnswers(answers);
-    // Unregister from global store so widget can render as completed
-    unregisterPendingQuestion(questionId);
+    // Clear from global Jotai store so widget can render as completed
+    clearPendingQuestionForSession(confirmSessionId);
     setPendingAskUserQuestion(null);
     await updateSessionMetadataField(confirmSessionId, 'pendingAskUserQuestion', null, null, updateSessionStore);
 
@@ -1152,13 +1149,13 @@ Your goal is to build a comprehensive plan through iterative refinement:
   const handleAskUserQuestionCancel = useCallback(async (questionId: string, confirmSessionId: string) => {
     try {
       await window.electronAPI.invoke('claude-code:cancel-question', { questionId });
-      // Unregister from global store
-      unregisterPendingQuestion(questionId);
+      // Clear from global Jotai store
+      clearPendingQuestionForSession(confirmSessionId);
       setPendingAskUserQuestion(null);
       await updateSessionMetadataField(confirmSessionId, 'pendingAskUserQuestion', null, null, updateSessionStore);
     } catch (error) {
       console.error('[SessionTranscript] Failed to cancel AskUserQuestion:', error);
-      unregisterPendingQuestion(questionId);
+      clearPendingQuestionForSession(confirmSessionId);
       setPendingAskUserQuestion(null);
     }
   }, [updateSessionStore]);

@@ -11,8 +11,13 @@
  * - A "Questions Answered" status
  */
 
-import React, { useEffect, useState } from 'react';
+import React from 'react';
+import { useAtomValue } from 'jotai';
 import type { CustomToolWidgetProps } from './index';
+import { sessionHasPendingQuestionAtom } from '../../../../store/atoms/pendingQuestions';
+
+// Re-export Jotai-based functions for backwards compatibility
+export { registerPendingQuestion, clearPendingQuestionForSession as unregisterPendingQuestion } from '../../../../store/atoms/pendingQuestions';
 
 /**
  * Global store for AskUserQuestion answers.
@@ -20,80 +25,6 @@ import type { CustomToolWidgetProps } from './index';
  * This is populated when answers are submitted via the confirmation dialog.
  */
 const askUserQuestionAnswersStore: Map<string, string> = new Map();
-
-/**
- * Global store for pending AskUserQuestion questions.
- * Keyed by questionId, tracks questions waiting for user input.
- * This prevents the widget from rendering as "submitted" while the interactive
- * confirmation dialog is showing.
- */
-const pendingQuestionsStore: Map<string, { sessionId: string; questionId: string }> = new Map();
-
-/**
- * Listeners for pending question state changes per session.
- * Used to notify widgets when questions are registered/unregistered without polling.
- */
-const pendingQuestionListeners: Map<string, Set<() => void>> = new Map();
-
-/**
- * Subscribe to pending question state changes for a session.
- * Returns an unsubscribe function.
- */
-export function subscribeToPendingQuestions(sessionId: string, listener: () => void): () => void {
-  if (!pendingQuestionListeners.has(sessionId)) {
-    pendingQuestionListeners.set(sessionId, new Set());
-  }
-  pendingQuestionListeners.get(sessionId)!.add(listener);
-  return () => {
-    pendingQuestionListeners.get(sessionId)?.delete(listener);
-  };
-}
-
-/**
- * Notify listeners for a session that pending question state changed.
- */
-function notifyListeners(sessionId: string): void {
-  pendingQuestionListeners.get(sessionId)?.forEach(listener => listener());
-}
-
-/**
- * Register a pending question (called when ai:askUserQuestion event is received).
- */
-export function registerPendingQuestion(questionId: string, sessionId: string): void {
-  pendingQuestionsStore.set(questionId, { sessionId, questionId });
-  notifyListeners(sessionId);
-}
-
-/**
- * Unregister a pending question (called when question is answered or cancelled).
- */
-export function unregisterPendingQuestion(questionId: string): void {
-  const entry = pendingQuestionsStore.get(questionId);
-  const sessionId = entry?.sessionId;
-  pendingQuestionsStore.delete(questionId);
-  if (sessionId) {
-    notifyListeners(sessionId);
-  }
-}
-
-/**
- * Check if a question is pending (waiting for user input).
- */
-export function isQuestionPending(questionId: string): boolean {
-  return pendingQuestionsStore.has(questionId);
-}
-
-/**
- * Check if a session has any pending questions.
- */
-export function sessionHasPendingQuestion(sessionId: string): boolean {
-  for (const pending of pendingQuestionsStore.values()) {
-    if (pending.sessionId === sessionId) {
-      return true;
-    }
-  }
-  return false;
-}
 
 /**
  * Store answers for AskUserQuestion.
@@ -199,41 +130,17 @@ export const AskUserQuestionWidget: React.FC<CustomToolWidgetProps> = ({
   message,
   sessionId,
 }) => {
-  // Delay initial render to allow pending question restore to happen first
-  // This prevents flash of "submitted" state on refresh
-  const [isReady, setIsReady] = useState(false);
-  // Track pending question state reactively via subscription
-  const [pendingState, setPendingState] = useState(() => sessionHasPendingQuestion(sessionId));
-
-  useEffect(() => {
-    // Small delay to let SessionTranscript restore pending questions from metadata
-    const timeout = setTimeout(() => {
-      // Re-check pending state when becoming ready (in case it changed during delay)
-      setPendingState(sessionHasPendingQuestion(sessionId));
-      setIsReady(true);
-    }, 150);
-    return () => clearTimeout(timeout);
-  }, [sessionId]);
-
-  useEffect(() => {
-    // Subscribe to pending question state changes for this session
-    // This triggers a re-render when questions are registered/unregistered
-    const unsubscribe = subscribeToPendingQuestions(sessionId, () => {
-      setPendingState(sessionHasPendingQuestion(sessionId));
-    });
-    // Sync initial state in case it changed between render and effect
-    setPendingState(sessionHasPendingQuestion(sessionId));
-    return unsubscribe;
-  }, [sessionId]);
+  // Track pending question state reactively via Jotai atom
+  const hasPendingQuestion = useAtomValue(sessionHasPendingQuestionAtom(sessionId));
 
   const tool = message.toolCall;
   if (!tool) return null;
 
   const questions = parseQuestions(tool.arguments);
 
-  // Don't render until ready (allows restore to complete)
-  // Also check if this session has a pending question
-  if (!isReady || pendingState) {
+  // Don't render if this session has a pending question
+  // The interactive AskUserQuestionConfirmation component handles the pending state
+  if (hasPendingQuestion) {
     return null;
   }
 
