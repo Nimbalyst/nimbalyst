@@ -697,7 +697,8 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
   function announceDevice(): void {
     // Get current device info (prefer callback for dynamic presence, fallback to static)
     const deviceInfo = config.getDeviceInfo?.() ?? config.deviceInfo;
-    if (deviceInfo && indexWs && indexConnected) {
+    // Check both our flag AND the actual WebSocket readyState to avoid "Sent before connected" errors
+    if (deviceInfo && indexWs && indexConnected && indexWs.readyState === WebSocket.OPEN) {
       const announceMsg: ClientMessage = {
         type: 'device_announce',
         device: {
