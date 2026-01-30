@@ -738,6 +738,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
       // Log the raw input to the SDK (include attachments in metadata for UI restoration)
       // CRITICAL: Must await to ensure user message is persisted before proceeding
+      // Mark as searchable so user prompts are included in FTS index
       if (sessionId) {
         const metadataToLog = attachments && attachments.length > 0 ? { attachments } : undefined;
         await this.logAgentMessage(sessionId, 'claude-code', 'input', JSON.stringify({
@@ -753,7 +754,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             disallowedTools: options.disallowedTools,
             permissionMode: options.permissionMode
           }
-        }), metadataToLog, hideMessages);
+        }), metadataToLog, hideMessages, undefined, true /* searchable */);
       }
 
       // TODO: Debug logging - uncomment if needed for MCP troubleshooting
@@ -863,7 +864,20 @@ export class ClaudeCodeProvider extends BaseAIProvider {
               : JSON.stringify(chunk);
             // Non-string chunks from SDK have a uuid field we can use for deduplication
             const providerMessageId = typeof chunk !== 'string' ? chunk.uuid : undefined;
-            this.logAgentMessageNonBlocking(sessionId, 'claude-code', 'output', rawChunkJson, undefined, hideMessages, providerMessageId);
+
+            // Determine if this chunk should be searchable (assistant text without tool content)
+            // Only assistant messages with text content (no tool_use/tool_result) are searchable
+            let isSearchable = false;
+            if (typeof chunk === 'object' && chunk.type === 'assistant' && chunk.message?.content) {
+              const content = chunk.message.content;
+              if (Array.isArray(content)) {
+                const hasText = content.some((block: any) => block.type === 'text');
+                const hasTool = content.some((block: any) => block.type === 'tool_use' || block.type === 'tool_result');
+                isSearchable = hasText && !hasTool;
+              }
+            }
+
+            this.logAgentMessageNonBlocking(sessionId, 'claude-code', 'output', rawChunkJson, undefined, hideMessages, providerMessageId, isSearchable);
           }
 
           // if (chunkCount <= 5) {

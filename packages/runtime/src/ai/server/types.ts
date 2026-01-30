@@ -379,6 +379,7 @@ export interface CreateAgentMessageInput {
   hidden?: boolean;  // Whether to hide this message from UI (e.g., /context commands)
   createdAt?: Date | string;  // Optional timestamp for imported messages (defaults to NOW())
   providerMessageId?: string;  // Provider-assigned message ID (e.g., SDK uuid) for deduplication
+  searchable?: boolean;  // Whether to include in FTS index (user prompts and assistant text only)
 }
 
 // ============================================================================

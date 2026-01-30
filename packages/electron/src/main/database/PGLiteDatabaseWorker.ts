@@ -514,7 +514,7 @@ export class PGLiteDatabaseWorker {
         const tableName = this.extractTableName(sql);
         const rowCount = result?.rows?.length ?? 0;
         // Truncate SQL for logging (first 200 chars)
-        const truncatedSql = sql.length > 200 ? sql.substring(0, 200) + '...' : sql;
+        const truncatedSql = sql.length > 200 ? sql.substring(0, 400) + '...' : sql;
         logger.main.warn(`[PGLite] Slow query (${duration.toFixed(0)}ms): table=${tableName}, rows=${rowCount}, sql="${truncatedSql}"`);
       }
 

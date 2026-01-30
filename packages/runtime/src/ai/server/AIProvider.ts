@@ -199,11 +199,15 @@ export abstract class BaseAIProvider extends EventEmitter implements AIProvider 
     content: string,
     metadata?: Record<string, unknown>,
     hidden?: boolean,
-    providerMessageId?: string  // Provider-assigned message ID (e.g., SDK uuid) for deduplication
+    providerMessageId?: string,  // Provider-assigned message ID (e.g., SDK uuid) for deduplication
+    searchable?: boolean  // Whether to include in FTS index (user prompts and assistant text only)
   ): Promise<void> {
     // Create timestamp HERE - this is the authoritative source
     // This same timestamp must be used for message.created_at, session.updated_at, and sync index
     const createdAt = new Date();
+
+    // Only allow searchable for content under 500KB to avoid tsvector 1MB limit
+    const isSearchable = searchable && content.length < 500000;
 
     try {
       await AgentMessagesRepository.create({
@@ -215,6 +219,7 @@ export abstract class BaseAIProvider extends EventEmitter implements AIProvider 
         hidden,
         createdAt,
         providerMessageId,
+        searchable: isSearchable,
       });
       // Emit event to notify listeners that new message was written to database
       // Include hidden flag so sync handlers can skip hidden messages
@@ -241,9 +246,10 @@ export abstract class BaseAIProvider extends EventEmitter implements AIProvider 
     content: string,
     metadata?: Record<string, unknown>,
     hidden?: boolean,
-    providerMessageId?: string
+    providerMessageId?: string,
+    searchable?: boolean
   ): void {
-    this.logAgentMessage(sessionId, source, direction, content, metadata, hidden, providerMessageId)
+    this.logAgentMessage(sessionId, source, direction, content, metadata, hidden, providerMessageId, searchable)
       .catch(error => {
         // For non-blocking calls, we've already logged the error in logAgentMessage
         // Just suppress the unhandled rejection
