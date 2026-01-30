@@ -942,7 +942,7 @@ export const RichTranscriptView = React.forwardRef<
   };
 
   return (
-    <div className="rich-transcript-view h-full flex flex-col bg-[var(--nim-bg)] relative overflow-x-hidden">
+    <div className="rich-transcript-view h-full flex flex-col bg-[var(--nim-bg)] relative overflow-x-hidden select-text">
       {/* Search Bar */}
       <TranscriptSearchBar
         isVisible={showSearchBar}
