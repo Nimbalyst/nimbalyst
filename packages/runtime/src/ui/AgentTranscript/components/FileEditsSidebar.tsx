@@ -36,6 +36,8 @@ interface FileEditsSidebarProps {
   onSelectAll?: (selected: boolean) => void;
   /** Callback for bulk selection changes (add/remove multiple files at once) */
   onBulkSelectionChange?: (filePaths: string[], selected: boolean) => void;
+  /** Whether to show a root-level "Select All" checkbox (defaults to true when showCheckboxes is true) */
+  showRootCheckbox?: boolean;
 }
 
 interface ContextMenuState {
@@ -76,8 +78,11 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
   selectedFiles,
   onSelectionChange,
   onSelectAll,
-  onBulkSelectionChange
+  onBulkSelectionChange,
+  showRootCheckbox
 }) => {
+  // Default showRootCheckbox to true when showCheckboxes is true
+  const shouldShowRootCheckbox = showRootCheckbox ?? showCheckboxes;
   const [gitStatus, setGitStatus] = useState<Record<string, FileGitStatus>>({});
   // Use prop if provided, otherwise use local state
   const [localGroupByDirectory, setLocalGroupByDirectory] = useState(false);
@@ -87,14 +92,14 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({ isOpen: false, x: 0, y: 0, filePath: '' });
 
   // Convert absolute path to relative path from workspace root
-  const getRelativePath = (filePath: string): string => {
+  const getRelativePath = useCallback((filePath: string): string => {
     if (!workspacePath || !filePath.startsWith(workspacePath)) {
       return filePath;
     }
     const relativePath = filePath.slice(workspacePath.length);
     // Remove leading slash if present
     return relativePath.startsWith('/') ? relativePath.slice(1) : relativePath;
-  };
+  }, [workspacePath]);
 
   // Build directory tree from file list
   const buildDirectoryTree = (files: Array<{ filePath: string; edits: FileEditSummary[]; totalAdded: number; totalRemoved: number; operation?: string; timestamp: string }>): DirectoryNode => {
@@ -329,11 +334,31 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
   }, [hideControls, expandAll, collapseAll]);
 
   // Check if file has uncommitted changes (is selectable for commit)
-  const isFileCommitted = (filePath: string): boolean => {
+  const isFileCommitted = useCallback((filePath: string): boolean => {
     const relativePath = getRelativePath(filePath);
     const status = gitStatus[relativePath];
     return !status || status.status === 'unchanged';
-  };
+  }, [gitStatus, getRelativePath]);
+
+  // Calculate root-level selection state for "Select All" checkbox
+  const rootSelectionInfo = useMemo(() => {
+    const allFilePaths = editedFiles.map(f => f.filePath);
+    const uncommittedPaths = allFilePaths.filter(p => !isFileCommitted(p));
+    const uncommittedCount = uncommittedPaths.length;
+
+    if (uncommittedCount === 0) {
+      return { state: 'none' as const, uncommittedCount: 0 };
+    }
+
+    const selectedCount = uncommittedPaths.filter(p => selectedFiles?.has(p)).length;
+    if (selectedCount === 0) {
+      return { state: 'none' as const, uncommittedCount };
+    }
+    if (selectedCount === uncommittedCount) {
+      return { state: 'all' as const, uncommittedCount };
+    }
+    return { state: 'some' as const, uncommittedCount };
+  }, [editedFiles, selectedFiles, isFileCommitted]);
 
   // Get file status color class based on operation and git status
   const getFileStatusColor = (filePath: string, operation?: string): string => {
@@ -705,6 +730,34 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
         </div>
       )}
       <div className="file-edits-sidebar__files flex-1 overflow-y-auto p-1">
+        {/* Root "Select All" checkbox */}
+        {shouldShowRootCheckbox && editedFiles.length > 0 && rootSelectionInfo.uncommittedCount > 0 && (
+          <div className="file-edits-sidebar__root-checkbox flex items-center gap-2 px-2 py-1.5 mb-1 border-b border-[var(--nim-border)]">
+            <div
+              onClick={() => onSelectAll?.(rootSelectionInfo.state !== 'all')}
+              className={`w-4 h-4 shrink-0 rounded-[3px] border-[1.5px] cursor-pointer flex items-center justify-center transition-all ${
+                rootSelectionInfo.state === 'all'
+                  ? 'bg-[var(--nim-file-edited)] border-[var(--nim-file-edited)]'
+                  : rootSelectionInfo.state === 'some'
+                    ? 'bg-[var(--nim-file-edited)] border-[var(--nim-file-edited)] opacity-60'
+                    : 'border-[var(--nim-text-faint)] bg-transparent hover:border-[var(--nim-text-muted)]'
+              }`}
+            >
+              {rootSelectionInfo.state !== 'none' && (
+                rootSelectionInfo.state === 'all' ? (
+                  <svg width="8" height="6" viewBox="0 0 8 6" fill="none" className="text-white">
+                    <path d="M1 3L3 5L7 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                ) : (
+                  <div className="w-2 h-0.5 bg-white rounded-full" />
+                )
+              )}
+            </div>
+            <span className="text-[0.8125rem] text-[var(--nim-text-muted)]">
+              Select all ({rootSelectionInfo.uncommittedCount} uncommitted)
+            </span>
+          </div>
+        )}
         {editedFiles.length === 0 ? (
           <div className="file-edits-sidebar__empty p-4 text-[var(--nim-text-faint)] text-sm text-center">
             No files edited yet

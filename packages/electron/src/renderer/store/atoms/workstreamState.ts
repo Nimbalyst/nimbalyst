@@ -90,6 +90,14 @@ export type WorkstreamType = 'single' | 'workstream' | 'worktree';
 export type WorkstreamLayoutMode = 'editor' | 'split' | 'transcript';
 
 /**
+ * File scope mode for the Files Edited sidebar.
+ * - current-changes: Show only files with uncommitted git changes
+ * - session-files: Show all files touched in this session/workstream (default)
+ * - all-uncommitted: Show all uncommitted files in the repository
+ */
+export type FileScopeMode = 'current-changes' | 'session-files' | 'all-uncommitted';
+
+/**
  * Complete state for a single workstream.
  * This is the single source of truth for all workstream-related state.
  */
@@ -131,6 +139,10 @@ export interface WorkstreamState {
   commitMessage: string;
   /** Active AI proposal ID (when AI proposed a commit) */
   activeProposalId: string | null;
+
+  // ===== Files Edited Sidebar Settings =====
+  /** File scope mode for the Files Edited sidebar */
+  fileScopeMode: FileScopeMode;
 }
 
 /**
@@ -151,6 +163,7 @@ function createDefaultState(id: string): WorkstreamState {
     stagedFiles: [],
     commitMessage: '',
     activeProposalId: null,
+    fileScopeMode: 'session-files', // Default to showing all session files
   };
 }
 
@@ -321,6 +334,13 @@ export const workstreamCommitMessageAtom = atomFamily((id: string) =>
  */
 export const workstreamActiveProposalIdAtom = atomFamily((id: string) =>
   atom((get) => get(workstreamStateAtom(id)).activeProposalId)
+);
+
+/**
+ * File scope mode for the Files Edited sidebar in a workstream.
+ */
+export const workstreamFileScopeModeAtom = atomFamily((id: string) =>
+  atom((get) => get(workstreamStateAtom(id)).fileScopeMode)
 );
 
 // ============================================================
@@ -560,6 +580,16 @@ export const clearWorkstreamGitStateAtom = atom(
 );
 
 /**
+ * Set file scope mode for a workstream.
+ */
+export const setWorkstreamFileScopeModeAtom = atom(
+  null,
+  (get, set, { workstreamId, mode }: { workstreamId: string; mode: FileScopeMode }) => {
+    set(workstreamStateAtom(workstreamId), { fileScopeMode: mode });
+  }
+);
+
+/**
  * Convert a single session into a workstream.
  * Creates the workstream structure and updates state.
  */
@@ -594,6 +624,8 @@ export const convertToWorkstreamAtom = atom(
       stagedFiles: currentState.stagedFiles,
       commitMessage: currentState.commitMessage,
       activeProposalId: currentState.activeProposalId,
+      // Inherit sidebar settings from original session
+      fileScopeMode: currentState.fileScopeMode,
     });
 
     // Clear the original session's state (it's now a child, state lives on parent)
@@ -611,6 +643,7 @@ export const convertToWorkstreamAtom = atom(
       stagedFiles: [],
       commitMessage: '',
       activeProposalId: null,
+      fileScopeMode: 'session-files',
     });
 
     // Initialize sibling state
