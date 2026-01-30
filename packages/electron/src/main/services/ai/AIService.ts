@@ -2228,10 +2228,19 @@ export class AIService {
                 reason: 'error'
               });
 
+              // Detect Bedrock tool search error even if runtime didn't flag it
+              const errorMsg = chunk.error || 'Unknown error occurred';
+              const isBedrockToolError = chunk.isBedrockToolError || (
+                typeof errorMsg === 'string' &&
+                errorMsg.includes('Tool reference') &&
+                errorMsg.includes('not found in available tools')
+              );
+
               safeSend(event, 'ai:error', {
                 sessionId: session.id,
-                message: chunk.error || 'Unknown error occurred',
-                isAuthError: chunk.isAuthError || false
+                message: errorMsg,
+                isAuthError: chunk.isAuthError || false,
+                isBedrockToolError
               });
               break;
 

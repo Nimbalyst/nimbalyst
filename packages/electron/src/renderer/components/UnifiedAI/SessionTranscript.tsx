@@ -22,6 +22,7 @@ import { registerPendingQuestion, clearPendingQuestionForSession } from '@nimbal
 import type { SessionData, ChatAttachment } from '@nimbalyst/runtime/ai/server/types';
 import { AIInput, AIInputRef } from './AIInput';
 import { PromptQueueList } from './PromptQueueList';
+import { useDialog } from '../../contexts/DialogContext';
 import { FileGutter } from '../AIChat/FileGutter';
 import { PendingReviewBanner } from '../AIChat/PendingReviewBanner';
 import type { AIMode } from './ModeTag';
@@ -327,11 +328,35 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   // ============================================================
   // Subscribe to error events to show errors in the transcript
   // ============================================================
+  const { confirm } = useDialog();
+
   useEffect(() => {
     if (!sessionId || !window.electronAPI?.on) return;
 
-    const handleError = (data: { sessionId: string; message: string }) => {
+    const handleError = async (data: { sessionId: string; message: string; isBedrockToolError?: boolean }) => {
+      console.log('[SessionTranscript] Received error:', data);
       if (data.sessionId !== sessionId) return;
+
+      // For tool search errors (common with alternative AI providers like Bedrock)
+      if (data.isBedrockToolError) {
+        console.log('[SessionTranscript] Showing tool search error dialog');
+        await confirm({
+          title: 'MCP Tool Configuration Required',
+          message: [
+            'Some alternative AI providers don\'t fully support deferred tool loading (tool search).',
+            '',
+            'To fix this:',
+            '1. Open Settings (Cmd+,)',
+            '2. Go to "Claude Code" panel',
+            '3. In the "Environment Variables" section, add:',
+            '   ENABLE_TOOL_SEARCH = false',
+            '4. Save and retry your request'
+          ].join('\n'),
+          confirmText: 'OK',
+          cancelText: '',
+          variant: 'warning'
+        });
+      }
 
       // Add error as an assistant message so user can see what went wrong
       const errorMessage = {
@@ -352,7 +377,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
 
     const cleanup = window.electronAPI.on('ai:error', handleError);
     return () => { cleanup?.(); };
-  }, [sessionId, sessionData?.messages, updateSessionStore, setIsProcessing]);
+  }, [sessionId, sessionData?.messages, updateSessionStore, setIsProcessing, confirm]);
 
   // Derived values
   const isLoading = isProcessing;

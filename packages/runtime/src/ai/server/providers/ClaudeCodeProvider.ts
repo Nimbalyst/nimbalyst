@@ -1310,14 +1310,42 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                 lowerError.includes('401')
               );
 
+              // Check if this is a Bedrock tool search incompatibility error
+              // The error pattern "Tool reference 'X' not found in available tools" is specific to
+              // deferred tool loading (tool search) not being fully supported by Bedrock
+              const isBedrockToolError = (
+                typeof errorMessage === 'string' &&
+                errorMessage.includes('Tool reference') &&
+                errorMessage.includes('not found in available tools')
+              );
+
+              // If it's a Bedrock tool error, provide helpful guidance
+              if (isBedrockToolError) {
+                errorMessage = [
+                  `MCP Tool Error: ${errorMessage}`,
+                  '',
+                  'This error occurs because some alternative AI providers don\'t fully support deferred tool loading (tool search).',
+                  '',
+                  'To fix this:',
+                  '1. Open Settings (Cmd+,)',
+                  '2. Go to "Claude Code" panel',
+                  '3. In the "Environment Variables" section, add:',
+                  '   ENABLE_TOOL_SEARCH = false',
+                  '4. Save and retry your request',
+                  '',
+                  'This will load all MCP tools upfront instead of deferring them.'
+                ].join('\n');
+              }
+
               // Log error to database (as 'output' since errors are provider responses)
-              this.logError(sessionId, 'claude-code', new Error(errorMessage), 'result_chunk', isAuthError ? 'authentication_error' : 'api_error', hideMessages);
+              this.logError(sessionId, 'claude-code', new Error(errorMessage), 'result_chunk', isAuthError ? 'authentication_error' : isBedrockToolError ? 'bedrock_tool_error' : 'api_error', hideMessages);
 
               // Yield error to UI with isAuthError flag if applicable
               yield {
                 type: 'error',
                 error: errorMessage,
-                ...(isAuthError && { isAuthError: true })
+                ...(isAuthError && { isAuthError: true }),
+                ...(isBedrockToolError && { isBedrockToolError: true })
               };
 
               // CRITICAL: Send completion and break on result errors (like "prompt too long")

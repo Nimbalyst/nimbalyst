@@ -318,7 +318,7 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
     // Otherwise, render the generic error UI
     return (
       <div className="my-2 p-3 bg-[rgba(239,68,68,0.1)] border border-[rgba(239,68,68,0.3)] rounded-lg">
-        <div className="text-nim-error font-semibold text-sm mb-2">
+        <div className="text-nim-error font-semibold text-sm mb-2 whitespace-pre-wrap">
           {errorMessage}
         </div>
       </div>
