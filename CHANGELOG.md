@@ -20,6 +20,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.18] - 2026-01-30
+
+
+### Added
+- Offscreen editor mounting system for MCP tools
+- Session import dialog in Developer menu
+
+### Changed
+- GitCommitConfirmationWidget styling aligned with FileEditsSidebar
+
+### Fixed
+- FTS indexing now includes user prompts and assistant text for better search
+- Session content search now works reliably with time/direction filters
+- Optimized session list query to prevent redundant loading
+- WebSocket "Sent before connected" error in announceDevice
+- Improved performance by caching session files query and preventing extension double-load
+- Extension 'main' field now optional for Claude plugin-only extensions
+
 ## [0.52.17] - 2026-01-29
 
 
