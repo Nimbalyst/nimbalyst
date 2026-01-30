@@ -114,6 +114,8 @@ export const LoginRequiredWidget: React.FC = () => {
       const result = await window.electronAPI.invoke('claude-code:login');
 
       if (result.success) {
+        // Show popup to ensure user sees the instructions
+        alert('Login initiated! Complete authentication in the Terminal window (you may have to type /login to complete the process), then click "Check Status".');
         setLoginStatus({
           message: 'Login initiated! Complete authentication in the Terminal window (you may have to type /login to complete the process), then click "Check Status".',
           success: true
