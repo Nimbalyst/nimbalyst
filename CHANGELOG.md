@@ -20,6 +20,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.19] - 2026-01-30
+
+
+### Added
+- Plan mode indicator displayed on user messages in transcript
+- Shift+Tab keyboard shortcut to toggle plan mode in Claude Code
+- `/clear` command now creates a new session in current context
+
+### Changed
+- Plan mode instructions moved from system prompt to user message for better visibility
+- AskUserQuestion state persisted using Jotai atoms for improved state management
+
+### Fixed
+- AskUserQuestion state now persists across session navigation
+- Object destroyed errors prevented when window refreshes during AI requests
+
 ## [0.52.18] - 2026-01-30
 
 
