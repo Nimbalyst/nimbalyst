@@ -142,7 +142,7 @@ export function ClaudeCodePanel({
     try {
       const result = await window.electronAPI.invoke('claude-code:login');
       if (result.success) {
-        alert(result.message || 'Login initiated! Please complete authentication in the Terminal window, then click "Refresh Status" to verify.');
+        alert(result.message || 'Login initiated! Please complete authentication in the Terminal window (you may have to type /login to complete the process), then click "Refresh Status" to verify.');
       }
     } catch (error: any) {
       alert(`Login failed: ${error.message || 'Unknown error'}`);
@@ -337,7 +337,7 @@ export function ClaudeCodePanel({
                           </button>
                         </div>
                         <p className="text-[11px] leading-relaxed text-[var(--nim-text-faint)] mt-2">
-                          Opens Terminal for OAuth authentication
+                          Opens Terminal for OAuth authentication. You may have to type /login to complete the process.
                         </p>
                       </div>
                     </>

@@ -115,7 +115,7 @@ export const LoginRequiredWidget: React.FC = () => {
 
       if (result.success) {
         setLoginStatus({
-          message: 'Login initiated! Complete authentication in the Terminal window, then click "Check Status".',
+          message: 'Login initiated! Complete authentication in the Terminal window (you may have to type /login to complete the process), then click "Check Status".',
           success: true
         });
       } else {
