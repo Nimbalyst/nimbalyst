@@ -62,6 +62,12 @@ interface ElectronAPI {
   onOpenKeyboardShortcuts: (callback: () => void) => () => void;
   onThemeChange: (callback: (theme: string) => void) => () => void;
   onMcpConfigChanged: (callback: (data: { scope: 'user' | 'workspace'; workspacePath?: string }) => void) => () => void;
+
+  // Offscreen editor IPC
+  onOffscreenEditorMount: (callback: (payload: { filePath: string; workspacePath: string }) => void) => () => void;
+  onOffscreenEditorUnmount: (callback: (payload: { filePath: string }) => void) => () => void;
+  onOffscreenEditorCaptureScreenshotRequest: (callback: (payload: { filePath: string; selector?: string; responseChannel: string }) => void) => () => void;
+
   onShowAbout: (callback: () => void) => () => void;
   onViewHistory: (callback: () => void) => () => void;
   onViewWorkspaceHistory: (callback: () => void) => () => void;

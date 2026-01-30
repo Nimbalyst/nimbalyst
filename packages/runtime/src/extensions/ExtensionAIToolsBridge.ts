@@ -113,9 +113,23 @@ export function getMCPToolDefinitions(): MCPToolDefinition[] {
   return tools;
 }
 
+// Callback for mounting offscreen editors (set by platform service)
+let offscreenMountCallback: ((filePath: string, workspacePath: string) => Promise<void>) | null = null;
+
+/**
+ * Set the callback for mounting offscreen editors.
+ * Called by the platform service to provide offscreen mounting capability.
+ */
+export function setOffscreenMountCallback(callback: (filePath: string, workspacePath: string) => Promise<void>): void {
+  offscreenMountCallback = callback;
+}
+
 /**
  * Execute an extension tool by name.
  * Called when the MCP server receives a tool call from Claude Code.
+ *
+ * If the tool requires an editor and the file is not currently open,
+ * this will automatically mount it offscreen before invoking the tool.
  */
 export async function executeExtensionTool(
   toolName: string,
@@ -146,6 +160,25 @@ export async function executeExtensionTool(
   const extensionId = handler.extension.manifest.id;
 
   try {
+    // Check if tool requires an editor and file is specified
+    const toolScope = handler.tool.scope || 'editor';
+    if (toolScope === 'editor' && context.activeFilePath && context.workspacePath) {
+      // Check if editor is already available (visible or offscreen)
+      // This is determined by whether the editor has registered its API
+      // The registry pattern used by extensions means we can't directly check here,
+      // but the tool will fail if the API is not available.
+      // So we attempt to mount offscreen if we have the callback available.
+      if (offscreenMountCallback) {
+        try {
+          console.log(`[ExtensionAIToolsBridge] Ensuring editor available for ${context.activeFilePath}`);
+          await offscreenMountCallback(context.activeFilePath, context.workspacePath);
+        } catch (mountError) {
+          console.warn(`[ExtensionAIToolsBridge] Failed to mount offscreen editor:`, mountError);
+          // Continue anyway - the tool might work without it or fail with a better error
+        }
+      }
+    }
+
     const aiContext: AIToolContext = {
       workspacePath: context.workspacePath,
       activeFilePath: context.activeFilePath,

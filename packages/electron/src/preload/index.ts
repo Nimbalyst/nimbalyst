@@ -144,6 +144,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('mcp-config-changed', handler);
     return () => ipcRenderer.removeListener('mcp-config-changed', handler);
   },
+  // Offscreen editor IPC
+  onOffscreenEditorMount: (callback: (payload: { filePath: string; workspacePath: string }) => void) => {
+    const handler = (_event: any, payload: any) => callback(payload);
+    ipcRenderer.on('offscreen-editor:mount', handler);
+    return () => ipcRenderer.removeListener('offscreen-editor:mount', handler);
+  },
+  onOffscreenEditorUnmount: (callback: (payload: { filePath: string }) => void) => {
+    const handler = (_event: any, payload: any) => callback(payload);
+    ipcRenderer.on('offscreen-editor:unmount', handler);
+    return () => ipcRenderer.removeListener('offscreen-editor:unmount', handler);
+  },
+  onOffscreenEditorCaptureScreenshotRequest: (callback: (payload: { filePath: string; selector?: string; responseChannel: string }) => void) => {
+    const handler = (_event: any, payload: any) => callback(payload);
+    ipcRenderer.on('offscreen-editor:capture-screenshot-request', handler);
+    return () => ipcRenderer.removeListener('offscreen-editor:capture-screenshot-request', handler);
+  },
   onShowAbout: (callback: () => void) => {
     ipcRenderer.on('show-about', callback);
     return () => ipcRenderer.removeListener('show-about', callback);

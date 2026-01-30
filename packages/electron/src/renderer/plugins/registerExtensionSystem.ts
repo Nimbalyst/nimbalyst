@@ -17,6 +17,7 @@ import {
   setConfigurationServiceProvider,
   screenshotService,
   getExtensionLoader,
+  setOffscreenMountCallback,
 } from '@nimbalyst/runtime';
 import { ExtensionPlatformServiceImpl } from '../services/ExtensionPlatformServiceImpl';
 import { initializeExtensionEditorBridge } from '../extensions/ExtensionEditorBridge';
@@ -474,6 +475,23 @@ export async function registerExtensionSystem(): Promise<void> {
 
     // Initialize the AI tools bridge to register extension tools with the tool registry
     initializeExtensionAIToolsBridge();
+
+    // Set up offscreen editor mounting callback for AI tools
+    setOffscreenMountCallback(async (filePath: string, workspacePath: string) => {
+      const electronAPI = (window as any).electronAPI;
+      if (!electronAPI) {
+        throw new Error('electronAPI not available');
+      }
+
+      const result = await electronAPI.invoke('offscreen-editor:mount', {
+        filePath,
+        workspacePath,
+      });
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to mount offscreen editor');
+      }
+    });
 
     // Set up callback to notify main process when extension tools change
     setOnToolsChangedCallback((tools) => {

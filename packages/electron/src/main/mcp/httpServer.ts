@@ -11,7 +11,6 @@ import { BrowserWindow, ipcMain, nativeImage } from 'electron';
 import { parse as parseUrl } from 'url';
 import { existsSync } from 'fs';
 import path, { isAbsolute } from 'path';
-import { MockupScreenshotService } from '../services/MockupScreenshotService';
 import { isVoiceModeActive, sendToVoiceAgent, getActiveVoiceSessionId, stopVoiceSession } from '../services/voice/VoiceModeService';
 import { findWindowByWorkspace } from '../window/WindowManager';
 import { SessionFilesRepository } from '@nimbalyst/runtime';
@@ -536,20 +535,6 @@ async function tryCreateServer(port: number): Promise<any> {
             }
           },
           {
-            name: 'capture_mockup_screenshot',
-            description: 'DEPRECATED: Use capture_editor_screenshot instead. This tool is maintained for backward compatibility only. Captures a screenshot of a .mockup.html file, including user annotations if the file is open.',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                file_path: {
-                  type: 'string',
-                  description: 'The absolute path to the .mockup.html file to capture.'
-                }
-              },
-              required: ['file_path']
-            }
-          },
-          {
             name: 'open_workspace',
             description: 'Open a workspace (project directory) in Nimbalyst. This allows switching between different projects or opening additional workspaces. The workspace will open in a new window.',
             inputSchema: {
@@ -997,135 +982,6 @@ The commit message should follow these guidelines:
             };
           }
 
-          case 'capture_mockup_screenshot': {
-            const filePath = args?.file_path as string;
-            console.log('[MCP Server] capture_mockup_screenshot called with:', { filePath, workspacePath });
-
-            // Validate file path
-            if (!filePath || typeof filePath !== 'string') {
-              return {
-                content: [
-                  {
-                    type: 'text',
-                    text: 'Error: file_path is required and must be a string'
-                  }
-                ],
-                isError: true
-              };
-            }
-
-            // Validate it's a mockup file
-            if (!filePath.endsWith('.mockup.html')) {
-              return {
-                content: [
-                  {
-                    type: 'text',
-                    text: `Error: File must be a .mockup.html file. Got: ${filePath}`
-                  }
-                ],
-                isError: true
-              };
-            }
-
-            try {
-              // Get the mockup screenshot service
-              const mockupService = MockupScreenshotService.getInstance();
-
-              // Use workspace path from query parameter (captured in closure)
-              // If not provided, fall back to document state
-              let effectiveWorkspacePath = workspacePath;
-
-              if (!effectiveWorkspacePath) {
-                // Try to find workspace from document state as fallback
-                for (const state of documentStateBySession.values()) {
-                  if (state?.workspacePath) {
-                    effectiveWorkspacePath = state.workspacePath;
-                    break;
-                  }
-                }
-              }
-
-              // If still no workspace found, return error
-              if (!effectiveWorkspacePath) {
-                return {
-                  content: [
-                    {
-                      type: 'text',
-                      text: 'Error: No workspace context available. Please ensure a workspace is open and the MCP server was connected with a workspace path.'
-                    }
-                  ],
-                  isError: true
-                };
-              }
-
-              // Call the capture method
-              const result = await mockupService.captureScreenshotForMCP(filePath, effectiveWorkspacePath);
-
-              if (!result.success) {
-                return {
-                  content: [
-                    {
-                      type: 'text',
-                      text: `Error capturing screenshot: ${result.error || 'Unknown error'}`
-                    }
-                  ],
-                  isError: true
-                };
-              }
-
-              // Validate that we actually got image data
-              // This prevents the API error: "image cannot be empty"
-              if (!result.imageBase64 || result.imageBase64.length === 0) {
-                console.error('[MCP Server] Mockup screenshot returned empty base64 data');
-                return {
-                  content: [
-                    {
-                      type: 'text',
-                      text: 'Error: Screenshot capture returned empty image data. The mockup may not have rendered properly or the capture failed silently.'
-                    }
-                  ],
-                  isError: true
-                };
-              }
-
-              console.log(`[MCP Server] Captured screenshot for ${filePath}`);
-
-              // Compress image if needed to work around Claude bug with large images
-              // See: https://discord.com/channels/1072196207201501266/1451693213931933846
-              const compressed = compressImageIfNeeded(
-                result.imageBase64,
-                result.mimeType || 'image/png'
-              );
-
-              const finalSizeBytes = Math.floor((compressed.data.length * 3) / 4);
-              console.log(`[MCP Server] Returning image inline in tool call: ${(finalSizeBytes / 1024 / 1024).toFixed(3)} MB, mimeType: ${compressed.mimeType}, wasCompressed: ${compressed.wasCompressed}`);
-
-              // Return the image as base64-encoded content
-              return {
-                content: [
-                  {
-                    type: 'image',
-                    data: compressed.data,
-                    mimeType: compressed.mimeType
-                  }
-                ],
-                isError: false
-              };
-            } catch (error) {
-              console.error('[MCP Server] Failed to capture screenshot:', error);
-              const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-
-              return {
-                content: [
-                  {
-                    type: 'text',
-                    text: `Error capturing screenshot: ${errorMessage}`
-                  }
-                ],
-                isError: true
-              };
-            }
-          }
 
           case 'open_file': {
             const filePathArg = args?.file_path as string;
@@ -1372,11 +1228,7 @@ The commit message should follow these guidelines:
             }
 
             try {
-              // Find the window that has this file open
-              let targetWindow: BrowserWindow | null = null;
-
               // Find which workspace contains this file path
-              // The file's workspace is the longest workspace path that is a prefix of the file path
               let fileWorkspacePath: string | undefined;
               for (const wsPath of workspaceToWindowMap.keys()) {
                 if (filePath.startsWith(wsPath + '/') || filePath === wsPath) {
@@ -1386,17 +1238,13 @@ The commit message should follow these guidelines:
                 }
               }
 
-              // Fallback: Check all session workspaces if not in workspaceToWindowMap
-              // This handles cases where registerWorkspaceWindow hasn't been called yet
+              // Fallback: Check all session workspaces
               if (!fileWorkspacePath) {
-                console.log('[MCP Server] Workspace not in map, checking documentStateBySession...');
-                console.log('[MCP Server] Available session workspaces:', Array.from(documentStateBySession.values()).map(s => s.workspacePath));
                 for (const state of documentStateBySession.values()) {
                   const wsPath = state.workspacePath;
                   if (wsPath && (filePath.startsWith(wsPath + '/') || filePath === wsPath)) {
                     if (!fileWorkspacePath || wsPath.length > fileWorkspacePath.length) {
                       fileWorkspacePath = wsPath;
-                      console.log('[MCP Server] Found workspace in session state:', wsPath);
                     }
                   }
                 }
@@ -1420,69 +1268,21 @@ The commit message should follow these guidelines:
                 };
               }
 
-              const windowId = workspaceToWindowMap.get(fileWorkspacePath);
-              if (windowId) {
-                targetWindow = BrowserWindow.fromId(windowId);
-              }
+              console.log(`[MCP Server] Using offscreen editor screenshot for ${filePath}`);
 
-              // If no window mapping exists, try to find a window with this workspace
-              if (!targetWindow || targetWindow.isDestroyed()) {
-                // Use the existing findWindowByWorkspace utility
-                targetWindow = findWindowByWorkspace(fileWorkspacePath);
-              }
+              // Use offscreen editor system for screenshot
+              // This will mount the editor offscreen if needed, capture, and unmount
+              const { OffscreenEditorManager } = await import('../services/OffscreenEditorManager');
+              const manager = OffscreenEditorManager.getInstance();
 
-              if (!targetWindow || targetWindow.isDestroyed()) {
-                return {
-                  content: [
-                    {
-                      type: 'text',
-                      text: `Error: Window for workspace "${fileWorkspacePath}" is no longer available`
-                    }
-                  ],
-                  isError: true
-                };
-              }
+              const imageBuffer = await manager.captureScreenshot(filePath, fileWorkspacePath, selector);
+              const imageBase64 = imageBuffer.toString('base64');
 
-              console.log(`[MCP Server] Routing screenshot request to window ${targetWindow.id} for workspace: ${fileWorkspacePath}`);
-
-              // Generate unique request ID
-              const requestId = `editor-screenshot-${Date.now()}-${Math.random().toString(36).substring(7)}`;
-
-              // Create promise for the result
-              const result = await new Promise<{ success: boolean; imageBase64?: string; mimeType?: string; error?: string }>((resolve) => {
-                // Set timeout
-                const timeout = setTimeout(() => {
-                  ipcMain.removeAllListeners(requestId);
-                  resolve({
-                    success: false,
-                    error: 'Screenshot capture timed out'
-                  });
-                }, 10000);
-
-                ipcMain.once(requestId, (_event, captureResult) => {
-                  clearTimeout(timeout);
-                  resolve(captureResult);
-                });
-
-                // Send IPC message to renderer to capture screenshot
-                targetWindow!.webContents.send('editor:capture-screenshot', {
-                  requestId,
-                  filePath,
-                  selector
-                });
-              });
-
-              if (!result.success) {
-                return {
-                  content: [
-                    {
-                      type: 'text',
-                      text: `Error capturing editor screenshot: ${result.error || 'Unknown error'}`
-                    }
-                  ],
-                  isError: true
-                };
-              }
+              const result = {
+                success: true,
+                imageBase64,
+                mimeType: 'image/png'
+              };
 
               // Validate that we actually got image data
               // This prevents the API error: "image cannot be empty"

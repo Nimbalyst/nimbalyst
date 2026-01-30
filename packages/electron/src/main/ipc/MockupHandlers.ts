@@ -9,7 +9,7 @@
 import { BrowserWindow } from 'electron';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { MockupScreenshotService } from '../services/MockupScreenshotService';
+import { OffscreenEditorManager } from '../services/OffscreenEditorManager';
 import { logger } from '../utils/logger';
 import { safeHandle, safeOn } from '../utils/ipcRegistry';
 import { getWindowId, windowStates } from '../window/WindowManager';
@@ -18,7 +18,8 @@ import { getWindowId, windowStates } from '../window/WindowManager';
  * Register IPC handlers for mockup operations.
  */
 export function registerMockupHandlers(): void {
-  // Handle screenshot result from renderer
+  // Handle screenshot result from renderer (deprecated - no longer used)
+  // This handler is kept for backward compatibility but does nothing
   safeHandle('mockup:screenshot-result', (_event, payload: {
     requestId: string;
     success: boolean;
@@ -26,13 +27,7 @@ export function registerMockupHandlers(): void {
     mimeType?: string;
     error?: string;
   }) => {
-    const service = MockupScreenshotService.getInstance();
-    service.handleScreenshotResult(payload.requestId, {
-      success: payload.success,
-      imageBase64: payload.imageBase64,
-      mimeType: payload.mimeType,
-      error: payload.error
-    });
+    logger.main.warn('[MockupHandlers] mockup:screenshot-result called - this handler is deprecated');
     return { success: true };
   });
 
@@ -47,26 +42,15 @@ export function registerMockupHandlers(): void {
         // We assume the workspace is a parent directory
         const workspacePath = path.dirname(mockupPath);
 
-        // Use the existing MockupScreenshotService
-        const service = MockupScreenshotService.getInstance();
-        const result = await service.captureScreenshotForMCP(
-          mockupPath,
-          workspacePath,
-        );
-
-        if (!result.success || !result.imageBase64) {
-          return {
-            success: false,
-            error: result.error || 'Failed to capture screenshot',
-          };
-        }
+        // Use the offscreen editor manager to capture screenshot
+        const offscreenManager = OffscreenEditorManager.getInstance();
+        const imageBuffer = await offscreenManager.captureScreenshot(mockupPath, workspacePath);
 
         // Ensure the output directory exists
         const outputDir = path.dirname(outputPath);
         await fs.mkdir(outputDir, { recursive: true });
 
-        // Convert base64 to buffer and write to file
-        const imageBuffer = Buffer.from(result.imageBase64, 'base64');
+        // Write buffer to file
         await fs.writeFile(outputPath, imageBuffer);
 
         logger.main.info(`[MockupHandlers] Screenshot saved: ${outputPath}`);

@@ -62,8 +62,8 @@ import { cliManager, initEnhancedPath } from './services/CLIManager';
 import { registerWorkspaceWindow, registerExtensionTools, shutdownHttpServer, startMcpHttpServer, updateDocumentState } from './mcp/httpServer';
 import { SessionNamingService } from './services/SessionNamingService';
 import { ExtensionDevService } from './services/ExtensionDevService';
-import { MockupScreenshotService } from './services/MockupScreenshotService';
 import { registerMockupHandlers } from './ipc/MockupHandlers';
+import { registerOffscreenEditorHandlers } from './ipc/OffscreenEditorHandlers';
 import { initVoiceModeService } from './services/voice/VoiceModeService';
 import { initVoiceModeSettingsHandler } from './services/voice/VoiceModeSettingsHandler';
 import { registerWalkthroughHandlers } from './ipc/WalkthroughHandlers';
@@ -732,6 +732,7 @@ app.whenReady().then(async () => {
     registerMockupHandlers();
     registerDataModelHandlers();
     registerExtensionHandlers();
+    registerOffscreenEditorHandlers();
 
     // Initialize extension file types (must happen before file operations)
     markStart('extension-file-types');
@@ -1423,9 +1424,7 @@ app.on('before-quit', async (event) => {
     }
 
     try {
-        // Cleanup mockup screenshot service
-        const mockupScreenshotService = MockupScreenshotService.getInstance();
-        mockupScreenshotService.cleanup();
+        // Cleanup services (placeholder for future cleanup)
     } catch (error) {
         console.error('[QUIT] Error cleaning up mockup screenshot service:', error);
     }

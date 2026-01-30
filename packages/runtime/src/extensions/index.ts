@@ -79,6 +79,7 @@ export {
   setOnToolsChangedCallback,
   getMCPToolDefinitions,
   executeExtensionTool,
+  setOffscreenMountCallback,
 } from './ExtensionAIToolsBridge';
 export type { MCPToolDefinition } from './ExtensionAIToolsBridge';
 

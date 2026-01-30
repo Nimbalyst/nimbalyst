@@ -12,6 +12,7 @@ import {beforePostHogSendWeb} from "../main/services/analytics/analytics-utils.t
 import { initMonacoEditor } from './utils/monacoConfig';
 import { store } from '@nimbalyst/runtime/store';
 import { initializeTheme } from './hooks/useTheme';
+import { offscreenEditorRenderer } from './services/OffscreenEditorRenderer';
 import {
   voiceModeSettingsAtom,
   initVoiceModeSettings,
@@ -41,6 +42,37 @@ initMonacoEditor();
 // Initialize theme from main process and set up IPC listener
 // This must happen before React renders to avoid flash
 initializeTheme();
+
+// Initialize offscreen editor renderer and set up IPC listeners
+offscreenEditorRenderer.initialize();
+
+// Expose offscreen renderer on window for main process access
+(window as any).offscreenEditorRenderer = offscreenEditorRenderer;
+
+// Set up IPC listeners for offscreen editor mount/unmount
+window.electronAPI.onOffscreenEditorMount(async (payload: { filePath: string; workspacePath: string }) => {
+  console.log('[Renderer] Received offscreen-editor:mount IPC:', payload);
+  try {
+    await offscreenEditorRenderer.mountEditor(payload.filePath, payload.workspacePath);
+  } catch (error) {
+    console.error('[Renderer] Failed to mount offscreen editor:', error);
+  }
+});
+
+window.electronAPI.onOffscreenEditorUnmount((payload: { filePath: string }) => {
+  offscreenEditorRenderer.unmountEditor(payload.filePath);
+});
+
+// Handle screenshot capture requests
+window.electronAPI.onOffscreenEditorCaptureScreenshotRequest(async (payload: { filePath: string; selector?: string; responseChannel: string }) => {
+  try {
+    const imageBase64 = await offscreenEditorRenderer.captureScreenshot(payload.filePath, payload.selector);
+    await window.electronAPI.invoke(payload.responseChannel, { success: true, imageBase64 });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    await window.electronAPI.invoke(payload.responseChannel, { success: false, error: errorMessage });
+  }
+});
 
 // Initialize app settings atoms from main process
 // This loads settings and hydrates the Jotai atoms before React renders
