@@ -12,12 +12,19 @@
 
 /*
  * Default all UI to non-selectable. Content areas opt-in with select-text class.
- * :where() zeros specificity so .select-text (0-0-1-0) can override.
- * This MUST come after @tailwind utilities so Tailwind's select-text wins.
+ * Using @layer utilities ensures this comes after base styles but can be overridden
+ * by utility classes in the HTML (like Tailwind's select-text).
  */
-@layer base {
+@layer utilities {
+  /* Low-specificity global default */
   :where(#root, #root *) {
     user-select: none;
+  }
+
+  /* Explicit override for content areas and their children */
+  .select-text,
+  .select-text * {
+    user-select: text;
   }
 }
 
