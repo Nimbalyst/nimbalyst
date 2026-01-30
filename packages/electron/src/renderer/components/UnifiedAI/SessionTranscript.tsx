@@ -1146,17 +1146,13 @@ Your goal is to build a comprehensive plan through iterative refinement:
       await window.electronAPI.invoke('claude-code:answer-question', { questionId, answers });
     } catch (error) {
       // SDK doesn't have this question anymore (session was interrupted)
-      // Fall back to sending answers as a hidden text message to continue the conversation
+      // Fall back to sending answers as a plain text message to continue the conversation
       console.log('[SessionTranscript] SDK question not found, sending answers as message');
       const answersText = Object.entries(answers)
-        .map(([q, a]) => `"${q}": "${a}"`)
+        .map(([q, a]) => `${q}: ${a}`)
         .join('\n');
-      const fallbackMessage = `<NIMBALYST_SYSTEM_MESSAGE>
-<USER_QUESTION_ANSWERS>
-The user has answered your previous questions:
-${answersText}
-</USER_QUESTION_ANSWERS>
-</NIMBALYST_SYSTEM_MESSAGE>`;
+      // Send as a simple user message - the AI will understand this is in response to its questions
+      const fallbackMessage = `Here are my answers to your questions:\n\n${answersText}`;
 
       try {
         await window.electronAPI.invoke('ai:sendMessage', fallbackMessage, { mode: aiMode }, confirmSessionId, workspacePath);

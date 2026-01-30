@@ -166,15 +166,22 @@ export const AskUserQuestionWidget: React.FC<CustomToolWidgetProps> = ({
   message,
   sessionId,
 }) => {
-  // Force re-render when pending questions change
+  // Delay initial render to allow pending question restore to happen first
+  // This prevents flash of "submitted" state on refresh
+  const [isReady, setIsReady] = useState(false);
   const [, forceUpdate] = useState({});
+
   useEffect(() => {
-    // Subscribe to changes in pending questions for this session
-    // We use a simple polling approach since the global store doesn't have reactive updates
+    // Small delay to let SessionTranscript restore pending questions from metadata
+    const timeout = setTimeout(() => setIsReady(true), 150);
+    // Then poll for changes
     const interval = setInterval(() => {
       forceUpdate({});
     }, 100);
-    return () => clearInterval(interval);
+    return () => {
+      clearTimeout(timeout);
+      clearInterval(interval);
+    };
   }, [sessionId]);
 
   const tool = message.toolCall;
@@ -182,9 +189,9 @@ export const AskUserQuestionWidget: React.FC<CustomToolWidgetProps> = ({
 
   const questions = parseQuestions(tool.arguments);
 
-  // Check if this session has a pending question - if so, don't render the widget
-  // The interactive AskUserQuestionConfirmation component handles the pending state
-  if (sessionHasPendingQuestion(sessionId)) {
+  // Don't render until ready (allows restore to complete)
+  // Also check if this session has a pending question
+  if (!isReady || sessionHasPendingQuestion(sessionId)) {
     return null;
   }
 
