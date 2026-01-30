@@ -2387,6 +2387,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                 <path d="M12 7v4M10 9h4"/>
               </svg>
               <span>New Worktree</span>
+              <span className="session-history-new-option-shortcut flex-none text-[11px] text-[var(--nim-text-muted)] opacity-70">{getShortcutDisplay(KeyboardShortcuts.window.newWorktree)}</span>
             </button>
           )}
           {onNewTerminal && (

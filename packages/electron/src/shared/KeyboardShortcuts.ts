@@ -76,6 +76,7 @@ export const KeyboardShortcuts = {
     sessionManager: 'Cmd+Shift+H',
     sessionQuickOpen: 'Cmd+L',
     agenticCoding: 'Cmd+Shift+K',
+    newWorktree: 'Cmd+Alt+W',
     aiModels: 'Cmd+,',
     minimize: 'Cmd+M'
   },

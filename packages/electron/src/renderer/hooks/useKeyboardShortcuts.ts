@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { ContentMode } from '../types/WindowModeTypes';
 import type { TrackerBottomPanelType } from '../components/TrackerBottomPanel/TrackerBottomPanel';
+import type { AgentModeRef } from '../components/AgentMode';
 
 interface KeyboardShortcutsOptions {
   // Mode state
@@ -18,6 +19,9 @@ interface KeyboardShortcutsOptions {
     toggleSidebarCollapsed: () => void;
     openHistoryDialog: () => void;
   } | null>;
+
+  // AgentMode ref for worktree operations
+  agentModeRef: React.RefObject<AgentModeRef | null>;
 
   // Bottom panel state
   bottomPanel: TrackerBottomPanelType | null;
@@ -41,6 +45,7 @@ interface KeyboardShortcutsOptions {
  * - Cmd+Shift+P: Toggle Plans panel
  * - Cmd+Shift+B: Toggle Bugs panel
  * - Cmd+Shift+K: Toggle Tasks panel
+ * - Cmd+Alt+W: Create new worktree session
  * - Cmd+`: Toggle Terminal panel
  */
 export function useKeyboardShortcuts({
@@ -49,6 +54,7 @@ export function useKeyboardShortcuts({
   setActiveMode,
   activeModeStateRef,
   editorModeRef,
+  agentModeRef,
   bottomPanel,
   setBottomPanel,
   terminalPanelVisible,
@@ -84,6 +90,26 @@ export function useKeyboardShortcuts({
       // NOTE: Cmd+O, Cmd+L, Cmd+Shift+L are handled by NavigationDialogKeyboardHandler
       // NOTE: Cmd+Shift+A for AI Chat is handled by the menu accelerator + IPC listener
       // NOTE: Cmd+Shift+T handled by menu system (reopen-last-closed-tab IPC event)
+
+      // Cmd+Alt+W for new worktree session
+      // Note: On Mac, Alt+W produces '∑', so we need to check e.code instead of e.key
+      if (workspaceMode && (e.metaKey || e.ctrlKey) && e.altKey && e.code === 'KeyW') {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        // Switch to agent mode if not already there
+        if (activeMode !== 'agent') {
+          setActiveMode('agent');
+          // Need to wait for mode switch and component mount
+          setTimeout(() => {
+            agentModeRef.current?.createNewWorktreeSession();
+          }, 100);
+        } else {
+          // Already in agent mode, create worktree directly
+          agentModeRef.current?.createNewWorktreeSession();
+        }
+        return;
+      }
 
       // Cmd+Y (Mac) or Ctrl+Y (Windows/Linux) for History - only in files mode
       if ((e.metaKey || e.ctrlKey) && e.key === 'y') {
@@ -134,6 +160,7 @@ export function useKeyboardShortcuts({
     setActiveMode,
     activeModeStateRef,
     editorModeRef,
+    agentModeRef,
     setBottomPanel,
     setTerminalPanelVisible,
     toggleAgentCollapsed,

@@ -48,6 +48,7 @@ import { initSessionStateListeners } from '../../store/sessionStateListeners';
 
 export interface AgentModeRef {
   createNewSession: () => Promise<void>;
+  createNewWorktreeSession: () => Promise<void>;
   openSessionInTab: (sessionId: string) => Promise<void>;
   closeActiveTab: () => void;
   reopenLastClosedSession: () => void;
@@ -226,6 +227,12 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
   const createNewWorktreeSession = useCallback(async () => {
     if (!window.electronAPI) return;
 
+    // Check if worktrees feature is available
+    if (!isWorktreesAvailable) return;
+
+    // Check if this is a git repo
+    if (!isGitRepo) return;
+
     try {
       // Create the worktree
       const worktreeResult = await window.electronAPI.invoke('worktree:create', workspacePath);
@@ -279,7 +286,7 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
     } catch (error) {
       console.error('[AgentMode] Failed to create worktree session:', error);
     }
-  }, [workspacePath, addSession, setSelectedWorkstream, defaultModel]);
+  }, [workspacePath, addSession, setSelectedWorkstream, defaultModel, isWorktreesAvailable, isGitRepo]);
 
   // Add session to an existing worktree
   const addSessionToWorktree = useCallback(async (worktreeId: string) => {
@@ -613,6 +620,7 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
   // Expose ref methods
   useImperativeHandle(ref, () => ({
     createNewSession,
+    createNewWorktreeSession,
     openSessionInTab,
     closeActiveTab: () => {
       // Route to workstream panel - it will only close editor tabs if they have focus
@@ -627,7 +635,7 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
     previousTab: () => {
       // TODO: Implement tab navigation
     },
-  }), [createNewSession, openSessionInTab, workspacePath, setSelectedWorkstream]);
+  }), [createNewSession, createNewWorktreeSession, openSessionInTab, workspacePath, setSelectedWorkstream]);
 
   // Handle worktree archived - refresh the session list to show updated state
   const handleWorktreeArchived = useCallback(() => {

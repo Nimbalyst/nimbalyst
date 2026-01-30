@@ -976,13 +976,14 @@ export default function App() {
     window.electronAPI.setTitle(title);
   }, [workspaceMode, workspaceName, activeMode]);
 
-  // Keyboard shortcuts (Cmd+E, Cmd+K, Cmd+Y, bottom panel shortcuts, terminal toggle)
+  // Keyboard shortcuts (Cmd+E, Cmd+K, Cmd+Y, bottom panel shortcuts, terminal toggle, Cmd+Alt+W)
   useKeyboardShortcuts({
     activeMode,
     workspaceMode,
     setActiveMode,
     activeModeStateRef,
     editorModeRef,
+    agentModeRef,
     bottomPanel,
     setBottomPanel,
     terminalPanelVisible,
