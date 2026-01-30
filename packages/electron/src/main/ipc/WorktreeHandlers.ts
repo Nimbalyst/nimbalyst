@@ -15,6 +15,7 @@ import { AISessionsRepository } from '@nimbalyst/runtime/storage/repositories/AI
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
 import { getTerminalSessionManager } from '../services/TerminalSessionManager';
 import { getTerminalsByWorktreeId, deleteTerminalInstance } from '../utils/terminalStore';
+import type { WorktreeCreateResult } from '../../shared/ipc/types';
 
 const logger = log.scope('WorktreeHandlers');
 
@@ -56,7 +57,7 @@ export function registerWorktreeHandlers(): void {
    * @param name - Optional custom name for the worktree
    * @returns Worktree data including id, path, branch, etc.
    */
-  ipcMain.handle('worktree:create', async (_event, workspacePath: string, name?: string) => {
+  ipcMain.handle('worktree:create', async (_event, workspacePath: string, name?: string): Promise<WorktreeCreateResult> => {
     const startTime = Date.now();
     const timings: Record<string, number> = {};
 

@@ -1,0 +1,23 @@
+/**
+ * Shared type definitions for IPC handler responses
+ */
+
+import type { Worktree } from '../../main/services/WorktreeStore';
+
+/**
+ * Response from worktree:create IPC handler
+ */
+export interface WorktreeCreateResult {
+  success: boolean;
+  worktree?: Worktree;
+  error?: string;
+}
+
+/**
+ * Response from sessions:create IPC handler
+ */
+export interface SessionCreateResult {
+  success: boolean;
+  id?: string;
+  error?: string;
+}

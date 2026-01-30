@@ -4,6 +4,7 @@ import { ModelIdentifier, type AIProviderType } from '@nimbalyst/runtime/ai/serv
 import type { UpdateSessionMetadataPayload } from '@nimbalyst/runtime/ai/adapters/sessionStore';
 import path from "path";
 import { safeHandle, safeOn } from '../utils/ipcRegistry';
+import type { SessionCreateResult } from '../../shared/ipc/types';
 
 // Initialize session manager
 const sessionManager = new SessionManager();
@@ -128,7 +129,7 @@ export async function registerSessionHandlers() {
     });
 
     // Create session (new format for agentic coding)
-    safeHandle('sessions:create', async (event, payload: { session: any; workspaceId: string }) => {
+    safeHandle('sessions:create', async (event, payload: { session: any; workspaceId: string }): Promise<SessionCreateResult> => {
         try {
             const { session, workspaceId } = payload;
 

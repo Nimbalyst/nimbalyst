@@ -61,6 +61,17 @@ export function useKeyboardShortcuts({
   setTerminalPanelVisible,
   toggleAgentCollapsed,
 }: KeyboardShortcutsOptions): void {
+  // Track if worktree creation is pending after mode switch
+  const pendingWorktreeCreationRef = useRef(false);
+
+  // When agentModeRef becomes available and worktree creation is pending, execute it
+  useEffect(() => {
+    if (pendingWorktreeCreationRef.current && agentModeRef.current && activeMode === 'agent') {
+      pendingWorktreeCreationRef.current = false;
+      agentModeRef.current.createNewWorktreeSession();
+    }
+  }, [agentModeRef, activeMode]);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent): void => {
       // Cmd+E for Files mode (toggle sidebar if already in files mode)
@@ -99,11 +110,8 @@ export function useKeyboardShortcuts({
         e.stopImmediatePropagation();
         // Switch to agent mode if not already there
         if (activeMode !== 'agent') {
+          pendingWorktreeCreationRef.current = true;
           setActiveMode('agent');
-          // Need to wait for mode switch and component mount
-          setTimeout(() => {
-            agentModeRef.current?.createNewWorktreeSession();
-          }, 100);
         } else {
           // Already in agent mode, create worktree directly
           agentModeRef.current?.createNewWorktreeSession();

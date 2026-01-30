@@ -45,6 +45,7 @@ import {
 import { errorNotificationService } from '../../services/ErrorNotificationService';
 import { initWorkstreamState, loadWorkstreamStates, workstreamStateAtom, workstreamActiveChildAtom, setWorkstreamActiveChildAtom, setWorktreeActiveSessionAtom } from '../../store/atoms/workstreamState';
 import { initSessionStateListeners } from '../../store/sessionStateListeners';
+import type { WorktreeCreateResult, SessionCreateResult } from '../../../shared/ipc/types';
 
 export interface AgentModeRef {
   createNewSession: () => Promise<void>;
@@ -62,6 +63,7 @@ export interface AgentModeProps {
   isActive?: boolean;
   onFileOpen?: (filePath: string) => Promise<void>;
   onOpenQuickSearch?: () => void;
+  onReady?: () => void;
 }
 
 /**
@@ -80,6 +82,7 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
   isActive = true,
   onFileOpen,
   onOpenQuickSearch,
+  onReady,
 }, ref) {
   // Ref to the workstream panel for closing tabs
   const workstreamPanelRef = useRef<AgentWorkstreamPanelRef>(null);
@@ -127,7 +130,9 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
     // Initialize unified workstream state
     initWorkstreamState(workspacePath);
     loadWorkstreamStates(workspacePath);
-  }, [workspacePath]);
+    // Notify parent that component is ready
+    onReady?.();
+  }, [workspacePath, onReady]);
 
   // Initialize session state listeners (global, runs once)
   useEffect(() => {
@@ -235,16 +240,16 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
 
     try {
       // Create the worktree
-      const worktreeResult = await window.electronAPI.invoke('worktree:create', workspacePath);
-      if (!worktreeResult?.success || !worktreeResult.worktree) {
-        throw new Error(worktreeResult?.error || 'Failed to create worktree');
+      const worktreeResult: WorktreeCreateResult = await window.electronAPI.invoke('worktree:create', workspacePath);
+      if (!worktreeResult.success || !worktreeResult.worktree) {
+        throw new Error(worktreeResult.error || 'Failed to create worktree');
       }
 
       const worktree = worktreeResult.worktree;
 
       // Create session with worktree association
       const sessionId = crypto.randomUUID();
-      const result = await window.electronAPI.invoke('sessions:create', {
+      const result: SessionCreateResult = await window.electronAPI.invoke('sessions:create', {
         session: {
           id: sessionId,
           provider: 'claude-code',

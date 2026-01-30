@@ -971,19 +971,22 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     setSortDropdownOpen(false);
   };
 
-  const toggleNewDropdown = () => {
-    if (!newDropdownOpen && newDropdownButtonRef.current) {
-      const rect = newDropdownButtonRef.current.getBoundingClientRect();
-      setNewDropdownPosition({
-        x: rect.right,
-        y: rect.bottom + 4
-      });
+  const toggleNewDropdown = (buttonElement?: HTMLButtonElement) => {
+    if (!newDropdownOpen) {
+      const button = buttonElement || newDropdownButtonRef.current;
+      if (button) {
+        const rect = button.getBoundingClientRect();
+        setNewDropdownPosition({
+          x: rect.right,
+          y: rect.bottom + 4
+        });
+      }
     }
     setNewDropdownOpen(!newDropdownOpen);
   };
 
   // Handle new button click - if only one option available, trigger it directly
-  const handleNewButtonClick = () => {
+  const handleNewButtonClick = (e: React.MouseEvent<HTMLButtonElement>) => {
     const availableOptions = [onNewSession, onNewWorktreeSession, onNewTerminal].filter(Boolean);
     if (availableOptions.length === 1) {
       // Only one option available, trigger it directly
@@ -992,7 +995,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
       else if (onNewTerminal) onNewTerminal();
     } else {
       // Multiple options, show dropdown
-      toggleNewDropdown();
+      toggleNewDropdown(e.currentTarget);
     }
   };
 
@@ -1101,9 +1104,11 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
       if (sortDropdownOpen && !target.closest('.session-history-sort-dropdown')) {
         setSortDropdownOpen(false);
       }
-      if (newDropdownOpen && newDropdownMenuRef.current && !newDropdownMenuRef.current.contains(target) && !target.closest('.session-history-new-dropdown')) {
-        setNewDropdownOpen(false);
-        setNewDropdownPosition(null);
+      if (newDropdownOpen && !target.closest('.session-history-new-dropdown')) {
+        if (!newDropdownMenuRef.current || !newDropdownMenuRef.current.contains(target)) {
+          setNewDropdownOpen(false);
+          setNewDropdownPosition(null);
+        }
       }
       if (cardContextMenu && cardContextMenuRef.current && !cardContextMenuRef.current.contains(target)) {
         closeCardContextMenu();
@@ -1112,6 +1117,18 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [sortDropdownOpen, newDropdownOpen, cardContextMenu, closeCardContextMenu]);
+
+  // Close dropdown on window resize to prevent stale positioning
+  useEffect(() => {
+    const handleResize = () => {
+      if (newDropdownOpen) {
+        setNewDropdownOpen(false);
+        setNewDropdownPosition(null);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [newDropdownOpen]);
 
   // Adjust card context menu position to stay within viewport
   const [adjustedCardMenuPosition, setAdjustedCardMenuPosition] = useState<{ x: number; y: number } | null>(null);
