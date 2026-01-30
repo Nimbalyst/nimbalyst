@@ -100,6 +100,7 @@ const injectRichTranscriptStyles = () => {
       opacity: 1;
     }
 
+    
     /* Animations */
     @keyframes thinking-pulse {
       0%, 100% {
@@ -1174,9 +1175,9 @@ export const RichTranscriptView = React.forwardRef<
                           </div>
                         )}
 
-                        <div className={`rich-transcript-message-content relative select-text ${isNewGroup ? 'ml-6' : 'no-indent ml-0'}`}>
+                        <div className={`rich-transcript-message-content relative ${isNewGroup ? 'ml-6' : 'no-indent ml-0'}`}>
                           {/* Copy button - shows on hover */}
-                          <div className="rich-transcript-message-copy-action absolute -top-1 right-0 z-[1] select-none">
+                          <div className="rich-transcript-message-copy-action absolute -top-1 right-0 z-[1]">
                             <button
                               onClick={() => copyMessageContent(message, index)}
                               className={`rich-transcript-copy-button p-1.5 rounded-md bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] cursor-pointer transition-all flex items-center justify-center hover:bg-[var(--nim-bg-hover)] ${copiedMessageIndex === index ? 'copied' : ''}`}

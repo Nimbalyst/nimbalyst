@@ -317,7 +317,7 @@ export const BashWidget: React.FC<CustomToolWidgetProps> = ({ message, isExpande
         <div className="flex items-start gap-2 p-2 bg-nim-tertiary">
           <div className="flex-1 flex items-start gap-1.5 min-w-0">
             <span className="text-nim-success font-semibold shrink-0 select-none">$</span>
-            <code className="text-nim text-[0.8125rem] leading-normal break-words whitespace-pre-wrap select-text">{command}</code>
+            <code className="text-nim text-[0.8125rem] leading-normal break-words whitespace-pre-wrap">{command}</code>
           </div>
           <button
             className={`shrink-0 flex items-center justify-center w-6 h-6 p-0 bg-transparent border-none rounded transition-all duration-150 opacity-60 cursor-pointer hover:bg-nim-hover hover:text-nim-muted hover:opacity-100 ${copied ? 'text-nim-success opacity-100' : 'text-nim-faint'}`}
@@ -346,7 +346,7 @@ export const BashWidget: React.FC<CustomToolWidgetProps> = ({ message, isExpande
       {/* Output display */}
       {displayOutput && (
         <div className="relative border-t border-nim">
-          <pre className={`m-0 p-2 text-xs leading-normal select-text ${hasError ? 'text-nim-error' : 'text-nim-muted'} bg-nim overflow-x-auto whitespace-pre-wrap break-words max-h-80 overflow-y-auto`}>
+          <pre className={`m-0 p-2 text-xs leading-normal ${hasError ? 'text-nim-error' : 'text-nim-muted'} bg-nim overflow-x-auto whitespace-pre-wrap break-words max-h-80 overflow-y-auto`}>
             {displayOutput}
           </pre>
           {needsTruncation && (

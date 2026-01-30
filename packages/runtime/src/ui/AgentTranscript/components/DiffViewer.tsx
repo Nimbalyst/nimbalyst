@@ -88,7 +88,7 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({ edit, filePath: contextF
         onMouseLeave={() => setIsHovered(false)}
       >
         <span className={`diff-line-marker inline-block w-6 shrink-0 font-semibold select-none text-center ${markerColor}`}>{marker}</span>
-        <span className="diff-line-content pl-2 leading-normal whitespace-pre select-text">{content || ' '}</span>
+        <span className="diff-line-content pl-2 leading-normal whitespace-pre">{content || ' '}</span>
       </div>
     );
   };

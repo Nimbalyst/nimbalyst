@@ -10,23 +10,6 @@
 @tailwind components;
 @tailwind utilities;
 
-/*
- * Default all UI to non-selectable. Content areas opt-in with select-text class.
- * Using @layer utilities ensures this comes after base styles but can be overridden
- * by utility classes in the HTML (like Tailwind's select-text).
- */
-@layer utilities {
-  /* Low-specificity global default */
-  :where(#root, #root *) {
-    user-select: none;
-  }
-
-  /* Explicit override for content areas and their children */
-  .select-text,
-  .select-text * {
-    user-select: text;
-  }
-}
 
 /* Shared component utilities are now imported via JS in index.tsx */
 
