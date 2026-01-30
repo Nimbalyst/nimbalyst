@@ -265,11 +265,33 @@ jobs:
         with:
           path: release-artifacts
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
       - name: Prepare release assets
         run: |
           mkdir -p release-files
-          find release-artifacts -type f \( -name "*.dmg" -o -name "*.zip" -o -name "*.exe" -o -name "*.AppImage" -o -name "*.yml" -o -name "*.yaml" \) -exec cp {} release-files/ \;
+          # Copy binaries but NOT yml files (we'll regenerate those)
+          find release-artifacts -type f \( -name "*.dmg" -o -name "*.zip" -o -name "*.exe" -o -name "*.AppImage" \) -exec cp {} release-files/ \;
           ls -la release-files/
+
+      - name: Generate update metadata with all architectures
+        working-directory: packages/electron
+        run: |
+          # Copy binaries to release folder so generate-update-yml.js can find them
+          mkdir -p release
+          cp ../../release-files/*.dmg ../../release-files/*.zip release/ 2>/dev/null || true
+          cp ../../release-files/*.exe release/ 2>/dev/null || true
+          cp ../../release-files/*.AppImage release/ 2>/dev/null || true
+          ls -la release/
+          # Generate yml files with all architectures present
+          node build/generate-update-yml.js
+          # Copy generated yml files back to release-files
+          cp release/*.yml ../../release-files/ 2>/dev/null || true
+          cp release/*.yaml ../../release-files/ 2>/dev/null || true
+          ls -la ../../release-files/
 
       - name: Generate release notes for R2 and public release
         id: release_notes

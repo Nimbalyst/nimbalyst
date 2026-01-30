@@ -76,7 +76,8 @@ function generateMacYml() {
     files.push({
       url: arm64Zip,
       sha512: calculateSHA512(arm64ZipPath),
-      size: getFileSize(arm64ZipPath)
+      size: getFileSize(arm64ZipPath),
+      arch: 'arm64'
     });
   }
 
@@ -85,7 +86,8 @@ function generateMacYml() {
     files.push({
       url: x64Zip,
       sha512: calculateSHA512(x64ZipPath),
-      size: getFileSize(x64ZipPath)
+      size: getFileSize(x64ZipPath),
+      arch: 'x64'
     });
   }
 
@@ -94,7 +96,8 @@ function generateMacYml() {
     files.push({
       url: arm64Dmg,
       sha512: calculateSHA512(arm64DmgPath),
-      size: getFileSize(arm64DmgPath)
+      size: getFileSize(arm64DmgPath),
+      arch: 'arm64'
     });
   }
 
@@ -103,7 +106,8 @@ function generateMacYml() {
     files.push({
       url: x64Dmg,
       sha512: calculateSHA512(x64DmgPath),
-      size: getFileSize(x64DmgPath)
+      size: getFileSize(x64DmgPath),
+      arch: 'x64'
     });
   }
 
@@ -135,6 +139,9 @@ function generateMacYml() {
     yamlString += `  - url: ${file.url}\n`;
     yamlString += `    sha512: ${file.sha512}\n`;
     yamlString += `    size: ${file.size}\n`;
+    if (file.arch) {
+      yamlString += `    arch: ${file.arch}\n`;
+    }
   });
   yamlString += `path: ${yamlContent.path}\n`;
   yamlString += `sha512: ${yamlContent.sha512}\n`;
