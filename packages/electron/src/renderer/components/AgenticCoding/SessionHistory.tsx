@@ -306,6 +306,9 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   const setSortBy = onSortOrderChange ?? setInternalSortOrder;
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
   const [newDropdownOpen, setNewDropdownOpen] = useState(false);
+  const [newDropdownPosition, setNewDropdownPosition] = useState<{ x: number; y: number } | null>(null);
+  const newDropdownButtonRef = useRef<HTMLButtonElement>(null);
+  const newDropdownMenuRef = useRef<HTMLDivElement>(null);
   const [contentSearchTriggered, setContentSearchTriggered] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   // Use atom for showArchived state
@@ -969,6 +972,13 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   };
 
   const toggleNewDropdown = () => {
+    if (!newDropdownOpen && newDropdownButtonRef.current) {
+      const rect = newDropdownButtonRef.current.getBoundingClientRect();
+      setNewDropdownPosition({
+        x: rect.right,
+        y: rect.bottom + 4
+      });
+    }
     setNewDropdownOpen(!newDropdownOpen);
   };
 
@@ -1091,8 +1101,9 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
       if (sortDropdownOpen && !target.closest('.session-history-sort-dropdown')) {
         setSortDropdownOpen(false);
       }
-      if (newDropdownOpen && !target.closest('.session-history-new-dropdown')) {
+      if (newDropdownOpen && newDropdownMenuRef.current && !newDropdownMenuRef.current.contains(target) && !target.closest('.session-history-new-dropdown')) {
         setNewDropdownOpen(false);
+        setNewDropdownPosition(null);
       }
       if (cardContextMenu && cardContextMenuRef.current && !cardContextMenuRef.current.contains(target)) {
         closeCardContextMenu();
@@ -1399,8 +1410,9 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
               </button>
             )}
             {(onNewSession || onNewWorktreeSession || onNewTerminal) && (
-              <div className="session-history-new-dropdown relative">
+              <div className="session-history-new-dropdown relative z-10">
                 <button
+                  ref={newDropdownButtonRef}
                   className="session-history-new-button flex items-center justify-center p-1.5 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded text-[var(--nim-text)] cursor-pointer transition-colors duration-150 shrink-0 hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-primary)] active:bg-[var(--nim-bg-tertiary)] [&_svg]:block"
                   data-testid="new-dropdown-button"
                   onClick={handleNewButtonClick}
@@ -1411,55 +1423,6 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                     <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
                   </svg>
                 </button>
-                {newDropdownOpen && (
-                  <div className="session-history-new-menu absolute top-[calc(100%+4px)] right-0 min-w-40 bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded overflow-hidden z-[100] shadow-[0_4px_12px_rgba(0,0,0,0.15)] whitespace-nowrap">
-                    {onNewSession && (
-                      <button
-                        className="session-history-new-option flex items-center w-full px-3 py-2 text-[13px] bg-transparent border-none text-[var(--nim-text)] cursor-pointer transition-colors duration-150 text-left gap-2 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0 [&_svg]:text-[var(--nim-text-muted)] [&>span]:flex-1"
-                        data-testid="new-session-button"
-                        onClick={() => { onNewSession(); setNewDropdownOpen(false); }}
-                      >
-                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                        </svg>
-                        <span>New Session</span>
-                        <span className="session-history-new-option-shortcut flex-none text-[11px] text-[var(--nim-text-muted)] opacity-70">{getShortcutDisplay(KeyboardShortcuts.file.newSession)}</span>
-                      </button>
-                    )}
-                    {onNewWorktreeSession && (
-                      <button
-                        className={`session-history-new-option flex items-center w-full px-3 py-2 text-[13px] bg-transparent border-none text-[var(--nim-text)] cursor-pointer transition-colors duration-150 text-left gap-2 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0 [&_svg]:text-[var(--nim-text-muted)] [&>span]:flex-1 ${!isGitRepo ? 'opacity-50 cursor-not-allowed hover:bg-transparent' : ''}`}
-                        data-testid="new-worktree-session-button"
-                        onClick={() => { if (isGitRepo) { onNewWorktreeSession(); setNewDropdownOpen(false); } }}
-                        disabled={!isGitRepo}
-                        title={!isGitRepo ? 'Worktrees require a git repository' : undefined}
-                      >
-                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                          <path d="M5 13v-2.5a1.5 1.5 0 0 1 1.5-1.5h3"/>
-                          <path d="M9.5 9V4.5"/>
-                          <circle cx="5" cy="4.5" r="1.5"/>
-                          <circle cx="9.5" cy="4.5" r="1.5"/>
-                          <path d="M5 6v2.5a1.5 1.5 0 0 0 1.5 1.5"/>
-                          <path d="M12 7v4M10 9h4"/>
-                        </svg>
-                        <span>New Worktree</span>
-                      </button>
-                    )}
-                    {onNewTerminal && (
-                      <button
-                        className="session-history-new-option flex items-center w-full px-3 py-2 text-[13px] bg-transparent border-none text-[var(--nim-text)] cursor-pointer transition-colors duration-150 text-left gap-2 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0 [&_svg]:text-[var(--nim-text-muted)] [&>span]:flex-1"
-                        data-testid="new-terminal-button"
-                        onClick={() => { onNewTerminal(); setNewDropdownOpen(false); }}
-                      >
-                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M3 5L7 9L3 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                          <path d="M9 13H13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                        </svg>
-                        <span>New Terminal</span>
-                      </button>
-                    )}
-                  </div>
-                )}
               </div>
             )}
           </div>
@@ -1533,8 +1496,9 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
           </div>
           <div className="session-history-header-buttons flex items-center gap-1.5 shrink-0">
             {(onNewSession || onNewWorktreeSession || onNewTerminal) && (
-              <div className="session-history-new-dropdown relative">
+              <div className="session-history-new-dropdown relative z-10">
                 <button
+                  ref={newDropdownButtonRef}
                   className="session-history-new-button flex items-center justify-center p-1.5 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded text-[var(--nim-text)] cursor-pointer transition-colors duration-150 shrink-0 hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-primary)] active:bg-[var(--nim-bg-tertiary)] [&_svg]:block"
                   data-testid="new-dropdown-button"
                   onClick={handleNewButtonClick}
@@ -1545,55 +1509,6 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                     <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
                   </svg>
                 </button>
-                {newDropdownOpen && (
-                  <div className="session-history-new-menu absolute top-[calc(100%+4px)] right-0 min-w-40 bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded overflow-hidden z-[100] shadow-[0_4px_12px_rgba(0,0,0,0.15)] whitespace-nowrap">
-                    {onNewSession && (
-                      <button
-                        className="session-history-new-option flex items-center w-full px-3 py-2 text-[13px] bg-transparent border-none text-[var(--nim-text)] cursor-pointer transition-colors duration-150 text-left gap-2 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0 [&_svg]:text-[var(--nim-text-muted)] [&>span]:flex-1"
-                        data-testid="new-session-button"
-                        onClick={() => { onNewSession(); setNewDropdownOpen(false); }}
-                      >
-                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                        </svg>
-                        <span>New Session</span>
-                        <span className="session-history-new-option-shortcut flex-none text-[11px] text-[var(--nim-text-muted)] opacity-70">{getShortcutDisplay(KeyboardShortcuts.file.newSession)}</span>
-                      </button>
-                    )}
-                    {onNewWorktreeSession && (
-                      <button
-                        className={`session-history-new-option flex items-center w-full px-3 py-2 text-[13px] bg-transparent border-none text-[var(--nim-text)] cursor-pointer transition-colors duration-150 text-left gap-2 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0 [&_svg]:text-[var(--nim-text-muted)] [&>span]:flex-1 ${!isGitRepo ? 'opacity-50 cursor-not-allowed hover:bg-transparent' : ''}`}
-                        data-testid="new-worktree-session-button"
-                        onClick={() => { if (isGitRepo) { onNewWorktreeSession(); setNewDropdownOpen(false); } }}
-                        disabled={!isGitRepo}
-                        title={!isGitRepo ? 'Worktrees require a git repository' : undefined}
-                      >
-                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                          <path d="M5 13v-2.5a1.5 1.5 0 0 1 1.5-1.5h3"/>
-                          <path d="M9.5 9V4.5"/>
-                          <circle cx="5" cy="4.5" r="1.5"/>
-                          <circle cx="9.5" cy="4.5" r="1.5"/>
-                          <path d="M5 6v2.5a1.5 1.5 0 0 0 1.5 1.5"/>
-                          <path d="M12 7v4M10 9h4"/>
-                        </svg>
-                        <span>New Worktree</span>
-                      </button>
-                    )}
-                    {onNewTerminal && (
-                      <button
-                        className="session-history-new-option flex items-center w-full px-3 py-2 text-[13px] bg-transparent border-none text-[var(--nim-text)] cursor-pointer transition-colors duration-150 text-left gap-2 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0 [&_svg]:text-[var(--nim-text-muted)] [&>span]:flex-1"
-                        data-testid="new-terminal-button"
-                        onClick={() => { onNewTerminal(); setNewDropdownOpen(false); }}
-                      >
-                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M3 5L7 9L3 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                          <path d="M9 13H13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                        </svg>
-                        <span>New Terminal</span>
-                      </button>
-                    )}
-                  </div>
-                )}
               </div>
             )}
           </div>
@@ -1634,8 +1549,9 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
               </button>
             )}
             {(onNewSession || onNewWorktreeSession) && (
-              <div className="session-history-new-dropdown relative">
+              <div className="session-history-new-dropdown relative z-10">
                 <button
+                  ref={newDropdownButtonRef}
                   className="session-history-new-button flex items-center justify-center p-1.5 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded text-[var(--nim-text)] cursor-pointer transition-colors duration-150 shrink-0 hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-primary)] active:bg-[var(--nim-bg-tertiary)] [&_svg]:block"
                   data-testid="new-dropdown-button"
                   onClick={handleNewButtonClick}
@@ -1646,42 +1562,6 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                     <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
                   </svg>
                 </button>
-                {newDropdownOpen && (
-                  <div className="session-history-new-menu absolute top-[calc(100%+4px)] right-0 min-w-40 bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded overflow-hidden z-[100] shadow-[0_4px_12px_rgba(0,0,0,0.15)] whitespace-nowrap">
-                    {onNewSession && (
-                      <button
-                        className="session-history-new-option flex items-center w-full px-3 py-2 text-[13px] bg-transparent border-none text-[var(--nim-text)] cursor-pointer transition-colors duration-150 text-left gap-2 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0 [&_svg]:text-[var(--nim-text-muted)] [&>span]:flex-1"
-                        data-testid="new-session-button"
-                        onClick={() => { onNewSession(); setNewDropdownOpen(false); }}
-                      >
-                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                        </svg>
-                        <span>New Session</span>
-                        <span className="session-history-new-option-shortcut flex-none text-[11px] text-[var(--nim-text-muted)] opacity-70">{getShortcutDisplay(KeyboardShortcuts.file.newSession)}</span>
-                      </button>
-                    )}
-                    {onNewWorktreeSession && (
-                      <button
-                        className={`session-history-new-option flex items-center w-full px-3 py-2 text-[13px] bg-transparent border-none text-[var(--nim-text)] cursor-pointer transition-colors duration-150 text-left gap-2 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0 [&_svg]:text-[var(--nim-text-muted)] [&>span]:flex-1 ${!isGitRepo ? 'opacity-50 cursor-not-allowed hover:bg-transparent' : ''}`}
-                        data-testid="new-worktree-session-button"
-                        onClick={() => { if (isGitRepo) { onNewWorktreeSession(); setNewDropdownOpen(false); } }}
-                        disabled={!isGitRepo}
-                        title={!isGitRepo ? 'Worktrees require a git repository' : undefined}
-                      >
-                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                          <path d="M5 13v-2.5a1.5 1.5 0 0 1 1.5-1.5h3"/>
-                          <path d="M9.5 9V4.5"/>
-                          <circle cx="5" cy="4.5" r="1.5"/>
-                          <circle cx="9.5" cy="4.5" r="1.5"/>
-                          <path d="M5 6v2.5a1.5 1.5 0 0 0 1.5 1.5"/>
-                          <path d="M12 7v4M10 9h4"/>
-                        </svg>
-                        <span>New Worktree</span>
-                      </button>
-                    )}
-                  </div>
-                )}
               </div>
             )}
             {onNewTerminal && (
@@ -1748,8 +1628,9 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
             </button>
           )}
           {(onNewSession || onNewWorktreeSession || onNewTerminal) && (
-            <div className="session-history-new-dropdown relative">
+            <div className="session-history-new-dropdown relative z-10">
               <button
+                ref={newDropdownButtonRef}
                 className="session-history-new-button flex items-center justify-center p-1.5 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded text-[var(--nim-text)] cursor-pointer transition-colors duration-150 shrink-0 hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-primary)] active:bg-[var(--nim-bg-tertiary)] [&_svg]:block"
                 data-testid="new-dropdown-button"
                 onClick={handleNewButtonClick}
@@ -1760,55 +1641,6 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                   <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
                 </svg>
               </button>
-              {newDropdownOpen && (
-                <div className="session-history-new-menu absolute top-[calc(100%+4px)] right-0 min-w-40 bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded overflow-hidden z-[100] shadow-[0_4px_12px_rgba(0,0,0,0.15)] whitespace-nowrap">
-                  {onNewSession && (
-                    <button
-                      className="session-history-new-option flex items-center w-full px-3 py-2 text-[13px] bg-transparent border-none text-[var(--nim-text)] cursor-pointer transition-colors duration-150 text-left gap-2 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0 [&_svg]:text-[var(--nim-text-muted)] [&>span]:flex-1"
-                      data-testid="new-session-button"
-                      onClick={() => { onNewSession(); setNewDropdownOpen(false); }}
-                    >
-                      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                      </svg>
-                      <span>New Session</span>
-                      <span className="session-history-new-option-shortcut flex-none text-[11px] text-[var(--nim-text-muted)] opacity-70">{getShortcutDisplay(KeyboardShortcuts.file.newSession)}</span>
-                    </button>
-                  )}
-                  {onNewWorktreeSession && (
-                    <button
-                      className={`session-history-new-option flex items-center w-full px-3 py-2 text-[13px] bg-transparent border-none text-[var(--nim-text)] cursor-pointer transition-colors duration-150 text-left gap-2 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0 [&_svg]:text-[var(--nim-text-muted)] [&>span]:flex-1 ${!isGitRepo ? 'opacity-50 cursor-not-allowed hover:bg-transparent' : ''}`}
-                      data-testid="new-worktree-session-button"
-                      onClick={() => { if (isGitRepo) { onNewWorktreeSession(); setNewDropdownOpen(false); } }}
-                      disabled={!isGitRepo}
-                      title={!isGitRepo ? 'Worktrees require a git repository' : undefined}
-                    >
-                      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                        <path d="M5 13v-2.5a1.5 1.5 0 0 1 1.5-1.5h3"/>
-                        <path d="M9.5 9V4.5"/>
-                        <circle cx="5" cy="4.5" r="1.5"/>
-                        <circle cx="9.5" cy="4.5" r="1.5"/>
-                        <path d="M5 6v2.5a1.5 1.5 0 0 0 1.5 1.5"/>
-                        <path d="M12 7v4M10 9h4"/>
-                      </svg>
-                      <span>New Worktree</span>
-                    </button>
-                  )}
-                  {onNewTerminal && (
-                    <button
-                      className="session-history-new-option flex items-center w-full px-3 py-2 text-[13px] bg-transparent border-none text-[var(--nim-text)] cursor-pointer transition-colors duration-150 text-left gap-2 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0 [&_svg]:text-[var(--nim-text-muted)] [&>span]:flex-1"
-                      data-testid="new-terminal-button"
-                      onClick={() => { onNewTerminal(); setNewDropdownOpen(false); }}
-                    >
-                      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M3 5L7 9L3 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                        <path d="M9 13H13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                      </svg>
-                      <span>New Terminal</span>
-                    </button>
-                  )}
-                </div>
-              )}
             </div>
           )}
         </div>
@@ -2512,6 +2344,65 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
           hasUncommittedChanges={archiveWorktreeDialogState.hasUncommittedChanges}
           uncommittedFileCount={archiveWorktreeDialogState.uncommittedFileCount}
         />
+      )}
+
+      {/* New dropdown menu - fixed position outside main container */}
+      {newDropdownOpen && newDropdownPosition && (
+        <div
+          ref={newDropdownMenuRef}
+          className="session-history-new-menu fixed min-w-40 bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded overflow-hidden z-[1000] shadow-[0_4px_12px_rgba(0,0,0,0.15)] whitespace-nowrap"
+          style={{
+            right: `${window.innerWidth - newDropdownPosition.x}px`,
+            top: `${newDropdownPosition.y}px`
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {onNewSession && (
+            <button
+              className="session-history-new-option flex items-center w-full px-3 py-2 text-[13px] bg-transparent border-none text-[var(--nim-text)] cursor-pointer transition-colors duration-150 text-left gap-2 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0 [&_svg]:text-[var(--nim-text-muted)] [&>span]:flex-1"
+              data-testid="new-session-button"
+              onClick={() => { onNewSession(); setNewDropdownOpen(false); setNewDropdownPosition(null); }}
+            >
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+              </svg>
+              <span>New Session</span>
+              <span className="session-history-new-option-shortcut flex-none text-[11px] text-[var(--nim-text-muted)] opacity-70">{getShortcutDisplay(KeyboardShortcuts.file.newSession)}</span>
+            </button>
+          )}
+          {onNewWorktreeSession && (
+            <button
+              className={`session-history-new-option flex items-center w-full px-3 py-2 text-[13px] bg-transparent border-none text-[var(--nim-text)] cursor-pointer transition-colors duration-150 text-left gap-2 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0 [&_svg]:text-[var(--nim-text-muted)] [&>span]:flex-1 ${!isGitRepo ? 'opacity-50 cursor-not-allowed hover:bg-transparent' : ''}`}
+              data-testid="new-worktree-session-button"
+              onClick={() => { if (isGitRepo) { onNewWorktreeSession(); setNewDropdownOpen(false); setNewDropdownPosition(null); } }}
+              disabled={!isGitRepo}
+              title={!isGitRepo ? 'Worktrees require a git repository' : undefined}
+            >
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M5 13v-2.5a1.5 1.5 0 0 1 1.5-1.5h3"/>
+                <path d="M9.5 9V4.5"/>
+                <circle cx="5" cy="4.5" r="1.5"/>
+                <circle cx="9.5" cy="4.5" r="1.5"/>
+                <path d="M5 6v2.5a1.5 1.5 0 0 0 1.5 1.5"/>
+                <path d="M12 7v4M10 9h4"/>
+              </svg>
+              <span>New Worktree</span>
+            </button>
+          )}
+          {onNewTerminal && (
+            <button
+              className="session-history-new-option flex items-center w-full px-3 py-2 text-[13px] bg-transparent border-none text-[var(--nim-text)] cursor-pointer transition-colors duration-150 text-left gap-2 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0 [&_svg]:text-[var(--nim-text-muted)] [&>span]:flex-1"
+              data-testid="new-terminal-button"
+              onClick={() => { onNewTerminal(); setNewDropdownOpen(false); setNewDropdownPosition(null); }}
+            >
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M3 5L7 9L3 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M9 13H13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+              </svg>
+              <span>New Terminal</span>
+            </button>
+          )}
+        </div>
       )}
     </div>
   );
