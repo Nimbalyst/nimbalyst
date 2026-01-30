@@ -579,12 +579,33 @@ export const loadSessionChildrenAtom = atom(
         // console.log('[loadSessionChildrenAtom] Setting children:', childIds);
         set(sessionChildrenAtom(parentSessionId), childIds);
 
-        // Set parent ID for each child and load their session data
+        // Set parent ID for each child and populate registry from list-children metadata
+        // NOTE: We do NOT call loadSessionDataAtom here - that loads ALL messages which is expensive.
+        // The list-children endpoint already returns all metadata needed for the list view.
+        // Full session data (with messages) is loaded lazily when a session tab is actually opened.
         for (const child of result.children) {
           set(sessionParentIdAtom(child.id), parentSessionId);
 
-          // Load full session data for each child so titles appear immediately
-          set(loadSessionDataAtom, { sessionId: child.id, workspacePath });
+          // Update registry with metadata from list-children (no messages needed for list view)
+          const registry = new Map(get(sessionRegistryAtom));
+          if (!registry.has(child.id)) {
+            registry.set(child.id, {
+              id: child.id,
+              title: child.title || 'Untitled Session',
+              createdAt: child.createdAt,
+              updatedAt: child.updatedAt,
+              provider: child.provider,
+              sessionType: child.sessionType || 'chat',
+              messageCount: child.messageCount || 0,
+              isArchived: child.isArchived || false,
+              isPinned: child.isPinned || false,
+              worktreeId: child.worktreeId,
+              parentSessionId: parentSessionId,
+              childCount: 0,
+              uncommittedCount: child.uncommittedCount || 0,
+            });
+            set(sessionRegistryAtom, registry);
+          }
         }
 
         // Update the unified workstream state with children
@@ -1490,14 +1511,21 @@ export const refreshSessionListAtom = atom(
  * Initialize the session list for a workspace.
  * Call this when the workspace is opened.
  *
- * This function is deduplicated - if called multiple times for the same workspace
- * while an init is already in progress, subsequent calls will return the existing promise.
+ * This function is deduplicated - if called multiple times for the same workspace,
+ * subsequent calls will return immediately (if already initialized) or return the
+ * existing promise (if initialization is in progress).
  * This prevents redundant database queries when multiple components mount simultaneously.
  */
 let initInProgress: Promise<void> | null = null;
 let lastInitWorkspacePath: string | null = null;
+let initializedWorkspacePath: string | null = null;
 
 export async function initSessionList(workspacePath: string): Promise<void> {
+  // If already initialized for this workspace, return immediately
+  if (initializedWorkspacePath === workspacePath) {
+    return;
+  }
+
   // If same workspace init is already in progress, return existing promise
   if (initInProgress && lastInitWorkspacePath === workspacePath) {
     return initInProgress;
@@ -1510,9 +1538,21 @@ export async function initSessionList(workspacePath: string): Promise<void> {
   initInProgress = store.set(refreshSessionListAtom);
   try {
     await initInProgress;
+    // Mark as initialized only after successful completion
+    initializedWorkspacePath = workspacePath;
   } finally {
     initInProgress = null;
   }
+}
+
+/**
+ * Reset session list initialization state.
+ * Call this when changing workspaces or when a full refresh is needed.
+ */
+export function resetSessionListInit(): void {
+  initializedWorkspacePath = null;
+  initInProgress = null;
+  lastInitWorkspacePath = null;
 }
 
 /**

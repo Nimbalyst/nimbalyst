@@ -447,18 +447,15 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
       // child_count is calculated via a correlated subquery for sessions that have children
       // branched_from_session_id is separate from parent_session_id (branch vs hierarchy)
       // metadata is included for hasUnread state (transient UI state stored in DB for cross-device sync)
+      // NOTE: message_count removed - it required an expensive LEFT JOIN on ai_agent_messages
+      // that was slow with many sessions. The count is not essential for the list view.
       const { rows } = await db.query<any>(
         `SELECT s.id, s.provider, s.model, s.session_type, s.mode, s.title, s.workspace_id,
                 s.worktree_id, s.parent_session_id, s.created_at, s.updated_at, s.is_archived, s.is_pinned,
                 s.branched_from_session_id, s.branch_point_message_id, s.branched_at, s.metadata,
-                COUNT(m.id) as message_count,
                 (SELECT COUNT(*) FROM ai_sessions c WHERE c.parent_session_id = s.id) as child_count
          FROM ai_sessions s
-         LEFT JOIN ai_agent_messages m ON s.id = m.session_id AND m.direction = 'input' AND (m.hidden = FALSE OR m.hidden IS NULL)
          WHERE s.workspace_id=$1 ${archiveFilter}
-         GROUP BY s.id, s.provider, s.model, s.session_type, s.mode, s.title, s.workspace_id,
-                  s.worktree_id, s.parent_session_id, s.created_at, s.updated_at, s.is_archived, s.is_pinned,
-                  s.branched_from_session_id, s.branch_point_message_id, s.branched_at, s.metadata
          ORDER BY s.updated_at DESC`,
         [workspaceId]
       );
@@ -469,7 +466,6 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
         const createdAt = toMillis(row.created_at);
         const updatedAt = toMillis(row.updated_at);
         const branchedAt = row.branched_at ? toMillis(row.branched_at) : undefined;
-        const messageCount = parseInt(row.message_count) || 0;
         const childCount = parseInt(row.child_count) || 0;
         const metadata = row.metadata ?? {};
         return {
@@ -485,7 +481,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
           childCount,  // Number of child sessions
           createdAt,
           updatedAt,
-          messageCount,
+          messageCount: 0,  // Not computed in list query for performance - loaded lazily if needed
           isArchived: row.is_archived ?? false,
           isPinned: row.is_pinned ?? false,
           // Branch tracking - SEPARATE from hierarchical parentSessionId
@@ -588,10 +584,8 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
           sm.branch_point_message_id,
           sm.branched_at,
           MAX(sm.rank) as max_rank,
-          COUNT(m.id) as message_count,
           (SELECT COUNT(*) FROM ai_sessions c WHERE c.parent_session_id = sm.id) as child_count
         FROM session_matches sm
-        LEFT JOIN ai_agent_messages m ON sm.id = m.session_id AND m.direction = 'input' AND (m.hidden = FALSE OR m.hidden IS NULL)
         GROUP BY sm.id, sm.provider, sm.model, sm.session_type, sm.mode, sm.title, sm.workspace_id,
                  sm.worktree_id, sm.parent_session_id, sm.created_at, sm.updated_at, sm.is_archived, sm.is_pinned,
                  sm.branched_from_session_id, sm.branch_point_message_id, sm.branched_at
@@ -603,7 +597,6 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
         const createdAt = toMillis(row.created_at);
         const updatedAt = toMillis(row.updated_at);
         const branchedAt = row.branched_at ? toMillis(row.branched_at) : undefined;
-        const messageCount = parseInt(row.message_count) || 0;
         const childCount = parseInt(row.child_count) || 0;
         return {
           id: row.id,
@@ -618,7 +611,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
           childCount,  // Number of child sessions
           createdAt,
           updatedAt,
-          messageCount,
+          messageCount: 0,  // Not computed in search query for performance
           isArchived: row.is_archived ?? false,
           isPinned: row.is_pinned ?? false,
           // Branch tracking - SEPARATE from hierarchical parentSessionId
