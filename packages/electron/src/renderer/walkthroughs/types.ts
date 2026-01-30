@@ -48,7 +48,12 @@ export interface WalkthroughStep {
   visibilityCondition?: () => boolean;
   /** Step title */
   title: string;
-  /** Step body text (supports basic markdown) */
+  /**
+   * Step body text. Supports basic markdown:
+   * - **bold** text
+   * - Line breaks (blank lines become paragraphs)
+   * - Bullet lists (lines starting with - or *)
+   */
   body: string;
   /**
    * Optional keyboard shortcut to display.
@@ -60,6 +65,11 @@ export interface WalkthroughStep {
   placement: 'top' | 'bottom' | 'left' | 'right' | 'auto';
   /** Optional action button (e.g., "Try it now") */
   action?: WalkthroughAction;
+  /**
+   * Use a wider callout for content-heavy steps.
+   * Default callout is 320px wide; wide mode is 420px.
+   */
+  wide?: boolean;
 }
 
 /**

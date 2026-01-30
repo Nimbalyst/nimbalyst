@@ -121,6 +121,21 @@ export const HelpContent: Record<string, HelpEntry> = {
   },
 
   // ============================================================================
+  // Agent Mode - Layout Controls
+  // ============================================================================
+
+  'layout-controls': {
+    title: 'Session Layout Modes',
+    body: `View your AI session and files edited together:
+
+**Files**: Show only the file editor tabs. Available when you open an edited file in an AI Session.
+
+**Split**: Show both transcript and editor stacked vertically. Drag the divider to adjust.,
+
+**Agent**: Show only the conversation transcript.`
+  },
+
+  // ============================================================================
   // Agent Mode - Session Management
   // ============================================================================
 

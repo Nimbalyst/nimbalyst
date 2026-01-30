@@ -5,7 +5,7 @@
  * through features. Supports multi-step navigation, dismissal, and theming.
  */
 
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import type { WalkthroughStep, WalkthroughDefinition } from '../types';
 import {
@@ -15,6 +15,58 @@ import {
   type CalloutPosition,
 } from '../WalkthroughService';
 import { getShortcutDisplay } from '../../../shared/KeyboardShortcuts';
+
+/**
+ * Parse basic markdown in walkthrough body text.
+ * Supports: **bold**, line breaks (paragraphs), and bullet lists (- or *).
+ */
+function parseMarkdownBody(text: string): React.ReactNode {
+  // Split into paragraphs by double newlines
+  const paragraphs = text.split(/\n\n+/);
+
+  return paragraphs.map((paragraph, pIndex) => {
+    const trimmed = paragraph.trim();
+    if (!trimmed) return null;
+
+    // Check if this paragraph is a bullet list
+    const lines = trimmed.split('\n');
+    const isBulletList = lines.every((line) => /^[-*]\s/.test(line.trim()));
+
+    if (isBulletList) {
+      return (
+        <ul key={pIndex} className="walkthrough-list list-disc pl-4 my-2 space-y-1">
+          {lines.map((line, lIndex) => (
+            <li key={lIndex}>{parseBoldText(line.replace(/^[-*]\s*/, '').trim())}</li>
+          ))}
+        </ul>
+      );
+    }
+
+    // Regular paragraph - parse bold and render
+    return (
+      <p key={pIndex} className="walkthrough-paragraph my-2 first:mt-0 last:mb-0">
+        {parseBoldText(trimmed.replace(/\n/g, ' '))}
+      </p>
+    );
+  });
+}
+
+/**
+ * Parse **bold** text within a string.
+ */
+function parseBoldText(text: string): React.ReactNode {
+  const parts = text.split(/(\*\*[^*]+\*\*)/);
+  return parts.map((part, index) => {
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return (
+        <strong key={index} className="font-semibold text-[var(--nim-text)]">
+          {part.slice(2, -2)}
+        </strong>
+      );
+    }
+    return part;
+  });
+}
 
 interface WalkthroughCalloutProps {
   /** The walkthrough definition */
@@ -148,6 +200,9 @@ export function WalkthroughCallout({
     }
   }, [isLastStep, onComplete, onNext]);
 
+  // Parse markdown body
+  const renderedBody = useMemo(() => parseMarkdownBody(step?.body ?? ''), [step?.body]);
+
   // Don't render if no valid target
   if (!position || !step) {
     return null;
@@ -171,10 +226,13 @@ export function WalkthroughCallout({
     }
   };
 
+  // Width classes: default 320px (w-80), wide 420px (w-[420px])
+  const widthClass = step.wide ? 'w-[420px]' : 'w-80';
+
   const callout = (
     <div
       ref={calloutRef}
-      className="walkthrough-callout fixed w-80 bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-[10px] z-[10001] overflow-visible animate-[walkthrough-fade-in_0.2s_ease-out_forwards] shadow-[0_8px_32px_rgba(0,0,0,0.25),0_2px_8px_rgba(0,0,0,0.15)]"
+      className={`walkthrough-callout fixed ${widthClass} bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-[10px] z-[10001] overflow-visible animate-[walkthrough-fade-in_0.2s_ease-out_forwards] shadow-[0_8px_32px_rgba(0,0,0,0.25),0_2px_8px_rgba(0,0,0,0.15)]`}
       style={{
         top: position.top,
         left: position.left,
@@ -227,7 +285,7 @@ export function WalkthroughCallout({
           id="walkthrough-body"
           className="walkthrough-callout-body text-[13px] leading-relaxed text-[var(--nim-text-muted)]"
         >
-          {step.body}
+          {renderedBody}
         </div>
 
         {/* Optional action button */}

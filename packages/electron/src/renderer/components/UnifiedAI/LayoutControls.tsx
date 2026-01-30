@@ -45,7 +45,7 @@ interface LayoutControlsProps {
 
 export function LayoutControls({ mode, hasTabs, onModeChange }: LayoutControlsProps) {
   return (
-    <div className="layout-controls flex items-center gap-0.5 p-1 bg-nim-tertiary rounded-md">
+    <div className="layout-controls flex items-center gap-0.5 p-1 bg-nim-tertiary rounded-md" data-testid="layout-controls">
       <button
         className={`layout-control-btn with-label flex items-center justify-center gap-1 w-auto h-6 px-2 py-0 border-none rounded cursor-pointer transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed ${mode === 'editor' ? 'active bg-nim-primary text-white hover:bg-nim-primary-hover' : 'bg-transparent text-nim-muted hover:enabled:bg-nim-hover hover:enabled:text-nim'}`}
         onClick={() => onModeChange('editor')}

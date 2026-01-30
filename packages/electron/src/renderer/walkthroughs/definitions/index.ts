@@ -10,6 +10,7 @@ import { aiSessionsButton } from './ai-sessions-button';
 import { contextWindowIntro } from './context-window-intro';
 import { diffModeIntro } from './diff-mode-intro';
 import { fileTreeTools } from './file-tree-tools';
+import { layoutControlsIntro } from './layout-controls-intro';
 import { modelPickerIntro } from './model-picker-intro';
 import { navigationIntro } from './navigation-intro';
 
@@ -23,5 +24,6 @@ export const walkthroughs: WalkthroughDefinition[] = [
   contextWindowIntro,
   diffModeIntro,
   fileTreeTools,
+  layoutControlsIntro,
   modelPickerIntro,
 ];
