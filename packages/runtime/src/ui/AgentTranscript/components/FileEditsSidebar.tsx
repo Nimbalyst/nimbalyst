@@ -38,6 +38,10 @@ interface FileEditsSidebarProps {
   onBulkSelectionChange?: (filePaths: string[], selected: boolean) => void;
   /** Whether to show a root-level "Select All" checkbox (defaults to true when showCheckboxes is true) */
   showRootCheckbox?: boolean;
+  /** Total count of session files (used to show "no uncommitted changes" vs "no files edited") */
+  totalSessionFilesCount?: number;
+  /** Callback to switch to session files view (when showing "no uncommitted changes") */
+  onShowSessionFiles?: () => void;
 }
 
 interface ContextMenuState {
@@ -79,7 +83,9 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
   onSelectionChange,
   onSelectAll,
   onBulkSelectionChange,
-  showRootCheckbox
+  showRootCheckbox,
+  totalSessionFilesCount,
+  onShowSessionFiles
 }) => {
   // Default showRootCheckbox to true when showCheckboxes is true
   const shouldShowRootCheckbox = showRootCheckbox ?? showCheckboxes;
@@ -760,7 +766,21 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
         )}
         {editedFiles.length === 0 ? (
           <div className="file-edits-sidebar__empty p-4 text-[var(--nim-text-faint)] text-sm text-center">
-            No files edited yet
+            {totalSessionFilesCount && totalSessionFilesCount > 0 ? (
+              <>
+                <div>No uncommitted changes</div>
+                {onShowSessionFiles && (
+                  <button
+                    onClick={onShowSessionFiles}
+                    className="mt-2 text-[var(--nim-primary)] hover:underline cursor-pointer bg-transparent border-none text-sm"
+                  >
+                    Show session files ({totalSessionFilesCount})
+                  </button>
+                )}
+              </>
+            ) : (
+              'No files edited yet'
+            )}
           </div>
         ) : groupByDirectory ? (
           renderDirectoryNode(buildDirectoryTree(editedFiles))

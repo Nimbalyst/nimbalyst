@@ -17,7 +17,7 @@ import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { FileEditsSidebar as FileEditsSidebarComponent, MaterialSymbol } from '@nimbalyst/runtime';
 import type { FileEditSummary } from '@nimbalyst/runtime';
 import { diffTreeGroupByDirectoryAtom, setDiffTreeGroupByDirectoryAtom } from '../../store/atoms/projectState';
-import { workstreamSessionsAtom, sessionTitleAtom } from '../../store/atoms/sessions';
+import { workstreamSessionsAtom } from '../../store/atoms/sessions';
 import {
   hasExternalEditorAtom,
   externalEditorNameAtom,
@@ -59,23 +59,6 @@ interface FileEditWithSession extends FileEditSummary {
   sessionId: string;
 }
 
-// Helper component to display session title in dropdown option
-const SessionFilterOption: React.FC<{ sessionId: string }> = ({ sessionId }) => {
-  const title = useAtomValue(sessionTitleAtom(sessionId));
-  return <option value={sessionId}>{title || `Session ${sessionId.slice(0, 8)}`}</option>;
-};
-
-// Hook to get session info with titles for dropdown
-const useSessionInfo = (sessionIds: string[]) => {
-  // We need to call useAtomValue for each session, but hooks can't be conditional
-  // So we use a component-based approach with a fixed maximum
-  const titles = sessionIds.map(id => {
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    const title = useAtomValue(sessionTitleAtom(id));
-    return { id, title: title || `Session ${id.slice(0, 8)}` };
-  });
-  return titles;
-};
 
 export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(({
   workstreamId,
@@ -108,8 +91,6 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
   const workstreamSessions = useAtomValue(workstreamSessionsAtom(workstreamId));
   // Show dropdown if there are multiple sessions in the workstream
   const hasMultipleSessions = workstreamSessions.length > 1;
-  // Get session info with titles for the dropdown
-  const sessionInfo = useSessionInfo(workstreamSessions);
 
   // Group by directory state from Jotai
   const [groupByDirectory] = useAtom(diffTreeGroupByDirectoryAtom);
@@ -153,6 +134,21 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
     // File has uncommitted changes if it has a status and status is not 'unchanged'
     return status !== undefined && status.status !== 'unchanged';
   }, [sessionFilesGitStatus, workspacePath, worktreePath]);
+
+  // Calculate total session files count (deduplicated by filepath)
+  const totalSessionFilesCount = useMemo(() => {
+    if (!allFileEdits.length) return 0;
+
+    // Deduplicate by filePath (most recent edit wins)
+    const fileMap = new Map<string, FileEditWithSession>();
+    for (const edit of allFileEdits) {
+      const existing = fileMap.get(edit.filePath);
+      if (!existing || new Date(edit.timestamp) > new Date(existing.timestamp)) {
+        fileMap.set(edit.filePath, edit);
+      }
+    }
+    return fileMap.size;
+  }, [allFileEdits]);
 
   // Filter file edits based on selected session and file scope mode
   const fileEdits = useMemo(() => {
@@ -773,6 +769,11 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
     openInExternalEditor(filePath);
   }, [openInExternalEditor]);
 
+  const handleShowSessionFiles = useCallback(() => {
+    // Switch to session-files mode
+    setFileScopeMode('session-files');
+  }, [setFileScopeMode]);
+
   return (
     <div className="files-edited-sidebar shrink-0 flex flex-col h-full bg-[var(--nim-bg-secondary)]" style={{ width }}>
       {/* Header with Files label and controls */}
@@ -788,7 +789,7 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
             onGroupByDirectoryChange={setGroupByDirectory}
             fileScopeMode={fileScopeMode}
             onFileScopeModeChange={setFileScopeMode}
-            sessions={hasMultipleSessions ? sessionInfo : undefined}
+            sessionIds={hasMultipleSessions ? workstreamSessions : undefined}
             filterSessionId={filterSessionId}
             onFilterSessionIdChange={setFilterSessionId}
           />
@@ -858,6 +859,8 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
             onSelectionChange={handleSelectionChange}
             onSelectAll={handleSelectAll}
             onBulkSelectionChange={handleBulkSelectionChange}
+            totalSessionFilesCount={totalSessionFilesCount}
+            onShowSessionFiles={fileScopeMode === 'current-changes' ? handleShowSessionFiles : undefined}
           />
         </div>
       </div>

@@ -8,13 +8,10 @@
  */
 
 import React, { useState, useRef, useEffect } from 'react';
+import { useAtomValue } from 'jotai';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import type { FileScopeMode } from '../../store/atoms/workstreamState';
-
-interface SessionInfo {
-  id: string;
-  title: string;
-}
+import { sessionTitleAtom } from '../../store/atoms/sessions';
 
 interface FilesEditedOptionsDropdownProps {
   /** Whether to group files by directory */
@@ -25,13 +22,38 @@ interface FilesEditedOptionsDropdownProps {
   fileScopeMode: FileScopeMode;
   /** Callback when file scope mode changes */
   onFileScopeModeChange: (mode: FileScopeMode) => void;
-  /** Available sessions (for workstreams with multiple sessions) */
-  sessions?: SessionInfo[];
+  /** Available session IDs (for workstreams with multiple sessions) */
+  sessionIds?: string[];
   /** Currently selected session ID for filtering (null = all sessions) */
   filterSessionId: string | null;
   /** Callback when session filter changes */
   onFilterSessionIdChange: (sessionId: string | null) => void;
 }
+
+/** Session option component - each instance calls its own hook */
+const SessionOption: React.FC<{
+  sessionId: string;
+  isSelected: boolean;
+  onSelect: () => void;
+}> = ({ sessionId, isSelected, onSelect }) => {
+  const title = useAtomValue(sessionTitleAtom(sessionId));
+  const displayTitle = title || `Session ${sessionId.slice(0, 8)}`;
+
+  return (
+    <label className="flex items-center gap-2 px-1 py-1 rounded cursor-pointer hover:bg-[var(--nim-bg-hover)]">
+      <input
+        type="radio"
+        name="sessionFilter"
+        checked={isSelected}
+        onChange={onSelect}
+        className="cursor-pointer"
+      />
+      <span className="text-xs text-[var(--nim-text)] truncate max-w-[150px]" title={displayTitle}>
+        {displayTitle}
+      </span>
+    </label>
+  );
+};
 
 const SCOPE_OPTIONS: Array<{ value: FileScopeMode; label: string; description: string }> = [
   { value: 'current-changes', label: 'Current changes', description: 'Files with uncommitted changes' },
@@ -44,7 +66,7 @@ export const FilesEditedOptionsDropdown: React.FC<FilesEditedOptionsDropdownProp
   onGroupByDirectoryChange,
   fileScopeMode,
   onFileScopeModeChange,
-  sessions,
+  sessionIds,
   filterSessionId,
   onFilterSessionIdChange,
 }) => {
@@ -79,7 +101,7 @@ export const FilesEditedOptionsDropdown: React.FC<FilesEditedOptionsDropdownProp
     return () => document.removeEventListener('keydown', handleEscape);
   }, [isOpen]);
 
-  const hasMultipleSessions = sessions && sessions.length > 1;
+  const hasMultipleSessions = sessionIds && sessionIds.length > 1;
 
   return (
     <div ref={dropdownRef} className="relative">
@@ -149,22 +171,13 @@ export const FilesEditedOptionsDropdown: React.FC<FilesEditedOptionsDropdownProp
                 />
                 <span className="text-xs text-[var(--nim-text)]">All sessions</span>
               </label>
-              {sessions.map((session) => (
-                <label
-                  key={session.id}
-                  className="flex items-center gap-2 px-1 py-1 rounded cursor-pointer hover:bg-[var(--nim-bg-hover)]"
-                >
-                  <input
-                    type="radio"
-                    name="sessionFilter"
-                    checked={filterSessionId === session.id}
-                    onChange={() => onFilterSessionIdChange(session.id)}
-                    className="cursor-pointer"
-                  />
-                  <span className="text-xs text-[var(--nim-text)] truncate max-w-[150px]" title={session.title}>
-                    {session.title || `Session ${session.id.slice(0, 8)}`}
-                  </span>
-                </label>
+              {sessionIds.map((sessionId) => (
+                <SessionOption
+                  key={sessionId}
+                  sessionId={sessionId}
+                  isSelected={filterSessionId === sessionId}
+                  onSelect={() => onFilterSessionIdChange(sessionId)}
+                />
               ))}
             </div>
           )}
