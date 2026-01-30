@@ -713,9 +713,10 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
       // Handle Enter to send (Shift+Enter for new line, but not when typeahead is open)
       // Allow sending when typeahead has no matching options (dropdown not visible)
       // Skip if IME composition is in progress (e.g., Japanese kanji conversion)
+      // Skip if attachments are still being processed (e.g., image compression)
       if (e.key === 'Enter' && !e.shiftKey && !isTypeaheadVisible && !e.nativeEvent.isComposing) {
         e.preventDefault();
-        if (value.trim() && !disabled) {
+        if (value.trim() && !disabled && processingAttachments.length === 0) {
           onSend(value);
         }
       }
@@ -888,7 +889,7 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
     }, [value, onChange, onAttachmentRemove]);
 
     const handleSend = () => {
-      if (value.trim() && !disabled) {
+      if (value.trim() && !disabled && processingAttachments.length === 0) {
         onSend(value);
       }
     };
@@ -1097,8 +1098,8 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
             <button
               className="ai-chat-send-button w-9 h-9 flex items-center justify-center bg-[var(--nim-primary)] border-none rounded-md text-white cursor-pointer transition-all duration-200 shrink-0 hover:enabled:bg-[var(--nim-primary-hover)] hover:enabled:scale-105 disabled:opacity-40 disabled:cursor-not-allowed"
               onClick={handleSend}
-              disabled={disabled || !value.trim()}
-              title="Send message (Enter)"
+              disabled={disabled || !value.trim() || processingAttachments.length > 0}
+              title={processingAttachments.length > 0 ? "Processing attachments..." : "Send message (Enter)"}
               aria-label="Send message"
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
