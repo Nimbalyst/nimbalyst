@@ -10,6 +10,17 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Default all UI to non-selectable. Content areas opt-in with select-text class.
+ * :where() zeros specificity so .select-text (0-0-1-0) can override.
+ * This MUST come after @tailwind utilities so Tailwind's select-text wins.
+ */
+@layer base {
+  :where(#root, #root *) {
+    user-select: none;
+  }
+}
+
 /* Shared component utilities are now imported via JS in index.tsx */
 
 /* Map rexical variables to electron-specific aliases for backwards compatibility */

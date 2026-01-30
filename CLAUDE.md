@@ -490,6 +490,36 @@ This pattern is essential for:
 | `bg-nim-primary` for panels | `bg-nim-secondary` | Use background hierarchy for panels |
 | `w-[90%] h-[80%]` for modals | `w-[90vw] h-[80vh]` | Use viewport units for fixed-position modals |
 
+#### Text Selection: Default to Non-Selectable
+
+The app defaults to `user-select: none` on the `#root` container and all descendants (via `:where(#root, #root *)`). This prevents awkward text selection on UI chrome (buttons, sidebar items, headers).
+
+**Content areas must opt-in to selection:**
+- Use `select-text` (Tailwind) or `user-select: text` (CSS) on content that users should be able to select/copy
+- Editor content areas (Lexical, Monaco, terminals) handle selection internally - no action needed
+
+**Where to allow selection:**
+- Editor content (handled automatically by editors)
+- AI chat message bodies (not headers, avatars, or metadata)
+- Code blocks and terminal output in transcripts
+- Error messages users might copy
+- Diff line content (not line numbers or markers)
+
+**Never allow selection on:**
+- Buttons, tabs, navigation items
+- Panel headers and toolbars
+- Sidebar items (file tree, session list)
+- Status indicators and badges
+- Line numbers, diff markers
+
+**Extension developers:** Custom editors and panels inherit `user-select: none` from the app root. Add `select-text` to your content areas where selection is appropriate.
+
+| Anti-Pattern | Problem | Solution |
+| --- | --- | --- |
+| Forgetting `select-text` on content | Users can't copy text | Add `select-text` to content wrappers |
+| `select-text` on entire component | Headers/buttons become selectable | Only apply to content, not chrome |
+| `select-none` on every element | Redundant, clutters code | Let global default handle it |
+
 ## AI Features
 
 ### AI Provider Types
