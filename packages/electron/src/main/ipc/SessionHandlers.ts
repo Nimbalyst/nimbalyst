@@ -24,6 +24,63 @@ interface GitStatusCache {
 const gitStatusCache = new Map<string, GitStatusCache>();
 const GIT_STATUS_CACHE_TTL_MS = 5000; // 5 second cache
 
+// ============================================================
+// Session Files Cache
+// Caches the session_files query result to avoid slow DB queries
+// when multiple components request session lists simultaneously.
+// ============================================================
+interface SessionFilesCache {
+    /** Map of file_path -> session_id (most recent editor of each file) */
+    fileToSession: Map<string, string>;
+    timestamp: number;
+}
+
+const sessionFilesCache = new Map<string, SessionFilesCache>();
+const SESSION_FILES_CACHE_TTL_MS = 5000; // 5 second cache
+
+/**
+ * Get session files mapping with caching.
+ * Returns a map of file_path -> session_id for the most recent session that edited each file.
+ * Avoids running expensive DISTINCT ON query multiple times in rapid succession.
+ */
+async function getCachedSessionFiles(workspacePath: string): Promise<Map<string, string>> {
+    const cached = sessionFilesCache.get(workspacePath);
+    if (cached && Date.now() - cached.timestamp < SESSION_FILES_CACHE_TTL_MS) {
+        return cached.fileToSession;
+    }
+
+    const { database } = await import('../database/PGLiteDatabaseWorker');
+
+    // Get the MOST RECENT session that edited each file
+    const { rows: sessionFiles } = await database.query<{ session_id: string; file_path: string }>(
+        `SELECT DISTINCT ON (file_path) session_id, file_path
+         FROM session_files
+         WHERE workspace_id = $1 AND link_type = 'edited'
+         ORDER BY file_path, timestamp DESC`,
+        [workspacePath]
+    );
+
+    const fileToSession = new Map<string, string>();
+    sessionFiles.forEach(row => {
+        fileToSession.set(row.file_path, row.session_id);
+    });
+
+    sessionFilesCache.set(workspacePath, {
+        fileToSession,
+        timestamp: Date.now()
+    });
+
+    return fileToSession;
+}
+
+/**
+ * Invalidate session files cache for a workspace.
+ * Call this when files are edited to ensure fresh data on next query.
+ */
+export function invalidateSessionFilesCache(workspacePath: string): void {
+    sessionFilesCache.delete(workspacePath);
+}
+
 /**
  * Get uncommitted files with caching.
  * Avoids spawning git status multiple times in rapid succession.
@@ -272,29 +329,20 @@ export async function registerSessionHandlers() {
 
             // Get uncommitted file counts for all sessions
             // Count files edited by each session that are currently uncommitted in git
-            // Uses cached git status to avoid redundant git spawns
+            // Uses cached git status and session files to avoid redundant queries
             const uncommittedMap = new Map<string, number>();
             try {
                 const uncommittedFiles = await getCachedUncommittedFiles(workspacePath);
 
                 if (uncommittedFiles.size > 0) {
-                    const { database } = await import('../database/PGLiteDatabaseWorker');
-
-                    // Get the MOST RECENT session that edited each file
-                    // This ensures we only count a file for the session that last touched it
-                    const { rows: sessionFiles } = await database.query<{ session_id: string; file_path: string; timestamp: string }>(
-                        `SELECT DISTINCT ON (file_path) session_id, file_path, timestamp
-                         FROM session_files
-                         WHERE workspace_id = $1 AND link_type = 'edited'
-                         ORDER BY file_path, timestamp DESC`,
-                        [workspacePath]
-                    );
+                    // Use cached session files query
+                    const fileToSession = await getCachedSessionFiles(workspacePath);
 
                     // Count uncommitted files per session (only for the session that last edited each file)
-                    sessionFiles.forEach(row => {
-                        const relativePath = row.file_path.replace(workspacePath + '/', '');
+                    fileToSession.forEach((sessionId, filePath) => {
+                        const relativePath = filePath.replace(workspacePath + '/', '');
                         if (uncommittedFiles.has(relativePath)) {
-                            uncommittedMap.set(row.session_id, (uncommittedMap.get(row.session_id) || 0) + 1);
+                            uncommittedMap.set(sessionId, (uncommittedMap.get(sessionId) || 0) + 1);
                         }
                     });
                 }
@@ -356,30 +404,24 @@ export async function registerSessionHandlers() {
             );
 
             // Calculate uncommitted file counts per session
-            // Uses cached git status to avoid redundant git spawns
+            // Uses cached git status and session files to avoid redundant queries
             const uncommittedMap = new Map<string, number>();
             try {
                 const uncommittedFiles = await getCachedUncommittedFiles(workspacePath);
 
                 if (uncommittedFiles.size > 0) {
                     // Get the session IDs we care about (children of this parent)
-                    const childSessionIds = rows.map((r: any) => r.id);
+                    const childSessionIds = new Set(rows.map((r: any) => r.id));
 
-                    // Get the MOST RECENT session that edited each file
-                    const { rows: sessionFiles } = await database.query<{ session_id: string; file_path: string; timestamp: string }>(
-                        `SELECT DISTINCT ON (file_path) session_id, file_path, timestamp
-                         FROM session_files
-                         WHERE workspace_id = $1 AND link_type = 'edited'
-                         ORDER BY file_path, timestamp DESC`,
-                        [workspacePath]
-                    );
+                    // Use cached session files query
+                    const fileToSession = await getCachedSessionFiles(workspacePath);
 
                     // Count uncommitted files per session (only for child sessions)
-                    sessionFiles.forEach(row => {
-                        if (childSessionIds.includes(row.session_id)) {
-                            const relativePath = row.file_path.replace(workspacePath + '/', '');
+                    fileToSession.forEach((sessionId, filePath) => {
+                        if (childSessionIds.has(sessionId)) {
+                            const relativePath = filePath.replace(workspacePath + '/', '');
                             if (uncommittedFiles.has(relativePath)) {
-                                uncommittedMap.set(row.session_id, (uncommittedMap.get(row.session_id) || 0) + 1);
+                                uncommittedMap.set(sessionId, (uncommittedMap.get(sessionId) || 0) + 1);
                             }
                         }
                     });
@@ -814,37 +856,27 @@ export async function registerSessionHandlers() {
 
     // Get uncommitted file counts per session (lightweight, for updating after git commits)
     // Returns counts for ALL sessions that have edited files, including 0 for fully committed sessions
-    // Uses cached git status when called in rapid succession
+    // Uses cached git status and session files when called in rapid succession
     safeHandle('sessions:get-uncommitted-counts', async (event, workspacePath: string) => {
         try {
             const uncommittedFiles = await getCachedUncommittedFiles(workspacePath);
 
-            const { database } = await import('../database/PGLiteDatabaseWorker');
-
-            // Get the MOST RECENT session that edited each file
-            const { rows: sessionFiles } = await database.query<{ session_id: string; file_path: string }>(
-                `SELECT DISTINCT ON (file_path) session_id, file_path
-                 FROM session_files
-                 WHERE workspace_id = $1 AND link_type = 'edited'
-                 ORDER BY file_path, timestamp DESC`,
-                [workspacePath]
-            );
+            // Use cached session files query
+            const fileToSession = await getCachedSessionFiles(workspacePath);
 
             // Initialize counts for all sessions that have edited files (start at 0)
             const counts: Record<string, number> = {};
-            const sessionsWithEdits = new Set<string>();
-            sessionFiles.forEach(row => {
-                sessionsWithEdits.add(row.session_id);
-                if (!counts[row.session_id]) {
-                    counts[row.session_id] = 0;
+            fileToSession.forEach((sessionId) => {
+                if (!counts[sessionId]) {
+                    counts[sessionId] = 0;
                 }
             });
 
             // Count uncommitted files per session
-            sessionFiles.forEach(row => {
-                const relativePath = row.file_path.replace(workspacePath + '/', '');
+            fileToSession.forEach((sessionId, filePath) => {
+                const relativePath = filePath.replace(workspacePath + '/', '');
                 if (uncommittedFiles.has(relativePath)) {
-                    counts[row.session_id] = (counts[row.session_id] || 0) + 1;
+                    counts[sessionId] = (counts[sessionId] || 0) + 1;
                 }
             });
 

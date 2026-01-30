@@ -304,15 +304,8 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   // Restore pending ExitPlanMode confirmation from session metadata on load
   useEffect(() => {
     const metadata = sessionData?.metadata as Record<string, unknown> | undefined;
-    console.log('[SessionTranscript] Checking for saved ExitPlanMode confirmation:', {
-      sessionId,
-      hasMetadata: !!metadata,
-      metadataKeys: metadata ? Object.keys(metadata) : [],
-      pendingExitPlanConfirmation: metadata?.pendingExitPlanConfirmation
-    });
     const savedConfirmation = metadata?.pendingExitPlanConfirmation as ExitPlanModeConfirmationData | undefined;
     if (savedConfirmation && savedConfirmation.sessionId === sessionId) {
-      console.log('[SessionTranscript] Restoring saved ExitPlanMode confirmation:', savedConfirmation);
       setPendingExitPlanConfirmation(savedConfirmation);
     }
   }, [sessionId, sessionData?.metadata]);
@@ -320,15 +313,12 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   useEffect(() => {
     const handleExitPlanModeConfirm = async (data: ExitPlanModeConfirmationData) => {
       if (data.sessionId === sessionId) {
-        console.log('[SessionTranscript] Received ExitPlanMode confirmation:', data);
         setPendingExitPlanConfirmation(data);
         // Persist to session metadata so it survives refresh
         try {
-          console.log('[SessionTranscript] Persisting ExitPlanMode confirmation to metadata...');
-          const result = await window.electronAPI.invoke('sessions:update-metadata', sessionId, {
+          await window.electronAPI.invoke('sessions:update-metadata', sessionId, {
             metadata: { pendingExitPlanConfirmation: data }
           });
-          console.log('[SessionTranscript] Persist result:', result);
 
           // Also update local session store so it's immediately available
           if (sessionData) {

@@ -562,6 +562,8 @@ class PGLiteWorker {
       CREATE INDEX IF NOT EXISTS idx_session_files_workspace ON session_files(workspace_id);
       CREATE INDEX IF NOT EXISTS idx_session_files_workspace_file ON session_files(workspace_id, file_path);
       CREATE INDEX IF NOT EXISTS idx_session_files_unique ON session_files(session_id, file_path, link_type);
+      -- Optimized index for DISTINCT ON (file_path) ... ORDER BY file_path, timestamp DESC queries
+      CREATE INDEX IF NOT EXISTS idx_session_files_uncommitted_lookup ON session_files(workspace_id, link_type, file_path, timestamp DESC);
     `);
 
     // Tracker Items table (JSONB structure)

@@ -1287,52 +1287,91 @@ export function getExtensionLoader(): ExtensionLoader {
   return extensionLoader;
 }
 
+// Track initialization state to prevent double-initialization from React StrictMode
+let extensionsInitialized = false;
+let extensionsInitializing: Promise<void> | null = null;
+
 /**
  * Initialize extensions by discovering and loading all enabled extensions.
  * Should be called during app startup after platform service is set.
  *
  * Uses the enabledStateProvider (if set) to check persisted enabled state
  * for each extension.
+ *
+ * This function is idempotent - calling it multiple times will only initialize once.
+ * If called while initialization is in progress, returns the existing promise.
  */
 export async function initializeExtensions(): Promise<void> {
-  const loader = getExtensionLoader();
-
-  console.info('[ExtensionLoader] Discovering extensions...');
-  const discovered = await loader.discoverExtensions();
-  console.info(`[ExtensionLoader] Found ${discovered.length} extension(s):`, discovered.map(d => d.manifest.id));
-
-  for (const ext of discovered) {
-    // Check persisted enabled state, passing manifest's defaultEnabled
-    let shouldLoad = true;
-    if (enabledStateProvider) {
-      try {
-        shouldLoad = await enabledStateProvider(ext.manifest.id, ext.manifest.defaultEnabled);
-      } catch (error) {
-        console.warn(
-          `[ExtensionLoader] Failed to check enabled state for ${ext.manifest.id}, defaulting to enabled:`,
-          error
-        );
-        shouldLoad = ext.manifest.defaultEnabled !== false;
-      }
-    }
-
-    if (!shouldLoad) {
-      console.info(
-        `[ExtensionLoader] Skipping disabled extension: ${ext.manifest.name}`
-      );
-      continue;
-    }
-
-    console.info(
-      `[ExtensionLoader] Loading ${ext.manifest.name} v${ext.manifest.version}...`
-    );
-    const result = await loader.loadExtension(ext);
-    if (!result.success) {
-      console.error(`[ExtensionLoader] Failed to load ${ext.manifest.id}:`, result.error);
-    }
+  // Return immediately if already initialized
+  if (extensionsInitialized) {
+    console.info('[ExtensionLoader] Extensions already initialized, skipping');
+    return;
   }
 
-  console.info(
-    `[ExtensionLoader] Loaded ${loader.getLoadedExtensions().length} extension(s)`
-  );
+  // Return existing promise if initialization is in progress
+  if (extensionsInitializing) {
+    console.info('[ExtensionLoader] Extension initialization already in progress, waiting...');
+    return extensionsInitializing;
+  }
+
+  // Start initialization
+  extensionsInitializing = (async () => {
+    try {
+      const loader = getExtensionLoader();
+
+      console.info('[ExtensionLoader] Discovering extensions...');
+      const discovered = await loader.discoverExtensions();
+      console.info(`[ExtensionLoader] Found ${discovered.length} extension(s):`, discovered.map(d => d.manifest.id));
+
+      for (const ext of discovered) {
+        // Check persisted enabled state, passing manifest's defaultEnabled
+        let shouldLoad = true;
+        if (enabledStateProvider) {
+          try {
+            shouldLoad = await enabledStateProvider(ext.manifest.id, ext.manifest.defaultEnabled);
+          } catch (error) {
+            console.warn(
+              `[ExtensionLoader] Failed to check enabled state for ${ext.manifest.id}, defaulting to enabled:`,
+              error
+            );
+            shouldLoad = ext.manifest.defaultEnabled !== false;
+          }
+        }
+
+        if (!shouldLoad) {
+          console.info(
+            `[ExtensionLoader] Skipping disabled extension: ${ext.manifest.name}`
+          );
+          continue;
+        }
+
+        console.info(
+          `[ExtensionLoader] Loading ${ext.manifest.name} v${ext.manifest.version}...`
+        );
+        const result = await loader.loadExtension(ext);
+        if (!result.success) {
+          console.error(`[ExtensionLoader] Failed to load ${ext.manifest.id}:`, result.error);
+        }
+      }
+
+      console.info(
+        `[ExtensionLoader] Loaded ${loader.getLoadedExtensions().length} extension(s)`
+      );
+
+      extensionsInitialized = true;
+    } finally {
+      extensionsInitializing = null;
+    }
+  })();
+
+  return extensionsInitializing;
+}
+
+/**
+ * Reset extension initialization state.
+ * Only use for testing or when extensions need to be completely reloaded.
+ */
+export function resetExtensionInitialization(): void {
+  extensionsInitialized = false;
+  extensionsInitializing = null;
 }
