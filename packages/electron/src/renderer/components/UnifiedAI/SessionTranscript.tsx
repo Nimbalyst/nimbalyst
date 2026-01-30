@@ -51,7 +51,9 @@ import {
   sessionChildrenAtom,
   sessionParentIdAtom,
   sessionWaitingForQuestionAtom,
+  sessionPendingQuestionAtom,
 } from '../../store';
+import type { PendingAskUserQuestionData } from '../../store/atoms/sessions';
 import { convertToWorkstreamAtom } from '../../store/atoms/sessions';
 import { usePostHog } from 'posthog-js/react';
 import { setAgentModeSettingsAtom, showPromptAdditionsAtom, hasExternalEditorAtom, externalEditorNameAtom, openInExternalEditorAtom } from '../../store/atoms/appSettings';
@@ -118,6 +120,44 @@ const readFile = async (filePath: string): Promise<{ success: boolean; content?:
 };
 
 /**
+ * Helper to persist or clear a metadata field on a session.
+ * Handles both the IPC call and local store update.
+ * Uses store.get() to fetch current sessionData, so callers don't need to pass it.
+ */
+async function updateSessionMetadataField<T>(
+  sessionId: string,
+  field: string,
+  value: T | null,
+  _sessionData: SessionData | null,  // Deprecated - kept for backwards compatibility, not used
+  updateSessionStore: (params: { sessionId: string; updates: Partial<SessionData> }) => void
+): Promise<void> {
+  try {
+    // Update local store FIRST (before async IPC) to ensure immediate availability
+    const currentSessionData = store.get(sessionStoreAtom(sessionId));
+
+    if (currentSessionData) {
+      const newMetadata = {
+        ...(currentSessionData.metadata as Record<string, unknown> || {}),
+        [field]: value
+      };
+      updateSessionStore({
+        sessionId,
+        updates: {
+          metadata: newMetadata
+        }
+      });
+    }
+
+    // Then persist to database
+    await window.electronAPI.invoke('sessions:update-metadata', sessionId, {
+      metadata: { [field]: value }
+    });
+  } catch (error) {
+    console.error(`[SessionTranscript] Failed to update ${field} metadata:`, error);
+  }
+}
+
+/**
  * SessionTranscript - Fully encapsulated transcript + input for one session
  */
 export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscriptProps>(({
@@ -182,7 +222,8 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   const [todos, setTodos] = useState<Todo[]>([]);
   const [queuedPrompts, setQueuedPrompts] = useState<any[]>([]);
   const [pendingExitPlanConfirmation, setPendingExitPlanConfirmation] = useState<ExitPlanModeConfirmationData | null>(null);
-  const [pendingAskUserQuestion, setPendingAskUserQuestion] = useState<AskUserQuestionData | null>(null);
+  // Pending AskUserQuestion uses Jotai atom so it persists across navigation
+  const [pendingAskUserQuestion, setPendingAskUserQuestion] = useAtom(sessionPendingQuestionAtom(sessionId));
   const [pendingToolPermissions, setPendingToolPermissions] = useState<ToolPermissionData[]>([]);
   const [pendingReviewFiles, setPendingReviewFiles] = useState<Set<string>>(new Set());
   const [promptAdditions, setPromptAdditions] = useState<{
@@ -334,49 +375,33 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     const handleExitPlanModeConfirm = async (data: ExitPlanModeConfirmationData) => {
       if (data.sessionId === sessionId) {
         setPendingExitPlanConfirmation(data);
-        // Persist to session metadata so it survives refresh
-        try {
-          await window.electronAPI.invoke('sessions:update-metadata', sessionId, {
-            metadata: { pendingExitPlanConfirmation: data }
-          });
-
-          // Also update local session store so it's immediately available
-          if (sessionData) {
-            updateSessionStore({
-              sessionId,
-              updates: {
-                metadata: {
-                  ...(sessionData.metadata as Record<string, unknown> || {}),
-                  pendingExitPlanConfirmation: data
-                }
-              }
-            });
-          }
-        } catch (error) {
-          console.error('[SessionTranscript] Failed to persist ExitPlanMode confirmation:', error);
-        }
+        await updateSessionMetadataField(sessionId, 'pendingExitPlanConfirmation', data, sessionData, updateSessionStore);
       }
     };
     const cleanup = window.electronAPI.on('ai:exitPlanModeConfirm', handleExitPlanModeConfirm);
     return () => { cleanup?.(); };
   }, [sessionId, sessionData, updateSessionStore]);
 
-  // Restore pending AskUserQuestion from session metadata on load
-  // Even if the SDK session was interrupted, we still show the question so the user
-  // can answer it - the submit handler will fall back to sending answers as a message.
+  // Restore pending AskUserQuestion from session metadata on app restart
+  // The Jotai atom persists across navigation, but on app restart we need to restore from DB
+  // Also register in global store so widget knows not to render as completed
   useEffect(() => {
+    // If atom already has data (from navigation), just ensure it's registered
+    if (pendingAskUserQuestion) {
+      registerPendingQuestion(pendingAskUserQuestion.questionId, sessionId);
+      return;
+    }
+    // Otherwise try to restore from metadata (app restart case)
     const metadata = sessionData?.metadata as Record<string, unknown> | undefined;
-    const savedQuestion = metadata?.pendingAskUserQuestion as AskUserQuestionData | undefined;
+    const savedQuestion = metadata?.pendingAskUserQuestion as PendingAskUserQuestionData | undefined;
     if (savedQuestion && savedQuestion.sessionId === sessionId) {
-      console.log('[SessionTranscript] Restoring saved AskUserQuestion:', savedQuestion);
       setPendingAskUserQuestion(savedQuestion);
-      // Register in global store so widget knows not to render as completed
       registerPendingQuestion(savedQuestion.questionId, sessionId);
     }
-  }, [sessionId, sessionData?.metadata]);
+  }, [sessionId, sessionData?.metadata, pendingAskUserQuestion, setPendingAskUserQuestion]);
 
   useEffect(() => {
-    const handleAskUserQuestion = async (data: AskUserQuestionData) => {
+    const handleAskUserQuestion = async (data: PendingAskUserQuestionData) => {
       if (data.sessionId === sessionId) {
         setPendingAskUserQuestion(prev => {
           if (prev && prev.questionId === data.questionId) return prev;
@@ -384,32 +409,13 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
         });
         // Register in global store so widget knows not to render as completed
         registerPendingQuestion(data.questionId, sessionId);
-        // Persist to session metadata so it survives navigation
-        try {
-          console.log('[SessionTranscript] Persisting AskUserQuestion to metadata...');
-          await window.electronAPI.invoke('sessions:update-metadata', sessionId, {
-            metadata: { pendingAskUserQuestion: data }
-          });
-          // Also update local session store so it's immediately available
-          if (sessionData) {
-            updateSessionStore({
-              sessionId,
-              updates: {
-                metadata: {
-                  ...(sessionData.metadata as Record<string, unknown> || {}),
-                  pendingAskUserQuestion: data
-                }
-              }
-            });
-          }
-        } catch (error) {
-          console.error('[SessionTranscript] Failed to persist AskUserQuestion:', error);
-        }
+        // Also persist to metadata for app restart restoration
+        await updateSessionMetadataField(sessionId, 'pendingAskUserQuestion', data, sessionData, updateSessionStore);
       }
     };
     const cleanup = window.electronAPI.on('ai:askUserQuestion', handleAskUserQuestion);
     return () => { cleanup?.(); };
-  }, [sessionId, sessionData, updateSessionStore]);
+  }, [sessionId, sessionData, updateSessionStore, setPendingAskUserQuestion]);
 
   useEffect(() => {
     const handleAskUserQuestionAnswered = (data: { questionId: string; sessionId: string; answers: Record<string, string> }) => {
@@ -431,25 +437,18 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
           }
           return null;
         });
-        // Clear from persisted metadata
-        try {
-          await window.electronAPI.invoke('sessions:update-metadata', sessionId, {
-            metadata: { pendingAskUserQuestion: null }
-          });
-        } catch (error) {
-          console.error('[SessionTranscript] Failed to clear AskUserQuestion from metadata:', error);
-        }
+        await updateSessionMetadataField(sessionId, 'pendingAskUserQuestion', null, null, updateSessionStore);
       }
     };
     const cleanup = window.electronAPI.on('ai:sessionCancelled', handleSessionCancelled);
     return () => { cleanup?.(); };
-  }, [sessionId]);
+  }, [sessionId, updateSessionStore, setPendingAskUserQuestion]);
 
   // Sync pendingAskUserQuestion state to atom for sidebar indicator
   const setWaitingForQuestion = useSetAtom(sessionWaitingForQuestionAtom(sessionId));
   useEffect(() => {
     setWaitingForQuestion(pendingAskUserQuestion !== null);
-  }, [pendingAskUserQuestion, setWaitingForQuestion]);
+  }, [pendingAskUserQuestion, setWaitingForQuestion, sessionId]);
 
   useEffect(() => {
     const handleToolPermission = (data: ToolPermissionData) => {
@@ -1021,14 +1020,11 @@ Your goal is to build a comprehensive plan through iterative refinement:
         decision: 'approved',
       });
 
-      // Clear from persisted metadata
-      await window.electronAPI.invoke('sessions:update-metadata', confirmSessionId, {
-        metadata: { pendingExitPlanConfirmation: null }
-      });
+      await updateSessionMetadataField(confirmSessionId, 'pendingExitPlanConfirmation', null, null, updateSessionStore);
     } catch (error) {
       console.error('[SessionTranscript] Failed to send ExitPlanMode approval:', error);
     }
-  }, [setAiMode, posthog]);
+  }, [setAiMode, posthog, updateSessionStore]);
 
   const handleExitPlanModeDeny = useCallback(async (requestId: string, confirmSessionId: string, feedback?: string) => {
     try {
@@ -1044,14 +1040,11 @@ Your goal is to build a comprehensive plan through iterative refinement:
         has_feedback: !!feedback,
       });
 
-      // Clear from persisted metadata
-      await window.electronAPI.invoke('sessions:update-metadata', confirmSessionId, {
-        metadata: { pendingExitPlanConfirmation: null }
-      });
+      await updateSessionMetadataField(confirmSessionId, 'pendingExitPlanConfirmation', null, null, updateSessionStore);
     } catch (error) {
       console.error('[SessionTranscript] Failed to send ExitPlanMode denial:', error);
     }
-  }, [posthog]);
+  }, [posthog, updateSessionStore]);
 
   // Handler for "Start new session to implement" option
   // Creates a child session with the plan file as context and sets up the implementation prompt
@@ -1068,10 +1061,7 @@ Your goal is to build a comprehensive plan through iterative refinement:
       posthog?.capture('exit_plan_mode_response', {
         decision: 'start_new_session',
       });
-      // Clear from persisted metadata
-      await window.electronAPI.invoke('sessions:update-metadata', confirmSessionId, {
-        metadata: { pendingExitPlanConfirmation: null }
-      });
+      await updateSessionMetadataField(confirmSessionId, 'pendingExitPlanConfirmation', null, null, updateSessionStore);
 
       // Determine the parent session ID for creating a child
       // If we have a parent (we're already in a workstream), use that parent
@@ -1136,10 +1126,7 @@ Your goal is to build a comprehensive plan through iterative refinement:
     // Unregister from global store so widget can render as completed
     unregisterPendingQuestion(questionId);
     setPendingAskUserQuestion(null);
-    // Clear from persisted metadata
-    await window.electronAPI.invoke('sessions:update-metadata', confirmSessionId, {
-      metadata: { pendingAskUserQuestion: null }
-    }).catch(err => console.error('[SessionTranscript] Failed to clear question metadata:', err));
+    await updateSessionMetadataField(confirmSessionId, 'pendingAskUserQuestion', null, null, updateSessionStore);
 
     // Try to answer via SDK first
     const result = await window.electronAPI.invoke('claude-code:answer-question', { questionId, answers }) as { success: boolean; error?: string };
@@ -1160,7 +1147,7 @@ Your goal is to build a comprehensive plan through iterative refinement:
         console.error('[SessionTranscript] Failed to send fallback message:', sendError);
       }
     }
-  }, [aiMode, workspacePath]);
+  }, [aiMode, workspacePath, updateSessionStore]);
 
   const handleAskUserQuestionCancel = useCallback(async (questionId: string, confirmSessionId: string) => {
     try {
@@ -1168,16 +1155,13 @@ Your goal is to build a comprehensive plan through iterative refinement:
       // Unregister from global store
       unregisterPendingQuestion(questionId);
       setPendingAskUserQuestion(null);
-      // Clear from persisted metadata
-      await window.electronAPI.invoke('sessions:update-metadata', confirmSessionId, {
-        metadata: { pendingAskUserQuestion: null }
-      });
+      await updateSessionMetadataField(confirmSessionId, 'pendingAskUserQuestion', null, null, updateSessionStore);
     } catch (error) {
       console.error('[SessionTranscript] Failed to cancel AskUserQuestion:', error);
       unregisterPendingQuestion(questionId);
       setPendingAskUserQuestion(null);
     }
-  }, []);
+  }, [updateSessionStore]);
 
   const getToolCategory = useCallback((pattern: string): string => {
     if (pattern.startsWith('Bash')) return 'bash';

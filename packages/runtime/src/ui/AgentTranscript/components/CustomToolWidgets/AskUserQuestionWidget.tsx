@@ -30,17 +30,50 @@ const askUserQuestionAnswersStore: Map<string, string> = new Map();
 const pendingQuestionsStore: Map<string, { sessionId: string; questionId: string }> = new Map();
 
 /**
+ * Listeners for pending question state changes per session.
+ * Used to notify widgets when questions are registered/unregistered without polling.
+ */
+const pendingQuestionListeners: Map<string, Set<() => void>> = new Map();
+
+/**
+ * Subscribe to pending question state changes for a session.
+ * Returns an unsubscribe function.
+ */
+export function subscribeToPendingQuestions(sessionId: string, listener: () => void): () => void {
+  if (!pendingQuestionListeners.has(sessionId)) {
+    pendingQuestionListeners.set(sessionId, new Set());
+  }
+  pendingQuestionListeners.get(sessionId)!.add(listener);
+  return () => {
+    pendingQuestionListeners.get(sessionId)?.delete(listener);
+  };
+}
+
+/**
+ * Notify listeners for a session that pending question state changed.
+ */
+function notifyListeners(sessionId: string): void {
+  pendingQuestionListeners.get(sessionId)?.forEach(listener => listener());
+}
+
+/**
  * Register a pending question (called when ai:askUserQuestion event is received).
  */
 export function registerPendingQuestion(questionId: string, sessionId: string): void {
   pendingQuestionsStore.set(questionId, { sessionId, questionId });
+  notifyListeners(sessionId);
 }
 
 /**
  * Unregister a pending question (called when question is answered or cancelled).
  */
 export function unregisterPendingQuestion(questionId: string): void {
+  const entry = pendingQuestionsStore.get(questionId);
+  const sessionId = entry?.sessionId;
   pendingQuestionsStore.delete(questionId);
+  if (sessionId) {
+    notifyListeners(sessionId);
+  }
 }
 
 /**
@@ -169,19 +202,28 @@ export const AskUserQuestionWidget: React.FC<CustomToolWidgetProps> = ({
   // Delay initial render to allow pending question restore to happen first
   // This prevents flash of "submitted" state on refresh
   const [isReady, setIsReady] = useState(false);
-  const [, forceUpdate] = useState({});
+  // Track pending question state reactively via subscription
+  const [pendingState, setPendingState] = useState(() => sessionHasPendingQuestion(sessionId));
 
   useEffect(() => {
     // Small delay to let SessionTranscript restore pending questions from metadata
-    const timeout = setTimeout(() => setIsReady(true), 150);
-    // Then poll for changes
-    const interval = setInterval(() => {
-      forceUpdate({});
-    }, 100);
-    return () => {
-      clearTimeout(timeout);
-      clearInterval(interval);
-    };
+    const timeout = setTimeout(() => {
+      // Re-check pending state when becoming ready (in case it changed during delay)
+      setPendingState(sessionHasPendingQuestion(sessionId));
+      setIsReady(true);
+    }, 150);
+    return () => clearTimeout(timeout);
+  }, [sessionId]);
+
+  useEffect(() => {
+    // Subscribe to pending question state changes for this session
+    // This triggers a re-render when questions are registered/unregistered
+    const unsubscribe = subscribeToPendingQuestions(sessionId, () => {
+      setPendingState(sessionHasPendingQuestion(sessionId));
+    });
+    // Sync initial state in case it changed between render and effect
+    setPendingState(sessionHasPendingQuestion(sessionId));
+    return unsubscribe;
   }, [sessionId]);
 
   const tool = message.toolCall;
@@ -191,7 +233,7 @@ export const AskUserQuestionWidget: React.FC<CustomToolWidgetProps> = ({
 
   // Don't render until ready (allows restore to complete)
   // Also check if this session has a pending question
-  if (!isReady || sessionHasPendingQuestion(sessionId)) {
+  if (!isReady || pendingState) {
     return null;
   }
 

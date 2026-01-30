@@ -142,6 +142,30 @@ export const sessionWaitingForQuestionAtom = atomFamily((_sessionId: string) =>
 );
 
 /**
+ * Data for a pending AskUserQuestion.
+ */
+export interface PendingAskUserQuestionData {
+  questionId: string;
+  sessionId: string;
+  questions: Array<{
+    question: string;
+    header: string;
+    options: Array<{ label: string; description: string }>;
+    multiSelect: boolean;
+  }>;
+  timestamp: number;
+}
+
+/**
+ * Per-session pending AskUserQuestion data.
+ * Stores the full question data so it persists across navigation.
+ * This is the source of truth for showing the AskUserQuestionConfirmation component.
+ */
+export const sessionPendingQuestionAtom = atomFamily((_sessionId: string) =>
+  atom<PendingAskUserQuestionData | null>(null)
+);
+
+/**
  * Per-session waiting for plan approval state.
  * Set when the ExitPlanMode tool is waiting for user approval.
  * Shows a distinct icon in the sidebar (not the processing spinner).
@@ -1468,7 +1492,7 @@ export const refreshSessionListAtom = atom(
       });
 
       if (result.success && Array.isArray(result.sessions)) {
-        const sessions: (SessionListItem & { hasUnread?: boolean })[] = result.sessions.map((s: any) => ({
+        const sessions: (SessionListItem & { hasUnread?: boolean; hasPendingQuestion?: boolean })[] = result.sessions.map((s: any) => ({
           id: s.id,
           name: s.title || s.name || 'Untitled Session',
           title: s.title || s.name || 'Untitled Session',
@@ -1486,6 +1510,7 @@ export const refreshSessionListAtom = atom(
           childCount: s.childCount || 0,
           uncommittedCount: s.uncommittedCount || 0,
           hasUnread: s.hasUnread || false,  // For initializing unread atom from database
+          hasPendingQuestion: s.hasPendingQuestion || false,  // For initializing pending question atom from database
         }));
 
         // Debug: log sessions with uncommittedCount
@@ -1515,6 +1540,10 @@ export const refreshSessionListAtom = atom(
           // Initialize unread state from database metadata (for cross-device sync)
           if (s.hasUnread) {
             set(sessionUnreadAtom(s.id), true);
+          }
+          // Initialize pending question state from database metadata (for sidebar indicator persistence)
+          if ((s as any).hasPendingQuestion) {
+            set(sessionWaitingForQuestionAtom(s.id), true);
           }
         }
         set(sessionRegistryAtom, registry);

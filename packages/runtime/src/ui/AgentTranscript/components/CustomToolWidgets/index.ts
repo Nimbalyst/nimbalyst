@@ -42,7 +42,7 @@ import type { Message } from '../../../../ai/server/types';
 
 // Re-export widgets
 export { MockupScreenshotWidget } from './MockupScreenshotWidget';
-export { AskUserQuestionWidget, storeAskUserQuestionAnswers, registerPendingQuestion, unregisterPendingQuestion } from './AskUserQuestionWidget';
+export { AskUserQuestionWidget, storeAskUserQuestionAnswers, registerPendingQuestion, unregisterPendingQuestion, subscribeToPendingQuestions } from './AskUserQuestionWidget';
 export { VisualDisplayWidget } from './VisualDisplayWidget';
 export { BashWidget } from './BashWidget';
 export { GitCommitConfirmationWidget, registerPendingProposal as registerPendingGitCommitProposal } from './GitCommitConfirmationWidget';

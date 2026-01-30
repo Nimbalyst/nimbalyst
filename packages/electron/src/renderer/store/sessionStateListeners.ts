@@ -158,10 +158,8 @@ export function initSessionStateListeners(): () => void {
    */
   const handleAskUserQuestion = (data: { sessionId: string; questionId: string }) => {
     const { sessionId } = data;
-    console.log('[sessionStateListeners] handleAskUserQuestion received:', { sessionId, questionId: data.questionId });
     if (!sessionId) return;
     store.set(sessionWaitingForQuestionAtom(sessionId), true);
-    console.log('[sessionStateListeners] Set sessionWaitingForQuestionAtom to true for:', sessionId);
   };
 
   /**
@@ -181,10 +179,8 @@ export function initSessionStateListeners(): () => void {
    */
   const handleExitPlanModeConfirm = (data: { sessionId: string; requestId: string }) => {
     const { sessionId } = data;
-    console.log('[sessionStateListeners] handleExitPlanModeConfirm received:', { sessionId, requestId: data.requestId });
     if (!sessionId) return;
     store.set(sessionWaitingForPlanApprovalAtom(sessionId), true);
-    console.log('[sessionStateListeners] Set sessionWaitingForPlanApprovalAtom to true for:', sessionId);
   };
 
   /**
@@ -234,7 +230,6 @@ export function initSessionStateListeners(): () => void {
   let cleanupExitPlanModeConfirm: (() => void) | undefined;
   let cleanupExitPlanModeResolved: (() => void) | undefined;
   if (window.electronAPI?.on) {
-    console.log('[sessionStateListeners] Setting up IPC event listeners for AskUserQuestion and ExitPlanMode');
     cleanupMessageLogged = window.electronAPI.on('ai:message-logged', handleMessageLogged);
     cleanupTitleUpdated = window.electronAPI.on('session:title-updated', handleTitleUpdated);
     cleanupAskUserQuestion = window.electronAPI.on('ai:askUserQuestion', handleAskUserQuestion);
@@ -242,8 +237,6 @@ export function initSessionStateListeners(): () => void {
     cleanupSessionCancelled = window.electronAPI.on('ai:sessionCancelled', handleAskUserQuestionResolved);
     cleanupExitPlanModeConfirm = window.electronAPI.on('ai:exitPlanModeConfirm', handleExitPlanModeConfirm);
     cleanupExitPlanModeResolved = window.electronAPI.on('ai:exitPlanModeResolved', handleExitPlanModeResolved);
-  } else {
-    console.warn('[sessionStateListeners] window.electronAPI.on not available!');
   }
 
   // Return cleanup function

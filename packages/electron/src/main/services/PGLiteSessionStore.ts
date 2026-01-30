@@ -492,6 +492,8 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
           // UI state from metadata (for cross-device sync)
           // Note: hasUnread is nested under metadata.metadata due to how updateSessionMetadata works
           hasUnread: metadata.metadata?.hasUnread ?? metadata.hasUnread ?? false,
+          // Check if session has a pending AskUserQuestion (for sidebar indicator persistence)
+          hasPendingQuestion: !!(metadata.pendingAskUserQuestion),
         };
       });
     },

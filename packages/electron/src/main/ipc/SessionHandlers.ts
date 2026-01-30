@@ -370,6 +370,7 @@ export async function registerSessionHandlers() {
                     childCount: entry.childCount || 0,  // Number of child sessions
                     uncommittedCount,  // Number of uncommitted files
                     hasUnread: (entry as any).hasUnread || false,  // Unread state from metadata
+                    hasPendingQuestion: (entry as any).hasPendingQuestion || false,  // Pending AskUserQuestion state from metadata
                     // Branch tracking - SEPARATE from hierarchical parentSessionId
                     branchedFromSessionId: (entry as any).branchedFromSessionId,
                     branchPointMessageId: entry.branchPointMessageId,

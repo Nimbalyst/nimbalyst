@@ -100,7 +100,7 @@ function bucketAgeInDays(timestampMs: number): string {
  * This prevents "Object has been destroyed" errors when the renderer context
  * that initiated the request no longer exists.
  */
-function safeSend(event: Electron.IpcMainInvokeEvent, channel: string, ...args: any[]): boolean {
+function safeSend(event: Electron.IpcMainInvokeEvent, channel: string, ...args: unknown[]): boolean {
   if (event.sender.isDestroyed()) {
     logger.main.debug(`[AIService] Skipping ${channel} - WebContents destroyed`);
     return false;
