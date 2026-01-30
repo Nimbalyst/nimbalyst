@@ -437,6 +437,25 @@ export class ClaudeSettingsManager {
   }
 
   /**
+   * Get user-level environment variables from ~/.claude/settings.json
+   */
+  async getUserLevelEnv(): Promise<Record<string, string>> {
+    const settings = await this.readSettingsFile(this.getUserLevelPath());
+    return (settings?.env as Record<string, string>) || {};
+  }
+
+  /**
+   * Set user-level environment variables in ~/.claude/settings.json
+   * Preserves all other settings in the file
+   */
+  async setUserLevelEnv(env: Record<string, string>): Promise<void> {
+    const filePath = this.getUserLevelPath();
+    const settings = (await this.readSettingsFile(filePath)) || {};
+    settings.env = env;
+    await this.writeSettingsFile(filePath, settings);
+  }
+
+  /**
    * Check if a pattern is in the project-local allowed list
    * NOTE: Resolves worktree paths to parent project
    */

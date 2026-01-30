@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { ProviderConfig, Model } from '../../Settings/SettingsView';
 // Import the actual SDK package.json to get the exact installed version
 // @ts-ignore - importing json
@@ -56,8 +56,39 @@ export function ClaudeCodePanel({
   const [claudeCodeWindowsStatus, setClaudeCodeWindowsStatus] = useState<ClaudeForWindowsInstallation | null>(null);
   const posthog = usePostHog();
 
+  // Environment variables state
+  const [envVars, setEnvVars] = useState<Record<string, string>>({});
+  const [isLoadingEnv, setIsLoadingEnv] = useState(true);
+  const [newEnvKey, setNewEnvKey] = useState('');
+  const [newEnvValue, setNewEnvValue] = useState('');
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [editingValue, setEditingValue] = useState('');
+
   // Detect Windows platform using navigator.platform (client-side, no IPC needed)
   const isWindowsPlatform = navigator.platform === 'Win32';
+
+  // Load environment variables
+  const loadEnvVars = useCallback(async () => {
+    try {
+      setIsLoadingEnv(true);
+      const env = await window.electronAPI.claudeCode.getEnv();
+      setEnvVars(env);
+    } catch (error) {
+      console.error('Failed to load env vars:', error);
+    } finally {
+      setIsLoadingEnv(false);
+    }
+  }, []);
+
+  // Save environment variables
+  const saveEnvVars = useCallback(async (newEnvVars: Record<string, string>) => {
+    try {
+      await window.electronAPI.claudeCode.setEnv(newEnvVars);
+      setEnvVars(newEnvVars);
+    } catch (error) {
+      console.error('Failed to save env vars:', error);
+    }
+  }, []);
 
   useEffect(() => {
     // Only check Windows installation status on Windows
@@ -67,7 +98,8 @@ export function ClaudeCodePanel({
       setIsCheckingClaudeWindowsStatus(false);
     }
     checkLoginStatus();
-  }, []);
+    loadEnvVars();
+  }, [loadEnvVars]);
 
   const checkLoginStatus = async () => {
     try {
@@ -360,6 +392,126 @@ export function ClaudeCodePanel({
               To view or modify allowed tools for a project, go to{' '}
               <strong className="font-medium text-[var(--nim-text)]">Project Settings &gt; Permissions</strong>.
             </p>
+          </div>
+
+          <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
+            <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">Environment Variables</h4>
+            <p className="text-xs leading-relaxed text-[var(--nim-text-muted)] mb-3">
+              Configure environment variables that will be set for all Claude Code sessions.
+              These are stored in <code className="text-xs bg-[var(--nim-bg-tertiary)] px-1 py-0.5 rounded">~/.claude/settings.json</code>.
+            </p>
+
+            {isLoadingEnv ? (
+              <div className="text-sm text-[var(--nim-text-muted)]">Loading...</div>
+            ) : (
+              <>
+                {/* Existing env vars list */}
+                {Object.keys(envVars).length > 0 && (
+                  <div className="env-vars-list space-y-2 mb-4">
+                    {Object.entries(envVars).map(([key, value]) => (
+                      <div key={key} className="env-var-row flex items-center gap-2">
+                        {editingKey === key ? (
+                          <>
+                            <input
+                              type="text"
+                              value={key}
+                              disabled
+                              className="flex-1 py-1.5 px-2 rounded text-sm bg-[var(--nim-bg-tertiary)] border border-[var(--nim-border)] text-[var(--nim-text-muted)] font-mono"
+                            />
+                            <span className="text-[var(--nim-text-muted)]">=</span>
+                            <input
+                              type="text"
+                              value={editingValue}
+                              onChange={(e) => setEditingValue(e.target.value)}
+                              className="flex-[2] py-1.5 px-2 rounded text-sm bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] text-[var(--nim-text)] font-mono focus:border-[var(--nim-primary)] outline-none"
+                              autoFocus
+                            />
+                            <button
+                              onClick={() => {
+                                const newEnvVars = { ...envVars, [key]: editingValue };
+                                saveEnvVars(newEnvVars);
+                                setEditingKey(null);
+                                setEditingValue('');
+                              }}
+                              className="py-1.5 px-3 rounded text-xs font-medium bg-[var(--nim-primary)] text-white hover:bg-[var(--nim-primary-hover)] transition-colors"
+                            >
+                              Save
+                            </button>
+                            <button
+                              onClick={() => {
+                                setEditingKey(null);
+                                setEditingValue('');
+                              }}
+                              className="py-1.5 px-3 rounded text-xs font-medium bg-[var(--nim-bg-tertiary)] border border-[var(--nim-border)] text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)] transition-colors"
+                            >
+                              Cancel
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <span className="flex-1 py-1.5 px-2 rounded text-sm bg-[var(--nim-bg-tertiary)] text-[var(--nim-text)] font-mono truncate">{key}</span>
+                            <span className="text-[var(--nim-text-muted)]">=</span>
+                            <span className="flex-[2] py-1.5 px-2 rounded text-sm bg-[var(--nim-bg-tertiary)] text-[var(--nim-text)] font-mono truncate">{value}</span>
+                            <button
+                              onClick={() => {
+                                setEditingKey(key);
+                                setEditingValue(value);
+                              }}
+                              className="py-1.5 px-3 rounded text-xs font-medium bg-[var(--nim-bg-tertiary)] border border-[var(--nim-border)] text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)] transition-colors"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => {
+                                const newEnvVars = { ...envVars };
+                                delete newEnvVars[key];
+                                saveEnvVars(newEnvVars);
+                              }}
+                              className="py-1.5 px-3 rounded text-xs font-medium bg-[var(--nim-bg-tertiary)] border border-[var(--nim-border)] text-[var(--nim-error)] hover:bg-[rgba(239,68,68,0.1)] transition-colors"
+                            >
+                              Delete
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Add new env var form */}
+                <div className="add-env-var flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={newEnvKey}
+                    onChange={(e) => setNewEnvKey(e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, ''))}
+                    placeholder="VARIABLE_NAME"
+                    className="flex-1 py-1.5 px-2 rounded text-sm bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] text-[var(--nim-text)] font-mono focus:border-[var(--nim-primary)] outline-none"
+                  />
+                  <span className="text-[var(--nim-text-muted)]">=</span>
+                  <input
+                    type="text"
+                    value={newEnvValue}
+                    onChange={(e) => setNewEnvValue(e.target.value)}
+                    placeholder="value"
+                    className="flex-[2] py-1.5 px-2 rounded text-sm bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] text-[var(--nim-text)] font-mono focus:border-[var(--nim-primary)] outline-none"
+                  />
+                  <button
+                    onClick={() => {
+                      if (newEnvKey && newEnvKey.trim()) {
+                        const newEnvVars = { ...envVars, [newEnvKey.trim()]: newEnvValue };
+                        saveEnvVars(newEnvVars);
+                        setNewEnvKey('');
+                        setNewEnvValue('');
+                      }
+                    }}
+                    disabled={!newEnvKey.trim()}
+                    className="py-1.5 px-3 rounded text-xs font-medium bg-[var(--nim-primary)] text-white hover:bg-[var(--nim-primary-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Add
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </>
       )}

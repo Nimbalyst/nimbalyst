@@ -356,6 +356,21 @@ export function registerSettingsHandlers() {
         return getClaudeCodeSettings();
     });
 
+    // Claude Code user-level environment variables (~/.claude/settings.json)
+    safeHandle('claudeSettings:get-env', async () => {
+        const { ClaudeSettingsManager } = await import('../services/ClaudeSettingsManager');
+        const claudeSettingsManager = ClaudeSettingsManager.getInstance();
+        return claudeSettingsManager.getUserLevelEnv();
+    });
+
+    safeHandle('claudeSettings:set-env', async (_event, env: Record<string, string>) => {
+        const { ClaudeSettingsManager } = await import('../services/ClaudeSettingsManager');
+        const claudeSettingsManager = ClaudeSettingsManager.getInstance();
+        await claudeSettingsManager.setUserLevelEnv(env);
+        logger.store.info('[SettingsHandlers] Claude Code user-level env vars updated');
+        return { success: true };
+    });
+
     safeHandle('claudeCode:set-project-commands-enabled', async (_event, enabled: boolean) => {
         const { setClaudeCodeProjectCommandsEnabled } = await import('../utils/store');
         setClaudeCodeProjectCommandsEnabled(enabled);
