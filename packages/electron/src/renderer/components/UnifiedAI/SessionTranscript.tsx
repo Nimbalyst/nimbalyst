@@ -1141,13 +1141,13 @@ Your goal is to build a comprehensive plan through iterative refinement:
       metadata: { pendingAskUserQuestion: null }
     }).catch(err => console.error('[SessionTranscript] Failed to clear question metadata:', err));
 
-    try {
-      // Try to answer via SDK first
-      await window.electronAPI.invoke('claude-code:answer-question', { questionId, answers });
-    } catch (error) {
+    // Try to answer via SDK first
+    const result = await window.electronAPI.invoke('claude-code:answer-question', { questionId, answers }) as { success: boolean; error?: string };
+
+    if (!result.success) {
       // SDK doesn't have this question anymore (session was interrupted)
       // Fall back to sending answers as a plain text message to continue the conversation
-      console.log('[SessionTranscript] SDK question not found, sending answers as message');
+      console.log('[SessionTranscript] SDK question not found, sending answers as message:', result.error);
       const answersText = Object.entries(answers)
         .map(([q, a]) => `${q}: ${a}`)
         .join('\n');

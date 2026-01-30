@@ -95,6 +95,21 @@ function bucketAgeInDays(timestampMs: number): string {
 }
 
 /**
+ * Safely send a message to a WebContents from an IPC event.
+ * Returns false if the sender was destroyed (e.g., window was refreshed/navigated).
+ * This prevents "Object has been destroyed" errors when the renderer context
+ * that initiated the request no longer exists.
+ */
+function safeSend(event: Electron.IpcMainInvokeEvent, channel: string, ...args: any[]): boolean {
+  if (event.sender.isDestroyed()) {
+    logger.main.debug(`[AIService] Skipping ${channel} - WebContents destroyed`);
+    return false;
+  }
+  event.sender.send(channel, ...args);
+  return true;
+}
+
+/**
  * Extract file extension from a file path for analytics.
  * Handles compound extensions like .mockup.html
  */
@@ -1079,7 +1094,7 @@ export class AIService {
     const sendAutoContextEvent = (phase: 'start' | 'end') => {
       try {
         // console.log(`[AIService] Sending ai:auto-context-${phase} event for session:`, session.id);
-        event.sender.send(`ai:auto-context-${phase}`, {
+        safeSend(event, `ai:auto-context-${phase}`, {
           sessionId: session.id
         });
         // console.log(`[AIService] Successfully sent ai:auto-context-${phase} event`);
@@ -1149,7 +1164,7 @@ export class AIService {
             await this.sessionManager.updateSessionTokenUsage(session.id, tokenUsage);
 
             // Also send IPC event to update UI immediately
-            event.sender.send('ai:tokenUsageUpdated', {
+            safeSend(event, 'ai:tokenUsageUpdated', {
               sessionId: session.id,
               tokenUsage
             });
@@ -1558,9 +1573,10 @@ export class AIService {
         role: 'user',
         content: message,
         timestamp: Date.now(),
-        attachments: attachments && attachments.length > 0 ? attachments : undefined
+        attachments: attachments && attachments.length > 0 ? attachments : undefined,
+        mode: documentContext?.mode,
       };
-      logger.main.info(`[AIService] Adding user message to session ${session.id}: "${message.substring(0, 50)}..." (queuedPromptId: ${queuedPromptId || 'none'})`);
+      logger.main.info(`[AIService] Adding user message to session ${session.id}: "${message.substring(0, 50)}..." (queuedPromptId: ${queuedPromptId || 'none'}, mode: ${documentContext?.mode})`);
       await this.sessionManager.addMessage(userMessage, session.id);
       logger.main.info(`[AIService] User message added successfully to session ${session.id}`);
 
@@ -1734,7 +1750,7 @@ export class AIService {
       // Skip hidden messages - they shouldn't trigger UI refreshes
       const onMessageLogged = (data: { sessionId: string; direction: string; hidden?: boolean }) => {
         if (data.hidden) return;
-        event.sender.send('ai:message-logged', data);
+        safeSend(event, 'ai:message-logged', data);
       };
       // Remove all previous listeners to avoid duplicates
       provider.removeAllListeners('message:logged');
@@ -1743,7 +1759,7 @@ export class AIService {
       // Listen for ExitPlanMode confirmation requests and forward to renderer
       const onExitPlanModeConfirm = (data: { requestId: string; sessionId: string; planSummary: string; timestamp: number }) => {
         logger.main.info('[AIService] ExitPlanMode confirmation requested:', data.requestId);
-        event.sender.send('ai:exitPlanModeConfirm', data);
+        safeSend(event, 'ai:exitPlanModeConfirm', data);
       };
       provider.removeAllListeners('exitPlanMode:confirm');
       provider.on('exitPlanMode:confirm', onExitPlanModeConfirm);
@@ -1751,7 +1767,7 @@ export class AIService {
       // Listen for AskUserQuestion requests and forward to renderer
       const onAskUserQuestion = (data: { questionId: string; sessionId: string; questions: any[]; timestamp: number }) => {
         logger.main.info('[AIService] AskUserQuestion requested:', data.questionId);
-        event.sender.send('ai:askUserQuestion', data);
+        safeSend(event, 'ai:askUserQuestion', data);
       };
       provider.removeAllListeners('askUserQuestion:pending');
       provider.on('askUserQuestion:pending', onAskUserQuestion);
@@ -1759,7 +1775,7 @@ export class AIService {
       // Listen for AskUserQuestion answers and forward to renderer to update tool call display
       const onAskUserQuestionAnswered = (data: { questionId: string; sessionId: string; questions: any[]; answers: Record<string, string>; timestamp: number }) => {
         logger.main.info('[AIService] AskUserQuestion answered:', data.questionId);
-        event.sender.send('ai:askUserQuestionAnswered', data);
+        safeSend(event, 'ai:askUserQuestionAnswered', data);
       };
       provider.removeAllListeners('askUserQuestion:answered');
       provider.on('askUserQuestion:answered', onAskUserQuestionAnswered);
@@ -1767,7 +1783,7 @@ export class AIService {
       // Listen for tool permission requests and forward to renderer
       const onToolPermissionPending = (data: { requestId: string; sessionId: string; workspacePath: string; request: any; timestamp: number }) => {
         logger.main.info('[AIService] Tool permission requested:', data.requestId);
-        event.sender.send('ai:toolPermission', data);
+        safeSend(event, 'ai:toolPermission', data);
 
         // Show OS notification if app is backgrounded
         const toolName = data.request?.toolName || 'Agent';
@@ -1788,14 +1804,14 @@ export class AIService {
       // Listen for tool permission resolved and forward to renderer
       const onToolPermissionResolved = (data: { requestId: string; sessionId: string; response: any; timestamp: number }) => {
         logger.main.info('[AIService] Tool permission resolved:', data.requestId);
-        event.sender.send('ai:toolPermissionResolved', data);
+        safeSend(event, 'ai:toolPermissionResolved', data);
       };
       provider.removeAllListeners('toolPermission:resolved');
       provider.on('toolPermission:resolved', onToolPermissionResolved);
 
       // Listen for prompt additions and forward to renderer for debug display
       const onPromptAdditions = (data: { sessionId: string; systemPromptAddition: string | null; userMessageAddition: string | null; timestamp: number }) => {
-        event.sender.send('ai:promptAdditions', data);
+        safeSend(event, 'ai:promptAdditions', data);
       };
       provider.removeAllListeners('promptAdditions');
       provider.on('promptAdditions', onPromptAdditions);
@@ -1810,7 +1826,7 @@ export class AIService {
         );
         // Notify renderer that files were tracked (if message had @ mentions)
         if (message.includes('@')) {
-          event.sender.send('session-files:updated', session.id);
+          safeSend(event, 'session-files:updated', session.id);
         }
       } catch (error) {
         logger.main.warn('[AIService] Failed to track user @ mentions:', error);
@@ -1871,7 +1887,7 @@ export class AIService {
         const streamStartTime = Date.now();
 
         // Send performance metrics to renderer
-        event.sender.send('ai:performanceMetrics', {
+        safeSend(event, 'ai:performanceMetrics', {
           phase: 'start',
           provider: session.provider,
           model: session.model || 'default',
@@ -1960,7 +1976,7 @@ export class AIService {
             perfLog.timeToFirstChunk = firstChunkTime - startTime;
 
             // Send first chunk metrics
-            event.sender.send('ai:performanceMetrics', {
+            safeSend(event, 'ai:performanceMetrics', {
               phase: 'firstChunk',
               timeToFirstChunk: perfLog.timeToFirstChunk
             });
@@ -1982,7 +1998,7 @@ export class AIService {
               // if (isClaudeCode && textChunks <= 5) {
               // }
               // Send ACCUMULATED response to renderer (not just the chunk)
-              event.sender.send('ai:streamResponse', {
+              safeSend(event, 'ai:streamResponse', {
                 sessionId: session.id,
                 partial: fullResponse,  // Send the full accumulated text
                 isComplete: false
@@ -2011,7 +2027,7 @@ export class AIService {
                       window  // Pass window to enable file watcher attachment for edited files
                     );
                     // Notify renderer that files were tracked
-                    event.sender.send('session-files:updated', session.id);
+                    safeSend(event, 'session-files:updated', session.id);
                   } catch (trackError) {
                     console.error('[AIService] Failed to track tool call:', trackError);
                   }
@@ -2074,7 +2090,7 @@ export class AIService {
                     });
                   }
 
-                  event.sender.send('ai:streamResponse', {
+                  safeSend(event, 'ai:streamResponse', {
                     sessionId: session.id,
                     partial: '',
                     isComplete: false,
@@ -2087,7 +2103,7 @@ export class AIService {
                   toolCallCount++;
                   toolCalls.push(chunk.toolCall);
                   // Send to renderer so it displays in chat transcript
-                  event.sender.send('ai:streamResponse', {
+                  safeSend(event, 'ai:streamResponse', {
                     sessionId: session.id,
                     partial: '',
                     isComplete: false,
@@ -2095,7 +2111,7 @@ export class AIService {
                   });
                 } else {
                   // For other tools, just send the tool call
-                  event.sender.send('ai:streamResponse', {
+                  safeSend(event, 'ai:streamResponse', {
                     sessionId: session.id,
                     partial: '',
                     isComplete: false,
@@ -2126,7 +2142,7 @@ export class AIService {
                 };
                 await this.sessionManager.addMessage(errorMessage, session.id);
 
-                event.sender.send('ai:streamResponse', {
+                safeSend(event, 'ai:streamResponse', {
                   sessionId: session.id,
                   partial: '',
                   isComplete: false,
@@ -2146,7 +2162,7 @@ export class AIService {
 
               // Forward streaming edit start event to renderer
               // Include targetFilePath so renderer knows which file to edit
-              event.sender.send('ai:streamEditStart', {
+              safeSend(event, 'ai:streamEditStart', {
                 sessionId: session.id,
                 targetFilePath: documentContext?.filePath,
                 ...chunk.config
@@ -2156,7 +2172,7 @@ export class AIService {
 
             case 'stream_edit_content':
               // Forward streaming content to renderer
-              event.sender.send('ai:streamEditContent', {
+              safeSend(event, 'ai:streamEditContent', {
                 sessionId: session.id,
                 content: chunk.content
               });
@@ -2164,7 +2180,7 @@ export class AIService {
 
             case 'stream_edit_end':
               // Forward streaming end event to renderer
-              event.sender.send('ai:streamEditEnd', {
+              safeSend(event, 'ai:streamEditEnd', {
                 sessionId: session.id,
                 ...(chunk.error ? { error: chunk.error } : {})
               });
@@ -2184,7 +2200,7 @@ export class AIService {
                     window  // Pass window to enable file watcher attachment for edited files
                   );
                   // Notify renderer that files were tracked
-                  event.sender.send('session-files:updated', session.id);
+                  safeSend(event, 'session-files:updated', session.id);
                 } catch (trackError) {
                   console.error('[AIService] Failed to track streamContent:', trackError);
                 }
@@ -2212,7 +2228,7 @@ export class AIService {
                 reason: 'error'
               });
 
-              event.sender.send('ai:error', {
+              safeSend(event, 'ai:error', {
                 sessionId: session.id,
                 message: chunk.error || 'Unknown error occurred',
                 isAuthError: chunk.isAuthError || false
@@ -2258,7 +2274,7 @@ export class AIService {
               }
 
               // Send completion metrics with token usage if available
-              event.sender.send('ai:performanceMetrics', {
+              safeSend(event, 'ai:performanceMetrics', {
                 phase: 'complete',
                 totalTime: perfLog.totalTime,
                 streamTime: perfLog.streamTime,
@@ -2430,7 +2446,7 @@ export class AIService {
               }
 
               // Send complete response
-              event.sender.send('ai:streamResponse', {
+              safeSend(event, 'ai:streamResponse', {
                 sessionId: session.id,
                 content: fullResponse,
                 isComplete: true,
@@ -2525,7 +2541,7 @@ export class AIService {
             const claimed = await queueStore.claim(nextPrompt.id);
             if (claimed) {
               // Notify renderer that prompt was claimed (so UI removes it from queue list)
-              event.sender.send('ai:promptClaimed', {
+              safeSend(event, 'ai:promptClaimed', {
                 sessionId: session.id,
                 promptId: claimed.id,
               });
@@ -2625,14 +2641,14 @@ export class AIService {
 
         // Send error metrics
         if (event && event.sender) {
-          event.sender.send('ai:performanceMetrics', {
+          safeSend(event, 'ai:performanceMetrics', {
             phase: 'error',
             errorTime,
             error: error instanceof Error ? error.message : 'Unknown error'
           });
 
           // Send error to renderer
-          event.sender.send('ai:error', {
+          safeSend(event, 'ai:error', {
             sessionId: session?.id,
             message: error instanceof Error ? error.message : 'Unknown error occurred'
           });
@@ -2660,7 +2676,7 @@ export class AIService {
               const claimed = await queueStore.claim(nextPrompt.id);
               if (claimed) {
                 // Notify renderer that prompt was claimed (so UI removes it from queue list)
-                event.sender.send('ai:promptClaimed', {
+                safeSend(event, 'ai:promptClaimed', {
                   sessionId: session.id,
                   promptId: claimed.id,
                 });
@@ -2899,7 +2915,7 @@ export class AIService {
 
       // Notify the renderer to update the queue list UI
       // This ensures locally-queued prompts are visible (same as mobile sync path)
-      event.sender.send('ai:queuedPromptsReceived', {
+      safeSend(event, 'ai:queuedPromptsReceived', {
         sessionId,
         promptCount: 1
       });
@@ -2951,7 +2967,7 @@ export class AIService {
       }
 
       // Notify renderer that prompt was claimed (so UI removes it from queue list)
-      event.sender.send('ai:promptClaimed', {
+      safeSend(event, 'ai:promptClaimed', {
         sessionId,
         promptId: claimed.id,
       });
@@ -3035,7 +3051,9 @@ export class AIService {
         const { BrowserWindow } = await import('electron');
         const windows = BrowserWindow.getAllWindows().filter(w => !w.isDestroyed());
         for (const win of windows) {
-          win.webContents.send('ai:exitPlanModeResolved', { sessionId });
+          if (!win.webContents.isDestroyed()) {
+            win.webContents.send('ai:exitPlanModeResolved', { sessionId });
+          }
         }
 
         return { success: true };
@@ -3645,7 +3663,7 @@ export class AIService {
     // MCP integration for applyDiff results
     safeHandle('mcp:applyDiff:result', async (event, resultChannel: string, result: any) => {
       // Forward result back through the result channel
-      event.sender.send(resultChannel, result);
+      safeSend(event, resultChannel, result);
     });
 
     // ============================================================
