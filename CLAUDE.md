@@ -2,6 +2,22 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## CRITICAL: Database Access Rules
+
+**NEVER directly open or query the PGLite database files using Node.js or command-line tools.**
+
+The database at `~/Library/Application Support/@nimbalyst/electron/pglite-db` uses PID-based locking and **can only be safely accessed by one process at a time**. Opening it from a second process (like a Node.js script) will:
+- Corrupt the database
+- Require database recovery
+- Potentially lose data
+
+**ALWAYS use the MCP database query tool instead:**
+- ✅ Use `mcp__nimbalyst-extension-dev__database_query` for all database queries
+- ❌ NEVER use `node -e "const { PGlite } = require(...)"` or similar approaches
+- ❌ NEVER use sqlite CLI or any direct file access
+
+The MCP tool safely queries the database through the running Nimbalyst process, which already has the exclusive lock.
+
 ## Codebase Overview
 
 Nimbalyst is an extensible, AI-native workspace that supports multiple editor types through a unified extension system. While it originated as a Lexical-based markdown editor, the architecture is evolving toward a fully pluggable model where **all editors** - including the core Lexical editor, Monaco code editor, spreadsheets, diagrams, and custom visual editors - are provided through extensions.
@@ -717,6 +733,7 @@ The application includes a walkthrough guide system for feature discovery and co
 
 - **AGENT\_PERMISSIONS.md**: Agent tool permission system and approval flow
 - **ANALYTICS\_GUIDE.md**: How to add PostHog analytics events
+- **DIALOGS.md**: How to add new dialogs using the DialogProvider system
 - **POSTHOG\_EVENTS.md**: Canonical reference for all analytics events
 - **POSTHOG\_MCP\_INTEGRATION.md**: PostHog MCP integration architecture
 - **PLAYWRIGHT.md**: E2E testing patterns and best practices

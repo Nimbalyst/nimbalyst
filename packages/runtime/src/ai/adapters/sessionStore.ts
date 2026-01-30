@@ -61,6 +61,11 @@ export interface SessionListOptions {
   includeArchived?: boolean;
 }
 
+export interface SessionSearchOptions extends SessionListOptions {
+  timeRange?: '7d' | '30d' | '90d' | 'all';
+  direction?: 'all' | 'input' | 'output';
+}
+
 export interface SessionStore {
   ensureReady(): Promise<void>;
   create(payload: CreateSessionPayload): Promise<void>;
@@ -73,7 +78,7 @@ export interface SessionStore {
    */
   getMany?(sessionIds: string[]): Promise<SessionData[]>;
   list(workspaceId: string, options?: SessionListOptions): Promise<SessionListItem[]>;
-  search(workspaceId: string, query: string, options?: SessionListOptions): Promise<SessionListItem[]>;
+  search(workspaceId: string, query: string, options?: SessionSearchOptions): Promise<SessionListItem[]>;
   delete(sessionId: string): Promise<void>;
   /**
    * Atomically update session title if it has not been named yet.

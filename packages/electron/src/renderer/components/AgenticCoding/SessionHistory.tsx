@@ -77,6 +77,33 @@ interface WorktreeWithStatus extends WorktreeData {
   };
 }
 
+// Search filter options for content search
+type SearchTimeRange = '7d' | '30d' | '90d' | 'all';
+type SearchDirection = 'all' | 'input' | 'output';
+
+interface SearchFilters {
+  timeRange: SearchTimeRange;
+  direction: SearchDirection;
+}
+
+const DEFAULT_SEARCH_FILTERS: SearchFilters = {
+  timeRange: '30d',  // Default to last 30 days for performance
+  direction: 'all',
+};
+
+const TIME_RANGE_LABELS: Record<SearchTimeRange, string> = {
+  '7d': 'Last 7 days',
+  '30d': 'Last 30 days',
+  '90d': 'Last 90 days',
+  'all': 'All time',
+};
+
+const DIRECTION_LABELS: Record<SearchDirection, string> = {
+  'all': 'All messages',
+  'input': 'User prompts only',
+  'output': 'Assistant only',
+};
+
 interface SessionHistoryProps {
   workspacePath: string;
   activeSessionId: string | null;
@@ -313,6 +340,9 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   const cardContextMenuRef = useRef<HTMLDivElement>(null);
   const [isIndexBuilding, setIsIndexBuilding] = useState(false);
   const [pendingSearchQuery, setPendingSearchQuery] = useState<string | null>(null); // Query to run after index build
+  const [searchFilters, setSearchFilters] = useState<SearchFilters>(DEFAULT_SEARCH_FILTERS);
+  const [showSearchFilters, setShowSearchFilters] = useState(false);
+  const searchFiltersRef = useRef<HTMLDivElement>(null);
 
   // Archive worktree dialog hook
   const {
@@ -362,12 +392,16 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   }, [refreshSessions]);
 
   // Execute the actual search query
-  const executeSearch = useCallback(async (query: string) => {
+  const executeSearch = useCallback(async (query: string, filters: SearchFilters = searchFilters) => {
     try {
       setIsSearching(true);
       setError(null);
 
-      const result = await window.electronAPI.invoke('sessions:search', workspacePath, query.trim(), { includeArchived: showArchived });
+      const result = await window.electronAPI.invoke('sessions:search', workspacePath, query.trim(), {
+        includeArchived: showArchived,
+        timeRange: filters.timeRange,
+        direction: filters.direction,
+      });
 
       if (result.success && Array.isArray(result.sessions)) {
         let searchResults = result.sessions.map((s: any) => ({
@@ -401,7 +435,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     } finally {
       setIsSearching(false);
     }
-  }, [workspacePath, showArchived, mode]);
+  }, [workspacePath, showArchived, mode, searchFilters]);
 
   // Search message content in database (heavy operation)
   // Checks if FTS index exists and prompts user to build if needed for large databases
@@ -528,6 +562,20 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     setContentSearchTriggered(true);
     searchMessageContent(searchQuery);
   }, [searchQuery, contentSearchTriggered, searchMessageContent]);
+
+  // Close search filters dropdown on click outside
+  useEffect(() => {
+    if (!showSearchFilters) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (searchFiltersRef.current && !searchFiltersRef.current.contains(event.target as Node)) {
+        setShowSearchFilters(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showSearchFilters]);
 
   // Handle user choosing to build FTS index
   const handleBuildIndex = useCallback(async () => {
@@ -1766,10 +1814,10 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
         </div>
       </div>
       <div className="session-history-section-label px-3 py-1.5 text-[11px] font-semibold text-[var(--nim-text-faint)] uppercase tracking-wider border-b border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] shrink-0">Agent Sessions</div>
-      <div className="session-history-search px-3 py-2 border-b border-[var(--nim-border)] shrink-0 relative">
+      <div className="session-history-search px-3 py-2 border-b border-[var(--nim-border)] shrink-0 relative z-[101]">
         <input
           type="text"
-          className="session-history-search-input nim-input w-full px-3 py-2 text-[13px] text-[var(--nim-text)] bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded outline-none transition-colors duration-150 placeholder:text-[var(--nim-text-faint)] focus:border-[var(--nim-primary)] focus:bg-[var(--nim-bg)]"
+          className="session-history-search-input nim-input w-full px-3 py-2 pr-8 text-[13px] text-[var(--nim-text)] bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded outline-none transition-colors duration-150 placeholder:text-[var(--nim-text-faint)] focus:border-[var(--nim-primary)] focus:bg-[var(--nim-bg)]"
           placeholder="Search sessions..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
@@ -1794,6 +1842,71 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
           >
             ⇥ Search contents
           </button>
+        )}
+        {/* Search filters dropdown - only visible when content search is active */}
+        {contentSearchTriggered && searchQuery && (
+          <div className="absolute right-4 top-1/2 -translate-y-1/2" ref={searchFiltersRef}>
+            <button
+              className={`flex items-center justify-center w-5 h-5 rounded transition-all duration-150 ${
+                showSearchFilters || searchFilters.timeRange !== '30d' || searchFilters.direction !== 'all'
+                  ? 'bg-[var(--nim-primary)] text-white'
+                  : 'text-[var(--nim-text-muted)] hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)]'
+              }`}
+              onClick={() => setShowSearchFilters(!showSearchFilters)}
+              title="Search filters"
+              aria-label="Search filters"
+            >
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M2 4h12M4 8h8M6 12h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+              </svg>
+            </button>
+            {showSearchFilters && (
+              <div className="absolute right-0 top-full mt-1 z-[100] min-w-[160px] bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded-lg shadow-lg overflow-hidden">
+                <div className="px-3 py-2 text-xs font-medium text-[var(--nim-text-muted)] border-b border-[var(--nim-border)]">
+                  Time Range
+                </div>
+                {(Object.entries(TIME_RANGE_LABELS) as [SearchTimeRange, string][]).map(([value, label]) => (
+                  <button
+                    key={value}
+                    className={`w-full px-3 py-2 text-left text-sm transition-colors ${
+                      searchFilters.timeRange === value
+                        ? 'bg-[var(--nim-bg-selected)] text-[var(--nim-primary)]'
+                        : 'text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]'
+                    }`}
+                    onClick={() => {
+                      const newFilters = { ...searchFilters, timeRange: value };
+                      setSearchFilters(newFilters);
+                      executeSearch(searchQuery, newFilters);
+                    }}
+                  >
+                    {label}
+                    {searchFilters.timeRange === value && <span className="float-right">✓</span>}
+                  </button>
+                ))}
+                <div className="px-3 py-2 text-xs font-medium text-[var(--nim-text-muted)] border-t border-b border-[var(--nim-border)]">
+                  Message Type
+                </div>
+                {(Object.entries(DIRECTION_LABELS) as [SearchDirection, string][]).map(([value, label]) => (
+                  <button
+                    key={value}
+                    className={`w-full px-3 py-2 text-left text-sm transition-colors ${
+                      searchFilters.direction === value
+                        ? 'bg-[var(--nim-bg-selected)] text-[var(--nim-primary)]'
+                        : 'text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]'
+                    }`}
+                    onClick={() => {
+                      const newFilters = { ...searchFilters, direction: value };
+                      setSearchFilters(newFilters);
+                      executeSearch(searchQuery, newFilters);
+                    }}
+                  >
+                    {label}
+                    {searchFilters.direction === value && <span className="float-right">✓</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         )}
       </div>
       <div className="session-history-filters flex items-center px-3 py-2 border-b border-[var(--nim-border)] gap-1.5 shrink-0">

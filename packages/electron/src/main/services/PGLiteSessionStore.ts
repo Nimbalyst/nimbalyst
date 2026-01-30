@@ -6,6 +6,7 @@ import type {
   SessionStore,
   SessionListItem,
   SessionListOptions,
+  SessionSearchOptions,
   CreateSessionPayload,
   UpdateSessionMetadataPayload,
   ChatMessage,
@@ -495,7 +496,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
       });
     },
 
-    async search(workspaceId: string, query: string, options?: SessionListOptions): Promise<SessionListItem[]> {
+    async search(workspaceId: string, query: string, options?: SessionSearchOptions): Promise<SessionListItem[]> {
       await ensureReady();
 
       // If query is empty, return all sessions (same as list)
@@ -506,92 +507,150 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
       const includeArchived = options?.includeArchived ?? false;
       const archiveFilter = includeArchived ? '' : 'AND (s.is_archived = FALSE OR s.is_archived IS NULL)';
 
+      // Default to 30 days to reduce database load
+      const timeRange = options?.timeRange ?? '30d';
+      const direction = options?.direction ?? 'all';
+
       // Sanitize query for FTS - replace special characters and prepare for tsquery
       const searchTerms = query.trim().split(/\s+/).filter(Boolean).join(' & ');
 
-      const { rows } = await db.query<any>(
-        `WITH session_matches AS (
-          -- Search in session titles
-          SELECT
-            s.id,
-            s.provider,
-            s.model,
-            s.session_type,
-            s.mode,
-            s.title,
-            s.workspace_id,
-            s.worktree_id,
-            s.parent_session_id,
-            s.created_at,
-            s.updated_at,
-            s.is_archived,
-            s.is_pinned,
-            s.branched_from_session_id,
-            s.branch_point_message_id,
-            s.branched_at,
-            ts_rank_cd(to_tsvector('english', COALESCE(s.title, '')), to_tsquery('english', $2)) * 2 as rank
-          FROM ai_sessions s
-          WHERE s.workspace_id = $1
-            AND to_tsvector('english', COALESCE(s.title, '')) @@ to_tsquery('english', $2)
-            ${archiveFilter}
+      // Calculate cutoff date for time range filter
+      let cutoffDate: Date | null = null;
+      if (timeRange !== 'all') {
+        const daysMap = { '7d': 7, '30d': 30, '90d': 90 };
+        const days = daysMap[timeRange];
+        cutoffDate = new Date();
+        cutoffDate.setDate(cutoffDate.getDate() - days);
+      }
 
-          UNION
+      // Run two separate queries and union in memory for better performance
+      // This allows each query to use indexes more efficiently
 
-          -- Search in message content
-          SELECT DISTINCT
-            s.id,
-            s.provider,
-            s.model,
-            s.session_type,
-            s.mode,
-            s.title,
-            s.workspace_id,
-            s.worktree_id,
-            s.parent_session_id,
-            s.created_at,
-            s.updated_at,
-            s.is_archived,
-            s.is_pinned,
-            s.branched_from_session_id,
-            s.branch_point_message_id,
-            s.branched_at,
-            MAX(ts_rank_cd(to_tsvector('english', m.content), to_tsquery('english', $2))) as rank
-          FROM ai_sessions s
-          INNER JOIN ai_agent_messages m ON s.id = m.session_id
-          WHERE s.workspace_id = $1
-            AND LENGTH(m.content) < 500000
-            AND to_tsvector('english', m.content) @@ to_tsquery('english', $2)
-            ${archiveFilter}
-          GROUP BY s.id, s.provider, s.model, s.session_type, s.mode, s.title, s.workspace_id,
-                   s.worktree_id, s.parent_session_id, s.created_at, s.updated_at, s.is_archived, s.is_pinned,
-                   s.branched_from_session_id, s.branch_point_message_id, s.branched_at
-        )
-        SELECT
-          sm.id,
-          sm.provider,
-          sm.model,
-          sm.session_type,
-          sm.mode,
-          sm.title,
-          sm.workspace_id,
-          sm.worktree_id,
-          sm.parent_session_id,
-          sm.created_at,
-          sm.updated_at,
-          sm.is_archived,
-          sm.is_pinned,
-          sm.branched_from_session_id,
-          sm.branch_point_message_id,
-          sm.branched_at,
-          MAX(sm.rank) as max_rank,
-          (SELECT COUNT(*) FROM ai_sessions c WHERE c.parent_session_id = sm.id) as child_count
-        FROM session_matches sm
-        GROUP BY sm.id, sm.provider, sm.model, sm.session_type, sm.mode, sm.title, sm.workspace_id,
-                 sm.worktree_id, sm.parent_session_id, sm.created_at, sm.updated_at, sm.is_archived, sm.is_pinned,
-                 sm.branched_from_session_id, sm.branch_point_message_id, sm.branched_at
-        ORDER BY max_rank DESC, sm.updated_at DESC`,
+      // Query 1: Search session titles (fast)
+      const titleQuery = db.query<any>(
+        `SELECT
+          s.id,
+          s.provider,
+          s.model,
+          s.session_type,
+          s.mode,
+          s.title,
+          s.workspace_id,
+          s.worktree_id,
+          s.parent_session_id,
+          s.created_at,
+          s.updated_at,
+          s.is_archived,
+          s.is_pinned,
+          s.branched_from_session_id,
+          s.branch_point_message_id,
+          s.branched_at,
+          ts_rank_cd(to_tsvector('english', COALESCE(s.title, '')), to_tsquery('english', $2)) * 2 as rank,
+          (SELECT COUNT(*) FROM ai_sessions c WHERE c.parent_session_id = s.id) as child_count
+        FROM ai_sessions s
+        WHERE s.workspace_id = $1
+          AND to_tsvector('english', COALESCE(s.title, '')) @@ to_tsquery('english', $2)
+          ${archiveFilter}`,
         [workspaceId, searchTerms]
       );
+
+      // Query 2: Search message content (uses GIN index on searchable messages)
+      // Only returns session IDs that match - we'll join with session data in memory
+      // Includes time range and direction filters to reduce database load
+      const contentQueryParams: any[] = [searchTerms];
+      let contentQuerySql = `SELECT DISTINCT m.session_id,
+          MAX(ts_rank_cd(to_tsvector('english', m.content), to_tsquery('english', $1))) as rank
+        FROM ai_agent_messages m
+        WHERE m.searchable = true
+          AND to_tsvector('english', m.content) @@ to_tsquery('english', $1)`;
+
+      if (cutoffDate) {
+        contentQueryParams.push(cutoffDate);
+        contentQuerySql += ` AND m.created_at >= $${contentQueryParams.length}`;
+      }
+
+      if (direction !== 'all') {
+        contentQueryParams.push(direction);
+        contentQuerySql += ` AND m.direction = $${contentQueryParams.length}`;
+      }
+
+      contentQuerySql += ' GROUP BY m.session_id';
+
+      const contentQuery = db.query<any>(contentQuerySql, contentQueryParams);
+
+      // Run both queries in parallel
+      const [titleResult, contentResult] = await Promise.all([titleQuery, contentQuery]);
+
+      // Build a map of session ID -> best rank from both sources
+      const sessionRanks = new Map<string, number>();
+      const sessionRows = new Map<string, any>();
+
+      // Add title matches
+      for (const row of titleResult.rows) {
+        sessionRanks.set(row.id, row.rank);
+        sessionRows.set(row.id, row);
+      }
+
+      // Get content match session IDs that aren't already in title results
+      const contentSessionIds = contentResult.rows
+        .map((r: any) => r.session_id)
+        .filter((id: string) => !sessionRows.has(id));
+
+      // If we have content matches not in title results, fetch their session data
+      if (contentSessionIds.length > 0) {
+        const { rows: contentSessions } = await db.query<any>(
+          `SELECT
+            s.id,
+            s.provider,
+            s.model,
+            s.session_type,
+            s.mode,
+            s.title,
+            s.workspace_id,
+            s.worktree_id,
+            s.parent_session_id,
+            s.created_at,
+            s.updated_at,
+            s.is_archived,
+            s.is_pinned,
+            s.branched_from_session_id,
+            s.branch_point_message_id,
+            s.branched_at,
+            (SELECT COUNT(*) FROM ai_sessions c WHERE c.parent_session_id = s.id) as child_count
+          FROM ai_sessions s
+          WHERE s.id = ANY($1)
+            AND s.workspace_id = $2
+            ${archiveFilter}`,
+          [contentSessionIds, workspaceId]
+        );
+
+        // Add content matches with their ranks
+        const contentRankMap = new Map(contentResult.rows.map((r: any) => [r.session_id, r.rank]));
+        for (const row of contentSessions) {
+          const contentRank = contentRankMap.get(row.id) || 0;
+          const existingRank = sessionRanks.get(row.id) || 0;
+          sessionRanks.set(row.id, Math.max(existingRank, contentRank));
+          if (!sessionRows.has(row.id)) {
+            sessionRows.set(row.id, { ...row, rank: contentRank });
+          }
+        }
+      }
+
+      // Also update ranks for sessions found in both title and content
+      for (const contentRow of contentResult.rows) {
+        if (sessionRows.has(contentRow.session_id)) {
+          const existingRank = sessionRanks.get(contentRow.session_id) || 0;
+          sessionRanks.set(contentRow.session_id, Math.max(existingRank, contentRow.rank));
+        }
+      }
+
+      // Convert to array and sort by rank DESC, updated_at DESC
+      const rows = Array.from(sessionRows.values())
+        .map(row => ({ ...row, max_rank: sessionRanks.get(row.id) || row.rank }))
+        .sort((a, b) => {
+          if (b.max_rank !== a.max_rank) return b.max_rank - a.max_rank;
+          return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+        });
 
       return rows.map(row => {
         const createdAt = toMillis(row.created_at);

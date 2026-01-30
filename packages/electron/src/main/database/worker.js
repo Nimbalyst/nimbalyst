@@ -718,24 +718,59 @@ class PGLiteWorker {
       throw error;
     }
 
-    // Add GIN index for full-text search on message content
-    // This dramatically speeds up FTS queries (10-100x for large tables)
-    // Only create eagerly for small databases to avoid blocking startup
+    // Add searchable column to ai_agent_messages table (migration)
+    // This marks which messages should be included in FTS index (user prompts, assistant text)
+    // Tool results, system events, etc. are not searchable to keep index small and fast
     try {
-      const countResult = await this.db.query('SELECT COUNT(*) as count FROM ai_agent_messages');
-      const messageCount = parseInt(countResult.rows[0]?.count || '0');
+      await this.db.exec(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'ai_agent_messages' AND column_name = 'searchable'
+          ) THEN
+            ALTER TABLE ai_agent_messages ADD COLUMN searchable BOOLEAN NOT NULL DEFAULT FALSE;
+          END IF;
+        END $$;
+      `);
+    } catch (error) {
+      console.error('[PGLite Worker] Failed to add searchable column:', error);
+      throw error;
+    }
 
-      if (messageCount < 1000) {
+    // NOTE: We used to drop the old FTS index here unconditionally, but that was wrong
+    // because it would drop the index that the user just built via the dialog.
+    // The old non-partial index (without WHERE searchable = true) is no longer created,
+    // so there's nothing to migrate from. If users have the old index, they can rebuild it.
+
+    // Add GIN index for full-text search on searchable messages only
+    // This dramatically speeds up FTS queries by only indexing user prompts and assistant text
+    // Only create eagerly for SMALL databases - large databases will prompt user via dialog
+    try {
+      const searchableResult = await this.db.query('SELECT COUNT(*) as count FROM ai_agent_messages WHERE searchable = true');
+      const searchableCount = parseInt(searchableResult.rows[0]?.count || '0');
+
+      const totalResult = await this.db.query('SELECT COUNT(*) as count FROM ai_agent_messages');
+      const totalCount = parseInt(totalResult.rows[0]?.count || '0');
+
+      // Check if backfill is needed: many messages but very few are searchable (<5% ratio)
+      const searchableRatio = totalCount > 0 ? searchableCount / totalCount : 1;
+      const needsBackfill = totalCount > 1000 && searchableRatio < 0.05;
+
+      if (needsBackfill) {
+        // Don't create index yet - user will trigger backfill + index build via dialog
+        console.log(`[PGLite Worker] Backfill needed (${searchableCount} searchable of ${totalCount} total, ${(searchableRatio * 100).toFixed(1)}%), will prompt user later`);
+      } else if (searchableCount < 1000) {
         // Safe to create index eagerly - will be fast for small/new databases
-        // Partial index excludes large messages (>500KB) to avoid tsvector 1MB limit
         await this.db.exec(`
           CREATE INDEX IF NOT EXISTS idx_ai_agent_messages_content_fts
           ON ai_agent_messages USING GIN(to_tsvector('english', content))
-          WHERE LENGTH(content) < 500000
+          WHERE searchable = true
         `);
-        console.log('[PGLite Worker] FTS GIN index created successfully');
+        console.log('[PGLite Worker] FTS GIN index created successfully (searchable messages only)');
       } else {
-        console.log(`[PGLite Worker] Skipping FTS index creation (${messageCount} messages), will prompt user later`);
+        // Large database with backfill already done - prompt user via dialog to build index
+        console.log(`[PGLite Worker] Skipping FTS index creation at startup (${searchableCount} searchable messages), will prompt user when they search`);
       }
     } catch (error) {
       // Non-fatal: searches will still work, just slower without the index

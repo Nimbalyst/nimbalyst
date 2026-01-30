@@ -547,7 +547,11 @@ export async function registerSessionHandlers() {
     });
 
     // Search sessions for workspace (full content search)
-    safeHandle('sessions:search', async (event, workspacePath: string, query: string, options?: { includeArchived?: boolean }) => {
+    safeHandle('sessions:search', async (event, workspacePath: string, query: string, options?: {
+        includeArchived?: boolean;
+        timeRange?: '7d' | '30d' | '90d' | 'all';
+        direction?: 'all' | 'input' | 'output';
+    }) => {
         try {
             const entries = await AISessionsRepository.search(workspacePath, query, options);
 
@@ -752,19 +756,19 @@ export async function registerSessionHandlers() {
         }
     });
 
-    // Get FTS index status - check if index exists and get message count
+    // Get FTS index status - check if index exists AND if backfill has been done
     safeHandle('sessions:get-fts-index-status', async (event, workspaceId: string) => {
         try {
             const { database } = await import('../database/PGLiteDatabaseWorker');
 
-            // Check if index exists
+            // Check if FTS index exists by querying pg_indexes
             const indexResult = await database.query(`
                 SELECT 1 FROM pg_indexes
                 WHERE indexname = 'idx_ai_agent_messages_content_fts'
             `);
-            const indexExists = indexResult.rows.length > 0;
+            const indexExistsInDb = indexResult.rows.length > 0;
 
-            // Get message count for this workspace
+            // Get total message count for this workspace
             const countResult = await database.query<{ count: string }>(`
                 SELECT COUNT(*) as count
                 FROM ai_agent_messages m
@@ -772,6 +776,25 @@ export async function registerSessionHandlers() {
                 WHERE s.workspace_id = $1
             `, [workspaceId]);
             const messageCount = parseInt(countResult.rows[0]?.count || '0');
+
+            // Quick heuristic: check ratio of searchable to total messages
+            // This is fast because it just counts, no pattern matching
+            const ratioResult = await database.query<{ searchable: string; total: string }>(`
+                SELECT
+                  COUNT(*) FILTER (WHERE searchable = true) as searchable,
+                  COUNT(*) as total
+                FROM ai_agent_messages
+            `);
+            const searchableCount = parseInt(ratioResult.rows[0]?.searchable || '0');
+            const totalMessages = parseInt(ratioResult.rows[0]?.total || '0');
+
+            // Backfill is needed if we have lots of messages but very few are searchable
+            // Expected ratio after backfill is ~15-20% (user prompts + assistant text responses)
+            const searchableRatio = totalMessages > 0 ? searchableCount / totalMessages : 1;
+            const needsBackfill = totalMessages > 5000 && searchableRatio < 0.01;
+
+            // Index is only "ready" if it exists AND backfill has been done
+            const indexExists = indexExistsInDb && !needsBackfill;
 
             return { indexExists, messageCount };
         } catch (error) {
@@ -781,6 +804,7 @@ export async function registerSessionHandlers() {
     });
 
     // Build FTS index on demand (for large databases where we skipped at startup)
+    // This first backfills the searchable column, then builds a partial index on searchable messages only
     safeHandle('sessions:build-fts-index', async (event) => {
         try {
             const { database } = await import('../database/PGLiteDatabaseWorker');
@@ -788,16 +812,42 @@ export async function registerSessionHandlers() {
             const startTime = Date.now();
             console.log('[SessionHandlers] Starting FTS index build...');
 
-            // Build partial index excluding large messages (>500KB) to avoid tsvector 1MB limit
-            // Use 10 minute timeout since index building can take a long time for large databases
+            // Step 1: Backfill searchable column for existing messages
+            // Only mark user prompts and assistant text (no tool content) as searchable
+            // Also exclude messages over 500KB to avoid tsvector 1MB limit
+            console.log('[SessionHandlers] Backfilling searchable column...');
+            const backfillStart = Date.now();
             await database.exec(`
-                CREATE INDEX IF NOT EXISTS idx_ai_agent_messages_content_fts
-                ON ai_agent_messages USING GIN(to_tsvector('english', content))
+                UPDATE ai_agent_messages SET searchable = true
                 WHERE LENGTH(content) < 500000
+                  AND source = 'claude-code'
+                  AND (
+                    -- User prompts
+                    (direction = 'input' AND content LIKE '{"prompt":%')
+                    -- Assistant text responses (no tool content)
+                    OR (content LIKE '%"type":"assistant"%'
+                        AND content LIKE '%"type":"text"%'
+                        AND content NOT LIKE '%"type":"tool_use"%'
+                        AND content NOT LIKE '%"type":"tool_result"%')
+                  )
             `, 10 * 60 * 1000);
+            const backfillElapsed = ((Date.now() - backfillStart) / 1000).toFixed(1);
+            console.log(`[SessionHandlers] Backfill completed in ${backfillElapsed}s`);
 
-            const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-            console.log(`[SessionHandlers] FTS index built successfully in ${elapsed}s`);
+            // Step 2: Drop existing index (if any) and rebuild with backfilled data
+            console.log('[SessionHandlers] Building FTS index on searchable messages...');
+            const indexStart = Date.now();
+            await database.exec(`DROP INDEX IF EXISTS idx_ai_agent_messages_content_fts`, 60 * 1000);
+            await database.exec(`
+                CREATE INDEX idx_ai_agent_messages_content_fts
+                ON ai_agent_messages USING GIN(to_tsvector('english', content))
+                WHERE searchable = true
+            `, 10 * 60 * 1000);
+            const indexElapsed = ((Date.now() - indexStart) / 1000).toFixed(1);
+            console.log(`[SessionHandlers] Index build completed in ${indexElapsed}s`);
+
+            const totalElapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+            console.log(`[SessionHandlers] FTS index built successfully in ${totalElapsed}s total`);
             return { success: true };
         } catch (error) {
             console.error('[SessionHandlers] Error building FTS index:', error);
