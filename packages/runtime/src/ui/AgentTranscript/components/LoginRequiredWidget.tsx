@@ -115,7 +115,7 @@ export const LoginRequiredWidget: React.FC = () => {
 
       if (result.success) {
         // Show popup to ensure user sees the instructions
-        alert('Login initiated! Complete authentication in the Terminal window (you may have to type /login to complete the process), then click "Check Status".');
+        alert('Login initiated!\n\nComplete authentication in the Terminal window.\nYou may have to type /login to complete the process.\n\nThen click "Check Status".');
         setLoginStatus({
           message: 'Login initiated! Complete authentication in the Terminal window (you may have to type /login to complete the process), then click "Check Status".',
           success: true
