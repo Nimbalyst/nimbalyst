@@ -30,6 +30,7 @@ function chatMessageFromServerMessage(msg: any): Message {
     role: msg.role,
     content: msg.content,
     timestamp: msg.timestamp,
+    mode: msg.mode,
     edits: msg.edits,
     toolCall: (msg as any).toolCall,
     isError: msg.isError,
@@ -144,12 +145,14 @@ export function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
           const parsed = JSON.parse(agentMsg.content);
           if (parsed.prompt) {
             // Claude Code format: { prompt: "...", options: {...} }
-            // Extract attachments from metadata if present
+            // Extract attachments and mode from metadata if present
             const attachments = agentMsg.metadata?.attachments;
+            const mode = agentMsg.metadata?.mode;
             uiMessages.push({
               role: 'user',
               content: parsed.prompt,
               timestamp,
+              mode,
               attachments: attachments && attachments.length > 0 ? attachments : undefined
             });
           } else if (parsed.type === 'user' && parsed.message) {

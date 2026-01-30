@@ -29,6 +29,9 @@ export interface DocumentContext {
   };
   textSelectionTimestamp?: number | null;
 
+  // AI mode at time of message submission (planning vs agent)
+  mode?: 'planning' | 'agent';
+
   // Worktree context (for isolated AI coding sessions)
   worktreeId?: string;  // ID of the associated worktree
   worktreePath?: string;  // Path to the worktree directory

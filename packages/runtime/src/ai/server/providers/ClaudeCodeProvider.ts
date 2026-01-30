@@ -736,11 +736,17 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       const queryStartTime = Date.now();
 
 
-      // Log the raw input to the SDK (include attachments in metadata for UI restoration)
+      // Log the raw input to the SDK (include attachments and mode in metadata for UI restoration)
       // CRITICAL: Must await to ensure user message is persisted before proceeding
       // Mark as searchable so user prompts are included in FTS index
       if (sessionId) {
-        const metadataToLog = attachments && attachments.length > 0 ? { attachments } : undefined;
+        const metadataToLog: Record<string, any> = {};
+        if (attachments && attachments.length > 0) {
+          metadataToLog.attachments = attachments;
+        }
+        if (documentContext?.mode) {
+          metadataToLog.mode = documentContext.mode;
+        }
         await this.logAgentMessage(sessionId, 'claude-code', 'input', JSON.stringify({
           prompt: message,
           options: {

@@ -1027,11 +1027,6 @@ export const RichTranscriptView = React.forwardRef<
                     const isTool = message.role === 'tool';
                     const isCollapsed = collapsedMessages.has(index);
 
-                    // Debug: log user messages with their mode
-                    if (isUser) {
-                      console.log('[RichTranscriptView] User message mode:', message.mode, 'content:', message.content.slice(0, 50));
-                    }
-
                     // Find tool messages that should be grouped with this message
                     const toolMessagesBefore: { message: Message, index: number }[] = [];
                     if (message.role === 'assistant') {
