@@ -20,6 +20,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.20] - 2026-01-30
+
+
+### Changed
+- Disabled text selection on UI chrome elements, opt-in for content areas
+
+### Fixed
+- Auto-updater now selects correct architecture on arm64 Macs
+- Block message send while image attachments are still processing
+
 ## [0.52.19] - 2026-01-30
 
 
