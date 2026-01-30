@@ -107,18 +107,30 @@ function validateManifest(
     }
   }
 
-  if (typeof m.main !== 'string' || !m.main) {
-    errors.push({
-      error: `Missing or invalid 'main'`,
-      field: 'main',
-      suggestion: 'Add the entry point path, e.g., "main": "dist/index.js"',
-    });
-  } else if (!(m.main as string).endsWith('.js') && !(m.main as string).endsWith('.mjs')) {
-    errors.push({
-      error: `Invalid 'main' format: "${m.main}" should end with .js or .mjs`,
-      field: 'main',
-      suggestion: 'The main entry point should be a JavaScript file, e.g., "main": "dist/index.js"',
-    });
+  // Check if extension only contributes a Claude plugin (no runtime code)
+  const contributions = m.contributions as Record<string, unknown> | undefined;
+  const onlyClaudePlugin = contributions?.claudePlugin &&
+    !contributions?.customEditors &&
+    !contributions?.aiTools &&
+    !contributions?.slashCommands &&
+    !contributions?.nodes &&
+    !contributions?.configuration;
+
+  // Main is required unless the extension only contributes a Claude plugin
+  if (!onlyClaudePlugin) {
+    if (typeof m.main !== 'string' || !m.main) {
+      errors.push({
+        error: `Missing or invalid 'main'`,
+        field: 'main',
+        suggestion: 'Add the entry point path, e.g., "main": "dist/index.js"',
+      });
+    } else if (!(m.main as string).endsWith('.js') && !(m.main as string).endsWith('.mjs')) {
+      errors.push({
+        error: `Invalid 'main' format: "${m.main}" should end with .js or .mjs`,
+        field: 'main',
+        suggestion: 'The main entry point should be a JavaScript file, e.g., "main": "dist/index.js"',
+      });
+    }
   }
 
   // Validate optional apiVersion
