@@ -8,3 +8,4 @@ export * from './providers/ClaudeCodeProvider';
 export * from './providers/OpenAIProvider';
 export * from './providers/OpenAICodexProvider';
 export * from './providers/LMStudioProvider';
+export * from './utils/errorDetection';

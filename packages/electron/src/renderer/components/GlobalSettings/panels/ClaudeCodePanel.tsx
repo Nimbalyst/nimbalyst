@@ -87,6 +87,8 @@ export function ClaudeCodePanel({
       setEnvVars(newEnvVars);
     } catch (error) {
       console.error('Failed to save env vars:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      alert(`Failed to save environment variables: ${errorMessage}`);
     }
   }, []);
 

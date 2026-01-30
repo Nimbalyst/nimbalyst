@@ -8,6 +8,7 @@ import Store from 'electron-store';
 import { SessionManager, ProviderFactory, ModelRegistry, AIProvider } from '@nimbalyst/runtime/ai/server';
 import { getSessionStateManager } from '@nimbalyst/runtime/ai/server/SessionStateManager';
 import { parseContextUsageMessage } from '@nimbalyst/runtime/ai/server/utils/contextUsage';
+import { isBedrockToolSearchError } from '@nimbalyst/runtime/ai/server/utils/errorDetection';
 import type { SessionStore } from '@nimbalyst/runtime';
 import {
   CLAUDE_CODE_VARIANTS,
@@ -92,6 +93,35 @@ function bucketAgeInDays(timestampMs: number): string {
   if (ageDays < 30) return '1-4-weeks';
   if (ageDays < 90) return '1-3-months';
   return '3-months-plus';
+}
+
+/**
+ * Detects the configured AI provider based on environment variables.
+ * Returns the provider identifier or null if no known provider is detected.
+ *
+ * Checks providers in order of specificity:
+ * 1. Claude Code specific flags (Bedrock, Vertex) - most specific
+ * 2. Other AI provider API keys
+ * 3. Anthropic API key - checked last as it's the default/fallback
+ */
+function detectConfiguredAIProvider(): string | null {
+  // Claude Code specific providers (most specific - explicit flags)
+  if (process.env.CLAUDE_CODE_USE_BEDROCK === '1') return 'aws-bedrock';
+  if (process.env.CLAUDE_CODE_USE_VERTEX === '1') return 'google-vertex';
+
+  // Other AI providers (check before Anthropic as they're more specific)
+  if (process.env.XAI_API_KEY) return 'xai';
+  if (process.env.OPENAI_API_KEY) return 'openai';
+  if (process.env.AZURE_OPENAI_API_KEY) return 'azure-openai';
+  if (process.env.GEMINI_API_KEY) return 'gemini';
+  if (process.env.MISTRAL_API_KEY) return 'mistral';
+  if (process.env.GROQ_API_KEY) return 'groq';
+  if (process.env.COHERE_API_KEY) return 'cohere';
+
+  // Anthropic direct API (check last as it's the default)
+  if (process.env.ANTHROPIC_API_KEY) return 'anthropic';
+
+  return null;
 }
 
 /**
@@ -2230,11 +2260,7 @@ export class AIService {
 
               // Detect Bedrock tool search error even if runtime didn't flag it
               const errorMsg = chunk.error || 'Unknown error occurred';
-              const isBedrockToolError = chunk.isBedrockToolError || (
-                typeof errorMsg === 'string' &&
-                errorMsg.includes('Tool reference') &&
-                errorMsg.includes('not found in available tools')
-              );
+              const isBedrockToolError = chunk.isBedrockToolError || isBedrockToolSearchError(errorMsg);
 
               safeSend(event, 'ai:error', {
                 sessionId: session.id,
@@ -2443,13 +2469,15 @@ export class AIService {
               if (session.provider === 'claude-code' && session.messages.length === 0) {
                 const initData = (provider as any).getInitData?.();
                 if (initData) {
+                  const configuredProvider = detectConfiguredAIProvider();
                   this.analytics.sendEvent('claude_code_session_started', {
                     mcpServerCount: initData.mcpServerCount,
                     slashCommandCount: initData.slashCommandCount,
                     agentCount: initData.agentCount,
                     skillCount: initData.skillCount,
                     pluginCount: initData.pluginCount,
-                    toolCount: initData.toolCount
+                    toolCount: initData.toolCount,
+                    ...(configuredProvider && { configuredProvider })
                   });
                 }
               }

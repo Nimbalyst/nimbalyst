@@ -334,27 +334,26 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     if (!sessionId || !window.electronAPI?.on) return;
 
     const handleError = async (data: { sessionId: string; message: string; isBedrockToolError?: boolean }) => {
-      console.log('[SessionTranscript] Received error:', data);
       if (data.sessionId !== sessionId) return;
 
       // For tool search errors (common with alternative AI providers like Bedrock)
       if (data.isBedrockToolError) {
-        console.log('[SessionTranscript] Showing tool search error dialog');
+        const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+        const settingsShortcut = isMac ? 'Cmd+,' : 'Ctrl+,';
         await confirm({
           title: 'MCP Tool Configuration Required',
           message: [
             'Some alternative AI providers don\'t fully support deferred tool loading (tool search).',
             '',
             'To fix this:',
-            '1. Open Settings (Cmd+,)',
+            `1. Open Settings (${settingsShortcut})`,
             '2. Go to "Claude Code" panel',
             '3. In the "Environment Variables" section, add:',
             '   ENABLE_TOOL_SEARCH = false',
             '4. Save and retry your request'
           ].join('\n'),
-          confirmText: 'OK',
-          cancelText: '',
-          variant: 'warning'
+          confirmLabel: 'OK',
+          cancelLabel: ''
         });
       }
 

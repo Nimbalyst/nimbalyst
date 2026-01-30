@@ -22,6 +22,7 @@ import {
   CLAUDE_CODE_VARIANTS,
   ModelIdentifier,
 } from '../types';
+import { isBedrockToolSearchError } from '../utils/errorDetection';
 import { AgentMessagesRepository } from '../../../storage/repositories/AgentMessagesRepository';
 import path from 'path';
 import fs from 'fs';
@@ -1311,23 +1312,18 @@ export class ClaudeCodeProvider extends BaseAIProvider {
               );
 
               // Check if this is a Bedrock tool search incompatibility error
-              // The error pattern "Tool reference 'X' not found in available tools" is specific to
-              // deferred tool loading (tool search) not being fully supported by Bedrock
-              const isBedrockToolError = (
-                typeof errorMessage === 'string' &&
-                errorMessage.includes('Tool reference') &&
-                errorMessage.includes('not found in available tools')
-              );
+              const isBedrockToolError = isBedrockToolSearchError(errorMessage);
 
               // If it's a Bedrock tool error, provide helpful guidance
               if (isBedrockToolError) {
+                const settingsShortcut = process.platform === 'darwin' ? 'Cmd+,' : 'Ctrl+,';
                 errorMessage = [
                   `MCP Tool Error: ${errorMessage}`,
                   '',
                   'This error occurs because some alternative AI providers don\'t fully support deferred tool loading (tool search).',
                   '',
                   'To fix this:',
-                  '1. Open Settings (Cmd+,)',
+                  `1. Open Settings (${settingsShortcut})`,
                   '2. Go to "Claude Code" panel',
                   '3. In the "Environment Variables" section, add:',
                   '   ENABLE_TOOL_SEARCH = false',
