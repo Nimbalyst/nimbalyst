@@ -39,6 +39,9 @@ export const DIALOG_IDS = {
   ONBOARDING: 'onboarding',
   FEATURE_WALKTHROUGH: 'feature-walkthrough',
   WINDOWS_CLAUDE_CODE_WARNING: 'windows-claude-code-warning',
+
+  // Developer group
+  SESSION_IMPORT: 'session-import',
 } as const;
 
 export type DialogId = (typeof DIALOG_IDS)[keyof typeof DIALOG_IDS];

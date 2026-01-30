@@ -41,9 +41,9 @@ export function createPGLiteAgentMessagesStore(db: PGliteLike, ensureDbReady?: E
       try {
         await db.query(
           `INSERT INTO ai_agent_messages (
-            session_id, source, direction, content, metadata, hidden, created_at, provider_message_id
+            session_id, source, direction, content, metadata, hidden, created_at, provider_message_id, searchable
           ) VALUES (
-            $1, $2, $3, $4, $5, $6, $7, $8
+            $1, $2, $3, $4, $5, $6, $7, $8, $9
           )`,
           [
             message.sessionId,
@@ -54,6 +54,7 @@ export function createPGLiteAgentMessagesStore(db: PGliteLike, ensureDbReady?: E
             message.hidden ?? false,
             timestamp,
             message.providerMessageId ?? null,
+            message.searchable ?? false,
           ]
         );
 
@@ -118,6 +119,37 @@ export function createPGLiteAgentMessagesStore(db: PGliteLike, ensureDbReady?: E
           providerMessageId: row.provider_message_id ?? undefined,
         };
       });
+    },
+
+    async getMessageCounts(sessionIds: string[]): Promise<Map<string, number>> {
+      await ensureReady();
+
+      if (sessionIds.length === 0) {
+        return new Map();
+      }
+
+      // Build parameterized query with placeholders
+      const placeholders = sessionIds.map((_, i) => `$${i + 1}`).join(', ');
+      const query = `
+        SELECT session_id, COUNT(*) as count
+        FROM ai_agent_messages
+        WHERE session_id IN (${placeholders}) AND hidden = FALSE
+        GROUP BY session_id
+      `;
+
+      const { rows } = await db.query<{ session_id: string; count: string }>(query, sessionIds);
+
+      const counts = new Map<string, number>();
+      // Initialize all requested session IDs with 0
+      for (const sessionId of sessionIds) {
+        counts.set(sessionId, 0);
+      }
+      // Update with actual counts
+      for (const row of rows) {
+        counts.set(row.session_id, parseInt(row.count, 10));
+      }
+
+      return counts;
     },
   };
 }

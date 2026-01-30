@@ -3,6 +3,8 @@ import type { CreateAgentMessageInput, AgentMessage } from '../../ai/server/type
 export interface AgentMessagesStore {
   create(message: CreateAgentMessageInput): Promise<void>;
   list(sessionId: string, options?: { limit?: number; offset?: number; includeHidden?: boolean }): Promise<AgentMessage[]>;
+  /** Get message counts for multiple sessions in a single query */
+  getMessageCounts?(sessionIds: string[]): Promise<Map<string, number>>;
 }
 
 let storeInstance: AgentMessagesStore | null = null;
@@ -37,5 +39,19 @@ export const AgentMessagesRepository = {
 
   async list(sessionId: string, options?: { limit?: number; offset?: number; includeHidden?: boolean }): Promise<AgentMessage[]> {
     return await requireStore().list(sessionId, options);
+  },
+
+  async getMessageCounts(sessionIds: string[]): Promise<Map<string, number>> {
+    const store = requireStore();
+    if (store.getMessageCounts) {
+      return await store.getMessageCounts(sessionIds);
+    }
+    // Fallback: query each session individually (N+1, but works for stores without batch support)
+    const counts = new Map<string, number>();
+    for (const sessionId of sessionIds) {
+      const messages = await store.list(sessionId);
+      counts.set(sessionId, messages.length);
+    }
+    return counts;
   },
 };

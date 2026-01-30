@@ -75,5 +75,18 @@ export function createSyncedAgentMessagesStore(
     async list(sessionId: string, options?: { limit?: number; offset?: number; includeHidden?: boolean }): Promise<AgentMessage[]> {
       return baseStore.list(sessionId, options);
     },
+
+    async getMessageCounts(sessionIds: string[]): Promise<Map<string, number>> {
+      if (baseStore.getMessageCounts) {
+        return baseStore.getMessageCounts(sessionIds);
+      }
+      // Fallback if base store doesn't support batch counts
+      const counts = new Map<string, number>();
+      for (const sessionId of sessionIds) {
+        const messages = await baseStore.list(sessionId);
+        counts.set(sessionId, messages.length);
+      }
+      return counts;
+    },
   };
 }

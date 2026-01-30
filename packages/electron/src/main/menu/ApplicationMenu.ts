@@ -1215,6 +1215,15 @@ export async function createApplicationMenu() {
                             }
                         },
                         {
+                            label: 'Show Session Import Dialog',
+                            click: async () => {
+                                const focused = getFocusedWindow();
+                                if (focused) {
+                                    focused.webContents.send('show-session-import-dialog');
+                                }
+                            }
+                        },
+                        {
                             label: 'Reset Worktree Onboarding',
                             click: async () => {
                                 const { setWorktreeOnboardingShown } = await import('../utils/store');

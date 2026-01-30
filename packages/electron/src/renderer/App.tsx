@@ -934,6 +934,25 @@ export default function App() {
     };
   }, []);
 
+  // Listen for show-session-import-dialog IPC event (from Developer menu)
+  useEffect(() => {
+    if (!window.electronAPI?.on) return;
+
+    const handleShowSessionImportDialog = () => {
+      if (dialogRef.current && workspacePath) {
+        dialogRef.current.open(DIALOG_IDS.SESSION_IMPORT, {
+          workspacePath,
+        });
+      }
+    };
+
+    window.electronAPI.on('show-session-import-dialog', handleShowSessionImportDialog);
+
+    return () => {
+      window.electronAPI.off?.('show-session-import-dialog', handleShowSessionImportDialog);
+    };
+  }, [workspacePath]);
+
   // NOTE: Commands toast check removed - commands now via extension-based plugins
 
   // Update window title for files mode - agent mode sets title directly from AgenticPanel

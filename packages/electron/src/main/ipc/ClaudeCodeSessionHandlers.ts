@@ -69,7 +69,6 @@ export function initializeClaudeCodeSessionHandlers() {
 
       // Get store references from repositories
       const sessionStore = AISessionsRepository.getStore();
-      const messagesStore = AgentMessagesRepository.getStore();
 
       // Build maps of providerSessionId -> session for each workspace (batch query optimization)
       const workspaceSessionMaps = new Map<string, Map<string, any>>();
@@ -89,45 +88,53 @@ export function initializeClaudeCodeSessionHandlers() {
 
       log.info(`After deduplication: ${uniqueMetadata.length} unique sessions`);
 
-      // Check sync status for each session using the batched maps
-      const sessionsWithStatus = await Promise.all(
-        uniqueMetadata.map(async (metadata) => {
-          // First check by direct ID (for already-imported sessions)
-          let existingSession = await sessionStore.get(metadata.sessionId);
+      // Build map of Claude session ID -> existing DB session
+      const existingSessionMap = new Map<string, any>();
+      for (const metadata of uniqueMetadata) {
+        // First check by direct ID (for already-imported sessions)
+        let existingSession = await sessionStore.get(metadata.sessionId);
 
-          // If not found, check the batched providerSessionId map
-          if (!existingSession) {
-            const workspaceMap = workspaceSessionMaps.get(metadata.workspacePath);
-            existingSession = workspaceMap?.get(metadata.sessionId) || null;
+        // If not found, check the batched providerSessionId map
+        if (!existingSession) {
+          const workspaceMap = workspaceSessionMaps.get(metadata.workspacePath);
+          existingSession = workspaceMap?.get(metadata.sessionId) || null;
+        }
+
+        if (existingSession) {
+          existingSessionMap.set(metadata.sessionId, existingSession);
+        }
+      }
+
+      // Build the final result using date comparison for sync status
+      const sessionsWithStatus = uniqueMetadata.map((metadata) => {
+        const existingSession = existingSessionMap.get(metadata.sessionId);
+
+        let status: 'new' | 'up-to-date' | 'needs-update' = 'new';
+
+        if (existingSession) {
+          // Compare timestamps - if file is newer, needs update
+          const fileUpdatedAt = metadata.updatedAt;
+          const dbUpdatedAt = existingSession.updatedAt;
+
+          // Use a small tolerance (1 second) for timestamp comparison
+          if (fileUpdatedAt > dbUpdatedAt + 1000) {
+            status = 'needs-update';
+          } else {
+            status = 'up-to-date';
           }
+        }
 
-          let status: 'new' | 'up-to-date' | 'needs-update' = 'new';
-          let dbMessageCount = 0;
-
-          if (existingSession) {
-            const messages = await messagesStore.list(existingSession.id);
-            dbMessageCount = messages.length;
-
-            if (dbMessageCount === metadata.messageCount) {
-              status = 'up-to-date';
-            } else if (dbMessageCount < metadata.messageCount) {
-              status = 'needs-update';
-            }
-          }
-
-          return {
-            sessionId: metadata.sessionId,
-            workspacePath: metadata.workspacePath,
-            title: metadata.title || 'Untitled Session',
-            createdAt: metadata.createdAt,
-            updatedAt: metadata.updatedAt,
-            messageCount: metadata.messageCount,
-            tokenUsage: metadata.tokenUsage,
-            syncStatus: status,
-            dbMessageCount: dbMessageCount,
-          };
-        })
-      );
+        return {
+          sessionId: metadata.sessionId,
+          workspacePath: metadata.workspacePath,
+          title: metadata.title || 'Untitled Session',
+          createdAt: metadata.createdAt,
+          updatedAt: metadata.updatedAt,
+          messageCount: metadata.messageCount,
+          tokenUsage: metadata.tokenUsage,
+          syncStatus: status,
+        };
+      });
 
       return {
         success: true,

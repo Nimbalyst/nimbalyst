@@ -17,7 +17,6 @@ interface SessionToImport {
     categories?: TokenUsageCategory[];
   };
   syncStatus: 'new' | 'up-to-date' | 'needs-update';
-  dbMessageCount: number;
   selected: boolean;
 }
 
@@ -344,7 +343,7 @@ export const SessionImportDialog: React.FC<SessionImportDialogProps> = ({
                                   >
                                     {session.syncStatus === 'new' && 'New'}
                                     {session.syncStatus === 'up-to-date' && 'In Sync'}
-                                    {session.syncStatus === 'needs-update' && `${session.messageCount - session.dbMessageCount} new messages`}
+                                    {session.syncStatus === 'needs-update' && 'Has Updates'}
                                   </span>
                                 </div>
                               </div>

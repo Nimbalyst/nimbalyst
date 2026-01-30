@@ -10,6 +10,7 @@ import { registerDialog } from '../contexts/DialogContext';
 import type { DialogConfig } from '../contexts/DialogContext.types';
 import { ProjectSelectionDialog } from '../components/ProjectSelectionDialog/ProjectSelectionDialog';
 import { ErrorDialog } from '../components/ErrorDialog/ErrorDialog';
+import { SessionImportDialog } from '../components/AgenticCoding/SessionImportDialog';
 import { DIALOG_IDS } from './registry';
 
 // Type definitions for dialog data
@@ -26,6 +27,10 @@ export interface ErrorDialogData {
   title: string;
   message: string;
   details?: any;
+}
+
+export interface SessionImportData {
+  workspacePath: string;
 }
 
 // Wrapper components that bridge DialogComponentProps to the original component props
@@ -76,6 +81,37 @@ function ErrorDialogWrapper({
   );
 }
 
+function SessionImportWrapper({
+  isOpen,
+  onClose,
+  data,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  data: SessionImportData;
+}) {
+  const handleImport = async (sessionIds: string[]) => {
+    const result = await window.electronAPI?.invoke('claude-code:sync-sessions', {
+      sessionIds,
+      workspacePath: data.workspacePath,
+    });
+    if (!result?.success) {
+      console.error('[SessionImportDialog] Import failed:', result?.error);
+      throw new Error(result?.error || 'Import failed');
+    }
+  };
+
+  return (
+    <SessionImportDialog
+      isOpen={isOpen}
+      onClose={onClose}
+      onImport={handleImport}
+      currentWorkspacePath={data.workspacePath}
+      filterByWorkspace={true}
+    />
+  );
+}
+
 // Register all data-carrying dialogs
 export function registerDataDialogs() {
   registerDialog<ProjectSelectionData>({
@@ -91,5 +127,12 @@ export function registerDataDialogs() {
     group: 'alert',
     component: ErrorDialogWrapper as DialogConfig<ErrorDialogData>['component'],
     priority: 400, // Errors have highest priority
+  });
+
+  registerDialog<SessionImportData>({
+    id: DIALOG_IDS.SESSION_IMPORT,
+    group: 'system',
+    component: SessionImportWrapper as DialogConfig<SessionImportData>['component'],
+    priority: 200,
   });
 }
