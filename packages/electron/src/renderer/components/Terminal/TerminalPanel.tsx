@@ -322,6 +322,25 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
           terminalInstanceRef.current = terminal;
           fitAddonRef.current = fitAddon;
 
+          // CRITICAL: Set up PTY output listener BEFORE scrollback restoration,
+          // but queue the output to prevent race conditions.
+          // This ensures we don't lose output that arrives during scrollback restoration,
+          // while also preventing interleaved writes that cause display corruption.
+          let scrollbackRestoreComplete = false;
+          const pendingOutput: string[] = [];
+
+          unsubscribeOutput = window.electronAPI.terminal.onOutput((data) => {
+            if (data.sessionId === sessionId && terminal && !disposed) {
+              if (scrollbackRestoreComplete) {
+                // Normal path: write directly to terminal
+                terminal.write(data.data);
+              } else {
+                // Queue output during scrollback restoration to prevent interleaving
+                pendingOutput.push(data.data);
+              }
+            }
+          });
+
           // Restore scrollback if available
           const scrollback = await window.electronAPI.terminal.getScrollback(sessionId);
           if (scrollback && !disposed) {
@@ -385,12 +404,12 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
             }
           }
 
-          // Listen for output from PTY
-          unsubscribeOutput = window.electronAPI.terminal.onOutput((data) => {
-            if (data.sessionId === sessionId && terminal && !disposed) {
-              terminal.write(data.data);
-            }
-          });
+          // Mark scrollback restoration as complete and flush any queued output
+          scrollbackRestoreComplete = true;
+          if (pendingOutput.length > 0 && terminal && !disposed) {
+            // Write all queued output in one batch to avoid further interleaving
+            terminal.write(pendingOutput.join(''));
+          }
 
           // Listen for PTY exit
           unsubscribeExited = window.electronAPI.terminal.onExited((data) => {
