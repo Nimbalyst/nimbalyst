@@ -1979,7 +1979,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     answers: Record<string, string>,
     sessionId?: string,
     respondedBy: 'desktop' | 'mobile' = 'desktop'
-  ): void {
+  ): boolean {
     const pending = this.pendingAskUserQuestions.get(questionId);
     if (pending) {
       pending.resolve(answers);
@@ -2004,9 +2004,10 @@ export class ClaudeCodeProvider extends BaseAIProvider {
           console.error('[CLAUDE-CODE] Failed to persist AskUserQuestion response:', err);
         });
       }
-      // Debug logging - uncomment if needed
+      return true;
     } else {
       console.warn(`[CLAUDE-CODE] No pending AskUserQuestion found for questionId: ${questionId}`);
+      return false;
     }
   }
 

@@ -5,7 +5,7 @@
 import { BrowserWindow } from 'electron';
 import { safeHandle } from '../../utils/ipcRegistry';
 import Store from 'electron-store';
-import { SessionManager, ProviderFactory, ModelRegistry, AIProvider } from '@nimbalyst/runtime/ai/server';
+import { SessionManager, ProviderFactory, ModelRegistry, AIProvider, isAskUserQuestionProvider } from '@nimbalyst/runtime/ai/server';
 import { getSessionStateManager } from '@nimbalyst/runtime/ai/server/SessionStateManager';
 import { parseContextUsageMessage } from '@nimbalyst/runtime/ai/server/utils/contextUsage';
 import { isBedrockToolSearchError } from '@nimbalyst/runtime/ai/server/utils/errorDetection';
@@ -3133,11 +3133,12 @@ export class AIService {
         return { success: false, error: 'Provider not found' };
       }
 
-      // Check if this is a ClaudeCodeProvider with the resolve method
-      if (typeof (provider as any).resolveAskUserQuestion === 'function') {
+      // Check if this is a provider that supports AskUserQuestion (e.g., ClaudeCodeProvider)
+      if (isAskUserQuestionProvider(provider)) {
         // Pass sessionId for response message persistence
-        (provider as any).resolveAskUserQuestion(questionId, answers, sessionId, 'desktop');
-        return { success: true };
+        // Provider logs warning if question not found - no need to duplicate here
+        const resolved = provider.resolveAskUserQuestion(questionId, answers, sessionId, 'desktop');
+        return resolved ? { success: true } : { success: false, error: 'Question not found' };
       } else {
         logger.main.warn(`[AIService] Provider does not support AskUserQuestion: ${session.provider}`);
         return { success: false, error: 'Provider does not support AskUserQuestion' };

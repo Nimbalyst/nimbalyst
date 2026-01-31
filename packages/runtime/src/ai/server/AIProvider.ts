@@ -16,6 +16,35 @@ import { toolRegistry, toAnthropicTools, toOpenAITools } from '../tools';
 import { buildSystemPrompt } from '../prompt';
 import { AgentMessagesRepository } from '../../storage/repositories/AgentMessagesRepository';
 
+/**
+ * Interface for providers that support the AskUserQuestion tool
+ * Currently only ClaudeCodeProvider implements this
+ */
+export interface AskUserQuestionProvider {
+  /**
+   * Resolve a pending AskUserQuestion request with user's answers
+   * @returns true if the question was found and resolved, false if not found
+   */
+  resolveAskUserQuestion(
+    questionId: string,
+    answers: Record<string, string>,
+    sessionId?: string,
+    respondedBy?: 'desktop' | 'mobile'
+  ): boolean;
+
+  /**
+   * Reject a pending AskUserQuestion request (e.g., on cancel/abort)
+   */
+  rejectAskUserQuestion(questionId: string, error: Error): void;
+}
+
+/**
+ * Type guard to check if a provider supports AskUserQuestion
+ */
+export function isAskUserQuestionProvider(provider: AIProvider): provider is AIProvider & AskUserQuestionProvider {
+  return typeof (provider as any).resolveAskUserQuestion === 'function';
+}
+
 export interface AIProvider extends EventEmitter {
   /**
    * Initialize the provider with configuration
