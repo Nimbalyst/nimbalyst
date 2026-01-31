@@ -907,6 +907,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.on('terminal:exited', handler);
       return () => ipcRenderer.removeListener('terminal:exited', handler);
     },
+    onCommandRunning: (callback: (data: { terminalId: string; isRunning: boolean }) => void) => {
+      const handler = (_event: any, data: any) => callback(data);
+      ipcRenderer.on('terminal:command-running', handler);
+      return () => ipcRenderer.removeListener('terminal:command-running', handler);
+    },
 
     // Legacy API (deprecated, for backward compatibility)
     /** @deprecated Use terminal.create instead */

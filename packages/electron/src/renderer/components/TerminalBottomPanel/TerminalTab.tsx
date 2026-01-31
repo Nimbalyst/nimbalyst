@@ -24,6 +24,7 @@ interface TerminalTabProps {
   isActive: boolean;
   terminalIndex: number;
   terminalCount: number;
+  isCommandRunning?: boolean;
   onSelect: () => void;
   onClose: () => void;
   onCloseOthers: () => void;
@@ -36,6 +37,7 @@ export const TerminalTab: React.FC<TerminalTabProps> = ({
   isActive,
   terminalIndex,
   terminalCount,
+  isCommandRunning,
   onSelect,
   onClose,
   onCloseOthers,
@@ -104,6 +106,12 @@ export const TerminalTab: React.FC<TerminalTabProps> = ({
         <MaterialSymbol icon="alt_route" size={14} title="Worktree terminal" />
       ) : (
         <MaterialSymbol icon={getShellIcon(terminal.shellName)} size={14} />
+      )}
+      {isCommandRunning && (
+        <div
+          className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse shrink-0"
+          title="Command running"
+        />
       )}
       <span className="terminal-tab-title overflow-hidden text-ellipsis shrink min-w-0">{getDisplayName()}</span>
       {!terminal.worktreeId && (

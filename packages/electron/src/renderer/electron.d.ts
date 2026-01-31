@@ -512,6 +512,7 @@ interface ElectronAPI {
     // Events
     onOutput: (callback: (data: { sessionId: string; data: string }) => void) => () => void;
     onExited: (callback: (data: { sessionId: string; exitCode: number }) => void) => () => void;
+    onCommandRunning: (callback: (data: { terminalId: string; isRunning: boolean }) => void) => () => void;
 
     // Legacy API (deprecated)
     /** @deprecated Use terminal.create instead */

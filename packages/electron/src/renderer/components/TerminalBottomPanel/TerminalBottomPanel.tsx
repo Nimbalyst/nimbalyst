@@ -23,6 +23,8 @@ import {
   setActiveTerminal,
   removeTerminalFromList,
   initTerminalListeners,
+  setTerminalCommandRunning,
+  terminalCommandRunningAtom,
   type TerminalInstance,
 } from '../../store/atoms/terminals';
 
@@ -35,6 +37,37 @@ interface TerminalBottomPanelProps {
   minHeight?: number;
   maxHeight?: number;
 }
+
+/**
+ * Wrapper component that subscribes to command running state for a terminal
+ * This isolates re-renders to just the affected tab when running state changes
+ */
+interface TerminalTabWrapperProps {
+  terminal: TerminalInstance;
+  isActive: boolean;
+  terminalIndex: number;
+  terminalCount: number;
+  onSelect: () => void;
+  onClose: () => void;
+  onCloseOthers: () => void;
+  onCloseAll: () => void;
+  onCloseToRight: () => void;
+}
+
+const TerminalTabWrapper: React.FC<TerminalTabWrapperProps> = ({
+  terminal,
+  ...props
+}) => {
+  const isCommandRunning = useAtomValue(terminalCommandRunningAtom(terminal.id));
+
+  return (
+    <TerminalTab
+      terminal={terminal}
+      isCommandRunning={isCommandRunning}
+      {...props}
+    />
+  );
+};
 
 export const TerminalBottomPanel: React.FC<TerminalBottomPanelProps> = ({
   workspacePath,
@@ -71,9 +104,15 @@ export const TerminalBottomPanel: React.FC<TerminalBottomPanelProps> = ({
     // Set up IPC listeners for terminal list changes
     const cleanupListeners = initTerminalListeners(workspacePath);
 
+    // Listen for command running state changes
+    const unsubscribeCommandRunning = window.electronAPI.terminal.onCommandRunning?.((data) => {
+      setTerminalCommandRunning(data.terminalId, data.isRunning);
+    });
+
     return () => {
       window.removeEventListener('terminal:created', handleTerminalCreated);
       cleanupListeners();
+      unsubscribeCommandRunning?.();
     };
   }, [workspacePath]);
 
@@ -289,7 +328,7 @@ export const TerminalBottomPanel: React.FC<TerminalBottomPanelProps> = ({
         <div className="terminal-bottom-panel-header flex items-center justify-between h-8 px-1.5 bg-[var(--nim-bg-secondary)] border-b border-[var(--nim-border)] shrink-0">
           <div className="terminal-bottom-panel-tabs flex gap-0.5 items-center overflow-x-auto flex-1 min-w-0 [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:bg-[var(--nim-bg-tertiary)] [&::-webkit-scrollbar-thumb]:rounded-sm">
             {terminals.map((terminal, index) => (
-              <TerminalTab
+              <TerminalTabWrapper
                 key={terminal.id}
                 terminal={terminal}
                 isActive={activeTerminalId === terminal.id}

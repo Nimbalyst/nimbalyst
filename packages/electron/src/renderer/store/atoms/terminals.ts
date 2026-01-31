@@ -8,6 +8,7 @@
  */
 
 import { atom } from 'jotai';
+import { atomFamily } from 'jotai/utils';
 import { store } from '@nimbalyst/runtime/store';
 
 /**
@@ -44,6 +45,21 @@ export const terminalListAtom = atom<TerminalInstance[]>([]);
  * Active terminal ID atom
  */
 export const activeTerminalIdAtom = atom<string | undefined>(undefined);
+
+/**
+ * Atom family for tracking command running state per terminal
+ * Each terminal has its own atom to avoid unnecessary re-renders
+ */
+export const terminalCommandRunningAtom = atomFamily((terminalId: string) =>
+  atom(false)
+);
+
+/**
+ * Update command running state for a terminal
+ */
+export function setTerminalCommandRunning(terminalId: string, isRunning: boolean): void {
+  store.set(terminalCommandRunningAtom(terminalId), isRunning);
+}
 
 /**
  * Load terminals from backend and update atoms
