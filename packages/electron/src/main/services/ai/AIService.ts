@@ -1840,7 +1840,14 @@ export class AIService {
       provider.on('toolPermission:resolved', onToolPermissionResolved);
 
       // Listen for prompt additions and forward to renderer for debug display
-      const onPromptAdditions = (data: { sessionId: string; systemPromptAddition: string | null; userMessageAddition: string | null; timestamp: number }) => {
+      const onPromptAdditions = (data: {
+        sessionId: string;
+        systemPromptAddition: string | null;
+        userMessageAddition: string | null;
+        documentContext?: any;
+        attachments?: Array<{ type: string; filename: string; mimeType?: string; filepath?: string }>;
+        timestamp: number;
+      }) => {
         safeSend(event, 'ai:promptAdditions', data);
       };
       provider.removeAllListeners('promptAdditions');

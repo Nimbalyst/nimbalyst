@@ -488,12 +488,25 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       // They're sent as separate content blocks via the API's multimodal format.
       // We only show what's actually appended to the user's text message.
 
-      // Emit prompt additions for debugging UI (only when there are additions)
-      if (sessionId && (systemPrompt || userMessageAddition)) {
+      // Emit prompt additions for debugging UI
+      // Always emit when there's any context to show (system prompt, user message, document context, or attachments)
+      const hasDocContext = documentContext && Object.keys(documentContext).length > 0;
+      const hasAttachments = attachments && attachments.length > 0;
+      if (sessionId && (systemPrompt || userMessageAddition || hasDocContext || hasAttachments)) {
+        // Build attachment summaries (don't include full base64 data, just metadata)
+        const attachmentSummaries = attachments?.map(att => ({
+          type: att.type,
+          filename: att.filename || (att.filepath ? path.basename(att.filepath) : 'unknown'),
+          mimeType: att.mimeType,
+          filepath: att.filepath
+        })) || [];
+
         this.emit('promptAdditions', {
           sessionId,
           systemPromptAddition: systemPrompt || null,
           userMessageAddition: userMessageAddition,
+          documentContext: hasDocContext ? documentContext : null,
+          attachments: attachmentSummaries,
           timestamp: Date.now()
         });
       }

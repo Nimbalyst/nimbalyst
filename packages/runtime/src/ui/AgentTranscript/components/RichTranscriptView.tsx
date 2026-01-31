@@ -143,21 +143,28 @@ if (typeof document !== 'undefined') {
 }
 
 /**
- * Inline component for displaying prompt additions (system prompt and user message additions)
+ * Inline component for displaying prompt additions (system prompt, user message, document context, and attachments)
  * Shows as collapsible sections after user messages when the developer option is enabled
+ * Persists across messages so users can reference additions from previous prompts
  */
 const PromptAdditionsInline: React.FC<{
   systemPromptAddition: string | null;
   userMessageAddition: string | null;
+  documentContext?: any;
+  attachments?: Array<{ type: string; filename: string; mimeType?: string; filepath?: string }>;
   timestamp: number;
-}> = ({ systemPromptAddition, userMessageAddition, timestamp }) => {
+}> = ({ systemPromptAddition, userMessageAddition, documentContext, attachments, timestamp }) => {
   const [isSystemExpanded, setIsSystemExpanded] = useState(false);
   const [isUserExpanded, setIsUserExpanded] = useState(false);
+  const [isDocContextExpanded, setIsDocContextExpanded] = useState(false);
+  const [isAttachmentsExpanded, setIsAttachmentsExpanded] = useState(false);
 
-  const hasSystemPrompt = systemPromptAddition && systemPromptAddition.trim().length > 0;
-  const hasUserMessage = userMessageAddition && userMessageAddition.trim().length > 0;
+  const hasSystemPrompt = !!(systemPromptAddition && systemPromptAddition.trim().length > 0);
+  const hasUserMessage = !!(userMessageAddition && userMessageAddition.trim().length > 0);
+  const hasDocContext = !!(documentContext && Object.keys(documentContext).length > 0);
+  const hasAttachments = !!(attachments && attachments.length > 0);
 
-  if (!hasSystemPrompt && !hasUserMessage) {
+  if (!hasSystemPrompt && !hasUserMessage && !hasDocContext && !hasAttachments) {
     return null;
   }
 
@@ -165,10 +172,47 @@ const PromptAdditionsInline: React.FC<{
     return new Date(ts).toLocaleTimeString();
   };
 
+  // Helper to render an expandable section
+  const renderExpandableSection = (
+    title: string,
+    isExpanded: boolean,
+    setExpanded: (v: boolean) => void,
+    badge: string,
+    content: React.ReactNode,
+    hasMore: boolean
+  ) => (
+    <div className={hasMore ? 'mb-2' : ''}>
+      <button
+        onClick={() => setExpanded(!isExpanded)}
+        className="flex items-center gap-1 bg-transparent border-none text-[var(--nim-text)] cursor-pointer p-1 text-xs font-medium hover:bg-[var(--nim-bg-hover)] rounded w-full text-left"
+      >
+        <span
+          style={{
+            transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
+            transition: 'transform 0.15s ease',
+            display: 'inline-block',
+            fontSize: '10px',
+          }}
+        >
+          {'\u25B6'}
+        </span>
+        {title}
+        <span className="text-[11px] text-[var(--nim-text-muted)] font-normal ml-1">
+          ({badge})
+        </span>
+      </button>
+      {isExpanded && (
+        <div className="mt-1 ml-3">
+          {content}
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div
       className="ml-6 mt-2 rounded-md border border-[var(--nim-border)] bg-[var(--nim-bg-tertiary)] text-xs"
-      style={{ maxHeight: '300px', overflowY: 'auto' }}
+      style={{ maxHeight: '400px', overflowY: 'auto' }}
     >
       <div className="flex items-center gap-2 px-3 py-2 border-b border-[var(--nim-border)]">
         <span
@@ -187,68 +231,80 @@ const PromptAdditionsInline: React.FC<{
       </div>
 
       <div className="p-2">
-        {hasSystemPrompt && (
-          <div className={hasUserMessage ? 'mb-2' : ''}>
-            <button
-              onClick={() => setIsSystemExpanded(!isSystemExpanded)}
-              className="flex items-center gap-1 bg-transparent border-none text-[var(--nim-text)] cursor-pointer p-1 text-xs font-medium hover:bg-[var(--nim-bg-hover)] rounded w-full text-left"
-            >
-              <span
-                style={{
-                  transform: isSystemExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
-                  transition: 'transform 0.15s ease',
-                  display: 'inline-block',
-                  fontSize: '10px',
-                }}
-              >
-                {'\u25B6'}
-              </span>
-              System Prompt Addition
-              <span className="text-[11px] text-[var(--nim-text-muted)] font-normal ml-1">
-                ({systemPromptAddition!.length} chars)
-              </span>
-            </button>
-            {isSystemExpanded && (
-              <pre
-                className="m-0 mt-1 ml-3 p-2 bg-[var(--nim-bg)] rounded border border-[var(--nim-border)] text-[11px] leading-relaxed text-[var(--nim-text-muted)] overflow-auto"
-                style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: '150px' }}
-              >
-                {systemPromptAddition}
-              </pre>
-            )}
-          </div>
+        {/* Document Context Section */}
+        {hasDocContext && renderExpandableSection(
+          'Document Context',
+          isDocContextExpanded,
+          setIsDocContextExpanded,
+          `${Object.keys(documentContext).length} fields`,
+          <pre
+            className="m-0 p-2 bg-[var(--nim-bg)] rounded border border-[var(--nim-border)] text-[11px] leading-relaxed text-[var(--nim-text-muted)] overflow-auto"
+            style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: '150px' }}
+          >
+            {JSON.stringify(documentContext, null, 2)}
+          </pre>,
+          hasSystemPrompt || hasUserMessage || hasAttachments
         )}
 
-        {hasUserMessage && (
-          <div>
-            <button
-              onClick={() => setIsUserExpanded(!isUserExpanded)}
-              className="flex items-center gap-1 bg-transparent border-none text-[var(--nim-text)] cursor-pointer p-1 text-xs font-medium hover:bg-[var(--nim-bg-hover)] rounded w-full text-left"
-            >
-              <span
-                style={{
-                  transform: isUserExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
-                  transition: 'transform 0.15s ease',
-                  display: 'inline-block',
-                  fontSize: '10px',
-                }}
+        {/* Attachments Section */}
+        {hasAttachments && renderExpandableSection(
+          'Attachments',
+          isAttachmentsExpanded,
+          setIsAttachmentsExpanded,
+          `${attachments!.length} file${attachments!.length > 1 ? 's' : ''}`,
+          <div className="space-y-1">
+            {attachments!.map((att, idx) => (
+              <div
+                key={idx}
+                className="flex items-center gap-2 p-2 bg-[var(--nim-bg)] rounded border border-[var(--nim-border)] text-[11px] text-[var(--nim-text-muted)]"
               >
-                {'\u25B6'}
-              </span>
-              User Message Addition
-              <span className="text-[11px] text-[var(--nim-text-muted)] font-normal ml-1">
-                ({userMessageAddition!.length} chars)
-              </span>
-            </button>
-            {isUserExpanded && (
-              <pre
-                className="m-0 mt-1 ml-3 p-2 bg-[var(--nim-bg)] rounded border border-[var(--nim-border)] text-[11px] leading-relaxed text-[var(--nim-text-muted)] overflow-auto"
-                style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: '150px' }}
-              >
-                {userMessageAddition}
-              </pre>
-            )}
-          </div>
+                <span
+                  className="px-1 py-0.5 rounded text-[9px] font-medium uppercase"
+                  style={{
+                    backgroundColor: att.type === 'image' ? 'var(--nim-info)' : 'var(--nim-primary)',
+                    color: 'white',
+                  }}
+                >
+                  {att.type}
+                </span>
+                <span className="font-medium text-[var(--nim-text)]">{att.filename}</span>
+                {att.mimeType && (
+                  <span className="text-[var(--nim-text-faint)]">({att.mimeType})</span>
+                )}
+              </div>
+            ))}
+          </div>,
+          hasSystemPrompt || hasUserMessage
+        )}
+
+        {/* System Prompt Section */}
+        {hasSystemPrompt && renderExpandableSection(
+          'System Prompt Addition',
+          isSystemExpanded,
+          setIsSystemExpanded,
+          `${systemPromptAddition!.length} chars`,
+          <pre
+            className="m-0 p-2 bg-[var(--nim-bg)] rounded border border-[var(--nim-border)] text-[11px] leading-relaxed text-[var(--nim-text-muted)] overflow-auto"
+            style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: '150px' }}
+          >
+            {systemPromptAddition}
+          </pre>,
+          hasUserMessage
+        )}
+
+        {/* User Message Addition Section */}
+        {hasUserMessage && renderExpandableSection(
+          'User Message Addition',
+          isUserExpanded,
+          setIsUserExpanded,
+          `${userMessageAddition!.length} chars`,
+          <pre
+            className="m-0 p-2 bg-[var(--nim-bg)] rounded border border-[var(--nim-border)] text-[11px] leading-relaxed text-[var(--nim-text-muted)] overflow-auto"
+            style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: '150px' }}
+          >
+            {userMessageAddition}
+          </pre>,
+          false
         )}
       </div>
     </div>
@@ -274,11 +330,14 @@ interface RichTranscriptViewProps {
   onOpenFile?: (filePath: string) => void;
   /** Optional: Callback to trigger /compact command */
   onCompact?: () => void;
-  /** Optional: Prompt additions for debugging (system prompt and user message additions) */
+  /** Optional: Prompt additions for debugging (system prompt, user message, document context, and attachments) */
   promptAdditions?: {
     systemPromptAddition: string | null;
     userMessageAddition: string | null;
+    documentContext?: any;
+    attachments?: Array<{ type: string; filename: string; mimeType?: string; filepath?: string }>;
     timestamp: number;
+    messageIndex: number; // Index of user message this belongs to (for stable positioning)
   } | null;
 }
 
@@ -503,15 +562,23 @@ export const RichTranscriptView = React.forwardRef<
     return false;
   }, [messages, sessionStatus, isProcessing]);
 
-  // Find the index of the last user message (for prompt additions display)
-  const lastUserMessageIndex = useMemo(() => {
+  // Compute effective target index for prompt additions display
+  // Use the stored messageIndex if valid, otherwise find the last user message
+  const promptAdditionsTargetIndex = useMemo(() => {
+    if (!promptAdditions) return -1;
+    const storedIndex = promptAdditions.messageIndex;
+    // Check if stored index is valid and points to a user message
+    if (storedIndex >= 0 && storedIndex < messages.length && messages[storedIndex]?.role === 'user') {
+      return storedIndex;
+    }
+    // Fallback: find the last user message
     for (let i = messages.length - 1; i >= 0; i--) {
       if (messages[i].role === 'user') {
         return i;
       }
     }
     return -1;
-  }, [messages]);
+  }, [messages, promptAdditions]);
 
   // Expose scroll method via ref
   React.useImperativeHandle(ref, () => ({
@@ -1157,11 +1224,13 @@ export const RichTranscriptView = React.forwardRef<
                             onCompact={onCompact}
                           />
                         </div>
-                        {/* Prompt additions debug display - show after the last user message when available */}
-                        {isUser && promptAdditions && index === lastUserMessageIndex && (
+                        {/* Prompt additions debug display - show after the last user message */}
+                        {isUser && promptAdditions && index === promptAdditionsTargetIndex && (
                           <PromptAdditionsInline
                             systemPromptAddition={promptAdditions.systemPromptAddition}
                             userMessageAddition={promptAdditions.userMessageAddition}
+                            documentContext={promptAdditions.documentContext}
+                            attachments={promptAdditions.attachments}
                             timestamp={promptAdditions.timestamp}
                           />
                         )}

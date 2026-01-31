@@ -30,6 +30,7 @@ import { ExitPlanModeConfirmation, ExitPlanModeConfirmationData } from './ExitPl
 import { AskUserQuestionConfirmation, AskUserQuestionData } from './AskUserQuestionConfirmation';
 import { ToolPermissionConfirmation, ToolPermissionData } from './ToolPermissionConfirmation';
 import { SlashCommandSuggestions } from './SlashCommandSuggestions';
+import type { TextSelection } from './TextSelectionIndicator';
 import { diffTreeGroupByDirectoryAtom, setDiffTreeGroupByDirectoryAtom } from '../../store/atoms/projectState';
 import {
   sessionDraftInputAtom,
@@ -55,8 +56,8 @@ import {
   sessionWaitingForQuestionAtom,
   sessionPendingQuestionAtom,
 } from '../../store';
-import type { PendingAskUserQuestionData } from '../../store/atoms/sessions';
-import { convertToWorkstreamAtom } from '../../store/atoms/sessions';
+import type { PendingAskUserQuestionData, PromptAdditionsData } from '../../store/atoms/sessions';
+import { convertToWorkstreamAtom, sessionPromptAdditionsAtom } from '../../store/atoms/sessions';
 import { usePostHog } from 'posthog-js/react';
 import { setAgentModeSettingsAtom, showPromptAdditionsAtom, hasExternalEditorAtom, externalEditorNameAtom, openInExternalEditorAtom } from '../../store/atoms/appSettings';
 
@@ -99,6 +100,35 @@ export interface SessionTranscriptProps {
     filePath?: string;
     content?: string;
     fileType?: string;
+    textSelection?: TextSelection;
+    textSelectionTimestamp?: number;
+  };
+
+  // On-demand getter for document context (preferred over static documentContext)
+  // This allows fresh text selection to be captured at message send time
+  getDocumentContext?: () => {
+    filePath?: string;
+    content?: string;
+    fileType?: string;
+    textSelection?: TextSelection;
+    textSelectionTimestamp?: number;
+  };
+}
+
+/**
+ * Serialize document context for IPC calls.
+ * Extracts only the serializable fields from the document context.
+ */
+function serializeDocumentContext(
+  documentContext: SessionTranscriptProps['documentContext']
+): { filePath?: string; content?: string; fileType?: string; textSelection?: TextSelection; textSelectionTimestamp?: number } | undefined {
+  if (!documentContext) return undefined;
+  return {
+    filePath: documentContext.filePath,
+    content: documentContext.content,
+    fileType: documentContext.fileType,
+    textSelection: documentContext.textSelection,
+    textSelectionTimestamp: documentContext.textSelectionTimestamp
   };
 }
 
@@ -174,9 +204,15 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   onClearSession,
   onClearAgentSession,
   documentContext,
+  getDocumentContext,
 }, ref) => {
   const posthog = usePostHog();
   const inputRef = useRef<AIInputRef>(null);
+
+  // Get effective document context - prefer getter for fresh data (captures text selection at call time)
+  const getEffectiveDocumentContext = useCallback(() => {
+    return getDocumentContext ? getDocumentContext() : documentContext;
+  }, [getDocumentContext, documentContext]);
 
   // ============================================================
   // Session state via Jotai atoms - component owns its own data
@@ -228,11 +264,8 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   const [pendingAskUserQuestion, setPendingAskUserQuestion] = useAtom(sessionPendingQuestionAtom(sessionId));
   const [pendingToolPermissions, setPendingToolPermissions] = useState<ToolPermissionData[]>([]);
   const [pendingReviewFiles, setPendingReviewFiles] = useState<Set<string>>(new Set());
-  const [promptAdditions, setPromptAdditions] = useState<{
-    systemPromptAddition: string | null;
-    userMessageAddition: string | null;
-    timestamp: number;
-  } | null>(null);
+  // Prompt additions state (dev mode) - uses Jotai atom for persistence across navigation
+  const [promptAdditions, setPromptAdditions] = useAtom(sessionPromptAdditionsAtom(sessionId));
 
   // Track mode at last message send to detect mode transitions via toggle button
   const lastSentModeRef = useRef<AIMode | null>(null);
@@ -496,6 +529,8 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
 
   // ============================================================
   // Prompt additions (dev mode debugging)
+  // Persist across messages so users can see additions from previous prompts
+  // Store with message index to keep widget attached to the correct message
   // ============================================================
   useEffect(() => {
     if (!showPromptAdditions) {
@@ -507,19 +542,35 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
       sessionId: string;
       systemPromptAddition: string | null;
       userMessageAddition: string | null;
+      documentContext?: any;
+      attachments?: Array<{ type: string; filename: string; mimeType?: string; filepath?: string }>;
       timestamp: number;
     }) => {
       if (data.sessionId === sessionId) {
+        // Get current messages directly from Jotai store to avoid stale ref issues
+        // The ref-based approach was unreliable because React's effect updating the ref
+        // might not have run yet when this IPC handler fires
+        const currentMessages = store.get(sessionMessagesAtom(sessionId));
+        let lastUserIdx = -1;
+        for (let i = currentMessages.length - 1; i >= 0; i--) {
+          if (currentMessages[i].role === 'user') {
+            lastUserIdx = i;
+            break;
+          }
+        }
         setPromptAdditions({
           systemPromptAddition: data.systemPromptAddition,
           userMessageAddition: data.userMessageAddition,
-          timestamp: data.timestamp
+          documentContext: data.documentContext,
+          attachments: data.attachments,
+          timestamp: data.timestamp,
+          messageIndex: lastUserIdx
         });
       }
     };
     const cleanup = window.electronAPI.on('ai:promptAdditions', handlePromptAdditions);
     return () => { cleanup?.(); };
-  }, [sessionId, showPromptAdditions]);
+  }, [sessionId, showPromptAdditions, setPromptAdditions]);
 
   // ============================================================
   // Pending review files
@@ -655,11 +706,9 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     setIsQueueing(true);
 
     try {
-      const serializableContext = documentContext ? {
-        filePath: documentContext.filePath,
-        content: documentContext.content,
-        fileType: documentContext.fileType
-      } : undefined;
+      // Get fresh document context at queue time (captures current text selection)
+      const effectiveContext = getEffectiveDocumentContext();
+      const serializableContext = serializeDocumentContext(effectiveContext);
 
       const result = await window.electronAPI.invoke(
         'ai:createQueuedPrompt',
@@ -684,7 +733,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     } finally {
       setIsQueueing(false);
     }
-  }, [sessionId, documentContext, draftAttachments, setDraftInput, setDraftAttachments, isQueueing]);
+  }, [sessionId, getEffectiveDocumentContext, draftAttachments, setDraftInput, setDraftAttachments, isQueueing]);
 
   const handleSend = useCallback(async () => {
     if (!draftInput.trim() || !sessionData) return;
@@ -876,10 +925,10 @@ Your goal is to build a comprehensive plan through iterative refinement:
     });
 
     try {
+      // Get fresh document context at send time (captures current text selection)
+      const effectiveContext = getEffectiveDocumentContext();
       const docContext = {
-        filePath: documentContext?.filePath,
-        content: documentContext?.content,
-        fileType: documentContext?.fileType,
+        ...serializeDocumentContext(effectiveContext),
         attachments: attachments.length > 0 ? attachments : undefined,
         mode: overrideMode,
       };
@@ -903,7 +952,7 @@ Your goal is to build a comprehensive plan through iterative refinement:
       });
       setIsProcessing(false);
     }
-  }, [sessionId, sessionData, draftInput, draftAttachments, isLoading, documentContext, aiMode, workspacePath, setDraftInput, setDraftAttachments, resetHistory, updateSessionStore, handleQueue, setIsProcessing, messages, mode, onClearSession, onClearAgentSession]);
+  }, [sessionId, sessionData, draftInput, draftAttachments, isLoading, getEffectiveDocumentContext, aiMode, workspacePath, setDraftInput, setDraftAttachments, resetHistory, updateSessionStore, handleQueue, setIsProcessing, messages, mode, onClearSession, onClearAgentSession]);
 
   const handleCancel = useCallback(async () => {
     try {
@@ -942,10 +991,10 @@ Your goal is to build a comprehensive plan through iterative refinement:
     });
 
     try {
+      // Get fresh document context at compact time
+      const effectiveContext = getEffectiveDocumentContext();
       const docContext = {
-        filePath: documentContext?.filePath,
-        content: documentContext?.content,
-        fileType: documentContext?.fileType,
+        ...serializeDocumentContext(effectiveContext),
         mode: aiMode,
       };
 
@@ -953,7 +1002,7 @@ Your goal is to build a comprehensive plan through iterative refinement:
     } catch (error) {
       console.error('[SessionTranscript] Failed to send /compact command:', error);
     }
-  }, [sessionId, sessionData, messages, documentContext, aiMode, workspacePath, updateSessionStore]);
+  }, [sessionId, sessionData, messages, getEffectiveDocumentContext, aiMode, workspacePath, updateSessionStore]);
 
   const handleTodoClick = useCallback((todo: TodoItem) => {
     onTodoClick?.(todo);

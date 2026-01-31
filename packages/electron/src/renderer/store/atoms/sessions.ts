@@ -182,6 +182,25 @@ export const sessionLastReadAtom = atomFamily((_sessionId: string) =>
   atom<number>(0)
 );
 
+/**
+ * Prompt additions data for debugging (dev mode).
+ * Shows what was added to the prompt: system additions, user message additions,
+ * document context, and attachments.
+ * Persists across navigation so the widget remains visible.
+ */
+export interface PromptAdditionsData {
+  systemPromptAddition: string | null;
+  userMessageAddition: string | null;
+  documentContext?: any;
+  attachments?: Array<{ type: string; filename: string; mimeType?: string; filepath?: string }>;
+  timestamp: number;
+  messageIndex: number; // Index of user message this belongs to
+}
+
+export const sessionPromptAdditionsAtom = atomFamily((_sessionId: string) =>
+  atom<PromptAdditionsData | null>(null)
+);
+
 // ============================================================
 // Per-session draft input state
 // These atoms encapsulate input state within AISessionView,
