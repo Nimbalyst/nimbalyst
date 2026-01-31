@@ -11,6 +11,16 @@ export * from './ai/tools';
 export * from './ai/modelConstants';
 export * from './ai/adapters/sessionStore';
 export { transformAgentMessagesToUI } from './ai/server/SessionManager';
+export {
+  DocumentContextService,
+  type IDocumentContextService,
+  type RawDocumentContext,
+  type PreparedDocumentContext,
+  type TextSelection,
+  type UserMessageAdditions,
+  type ContextPreparationResult,
+  type ModeTransition,
+} from './ai/services';
 export * from './storage/repositories/AISessionsRepository';
 export * from './storage/repositories/SessionFilesRepository';
 export { AgentMessagesRepository } from './storage/repositories/AgentMessagesRepository';
