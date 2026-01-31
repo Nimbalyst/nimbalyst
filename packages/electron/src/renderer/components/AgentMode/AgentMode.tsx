@@ -313,7 +313,7 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
           id: sessionId,
           provider: 'claude-code',
           model: defaultModel,
-          title: `Session in ${worktree.displayName || worktree.name}`,
+          title: 'New Session',
           worktreeId: worktree.id,
         },
         workspaceId: workspacePath,
@@ -323,8 +323,8 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
         // Add to session list
         addSession({
           id: result.id,
-          name: `Session in ${worktree.displayName || worktree.name}`,
-          title: `Session in ${worktree.displayName || worktree.name}`,
+          name: 'New Session',
+          title: 'New Session',
           createdAt: Date.now(),
           updatedAt: Date.now(),
           provider: 'claude-code',
