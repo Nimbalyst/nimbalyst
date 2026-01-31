@@ -158,7 +158,7 @@ const SessionTabBar: React.FC<{
 }> = React.memo(({ sessions, activeSessionId, onSessionSelect, onNewSession, onSessionArchive, onSessionUnarchive }) => {
   // Always show the tab bar - even for single sessions, the user should see their session tab
   return (
-    <div className="session-tab-bar nim-scrollbar-thin flex items-center gap-0.5 px-3 pt-1 pb-1.5 bg-[var(--nim-bg-secondary)] border-t-[3px] border-b border-[var(--nim-border)] overflow-x-auto shrink-0">
+    <div className="session-tab-bar flex flex-wrap items-center gap-0.5 px-3 pt-1 pb-1.5 bg-[var(--nim-bg-secondary)] border-t-[3px] border-b border-[var(--nim-border)] shrink-0">
       {sessions.map((sessionId) => (
         <SessionTab
           key={sessionId}
