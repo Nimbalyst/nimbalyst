@@ -443,6 +443,26 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
     setActiveSession({ workstreamId, sessionId });
   }, [workstreamId, setActiveSession]);
 
+  // Archive a child session
+  const handleSessionArchive = useCallback(async (sessionId: string) => {
+    try {
+      await window.electronAPI.invoke('sessions:update-metadata', sessionId, { isArchived: true });
+      updateSessionStore({ sessionId, updates: { isArchived: true } });
+    } catch (error) {
+      console.error('[AgentWorkstreamPanel] Failed to archive session:', error);
+    }
+  }, [updateSessionStore]);
+
+  // Unarchive a child session
+  const handleSessionUnarchive = useCallback(async (sessionId: string) => {
+    try {
+      await window.electronAPI.invoke('sessions:update-metadata', sessionId, { isArchived: false });
+      updateSessionStore({ sessionId, updates: { isArchived: false } });
+    } catch (error) {
+      console.error('[AgentWorkstreamPanel] Failed to unarchive session:', error);
+    }
+  }, [updateSessionStore]);
+
   // Track pending file open when switching to split mode
   const pendingFileOpenRef = useRef<string | null>(null);
 
@@ -735,6 +755,8 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
                 onFileClick={handleFileClick}
                 worktreeId={sessionWorktreeId}
                 onAddSessionToWorktree={onAddSessionToWorktree}
+                onSessionArchive={handleSessionArchive}
+                onSessionUnarchive={handleSessionUnarchive}
               />
             </div>
           )}

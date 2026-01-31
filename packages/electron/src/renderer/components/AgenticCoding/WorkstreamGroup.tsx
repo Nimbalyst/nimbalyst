@@ -57,6 +57,7 @@ interface WorkstreamGroupProps {
   onChildSessionSelect?: (childSessionId: string, parentId: string, parentType: 'workstream' | 'worktree') => void;
   onSessionDelete?: (sessionId: string) => void;
   onSessionArchive?: (sessionId: string) => void;
+  onSessionUnarchive?: (sessionId: string) => void;
   onSessionPinToggle?: (sessionId: string, isPinned: boolean) => void;
   onSessionRename?: (sessionId: string, newName: string) => void;
 
@@ -95,6 +96,7 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
   onChildSessionSelect,
   onSessionDelete,
   onSessionArchive,
+  onSessionUnarchive,
   onSessionPinToggle,
   onSessionRename,
   provider,
@@ -396,6 +398,7 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
               }}
               onDelete={onSessionDelete ? () => onSessionDelete(session.id) : undefined}
               onArchive={onSessionArchive ? () => onSessionArchive(session.id) : undefined}
+              onUnarchive={onSessionUnarchive ? () => onSessionUnarchive(session.id) : undefined}
               onPinToggle={onSessionPinToggle ? (pinned) => onSessionPinToggle(session.id, pinned) : undefined}
               onRename={onSessionRename ? (newName) => onSessionRename(session.id, newName) : undefined}
             />
@@ -562,6 +565,7 @@ interface WorkstreamSessionItemProps {
   onClick: () => void;
   onDelete?: () => void;
   onArchive?: () => void;
+  onUnarchive?: () => void;
   onPinToggle?: (isPinned: boolean) => void;
   onRename?: (newName: string) => void;
 }
@@ -572,6 +576,7 @@ const WorkstreamSessionItem: React.FC<WorkstreamSessionItemProps> = ({
   onClick,
   onDelete,
   onArchive,
+  onUnarchive,
   onPinToggle,
   onRename,
 }) => {
@@ -601,6 +606,12 @@ const WorkstreamSessionItem: React.FC<WorkstreamSessionItemProps> = ({
     e.stopPropagation();
     setShowContextMenu(false);
     onArchive?.();
+  };
+
+  const handleUnarchive = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowContextMenu(false);
+    onUnarchive?.();
   };
 
   const handlePinToggle = (e: React.MouseEvent) => {
@@ -646,7 +657,7 @@ const WorkstreamSessionItem: React.FC<WorkstreamSessionItemProps> = ({
     <div
       className={`workstream-session-item flex items-center gap-2 py-1.5 px-3 mr-2 mb-0.5 cursor-pointer rounded transition-colors duration-150 select-none ${
         isActive ? 'active bg-[var(--nim-bg-selected)]' : 'hover:bg-[var(--nim-bg-hover)]'
-      } focus:outline-2 focus:outline-[var(--nim-border-focus)] focus:outline-offset-[-2px]`}
+      } ${session.isArchived ? 'opacity-60 hover:opacity-80' : ''} focus:outline-2 focus:outline-[var(--nim-border-focus)] focus:outline-offset-[-2px]`}
       onClick={onClick}
       onContextMenu={handleContextMenu}
       onMouseLeave={() => setShowContextMenu(false)}
@@ -725,13 +736,13 @@ const WorkstreamSessionItem: React.FC<WorkstreamSessionItemProps> = ({
               Rename
             </button>
           )}
-          {onArchive && (
+          {(onArchive || onUnarchive) && (
             <button
               className="workstream-group-context-menu-item flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
-              onClick={handleArchive}
+              onClick={session.isArchived ? handleUnarchive : handleArchive}
             >
-              <MaterialSymbol icon="archive" size={14} />
-              Archive
+              <MaterialSymbol icon={session.isArchived ? "unarchive" : "archive"} size={14} />
+              {session.isArchived ? 'Unarchive' : 'Archive'}
             </button>
           )}
           {onDelete && (

@@ -355,7 +355,12 @@ export const updateSessionStoreAtom = atom(
       set(sessionStoreAtom(sessionId), { ...current, ...updates });
     }
 
-    // 2. Always update registry with metadata fields
+    // 2. Update per-session atomFamily atoms for reactive updates
+    if (updates.isArchived !== undefined) {
+      set(sessionArchivedAtom(sessionId), updates.isArchived);
+    }
+
+    // 3. Always update registry with metadata fields
     const registry = new Map(get(sessionRegistryAtom));
     const meta = registry.get(sessionId);
     if (meta) {
@@ -1771,12 +1776,16 @@ export const setSelectedWorkstreamAtom = atom(
  */
 export const workstreamSessionsAtom = atomFamily((workstreamId: string) =>
   atom((get) => {
+    // Helper to filter out archived sessions
+    const filterArchived = (sessionIds: string[]) =>
+      sessionIds.filter(id => !get(sessionArchivedAtom(id)));
+
     // Check if this is a parent with children already loaded
     const children = get(sessionChildrenAtom(workstreamId));
     if (children.length > 0) {
-      // This is a workstream parent - only return children
+      // This is a workstream parent - only return non-archived children
       // The parent is a structural container, not a displayable session
-      return children;
+      return filterArchived(children);
     }
 
     // Get session data and registry for further checks
@@ -1785,17 +1794,17 @@ export const workstreamSessionsAtom = atomFamily((workstreamId: string) =>
 
     // Check if this session has a worktree_id
     if (sessionData?.worktreeId) {
-      // This is a worktree session - find all sessions with the same worktreeId
+      // This is a worktree session - find all non-archived sessions with the same worktreeId
       const worktreeSessions = Array.from(registry.values())
         .filter(s => s.worktreeId === sessionData.worktreeId)
         .map(s => s.id);
       // If no sessions found in registry (might not be populated yet), at least include self
       if (worktreeSessions.length === 0) {
         // console.log('[workstreamSessionsAtom]', workstreamId, 'worktree session - returning self');
-        return [workstreamId];
+        return filterArchived([workstreamId]);
       }
       // console.log('[workstreamSessionsAtom]', workstreamId, 'returning worktree sessions:', worktreeSessions);
-      return worktreeSessions;
+      return filterArchived(worktreeSessions);
     }
 
     // Check if this is a workstream root that hasn't had children loaded yet
@@ -1803,18 +1812,18 @@ export const workstreamSessionsAtom = atomFamily((workstreamId: string) =>
     const sessionMeta = registry.get(workstreamId);
     // console.log('[workstreamSessionsAtom]', workstreamId, 'sessionMeta:', sessionMeta?.id, 'childCount:', sessionMeta?.childCount);
     if (sessionMeta?.childCount && sessionMeta.childCount > 0) {
-      // This is a workstream parent - find children from registry by parentSessionId
+      // This is a workstream parent - find non-archived children from registry by parentSessionId
       // This works even before the workstream is opened
       const childrenFromRegistry = Array.from(registry.values())
         .filter(s => s.parentSessionId === workstreamId)
         .map(s => s.id);
       // console.log('[workstreamSessionsAtom]', workstreamId, 'returning children from registry:', childrenFromRegistry);
-      return childrenFromRegistry;
+      return filterArchived(childrenFromRegistry);
     }
 
     // Single session with no children and no worktree
     // console.log('[workstreamSessionsAtom]', workstreamId, 'returning self as single session');
-    return [workstreamId];
+    return filterArchived([workstreamId]);
   })
 );
 
