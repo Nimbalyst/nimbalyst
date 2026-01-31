@@ -20,6 +20,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.22] - 2026-01-30
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- Improved error handling for AskUserQuestion tool resolution in Claude Code sessions
+- Added comprehensive analytics diagnostics with fail-open error handling for better reliability
+- Fixed Intel Mac terminal support by enabling npmRebuild in Electron build configuration
+- Fixed text selection styling using correct CSS layer utilities
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.52.21] - 2026-01-30
 
 
