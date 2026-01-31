@@ -436,22 +436,37 @@ export const sessionActiveAtom = atomFamily((_sessionId: string) =>
 /**
  * Derived: Session title from sessionData.
  * For use in tabs and lists where only the title is needed.
+ * Falls back to sessionRegistryAtom when sessionStoreAtom hasn't been loaded yet
+ * (e.g., after app restart before the session tab is opened).
  */
 export const sessionTitleAtom = atomFamily((sessionId: string) =>
   atom((get) => {
     const data = get(sessionStoreAtom(sessionId));
-    return data?.title || data?.name || 'Untitled';
+    if (data?.title || data?.name) {
+      return data.title || data.name;
+    }
+    // Fall back to registry for sessions that haven't been fully loaded yet
+    const registry = get(sessionRegistryAtom);
+    const meta = registry.get(sessionId);
+    return meta?.title || 'Untitled';
   })
 );
 
 /**
  * Derived: Session provider from sessionData.
  * For use in tabs and lists where the provider icon is needed.
+ * Falls back to sessionRegistryAtom when sessionStoreAtom hasn't been loaded yet.
  */
 export const sessionProviderAtom = atomFamily((sessionId: string) =>
   atom((get) => {
     const data = get(sessionStoreAtom(sessionId));
-    return data?.provider || 'claude';
+    if (data?.provider) {
+      return data.provider;
+    }
+    // Fall back to registry for sessions that haven't been fully loaded yet
+    const registry = get(sessionRegistryAtom);
+    const meta = registry.get(sessionId);
+    return meta?.provider || 'claude';
   })
 );
 
