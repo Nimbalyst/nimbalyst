@@ -1866,7 +1866,6 @@ export class AIService {
         sessionId: string;
         systemPromptAddition: string | null;
         userMessageAddition: string | null;
-        documentContext?: any;
         attachments?: Array<{ type: string; filename: string; mimeType?: string; filepath?: string }>;
         timestamp: number;
       }) => {

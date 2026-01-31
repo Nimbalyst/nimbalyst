@@ -185,13 +185,12 @@ export const sessionLastReadAtom = atomFamily((_sessionId: string) =>
 /**
  * Prompt additions data for debugging (dev mode).
  * Shows what was added to the prompt: system additions, user message additions,
- * document context, and attachments.
+ * and attachments.
  * Persists across navigation so the widget remains visible.
  */
 export interface PromptAdditionsData {
   systemPromptAddition: string | null;
   userMessageAddition: string | null;
-  documentContext?: any;
   attachments?: Array<{ type: string; filename: string; mimeType?: string; filepath?: string }>;
   timestamp: number;
   messageIndex: number; // Index of user message this belongs to

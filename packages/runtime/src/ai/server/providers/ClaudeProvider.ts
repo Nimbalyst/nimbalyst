@@ -4,6 +4,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { promises as fs } from 'fs';
+import * as path from 'path';
 import { BaseAIProvider } from '../AIProvider';
 import {
   DocumentContext,
@@ -63,6 +64,26 @@ export class ClaudeProvider extends BaseAIProvider {
 
     // Build system prompt with document context
     const systemPrompt = this.buildSystemPrompt(documentContext);
+
+    // Emit prompt additions for debugging UI (for chat models)
+    const hasAttachments = attachments && attachments.length > 0;
+    if (sessionId && (systemPrompt || hasAttachments)) {
+      // Build attachment summaries (don't include full base64 data, just metadata)
+      const attachmentSummaries = attachments?.map(att => ({
+        type: att.type,
+        filename: att.filename || (att.filepath ? path.basename(att.filepath) : 'unknown'),
+        mimeType: att.mimeType,
+        filepath: att.filepath
+      })) || [];
+
+      this.emit('promptAdditions', {
+        sessionId,
+        systemPromptAddition: systemPrompt || null,
+        userMessageAddition: null,  // Chat models don't add to user message
+        attachments: attachmentSummaries,
+        timestamp: Date.now()
+      });
+    }
 
     // Create abort controller for this request
     this.abortController = new AbortController();

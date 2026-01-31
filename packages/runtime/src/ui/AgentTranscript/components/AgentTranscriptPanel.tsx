@@ -56,11 +56,10 @@ interface AgentTranscriptPanelProps {
   externalEditorName?: string;
   /** Optional: Callback to trigger /compact command */
   onCompact?: () => void;
-  /** Optional: Prompt additions for debugging (system prompt, user message, document context, and attachments) */
+  /** Optional: Prompt additions for debugging (system prompt, user message, and attachments) */
   promptAdditions?: {
     systemPromptAddition: string | null;
     userMessageAddition: string | null;
-    documentContext?: any;
     attachments?: Array<{ type: string; filename: string; mimeType?: string; filepath?: string }>;
     timestamp: number;
     messageIndex: number; // Index of user message this belongs to (for stable positioning)

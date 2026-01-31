@@ -143,28 +143,25 @@ if (typeof document !== 'undefined') {
 }
 
 /**
- * Inline component for displaying prompt additions (system prompt, user message, document context, and attachments)
+ * Inline component for displaying prompt additions (system prompt, user message, and attachments)
  * Shows as collapsible sections after user messages when the developer option is enabled
  * Persists across messages so users can reference additions from previous prompts
  */
 const PromptAdditionsInline: React.FC<{
   systemPromptAddition: string | null;
   userMessageAddition: string | null;
-  documentContext?: any;
   attachments?: Array<{ type: string; filename: string; mimeType?: string; filepath?: string }>;
   timestamp: number;
-}> = ({ systemPromptAddition, userMessageAddition, documentContext, attachments, timestamp }) => {
+}> = ({ systemPromptAddition, userMessageAddition, attachments, timestamp }) => {
   const [isSystemExpanded, setIsSystemExpanded] = useState(false);
   const [isUserExpanded, setIsUserExpanded] = useState(false);
-  const [isDocContextExpanded, setIsDocContextExpanded] = useState(false);
   const [isAttachmentsExpanded, setIsAttachmentsExpanded] = useState(false);
 
   const hasSystemPrompt = !!(systemPromptAddition && systemPromptAddition.trim().length > 0);
   const hasUserMessage = !!(userMessageAddition && userMessageAddition.trim().length > 0);
-  const hasDocContext = !!(documentContext && Object.keys(documentContext).length > 0);
   const hasAttachments = !!(attachments && attachments.length > 0);
 
-  if (!hasSystemPrompt && !hasUserMessage && !hasDocContext && !hasAttachments) {
+  if (!hasSystemPrompt && !hasUserMessage && !hasAttachments) {
     return null;
   }
 
@@ -231,21 +228,6 @@ const PromptAdditionsInline: React.FC<{
       </div>
 
       <div className="p-2">
-        {/* Document Context Section */}
-        {hasDocContext && renderExpandableSection(
-          'Document Context',
-          isDocContextExpanded,
-          setIsDocContextExpanded,
-          `${Object.keys(documentContext).length} fields`,
-          <pre
-            className="m-0 p-2 bg-[var(--nim-bg)] rounded border border-[var(--nim-border)] text-[11px] leading-relaxed text-[var(--nim-text-muted)] overflow-auto"
-            style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: '150px' }}
-          >
-            {JSON.stringify(documentContext, null, 2)}
-          </pre>,
-          hasSystemPrompt || hasUserMessage || hasAttachments
-        )}
-
         {/* Attachments Section */}
         {hasAttachments && renderExpandableSection(
           'Attachments',
@@ -330,11 +312,10 @@ interface RichTranscriptViewProps {
   onOpenFile?: (filePath: string) => void;
   /** Optional: Callback to trigger /compact command */
   onCompact?: () => void;
-  /** Optional: Prompt additions for debugging (system prompt, user message, document context, and attachments) */
+  /** Optional: Prompt additions for debugging (system prompt, user message, and attachments) */
   promptAdditions?: {
     systemPromptAddition: string | null;
     userMessageAddition: string | null;
-    documentContext?: any;
     attachments?: Array<{ type: string; filename: string; mimeType?: string; filepath?: string }>;
     timestamp: number;
     messageIndex: number; // Index of user message this belongs to (for stable positioning)
@@ -1229,7 +1210,6 @@ export const RichTranscriptView = React.forwardRef<
                           <PromptAdditionsInline
                             systemPromptAddition={promptAdditions.systemPromptAddition}
                             userMessageAddition={promptAdditions.userMessageAddition}
-                            documentContext={promptAdditions.documentContext}
                             attachments={promptAdditions.attachments}
                             timestamp={promptAdditions.timestamp}
                           />

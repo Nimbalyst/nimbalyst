@@ -547,7 +547,6 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
       sessionId: string;
       systemPromptAddition: string | null;
       userMessageAddition: string | null;
-      documentContext?: any;
       attachments?: Array<{ type: string; filename: string; mimeType?: string; filepath?: string }>;
       timestamp: number;
     }) => {
@@ -566,7 +565,6 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
         setPromptAdditions({
           systemPromptAddition: data.systemPromptAddition,
           userMessageAddition: data.userMessageAddition,
-          documentContext: data.documentContext,
           attachments: data.attachments,
           timestamp: data.timestamp,
           messageIndex: lastUserIdx

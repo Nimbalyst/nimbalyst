@@ -5,6 +5,7 @@
 import OpenAI from 'openai';
 import { BaseAIProvider } from '../AIProvider';
 import fs from 'fs/promises';
+import * as path from 'path';
 import {
   DocumentContext,
   ProviderConfig,
@@ -69,6 +70,26 @@ export class OpenAIProvider extends BaseAIProvider {
     const promptStartTime = Date.now();
     const systemPrompt = this.buildSystemPrompt(documentContext);
     console.log(`[OpenAIProvider] System prompt built in ${Date.now() - promptStartTime}ms, length: ${systemPrompt.length}`);
+
+    // Emit prompt additions for debugging UI (for chat models)
+    const hasAttachments = attachments && attachments.length > 0;
+    if (sessionId && (systemPrompt || hasAttachments)) {
+      // Build attachment summaries (don't include full base64 data, just metadata)
+      const attachmentSummaries = attachments?.map(att => ({
+        type: att.type,
+        filename: att.filename || (att.filepath ? path.basename(att.filepath) : 'unknown'),
+        mimeType: att.mimeType,
+        filepath: att.filepath
+      })) || [];
+
+      this.emit('promptAdditions', {
+        sessionId,
+        systemPromptAddition: systemPrompt || null,
+        userMessageAddition: null,  // Chat models don't add to user message
+        attachments: attachmentSummaries,
+        timestamp: Date.now()
+      });
+    }
 
     // Create abort controller for this request
     this.abortController = new AbortController();

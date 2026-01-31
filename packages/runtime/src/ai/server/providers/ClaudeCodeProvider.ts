@@ -484,9 +484,8 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       // Emit prompt additions for debugging UI
       // Only emit for user-initiated messages, not hidden/auto-triggered commands like /context
       // This prevents auto-commands from overwriting the user's prompt additions data
-      const hasDocContext = documentContext && Object.keys(documentContext).length > 0;
       const hasAttachments = attachments && attachments.length > 0;
-      if (!hideMessages && sessionId && (systemPrompt || userMessageAddition || hasDocContext || hasAttachments)) {
+      if (!hideMessages && sessionId && (systemPrompt || userMessageAddition || hasAttachments)) {
         // Build attachment summaries (don't include full base64 data, just metadata)
         const attachmentSummaries = attachments?.map(att => ({
           type: att.type,
@@ -499,7 +498,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
           sessionId,
           systemPromptAddition: systemPrompt || null,
           userMessageAddition: userMessageAddition,
-          documentContext: hasDocContext ? documentContext : null,
           attachments: attachmentSummaries,
           timestamp: Date.now()
         });
