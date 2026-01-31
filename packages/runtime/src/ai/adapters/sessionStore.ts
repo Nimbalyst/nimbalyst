@@ -51,10 +51,23 @@ export interface CreateSessionPayload {
   branchedAt?: number;  // Timestamp when the branch was created
 }
 
+/**
+ * Persisted document state for DocumentContextService.
+ * Stored per-session to enable transition detection across app restarts.
+ * Note: content is NOT stored - only hash. First message after restart
+ * will use full content (no diff) if hash differs from current file.
+ */
+export interface PersistedDocumentState {
+  filePath: string;
+  contentHash: string;
+}
+
 export interface UpdateSessionMetadataPayload extends Partial<CreateSessionPayload> {
   draftInput?: string;
   metadata?: Record<string, unknown>;
   isArchived?: boolean;
+  /** Document state for transition detection (persisted across restarts) */
+  lastDocumentState?: PersistedDocumentState | null;
 }
 
 export interface SessionListOptions {

@@ -21,11 +21,26 @@ import type {
   ContextPreparationResult,
   ModeTransition,
   TextSelection,
+  PersistedDocumentState,
+  PersistDocumentStateCallback,
 } from './types';
 
 export class DocumentContextService implements IDocumentContextService {
   /** Per-session document state for transition detection */
   private lastDocumentStateBySession: Map<string, DocumentState> = new Map();
+
+  /** Callback to persist state changes to database */
+  private persistCallback: PersistDocumentStateCallback | null = null;
+
+  /** Debug logging enabled flag */
+  private debugEnabled = true;
+
+  private debug(message: string, data?: Record<string, unknown>): void {
+    if (this.debugEnabled) {
+      const dataStr = data ? ` ${JSON.stringify(data, null, 2)}` : '';
+      console.log(`[DocumentContextService] ${message}${dataStr}`);
+    }
+  }
 
   prepareContext(
     rawContext: RawDocumentContext | undefined,
@@ -33,14 +48,31 @@ export class DocumentContextService implements IDocumentContextService {
     providerType: AIProviderType,
     modeTransition?: ModeTransition
   ): ContextPreparationResult {
+    this.debug('prepareContext INPUT', {
+      sessionId,
+      providerType,
+      hasRawContext: !!rawContext,
+      filePath: rawContext?.filePath,
+      contentLength: rawContext?.content?.length,
+      contentHash: rawContext?.content ? hashContent(rawContext.content) : undefined,
+      hasSelection: !!rawContext?.selection || !!rawContext?.textSelection,
+    });
+
     // 1. Compute document transition
     const transitionResult = this.computeTransition(rawContext, sessionId);
 
-    // 2. Update cached state
+    // 2. Update cached state and persist
     if (transitionResult.newState) {
       this.lastDocumentStateBySession.set(sessionId, transitionResult.newState);
+      // Persist to database (fire and forget - don't block on persistence)
+      this.persistState(sessionId, {
+        filePath: transitionResult.newState.filePath,
+        contentHash: transitionResult.newState.contentHash,
+      });
     } else if (transitionResult.transition === 'closed') {
       this.lastDocumentStateBySession.delete(sessionId);
+      // Clear persisted state
+      this.persistState(sessionId, null);
     }
 
     // 3. Build document context (decide content vs diff)
@@ -53,15 +85,60 @@ export class DocumentContextService implements IDocumentContextService {
     // 4. Build user message additions
     const userMessageAdditions = this.buildUserMessageAdditions(modeTransition);
 
+    this.debug('prepareContext OUTPUT', {
+      sessionId,
+      transition: transitionResult.transition,
+      outputFilePath: documentContext.filePath,
+      hasContent: !!documentContext.content,
+      contentLength: documentContext.content?.length,
+      hasDiff: !!documentContext.documentDiff,
+      diffLength: documentContext.documentDiff?.length,
+      hasTextSelection: !!documentContext.textSelection,
+      hasPlanModeInstructions: !!userMessageAdditions.planModeInstructions,
+    });
+
     return { documentContext, userMessageAdditions };
   }
 
   clearSessionState(sessionId: string): void {
     this.lastDocumentStateBySession.delete(sessionId);
+    // Also clear persisted state
+    this.persistState(sessionId, null);
   }
 
   getSessionState(sessionId: string): DocumentState | undefined {
     return this.lastDocumentStateBySession.get(sessionId);
+  }
+
+  loadPersistedState(sessionId: string, state: PersistedDocumentState): void {
+    // Load persisted state into memory cache.
+    // Note: We don't have the content, only the hash. This means:
+    // - If file hasn't changed (same hash), transition will be 'none'
+    // - If file has changed (different hash), transition will be 'modified' but NO diff
+    //   (since we don't have old content to diff against)
+    // This is acceptable - we lose diff optimization for one message after restart.
+    this.lastDocumentStateBySession.set(sessionId, {
+      filePath: state.filePath,
+      content: '', // Empty - we can't compute diffs without previous content
+      contentHash: state.contentHash,
+    });
+  }
+
+  setPersistCallback(callback: PersistDocumentStateCallback): void {
+    this.persistCallback = callback;
+  }
+
+  /**
+   * Persist state to database via callback (fire and forget).
+   */
+  private persistState(sessionId: string, state: PersistedDocumentState | null): void {
+    if (this.persistCallback) {
+      // Don't await - persistence is best-effort and shouldn't block the main flow
+      this.persistCallback(sessionId, state).catch((err) => {
+        // Log but don't throw - persistence failure shouldn't break the service
+        console.error('[DocumentContextService] Failed to persist state:', err);
+      });
+    }
   }
 
   /**
@@ -74,6 +151,15 @@ export class DocumentContextService implements IDocumentContextService {
     sessionId: string
   ): TransitionResult {
     const lastState = this.lastDocumentStateBySession.get(sessionId) || null;
+
+    this.debug('computeTransition', {
+      sessionId,
+      hasLastState: !!lastState,
+      lastFilePath: lastState?.filePath,
+      lastContentHash: lastState?.contentHash,
+      currentFilePath: rawContext?.filePath,
+      currentContentLength: rawContext?.content?.length,
+    });
 
     // Case 1: No document context (user not viewing any file)
     if (!rawContext || !rawContext.filePath || !rawContext.content) {
@@ -141,21 +227,49 @@ export class DocumentContextService implements IDocumentContextService {
     transitionResult: TransitionResult,
     providerType: AIProviderType
   ): PreparedDocumentContext {
-    // For Claude Code with 'modified' transition and available diff: use diff, omit content
-    // For all other cases: use full content
-    const useDiff = providerType === 'claude-code' &&
-                    transitionResult.transition === 'modified' &&
-                    !!transitionResult.documentDiff;
+    // Content handling based on transition:
+    // - 'none': No content or diff (nothing changed, AI already has context)
+    // - 'modified' with claude-code: Use diff instead of full content
+    // - 'opened', 'switched': Full content (new file for AI)
+    // - 'closed': No content (document closed)
 
-    return {
+    const transition = transitionResult.transition;
+
+    // Build base context with fields that are always present
+    const baseContext: PreparedDocumentContext = {
       filePath: rawContext?.filePath,
       fileType: rawContext?.fileType,
-      content: useDiff ? undefined : rawContext?.content,
-      documentDiff: useDiff ? transitionResult.documentDiff : undefined,
-      documentTransition: transitionResult.transition,
-      previousFilePath: transitionResult.previousFilePath,
-      textSelection: this.normalizeTextSelection(rawContext),
+      documentTransition: transition,
     };
+
+    // Add previousFilePath if present
+    if (transitionResult.previousFilePath) {
+      baseContext.previousFilePath = transitionResult.previousFilePath;
+    }
+
+    // Add textSelection if present
+    const textSelection = this.normalizeTextSelection(rawContext);
+    if (textSelection) {
+      baseContext.textSelection = textSelection;
+    }
+
+    // For 'none' transition: omit content entirely (nothing changed)
+    if (transition === 'none') {
+      return baseContext;
+    }
+
+    // For Claude Code with 'modified' transition and available diff: use diff, omit content
+    const useDiff = providerType === 'claude-code' &&
+                    transition === 'modified' &&
+                    !!transitionResult.documentDiff;
+
+    if (useDiff) {
+      baseContext.documentDiff = transitionResult.documentDiff;
+    } else if (rawContext?.content) {
+      baseContext.content = rawContext.content;
+    }
+
+    return baseContext;
   }
 
   /**

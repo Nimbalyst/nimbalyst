@@ -26,7 +26,7 @@ describe('DocumentContextService', () => {
         expect(result.documentContext.documentDiff).toBeUndefined();
       });
 
-      it('detects "none" transition when content is unchanged', () => {
+      it('detects "none" transition when content is unchanged and omits content', () => {
         const rawContext: RawDocumentContext = {
           filePath: '/test/file.ts',
           fileType: 'typescript',
@@ -40,7 +40,11 @@ describe('DocumentContextService', () => {
         const result = service.prepareContext(rawContext, 'session-1', 'claude', undefined);
 
         expect(result.documentContext.documentTransition).toBe('none');
-        expect(result.documentContext.content).toBe('const x = 1;');
+        // Content should be omitted when nothing changed - AI already has the context
+        expect(result.documentContext.content).toBeUndefined();
+        expect(result.documentContext.documentDiff).toBeUndefined();
+        // But filePath should still be present so AI knows which file we're looking at
+        expect(result.documentContext.filePath).toBe('/test/file.ts');
       });
 
       it('detects "modified" transition when content changes', () => {
@@ -418,6 +422,119 @@ function test6() {
       expect(state?.filePath).toBe('/test/file.ts');
       expect(state?.content).toBe('const x = 1;');
       expect(state?.contentHash).toBeDefined();
+    });
+  });
+
+  describe('persistence', () => {
+    it('calls persist callback when state changes', async () => {
+      const persistedStates: Array<{ sessionId: string; state: any }> = [];
+      service.setPersistCallback(async (sessionId, state) => {
+        persistedStates.push({ sessionId, state });
+      });
+
+      const rawContext: RawDocumentContext = {
+        filePath: '/test/file.ts',
+        fileType: 'typescript',
+        content: 'const x = 1;',
+      };
+
+      service.prepareContext(rawContext, 'session-1', 'claude', undefined);
+
+      // Wait for async callback
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      expect(persistedStates).toHaveLength(1);
+      expect(persistedStates[0].sessionId).toBe('session-1');
+      expect(persistedStates[0].state).toEqual({
+        filePath: '/test/file.ts',
+        contentHash: expect.any(String),
+      });
+    });
+
+    it('calls persist callback with null when document is closed', async () => {
+      const persistedStates: Array<{ sessionId: string; state: any }> = [];
+      service.setPersistCallback(async (sessionId, state) => {
+        persistedStates.push({ sessionId, state });
+      });
+
+      const rawContext: RawDocumentContext = {
+        filePath: '/test/file.ts',
+        fileType: 'typescript',
+        content: 'const x = 1;',
+      };
+
+      service.prepareContext(rawContext, 'session-1', 'claude', undefined);
+      service.prepareContext(undefined, 'session-1', 'claude', undefined);
+
+      // Wait for async callbacks
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      expect(persistedStates).toHaveLength(2);
+      expect(persistedStates[1].state).toBeNull();
+    });
+
+    it('loads persisted state and detects unchanged file', () => {
+      // Simulate app restart by loading persisted state
+      service.loadPersistedState('session-1', {
+        filePath: '/test/file.ts',
+        contentHash: '7c9e6679', // Hash for 'const x = 1;'
+      });
+
+      // User opens same file with same content - need to compute actual hash
+      const rawContext: RawDocumentContext = {
+        filePath: '/test/file.ts',
+        fileType: 'typescript',
+        content: 'const x = 1;',
+      };
+
+      // We need the actual hash - let's first compute it
+      service.clearSessionState('session-1');
+      const firstResult = service.prepareContext(rawContext, 'session-1', 'claude', undefined);
+      const actualHash = service.getSessionState('session-1')?.contentHash;
+
+      // Now test with correct hash
+      service.clearSessionState('session-1');
+      service.loadPersistedState('session-1', {
+        filePath: '/test/file.ts',
+        contentHash: actualHash!,
+      });
+
+      const result = service.prepareContext(rawContext, 'session-1', 'claude', undefined);
+
+      // Should detect content is unchanged since hash matches
+      expect(result.documentContext.documentTransition).toBe('none');
+    });
+
+    it('loads persisted state and detects modified file (no diff available)', () => {
+      // First, compute the hash for the original content
+      const originalContext: RawDocumentContext = {
+        filePath: '/test/file.ts',
+        fileType: 'typescript',
+        content: 'const x = 1;',
+      };
+      service.prepareContext(originalContext, 'temp-session', 'claude', undefined);
+      const originalHash = service.getSessionState('temp-session')?.contentHash;
+
+      // Simulate app restart with persisted hash (but no content)
+      service.loadPersistedState('session-1', {
+        filePath: '/test/file.ts',
+        contentHash: originalHash!,
+      });
+
+      // User opens file but content has changed
+      const modifiedContext: RawDocumentContext = {
+        filePath: '/test/file.ts',
+        fileType: 'typescript',
+        content: 'const x = 999;',
+      };
+
+      const result = service.prepareContext(modifiedContext, 'session-1', 'claude', undefined);
+
+      // Should detect modification but cannot provide diff (no previous content)
+      expect(result.documentContext.documentTransition).toBe('modified');
+      // Full content should be sent since we can't compute diff without previous content
+      expect(result.documentContext.content).toBe('const x = 999;');
+      expect(result.documentContext.documentDiff).toBeUndefined();
     });
   });
 });

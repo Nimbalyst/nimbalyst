@@ -9,7 +9,7 @@ export { ModelIdentifier } from './ModelIdentifier';
 export interface DocumentContext {
   filePath?: string;
   fileType?: string;
-  content: string;
+  content?: string;  // Optional: omitted when documentTransition is 'none' (content unchanged)
   cursorPosition?: { line: number; column: number };
   selection?:
     | string

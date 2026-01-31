@@ -16,4 +16,6 @@ export type {
   ContextPreparationResult,
   ModeTransition,
   TransitionResult,
+  PersistedDocumentState,
+  PersistDocumentStateCallback,
 } from './types';

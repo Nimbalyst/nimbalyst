@@ -315,6 +315,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
       if (metadata.isArchived !== undefined) pushUpdate('is_archived =', metadata.isArchived);
       if ((metadata as any).isPinned !== undefined) pushUpdate('is_pinned =', (metadata as any).isPinned);
       if ((metadata as any).parentSessionId !== undefined) pushUpdate('parent_session_id =', (metadata as any).parentSessionId);
+      if ((metadata as any).lastDocumentState !== undefined) pushUpdate('last_document_state =', (metadata as any).lastDocumentState);
 
       // NOTE: We intentionally do NOT update updated_at here. The updated_at timestamp
       // should only change when messages are added (via PGLiteAgentMessagesStore.create),
@@ -381,6 +382,8 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
         branchPointMessageId: row.branch_point_message_id ? parseInt(row.branch_point_message_id) : undefined,
         branchedAt: row.branched_at ? toMillis(row.branched_at) : undefined,
         branchedFromProviderSessionId: row.branched_from_provider_session_id ?? undefined,
+        // Document context service state for transition detection
+        lastDocumentState: row.last_document_state ?? undefined,
       } satisfies ChatSession;
     },
 

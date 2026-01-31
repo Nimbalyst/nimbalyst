@@ -131,6 +131,24 @@ export interface TransitionResult {
 }
 
 /**
+ * Persisted document state (stored in database).
+ * Does NOT include content - only hash for comparison.
+ * First message after restart cannot compute diff, but can detect changes.
+ */
+export interface PersistedDocumentState {
+  filePath: string;
+  contentHash: string;
+}
+
+/**
+ * Callback to persist document state changes to the database.
+ */
+export type PersistDocumentStateCallback = (
+  sessionId: string,
+  state: PersistedDocumentState | null
+) => Promise<void>;
+
+/**
  * Service for preparing document context and user message additions for AI providers.
  *
  * Responsibilities:
@@ -173,4 +191,18 @@ export interface IDocumentContextService {
    * Get the last known document state for a session (for debugging/testing).
    */
   getSessionState(sessionId: string): DocumentState | undefined;
+
+  /**
+   * Load persisted document state from database into memory.
+   * Call when a session is loaded/resumed to restore transition detection capability.
+   * Note: Only hash is persisted, not content. First message after load will use
+   * full content (no diff) if file has changed.
+   */
+  loadPersistedState(sessionId: string, state: PersistedDocumentState): void;
+
+  /**
+   * Set the callback for persisting state changes.
+   * Called whenever document state changes and needs to be saved.
+   */
+  setPersistCallback(callback: PersistDocumentStateCallback): void;
 }

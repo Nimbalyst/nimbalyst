@@ -497,6 +497,15 @@ export class AIService {
     logger.main.info('[AIService] Constructor called');
     this.sessionManager = new SessionManager(sessionStore);
 
+    // Set up persistence callback for DocumentContextService
+    // Use AISessionsRepository directly since SessionManager doesn't have a generic updateMetadata
+    this.documentContextService.setPersistCallback(async (sessionId, state) => {
+      const { AISessionsRepository } = await import('@nimbalyst/runtime/storage/repositories/AISessionsRepository');
+      await AISessionsRepository.updateMetadata(sessionId, {
+        lastDocumentState: state,
+      });
+    });
+
     // Initialize mobile sync handler if sync is enabled
     this.initializeMobileSyncHandler().catch(err => {
       logger.main.error('[AIService] initializeMobileSyncHandler threw:', err);
@@ -1995,7 +2004,7 @@ export class AIService {
           // Document fields from prepared context
           filePath: preparedContext.filePath,
           fileType: preparedContext.fileType,
-          content: preparedContext.content || '',  // Required by DocumentContext interface
+          content: preparedContext.content,  // Omitted when transition is 'none' (content unchanged)
           documentDiff: preparedContext.documentDiff,
           documentTransition: preparedContext.documentTransition,
           previousFilePath: preparedContext.previousFilePath,
@@ -2814,6 +2823,12 @@ export class AIService {
       if (!session) {
         console.log(`[SESSION] Session not found: ${sessionId} (this is normal if the session was deleted)`);
         return null;
+      }
+
+      // Restore document context state from persisted data (if available)
+      // This enables transition detection across app restarts
+      if (session.lastDocumentState) {
+        this.documentContextService.loadPersistedState(sessionId, session.lastDocumentState);
       }
 
       // Track ai_session_resumed only when user intentionally opens a session from history

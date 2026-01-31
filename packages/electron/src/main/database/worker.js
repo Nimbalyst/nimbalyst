@@ -486,6 +486,15 @@ class PGLiteWorker {
         ) THEN
           ALTER TABLE ai_sessions ADD COLUMN is_archived BOOLEAN DEFAULT FALSE;
         END IF;
+
+        -- Add last_document_state column for DocumentContextService persistence
+        -- Stores {filePath, contentHash} to enable transition detection across restarts
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'ai_sessions' AND column_name = 'last_document_state'
+        ) THEN
+          ALTER TABLE ai_sessions ADD COLUMN last_document_state JSONB;
+        END IF;
       END $$;
     `);
 
