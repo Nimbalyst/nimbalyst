@@ -75,6 +75,7 @@ import { ExtensionHostComponents } from './components/ExtensionHostComponents';
 // ClaudeCommandsToast removed - commands now provided via extension-based claude plugins
 import { UpdateToast } from './components/UpdateToast';
 import { ProjectTrustToast } from './components/ProjectTrustToast';
+import { getTextSelection } from './components/UnifiedAI/TextSelectionIndicator';
 // NOTE: PostHogSurvey now managed by DialogProvider
 import { NotificationSessionChecker } from './components/NotificationSessionChecker';
 import OnboardingService from './services/OnboardingService';
@@ -565,7 +566,9 @@ export default function App() {
     content: '', // Don't call getContentRef during render - getLatestContent will be called when needed
     cursorPosition: undefined,
     selection: undefined,
-    getLatestContent: () => getContentRef.current?.() || ''
+    getLatestContent: () => getContentRef.current?.() || '',
+    get textSelection() { return getTextSelection() ?? undefined; },
+    get textSelectionTimestamp() { return getTextSelection()?.timestamp ?? undefined; }
   }), []); // Empty deps - never recreates, reads from refs
 
   // Build extension panel context for AI features (when an aiSupported panel is active)

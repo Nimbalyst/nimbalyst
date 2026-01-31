@@ -22,6 +22,7 @@ import type { NewFileType, ExtensionFileType } from '../NewFileMenu';
 import { contributionToExtensionFileType } from '../NewFileMenu';
 import { HistoryDialog } from '../HistoryDialog';
 import { WorkspaceHistoryDialog } from '../WorkspaceHistoryDialog';
+import { getTextSelection } from '../UnifiedAI/TextSelectionIndicator';
 
 export interface EditorModeRef {
   closeActiveTab: () => void;
@@ -66,9 +67,6 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
   onOpenQuickSearch,
   onSwitchToAgentMode
 }, ref) {
-  // Debug: trace re-renders
-  if (import.meta.env.DEV) console.log('[EditorMode] render');
-
   // Sidebar state
   const [sidebarWidth, setSidebarWidth] = useState<number>(250);
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
@@ -335,6 +333,7 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
   const getDocumentContext = useCallback(() => {
     const activeTab = activeTabForContextRef.current;
     if (!activeTab) {
+      // No active tab - don't include text selection as it would be stale from a previous tab
       return {
         filePath: '',
         fileType: 'unknown',
@@ -391,6 +390,11 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
       }
     }
 
+    const textSelectionData = getTextSelection();
+    // Only include text selection if it belongs to the current file
+    const textSelection = textSelectionData && textSelectionData.filePath === filePath
+      ? textSelectionData
+      : undefined;
     return {
       filePath,
       fileType,
@@ -401,8 +405,8 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
       mockupSelection: fileType === 'mockup' ? (window as any).__mockupSelectedElement : undefined,
       mockupDrawing: fileType === 'mockup' ? (window as any).__mockupDrawing : undefined,
       mockupAnnotationTimestamp: fileType === 'mockup' ? (window as any).__mockupAnnotationTimestamp : undefined,
-      textSelection: undefined,
-      textSelectionTimestamp: undefined
+      textSelection,
+      textSelectionTimestamp: textSelection?.timestamp
     };
   }, []);
 
@@ -970,13 +974,14 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
                   }
                 }}
                 onGetContentReady={(tabId, getContentFn) => {
-                  const store = tabsActions.getSnapshot();
-                  if (tabId === store.activeTabId) {
-                    getContentRef.current = getContentFn;
-                    aiToolService.setGetContentFunction(getContentFn);
-                    if (onGetContentReady) {
-                      onGetContentReady(getContentFn);
-                    }
+                  // Always update - each getContentFn closure is bound to its tab's content.
+                  // The conditional check was causing a race condition where content from a
+                  // previous tab would be used because tabsActions.getSnapshot().activeTabId
+                  // hadn't yet updated when the new tab's editor fired onGetContentReady.
+                  getContentRef.current = getContentFn;
+                  aiToolService.setGetContentFunction(getContentFn);
+                  if (onGetContentReady) {
+                    onGetContentReady(getContentFn);
                   }
                 }}
                 onViewHistory={() => {

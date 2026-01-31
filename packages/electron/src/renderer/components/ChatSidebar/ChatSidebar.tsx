@@ -37,6 +37,12 @@ export interface ChatSidebarProps {
     content?: string;
     fileType?: string;
     getLatestContent?: () => string;
+    textSelection?: {
+      text: string;
+      filePath: string;
+      timestamp: number;
+    };
+    textSelectionTimestamp?: number;
   };
   onFileOpen?: (filePath: string) => Promise<void>;
   /** Whether the sidebar is collapsed */
@@ -338,6 +344,7 @@ export const ChatSidebar = forwardRef<ChatSidebarRef, ChatSidebarProps>(({
         onFileClick={handleFileClick}
         onClearSession={handleNewSession}
         documentContext={effectiveDocumentContext}
+        getDocumentContext={getDocumentContext}
       />
     </div>
   );

@@ -453,13 +453,68 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       const fileType = (documentContext as any)?.fileType;
       const hasMockupAnnotations = mockupDrawing && fileType === 'mockup';
 
-      // Build system message content based on context
-      if (!isSlashCommand && (currentDocPath || hasMockupAnnotations)) {
+      // Build system message content based on context and document transitions
+      // This content is appended to the user's message (not the system prompt) so it's
+      // dynamic per-message context that the AI sees with each request.
+      const documentTransition = (documentContext as any)?.documentTransition;
+      const previousFilePath = (documentContext as any)?.previousFilePath;
+      const documentDiff = (documentContext as any)?.documentDiff;
+      const hasTransition = documentTransition && documentTransition !== 'none';
+
+      if (!isSlashCommand && (currentDocPath || hasMockupAnnotations || hasTransition)) {
         let systemMessageContent = '';
 
-        if (currentDocPath) {
+        // Add transition message if there was a document context change
+        if (hasTransition) {
+          switch (documentTransition) {
+            case 'closed':
+              // User stopped viewing a file (switched to agent mode or closed the file)
+              if (previousFilePath) {
+                const prevFileName = path.basename(previousFilePath) || previousFilePath;
+                systemMessageContent += `The user is no longer viewing "${prevFileName}". They may have switched to agent mode or closed the document.`;
+              } else {
+                systemMessageContent += 'The user is no longer viewing any document.';
+              }
+              break;
+            case 'opened':
+              // User started viewing a file (will be handled below with currentDocPath)
+              break;
+            case 'switched':
+              // User switched from one file to another
+              if (previousFilePath && currentDocPath) {
+                const prevFileName = path.basename(previousFilePath) || previousFilePath;
+                const currFileName = path.basename(currentDocPath) || currentDocPath;
+                systemMessageContent += `The user switched from viewing "${prevFileName}" to "${currFileName}".`;
+              }
+              break;
+            case 'modified':
+              // Document was modified - notify the AI and point to the diff in documentContext
+              if (currentDocPath) {
+                const fileName = path.basename(currentDocPath) || currentDocPath;
+                if (documentDiff) {
+                  systemMessageContent += `The document "${fileName}" has been modified since your last response. A diff is provided in the document context.`;
+                } else {
+                  // Large change - full content is in documentContext
+                  systemMessageContent += `The document "${fileName}" has been significantly modified since your last response.`;
+                }
+              }
+              break;
+          }
+        }
+
+        // Add current document info (for opened, or when viewing a document without transition)
+        // Skip for 'switched' and 'modified' (already mentioned the file above)
+        if (currentDocPath && documentTransition !== 'switched' && documentTransition !== 'modified') {
           const fileName = path.basename(currentDocPath) || currentDocPath;
-          systemMessageContent += `The user is currently viewing this document:\n<current_open_document>${fileName}</current_open_document>`;
+          if (systemMessageContent) {
+            systemMessageContent += '\n\n';
+          }
+          if (documentTransition === 'opened') {
+            systemMessageContent += `The user is now viewing this document:\n<current_open_document>${fileName}</current_open_document>`;
+          } else {
+            // For 'none' or no transition - show current document
+            systemMessageContent += `The user is currently viewing this document:\n<current_open_document>${fileName}</current_open_document>`;
+          }
         }
 
         if (hasMockupAnnotations) {
@@ -469,7 +524,9 @@ export class ClaudeCodeProvider extends BaseAIProvider {
           systemMessageContent += 'IMPORTANT: The user has drawn annotations on the mockup to show you what they want. Use the mcp__nimbalyst-mcp__capture_mockup_screenshot tool to see their annotations before responding.';
         }
 
-        message = `${message}\n\n<NIMBALYST_SYSTEM_MESSAGE>\n${systemMessageContent}\n</NIMBALYST_SYSTEM_MESSAGE>`;
+        if (systemMessageContent) {
+          message = `${message}\n\n<NIMBALYST_SYSTEM_MESSAGE>\n${systemMessageContent}\n</NIMBALYST_SYSTEM_MESSAGE>`;
+        }
       }
 
       // Build system prompt with document context
@@ -489,10 +546,11 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       // We only show what's actually appended to the user's text message.
 
       // Emit prompt additions for debugging UI
-      // Always emit when there's any context to show (system prompt, user message, document context, or attachments)
+      // Only emit for user-initiated messages, not hidden/auto-triggered commands like /context
+      // This prevents auto-commands from overwriting the user's prompt additions data
       const hasDocContext = documentContext && Object.keys(documentContext).length > 0;
       const hasAttachments = attachments && attachments.length > 0;
-      if (sessionId && (systemPrompt || userMessageAddition || hasDocContext || hasAttachments)) {
+      if (!hideMessages && sessionId && (systemPrompt || userMessageAddition || hasDocContext || hasAttachments)) {
         // Build attachment summaries (don't include full base64 data, just metadata)
         const attachmentSummaries = attachments?.map(att => ({
           type: att.type,

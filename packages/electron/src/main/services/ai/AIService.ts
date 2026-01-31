@@ -36,6 +36,7 @@ import {AnalyticsService} from "../analytics/AnalyticsService.ts";
 import { historyManager } from '../../HistoryManager';
 import { getAIProviderOverrides, saveAIProviderOverrides, clearAIProviderOverrides, getWorkspaceState } from '../../utils/store';
 import { mergeAISettings } from '../../utils/aiSettingsMerge';
+import { hashContent, computeDiff, type DocumentState } from '@nimbalyst/runtime/utils/documentDiff';
 import { ALL_PACKAGES } from '../../../shared/toolPackages';
 import { getMessageSyncHandler, getSyncProvider } from '../SyncManager';
 import * as fs from 'fs';
@@ -489,6 +490,10 @@ export class AIService {
   // (can happen if the same request is delivered multiple times)
   private processingMobileSessionRequests = new Set<string>();
 
+  // Track last sent document state per session for diff resolution
+  // When renderer sends a diff or 'unchanged' flag, we use this to reconstruct full content
+  private lastDocumentStateBySession = new Map<string, DocumentState>();
+
   constructor(sessionStore: SessionStore) {
     logger.main.info('[AIService] Constructor called');
     this.sessionManager = new SessionManager(sessionStore);
@@ -625,6 +630,98 @@ export class AIService {
       default:
         return globalApiKeys[provider];
     }
+  }
+
+  /**
+   * Compute document transition and diff by comparing incoming content with stored state.
+   * The renderer always sends full content - we compute optimization here on the backend.
+   *
+   * @param documentContext - The context received from renderer (always full content)
+   * @param sessionId - The session ID for looking up last document state
+   * @returns Context with transition info and optional diff for prompt optimization
+   */
+  private computeDocumentTransition(
+    documentContext: DocumentContext | undefined,
+    sessionId: string
+  ): {
+    context: DocumentContext | undefined;
+    newState: DocumentState | null;
+    transition: 'none' | 'opened' | 'closed' | 'switched' | 'modified';
+    previousFilePath?: string;
+    documentDiff?: string;
+  } {
+    const lastState = this.lastDocumentStateBySession.get(sessionId) || null;
+
+    // Case 1: No document context (user not viewing any file)
+    if (!documentContext || !documentContext.filePath || !documentContext.content) {
+      if (lastState?.filePath) {
+        // Had a document before, now none - 'closed' transition
+        return {
+          context: documentContext,
+          newState: null,
+          transition: 'closed',
+          previousFilePath: lastState.filePath,
+        };
+      }
+      // No document before or now
+      return { context: documentContext, newState: null, transition: 'none' };
+    }
+
+    // Compute hash of current content
+    const currentHash = hashContent(documentContext.content);
+    const newState: DocumentState = {
+      filePath: documentContext.filePath,
+      content: documentContext.content,
+      contentHash: currentHash,
+    };
+
+    // Case 2: No previous state - 'opened' transition (first time seeing a file)
+    if (!lastState) {
+      logger.main.info(`[AIService] Document opened: ${documentContext.filePath} (${documentContext.content.length} chars)`);
+      return {
+        context: documentContext,
+        newState,
+        transition: 'opened',
+      };
+    }
+
+    // Case 3: Different file - 'switched' transition
+    if (lastState.filePath !== documentContext.filePath) {
+      logger.main.info(`[AIService] Document switched: ${lastState.filePath} → ${documentContext.filePath}`);
+      return {
+        context: documentContext,
+        newState,
+        transition: 'switched',
+        previousFilePath: lastState.filePath,
+      };
+    }
+
+    // Case 4: Same file, same content - 'none' transition (unchanged)
+    if (lastState.contentHash === currentHash) {
+      logger.main.info(`[AIService] Document unchanged: ${documentContext.filePath} (hash: ${currentHash})`);
+      return {
+        context: documentContext,
+        newState,
+        transition: 'none',
+      };
+    }
+
+    // Case 5: Same file, different content - 'modified' transition
+    // Compute a diff to show what changed
+    const diff = computeDiff(lastState.content, documentContext.content, documentContext.filePath);
+
+    if (diff) {
+      logger.main.info(`[AIService] Document modified: ${documentContext.filePath} (diff: ${diff.length} chars vs full: ${documentContext.content.length} chars)`);
+    } else {
+      logger.main.info(`[AIService] Document modified (large change): ${documentContext.filePath} (${documentContext.content.length} chars)`);
+    }
+
+    return {
+      context: documentContext,
+      newState,
+      transition: 'modified',
+      documentDiff: diff, // May be undefined if diff is larger than content
+    };
   }
 
   /**
@@ -1958,12 +2055,39 @@ export class AIService {
           });
         }
 
-        // Add sessionType, mode, attachments, and worktree info to documentContext for provider to use in system prompt
-        const effectiveMode = (documentContext as any)?.mode ?? session.mode;
+        // Compute document transition by comparing incoming content with stored state
+        // This enables prompt optimization (show "unchanged" or diff instead of full content)
+        const { context: resolvedDocumentContext, newState, transition, previousFilePath, documentDiff } = this.computeDocumentTransition(documentContext, session.id);
 
-        const contextWithSession = documentContext ? {
-          ...documentContext,
-          sessionType: (documentContext as any)?.sessionType ?? session.sessionType,
+        // Update stored document state for next message's comparison
+        if (newState) {
+          this.lastDocumentStateBySession.set(session.id, newState);
+        } else if (transition === 'closed') {
+          // Clear the stored state when user stops viewing a document
+          this.lastDocumentStateBySession.delete(session.id);
+        }
+
+        // Add sessionType, mode, attachments, and worktree info to documentContext for provider to use in system prompt
+        const effectiveMode = resolvedDocumentContext?.mode ?? session.mode;
+
+        // For Claude Code with modified documents where we have a diff, omit full content
+        // since the diff in documentContext provides sufficient change information.
+        // For large changes (no diff), we still send full content.
+        const shouldOmitContent = isClaudeCode && transition === 'modified' && documentDiff;
+
+        // Build context with all fields except content
+        const contextWithoutContent = {
+          // Spread resolvedDocumentContext but we'll handle content separately
+          ...(resolvedDocumentContext ? {
+            filePath: resolvedDocumentContext.filePath,
+            fileType: resolvedDocumentContext.fileType,
+            cursorPosition: resolvedDocumentContext.cursorPosition,
+            selection: resolvedDocumentContext.selection,
+            textSelection: resolvedDocumentContext.textSelection,
+            textSelectionTimestamp: resolvedDocumentContext.textSelectionTimestamp,
+            mode: resolvedDocumentContext.mode,
+          } : {}),
+          sessionType: resolvedDocumentContext?.sessionType ?? session.sessionType,
           mode: effectiveMode,
           permissionsPath,  // For worktree sessions, this is the parent project path
           attachments,
@@ -1974,7 +2098,20 @@ export class AIService {
           // Include branch tracking for session forking (Claude Code SDK forkSession)
           branchedFromSessionId: session.branchedFromSessionId,
           branchedFromProviderSessionId: session.branchedFromProviderSessionId,
-        } as any : {
+          // Document transition information for system messages
+          documentTransition: transition,
+          previousFilePath,
+          // Pass the diff for providers to show instead of full content when document was modified
+          documentDiff,
+        };
+
+        // Add content only if we're not omitting it
+        const contextWithSession: DocumentContext = resolvedDocumentContext ? (
+          shouldOmitContent
+            ? contextWithoutContent as DocumentContext
+            : { ...contextWithoutContent, content: resolvedDocumentContext.content }
+        ) : {
+          content: '',  // Required by DocumentContext interface
           sessionType: session.sessionType,
           mode: effectiveMode,
           permissionsPath,
@@ -1985,10 +2122,15 @@ export class AIService {
           // Include branch tracking for session forking (Claude Code SDK forkSession)
           branchedFromSessionId: session.branchedFromSessionId,
           branchedFromProviderSessionId: session.branchedFromProviderSessionId,
-        } as any;
+          // Document transition information for system messages
+          documentTransition: transition,
+          previousFilePath,
+          // Pass the diff for providers to show instead of full content when document was modified
+          documentDiff,
+        };
 
         // Update MCP document state for Claude Code provider so it knows which file-scoped tools to show
-        if (isClaudeCode && contextWithSession?.filePath && contextWithSession?.workspacePath) {
+        if (isClaudeCode && contextWithSession?.filePath && effectiveWorkspacePath) {
           const { updateDocumentState, registerWorkspaceWindow } = await import('../../mcp/httpServer');
           updateDocumentState({
             filePath: contextWithSession.filePath,
@@ -3063,6 +3205,8 @@ export class AIService {
       // Clean up provider if it exists
       if (success) {
         ProviderFactory.destroyProvider(sessionId);
+        // Clean up document state tracking
+        this.lastDocumentStateBySession.delete(sessionId);
       }
 
       return { success };

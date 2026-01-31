@@ -147,7 +147,7 @@ export {
   type SessionListItem,
   type OpenSession,
   type WorkstreamType,
-  reparentSessionAtom
+  reparentSessionAtom,
 } from './atoms/sessions';
 
 // File tree atoms (Electron file watcher)

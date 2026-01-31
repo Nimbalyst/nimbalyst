@@ -117,7 +117,7 @@ export interface SessionTranscriptProps {
 
 /**
  * Serialize document context for IPC calls.
- * Extracts only the serializable fields from the document context.
+ * Always sends full content - backend handles diff optimization.
  */
 function serializeDocumentContext(
   documentContext: SessionTranscriptProps['documentContext']
@@ -927,6 +927,8 @@ Your goal is to build a comprehensive plan through iterative refinement:
     try {
       // Get fresh document context at send time (captures current text selection)
       const effectiveContext = getEffectiveDocumentContext();
+
+      // Always send full document content - backend handles diff optimization
       const docContext = {
         ...serializeDocumentContext(effectiveContext),
         attachments: attachments.length > 0 ? attachments : undefined,

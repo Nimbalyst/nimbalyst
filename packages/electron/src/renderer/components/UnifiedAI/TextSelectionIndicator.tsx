@@ -1,5 +1,14 @@
 import React, { useSyncExternalStore, useCallback } from 'react';
 
+/**
+ * Represents a text selection from the editor
+ */
+export interface TextSelection {
+  text: string;
+  filePath: string;
+  timestamp: number;
+}
+
 interface TextSelectionIndicatorProps {
   /** Current document file path */
   currentFilePath?: string;
@@ -44,7 +53,7 @@ export function notifyTextSelectionChanged(): void {
 /**
  * Get current text selection from window globals
  */
-export function getTextSelection(): { text: string; filePath: string; timestamp: number } | null {
+export function getTextSelection(): TextSelection | null {
   const text = (window as any).__textSelectionText as string | undefined;
   const filePath = (window as any).__textSelectionFilePath as string | undefined;
   const timestamp = (window as any).__textSelectionTimestamp as number | undefined;
@@ -136,44 +145,24 @@ export const TextSelectionIndicator: React.FC<TextSelectionIndicatorProps> = ({
     ? selectionText.slice(0, 50) + '...'
     : selectionText;
 
+  // Use native title attribute for tooltip - browser handles escaping automatically
+  const tooltipText = `Selected text will be included: "${previewText}"`;
+
   return (
-    <>
-      <style>
-        {`.text-selection-indicator[data-tooltip] {
-          position: relative;
-        }
-        .text-selection-indicator[data-tooltip]:hover::after {
-          content: attr(data-tooltip);
-          position: absolute;
-          bottom: 100%;
-          left: 0;
-          background: var(--nim-bg-tertiary);
-          color: var(--nim-text-muted);
-          padding: 4px 8px;
-          border-radius: 4px;
-          font-size: 11px;
-          white-space: normal;
-          max-width: 250px;
-          z-index: 1000;
-          pointer-events: none;
-          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }`}
-      </style>
-      <div
-        className="text-selection-indicator"
-        data-tooltip={`Selected text will be included: "${previewText}"`}
-        style={{
-          padding: '4px 8px',
-          marginBottom: '4px',
-          fontSize: '12px',
-          color: 'var(--info-color)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '4px'
-        }}
-      >
-        <span>+ selection</span>
-      </div>
-    </>
+    <div
+      className="text-selection-indicator"
+      title={tooltipText}
+      style={{
+        padding: '4px 8px',
+        marginBottom: '4px',
+        fontSize: '12px',
+        color: 'var(--info-color)',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '4px'
+      }}
+    >
+      <span>+ selection</span>
+    </div>
   );
 };

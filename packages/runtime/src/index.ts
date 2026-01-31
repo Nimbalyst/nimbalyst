@@ -86,6 +86,7 @@ export * from './ui/icons/fileIcons';
 // Utils
 export * from './utils/dateUtils';
 export * from './utils/fuzzyMatch';
+export * from './utils/documentDiff';
 // Mockup Plugin - Node exported separately to avoid circular dependency
 export {
   MockupNode,

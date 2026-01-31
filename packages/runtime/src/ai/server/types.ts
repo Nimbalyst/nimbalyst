@@ -36,6 +36,18 @@ export interface DocumentContext {
   worktreeId?: string;  // ID of the associated worktree
   worktreePath?: string;  // Path to the worktree directory
   worktreeProjectPath?: string;  // Path to the parent project (for permission lookups)
+
+  // Document transition tracking (for prompt optimization)
+  documentTransition?: 'none' | 'opened' | 'closed' | 'switched' | 'modified';
+  previousFilePath?: string;  // Path of previously viewed file (for switched/closed transitions)
+  documentDiff?: string;  // Unified diff patch when document was modified
+
+  // Session context (populated by backend before sending to provider)
+  sessionType?: SessionType;
+  permissionsPath?: string;  // Path for permission lookups (may differ from worktreePath)
+  attachments?: ChatAttachment[];
+  branchedFromSessionId?: string;  // For session forking
+  branchedFromProviderSessionId?: string;
 }
 
 export interface ChatAttachment {
@@ -193,6 +205,14 @@ export interface SessionData {
 
   // Additional metadata
   metadata?: Record<string, unknown>;
+
+  // Document context optimization - tracks what was last sent to AI
+  // Used to compute diffs/unchanged flags for prompt optimization
+  lastDocumentState?: {
+    filePath: string;
+    contentHash: string;
+    // Note: We don't persist full content to save space - only hash for comparison
+  };
 
   // Provider-specific data
   providerSessionId?: string;  // For Claude Code's internal session ID

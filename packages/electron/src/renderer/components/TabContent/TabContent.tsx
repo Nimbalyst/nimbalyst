@@ -374,6 +374,15 @@ const TabContentComponent: React.FC<TabContentProps> = ({
       // Update active tab and visibility
       activeTabIdRef.current = newActiveTabId;
 
+      // Emit onGetContentReady for the newly active tab (even if already loaded)
+      // This ensures EditorMode.getContentRef stays in sync when switching tabs
+      if (newActiveTabId && propsRef.current.onGetContentReady) {
+        const getContentFn = getContentFunctionsRef.current.get(newActiveTabId);
+        if (getContentFn) {
+          propsRef.current.onGetContentReady(newActiveTabId, getContentFn);
+        }
+      }
+
       // Always update visibility after syncing tabs (editors may have been added)
       updateVisibility();
     };

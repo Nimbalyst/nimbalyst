@@ -206,7 +206,16 @@ export abstract class BaseAIProvider extends EventEmitter implements AIProvider 
    * Providers should call this and append their specific instructions
    */
   protected buildSystemPrompt(documentContext?: DocumentContext): string {
-    return buildSystemPrompt(documentContext);
+    // Extract transition info from document context if present
+    const documentTransition = (documentContext as any)?.documentTransition;
+    const documentDiff = (documentContext as any)?.documentDiff;
+
+    // Use the new options format to pass transition/diff info
+    return buildSystemPrompt({
+      documentContext,
+      documentTransition,
+      documentDiff,
+    });
   }
 
   /**
