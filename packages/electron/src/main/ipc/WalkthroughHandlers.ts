@@ -72,11 +72,12 @@ export function registerWalkthroughHandlers(): void {
 
   /**
    * Record that a walkthrough was shown (for analytics tracking)
+   * Also updates per-mode cooldown timestamp
    */
   safeHandle(
     'walkthroughs:record-shown',
-    async (_event, walkthroughId: string, version?: number): Promise<void> => {
-      recordWalkthroughShown(walkthroughId, version);
+    async (_event, walkthroughId: string, version?: number, mode?: 'files' | 'agent'): Promise<void> => {
+      recordWalkthroughShown(walkthroughId, version, mode);
     }
   );
 

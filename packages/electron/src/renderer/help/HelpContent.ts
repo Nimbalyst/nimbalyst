@@ -146,7 +146,12 @@ export const HelpContent: Record<string, HelpEntry> = {
   },
   'session-quick-open-button': {
     title: 'Quick Open Session',
-    body: 'Search and jump to any AI session by content or title.',
+    body: 'Search and jump to any AI session by content or title. Much faster than scrolling through history.',
+    shortcut: KeyboardShortcuts.window.sessionQuickOpen,
+  },
+  'session-quick-search-button': {
+    title: 'Quick Open Session',
+    body: 'Search and jump to any AI session by content or title. Much faster than scrolling through history.',
     shortcut: KeyboardShortcuts.window.sessionQuickOpen,
   },
   'session-archive-button': {
@@ -167,8 +172,16 @@ export const HelpContent: Record<string, HelpEntry> = {
     body: 'Agent mode can edit files and run commands. Chat mode is for conversation only.',
   },
   'plan-mode-toggle': {
-    title: 'Plan Mode',
-    body: 'Enable planning mode for the AI to think through complex tasks before acting.',
+    title: 'Plan vs Agent Mode',
+    body: 'Toggle between Plan and Agent modes. Plan mode creates structured plans before the AI writes code. Agent mode executes changes directly.',
+  },
+  'attach-files-input': {
+    title: 'Attach Files & Images',
+    body: 'Drag and drop files or paste images directly into the chat. You can also use @ to mention files from your project.',
+  },
+  'agent-welcome': {
+    title: 'Start Your First Session',
+    body: 'Create an AI coding session. Describe what you want to build, and the agent will help you.',
   },
 
   // ============================================================================

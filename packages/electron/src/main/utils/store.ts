@@ -106,6 +106,13 @@ interface AppStoreSchema {
   };
   // Walkthrough guide system state
   walkthroughs?: WalkthroughState;
+  // First-open tracking for editor types (for walkthrough triggers)
+  editorFirstOpens?: {
+    excalidraw?: boolean;
+    mockup?: boolean;
+    spreadsheet?: boolean;
+    datamodel?: boolean;
+  };
   // Advanced: V8 heap memory limit in MB (default: 4096 = 4GB)
   // Increase if you experience OOM crashes with large sessions
   maxHeapSizeMB?: number;
@@ -134,6 +141,11 @@ export interface WalkthroughState {
   dismissed: string[];
   /** History of walkthrough interactions for analytics/rate limiting */
   history?: Record<string, WalkthroughHistory>;
+  /** Per-mode timestamps for cooldown tracking (5 min between walkthroughs per mode) */
+  lastShownAtByMode?: {
+    files?: number;
+    agent?: number;
+  };
 }
 
 export interface WalkthroughHistory {
@@ -1350,18 +1362,26 @@ export function markWalkthroughDismissed(walkthroughId: string, version?: number
 /**
  * Record that a walkthrough was shown (for analytics).
  */
-export function recordWalkthroughShown(walkthroughId: string, version?: number): void {
+export function recordWalkthroughShown(walkthroughId: string, version?: number, mode?: 'files' | 'agent'): void {
   const current = getWalkthroughState();
+  const now = Date.now();
+
   const history = {
     ...current.history,
     [walkthroughId]: {
       ...current.history?.[walkthroughId],
-      shownAt: Date.now(),
+      shownAt: now,
       version,
     },
   };
 
-  getAppStore().set('walkthroughs', { ...current, history });
+  // Update per-mode cooldown timestamp
+  const lastShownAtByMode = mode ? {
+    ...current.lastShownAtByMode,
+    [mode]: now,
+  } : current.lastShownAtByMode;
+
+  getAppStore().set('walkthroughs', { ...current, history, lastShownAtByMode });
 }
 
 /**
@@ -1394,6 +1414,22 @@ export function shouldShowWalkthrough(walkthroughId: string, version?: number): 
  */
 export function resetWalkthroughState(): void {
   getAppStore().set('walkthroughs', { ...DEFAULT_WALKTHROUGH_STATE });
+}
+
+/**
+ * Check if an editor type has been opened before
+ */
+export function hasOpenedEditor(editorType: 'excalidraw' | 'mockup' | 'spreadsheet' | 'datamodel'): boolean {
+  const firstOpens = getAppStore().get('editorFirstOpens') ?? {};
+  return firstOpens[editorType] ?? false;
+}
+
+/**
+ * Mark an editor type as opened
+ */
+export function markEditorOpened(editorType: 'excalidraw' | 'mockup' | 'spreadsheet' | 'datamodel'): void {
+  const firstOpens = getAppStore().get('editorFirstOpens') ?? {};
+  getAppStore().set('editorFirstOpens', { ...firstOpens, [editorType]: true });
 }
 
 // Generic App Settings (for extension storage and other dynamic keys)

@@ -86,7 +86,7 @@ export function WalkthroughProvider({
 
   // Start a walkthrough (can be called manually for testing)
   const startWalkthrough = useCallback(
-    (walkthroughId: string) => {
+    (walkthroughId: string, mode?: 'files' | 'agent') => {
       const walkthrough = walkthroughs.find((w) => w.id === walkthroughId);
       if (!walkthrough) {
         console.warn(`[Walkthrough] Unknown walkthrough ID: ${walkthroughId}`);
@@ -97,14 +97,15 @@ export function WalkthroughProvider({
       setActiveWalkthroughId(walkthroughId);
       setCurrentStepIndex(0);
 
-      // Record that it was shown
-      recordWalkthroughShown(walkthroughId, walkthrough.version);
+      // Record that it was shown (with mode for cooldown tracking)
+      recordWalkthroughShown(walkthroughId, walkthrough.version, mode);
 
       // Track in PostHog
       posthog?.capture('walkthrough_started', {
         walkthrough_id: walkthroughId,
         walkthrough_name: walkthrough.name,
         total_steps: walkthrough.steps.length,
+        mode,
       });
     },
     [posthog, setActiveWalkthroughId, setCurrentStepIndex]
@@ -231,10 +232,13 @@ export function WalkthroughProvider({
     }
 
     // Find eligible walkthroughs for current mode
+    // Only track cooldown for files/agent modes (not settings)
+    const modeForCooldown = currentMode === 'files' || currentMode === 'agent' ? currentMode : undefined;
+
     const eligible = walkthroughs
       .filter((w) => {
-        // Check if should show based on state
-        if (!shouldShowWalkthrough(state, w)) {
+        // Check if should show based on state (including cooldown check)
+        if (!shouldShowWalkthrough(state, w, modeForCooldown)) {
           if (import.meta.env.DEV) {
             console.log(`[Walkthrough] ${w.id} filtered out by shouldShowWalkthrough`);
           }
@@ -285,7 +289,7 @@ export function WalkthroughProvider({
           return;
         }
         lastTriggeredModeRef.current = currentMode;
-        startWalkthrough(walkthrough.id);
+        startWalkthrough(walkthrough.id, modeForCooldown);
       }, delay);
     }
 

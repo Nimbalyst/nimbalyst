@@ -42,12 +42,14 @@ export async function markWalkthroughDismissed(
 
 /**
  * Record that a walkthrough was shown (for analytics)
+ * Also updates the per-mode cooldown timestamp
  */
 export async function recordWalkthroughShown(
   walkthroughId: string,
-  version?: number
+  version?: number,
+  mode?: 'files' | 'agent'
 ): Promise<void> {
-  return window.electronAPI.invoke('walkthroughs:record-shown', walkthroughId, version);
+  return window.electronAPI.invoke('walkthroughs:record-shown', walkthroughId, version, mode);
 }
 
 /**
@@ -67,12 +69,15 @@ export async function registerWalkthroughMenuEntries(
   return window.electronAPI.invoke('walkthroughs:register-menu-entries', walkthroughs);
 }
 
+const COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
+
 /**
  * Check if a walkthrough should be shown based on current state
  */
 export function shouldShowWalkthrough(
   state: WalkthroughState,
-  walkthrough: WalkthroughDefinition
+  walkthrough: WalkthroughDefinition,
+  currentMode?: 'files' | 'agent'
 ): boolean {
   // Globally disabled
   if (!state.enabled) return false;
@@ -87,6 +92,18 @@ export function shouldShowWalkthrough(
     if (history?.version !== undefined && history.version !== walkthrough.version) {
       // New version - allow showing again even if previously completed/dismissed
       return true;
+    }
+  }
+
+  // Check per-mode cooldown (prevents rapid-fire walkthroughs in same mode)
+  if (currentMode && state.lastShownAtByMode?.[currentMode]) {
+    const lastShown = state.lastShownAtByMode[currentMode];
+    const timeSinceLastShown = Date.now() - lastShown;
+    if (timeSinceLastShown < COOLDOWN_MS) {
+      if (import.meta.env.DEV) {
+        console.log(`[Walkthrough] Cooldown active for ${currentMode} mode (${Math.floor((COOLDOWN_MS - timeSinceLastShown) / 1000)}s remaining)`);
+      }
+      return false;
     }
   }
 

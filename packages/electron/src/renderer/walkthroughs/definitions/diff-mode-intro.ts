@@ -7,6 +7,7 @@
 
 import type { WalkthroughDefinition } from '../types';
 import { getHelpContent } from '../../help';
+import { isTargetValid } from '../WalkthroughService';
 
 const keepAllHelp = getHelpContent('diff-keep-all-button')!;
 const revertAllHelp = getHelpContent('diff-revert-all-button')!;
@@ -18,6 +19,11 @@ export const diffModeIntro: WalkthroughDefinition = {
   trigger: {
     // Show when viewing files (where diff mode appears)
     screen: 'files',
+    // Only show when diff approval bar is actually visible
+    condition: () => {
+      const diffBar = document.querySelector('[data-testid="diff-keep-all-button"]');
+      return diffBar !== null && isTargetValid(diffBar as HTMLElement);
+    },
     // Wait for diff bar to render
     delay: 500,
     // Medium priority

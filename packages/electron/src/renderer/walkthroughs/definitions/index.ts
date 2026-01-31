@@ -13,6 +13,10 @@ import { fileTreeTools } from './file-tree-tools';
 import { layoutControlsIntro } from './layout-controls-intro';
 import { modelPickerIntro } from './model-picker-intro';
 import { navigationIntro } from './navigation-intro';
+import { planModeIntro } from './plan-mode-intro';
+import { attachFilesIntro } from './attach-files-intro';
+import { sessionQuickOpenIntro } from './session-quick-open-intro';
+import { agentWelcomeIntro } from './agent-welcome-intro';
 
 /**
  * All available walkthroughs.
@@ -26,4 +30,8 @@ export const walkthroughs: WalkthroughDefinition[] = [
   fileTreeTools,
   layoutControlsIntro,
   modelPickerIntro,
+  planModeIntro,
+  attachFilesIntro,
+  sessionQuickOpenIntro,
+  agentWelcomeIntro,
 ];

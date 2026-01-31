@@ -129,6 +129,11 @@ export interface WalkthroughState {
   dismissed: string[];
   /** History of walkthrough interactions */
   history?: Record<string, WalkthroughHistory>;
+  /** Per-mode timestamps for cooldown tracking (5 min between walkthroughs per mode) */
+  lastShownAtByMode?: {
+    files?: number;
+    agent?: number;
+  };
 }
 
 /**
