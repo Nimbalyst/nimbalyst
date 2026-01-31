@@ -34,6 +34,7 @@ export interface WorkstreamSessionTabsProps {
   onFileClick?: (filePath: string) => void;
   worktreeId?: string | null; // If set, this is a worktree session (add sessions to worktree, not convert to workstream)
   onAddSessionToWorktree?: (worktreeId: string) => Promise<void>; // Callback to add session to worktree
+  onCreateWorktreeSession?: (worktreeId: string) => Promise<string | null>; // Callback to create session in worktree (returns session ID)
   onSessionArchive?: (sessionId: string) => void; // Callback to archive a session
   onSessionUnarchive?: (sessionId: string) => void; // Callback to unarchive a session
 }
@@ -194,6 +195,7 @@ export const WorkstreamSessionTabs: React.FC<WorkstreamSessionTabsProps> = React
   onFileClick,
   worktreeId,
   onAddSessionToWorktree,
+  onCreateWorktreeSession,
   onSessionArchive,
   onSessionUnarchive,
 }) => {
@@ -251,6 +253,7 @@ export const WorkstreamSessionTabs: React.FC<WorkstreamSessionTabsProps> = React
           workspacePath={workspacePath}
           onFileClick={onFileClick}
           onClearAgentSession={handleNewSession}
+          onCreateWorktreeSession={onCreateWorktreeSession}
         />
       </div>
     </div>

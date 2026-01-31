@@ -293,62 +293,70 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
     }
   }, [workspacePath, addSession, setSelectedWorkstream, defaultModel, isWorktreesAvailable, isGitRepo]);
 
-  // Add session to an existing worktree
-  const addSessionToWorktree = useCallback(async (worktreeId: string) => {
-    if (!window.electronAPI) return;
+  // Create session in an existing worktree and return the session ID
+  // This is the core logic shared by both addSessionToWorktree and createWorktreeSession
+  const createWorktreeSessionCore = useCallback(async (worktreeId: string): Promise<string | null> => {
+    if (!window.electronAPI) return null;
 
-    try {
-      // Get the worktree data to use its name
-      const worktreeResult = await window.electronAPI.invoke('worktree:get', worktreeId);
-      if (!worktreeResult?.worktree) {
-        throw new Error('Worktree not found');
-      }
+    // Get the worktree data to use its name
+    const worktreeResult = await window.electronAPI.invoke('worktree:get', worktreeId);
+    if (!worktreeResult?.worktree) {
+      throw new Error('Worktree not found');
+    }
 
-      const worktree = worktreeResult.worktree;
+    const worktree = worktreeResult.worktree;
 
-      // Create session with worktree association (no parentSessionId - this is NOT a workstream)
-      const sessionId = crypto.randomUUID();
-      const result = await window.electronAPI.invoke('sessions:create', {
-        session: {
-          id: sessionId,
-          provider: 'claude-code',
-          model: defaultModel,
-          title: 'New Session',
-          worktreeId: worktree.id,
-        },
-        workspaceId: workspacePath,
+    // Create session with worktree association (no parentSessionId - this is NOT a workstream)
+    const sessionId = crypto.randomUUID();
+    const result = await window.electronAPI.invoke('sessions:create', {
+      session: {
+        id: sessionId,
+        provider: 'claude-code',
+        model: defaultModel,
+        title: 'New Session',
+        worktreeId: worktree.id,
+      },
+      workspaceId: workspacePath,
+    });
+
+    if (result.success && result.id) {
+      // Add to session list
+      addSession({
+        id: result.id,
+        name: 'New Session',
+        title: 'New Session',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        provider: 'claude-code',
+        model: defaultModel,
+        sessionType: 'coding',
+        messageCount: 0,
+        projectPath: workspacePath,
+        worktreeId: worktree.id,
       });
 
-      if (result.success && result.id) {
-        // Add to session list
-        addSession({
-          id: result.id,
-          name: 'New Session',
-          title: 'New Session',
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-          provider: 'claude-code',
-          model: defaultModel,
-          sessionType: 'coding',
-          messageCount: 0,
-          projectPath: workspacePath,
-          worktreeId: worktree.id,
-        });
+      // Initialize workstream state with worktree type
+      store.set(workstreamStateAtom(result.id), {
+        type: 'worktree',
+        worktreeId: worktree.id,
+      });
 
-        // Initialize workstream state with worktree type
-        store.set(workstreamStateAtom(result.id), {
-          type: 'worktree',
-          worktreeId: worktree.id,
-        });
+      // Select the new session within the worktree
+      setSelectedWorkstream({
+        workspacePath,
+        selection: { type: 'worktree', id: result.id },
+      });
 
-        // Select the new session within the worktree
-        setSelectedWorkstream({
-          workspacePath,
-          selection: { type: 'worktree', id: result.id },
-        });
-      } else {
-        throw new Error(result.error || 'Failed to create session');
-      }
+      return result.id;
+    } else {
+      throw new Error(result.error || 'Failed to create session');
+    }
+  }, [workspacePath, addSession, setSelectedWorkstream, defaultModel]);
+
+  // Add session to an existing worktree (void return, shows error notification on failure)
+  const addSessionToWorktree = useCallback(async (worktreeId: string) => {
+    try {
+      await createWorktreeSessionCore(worktreeId);
     } catch (error) {
       errorNotificationService.showError(
         'Failed to Create Session',
@@ -356,7 +364,17 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
         { duration: 5000 }
       );
     }
-  }, [workspacePath, addSession, setSelectedWorkstream, defaultModel]);
+  }, [createWorktreeSessionCore]);
+
+  // Create session in worktree and return the session ID (for use by plan mode)
+  const createWorktreeSession = useCallback(async (worktreeId: string): Promise<string | null> => {
+    try {
+      return await createWorktreeSessionCore(worktreeId);
+    } catch (error) {
+      console.error('[AgentMode] Failed to create worktree session:', error);
+      return null;
+    }
+  }, [createWorktreeSessionCore]);
 
   // Open session by ID
   const openSessionInTab = useCallback(async (sessionId: string) => {
@@ -657,6 +675,7 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
       workstreamType={selectedWorkstream.type}
       onFileOpen={onFileOpen}
       onAddSessionToWorktree={addSessionToWorktree}
+      onCreateWorktreeSession={createWorktreeSession}
       onWorktreeArchived={handleWorktreeArchived}
     />
   ) : (

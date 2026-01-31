@@ -95,6 +95,10 @@ export interface SessionTranscriptProps {
   // Clear agent session callback (for agent mode - creates new session in worktree or workstream)
   onClearAgentSession?: () => void;
 
+  // Create new session in worktree callback (returns new session ID)
+  // Used by handleExitPlanModeStartNewSession when in a worktree
+  onCreateWorktreeSession?: (worktreeId: string) => Promise<string | null>;
+
   // Document context (for chat mode where parent provides it)
   documentContext?: {
     filePath?: string;
@@ -203,6 +207,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   onSessionTitleChanged,
   onClearSession,
   onClearAgentSession,
+  onCreateWorktreeSession,
   documentContext,
   getDocumentContext,
 }, ref) => {
@@ -1119,7 +1124,9 @@ Your goal is to build a comprehensive plan through iterative refinement:
   }, [posthog, updateSessionStore]);
 
   // Handler for "Start new session to implement" option
-  // Creates a child session with the plan file as context and sets up the implementation prompt
+  // Creates a new session with the plan file as context and sets up the implementation prompt
+  // For worktree sessions: creates a new session in the same worktree (no parent-child hierarchy)
+  // For regular sessions: creates a workstream hierarchy (converts to workstream if needed)
   const handleExitPlanModeStartNewSession = useCallback(async (requestId: string, confirmSessionId: string, planFilePath: string) => {
     try {
       // First approve the ExitPlanMode so Claude finishes
@@ -1132,33 +1139,41 @@ Your goal is to build a comprehensive plan through iterative refinement:
       // Track exit plan mode response
       posthog?.capture('exit_plan_mode_response', {
         decision: 'start_new_session',
+        is_worktree: !!worktreeId,
       });
       await updateSessionMetadataField(confirmSessionId, 'pendingExitPlanConfirmation', null, null, updateSessionStore);
 
-      // Determine the parent session ID for creating a child
-      // If we have a parent (we're already in a workstream), use that parent
-      // Otherwise, use the current session as the parent (or convert to workstream)
-      const hasChildren = sessionChildren.length > 0;
       let newSessionId: string | null = null;
 
-      if (hasChildren || sessionParentId) {
-        // Already part of a workstream hierarchy - create a child of the appropriate parent
-        // If sessionParentId exists, we're a child session - create sibling under the same parent
-        // If hasChildren, we're the root - create child under us
-        const parentId = sessionParentId || confirmSessionId;
-        newSessionId = await createChildSession({
-          parentSessionId: parentId,
-          workspacePath: workspacePath || '',
-          provider: 'claude-code',
-        });
+      // Check if we're in a worktree session
+      if (worktreeId && onCreateWorktreeSession) {
+        // Worktree sessions: create a new session in the same worktree (NOT a workstream)
+        // This avoids creating workstreams-within-worktrees which is not supported
+        console.log('[SessionTranscript] Creating new session in worktree:', worktreeId);
+        newSessionId = await onCreateWorktreeSession(worktreeId);
       } else {
-        // Single session - convert to workstream first, which creates a sibling session
-        const result = await convertToWorkstream({
-          sessionId: confirmSessionId,
-          workspacePath: workspacePath || '',
-        });
-        if (result?.siblingId) {
-          newSessionId = result.siblingId;
+        // Regular sessions: use workstream hierarchy logic
+        const hasChildren = sessionChildren.length > 0;
+
+        if (hasChildren || sessionParentId) {
+          // Already part of a workstream hierarchy - create a child of the appropriate parent
+          // If sessionParentId exists, we're a child session - create sibling under the same parent
+          // If hasChildren, we're the root - create child under us
+          const parentId = sessionParentId || confirmSessionId;
+          newSessionId = await createChildSession({
+            parentSessionId: parentId,
+            workspacePath: workspacePath || '',
+            provider: 'claude-code',
+          });
+        } else {
+          // Single session - convert to workstream first, which creates a sibling session
+          const result = await convertToWorkstream({
+            sessionId: confirmSessionId,
+            workspacePath: workspacePath || '',
+          });
+          if (result?.siblingId) {
+            newSessionId = result.siblingId;
+          }
         }
       }
 
@@ -1182,16 +1197,16 @@ Your goal is to build a comprehensive plan through iterative refinement:
 
         console.log('[SessionTranscript] Created new session for implementation:', newSessionId, 'with prompt:', implementationPrompt);
 
-        // The atom operations (createChildSession/convertToWorkstream) already update:
+        // The atom operations (createChildSession/convertToWorkstream/onCreateWorktreeSession) already update:
         // - sessionActiveChildAtom (sets new session as active)
-        // - setSelectedWorkstreamAtom (navigates to workstream)
+        // - setSelectedWorkstreamAtom (navigates to workstream/worktree)
         // - workstreamState atoms
         // So the parent components will automatically switch to the new session
       }
     } catch (error) {
       console.error('[SessionTranscript] Failed to start new session for implementation:', error);
     }
-  }, [setAiMode, sessionChildren, sessionParentId, workspacePath, createChildSession, convertToWorkstream, sessionData?.worktreePath, posthog]);
+  }, [setAiMode, sessionChildren, sessionParentId, workspacePath, worktreeId, onCreateWorktreeSession, createChildSession, convertToWorkstream, sessionData?.worktreePath, posthog]);
 
   const handleAskUserQuestionSubmit = useCallback(async (questionId: string, confirmSessionId: string, answers: Record<string, string>) => {
     storeAskUserQuestionAnswers(answers);
