@@ -312,18 +312,36 @@ let _workspaceStore: Store<Record<string, WorkspaceState>> | null = null;
 
 function getAppStore(): Store<AppStoreSchema> {
   if (!_appStore) {
-    _appStore = new Store<AppStoreSchema>({
-      name: 'app-settings',
-      clearInvalidConfig: true,
-      defaults: {
-        theme: 'system',
-        recent: {
-          workspaces: [],
-          documents: [],
+    const platform = process.platform;
+    try {
+      _appStore = new Store<AppStoreSchema>({
+        name: 'app-settings',
+        clearInvalidConfig: true,
+        defaults: {
+          theme: 'system',
+          recent: {
+            workspaces: [],
+            documents: [],
+          },
+          openWorkspaces: [],
+          analyticsEnabled: true, // Default to enabled
         },
-        openWorkspaces: [],
-      },
-    });
+      });
+      console.log('[Store] App store initialized at:', _appStore.path);
+    } catch (error) {
+      console.error('[Store] Failed to initialize app store:', error);
+
+      // Platform-specific diagnostics
+      if (platform === 'linux') {
+        console.error('[Store] Linux store init failed. Check:');
+        console.error('  - File permissions in config directory');
+        console.error('  - XDG_CONFIG_HOME environment variable');
+        console.error('  - SELinux/AppArmor policies');
+        console.error('  - Disk space available');
+      }
+
+      throw new Error(`Failed to initialize app store: ${(error as Error).message}`);
+    }
   }
   return _appStore;
 }
@@ -963,7 +981,15 @@ export function setDefaultAIModel(model: string): void {
 
 // Analytics Settings
 export function isAnalyticsEnabled(): boolean {
-  return getAppStore().get('analyticsEnabled', true); // Default to enabled
+  try {
+    const enabled = getAppStore().get('analyticsEnabled', true); // Default to enabled
+    return enabled;
+  } catch (error) {
+    console.error('[Store] Failed to read analyticsEnabled from store:', error);
+    // Fail open - default to enabled if we can't read the store
+    // This ensures analytics works even if store is temporarily unavailable
+    return true;
+  }
 }
 
 export function setAnalyticsEnabled(enabled: boolean): void {

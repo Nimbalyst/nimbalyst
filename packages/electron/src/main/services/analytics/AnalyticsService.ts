@@ -44,32 +44,53 @@ export class AnalyticsService {
   public init(): void {
     this.postHogClient ??= this.initPostHogClient();
     this.sessionTracker ??= this.initPostHogClient();
+    this.healthCheck();
     this.log.info(`Analytics service initialized (analytics ID: ${this.getDistinctId()}, official build: ${this.isOfficialBuild})`);
   }
 
   public sendEvent(eventName: string, properties?: Record<string | number, any>): void {
-    if (this.allowedToSendAnalytics() && this.postHogClient && eventName) {
-      const eventProperties: Record<string | number, any> = {
-        '$session_id': this.sessionId,
-        ...properties,
-      }
-
-      // Mark users as dev users if they've ever used a non-official build
-      // This ensures the property is set even if they missed the session start event
-      if (!this.isOfficialBuild) {
-        eventProperties.$set_once = {
-          'is_dev_user': true,
-          ...eventProperties.$set_once
-        }
-      }
-
-      // this.log.info(`event: ${eventName}`, eventProperties);
-      this.postHogClient.capture({
-        distinctId: this.getDistinctId(),
-        event: eventName,
-        properties: eventProperties,
-      })
+    // Validate event name
+    if (!eventName) {
+      this.log.warn('[Analytics] Skipping event: empty eventName');
+      return;
     }
+
+    // Check PostHog client initialization
+    if (!this.postHogClient) {
+      this.log.error('[Analytics] Skipping event: PostHog client not initialized', { eventName });
+      return;
+    }
+
+    // Check analytics enabled state
+    if (!this.allowedToSendAnalytics()) {
+      this.log.info('[Analytics] Skipping event: analytics disabled', {
+        eventName,
+        analyticsEnabled: isAnalyticsEnabled()
+      });
+      return;
+    }
+
+    // Send event
+    const eventProperties: Record<string | number, any> = {
+      '$session_id': this.sessionId,
+      ...properties,
+    }
+
+    // Mark users as dev users if they've ever used a non-official build
+    // This ensures the property is set even if they missed the session start event
+    if (!this.isOfficialBuild) {
+      eventProperties.$set_once = {
+        'is_dev_user': true,
+        ...eventProperties.$set_once
+      }
+    }
+
+    // this.log.info(`event: ${eventName}`, eventProperties);
+    this.postHogClient.capture({
+      distinctId: this.getDistinctId(),
+      event: eventName,
+      properties: eventProperties,
+    })
   }
 
   public async optIn(): Promise<void> {
@@ -153,7 +174,50 @@ export class AnalyticsService {
 
   public allowedToSendAnalytics(): boolean {
     // Check if user has enabled analytics in settings
-    return isAnalyticsEnabled();
+    try {
+      const enabled = isAnalyticsEnabled();
+      return enabled;
+    } catch (error) {
+      this.log.error('[Analytics] Error checking analytics enabled state', { error });
+      // Fail open - if we can't read the setting, allow analytics
+      // This ensures analytics works even if store initialization fails
+      return true;
+    }
+  }
+
+  /**
+   * Health check for analytics system.
+   * Logs diagnostic information to help identify initialization failures.
+   */
+  private healthCheck(): void {
+    const checks = {
+      postHogClient: !!this.postHogClient,
+      sessionTracker: !!this.sessionTracker,
+      distinctId: this.getDistinctId(),
+      storeAccessible: true,
+      analyticsEnabled: false,
+    };
+
+    try {
+      checks.analyticsEnabled = this.allowedToSendAnalytics();
+    } catch (error) {
+      checks.storeAccessible = false;
+      this.log.error('[Analytics] Store access failed during health check', { error });
+    }
+
+    this.log.info('[Analytics] Health check', checks);
+
+    if (!checks.postHogClient) {
+      this.log.error('[Analytics] CRITICAL: PostHog client not initialized');
+    }
+
+    if (!checks.storeAccessible) {
+      this.log.error('[Analytics] CRITICAL: Cannot access analytics settings store');
+    }
+
+    if (!checks.analyticsEnabled) {
+      this.log.info('[Analytics] Analytics disabled by user preference');
+    }
   }
 
   public getDistinctId(): string {
