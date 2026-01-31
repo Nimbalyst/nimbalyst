@@ -140,7 +140,7 @@
     "electronVersion": "37.2.6",
     "nodeGypRebuild": false,
     "buildDependenciesFromSource": false,
-    "npmRebuild": false,
+    "npmRebuild": true,
     "directories": {
       "output": "release"
     },
