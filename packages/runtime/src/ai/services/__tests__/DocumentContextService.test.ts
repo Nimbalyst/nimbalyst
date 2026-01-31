@@ -225,6 +225,68 @@ function test6() {
         expect(result.documentContext.content).toBe('const x = 1;');
         expect(result.documentContext.documentDiff).toBeUndefined();
       });
+
+      it('truncates content to 2000 characters for claude-code', () => {
+        // Create content longer than 2000 characters
+        const longContent = 'x'.repeat(3000);
+
+        const rawContext: RawDocumentContext = {
+          filePath: '/test/file.ts',
+          fileType: 'typescript',
+          content: longContent,
+        };
+
+        const result = service.prepareContext(rawContext, 'session-1', 'claude-code', undefined);
+
+        expect(result.documentContext.content).toHaveLength(2000);
+        expect(result.documentContext.contentTruncated).toBe(true);
+      });
+
+      it('does not truncate content for chat providers', () => {
+        // Create content longer than 2000 characters
+        const longContent = 'x'.repeat(3000);
+
+        const rawContext: RawDocumentContext = {
+          filePath: '/test/file.ts',
+          fileType: 'typescript',
+          content: longContent,
+        };
+
+        const result = service.prepareContext(rawContext, 'session-1', 'claude', undefined);
+
+        expect(result.documentContext.content).toHaveLength(3000);
+        expect(result.documentContext.contentTruncated).toBeUndefined();
+      });
+
+      it('does not truncate content under 2000 characters for claude-code', () => {
+        const shortContent = 'const x = 1;';
+
+        const rawContext: RawDocumentContext = {
+          filePath: '/test/file.ts',
+          fileType: 'typescript',
+          content: shortContent,
+        };
+
+        const result = service.prepareContext(rawContext, 'session-1', 'claude-code', undefined);
+
+        expect(result.documentContext.content).toBe(shortContent);
+        expect(result.documentContext.contentTruncated).toBeUndefined();
+      });
+
+      it('includes truncation notice in document context prompt', () => {
+        const longContent = 'x'.repeat(3000);
+
+        const rawContext: RawDocumentContext = {
+          filePath: '/test/file.ts',
+          fileType: 'typescript',
+          content: longContent,
+        };
+
+        const result = service.prepareContext(rawContext, 'session-1', 'claude-code', undefined);
+
+        expect(result.userMessageAdditions.documentContextPrompt).toContain('Content truncated to first 2000 characters');
+        expect(result.userMessageAdditions.documentContextPrompt).toContain('Use the Read tool to see the full file');
+      });
     });
 
     describe('text selection normalization', () => {

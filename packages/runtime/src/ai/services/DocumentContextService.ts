@@ -286,7 +286,14 @@ export class DocumentContextService implements IDocumentContextService {
     if (useDiff) {
       baseContext.documentDiff = transitionResult.documentDiff;
     } else if (rawContext?.content) {
-      baseContext.content = rawContext.content;
+      // For Claude Code, truncate content to 2000 characters to reduce context usage
+      // Chat providers get full content since they need it for direct file context
+      if (providerType === 'claude-code' && rawContext.content.length > 2000) {
+        baseContext.content = rawContext.content.slice(0, 2000);
+        baseContext.contentTruncated = true;
+      } else {
+        baseContext.content = rawContext.content;
+      }
     }
 
     return baseContext;
@@ -469,6 +476,9 @@ Your goal is to build a comprehensive plan through iterative refinement:
         prompt += `\n(Document content unchanged since last message.)\n`;
       } else if (context.content) {
         prompt += `\n<DOCUMENT_CONTENT>\n${context.content}\n</DOCUMENT_CONTENT>\n`;
+        if (context.contentTruncated) {
+          prompt += `(Content truncated to first 2000 characters. Use the Read tool to see the full file.)\n`;
+        }
       }
 
       // Disambiguation note
