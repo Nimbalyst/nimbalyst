@@ -1778,8 +1778,13 @@ export class ClaudeCodeProvider extends BaseAIProvider {
           }
         }
       } catch (iterError) {
-        console.error('[CLAUDE-CODE] Error during iteration:', iterError);
-        console.error('[CLAUDE-CODE] Error stack:', (iterError as Error).stack);
+        // Don't log abort errors - they're expected when user cancels
+        const errMessage = (iterError as Error).message || '';
+        const isAbort = (iterError as any).name === 'AbortError' || errMessage.includes('aborted');
+        if (!isAbort) {
+          console.error('[CLAUDE-CODE] Error during iteration:', iterError);
+          console.error('[CLAUDE-CODE] Error stack:', (iterError as Error).stack);
+        }
         throw iterError;
       }
 
@@ -1850,14 +1855,19 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
     } catch (error: any) {
       const errorTime = Date.now() - startTime;
-      console.error(`[CLAUDE-CODE] ========== ERROR in sendMessage ==========`);
-      console.error(`[CLAUDE-CODE] Error occurred after ${errorTime}ms`);
-      console.error(`[CLAUDE-CODE] Error name: ${error.name}`);
-      console.error(`[CLAUDE-CODE] Error message: ${error.message}`);
-      console.error(`[CLAUDE-CODE] Error stack:`, error.stack);
+      const isAbort = error.name === 'AbortError' || error.message?.includes('aborted');
 
-      if (error.name === 'AbortError' || error.message?.includes('aborted')) {
-        console.log(`[CLAUDE-CODE] Request was aborted after ${errorTime}ms`);
+      // Only log details for non-abort errors
+      if (!isAbort) {
+        console.error(`[CLAUDE-CODE] ========== ERROR in sendMessage ==========`);
+        console.error(`[CLAUDE-CODE] Error occurred after ${errorTime}ms`);
+        console.error(`[CLAUDE-CODE] Error name: ${error.name}`);
+        console.error(`[CLAUDE-CODE] Error message: ${error.message}`);
+        console.error(`[CLAUDE-CODE] Error stack:`, error.stack);
+      }
+
+      if (isAbort) {
+        // Abort is expected - user cancelled, don't log as error
         yield {
           type: 'complete',
           isComplete: true
