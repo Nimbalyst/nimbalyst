@@ -22,12 +22,8 @@ export interface DocumentContext {
         start: { line: number; column: number };
         end: { line: number; column: number };
       };
-  textSelection?: {
-    text: string;
-    filePath: string;
-    timestamp: number;
-  };
-  textSelectionTimestamp?: number | null;
+  textSelection?: string;  // Just the selected text (filePath is already on document context)
+  textSelectionTimestamp?: number | null;  // For staleness detection
 
   // AI mode at time of message submission (planning vs agent)
   mode?: 'planning' | 'agent';

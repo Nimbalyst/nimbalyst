@@ -25,17 +25,11 @@ export interface DocumentState {
 }
 
 /**
- * Normalized text selection format.
- * All legacy selection formats are converted to this.
+ * Normalized text selection - just the selected text.
+ * The file is always the open document (filePath), so we don't duplicate it.
+ * Staleness detection uses textSelectionTimestamp on the parent object.
  */
-export interface TextSelection {
-  /** Selected text content */
-  text: string;
-  /** Path to the file the selection is from */
-  filePath: string;
-  /** Timestamp when the selection was made */
-  timestamp: number;
-}
+export type TextSelection = string;
 
 /**
  * Raw document context from the renderer process.
@@ -47,10 +41,10 @@ export interface RawDocumentContext {
   fileType?: string;
   content: string;  // Full content always sent from renderer
 
-  // Selection (multiple legacy formats supported - will be normalized)
+  // Selection (multiple formats supported - will be normalized to just the text)
   selection?: string | { text: string; filePath: string; timestamp: number } | { start: { line: number; column: number }; end: { line: number; column: number } };
-  textSelection?: { text: string; filePath: string; timestamp: number };
-  textSelectionTimestamp?: number | null;
+  textSelection?: string | { text: string; filePath: string; timestamp: number };  // Either format accepted
+  textSelectionTimestamp?: number | null;  // For staleness detection when textSelection is a string
 }
 
 /**

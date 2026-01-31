@@ -357,40 +357,37 @@ Your goal is to build a comprehensive plan through iterative refinement:
   }
 
   /**
-   * Normalize the various selection formats to a single TextSelection format.
+   * Extract text from the various selection formats.
+   * Returns just the selected text string (filePath is always the open document).
    */
   private normalizeTextSelection(rawContext?: RawDocumentContext): TextSelection | undefined {
     if (!rawContext) {
       return undefined;
     }
 
-    // Priority 1: textSelection object (newest format)
+    // Priority 1: textSelection as string (new simplified format)
+    if (typeof rawContext.textSelection === 'string' && rawContext.textSelection) {
+      return rawContext.textSelection;
+    }
+
+    // Priority 2: textSelection as object (legacy format)
     if (rawContext.textSelection &&
         typeof rawContext.textSelection === 'object' &&
         'text' in rawContext.textSelection) {
-      return rawContext.textSelection as TextSelection;
+      return rawContext.textSelection.text;
     }
 
-    // Priority 2: selection as object with text/filePath/timestamp
+    // Priority 3: selection as object with text property
     if (rawContext.selection &&
         typeof rawContext.selection === 'object' &&
         'text' in rawContext.selection &&
         typeof rawContext.selection.text === 'string') {
-      const sel = rawContext.selection as { text: string; filePath: string; timestamp: number };
-      return {
-        text: sel.text,
-        filePath: sel.filePath,
-        timestamp: sel.timestamp,
-      };
+      return rawContext.selection.text;
     }
 
-    // Priority 3: selection as string (legacy format - just text)
-    if (typeof rawContext.selection === 'string' && rawContext.filePath) {
-      return {
-        text: rawContext.selection,
-        filePath: rawContext.filePath,
-        timestamp: rawContext.textSelectionTimestamp || Date.now(),
-      };
+    // Priority 4: selection as string (legacy format)
+    if (typeof rawContext.selection === 'string') {
+      return rawContext.selection;
     }
 
     // No valid selection found

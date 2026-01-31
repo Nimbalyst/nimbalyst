@@ -228,7 +228,21 @@ function test6() {
     });
 
     describe('text selection normalization', () => {
-      it('normalizes textSelection object format', () => {
+      it('extracts text from textSelection string format (new simplified format)', () => {
+        const rawContext: RawDocumentContext = {
+          filePath: '/test/file.ts',
+          fileType: 'typescript',
+          content: 'const x = 1;',
+          textSelection: 'const x',  // Simplified: just the text
+          textSelectionTimestamp: 123456,  // Timestamp is separate
+        };
+
+        const result = service.prepareContext(rawContext, 'session-1', 'claude', undefined);
+
+        expect(result.documentContext.textSelection).toBe('const x');
+      });
+
+      it('extracts text from textSelection object format (legacy format)', () => {
         const rawContext: RawDocumentContext = {
           filePath: '/test/file.ts',
           fileType: 'typescript',
@@ -242,14 +256,11 @@ function test6() {
 
         const result = service.prepareContext(rawContext, 'session-1', 'claude', undefined);
 
-        expect(result.documentContext.textSelection).toEqual({
-          text: 'const x',
-          filePath: '/test/file.ts',
-          timestamp: 123456,
-        });
+        // textSelection is now just the text string
+        expect(result.documentContext.textSelection).toBe('const x');
       });
 
-      it('normalizes selection as object with text/filePath/timestamp', () => {
+      it('extracts text from selection as object with text property', () => {
         const rawContext: RawDocumentContext = {
           filePath: '/test/file.ts',
           fileType: 'typescript',
@@ -263,14 +274,10 @@ function test6() {
 
         const result = service.prepareContext(rawContext, 'session-1', 'claude', undefined);
 
-        expect(result.documentContext.textSelection).toEqual({
-          text: 'const x',
-          filePath: '/test/file.ts',
-          timestamp: 123456,
-        });
+        expect(result.documentContext.textSelection).toBe('const x');
       });
 
-      it('normalizes selection as string (legacy format)', () => {
+      it('extracts text from selection as string (legacy format)', () => {
         const rawContext: RawDocumentContext = {
           filePath: '/test/file.ts',
           fileType: 'typescript',
@@ -281,11 +288,7 @@ function test6() {
 
         const result = service.prepareContext(rawContext, 'session-1', 'claude', undefined);
 
-        expect(result.documentContext.textSelection).toEqual({
-          text: 'const x',
-          filePath: '/test/file.ts',
-          timestamp: 123456,
-        });
+        expect(result.documentContext.textSelection).toBe('const x');
       });
 
       it('returns undefined when no selection present', () => {

@@ -128,21 +128,20 @@ This is a deliberate trade-off to keep database storage small while preserving t
 
 ## Text Selection Normalization
 
-The service normalizes multiple legacy selection formats into a standard format:
+The service normalizes multiple legacy selection formats into a simple string:
 
-**Priority order (highest to lowest):**
-1. Modern format: `textSelection: { text, filePath, timestamp }`
-2. Object format: `selection: { text, filePath, timestamp }`
-3. Legacy string: `selection: string` with separate `textSelectionTimestamp`
+**Input formats accepted (priority order):**
+1. String: `textSelection: "selected text"` with `textSelectionTimestamp` for staleness
+2. Object: `textSelection: { text, filePath, timestamp }`
+3. Object: `selection: { text, filePath, timestamp }`
+4. Legacy string: `selection: string`
 
 **Output format:**
 ```typescript
-{
-  text: string;
-  filePath: string;
-  timestamp: number;
-}
+textSelection: string  // Just the selected text
 ```
+
+The `filePath` is omitted because it's always the open document (already available in `documentContext.filePath`). Staleness detection uses `textSelectionTimestamp` at the document context level.
 
 ## Plan Mode Instructions
 

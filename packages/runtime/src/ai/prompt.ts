@@ -21,7 +21,17 @@ interface SelectedTextResult {
 function extractSelectedText(documentContext: DocumentContext | undefined): SelectedTextResult {
   const selection = (documentContext as any)?.selection;
   const textSelection = (documentContext as any)?.textSelection;
+  const textSelectionTimestamp = (documentContext as any)?.textSelectionTimestamp;
 
+  // textSelection is now just a string (the selected text)
+  if (typeof textSelection === 'string' && textSelection) {
+    const isStale = textSelectionTimestamp
+      ? (Date.now() - textSelectionTimestamp > SELECTION_STALENESS_MS)
+      : false;
+    return { text: textSelection, isStale };
+  }
+
+  // Legacy: textSelection as object with text property
   if (textSelection && typeof textSelection === 'object' && textSelection.text) {
     const isStale = textSelection.timestamp
       ? (Date.now() - textSelection.timestamp > SELECTION_STALENESS_MS)
@@ -29,10 +39,12 @@ function extractSelectedText(documentContext: DocumentContext | undefined): Sele
     return { text: textSelection.text, isStale };
   }
 
+  // Legacy: selection as string
   if (typeof selection === 'string') {
     return { text: selection, isStale: false };
   }
 
+  // Legacy: selection as object
   if (selection && typeof selection === 'object') {
     const text = (selection as any).text ?? (selection as any).content ?? '';
     return { text, isStale: false };
