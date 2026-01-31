@@ -20,6 +20,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.23] - 2026-01-31
+
+
+### Added
+- Terminal tab indicator showing when a command is running
+- Session tabs now wrap to multiple rows when overflowing
+- Text selection context included in AI chat messages
+- Enhanced prompt additions widget with document context, attachments, and persistence
+- Archive/unarchive functionality for individual sessions in worktrees
+
+### Changed
+- Moved document context from system prompt to user message for better context handling
+- Simplified text selection to just the selected text string
+- Optimized document content by omitting unchanged content between messages
+
+### Fixed
+- Suppressed error logs when user aborts Claude Code request
+- Prevented terminal display corruption from interleaved writes
+- Plan mode implementation now creates new session in worktree instead of workstream
+- Fixed worktree session tabs showing 'Untitled' after restart
+- Fixed new sessions in worktrees using 'New Session' instead of worktree name
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.52.22] - 2026-01-30
 
 
