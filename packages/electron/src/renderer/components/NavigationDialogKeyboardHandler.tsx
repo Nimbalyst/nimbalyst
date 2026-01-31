@@ -100,6 +100,24 @@ export function NavigationDialogKeyboardHandler({
       // Only handle shortcuts in workspace mode
       if (!props.workspaceMode || !props.workspacePath) return;
 
+      // Cmd+Shift+F (Mac) or Ctrl+Shift+F (Windows/Linux) for Quick Open in content search mode
+      if (
+        (e.metaKey || e.ctrlKey) &&
+        e.shiftKey &&
+        (e.key === 'F' || e.key === 'f')
+      ) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        dialogs.openQuickOpen({
+          workspacePath: props.workspacePath,
+          currentFilePath: props.currentFilePath,
+          onFileSelect: props.onFileSelect,
+          startInContentSearchMode: true,
+        });
+        return;
+      }
+
       // Cmd+O (Mac) or Ctrl+O (Windows/Linux) for Quick Open
       if ((e.metaKey || e.ctrlKey) && e.key === 'o') {
         e.preventDefault();

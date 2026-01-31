@@ -20,6 +20,8 @@ export interface QuickOpenData {
   workspacePath: string;
   currentFilePath?: string | null;
   onFileSelect: (filePath: string) => void;
+  /** If true, immediately trigger content search mode when opened */
+  startInContentSearchMode?: boolean;
 }
 
 export interface SessionQuickOpenData {
@@ -58,6 +60,7 @@ function QuickOpenWrapper({
         data.onFileSelect(filePath);
         onClose();
       }}
+      startInContentSearchMode={data.startInContentSearchMode}
     />
   );
 }

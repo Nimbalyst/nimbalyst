@@ -9,6 +9,7 @@ import os from 'os';
 import * as chardet from 'chardet';
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
 import { openWorkspaceFile, openFile } from '../file/FileOpener';
+import { fuzzyMatchPath } from '@nimbalyst/runtime';
 
 const { writeFile, mkdir, rename, unlink, rmdir, copyFile, readFile, rm, stat, cp } = fsPromises;
 
@@ -368,9 +369,10 @@ export function registerWorkspaceHandlers() {
     });
 
     // Search workspace file names only (fast, uses cache)
+    // Supports fuzzy matching with CamelCase abbreviations (e.g., "ClaCoPro" matches "ClaudeCodeProvider")
     safeHandle('search-workspace-file-names', async (event, workspacePath: string, query: string) => {
         try {
-            const trimmedQuery = query.trim().toLowerCase();
+            const trimmedQuery = query.trim();
             if (!trimmedQuery) return [];
 
             // Use cache if available
@@ -380,16 +382,27 @@ export function registerWorkspaceHandlers() {
                 return [];
             }
 
-            // Filter cache by name match
-            const results = cache
-                .filter(item => item.name.includes(trimmedQuery))
-                .slice(0, 50)
-                .map(item => ({
-                    // Normalize path separators to platform-native format
-                    path: path.normalize(item.path),
-                    isFileNameMatch: true,
-                    matches: []
-                }));
+            // Use fuzzy matching for better search experience
+            // Supports: substring, CamelCase abbreviation (ClaCoPro), delimiter-separated (tra-bug)
+            const scoredResults = cache
+                .map(item => {
+                    const match = fuzzyMatchPath(trimmedQuery, item.path);
+                    return {
+                        item,
+                        match,
+                    };
+                })
+                .filter(r => r.match.matches)
+                .sort((a, b) => b.match.score - a.match.score)
+                .slice(0, 50);
+
+            const results = scoredResults.map(r => ({
+                // Normalize path separators to platform-native format
+                path: path.normalize(r.item.path),
+                isFileNameMatch: true,
+                matches: [],
+                score: r.match.score,
+            }));
 
             return results;
         } catch (error) {

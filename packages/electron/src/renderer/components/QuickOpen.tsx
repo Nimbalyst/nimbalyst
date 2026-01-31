@@ -24,6 +24,8 @@ interface QuickOpenProps {
   workspacePath: string;
   currentFilePath?: string | null;
   onFileSelect: (filePath: string) => void;
+  /** If true, immediately trigger content search mode when opened */
+  startInContentSearchMode?: boolean;
 }
 
 export const QuickOpen: React.FC<QuickOpenProps> = ({
@@ -32,6 +34,7 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
   workspacePath,
   currentFilePath,
   onFileSelect,
+  startInContentSearchMode = false,
 }) => {
   const posthog = usePostHog();
   const [searchQuery, setSearchQuery] = useState('');
@@ -248,12 +251,58 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
       clearTimeout(searchTimeoutRef.current);
     }
 
-    // Reset content search trigger when query changes
-    setContentSearchTriggered(false);
+    // Reset content search trigger when query changes (but keep it if in content search mode)
+    if (!startInContentSearchMode) {
+      setContentSearchTriggered(false);
+    }
 
     if (searchQuery) {
       searchTimeoutRef.current = setTimeout(() => {
         searchFiles(searchQuery);
+        // If in content search mode, also trigger content search after file name search
+        if (startInContentSearchMode) {
+          // Content search will be triggered after searchFiles completes
+          // We need to call it separately since contentSearchTriggered is already true
+          const api = (window as any).electronAPI || (window as any).electron;
+          if (api?.searchWorkspaceFileContent) {
+            api.searchWorkspaceFileContent(workspacePath, searchQuery)
+              .then((contentResults: any[]) => {
+                if (Array.isArray(contentResults)) {
+                  setSearchResults(prevResults => {
+                    const mergedResults = [...prevResults];
+                    for (const contentResult of contentResults) {
+                      const existingIndex = mergedResults.findIndex(r => r.path === contentResult.path);
+                      if (existingIndex >= 0) {
+                        mergedResults[existingIndex].matches = contentResult.matches || [];
+                        mergedResults[existingIndex].isContentMatch = true;
+                      } else {
+                        mergedResults.push({
+                          path: contentResult.path,
+                          name: getFileName(contentResult.path),
+                          isRecent: recentFiles.includes(contentResult.path),
+                          matches: contentResult.matches || [],
+                          isFileNameMatch: false,
+                          isContentMatch: true,
+                        });
+                      }
+                    }
+                    mergedResults.sort((a, b) => {
+                      if (a.isFileNameMatch && !b.isFileNameMatch) return -1;
+                      if (!a.isFileNameMatch && b.isFileNameMatch) return 1;
+                      const aMatchCount = a.matches?.length || 0;
+                      const bMatchCount = b.matches?.length || 0;
+                      if (aMatchCount !== bMatchCount) return bMatchCount - aMatchCount;
+                      return a.name.localeCompare(b.name);
+                    });
+                    return mergedResults;
+                  });
+                }
+              })
+              .catch((error: any) => {
+                console.error('Error in content search:', error);
+              });
+          }
+        }
       }, 150);
     } else {
       setSearchResults([]);
@@ -264,7 +313,7 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
         clearTimeout(searchTimeoutRef.current);
       }
     };
-  }, [searchQuery, searchFiles]);
+  }, [searchQuery, searchFiles, startInContentSearchMode, workspacePath, recentFiles]);
 
   // Load recent files when modal opens
   useEffect(() => {
@@ -286,7 +335,9 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
       setSearchQuery('');
       setSelectedIndex(0);
       setSearchResults([]);
-      setContentSearchTriggered(false);
+      // If starting in content search mode, mark as triggered so we search contents immediately
+      setContentSearchTriggered(startInContentSearchMode);
+      setIsContentSearch(startInContentSearchMode);
       setMouseHasMoved(false);
       setTimeout(() => searchInputRef.current?.focus(), 100);
 
@@ -298,7 +349,7 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
         });
       }
     }
-  }, [isOpen, workspacePath]);
+  }, [isOpen, workspacePath, startInContentSearchMode]);
 
   // Track mouse movement to distinguish between mouse hover and mouse at rest
   useEffect(() => {
@@ -386,7 +437,7 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
             ref={searchInputRef}
             type="text"
             className="quick-open-search nim-input text-base"
-            placeholder="Search files..."
+            placeholder={startInContentSearchMode ? "Search in file contents..." : "Search files..."}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
@@ -397,7 +448,7 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
               {contentSearchTriggered ? 'Searching file contents...' : 'Searching...'}
             </div>
           )}
-          {!isSearching && searchQuery && !contentSearchTriggered && (
+          {!isSearching && searchQuery && !contentSearchTriggered && !startInContentSearchMode && (
             <button
               className="quick-open-content-search-hint absolute right-6 top-1/2 -translate-y-1/2 text-xs flex items-center gap-1 px-2 py-1 rounded cursor-pointer border-none transition-colors duration-150 bg-transparent text-nim-faint hover:bg-[var(--nim-accent-subtle)] hover:text-nim-primary"
               onClick={() => searchFileContents()}
@@ -499,50 +550,64 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
         </div>
 
         <div
-          className="quick-open-footer px-4 py-2 flex gap-4 border-t border-nim bg-nim-secondary"
+          className="quick-open-footer px-4 py-2 flex justify-between border-t border-nim bg-nim-secondary"
         >
-          <span
-            className="quick-open-hint text-[11px] flex items-center gap-1 text-nim-faint"
-          >
-            <kbd
-              className="px-1.5 py-0.5 rounded font-mono text-[10px] bg-nim border border-nim text-nim"
-            >
-              ↑↓
-            </kbd>
-            Navigate
-          </span>
-          <span
-            className="quick-open-hint text-[11px] flex items-center gap-1 text-nim-faint"
-          >
-            <kbd
-              className="px-1.5 py-0.5 rounded font-mono text-[10px] bg-nim border border-nim text-nim"
-            >
-              Enter
-            </kbd>
-            Open
-          </span>
-          {searchQuery && !contentSearchTriggered && (
+          <div className="flex gap-4">
             <span
               className="quick-open-hint text-[11px] flex items-center gap-1 text-nim-faint"
             >
               <kbd
                 className="px-1.5 py-0.5 rounded font-mono text-[10px] bg-nim border border-nim text-nim"
               >
-                Tab
+                ↑↓
               </kbd>
-              Search in file contents
+              Navigate
+            </span>
+            <span
+              className="quick-open-hint text-[11px] flex items-center gap-1 text-nim-faint"
+            >
+              <kbd
+                className="px-1.5 py-0.5 rounded font-mono text-[10px] bg-nim border border-nim text-nim"
+              >
+                Enter
+              </kbd>
+              Open
+            </span>
+            {searchQuery && !contentSearchTriggered && !startInContentSearchMode && (
+              <span
+                className="quick-open-hint text-[11px] flex items-center gap-1 text-nim-faint"
+              >
+                <kbd
+                  className="px-1.5 py-0.5 rounded font-mono text-[10px] bg-nim border border-nim text-nim"
+                >
+                  Tab
+                </kbd>
+                Search in file contents
+              </span>
+            )}
+            <span
+              className="quick-open-hint text-[11px] flex items-center gap-1 text-nim-faint"
+            >
+              <kbd
+                className="px-1.5 py-0.5 rounded font-mono text-[10px] bg-nim border border-nim text-nim"
+              >
+                Esc
+              </kbd>
+              Close
+            </span>
+          </div>
+          {!startInContentSearchMode && (
+            <span
+              className="quick-open-hint text-[11px] flex items-center gap-1 text-nim-faint"
+            >
+              <kbd
+                className="px-1.5 py-0.5 rounded font-mono text-[10px] bg-nim border border-nim text-nim"
+              >
+                ⌘⇧F
+              </kbd>
+              Content search
             </span>
           )}
-          <span
-            className="quick-open-hint text-[11px] flex items-center gap-1 text-nim-faint"
-          >
-            <kbd
-              className="px-1.5 py-0.5 rounded font-mono text-[10px] bg-nim border border-nim text-nim"
-            >
-              Esc
-            </kbd>
-            Close
-          </span>
         </div>
       </div>
     </>
