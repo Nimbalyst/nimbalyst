@@ -1155,7 +1155,7 @@ Please proceed with this strategy.`;
             {!worktreeId && (
               <div className="flex flex-col gap-2 pt-3">
                 {/* Commit mode toggle and header */}
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between" data-testid="git-commit-mode-toggle">
                   <span className="text-[11px] font-semibold text-[var(--nim-text)]">Commit</span>
                   <div className="flex rounded-[3px] overflow-hidden border border-[var(--nim-border)]">
                     <button

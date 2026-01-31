@@ -185,6 +185,15 @@ export const HelpContent: Record<string, HelpEntry> = {
   },
 
   // ============================================================================
+  // Agent Mode - Git Operations
+  // ============================================================================
+
+  'git-commit-mode-toggle': {
+    title: 'Commit Modes',
+    body: 'Choose how to commit your changes. Manual lets you write your own message. Smart uses AI to analyze changes and propose a commit message.',
+  },
+
+  // ============================================================================
   // Agent Mode - Model & Context
   // ============================================================================
 

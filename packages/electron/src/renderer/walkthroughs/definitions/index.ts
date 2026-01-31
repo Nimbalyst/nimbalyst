@@ -17,6 +17,7 @@ import { planModeIntro } from './plan-mode-intro';
 import { attachFilesIntro } from './attach-files-intro';
 import { sessionQuickOpenIntro } from './session-quick-open-intro';
 import { agentWelcomeIntro } from './agent-welcome-intro';
+import { gitCommitModeIntro } from './git-commit-mode-intro';
 
 /**
  * All available walkthroughs.
@@ -34,4 +35,5 @@ export const walkthroughs: WalkthroughDefinition[] = [
   attachFilesIntro,
   sessionQuickOpenIntro,
   agentWelcomeIntro,
+  gitCommitModeIntro,
 ];
