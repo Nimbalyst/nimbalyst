@@ -349,6 +349,236 @@ function test6() {
         expect(result.userMessageAdditions.planModeInstructions).toBeUndefined();
         expect(result.userMessageAdditions.planModeDeactivation).toBeUndefined();
       });
+
+      it('builds document context prompt with file path and content', () => {
+        const rawContext: RawDocumentContext = {
+          filePath: '/test/file.ts',
+          fileType: 'typescript',
+          content: 'const x = 1;',
+        };
+
+        const result = service.prepareContext(rawContext, 'session-1', 'claude', undefined);
+
+        expect(result.userMessageAdditions.documentContextPrompt).toBeDefined();
+        expect(result.userMessageAdditions.documentContextPrompt).toContain('<ACTIVE_DOCUMENT>/test/file.ts</ACTIVE_DOCUMENT>');
+        expect(result.userMessageAdditions.documentContextPrompt).toContain('<DOCUMENT_CONTENT>');
+        expect(result.userMessageAdditions.documentContextPrompt).toContain('const x = 1;');
+        expect(result.userMessageAdditions.documentContextPrompt).toContain('</DOCUMENT_CONTENT>');
+      });
+
+      it('includes cursor position in document context prompt when provided', () => {
+        const rawContext: RawDocumentContext = {
+          filePath: '/test/file.ts',
+          fileType: 'typescript',
+          content: 'const x = 1;',
+          cursorPosition: { line: 5, column: 10 },
+        };
+
+        const result = service.prepareContext(rawContext, 'session-1', 'claude', undefined);
+
+        expect(result.userMessageAdditions.documentContextPrompt).toContain('Cursor: Line 5, Column 10');
+      });
+
+      it('includes selected text in document context prompt', () => {
+        const rawContext: RawDocumentContext = {
+          filePath: '/test/file.ts',
+          fileType: 'typescript',
+          content: 'const x = 1;',
+          textSelection: 'const x',
+        };
+
+        const result = service.prepareContext(rawContext, 'session-1', 'claude', undefined);
+
+        expect(result.userMessageAdditions.documentContextPrompt).toContain('<SELECTED_TEXT>');
+        expect(result.userMessageAdditions.documentContextPrompt).toContain('const x');
+        expect(result.userMessageAdditions.documentContextPrompt).toContain('</SELECTED_TEXT>');
+      });
+
+      it('includes staleness warning for old selections', () => {
+        const rawContext: RawDocumentContext = {
+          filePath: '/test/file.ts',
+          fileType: 'typescript',
+          content: 'const x = 1;',
+          textSelection: 'const x',
+          textSelectionTimestamp: Date.now() - 120000, // 2 minutes ago
+        };
+
+        const result = service.prepareContext(rawContext, 'session-1', 'claude', undefined);
+
+        expect(result.userMessageAdditions.documentContextPrompt).toContain('selection was made over a minute ago');
+      });
+
+      it('shows diff for modified documents instead of full content', () => {
+        // Use a much larger file so diff is smaller than content
+        // The diff algorithm only returns diff if it's smaller than full content
+        const lines = Array.from({ length: 30 }, (_, i) => `function test${i}() { console.log('test${i}'); }`);
+        const middleIndex = 15;
+
+        const largeContent1 = [
+          ...lines.slice(0, middleIndex),
+          'const x = 1;',
+          ...lines.slice(middleIndex),
+        ].join('\n');
+
+        const largeContent2 = [
+          ...lines.slice(0, middleIndex),
+          'const x = 2;',
+          ...lines.slice(middleIndex),
+        ].join('\n');
+
+        const rawContext1: RawDocumentContext = {
+          filePath: '/test/file.ts',
+          content: largeContent1,
+        };
+
+        const rawContext2: RawDocumentContext = {
+          filePath: '/test/file.ts',
+          content: largeContent2,
+        };
+
+        service.prepareContext(rawContext1, 'session-1', 'claude-code', undefined);
+        const result = service.prepareContext(rawContext2, 'session-1', 'claude-code', undefined);
+
+        expect(result.userMessageAdditions.documentContextPrompt).toContain('<DOCUMENT_DIFF>');
+        expect(result.userMessageAdditions.documentContextPrompt).toContain('-const x = 1;');
+        expect(result.userMessageAdditions.documentContextPrompt).toContain('+const x = 2;');
+        expect(result.userMessageAdditions.documentContextPrompt).toContain('</DOCUMENT_DIFF>');
+      });
+
+      it('shows unchanged message for none transition', () => {
+        const rawContext: RawDocumentContext = {
+          filePath: '/test/file.ts',
+          content: 'const x = 1;',
+        };
+
+        service.prepareContext(rawContext, 'session-1', 'claude', undefined);
+        const result = service.prepareContext(rawContext, 'session-1', 'claude', undefined);
+
+        expect(result.userMessageAdditions.documentContextPrompt).toContain('Document content unchanged');
+      });
+
+      it('shows closed transition message', () => {
+        const rawContext: RawDocumentContext = {
+          filePath: '/test/file.ts',
+          content: 'const x = 1;',
+        };
+
+        service.prepareContext(rawContext, 'session-1', 'claude', undefined);
+        const result = service.prepareContext(undefined, 'session-1', 'claude', undefined);
+
+        expect(result.userMessageAdditions.documentContextPrompt).toContain('closed the document');
+        expect(result.userMessageAdditions.documentContextPrompt).toContain('/test/file.ts');
+      });
+
+      it('shows switched transition message', () => {
+        const rawContext1: RawDocumentContext = {
+          filePath: '/test/file1.ts',
+          content: 'const x = 1;',
+        };
+
+        const rawContext2: RawDocumentContext = {
+          filePath: '/test/file2.ts',
+          content: 'const y = 2;',
+        };
+
+        service.prepareContext(rawContext1, 'session-1', 'claude', undefined);
+        const result = service.prepareContext(rawContext2, 'session-1', 'claude', undefined);
+
+        expect(result.userMessageAdditions.documentContextPrompt).toContain('switched from');
+        expect(result.userMessageAdditions.documentContextPrompt).toContain('/test/file1.ts');
+        expect(result.userMessageAdditions.documentContextPrompt).toContain('/test/file2.ts');
+      });
+
+      it('includes mockup selection in document context prompt', () => {
+        const rawContext: RawDocumentContext = {
+          filePath: '/test/mockup.html',
+          fileType: 'mockup',
+          content: '<button>Click me</button>',
+          mockupSelection: {
+            tagName: 'button',
+            selector: '#my-button',
+            outerHTML: '<button id="my-button">Click me</button>',
+          },
+        };
+
+        const result = service.prepareContext(rawContext, 'session-1', 'claude', undefined);
+
+        expect(result.userMessageAdditions.documentContextPrompt).toContain('<SELECTED_MOCKUP_ELEMENT>');
+        expect(result.userMessageAdditions.documentContextPrompt).toContain('Tag: <button>');
+        expect(result.userMessageAdditions.documentContextPrompt).toContain('#my-button');
+        expect(result.userMessageAdditions.documentContextPrompt).toContain('</SELECTED_MOCKUP_ELEMENT>');
+      });
+
+      it('includes mockup drawing note in document context prompt', () => {
+        const rawContext: RawDocumentContext = {
+          filePath: '/test/mockup.html',
+          fileType: 'mockup',
+          content: '<div>Content</div>',
+          mockupDrawing: true,
+        };
+
+        const result = service.prepareContext(rawContext, 'session-1', 'claude', undefined);
+
+        expect(result.userMessageAdditions.documentContextPrompt).toContain('drawn annotations');
+        expect(result.userMessageAdditions.documentContextPrompt).toContain('capture_mockup_screenshot');
+      });
+    });
+
+    describe('one-time editing instructions', () => {
+      it('adds editing instructions on first message with document', () => {
+        const rawContext: RawDocumentContext = {
+          filePath: '/test/file.ts',
+          content: 'const x = 1;',
+        };
+
+        const result = service.prepareContext(rawContext, 'session-1', 'claude', undefined);
+
+        expect(result.userMessageAdditions.editingInstructions).toBeDefined();
+        expect(result.userMessageAdditions.editingInstructions).toContain('<OPEN_FILE_INSTRUCTIONS>');
+        expect(result.userMessageAdditions.editingInstructions).toContain('Read tool');
+        expect(result.userMessageAdditions.editingInstructions).toContain('Edit tool');
+        expect(result.userMessageAdditions.editingInstructions).toContain('</OPEN_FILE_INSTRUCTIONS>');
+      });
+
+      it('does not add editing instructions on subsequent messages', () => {
+        const rawContext: RawDocumentContext = {
+          filePath: '/test/file.ts',
+          content: 'const x = 1;',
+        };
+
+        // First message
+        const result1 = service.prepareContext(rawContext, 'session-1', 'claude', undefined);
+        expect(result1.userMessageAdditions.editingInstructions).toBeDefined();
+
+        // Second message
+        const result2 = service.prepareContext(rawContext, 'session-1', 'claude', undefined);
+        expect(result2.userMessageAdditions.editingInstructions).toBeUndefined();
+      });
+
+      it('does not add editing instructions when no document is open', () => {
+        const result = service.prepareContext(undefined, 'session-1', 'claude', undefined);
+
+        expect(result.userMessageAdditions.editingInstructions).toBeUndefined();
+      });
+
+      it('tracks editing instructions per session independently', () => {
+        const rawContext: RawDocumentContext = {
+          filePath: '/test/file.ts',
+          content: 'const x = 1;',
+        };
+
+        // Session 1 - first message
+        const result1 = service.prepareContext(rawContext, 'session-1', 'claude', undefined);
+        expect(result1.userMessageAdditions.editingInstructions).toBeDefined();
+
+        // Session 2 - first message (should also get instructions)
+        const result2 = service.prepareContext(rawContext, 'session-2', 'claude', undefined);
+        expect(result2.userMessageAdditions.editingInstructions).toBeDefined();
+
+        // Session 1 - second message (no instructions)
+        const result3 = service.prepareContext(rawContext, 'session-1', 'claude', undefined);
+        expect(result3.userMessageAdditions.editingInstructions).toBeUndefined();
+      });
     });
   });
 

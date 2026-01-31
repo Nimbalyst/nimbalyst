@@ -444,102 +444,38 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     this.editedFilesThisTurn.clear();
 
     try {
-      // Append document context to message when there's a specific document
-      // AgenticPanel strips out filePath when in agent mode, so this only applies to AIChat panel
+      // Append document context to message using pre-built prompts from DocumentContextService
       // Skip adding system message if the prompt starts with a slash command
       const isSlashCommand = message.trimStart().startsWith('/');
-      const currentDocPath = documentContext?.filePath;
-      const mockupDrawing = (documentContext as any)?.mockupDrawing;
-      const fileType = (documentContext as any)?.fileType;
-      const hasMockupAnnotations = mockupDrawing && fileType === 'mockup';
+      const documentContextPrompt = (documentContext as any)?.documentContextPrompt;
+      const editingInstructions = (documentContext as any)?.editingInstructions;
 
-      // Build system message content based on context and document transitions
-      // This content is appended to the user's message (not the system prompt) so it's
-      // dynamic per-message context that the AI sees with each request.
-      const documentTransition = (documentContext as any)?.documentTransition;
-      const previousFilePath = (documentContext as any)?.previousFilePath;
-      const documentDiff = (documentContext as any)?.documentDiff;
-      const hasTransition = documentTransition && documentTransition !== 'none';
+      // Build user message addition from pre-built prompts
+      let userMessageAddition: string | null = null;
+      if (!isSlashCommand) {
+        const parts: string[] = [];
 
-      if (!isSlashCommand && (currentDocPath || hasMockupAnnotations || hasTransition)) {
-        let systemMessageContent = '';
-
-        // Add transition message if there was a document context change
-        if (hasTransition) {
-          switch (documentTransition) {
-            case 'closed':
-              // User stopped viewing a file (switched to agent mode or closed the file)
-              if (previousFilePath) {
-                const prevFileName = path.basename(previousFilePath) || previousFilePath;
-                systemMessageContent += `The user is no longer viewing "${prevFileName}". They may have switched to agent mode or closed the document.`;
-              } else {
-                systemMessageContent += 'The user is no longer viewing any document.';
-              }
-              break;
-            case 'opened':
-              // User started viewing a file (will be handled below with currentDocPath)
-              break;
-            case 'switched':
-              // User switched from one file to another
-              if (previousFilePath && currentDocPath) {
-                const prevFileName = path.basename(previousFilePath) || previousFilePath;
-                const currFileName = path.basename(currentDocPath) || currentDocPath;
-                systemMessageContent += `The user switched from viewing "${prevFileName}" to "${currFileName}".`;
-              }
-              break;
-            case 'modified':
-              // Document was modified - notify the AI and point to the diff in documentContext
-              if (currentDocPath) {
-                const fileName = path.basename(currentDocPath) || currentDocPath;
-                if (documentDiff) {
-                  systemMessageContent += `The document "${fileName}" has been modified since your last response. A diff is provided in the document context.`;
-                } else {
-                  // Large change - full content is in documentContext
-                  systemMessageContent += `The document "${fileName}" has been significantly modified since your last response.`;
-                }
-              }
-              break;
-          }
+        // Add document context prompt (file path, cursor, selection, content/diff, transitions)
+        if (documentContextPrompt) {
+          parts.push(documentContextPrompt);
         }
 
-        // Add current document info (for opened, or when viewing a document without transition)
-        // Skip for 'switched' and 'modified' (already mentioned the file above)
-        if (currentDocPath && documentTransition !== 'switched' && documentTransition !== 'modified') {
-          const fileName = path.basename(currentDocPath) || currentDocPath;
-          if (systemMessageContent) {
-            systemMessageContent += '\n\n';
-          }
-          if (documentTransition === 'opened') {
-            systemMessageContent += `The user is now viewing this document:\n<current_open_document>${fileName}</current_open_document>`;
-          } else {
-            // For 'none' or no transition - show current document
-            systemMessageContent += `The user is currently viewing this document:\n<current_open_document>${fileName}</current_open_document>`;
-          }
+        // Add one-time editing instructions (only on first message with document open)
+        if (editingInstructions) {
+          parts.push(editingInstructions);
         }
 
-        if (hasMockupAnnotations) {
-          if (systemMessageContent) {
-            systemMessageContent += '\n\n';
-          }
-          systemMessageContent += 'IMPORTANT: The user has drawn annotations on the mockup to show you what they want. Use the mcp__nimbalyst-mcp__capture_mockup_screenshot tool to see their annotations before responding.';
-        }
-
-        if (systemMessageContent) {
-          message = `${message}\n\n<NIMBALYST_SYSTEM_MESSAGE>\n${systemMessageContent}\n</NIMBALYST_SYSTEM_MESSAGE>`;
+        if (parts.length > 0) {
+          userMessageAddition = parts.join('\n\n');
+          message = `${message}\n\n<NIMBALYST_SYSTEM_MESSAGE>\n${userMessageAddition}\n</NIMBALYST_SYSTEM_MESSAGE>`;
         }
       }
 
-      // Build system prompt with document context
+      // Build system prompt (no longer contains document context)
       const promptBuildStart = Date.now();
       console.log('[CLAUDE-CODE] sendMessage - documentContext keys:', documentContext ? Object.keys(documentContext) : 'undefined');
       console.log('[CLAUDE-CODE] sendMessage - documentContext.sessionType:', (documentContext as any)?.sessionType);
       const systemPrompt = this.buildSystemPrompt(documentContext);
-
-      // Extract the inline system message content that was added to the user message
-      // This is the content between <NIMBALYST_SYSTEM_MESSAGE> tags
-      // This is the ONLY thing actually appended to the user's text message
-      const inlineSystemMatch = message.match(/<NIMBALYST_SYSTEM_MESSAGE>\n([\s\S]*?)\n<\/NIMBALYST_SYSTEM_MESSAGE>/);
-      const userMessageAddition = inlineSystemMatch ? inlineSystemMatch[1] : null;
 
       // Note: Attachments (images/documents) are NOT added to the message text.
       // They're sent as separate content blocks via the API's multimodal format.

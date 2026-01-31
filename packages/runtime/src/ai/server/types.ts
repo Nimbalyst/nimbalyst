@@ -44,6 +44,10 @@ export interface DocumentContext {
   attachments?: ChatAttachment[];
   branchedFromSessionId?: string;  // For session forking
   branchedFromProviderSessionId?: string;
+
+  // Pre-built prompts from DocumentContextService (for user message additions)
+  documentContextPrompt?: string;  // File path, cursor, selection, content/diff, transitions
+  editingInstructions?: string;    // One-time editing instructions (only first message with doc)
 }
 
 export interface ChatAttachment {

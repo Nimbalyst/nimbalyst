@@ -245,7 +245,8 @@ IMPORTANT: You are working in a git worktree at ${worktreePath}. This is an isol
     return prompt;
   }
 
-  // For non-coding sessions, use addendum-based approach
+  // For non-coding sessions (files/chat mode), use addendum-based approach
+  // Document context is now passed via user message additions, not the system prompt
   const hasDocument = !!(documentContext && (documentContext.filePath || documentContext.content));
 
   let base = `The following is an addendum to the above. Anything in the addendum supersedes the above.
@@ -261,6 +262,8 @@ When asked about your identity, say that you are Claude Code running inside Nimb
 
   // NOTE: MockupLM instructions removed - now provided via mockuplm extension's claude plugin skill
 
+  // Only static configuration goes in system prompt
+  // Document context (file path, cursor, selection, content) is now in user message additions
   if (!hasDocument) {
     return base + `
 
@@ -271,45 +274,10 @@ You can still answer questions, provide information, and have general conversati
 `;
   }
 
-  // Extract selected text with staleness detection
-  const { text: selectedText, isStale: isSelectionStale } = extractSelectedText(documentContext);
-
+  // When a document is open, just close the addendum
+  // All document-specific context (file path, cursor, selection, content, editing instructions)
+  // is now passed via user message additions from DocumentContextService
   return base + `
-
-═══════════════════════════════════════════════════════════
-🎯 ACTIVE DOCUMENT (the file the user is asking you to edit):
-═══════════════════════════════════════════════════════════
-File path: ${documentContext?.filePath || 'untitled'}
-${(documentContext as any)?.cursorPosition ? `Cursor position: Line ${(documentContext as any).cursorPosition.line}, Column ${(documentContext as any).cursorPosition.column}` : ''}
-${buildSelectedTextSection(selectedText, isSelectionStale)}
-**IMPORTANT**: When the user says "this file", "this document", "here", or "clean up",
-they are referring to THIS file above (${documentContext?.filePath || 'untitled'}),
-NOT any other files mentioned in project instructions (like CLAUDE.md) or context.
-═══════════════════════════════════════════════════════════
-
-You can edit this markdown file using your native Edit and Write tools.
-When you edit files, changes will appear as visual diffs that the user can review and approve/reject.
-
-🚨 CRITICAL EDITING RULES:
-1. ALWAYS use Read tool first to view file content before editing (required by Edit tool)
-2. Use Edit tool to modify existing files (with exact old_string and new_string)
-3. Use Write tool to create new files or completely replace file contents
-4. Changes automatically appear as visual diffs for the user to review
-5. Keep responses brief (2-4 words: "Editing document...", "Adding content...")
-6. DO NOT explain what you're doing - the user sees the changes as diffs
-
-WORKFLOW:
-1. Read the file to see its content (REQUIRED)
-2. Make your edits with the Edit tool
-3. Done - the user sees the changes as a diff
-
-EXAMPLES:
-- "add a haiku" → Read file, then Edit to add it
-- "fix the typo" → Read file, then Edit to fix it
-- "remove that paragraph" → Read file, then Edit to remove it
-- "update the table" → Read file, then Edit to update it
-
-Remember: Your edits appear as reviewable diffs. Just make the changes directly.
 </addendum>
 `;
 }

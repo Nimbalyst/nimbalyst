@@ -82,8 +82,8 @@ export class DocumentContextService implements IDocumentContextService {
       providerType
     );
 
-    // 4. Build user message additions
-    const userMessageAdditions = this.buildUserMessageAdditions(modeTransition);
+    // 4. Build user message additions (includes document context prompt and one-time editing instructions)
+    const userMessageAdditions = this.buildUserMessageAdditions(modeTransition, documentContext, sessionId);
 
     this.debug('prepareContext OUTPUT', {
       sessionId,
@@ -181,6 +181,8 @@ export class DocumentContextService implements IDocumentContextService {
       filePath: rawContext.filePath,
       content: rawContext.content,
       contentHash: currentHash,
+      // Preserve sentEditingInstructions from previous state if same session
+      sentEditingInstructions: lastState?.sentEditingInstructions,
     };
 
     // Case 2: No previous state - 'opened' transition (first time seeing a file)
@@ -247,10 +249,28 @@ export class DocumentContextService implements IDocumentContextService {
       baseContext.previousFilePath = transitionResult.previousFilePath;
     }
 
+    // Add cursor position if present
+    if (rawContext?.cursorPosition) {
+      baseContext.cursorPosition = rawContext.cursorPosition;
+    }
+
     // Add textSelection if present
     const textSelection = this.normalizeTextSelection(rawContext);
     if (textSelection) {
       baseContext.textSelection = textSelection;
+    }
+
+    // Add text selection timestamp for staleness detection
+    if (rawContext?.textSelectionTimestamp !== undefined) {
+      baseContext.textSelectionTimestamp = rawContext.textSelectionTimestamp;
+    }
+
+    // Add mockup-specific fields if present
+    if (rawContext?.mockupSelection) {
+      baseContext.mockupSelection = rawContext.mockupSelection;
+    }
+    if (rawContext?.mockupDrawing) {
+      baseContext.mockupDrawing = rawContext.mockupDrawing;
     }
 
     // For 'none' transition: omit content entirely (nothing changed)
@@ -273,10 +293,12 @@ export class DocumentContextService implements IDocumentContextService {
   }
 
   /**
-   * Build user message additions (plan mode instructions, etc.).
+   * Build user message additions (plan mode instructions, document context, editing instructions, etc.).
    */
   private buildUserMessageAdditions(
-    modeTransition?: ModeTransition
+    modeTransition: ModeTransition | undefined,
+    documentContext: PreparedDocumentContext,
+    sessionId: string
   ): UserMessageAdditions {
     const additions: UserMessageAdditions = {};
 
@@ -286,6 +308,21 @@ export class DocumentContextService implements IDocumentContextService {
 
     if (modeTransition?.exitingPlanMode) {
       additions.planModeDeactivation = '<PLAN_MODE_DEACTIVATED>The planning restrictions no longer apply.</PLAN_MODE_DEACTIVATED>';
+    }
+
+    // Build document context prompt (file path, cursor, selection, content/diff, transitions)
+    const documentContextPrompt = this.buildDocumentContextPrompt(documentContext);
+    if (documentContextPrompt) {
+      additions.documentContextPrompt = documentContextPrompt;
+    }
+
+    // Add one-time editing instructions (only on first message with a document open)
+    const state = this.lastDocumentStateBySession.get(sessionId);
+    const hasDocument = !!documentContext.filePath;
+    if (hasDocument && state && !state.sentEditingInstructions) {
+      additions.editingInstructions = this.getEditingInstructions();
+      // Mark that we've sent editing instructions for this session
+      state.sentEditingInstructions = true;
     }
 
     return additions;
@@ -354,6 +391,114 @@ Your goal is to build a comprehensive plan through iterative refinement:
 5. End your turn by either using AskUserQuestion or calling ExitPlanMode when ready
 </PLAN_MODE_ACTIVATED>
 </NIMBALYST_SYSTEM_MESSAGE>`;
+  }
+
+  /**
+   * Staleness threshold for text selections (60 seconds).
+   */
+  private static readonly SELECTION_STALENESS_MS = 60000;
+
+  /**
+   * Build the document context prompt that gets appended to the user message.
+   * This includes file path, cursor position, selected text, content/diff, and transition info.
+   */
+  private buildDocumentContextPrompt(context: PreparedDocumentContext): string | undefined {
+    const hasDocument = !!context.filePath;
+    const transition = context.documentTransition;
+
+    // If no document and no transition info, nothing to add
+    if (!hasDocument && transition === 'none') {
+      return undefined;
+    }
+
+    let prompt = '';
+
+    // Handle document transitions
+    if (transition === 'closed' && context.previousFilePath) {
+      prompt += `The user closed the document "${context.previousFilePath}". They may have switched to agent mode or are no longer editing a file.\n\n`;
+      return prompt; // No more document info to add
+    }
+
+    if (transition === 'switched' && context.previousFilePath) {
+      prompt += `The user switched from "${context.previousFilePath}" to "${context.filePath}".\n\n`;
+    }
+
+    // If we have a document, show its context
+    if (hasDocument) {
+      prompt += `The user is currently looking at this document. They are not necessarily asking you about this document, but they may be. Use your best judgement to decide if they are making a general request or asking specifically about this document.\n`;
+      prompt += `<ACTIVE_DOCUMENT>${context.filePath}</ACTIVE_DOCUMENT>\n`;
+
+      // Add cursor position if available
+      if (context.cursorPosition) {
+        prompt += `Cursor: Line ${context.cursorPosition.line}, Column ${context.cursorPosition.column}\n`;
+      }
+
+      // Add selected text section with staleness detection
+      if (context.textSelection) {
+        const isStale = context.textSelectionTimestamp
+          ? (Date.now() - context.textSelectionTimestamp > DocumentContextService.SELECTION_STALENESS_MS)
+          : false;
+
+        prompt += `\nThe user currently has the following text selected in the document:\n<SELECTED_TEXT>\n${context.textSelection}\n</SELECTED_TEXT>\n`;
+
+        if (isStale) {
+          prompt += `(Note: This selection was made over a minute ago and may be outdated.)\n`;
+        }
+
+        prompt += `When the user refers to "this", "this text", "here", or similar, they mean this selected text.\n`;
+      }
+
+      // Add mockup-specific context
+      if (context.mockupSelection) {
+        prompt += `\nThe user has selected this element in the mockup:\n`;
+        prompt += `<SELECTED_MOCKUP_ELEMENT>\n`;
+        prompt += `Tag: <${context.mockupSelection.tagName}>\n`;
+        prompt += `Selector: ${context.mockupSelection.selector}\n`;
+        prompt += `HTML:\n${context.mockupSelection.outerHTML}\n`;
+        prompt += `</SELECTED_MOCKUP_ELEMENT>\n`;
+      }
+
+      if (context.mockupDrawing) {
+        prompt += `\nThe user has drawn annotations on the mockup. Use the capture_mockup_screenshot tool to see their annotations.\n`;
+      }
+
+      // Add content or diff based on transition
+      if (transition === 'modified' && context.documentDiff) {
+        prompt += `\nThe document has changed since your last message:\n<DOCUMENT_DIFF>\n${context.documentDiff}\n</DOCUMENT_DIFF>\n`;
+      } else if (transition === 'none') {
+        prompt += `\n(Document content unchanged since last message.)\n`;
+      } else if (context.content) {
+        prompt += `\n<DOCUMENT_CONTENT>\n${context.content}\n</DOCUMENT_CONTENT>\n`;
+      }
+
+      // Disambiguation note
+      prompt += `\nWhen the user says "this file", "this document", or "here", they mean "${context.filePath}", not any other files in context.\n`;
+    }
+
+    return prompt || undefined;
+  }
+
+  /**
+   * Get the one-time editing instructions.
+   * These are only sent once per session when a document is first opened.
+   */
+  private getEditingInstructions(): string {
+    return `Editing instructions for open files. These instructions only apply to when you are working on the user's currently open file. If there is no currently open file, or the user's request does not apply to the currently open file, these may be ignored.
+<OPEN_FILE_INSTRUCTIONS>
+When editing the user's open document, follow these rules:
+
+1. ALWAYS use the Read tool first to view the file content before editing (required by the Edit tool)
+2. Use the Edit tool to modify existing content (with exact old_string and new_string)
+3. Use the Write tool to create new files or completely replace file contents
+4. Changes appear as visual diffs for the user to review and approve/reject
+5. Keep responses brief (2-4 words like "Editing document..." or "Adding content...")
+6. DO NOT explain what you're doing - the user sees the changes as diffs
+
+WORKFLOW:
+1. Read the file to see its content (REQUIRED)
+2. Make your edits with the Edit tool
+3. Done - the user sees the changes as a diff
+</OPEN_FILE_INSTRUCTIONS>`;
   }
 
   /**

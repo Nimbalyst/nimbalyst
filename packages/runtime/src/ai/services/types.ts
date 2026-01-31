@@ -22,6 +22,8 @@ export interface DocumentState {
   content: string;
   /** Hash of the content for quick comparison */
   contentHash: string;
+  /** Whether editing instructions have been sent this session (one-time only) */
+  sentEditingInstructions?: boolean;
 }
 
 /**
@@ -41,10 +43,21 @@ export interface RawDocumentContext {
   fileType?: string;
   content: string;  // Full content always sent from renderer
 
+  // Cursor position
+  cursorPosition?: { line: number; column: number };
+
   // Selection (multiple formats supported - will be normalized to just the text)
   selection?: string | { text: string; filePath: string; timestamp: number } | { start: { line: number; column: number }; end: { line: number; column: number } };
   textSelection?: string | { text: string; filePath: string; timestamp: number };  // Either format accepted
   textSelectionTimestamp?: number | null;  // For staleness detection when textSelection is a string
+
+  // Mockup-specific fields
+  mockupSelection?: {
+    tagName: string;
+    selector: string;
+    outerHTML: string;
+  };
+  mockupDrawing?: boolean;  // True if user drew annotations on mockup
 }
 
 /**
@@ -66,8 +79,20 @@ export interface PreparedDocumentContext {
   // Previous file path (for 'switched' and 'closed' transitions)
   previousFilePath?: string;
 
+  // Cursor position
+  cursorPosition?: { line: number; column: number };
+
   // Selection (normalized)
   textSelection?: TextSelection;
+  textSelectionTimestamp?: number | null;  // For staleness detection
+
+  // Mockup-specific fields
+  mockupSelection?: {
+    tagName: string;
+    selector: string;
+    outerHTML: string;
+  };
+  mockupDrawing?: boolean;
 }
 
 /**
@@ -80,6 +105,12 @@ export interface UserMessageAdditions {
 
   /** Plan mode deactivation notice (when exiting planning mode) */
   planModeDeactivation?: string;
+
+  /** Document context prompt (file path, cursor position, selection, content/diff, transitions) */
+  documentContextPrompt?: string;
+
+  /** One-time editing instructions (only sent on first message of session with a document open) */
+  editingInstructions?: string;
 }
 
 /**

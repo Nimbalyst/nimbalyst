@@ -1985,12 +1985,15 @@ export class AIService {
           filePath: documentContext.filePath,
           fileType: documentContext.fileType,
           content: documentContext.content || '',
+          cursorPosition: documentContext.cursorPosition,
           selection: documentContext.selection,
           textSelection: documentContext.textSelection,
           textSelectionTimestamp: documentContext.textSelectionTimestamp,
+          mockupSelection: (documentContext as any).mockupSelection,
+          mockupDrawing: (documentContext as any).mockupDrawing,
         } : undefined;
 
-        const { documentContext: preparedContext } = this.documentContextService.prepareContext(
+        const { documentContext: preparedContext, userMessageAdditions } = this.documentContextService.prepareContext(
           rawContext,
           session.id,
           session.provider as AIProviderType,
@@ -2031,6 +2034,10 @@ export class AIService {
           // Branch tracking for session forking
           branchedFromSessionId: session.branchedFromSessionId,
           branchedFromProviderSessionId: session.branchedFromProviderSessionId,
+
+          // Pre-built prompts from DocumentContextService (for user message additions)
+          documentContextPrompt: userMessageAdditions.documentContextPrompt,
+          editingInstructions: userMessageAdditions.editingInstructions,
         };
 
         // Update MCP document state for Claude Code provider so it knows which file-scoped tools to show
