@@ -39,9 +39,22 @@ export async function launchElectronApp(options?: {
   env?: Record<string, string>;
   /** Permission mode. Defaults to 'allow-all' to skip trust toast. Use 'none' to show the toast. */
   permissionMode?: TestPermissionMode;
+  /** Skip clearing the test database. Default false - database is cleared on each launch to prevent corruption issues. */
+  preserveTestDatabase?: boolean;
 }): Promise<ElectronApplication> {
   const electronMain = path.resolve(__dirname, '../out/main/index.js');
   const electronCwd = path.resolve(__dirname, '../../../');
+
+  // Clear the test database directory to prevent corruption issues from previous runs
+  // The test database is stored in the system temp directory with a fixed name
+  if (!options?.preserveTestDatabase) {
+    const testDbPath = path.join(os.tmpdir(), 'nimbalyst-test-db');
+    try {
+      await fs.rm(testDbPath, { recursive: true, force: true });
+    } catch {
+      // Ignore errors - directory might not exist
+    }
+  }
 
   // Check if dev server is running (try both IPv4 and IPv6)
   const devServerUrls = ['http://127.0.0.1:5273', 'http://[::1]:5273'];
