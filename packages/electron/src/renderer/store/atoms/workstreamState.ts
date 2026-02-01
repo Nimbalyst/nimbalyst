@@ -92,10 +92,10 @@ export type WorkstreamLayoutMode = 'editor' | 'split' | 'transcript';
 /**
  * File scope mode for the Files Edited sidebar.
  * - current-changes: Show only files with uncommitted git changes
- * - session-files: Show all files touched in this session/workstream (default)
- * - all-uncommitted: Show all uncommitted files in the repository
+ * - session-files: Show all files touched in this session/workstream
+ * - all-changes: Show all uncommitted files in the repository (default)
  */
-export type FileScopeMode = 'current-changes' | 'session-files' | 'all-uncommitted';
+export type FileScopeMode = 'current-changes' | 'session-files' | 'all-changes';
 
 /**
  * Complete state for a single workstream.
@@ -163,7 +163,7 @@ function createDefaultState(id: string): WorkstreamState {
     stagedFiles: [],
     commitMessage: '',
     activeProposalId: null,
-    fileScopeMode: 'session-files', // Default to showing all session files
+    fileScopeMode: 'all-changes', // Default to showing all changes
   };
 }
 
@@ -643,7 +643,7 @@ export const convertToWorkstreamAtom = atom(
       stagedFiles: [],
       commitMessage: '',
       activeProposalId: null,
-      fileScopeMode: 'session-files',
+      fileScopeMode: 'all-changes',
     });
 
     // Initialize sibling state

@@ -176,10 +176,10 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
         return filtered.filter(edit => isFileUncommitted(edit.filePath));
 
       case 'session-files':
-        // Default: show all files from session(s)
+        // Show all files from session(s)
         return filtered;
 
-      case 'all-uncommitted': {
+      case 'all-changes': {
         // Merge session files with all uncommitted files from repo
         const sessionFilePaths = new Set(filtered.map(f => f.filePath));
         // Add uncommitted files that aren't already in session files
@@ -477,10 +477,10 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
     };
   }, [workspacePath, worktreePath, allFileEdits]);
 
-  // Fetch all uncommitted files from repo (for "all-uncommitted" scope)
+  // Fetch all uncommitted files from repo (for "all-changes" scope)
   useEffect(() => {
-    // Only fetch when scope is all-uncommitted
-    if (fileScopeMode !== 'all-uncommitted' || !workspacePath) {
+    // Only fetch when scope is all-changes
+    if (fileScopeMode !== 'all-changes' || !workspacePath) {
       setAllUncommittedFiles([]);
       return;
     }
@@ -493,11 +493,8 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
           const effectiveWorkspacePath = worktreePath || workspacePath;
           const result = await window.electronAPI.invoke('git:get-uncommitted-files', effectiveWorkspacePath);
           if (result.success && result.files && isCurrent) {
-            // Convert relative paths to absolute
-            const absolutePaths = result.files.map((relativePath: string) =>
-              `${effectiveWorkspacePath}/${relativePath}`
-            );
-            setAllUncommittedFiles(absolutePaths);
+            // Files are already absolute paths from git:get-uncommitted-files
+            setAllUncommittedFiles(result.files);
           }
         }
       } catch (error) {

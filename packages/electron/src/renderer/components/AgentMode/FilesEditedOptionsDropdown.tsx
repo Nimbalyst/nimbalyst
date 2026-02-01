@@ -58,7 +58,7 @@ const SessionOption: React.FC<{
 const SCOPE_OPTIONS: Array<{ value: FileScopeMode; label: string; description: string }> = [
   { value: 'current-changes', label: 'Current changes', description: 'Files with uncommitted changes' },
   { value: 'session-files', label: 'Session files', description: 'All files touched in session' },
-  { value: 'all-uncommitted', label: 'All uncommitted', description: 'All uncommitted files in repo' },
+  { value: 'all-changes', label: 'All changes', description: 'All uncommitted files in repo' },
 ];
 
 export const FilesEditedOptionsDropdown: React.FC<FilesEditedOptionsDropdownProps> = ({

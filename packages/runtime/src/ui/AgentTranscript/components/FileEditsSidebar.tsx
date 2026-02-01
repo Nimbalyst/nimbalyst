@@ -274,9 +274,19 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
       fetchGitStatus();
     };
 
+    // Listen for git status changes
+    const handleGitStatusChanged = (data: { workspacePath: string }) => {
+      if (data.workspacePath === workspacePath) {
+        fetchGitStatus();
+      }
+    };
+
     window.addEventListener('focus', handleFocus);
+    const unsubscribe = (window as any).electronAPI?.on?.('git:status-changed', handleGitStatusChanged);
+
     return () => {
       window.removeEventListener('focus', handleFocus);
+      unsubscribe?.();
     };
   }, [editedFiles, workspacePath]);
 

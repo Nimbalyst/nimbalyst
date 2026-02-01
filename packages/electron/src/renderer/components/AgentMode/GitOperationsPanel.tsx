@@ -1388,14 +1388,17 @@ Please proceed with this strategy.`;
                   <span className="text-[11px] font-semibold text-[var(--nim-text)]">Commit & Sync</span>
                   <button
                     onClick={async () => {
+                      // Refresh worktree data
                       await Promise.all([
                         loadWorktreeChangedFiles(),
                         loadWorktreeCommits(),
                         loadWorktreeStatus(),
                       ]);
+                      // Trigger git status change event to refresh uncommitted files in FilesEditedSidebar
+                      window.electronAPI?.emit?.('git:status-changed', { workspacePath: worktreePath || workspacePath });
                     }}
                     className="flex items-center gap-1 px-2 py-1 text-[10px] text-[var(--nim-primary)] hover:bg-[var(--nim-bg-hover)] rounded transition-colors"
-                    title="Refresh worktree status"
+                    title="Refresh worktree status and uncommitted files"
                   >
                     <MaterialSymbol icon="refresh" size={14} />
                     <span>Refresh</span>
