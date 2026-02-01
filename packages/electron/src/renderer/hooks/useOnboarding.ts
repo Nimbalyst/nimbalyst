@@ -1,6 +1,7 @@
 import { useEffect, useCallback, useRef } from 'react';
+import { useAtomValue } from 'jotai';
 import { usePostHog } from 'posthog-js/react';
-import { dialogRef } from '../contexts/DialogContext';
+import { dialogRef, dialogReadyAtom } from '../contexts/DialogContext';
 import { DIALOG_IDS } from '../dialogs';
 import type { OnboardingData, UnifiedOnboardingData, WindowsClaudeCodeWarningData } from '../dialogs';
 import OnboardingService from '../services/OnboardingService';
@@ -34,6 +35,7 @@ export function useOnboarding({
   setActiveMode,
 }: UseOnboardingOptions): UseOnboardingReturn {
   const posthog = usePostHog();
+  const dialogReady = useAtomValue(dialogReadyAtom);
 
   // Track state for onboarding flow
   const onboardingOpenRef = useRef(false);
@@ -195,18 +197,13 @@ export function useOnboarding({
   }, [workspaceMode, posthog, setActiveMode]);
 
   // Check for unified onboarding on first launch
+  // Wait for: initialization complete, dialog system ready, workspace mode
   useEffect(() => {
-    // Only check after initialization is complete
-    if (isInitializing) return;
+    if (isInitializing || !dialogReady || !workspaceMode) return;
 
     const checkUnifiedOnboarding = async () => {
       // Skip in Playwright tests
       if ((window as any).PLAYWRIGHT) {
-        return;
-      }
-
-      // Only show in workspace mode windows
-      if (!workspaceMode) {
         return;
       }
 
@@ -235,7 +232,7 @@ export function useOnboarding({
     };
 
     checkUnifiedOnboarding();
-  }, [isInitializing, workspaceMode, handleOnboardingComplete, handleOnboardingSkip, checkWindowsWarning]);
+  }, [isInitializing, dialogReady, workspaceMode, handleOnboardingComplete, handleOnboardingSkip, checkWindowsWarning]);
 
   // Listen for show-unified-onboarding IPC event (from Developer menu)
   useEffect(() => {

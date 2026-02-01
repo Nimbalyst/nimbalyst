@@ -7,6 +7,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
+import { atom, useSetAtom } from 'jotai';
 import type {
   ActiveDialog,
   ConfirmDialogOptions,
@@ -17,6 +18,12 @@ import type {
 
 // Create the context with undefined default - we'll throw if used outside provider
 const DialogContext = createContext<DialogContextValue | undefined>(undefined);
+
+/**
+ * Atom that tracks when DialogProvider is mounted and ready.
+ * Use this to reactively wait for dialogs to be available.
+ */
+export const dialogReadyAtom = atom(false);
 
 /**
  * Global ref for accessing dialog functions from outside React components.
@@ -228,13 +235,18 @@ export function DialogProvider({
     [open, close, isOpen, activeDialogIds, confirm, registerDialog],
   );
 
+  // Track dialog ready state via Jotai atom
+  const setDialogReady = useSetAtom(dialogReadyAtom);
+
   // Populate the global ref for access from outside React components
   useEffect(() => {
     dialogRef.current = contextValue;
+    setDialogReady(true);
     return () => {
       dialogRef.current = null;
+      setDialogReady(false);
     };
-  }, [contextValue]);
+  }, [contextValue, setDialogReady]);
 
   // Sort dialogs by priority and openedAt for rendering order
   const sortedDialogs = useMemo(() => {
