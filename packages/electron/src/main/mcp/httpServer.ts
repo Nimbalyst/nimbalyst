@@ -46,14 +46,26 @@ function compressImageIfNeeded(
   console.log(`[MCP Server] Image size ${byteSizeMB.toFixed(2)} MB exceeds limit of ${maxSizeMB.toFixed(2)} MB, compressing to JPEG...`);
 
   try {
+    // Validate base64 data before attempting to decode
+    if (!base64Data || base64Data.length === 0) {
+      console.error('[MCP Server] Empty base64 data provided to compressImageIfNeeded');
+      return { data: base64Data, mimeType, wasCompressed: false };
+    }
+
     // Create nativeImage from base64 PNG
     const buffer = Buffer.from(base64Data, 'base64');
-    console.log(`[MCP Server] Created buffer of ${buffer.length} bytes`);
+    console.log(`[MCP Server] Created buffer of ${buffer.length} bytes from ${base64Data.length} chars base64`);
+
+    // Validate that we actually got a buffer with data
+    if (buffer.length === 0) {
+      console.error('[MCP Server] Buffer is empty after decoding base64, data may be corrupted');
+      return { data: base64Data, mimeType, wasCompressed: false };
+    }
 
     const image = nativeImage.createFromBuffer(buffer);
 
     if (image.isEmpty()) {
-      console.warn('[MCP Server] Failed to create image from base64 (image is empty), returning original');
+      console.warn('[MCP Server] Failed to create image from base64 (image is empty), buffer may be corrupted. Returning original without compression.');
       return { data: base64Data, mimeType, wasCompressed: false };
     }
 
