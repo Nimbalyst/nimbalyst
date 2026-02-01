@@ -66,14 +66,41 @@ export class OpenAIProvider extends BaseAIProvider {
       throw new Error('OpenAI provider not initialized');
     }
 
-    // Build system prompt with document context
+    // Build system prompt (no longer includes document context - that's in user message now)
     const promptStartTime = Date.now();
     const systemPrompt = this.buildSystemPrompt(documentContext);
     console.log(`[OpenAIProvider] System prompt built in ${Date.now() - promptStartTime}ms, length: ${systemPrompt.length}`);
 
-    // Emit prompt additions for debugging UI (for chat models)
+    // Append document context to message using pre-built prompts from DocumentContextService
+    // Skip adding system message if the prompt starts with a slash command
+    const isSlashCommand = message.trimStart().startsWith('/');
+    const documentContextPrompt = (documentContext as any)?.documentContextPrompt;
+    const editingInstructions = (documentContext as any)?.editingInstructions;
+
+    // Build user message addition from pre-built prompts
+    let userMessageAddition: string | null = null;
+    if (!isSlashCommand) {
+      const parts: string[] = [];
+
+      // Add document context prompt (file path, cursor, selection, content/diff, transitions)
+      if (documentContextPrompt) {
+        parts.push(documentContextPrompt);
+      }
+
+      // Add one-time editing instructions (only on first message with document open)
+      if (editingInstructions) {
+        parts.push(editingInstructions);
+      }
+
+      if (parts.length > 0) {
+        userMessageAddition = parts.join('\n\n');
+        message = `${message}\n\n<NIMBALYST_SYSTEM_MESSAGE>\n${userMessageAddition}\n</NIMBALYST_SYSTEM_MESSAGE>`;
+      }
+    }
+
+    // Emit prompt additions for debugging UI
     const hasAttachments = attachments && attachments.length > 0;
-    if (sessionId && (systemPrompt || hasAttachments)) {
+    if (sessionId && (systemPrompt || userMessageAddition || hasAttachments)) {
       // Build attachment summaries (don't include full base64 data, just metadata)
       const attachmentSummaries = attachments?.map(att => ({
         type: att.type,
@@ -85,7 +112,7 @@ export class OpenAIProvider extends BaseAIProvider {
       this.emit('promptAdditions', {
         sessionId,
         systemPromptAddition: systemPrompt || null,
-        userMessageAddition: null,  // Chat models don't add to user message
+        userMessageAddition: userMessageAddition,
         attachments: attachmentSummaries,
         timestamp: Date.now()
       });

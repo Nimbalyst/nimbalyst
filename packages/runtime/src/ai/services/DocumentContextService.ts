@@ -42,11 +42,17 @@ export class DocumentContextService implements IDocumentContextService {
     }
   }
 
+  /**
+   * Options for content handling in prepareContext
+   */
+  static readonly DEFAULT_TRUNCATE_LENGTH = 2000;
+
   prepareContext(
     rawContext: RawDocumentContext | undefined,
     sessionId: string,
     providerType: AIProviderType,
-    modeTransition?: ModeTransition
+    modeTransition?: ModeTransition,
+    options?: { truncateContent?: boolean; truncateLength?: number }
   ): ContextPreparationResult {
     this.debug('prepareContext INPUT', {
       sessionId,
@@ -79,7 +85,8 @@ export class DocumentContextService implements IDocumentContextService {
     const documentContext = this.buildDocumentContext(
       rawContext,
       transitionResult,
-      providerType
+      providerType,
+      options
     );
 
     // 4. Build user message additions (includes document context prompt and one-time editing instructions)
@@ -227,7 +234,8 @@ export class DocumentContextService implements IDocumentContextService {
   private buildDocumentContext(
     rawContext: RawDocumentContext | undefined,
     transitionResult: TransitionResult,
-    providerType: AIProviderType
+    providerType: AIProviderType,
+    options?: { truncateContent?: boolean; truncateLength?: number }
   ): PreparedDocumentContext {
     // Content handling based on transition:
     // - 'none': No content or diff (nothing changed, AI already has context)
@@ -278,18 +286,20 @@ export class DocumentContextService implements IDocumentContextService {
       return baseContext;
     }
 
-    // For Claude Code with 'modified' transition and available diff: use diff, omit content
-    const useDiff = providerType === 'claude-code' &&
-                    transition === 'modified' &&
-                    !!transitionResult.documentDiff;
+    // For 'modified' transition with available diff: use diff, omit content
+    // This optimization reduces context usage for all providers
+    const useDiff = transition === 'modified' && !!transitionResult.documentDiff;
 
     if (useDiff) {
       baseContext.documentDiff = transitionResult.documentDiff;
     } else if (rawContext?.content) {
-      // For Claude Code, truncate content to 2000 characters to reduce context usage
-      // Chat providers get full content since they need it for direct file context
-      if (providerType === 'claude-code' && rawContext.content.length > 2000) {
-        baseContext.content = rawContext.content.slice(0, 2000);
+      // Truncate content if requested (claude-code uses this to reduce context usage)
+      // Chat providers can optionally use truncation via options
+      const shouldTruncate = options?.truncateContent ?? (providerType === 'claude-code');
+      const truncateLength = options?.truncateLength ?? DocumentContextService.DEFAULT_TRUNCATE_LENGTH;
+
+      if (shouldTruncate && rawContext.content.length > truncateLength) {
+        baseContext.content = rawContext.content.slice(0, truncateLength);
         baseContext.contentTruncated = true;
       } else {
         baseContext.content = rawContext.content;

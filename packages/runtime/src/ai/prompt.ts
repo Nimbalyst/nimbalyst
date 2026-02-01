@@ -1,90 +1,6 @@
 import type { DocumentContext } from './types';
 
 /**
- * Text selection staleness threshold in milliseconds.
- * Selections older than this are considered potentially stale.
- */
-const SELECTION_STALENESS_MS = 60000; // 60 seconds
-
-/**
- * Result of extracting selected text from document context
- */
-interface SelectedTextResult {
-  text: string;
-  isStale: boolean;
-}
-
-/**
- * Extract selected text from document context with staleness detection.
- * Selections older than SELECTION_STALENESS_MS are flagged as stale.
- */
-function extractSelectedText(documentContext: DocumentContext | undefined): SelectedTextResult {
-  const selection = (documentContext as any)?.selection;
-  const textSelection = (documentContext as any)?.textSelection;
-  const textSelectionTimestamp = (documentContext as any)?.textSelectionTimestamp;
-
-  // textSelection is now just a string (the selected text)
-  if (typeof textSelection === 'string' && textSelection) {
-    const isStale = textSelectionTimestamp
-      ? (Date.now() - textSelectionTimestamp > SELECTION_STALENESS_MS)
-      : false;
-    return { text: textSelection, isStale };
-  }
-
-  // Legacy: textSelection as object with text property
-  if (textSelection && typeof textSelection === 'object' && textSelection.text) {
-    const isStale = textSelection.timestamp
-      ? (Date.now() - textSelection.timestamp > SELECTION_STALENESS_MS)
-      : false;
-    return { text: textSelection.text, isStale };
-  }
-
-  // Legacy: selection as string
-  if (typeof selection === 'string') {
-    return { text: selection, isStale: false };
-  }
-
-  // Legacy: selection as object
-  if (selection && typeof selection === 'object') {
-    const text = (selection as any).text ?? (selection as any).content ?? '';
-    return { text, isStale: false };
-  }
-
-  return { text: '', isStale: false };
-}
-
-/**
- * Build the selected text section for system prompts.
- * Includes a staleness warning if the selection is older than the threshold.
- */
-function buildSelectedTextSection(selectedText: string, isStale: boolean): string {
-  if (!selectedText) return '';
-
-  let section = `
-📝 USER-SELECTED TEXT:
-The user has selected this text in the document:
-\`\`\`
-${selectedText}
-\`\`\`
-`;
-
-  if (isStale) {
-    section += `
-⚠️ NOTE: This selection was made over a minute ago and may no longer reflect the user's current focus.
-If the user's request doesn't seem to relate to this selection, ask for clarification.
-`;
-  }
-
-  section += `
-When the user refers to "this", "this text", "this section", "here", or asks to
-"revise this", "expand on this", "go into more detail", etc., they are referring
-to THIS selected text above. Focus your edits on this specific selection.
-`;
-
-  return section;
-}
-
-/**
  * Build session naming instructions section
  * Used by both coding and chat sessions
  */
@@ -297,22 +213,23 @@ export interface BasePromptOptions {
  * Build system prompt for base AI providers (Claude, OpenAI, LM Studio, OpenAI Codex)
  * This is a simpler prompt builder without <addendum> tags or advanced features.
  * For Claude Code provider, use buildClaudeCodeSystemPrompt instead.
+ *
+ * NOTE: Document context (file path, cursor, selection, content) is now passed via
+ * user message additions from DocumentContextService, not the system prompt.
+ * This function only includes static configuration and tool usage instructions.
  */
 export function buildSystemPrompt(documentContextOrOptions?: DocumentContext | BasePromptOptions): string {
   // Support both legacy (DocumentContext) and new (BasePromptOptions) signatures
   let documentContext: DocumentContext | undefined;
-  let documentTransition: string | undefined;
-  let documentDiff: string | undefined;
 
   if (documentContextOrOptions && 'documentContext' in documentContextOrOptions) {
     // New options format
     documentContext = documentContextOrOptions.documentContext;
-    documentTransition = documentContextOrOptions.documentTransition;
-    documentDiff = documentContextOrOptions.documentDiff;
   } else {
     // Legacy format - direct DocumentContext
     documentContext = documentContextOrOptions as DocumentContext | undefined;
   }
+
   // Check if this is an agentic coding session (no specific document context)
   const sessionType = (documentContext as any)?.sessionType;
   const hasDocument = !!(documentContext && (documentContext.filePath || documentContext.content));
@@ -336,75 +253,14 @@ The user needs to open a document first before you can help with editing.
 You can still answer questions, provide information, and have general conversations.`;
   }
 
-  // Extract selected text with staleness detection
-  const { text: selectedText, isStale: isSelectionStale } = extractSelectedText(documentContext);
+  // Document context (file path, cursor, selection, content) is now passed via
+  // user message additions from DocumentContextService, so we only include
+  // static tool usage instructions here.
 
   const fileType = documentContext?.fileType || 'markdown';
   const isMockup = fileType === 'mockup';
-  const mockupSelection = (documentContext as any)?.mockupSelection;
-  const mockupDrawing = (documentContext as any)?.mockupDrawing;
 
   return base + `
-
-═══════════════════════════════════════════════════════════
-🎯 ACTIVE DOCUMENT (the file the user is asking you to edit):
-═══════════════════════════════════════════════════════════
-File path: ${documentContext?.filePath || 'untitled'}
-File type: ${fileType}
-${(documentContext as any)?.cursorPosition ? `Cursor position: Line ${(documentContext as any).cursorPosition.line}, Column ${(documentContext as any).cursorPosition.column}` : ''}
-${buildSelectedTextSection(selectedText, isSelectionStale)}
-${mockupSelection ? `
-🎯 SELECTED MOCKUP ELEMENT:
-The user has clicked on this element in the mockup preview:
-- Tag: <${mockupSelection.tagName}>
-- CSS Selector: ${mockupSelection.selector}
-- HTML:
-\`\`\`html
-${mockupSelection.outerHTML}
-\`\`\`
-
-When the user refers to "this element", "this button", "this section", etc.,
-they mean THIS selected element above. Use its CSS selector to target it precisely in edits.
-` : ''}
-${mockupDrawing ? `
-✏️ USER DRAWING ANNOTATIONS:
-The user has drawn annotations on the mockup to show you what they want.
-The drawing includes circles, arrows, and marks to indicate:
-- Which elements to modify (circled items)
-- Where to move things (arrows)
-- Areas of focus (highlighted regions)
-
-IMAGE: The drawing is attached as an image in this message.
-You can see the visual annotations the user made.
-
-INTERPRET THE DRAWING:
-- Circles usually indicate "change this element"
-- Arrows usually indicate "move from here to there"
-- Lines connecting elements indicate relationships
-- Crossed-out items indicate "remove this"
-
-The user expects you to understand their visual intent from the drawing.
-` : ''}
-
-**IMPORTANT**: When the user says "this file", "this document", "here", or "clean up",
-they are referring to THIS file above (${documentContext?.filePath || 'untitled'}),
-NOT any other files mentioned in project instructions or context.
-
-${(() => {
-  // Handle document content based on transition type
-  if (documentTransition === 'none') {
-    // Document unchanged since last message - don't resend content
-    return '(Document content unchanged since last message - refer to previous context)\n';
-  } else if (documentTransition === 'modified' && documentDiff) {
-    // Document was modified - show the diff
-    return `Document has been modified since your last response. Changes (unified diff):\n\`\`\`diff\n${documentDiff}\n\`\`\`\n`;
-  } else if (documentContext?.content) {
-    // Full content: first time seeing file, switched files, or no transition info
-    return `Full content of the active document:\n\`\`\`${isMockup ? 'html' : ''}\n${documentContext.content}\n\`\`\`\n`;
-  }
-  return '';
-})()}
-═══════════════════════════════════════════════════════════
 
 ${isMockup ? `
 🎨 MOCKUP EDITING MODE
@@ -490,7 +346,7 @@ SMART INSERTION RULES for streamContent tool - YOU MUST ANALYZE THE USER'S REQUE
 2. If user references specific text like "after the fruits list", "below the purple section", "after ## Purple" → use:
    - insertAfter="## Purple" (or whatever unique text they reference)
    - position='cursor' (as fallback)
-3. If user has text selected (check selection field above) → use position='after-selection'
+3. If user has text selected (check selection field in document context) → use position='after-selection'
 4. If user says "here" or "at cursor" → use position='cursor'
 5. If unclear but adding new content → use position='end' (safer than overwriting at cursor)
 
