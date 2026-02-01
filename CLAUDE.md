@@ -120,6 +120,13 @@ If none of the above are true, run e2e tests normally.
 
 ALWAYS use the /e2e-devcontainer command when running e2e tests in a dev container.
 
+### E2E Testing Guidelines
+
+You may use the `e2e-runner` agent to run **targeted E2E tests** related to the code you are working on. However:
+- **Do NOT run the full E2E test suite** unless explicitly asked - it takes a long time and some existing tests may be broken
+- **Prefer specific test files** related to your changes (e.g., `e2e/editors/monaco.spec.ts` when working on Monaco editor)
+- **Use grep patterns** to run specific test cases when only a few tests are relevant
+
 ### Other Packages
 - **Capacitor (mobile)**: `npm run cap:dev`, `npm run cap:ios`, `npm run cap:android`
 - **Collaboration server**: `npm run collabv2:dev`, `npm run collabv2:deploy`
