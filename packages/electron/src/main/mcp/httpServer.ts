@@ -128,6 +128,89 @@ const activeTransports = new Map<string, SSEServerTransport>();
 // This is populated when we receive document state updates
 const workspaceToWindowMap = new Map<string, number>();
 
+// Cache for worktree path -> project path resolution
+// This avoids repeated database lookups for the same worktree
+const worktreeToProjectPathCache = new Map<string, string | null>();
+
+/**
+ * Find the window ID for a given workspace path, resolving worktree paths to their parent project.
+ *
+ * When Claude Code runs in a worktree, the workspacePath is the worktree directory
+ * (e.g., /Users/foo/repo_worktrees/gentle-flame), but the window is registered under
+ * the parent project path (e.g., /Users/foo/repo). This function handles that resolution.
+ *
+ * @param workspacePath The workspace path (may be a worktree path or regular workspace)
+ * @returns The window ID if found, or null if no window is found
+ */
+async function findWindowIdForWorkspacePath(workspacePath: string): Promise<number | null> {
+  // First try direct lookup - this works for regular workspaces
+  let windowId = workspaceToWindowMap.get(workspacePath);
+  if (windowId !== undefined) {
+    return windowId;
+  }
+
+  // Try findWindowByWorkspace directly
+  let targetWindow = findWindowByWorkspace(workspacePath);
+  if (targetWindow && !targetWindow.isDestroyed()) {
+    // Cache the mapping for future lookups
+    workspaceToWindowMap.set(workspacePath, targetWindow.id);
+    return targetWindow.id;
+  }
+
+  // Check if this might be a worktree path
+  // First check cache to avoid repeated DB lookups
+  if (worktreeToProjectPathCache.has(workspacePath)) {
+    const cachedProjectPath = worktreeToProjectPathCache.get(workspacePath);
+    if (cachedProjectPath) {
+      windowId = workspaceToWindowMap.get(cachedProjectPath);
+      if (windowId !== undefined) {
+        return windowId;
+      }
+      targetWindow = findWindowByWorkspace(cachedProjectPath);
+      if (targetWindow && !targetWindow.isDestroyed()) {
+        workspaceToWindowMap.set(cachedProjectPath, targetWindow.id);
+        return targetWindow.id;
+      }
+    }
+    // cachedProjectPath is null means we already checked and it's not a worktree
+    return null;
+  }
+
+  // Query the database to check if this is a worktree path
+  try {
+    const { getDatabase, ensureDbReady } = await import('../database/initialize');
+    const { createWorktreeStore } = await import('../services/WorktreeStore');
+    const db = getDatabase();
+    const worktreeStore = createWorktreeStore(db, ensureDbReady);
+    const worktree = await worktreeStore.getByPath(workspacePath);
+
+    if (worktree) {
+      // It's a worktree - use the project path
+      const projectPath = worktree.projectPath;
+      worktreeToProjectPathCache.set(workspacePath, projectPath);
+      console.log(`[MCP Server] Resolved worktree path ${workspacePath} -> project path ${projectPath}`);
+
+      windowId = workspaceToWindowMap.get(projectPath);
+      if (windowId !== undefined) {
+        return windowId;
+      }
+      targetWindow = findWindowByWorkspace(projectPath);
+      if (targetWindow && !targetWindow.isDestroyed()) {
+        workspaceToWindowMap.set(projectPath, targetWindow.id);
+        return targetWindow.id;
+      }
+    } else {
+      // Not a worktree - cache the negative result
+      worktreeToProjectPathCache.set(workspacePath, null);
+    }
+  } catch (error) {
+    console.warn('[MCP Server] Error checking worktree path:', error);
+    // Don't cache errors - they might be transient
+  }
+
+  return null;
+}
+
 // Extension tools registered from renderer
 interface ExtensionToolDefinition {
   name: string;
@@ -245,7 +328,7 @@ let httpServerInstance: any = null;
  * Uses workspace path as the canonical identifier since it's stable across app restarts,
  * unlike windowId which changes every time.
  */
-function findWindowForFilePath(filePath: string | undefined): BrowserWindow | null {
+async function findWindowForFilePath(filePath: string | undefined): Promise<BrowserWindow | null> {
   if (!filePath) {
     throw new Error('[MCP Server] CRITICAL: No file path provided to findWindowForFilePath, cannot determine target window');
   }
@@ -293,8 +376,8 @@ function findWindowForFilePath(filePath: string | undefined): BrowserWindow | nu
     throw new Error(`[MCP Server] CRITICAL: Could not determine workspace for file: ${filePath}. Available sessions (${documentStateBySession.size}): ${availableSessions}`);
   }
 
-  // Look up the window ID for this workspace path
-  const windowId = workspaceToWindowMap.get(targetWorkspacePath);
+  // Look up the window ID for this workspace path (resolves worktree paths to parent project)
+  const windowId = await findWindowIdForWorkspacePath(targetWorkspacePath);
   if (!windowId) {
     const availableWorkspaces = Array.from(workspaceToWindowMap.entries()).map(([path, id]) =>
       `${path} -> window ${id}`
@@ -483,12 +566,20 @@ async function tryCreateServer(port: number): Promise<any> {
 
       // Register workspace-to-window mapping at connection time
       // This ensures extension tools can route to the correct window
+      // Note: For worktree sessions, the workspacePath is the worktree directory,
+      // but the window is registered under the parent project path.
+      // We use findWindowIdForWorkspacePath which resolves worktrees to their parent.
       if (workspacePath) {
-        const targetWindow = findWindowByWorkspace(workspacePath);
-        if (targetWindow && !targetWindow.isDestroyed()) {
-          workspaceToWindowMap.set(workspacePath, targetWindow.id);
-          // console.log(`[MCP Server] Registered workspace ${workspacePath} -> window ${targetWindow.id}`);
-        }
+        // Async registration - don't await, just fire and forget
+        // The mapping will be ready by the time tool calls need it
+        findWindowIdForWorkspacePath(workspacePath).then(windowId => {
+          if (windowId) {
+            workspaceToWindowMap.set(workspacePath, windowId);
+            console.log(`[MCP Server] Registered workspace ${workspacePath} -> window ${windowId}`);
+          }
+        }).catch(err => {
+          console.warn(`[MCP Server] Failed to register workspace window mapping:`, err);
+        });
       }
 
       // Create a new MCP server instance for this connection
@@ -811,7 +902,7 @@ The commit message should follow these guidelines:
             }
 
             // Find the correct window for this file
-            const targetWindow = findWindowForFilePath(targetFilePath);
+            const targetWindow = await findWindowForFilePath(targetFilePath);
             if (targetWindow) {
 
               // Validate that the file is a markdown file
@@ -901,7 +992,7 @@ The commit message should follow these guidelines:
             }
 
             // Find the correct window for this file
-            const targetWindow = findWindowForFilePath(targetFilePath);
+            const targetWindow = await findWindowForFilePath(targetFilePath);
             if (targetWindow) {
 
               // Generate a unique stream ID
@@ -1063,23 +1154,27 @@ The commit message should follow these guidelines:
                 };
               }
 
-              // Find the window for this workspace
-              let targetWindow: BrowserWindow | null = null;
-              const windowId = workspaceToWindowMap.get(fileWorkspacePath);
-              if (windowId) {
-                targetWindow = BrowserWindow.fromId(windowId);
-              }
-
-              if (!targetWindow || targetWindow.isDestroyed()) {
-                targetWindow = findWindowByWorkspace(fileWorkspacePath);
-              }
-
-              if (!targetWindow || targetWindow.isDestroyed()) {
+              // Find the window for this workspace (resolves worktree paths to parent project)
+              const windowId = await findWindowIdForWorkspacePath(fileWorkspacePath);
+              if (!windowId) {
                 return {
                   content: [
                     {
                       type: 'text',
                       text: `Error: No window found for workspace "${fileWorkspacePath}"`
+                    }
+                  ],
+                  isError: true
+                };
+              }
+
+              const targetWindow = BrowserWindow.fromId(windowId);
+              if (!targetWindow || targetWindow.isDestroyed()) {
+                return {
+                  content: [
+                    {
+                      type: 'text',
+                      text: `Error: Window no longer exists for workspace "${fileWorkspacePath}"`
                     }
                   ],
                   isError: true
@@ -1742,8 +1837,8 @@ The commit message should follow these guidelines:
               };
             }
 
-            // Find the target window
-            const commitWindowId = workspaceToWindowMap.get(workspacePath);
+            // Find the target window (resolves worktree paths to parent project)
+            const commitWindowId = await findWindowIdForWorkspacePath(workspacePath);
             if (!commitWindowId) {
               return {
                 content: [
@@ -1873,8 +1968,8 @@ The commit message should follow these guidelines:
               };
             }
 
-            // Find the correct window for this workspace
-            const windowId = workspaceToWindowMap.get(workspacePath);
+            // Find the correct window for this workspace (resolves worktree paths to parent project)
+            const windowId = await findWindowIdForWorkspacePath(workspacePath);
             if (!windowId) {
               return {
                 content: [
