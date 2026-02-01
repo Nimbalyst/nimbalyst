@@ -24,6 +24,76 @@ interface TrackerTableProps {
   onSortChange?: (column: SortColumn, direction: SortDirection) => void;
   hideTypeTabs?: boolean;
   onSwitchToFilesMode?: () => void;
+  /** Callback when user wants to create a new tracker item of the current type */
+  onNewItem?: (type: TrackerItemType) => void;
+}
+
+/**
+ * Get educational description for each tracker type
+ */
+function getTypeDescription(type: TrackerItemType): { title: string; description: string; hints: string[] } {
+  const descriptions: Record<TrackerItemType, { title: string; description: string; hints: string[] }> = {
+    'plan': {
+      title: 'Plans',
+      description: 'Plans help you organize features, projects, and initiatives with AI assistance. Use /plan in chat to create a new plan document with status tracking.',
+      hints: [
+        'Use /plan in agent chat to create a new plan',
+        'Plans support progress tracking and status updates',
+        'Click "+ New" to start planning with AI',
+      ],
+    },
+    'bug': {
+      title: 'Bugs',
+      description: "Bugs track issues and defects that need fixing. They're stored as inline items in your markdown documents, making them easy to find alongside related notes.",
+      hints: [
+        'Type #bug in any markdown file to create a bug',
+        'Use /track bug in agent chat',
+        'Click "+ New" to quickly add a bug',
+      ],
+    },
+    'task': {
+      title: 'Tasks',
+      description: 'Tasks track work items and todos. Add them inline to any document or use the quick-add panel.',
+      hints: [
+        'Type #task in any markdown file to create a task',
+        'Use /track task in agent chat',
+        'Click "+ New" to quickly add a task',
+      ],
+    },
+    'idea': {
+      title: 'Ideas',
+      description: 'Ideas capture concepts and proposals to explore. Jot them down quickly and revisit later.',
+      hints: [
+        'Type #idea in any markdown file to capture an idea',
+        'Use /track idea in agent chat',
+        'Click "+ New" to quickly add an idea',
+      ],
+    },
+    'decision': {
+      title: 'Decisions',
+      description: 'Decisions document important choices and their rationale. Great for architectural decisions that need context preserved.',
+      hints: [
+        'Type #decision in any markdown file',
+        'Use /track decision in agent chat',
+        'Click "+ New" to document a decision',
+      ],
+    },
+  };
+  return descriptions[type] || descriptions['task'];
+}
+
+/**
+ * Get color for tracker type (used for icons and accents)
+ */
+function getTypeColor(type: TrackerItemType): string {
+  const colors: Record<TrackerItemType, string> = {
+    'bug': '#dc2626',
+    'task': '#2563eb',
+    'plan': '#7c3aed',
+    'idea': '#ca8a04',
+    'decision': '#8b5cf6',
+  };
+  return colors[type] || '#6b7280';
 }
 
 function getStatusColor(status: TrackerItemStatus): string {
@@ -155,6 +225,7 @@ export function TrackerTable({
   onSortChange,
   hideTypeTabs = false,
   onSwitchToFilesMode,
+  onNewItem,
 }: TrackerTableProps): JSX.Element {
   const [items, setItems] = useState<TrackerItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -524,21 +595,51 @@ export function TrackerTable({
         </div>
       )}
 
-      <div className="tracker-table-container flex-1 overflow-auto px-3 pb-3">
+      <div className="tracker-table-container flex-1 overflow-auto pb-1">
         <table className="tracker-table w-full border-collapse text-[13px]">
           <thead>
             <tr>
               <th
-                className="tracker-table-header type sortable sticky top-0 bg-[var(--nim-bg-secondary)] py-1.5 px-2 text-left text-[11px] font-semibold text-[var(--nim-text-faint)] uppercase tracking-[0.5px] border-b border-[var(--nim-border)] z-10 cursor-pointer select-none hover:bg-[var(--nim-bg-hover)]"
-                onClick={() => handleColumnClick('type')}
+                className="tracker-table-header type sticky top-0 bg-[var(--nim-bg-secondary)] py-1 px-2 text-left text-[11px] font-semibold text-[var(--nim-text-faint)] uppercase tracking-[0.5px] border-b border-[var(--nim-border)] z-10 select-none"
               >
                 <span className="header-content inline-flex items-center gap-1 whitespace-nowrap">
-                  <span>TYPE</span>
-                  {getSortIndicator('type')}
+                  {/* Show + New button when a specific type is selected and onNewItem is provided */}
+                  {onNewItem && activeTypeFilter !== 'all' ? (
+                    <button
+                      className="tracker-new-button inline-flex items-center gap-0.5 px-1.5 py-px rounded text-[10px] font-semibold border-none cursor-pointer transition-all duration-150 hover:opacity-90"
+                      style={{
+                        backgroundColor: `${getTypeColor(activeTypeFilter as TrackerItemType)}15`,
+                        color: getTypeColor(activeTypeFilter as TrackerItemType),
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onNewItem(activeTypeFilter as TrackerItemType);
+                      }}
+                      title={`Create new ${activeTypeFilter}`}
+                    >
+                      <span className="material-symbols-outlined text-xs">add</span>
+                      <span>New</span>
+                    </button>
+                  ) : (
+                    <>
+                      <span
+                        className="cursor-pointer hover:text-[var(--nim-text)]"
+                        onClick={() => handleColumnClick('type')}
+                      >
+                        TYPE
+                      </span>
+                      <span
+                        className="cursor-pointer"
+                        onClick={() => handleColumnClick('type')}
+                      >
+                        {getSortIndicator('type')}
+                      </span>
+                    </>
+                  )}
                 </span>
               </th>
               <th
-                className="tracker-table-header title sortable sticky top-0 bg-[var(--nim-bg-secondary)] py-1.5 px-2 text-left text-[11px] font-semibold text-[var(--nim-text-faint)] uppercase tracking-[0.5px] border-b border-[var(--nim-border)] z-10 cursor-pointer select-none hover:bg-[var(--nim-bg-hover)]"
+                className="tracker-table-header title sortable sticky top-0 bg-[var(--nim-bg-secondary)] py-1 px-2 text-left text-[11px] font-semibold text-[var(--nim-text-faint)] uppercase tracking-[0.5px] border-b border-[var(--nim-border)] z-10 cursor-pointer select-none hover:bg-[var(--nim-bg-hover)]"
                 onClick={() => handleColumnClick('title')}
               >
                 <span className="header-content inline-flex items-center gap-1 whitespace-nowrap">
@@ -547,7 +648,7 @@ export function TrackerTable({
                 </span>
               </th>
               <th
-                className="tracker-table-header status sortable sticky top-0 bg-[var(--nim-bg-secondary)] py-1.5 px-2 text-left text-[11px] font-semibold text-[var(--nim-text-faint)] uppercase tracking-[0.5px] border-b border-[var(--nim-border)] z-10 cursor-pointer select-none hover:bg-[var(--nim-bg-hover)]"
+                className="tracker-table-header status sortable sticky top-0 bg-[var(--nim-bg-secondary)] py-1 px-2 text-left text-[11px] font-semibold text-[var(--nim-text-faint)] uppercase tracking-[0.5px] border-b border-[var(--nim-border)] z-10 cursor-pointer select-none hover:bg-[var(--nim-bg-hover)]"
                 onClick={() => handleColumnClick('status')}
               >
                 <span className="header-content inline-flex items-center gap-1 whitespace-nowrap">
@@ -556,7 +657,7 @@ export function TrackerTable({
                 </span>
               </th>
               <th
-                className="tracker-table-header priority sortable sticky top-0 bg-[var(--nim-bg-secondary)] py-1.5 px-2 text-left text-[11px] font-semibold text-[var(--nim-text-faint)] uppercase tracking-[0.5px] border-b border-[var(--nim-border)] z-10 cursor-pointer select-none hover:bg-[var(--nim-bg-hover)]"
+                className="tracker-table-header priority sortable sticky top-0 bg-[var(--nim-bg-secondary)] py-1 px-2 text-left text-[11px] font-semibold text-[var(--nim-text-faint)] uppercase tracking-[0.5px] border-b border-[var(--nim-border)] z-10 cursor-pointer select-none hover:bg-[var(--nim-bg-hover)]"
                 onClick={() => handleColumnClick('priority')}
               >
                 <span className="header-content inline-flex items-center gap-1 whitespace-nowrap">
@@ -565,7 +666,7 @@ export function TrackerTable({
                 </span>
               </th>
               <th
-                className="tracker-table-header progress sortable sticky top-0 bg-[var(--nim-bg-secondary)] py-1.5 px-2 text-left text-[11px] font-semibold text-[var(--nim-text-faint)] uppercase tracking-[0.5px] border-b border-[var(--nim-border)] z-10 cursor-pointer select-none hover:bg-[var(--nim-bg-hover)]"
+                className="tracker-table-header progress sortable sticky top-0 bg-[var(--nim-bg-secondary)] py-1 px-2 text-left text-[11px] font-semibold text-[var(--nim-text-faint)] uppercase tracking-[0.5px] border-b border-[var(--nim-border)] z-10 cursor-pointer select-none hover:bg-[var(--nim-bg-hover)]"
                 onClick={() => handleColumnClick('progress')}
               >
                 <span className="header-content inline-flex items-center gap-1 whitespace-nowrap">
@@ -574,7 +675,7 @@ export function TrackerTable({
                 </span>
               </th>
               <th
-                className="tracker-table-header module sortable sticky top-0 bg-[var(--nim-bg-secondary)] py-1.5 px-2 text-left text-[11px] font-semibold text-[var(--nim-text-faint)] uppercase tracking-[0.5px] border-b border-[var(--nim-border)] z-10 cursor-pointer select-none hover:bg-[var(--nim-bg-hover)]"
+                className="tracker-table-header module sortable sticky top-0 bg-[var(--nim-bg-secondary)] py-1 px-2 text-left text-[11px] font-semibold text-[var(--nim-text-faint)] uppercase tracking-[0.5px] border-b border-[var(--nim-border)] z-10 cursor-pointer select-none hover:bg-[var(--nim-bg-hover)]"
                 onClick={() => handleColumnClick('module')}
               >
                 <span className="header-content inline-flex items-center gap-1 whitespace-nowrap">
@@ -583,7 +684,7 @@ export function TrackerTable({
                 </span>
               </th>
               <th
-                className="tracker-table-header updated sortable sticky top-0 bg-[var(--nim-bg-secondary)] py-1.5 px-2 text-left text-[11px] font-semibold text-[var(--nim-text-faint)] uppercase tracking-[0.5px] border-b border-[var(--nim-border)] z-10 cursor-pointer select-none hover:bg-[var(--nim-bg-hover)]"
+                className="tracker-table-header updated sortable sticky top-0 bg-[var(--nim-bg-secondary)] py-1 px-2 text-left text-[11px] font-semibold text-[var(--nim-text-faint)] uppercase tracking-[0.5px] border-b border-[var(--nim-border)] z-10 cursor-pointer select-none hover:bg-[var(--nim-bg-hover)]"
                 onClick={() => handleColumnClick('lastIndexed')}
               >
                 <span className="header-content inline-flex items-center gap-1 whitespace-nowrap">
@@ -592,56 +693,113 @@ export function TrackerTable({
                 </span>
               </th>
             </tr>
-            <tr className="filter-row">
-              <th className="tracker-table-header filter-cell py-2 px-3 bg-[var(--nim-bg)]"></th>
-              <th className="tracker-table-header filter-cell py-2 px-3 bg-[var(--nim-bg)]">
-                <input
-                  type="text"
-                  className="filter-input w-full py-1 px-1.5 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded text-[var(--nim-text)] text-xs focus:outline-none focus:border-[var(--nim-primary)]"
-                  placeholder="Search..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </th>
-              <th className="tracker-table-header filter-cell py-2 px-3 bg-[var(--nim-bg)]">
-                <select
-                  className="filter-select w-full py-1 px-1.5 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded text-[var(--nim-text)] text-xs focus:outline-none focus:border-[var(--nim-primary)]"
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                >
-                  {statusOptions.map(option => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </th>
-              <th className="tracker-table-header filter-cell py-2 px-3 bg-[var(--nim-bg)]">
-                <select
-                  className="filter-select w-full py-1 px-1.5 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded text-[var(--nim-text)] text-xs focus:outline-none focus:border-[var(--nim-primary)]"
-                  value={priorityFilter}
-                  onChange={(e) => setPriorityFilter(e.target.value)}
-                >
-                  {priorityOptions.map(option => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </th>
-              <th className="tracker-table-header filter-cell py-2 px-3 bg-[var(--nim-bg)]"></th>
-              <th className="tracker-table-header filter-cell py-2 px-3 bg-[var(--nim-bg)]"></th>
-              <th className="tracker-table-header filter-cell py-2 px-3 bg-[var(--nim-bg)]"></th>
-            </tr>
+            {/* Only show filter row when there are items to filter */}
+            {items.length > 0 && (
+              <tr className="filter-row">
+                <th className="tracker-table-header filter-cell py-1 px-2 bg-[var(--nim-bg)]"></th>
+                <th className="tracker-table-header filter-cell py-1 px-2 bg-[var(--nim-bg)]">
+                  <input
+                    type="text"
+                    className="filter-input w-full py-1 px-1.5 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded text-[var(--nim-text)] text-xs focus:outline-none focus:border-[var(--nim-primary)]"
+                    placeholder="Search..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                </th>
+                <th className="tracker-table-header filter-cell py-1 px-2 bg-[var(--nim-bg)]">
+                  <select
+                    className="filter-select w-full py-1 px-1.5 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded text-[var(--nim-text)] text-xs focus:outline-none focus:border-[var(--nim-primary)]"
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                  >
+                    {statusOptions.map(option => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </th>
+                <th className="tracker-table-header filter-cell py-1 px-2 bg-[var(--nim-bg)]">
+                  <select
+                    className="filter-select w-full py-1 px-1.5 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded text-[var(--nim-text)] text-xs focus:outline-none focus:border-[var(--nim-primary)]"
+                    value={priorityFilter}
+                    onChange={(e) => setPriorityFilter(e.target.value)}
+                  >
+                    {priorityOptions.map(option => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </th>
+                <th className="tracker-table-header filter-cell py-1 px-2 bg-[var(--nim-bg)]"></th>
+                <th className="tracker-table-header filter-cell py-1 px-2 bg-[var(--nim-bg)]"></th>
+                <th className="tracker-table-header filter-cell py-1 px-2 bg-[var(--nim-bg)]"></th>
+              </tr>
+            )}
           </thead>
           <tbody>
           {sortedItems.length === 0 ? (
             <tr>
               <td colSpan={7} className="tracker-table-empty-cell !p-0 !border-none">
-                <div className="tracker-table-empty flex flex-col items-center justify-center py-[60px] px-5 text-[var(--nim-text-muted)] text-center gap-3">
-                  <span>No tracker items found</span>
-                  <p className="text-xs text-[var(--nim-text-faint)] mt-2">Create tracker items using #bug, #task, #plan, or #idea in any markdown file</p>
-                </div>
+                {activeTypeFilter !== 'all' ? (
+                  // Type-specific educational empty state - horizontal layout
+                  (() => {
+                    const typeInfo = getTypeDescription(activeTypeFilter as TrackerItemType);
+                    const typeColor = getTypeColor(activeTypeFilter as TrackerItemType);
+                    const typeIcon = getTypeIcon(activeTypeFilter as TrackerItemType);
+                    return (
+                      <div className="tracker-table-empty flex items-center gap-4 py-4 px-6">
+                        {/* Icon */}
+                        <div
+                          className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                          style={{ backgroundColor: `${typeColor}12` }}
+                        >
+                          <span
+                            className="material-symbols-outlined text-lg"
+                            style={{ color: typeColor }}
+                          >
+                            {typeIcon}
+                          </span>
+                        </div>
+
+                        {/* Description and hints */}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-[var(--nim-text-muted)] m-0">
+                            {typeInfo.description}
+                          </p>
+                          <p className="text-xs text-[var(--nim-text-faint)] m-0 mt-1">
+                            {activeTypeFilter === 'plan' ? (
+                              <>Use <code className="px-1 py-0.5 bg-[var(--nim-bg-secondary)] rounded text-[10px]">/plan</code> in chat to create a new plan</>
+                            ) : (
+                              <>Type <code className="px-1 py-0.5 bg-[var(--nim-bg-secondary)] rounded text-[10px]">#{activeTypeFilter}</code> in markdown or use <code className="px-1 py-0.5 bg-[var(--nim-bg-secondary)] rounded text-[10px]">/track {activeTypeFilter}</code> in chat</>
+                            )}
+                          </p>
+                        </div>
+
+                        {/* New button */}
+                        {onNewItem && (
+                          <button
+                            className="shrink-0 px-3 py-1.5 rounded-md text-xs font-medium text-white border-none cursor-pointer transition-all duration-150 hover:opacity-90"
+                            style={{ backgroundColor: typeColor }}
+                            onClick={() => onNewItem(activeTypeFilter as TrackerItemType)}
+                          >
+                            <span className="flex items-center gap-1">
+                              <span className="material-symbols-outlined text-sm">add</span>
+                              New {activeTypeFilter.charAt(0).toUpperCase() + activeTypeFilter.slice(1)}
+                            </span>
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })()
+                ) : (
+                  // Generic empty state for "all" filter
+                  <div className="tracker-table-empty flex items-center justify-center gap-2 py-4 px-6">
+                    <p className="text-sm text-[var(--nim-text-muted)] m-0">No tracker items found</p>
+                    <p className="text-xs text-[var(--nim-text-faint)] m-0">Create items using #bug, #task, #plan, or #idea in any markdown file</p>
+                  </div>
+                )}
               </td>
             </tr>
           ) : (

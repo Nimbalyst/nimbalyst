@@ -1,6 +1,6 @@
 import React from 'react';
 import { usePostHog } from 'posthog-js/react';
-import { useAtomValue } from 'jotai';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import type { ContentMode } from '../../types/WindowModeTypes';
 import { KeyboardShortcuts, getShortcutDisplay } from '../../../shared/KeyboardShortcuts';
@@ -10,11 +10,14 @@ import { TrustIndicator } from '../TrustIndicator';
 import { ExtensionDevIndicator } from '../ExtensionDevIndicator';
 import { useExtensionGutterButtons } from '../../extensions/panels/usePanels';
 import { terminalFeatureAvailableAtom } from '../../store/atoms/appSettings';
+import {
+  activeTrackerTypeAtom,
+  toggleTrackerPanelAtom,
+  closeTrackerPanelAtom,
+} from '../../store/atoms/trackers';
 
 export type NavigationMode = 'planning' | 'coding';
 export type SidebarView = 'files' | 'settings';
-
-export type TrackerBottomPanelType = 'plan' | 'bug' | 'task' | 'idea' | 'decision';
 
 /**
  * Extension panel info for gutter buttons.
@@ -34,12 +37,7 @@ interface NavigationGutterProps {
   onOpenPermissions?: () => void;
   onOpenFeedback?: () => void;
   onChangeTrustMode?: () => void;
-  onTogglePlansPanel?: () => void;
-  onToggleBugsPanel?: () => void;
-  onToggleTasksPanel?: () => void;
-  onToggleIdeasPanel?: () => void;
   onToggleTerminalPanel?: () => void;
-  bottomPanel?: TrackerBottomPanelType | null;
   terminalPanelVisible?: boolean;
   workspacePath?: string | null;
   /** Currently active extension panel ID */
@@ -69,12 +67,7 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
   onOpenPermissions,
   onOpenFeedback,
   onChangeTrustMode,
-  onTogglePlansPanel,
-  onToggleBugsPanel,
-  onToggleTasksPanel,
-  onToggleIdeasPanel,
   onToggleTerminalPanel,
-  bottomPanel,
   terminalPanelVisible,
   workspacePath,
   activeExtensionPanel,
@@ -83,6 +76,11 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
   onToggleAgentCollapsed,
 }) => {
   const posthog = usePostHog();
+
+  // Tracker panel state from atoms
+  const activeTrackerType = useAtomValue(activeTrackerTypeAtom);
+  const toggleTrackerPanel = useSetAtom(toggleTrackerPanelAtom);
+  const closeTrackerPanel = useSetAtom(closeTrackerPanelAtom);
 
   // Check if terminal feature is available (developer mode + feature enabled)
   const isTerminalAvailable = useAtomValue(terminalFeatureAvailableAtom);
@@ -125,10 +123,12 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
       onClick: onToggleTerminalPanel,
     }] : []),
     {
-      id: 'plan',
+      id: 'tracker',
       icon: 'edit_note',
-      label: 'Plans (Cmd+Shift+P)',
-      onClick: onTogglePlansPanel,
+      label: 'Trackers (Cmd+Shift+T)',
+      onClick: () => {
+        toggleTrackerPanel();
+      },
     }
   ];
 
@@ -342,7 +342,7 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
         {bottomPanelButtons.map((button) => {
           const isActive = button.id === 'terminal'
             ? terminalPanelVisible
-            : bottomPanel === button.id;
+            : button.id === 'tracker' && activeTrackerType !== null;
           return (
             <button
               key={button.id}

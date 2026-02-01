@@ -4,12 +4,17 @@
  * State for the tracker system (bugs, plans, tasks, etc.) in the bottom panel.
  * Uses tracker type as keys for per-tracker-type state.
  *
- * Key principle: TrackerService WRITES counts and items,
- * TrackerTab components subscribe to their specific type's state.
+ * Pattern: "blob atom" for layout state with persistence,
+ * separate atoms for tracker data (counts, items).
  */
 
 import { atom } from 'jotai';
 import { atomFamily } from 'jotai/utils';
+import { store } from '@nimbalyst/runtime/store';
+
+// ============================================================
+// Types
+// ============================================================
 
 /**
  * Tracker item types supported by the system.
@@ -37,15 +42,228 @@ export interface TrackerItem {
   description?: string;
   status: TrackerStatus;
   priority: 'low' | 'medium' | 'high' | 'critical';
-  filePath: string; // Path to the markdown file
+  filePath: string;
   createdAt: number;
   updatedAt: number;
   tags: string[];
 }
 
 /**
+ * Tracker panel layout state.
+ * This shape is used both at runtime and for persistence.
+ */
+export interface TrackerPanelLayout {
+  /** Currently active tracker type, null = panel closed */
+  activeType: TrackerType | null;
+  /** Last active type - used to restore when panel reopens */
+  lastActiveType: TrackerType;
+  /** Panel height in pixels */
+  height: number;
+  /** Whether settings view is shown */
+  settingsVisible: boolean;
+}
+
+// ============================================================
+// Default Values
+// ============================================================
+
+const DEFAULT_LAYOUT: TrackerPanelLayout = {
+  activeType: null,
+  lastActiveType: 'plan',
+  height: 300,
+  settingsVisible: false,
+};
+
+// Track workspace path for persistence
+let currentWorkspacePath: string | null = null;
+
+// ============================================================
+// Main Layout Atom
+// ============================================================
+
+/**
+ * Main atom for tracker panel layout state.
+ */
+export const trackerPanelLayoutAtom = atom<TrackerPanelLayout>(DEFAULT_LAYOUT);
+
+// ============================================================
+// Derived Atoms (read-only slices)
+// ============================================================
+
+/** Currently active tracker type (null = panel closed) */
+export const activeTrackerTypeAtom = atom(
+  (get) => get(trackerPanelLayoutAtom).activeType
+);
+
+/** Last active tracker type */
+export const lastActiveTrackerTypeAtom = atom(
+  (get) => get(trackerPanelLayoutAtom).lastActiveType
+);
+
+/** Tracker panel height */
+export const trackerPanelHeightAtom = atom(
+  (get) => get(trackerPanelLayoutAtom).height
+);
+
+/** Whether settings view is visible */
+export const trackerSettingsVisibleAtom = atom(
+  (get) => get(trackerPanelLayoutAtom).settingsVisible
+);
+
+/** Whether the tracker panel is open */
+export const trackerPanelOpenAtom = atom(
+  (get) => get(trackerPanelLayoutAtom).activeType !== null
+);
+
+// ============================================================
+// Debounced Persistence
+// ============================================================
+
+let persistTimer: ReturnType<typeof setTimeout> | null = null;
+
+function schedulePersist(workspacePath: string, layout: TrackerPanelLayout): void {
+  if (persistTimer) {
+    clearTimeout(persistTimer);
+  }
+
+  persistTimer = setTimeout(async () => {
+    try {
+      await window.electronAPI.invoke('workspace:update-state', workspacePath, {
+        trackerBottomPanel: layout.activeType,
+        trackerBottomPanelHeight: layout.height,
+        lastActiveTrackerType: layout.activeType || layout.lastActiveType,
+      });
+    } catch (err) {
+      console.error('[trackers] Failed to persist layout:', err);
+    }
+  }, 300);
+}
+
+// ============================================================
+// Setter Atoms
+// ============================================================
+
+/**
+ * Update tracker panel layout with partial values.
+ */
+export const setTrackerPanelLayoutAtom = atom(
+  null,
+  (get, set, updates: Partial<TrackerPanelLayout>) => {
+    const current = get(trackerPanelLayoutAtom);
+    const newLayout = { ...current, ...updates };
+
+    // Auto-update lastActiveType when activeType changes to non-null
+    if (updates.activeType !== undefined && updates.activeType !== null) {
+      newLayout.lastActiveType = updates.activeType;
+    }
+
+    set(trackerPanelLayoutAtom, newLayout);
+
+    if (currentWorkspacePath) {
+      schedulePersist(currentWorkspacePath, newLayout);
+    }
+  }
+);
+
+/**
+ * Set active tracker type directly.
+ */
+export const setActiveTrackerTypeAtom = atom(
+  null,
+  (get, set, type: TrackerType | null) => {
+    set(setTrackerPanelLayoutAtom, { activeType: type });
+  }
+);
+
+/**
+ * Set tracker panel height.
+ */
+export const setTrackerPanelHeightAtom = atom(
+  null,
+  (_get, set, height: number) => {
+    set(setTrackerPanelLayoutAtom, { height });
+  }
+);
+
+/**
+ * Toggle settings view visibility.
+ */
+export const toggleTrackerSettingsAtom = atom(
+  null,
+  (get, set) => {
+    const current = get(trackerPanelLayoutAtom);
+    set(setTrackerPanelLayoutAtom, { settingsVisible: !current.settingsVisible });
+  }
+);
+
+/**
+ * Toggle tracker panel - smart toggle behavior:
+ * - If closed: open to last active type (or requested type)
+ * - If open on different type: switch to requested type
+ * - If open on same type: close
+ */
+export const toggleTrackerPanelAtom = atom(
+  null,
+  (get, set, requestedType?: TrackerType) => {
+    const layout = get(trackerPanelLayoutAtom);
+
+    if (layout.activeType === null) {
+      // Panel is closed - open to last active or requested type
+      const typeToOpen = requestedType || layout.lastActiveType;
+      set(setTrackerPanelLayoutAtom, { activeType: typeToOpen });
+    } else if (requestedType && layout.activeType !== requestedType) {
+      // Panel is open but on different type - switch to requested type
+      set(setTrackerPanelLayoutAtom, { activeType: requestedType });
+    } else {
+      // Panel is open on same type (or no type requested) - close it
+      set(setTrackerPanelLayoutAtom, { activeType: null });
+    }
+  }
+);
+
+/**
+ * Close tracker panel.
+ */
+export const closeTrackerPanelAtom = atom(null, (_get, set) => {
+  set(setTrackerPanelLayoutAtom, { activeType: null });
+});
+
+// ============================================================
+// Initialization
+// ============================================================
+
+/**
+ * Initialize tracker panel layout from workspace state.
+ * Call this when workspace path is known.
+ */
+export async function initTrackerPanelLayout(workspacePath: string): Promise<void> {
+  currentWorkspacePath = workspacePath;
+
+  try {
+    const workspaceState = await window.electronAPI.invoke(
+      'workspace:get-state',
+      workspacePath
+    );
+
+    const restoredLayout: TrackerPanelLayout = {
+      activeType: workspaceState?.trackerBottomPanel ?? DEFAULT_LAYOUT.activeType,
+      lastActiveType: workspaceState?.lastActiveTrackerType ?? DEFAULT_LAYOUT.lastActiveType,
+      height: workspaceState?.trackerBottomPanelHeight ?? DEFAULT_LAYOUT.height,
+      settingsVisible: DEFAULT_LAYOUT.settingsVisible, // Don't persist settings view
+    };
+
+    store.set(trackerPanelLayoutAtom, restoredLayout);
+  } catch (err) {
+    console.error('[trackers] Failed to load layout:', err);
+  }
+}
+
+// ============================================================
+// Tracker Data Atoms (separate from layout)
+// ============================================================
+
+/**
  * Counts by tracker type.
- * TrackerTabs subscribe to show counts in tab badges.
  */
 export const trackerCountsAtom = atom<Record<TrackerType, number>>({
   bug: 0,
@@ -57,7 +275,6 @@ export const trackerCountsAtom = atom<Record<TrackerType, number>>({
 
 /**
  * Per-type tracker count.
- * Derived from trackerCountsAtom for efficient per-tab subscriptions.
  */
 export const trackerCountAtom = atomFamily((type: TrackerType) =>
   atom((get) => {
@@ -68,16 +285,10 @@ export const trackerCountAtom = atomFamily((type: TrackerType) =>
 
 /**
  * Items per tracker type.
- * TrackerList subscribes to its type's items.
  */
 export const trackerItemsAtom = atomFamily((_type: TrackerType) =>
   atom<TrackerItem[]>([])
 );
-
-/**
- * Currently selected tracker type in bottom panel.
- */
-export const activeTrackerTypeAtom = atom<TrackerType | null>(null);
 
 /**
  * Currently selected tracker item ID.
@@ -139,7 +350,6 @@ export const filteredTrackerItemsAtom = atomFamily((type: TrackerType) =>
 
 /**
  * Derived: total open items across all tracker types.
- * Useful for global badge.
  */
 export const totalOpenItemsAtom = atom((get) => {
   const counts = get(trackerCountsAtom);
@@ -148,7 +358,6 @@ export const totalOpenItemsAtom = atom((get) => {
 
 /**
  * Derived: critical/high priority items count.
- * For attention indicator.
  */
 export const criticalItemsCountAtom = atom((get) => {
   let count = 0;
@@ -165,13 +374,12 @@ export const criticalItemsCountAtom = atom((get) => {
   return count;
 });
 
-/**
- * Actions for managing tracker state.
- */
+// ============================================================
+// Action Atoms for Tracker Data
+// ============================================================
 
 /**
  * Update counts for all tracker types.
- * Called by TrackerService after scanning.
  */
 export const updateTrackerCountsAtom = atom(
   null,

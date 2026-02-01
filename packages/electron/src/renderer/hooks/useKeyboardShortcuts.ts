@@ -1,7 +1,11 @@
 import { useEffect, useRef } from 'react';
+import { useSetAtom } from 'jotai';
 import type { ContentMode } from '../types/WindowModeTypes';
-import type { TrackerBottomPanelType } from '../components/TrackerBottomPanel/TrackerBottomPanel';
 import type { AgentModeRef } from '../components/AgentMode';
+import {
+  toggleTrackerPanelAtom,
+  closeTrackerPanelAtom,
+} from '../store/atoms/trackers';
 
 interface KeyboardShortcutsOptions {
   // Mode state
@@ -23,10 +27,6 @@ interface KeyboardShortcutsOptions {
   // AgentMode ref for worktree operations
   agentModeRef: React.RefObject<AgentModeRef | null>;
 
-  // Bottom panel state
-  bottomPanel: TrackerBottomPanelType | null;
-  setBottomPanel: React.Dispatch<React.SetStateAction<TrackerBottomPanelType | null>>;
-
   // Terminal panel state
   terminalPanelVisible: boolean;
   setTerminalPanelVisible: React.Dispatch<React.SetStateAction<boolean>>;
@@ -42,9 +42,7 @@ interface KeyboardShortcutsOptions {
  * - Cmd+E: Switch to Files mode (or toggle sidebar if already in Files mode)
  * - Cmd+K: Switch to Agent mode (or toggle session history if already in Agent mode)
  * - Cmd+Y: Open history dialog (Files mode only)
- * - Cmd+Shift+P: Toggle Plans panel
- * - Cmd+Shift+B: Toggle Bugs panel
- * - Cmd+Shift+K: Toggle Tasks panel
+ * - Cmd+Shift+T: Toggle Tracker panel (remembers last active type)
  * - Cmd+Alt+W: Create new worktree session
  * - Cmd+`: Toggle Terminal panel
  */
@@ -55,12 +53,14 @@ export function useKeyboardShortcuts({
   activeModeStateRef,
   editorModeRef,
   agentModeRef,
-  bottomPanel,
-  setBottomPanel,
   terminalPanelVisible,
   setTerminalPanelVisible,
   toggleAgentCollapsed,
 }: KeyboardShortcutsOptions): void {
+  // Tracker panel atoms
+  const toggleTrackerPanel = useSetAtom(toggleTrackerPanelAtom);
+  const closeTrackerPanel = useSetAtom(closeTrackerPanelAtom);
+
   // Track if worktree creation is pending after mode switch
   const pendingWorktreeCreationRef = useRef(false);
 
@@ -78,48 +78,32 @@ export function useKeyboardShortcuts({
       if ((e.metaKey || e.ctrlKey) && e.key === 'e') {
         e.preventDefault();
         e.stopPropagation();
-        e.stopImmediatePropagation();
-        if (activeMode === 'files') {
-          editorModeRef.current?.toggleSidebarCollapsed();
-        } else {
-          setActiveMode('files');
+
+        if (workspaceMode) {
+          if (activeMode === 'files') {
+            editorModeRef.current?.toggleSidebarCollapsed();
+          } else {
+            setActiveMode('files');
+          }
         }
-        return;
       }
+
       // Cmd+K for Agent mode (toggle session history if already in agent mode)
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+      // This is a global shortcut, but should be preempted if another component handles it
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k' && !e.shiftKey) {
         e.preventDefault();
         e.stopPropagation();
-        e.stopImmediatePropagation();
-        if (activeMode === 'agent') {
-          toggleAgentCollapsed();
-        } else {
-          setActiveMode('agent');
-        }
-        return;
-      }
-      // NOTE: Cmd+O, Cmd+L, Cmd+Shift+L are handled by NavigationDialogKeyboardHandler
-      // NOTE: Cmd+Shift+A for AI Chat is handled by the menu accelerator + IPC listener
-      // NOTE: Cmd+Shift+T handled by menu system (reopen-last-closed-tab IPC event)
 
-      // Cmd+Alt+W for new worktree session
-      // Note: On Mac, Alt+W produces '∑', so we need to check e.code instead of e.key
-      if (workspaceMode && (e.metaKey || e.ctrlKey) && e.altKey && e.code === 'KeyW') {
-        e.preventDefault();
-        e.stopPropagation();
-        e.stopImmediatePropagation();
-        // Switch to agent mode if not already there
-        if (activeMode !== 'agent') {
-          pendingWorktreeCreationRef.current = true;
-          setActiveMode('agent');
-        } else {
-          // Already in agent mode, create worktree directly
-          agentModeRef.current?.createNewWorktreeSession();
+        if (workspaceMode) {
+          if (activeMode === 'agent') {
+            toggleAgentCollapsed();
+          } else {
+            setActiveMode('agent');
+          }
         }
-        return;
       }
 
-      // Cmd+Y (Mac) or Ctrl+Y (Windows/Linux) for History - only in files mode
+      // Cmd+Y for history dialog (Files mode only)
       if ((e.metaKey || e.ctrlKey) && e.key === 'y') {
         e.preventDefault();
         // Only open history dialog when in files mode
@@ -128,23 +112,10 @@ export function useKeyboardShortcuts({
         }
       }
 
-      // Bottom panel keyboard shortcuts (mutually exclusive)
-      // Cmd+Shift+P for Plans panel
-      if (workspaceMode && (e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'p') {
+      // Cmd+Shift+T to toggle tracker panel (remembers last active type)
+      if (workspaceMode && (e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 't') {
         e.preventDefault();
-        setBottomPanel(prev => prev === 'plan' ? null : 'plan');
-        setTerminalPanelVisible(false);
-      }
-      // Cmd+Shift+B for Bugs panel
-      if (workspaceMode && (e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'b') {
-        e.preventDefault();
-        setBottomPanel(prev => prev === 'bug' ? null : 'bug');
-        setTerminalPanelVisible(false);
-      }
-      // Cmd+Shift+K for Tasks panel
-      if (workspaceMode && (e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'k') {
-        e.preventDefault();
-        setBottomPanel(prev => prev === 'task' ? null : 'task');
+        toggleTrackerPanel();
         setTerminalPanelVisible(false);
       }
       // Cmd+` (macOS) or Ctrl+` (Windows/Linux) for Terminal panel
@@ -153,24 +124,42 @@ export function useKeyboardShortcuts({
         e.preventDefault();
         e.stopPropagation();
         setTerminalPanelVisible(prev => {
-          if (!prev) setBottomPanel(null); // Close tracker when opening terminal
+          if (!prev) closeTrackerPanel(); // Close tracker when opening terminal
           return !prev;
         });
       }
+
+      // Cmd+Alt+W (Mac) or Ctrl+Alt+W (Windows) to create new worktree session
+      if (workspaceMode && (e.metaKey || e.ctrlKey) && e.altKey && e.key === 'w') {
+        e.preventDefault();
+        e.stopPropagation();
+
+        // If in agent mode and ref is available, create worktree directly
+        if (activeMode === 'agent' && agentModeRef.current) {
+          agentModeRef.current.createNewWorktreeSession();
+        } else {
+          // Switch to agent mode first, then create worktree when ref becomes available
+          pendingWorktreeCreationRef.current = true;
+          setActiveMode('agent');
+        }
+      }
     };
 
-    // Use capture phase to intercept before any other handlers (like Lexical's)
-    window.addEventListener('keydown', handleKeyDown, true);
-    return () => window.removeEventListener('keydown', handleKeyDown, true);
+    window.addEventListener('keydown', handleKeyDown, { capture: true });
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown, { capture: true });
+    };
   }, [
-    workspaceMode,
     activeMode,
+    workspaceMode,
     setActiveMode,
     activeModeStateRef,
     editorModeRef,
     agentModeRef,
-    setBottomPanel,
+    terminalPanelVisible,
     setTerminalPanelVisible,
     toggleAgentCollapsed,
+    toggleTrackerPanel,
+    closeTrackerPanel,
   ]);
 }

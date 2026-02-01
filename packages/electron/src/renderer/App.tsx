@@ -57,8 +57,11 @@ import {
   goForwardAtom,
   registerNavigationRestoreCallbacks,
   initNavigationHistory,
+  // Session state
+  sessionModeAtom,
+  selectedWorkstreamAtom,
 } from './store';
-import { TrackerBottomPanel, TrackerBottomPanelType } from './components/TrackerBottomPanel/TrackerBottomPanel.tsx';
+import { TrackerBottomPanel } from './components/TrackerBottomPanel/TrackerBottomPanel.tsx';
 import { TerminalBottomPanel } from './components/TerminalBottomPanel';
 import { registerDocumentLinkPlugin } from './plugins/registerDocumentLinkPlugin';
 import { registerAIChatPlugin } from './plugins/registerAIChatPlugin';
@@ -88,10 +91,18 @@ import {
   initializeElectronStorageBackend,
 } from './extensions/panels';
 import { setStorageBackend } from '@nimbalyst/runtime';
+import { store } from '@nimbalyst/runtime/store';
 import { extensionPanelAIContextAtom } from './store/atoms/extensionPanels';
 import { setDiffTreeGroupByDirectoryAtom } from './store/atoms/projectState';
 import { toggleSessionHistoryCollapsedAtom } from './store/atoms/agentMode';
 import { setDeveloperFeatureSettingsAtom } from './store/atoms/appSettings';
+import {
+  activeTrackerTypeAtom,
+  trackerPanelOpenAtom,
+  toggleTrackerPanelAtom,
+  closeTrackerPanelAtom,
+  initTrackerPanelLayout,
+} from './store/atoms/trackers';
 
 logger.ui.info('App.tsx loading');
 logger.ui.info('About to import StravuEditor');
@@ -350,9 +361,10 @@ export default function App() {
     }
   }, [activeMode]);
 
-  // Bottom panel state (shared across all modes)
-  const [bottomPanel, setBottomPanel] = useState<TrackerBottomPanelType | null>(null);
-  const [bottomPanelHeight, setBottomPanelHeight] = useState<number>(300);
+  // Tracker panel state from atoms
+  const isTrackerPanelOpen = useAtomValue(trackerPanelOpenAtom);
+  const toggleTrackerPanel = useSetAtom(toggleTrackerPanelAtom);
+  const closeTrackerPanel = useSetAtom(closeTrackerPanelAtom);
 
   // Terminal bottom panel state
   const [terminalPanelVisible, setTerminalPanelVisible] = useState<boolean>(false);
@@ -407,24 +419,13 @@ export default function App() {
       .catch(error => {
         console.error('[ContentMode] Failed to save active mode:', error);
       });
-  }, [activeMode, workspacePath, bottomPanel]);
+  }, [activeMode, workspacePath]);
 
-  // Load bottom panel state from workspace state
+  // Initialize tracker panel state from workspace state
   useEffect(() => {
-    if (!workspacePath || !window.electronAPI?.invoke) return;
-
-    window.electronAPI.invoke('workspace:get-state', workspacePath)
-      .then(state => {
-        if (state?.trackerBottomPanel !== undefined) {
-          setBottomPanel(state.trackerBottomPanel);
-        }
-        if (state?.trackerBottomPanelHeight !== undefined) {
-          setBottomPanelHeight(state.trackerBottomPanelHeight);
-        }
-      })
-      .catch(error => {
-        console.error('[TrackerBottomPanel] Failed to load bottom panel state:', error);
-      });
+    if (workspacePath) {
+      initTrackerPanelLayout(workspacePath);
+    }
   }, [workspacePath]);
 
   // Load terminal panel state from terminal store
@@ -437,7 +438,7 @@ export default function App() {
           setTerminalPanelVisible(state.panelVisible);
           // If terminal panel is visible, close tracker panel (mutually exclusive)
           if (state.panelVisible) {
-            setBottomPanel(null);
+            closeTrackerPanel();
           }
         }
         if (state?.panelHeight !== undefined) {
@@ -447,26 +448,7 @@ export default function App() {
       .catch(error => {
         console.error('[TerminalBottomPanel] Failed to load terminal panel state:', error);
       });
-  }, [workspacePath]);
-
-  // Save bottom panel state when it changes
-  useEffect(() => {
-    // console.log('[App Layout] Bottom panel state changed:', {
-    //   bottomPanel,
-    //   bottomPanelHeight,
-    //   activeMode
-    // });
-
-    if (!workspacePath || !window.electronAPI?.invoke) return;
-
-    window.electronAPI.invoke('workspace:update-state', workspacePath, {
-      trackerBottomPanel: bottomPanel,
-      trackerBottomPanelHeight: bottomPanelHeight
-    })
-      .catch(error => {
-        console.error('[TrackerBottomPanel] Failed to save bottom panel state:', error);
-      });
-  }, [bottomPanel, bottomPanelHeight, workspacePath, activeMode]);
+  }, [workspacePath, closeTrackerPanel]);
 
 
   // Register aiToolService methods on aiChatBridge for runtime to use
@@ -550,7 +532,7 @@ export default function App() {
     }, 100);
 
     return () => clearTimeout(timeout);
-  }, [activeMode, bottomPanel, bottomPanelHeight]);
+  }, [activeMode, isTrackerPanelOpen]);
 
   // NOTE: Tab management moved to EditorMode. App.tsx no longer maintains tabs.
   // Current file info is stored in refs to prevent re-renders.
@@ -987,8 +969,6 @@ export default function App() {
     activeModeStateRef,
     editorModeRef,
     agentModeRef,
-    bottomPanel,
-    setBottomPanel,
     terminalPanelVisible,
     setTerminalPanelVisible,
     toggleAgentCollapsed,
@@ -998,12 +978,12 @@ export default function App() {
   useEffect(() => {
     const handleTerminalShow = () => {
       setTerminalPanelVisible(true);
-      setBottomPanel(null); // Close tracker when opening terminal
+      closeTrackerPanel(); // Close tracker when opening terminal
     };
 
     window.addEventListener('terminal:show', handleTerminalShow);
     return () => window.removeEventListener('terminal:show', handleTerminalShow);
-  }, []);
+  }, [closeTrackerPanel]);
 
   // Listen for open-ai-session events (from rebase/merge conflict resolution)
   useEffect(() => {
@@ -1432,27 +1412,10 @@ export default function App() {
           // Switch to agent mode instead of opening old session manager
           setActiveMode('agent');
         }}
-        onTogglePlansPanel={() => {
-          setBottomPanel(prev => prev === 'plan' ? null : 'plan');
-          setTerminalPanelVisible(false); // Close terminal when opening tracker
-        }}
-        bottomPanel={bottomPanel as any}
-        onToggleBugsPanel={() => {
-          setBottomPanel(prev => prev === 'bug' ? null : 'bug');
-          setTerminalPanelVisible(false); // Close terminal when opening tracker
-        }}
-        onToggleTasksPanel={() => {
-          setBottomPanel(prev => prev === 'task' ? null : 'task');
-          setTerminalPanelVisible(false); // Close terminal when opening tracker
-        }}
-        onToggleIdeasPanel={() => {
-          setBottomPanel(prev => prev === 'idea' ? null : 'idea');
-          setTerminalPanelVisible(false); // Close terminal when opening tracker
-        }}
         onToggleTerminalPanel={() => {
           setTerminalPanelVisible(prev => !prev);
           if (!terminalPanelVisible) {
-            setBottomPanel(null); // Close tracker when opening terminal
+            closeTrackerPanel(); // Close tracker when opening terminal
           }
         }}
         terminalPanelVisible={terminalPanelVisible}
@@ -1647,13 +1610,10 @@ export default function App() {
         </div>
 
         {/* Bottom: Tracker Bottom Panel - spans width after nav gutter */}
-        {bottomPanel && (
+        {isTrackerPanelOpen && (
           <TrackerBottomPanel
-            activePanel={bottomPanel}
-            onPanelChange={setBottomPanel}
-            height={bottomPanelHeight}
-            onHeightChange={setBottomPanelHeight}
             onSwitchToFilesMode={() => setActiveMode('files')}
+            workspacePath={workspacePath || undefined}
           />
         )}
 
