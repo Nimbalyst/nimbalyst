@@ -59,6 +59,7 @@ import { ArchiveWorktreeDialog } from './ArchiveWorktreeDialog';
 import { useArchiveWorktreeDialog } from '../../hooks/useArchiveWorktreeDialog';
 import { detectFileType } from '../../hooks/useDocumentContext';
 import { getTextSelection } from '../UnifiedAI/TextSelectionIndicator';
+import { terminalListAtom, setActiveTerminal, loadTerminals } from '../../store/atoms/terminals';
 
 export interface AgentWorkstreamPanelRef {
   closeActiveTab: () => void;
@@ -88,8 +89,9 @@ const WorkstreamHeader: React.FC<{
   sidebarVisible: boolean;
   onArchiveStatusChange?: () => void;
   onOpenTerminal?: () => void;
+  onCreateNewTerminal?: () => void;
   onShowArchiveDialog?: () => void;
-}> = React.memo(({ workstreamId, workspacePath, worktreeId, worktreePath, onToggleSidebar, sidebarVisible, onArchiveStatusChange, onOpenTerminal, onShowArchiveDialog }) => {
+}> = React.memo(({ workstreamId, workspacePath, worktreeId, worktreePath, onToggleSidebar, sidebarVisible, onArchiveStatusChange, onOpenTerminal, onCreateNewTerminal, onShowArchiveDialog }) => {
   const title = useAtomValue(workstreamTitleAtom(workstreamId));
   const isProcessing = useAtomValue(workstreamProcessingAtom(workstreamId));
   const sessionData = useAtomValue(sessionStoreAtom(workstreamId));
@@ -104,6 +106,44 @@ const WorkstreamHeader: React.FC<{
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(title ?? '');
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Terminal button context menu state
+  const [terminalContextMenu, setTerminalContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const terminalContextMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close context menu when clicking outside
+  useEffect(() => {
+    if (!terminalContextMenu) return;
+
+    const handleClickOutside = (e: MouseEvent) => {
+      if (terminalContextMenuRef.current && !terminalContextMenuRef.current.contains(e.target as Node)) {
+        setTerminalContextMenu(null);
+      }
+    };
+
+    const handleEscape = (e: globalThis.KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setTerminalContextMenu(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [terminalContextMenu]);
+
+  const handleTerminalContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setTerminalContextMenu({ x: e.clientX, y: e.clientY });
+  }, []);
+
+  const handleNewTerminalClick = useCallback(() => {
+    setTerminalContextMenu(null);
+    onCreateNewTerminal?.();
+  }, [onCreateNewTerminal]);
 
   // A workstream has children if there are multiple sessions
   const hasChildren = sessions.length > 1;
@@ -241,6 +281,40 @@ const WorkstreamHeader: React.FC<{
 
         <div className="workstream-header-spacer flex-1" />
 
+        {/* Terminal button - only show for worktree sessions, positioned before layout controls */}
+        {worktreeId && onOpenTerminal && (
+          <button
+            className="workstream-terminal-btn w-8 h-8 flex items-center justify-center rounded text-[var(--nim-text-faint)] cursor-pointer border-none bg-transparent hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text-muted)] mr-2"
+            onClick={onOpenTerminal}
+            onContextMenu={handleTerminalContextMenu}
+            title="Open terminal in worktree"
+          >
+            <MaterialSymbol icon="terminal" size={20} />
+          </button>
+        )}
+
+        {/* Terminal button context menu */}
+        {terminalContextMenu && (
+          <div
+            ref={terminalContextMenuRef}
+            className="fixed p-1 min-w-[140px] rounded-md z-[10000] text-[13px] backdrop-blur-[10px] shadow-[0_4px_12px_rgba(0,0,0,0.15)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.5)]"
+            style={{
+              left: terminalContextMenu.x,
+              top: terminalContextMenu.y,
+              background: 'var(--nim-bg)',
+              border: '1px solid var(--nim-border)',
+            }}
+          >
+            <div
+              className="flex items-center gap-2.5 px-3 py-1.5 rounded cursor-pointer transition-colors text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]"
+              onClick={handleNewTerminalClick}
+            >
+              <MaterialSymbol icon="add" size={18} />
+              <span>New Terminal</span>
+            </div>
+          </div>
+        )}
+
         {/* Layout controls - shared component with Files/Agent labels */}
         <LayoutControls
           mode={layoutMode}
@@ -248,34 +322,23 @@ const WorkstreamHeader: React.FC<{
           onModeChange={handleLayoutChange}
         />
 
-        {/* New Terminal button - only show for worktree sessions */}
-        {worktreeId && onOpenTerminal && (
-          <button
-            className="workstream-sidebar-toggle layout-control-btn w-7 h-7 flex items-center justify-center rounded text-[var(--nim-text-faint)] cursor-pointer border-none bg-transparent ml-2 hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text-muted)]"
-            onClick={onOpenTerminal}
-            title="Open terminal in worktree"
-          >
-            <MaterialSymbol icon="terminal" size={16} />
-          </button>
-        )}
-
         {/* Archive/Unarchive button */}
         <button
-          className="workstream-archive-button flex items-center gap-1.5 h-6 px-2 rounded text-[var(--nim-text-faint)] text-[11px] font-medium cursor-pointer border-none bg-transparent hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text-muted)]"
+          className="workstream-archive-button flex items-center gap-1.5 h-8 px-2 rounded text-[var(--nim-text-faint)] text-[11px] font-medium cursor-pointer border-none bg-transparent hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text-muted)]"
           onClick={isArchived ? handleUnarchive : handleArchive}
           title={isArchived ? `Unarchive ${getSessionTypeLabel().toLowerCase()}` : `Archive ${getSessionTypeLabel().toLowerCase()}`}
         >
-          <MaterialSymbol icon={isArchived ? 'unarchive' : 'archive'} size={16} />
+          <MaterialSymbol icon={isArchived ? 'unarchive' : 'archive'} size={18} />
           <span>{isArchived ? `Unarchive ${getSessionTypeLabel()}` : `Archive ${getSessionTypeLabel()}`}</span>
         </button>
 
         {/* Toggle files sidebar */}
         <button
-          className={`workstream-sidebar-toggle w-7 h-7 flex items-center justify-center rounded cursor-pointer border-none bg-transparent ml-2 hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text-muted)] ${sidebarVisible ? 'active text-[var(--nim-primary)]' : 'text-[var(--nim-text-faint)]'}`}
+          className={`workstream-sidebar-toggle w-8 h-8 flex items-center justify-center rounded cursor-pointer border-none bg-transparent ml-2 hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text-muted)] ${sidebarVisible ? 'active text-[var(--nim-primary)]' : 'text-[var(--nim-text-faint)]'}`}
           onClick={onToggleSidebar}
           title={sidebarVisible ? 'Hide edited files' : 'Show edited files'}
         >
-          <MaterialSymbol icon="dock_to_right" size={16} />
+          <MaterialSymbol icon="dock_to_right" size={20} />
         </button>
       </div>
     </div>
@@ -557,12 +620,25 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
     await confirmArchive(workspacePath, onWorktreeArchived);
   }, [workspacePath, onWorktreeArchived, confirmArchive]);
 
-  // Open a terminal in the worktree directory
+  // Get terminal list for checking existing terminals
+  const terminals = useAtomValue(terminalListAtom);
+
+  // Open a terminal in the worktree directory (reuses existing if available)
   const handleOpenTerminal = useCallback(async () => {
     if (!sessionWorktreeId || !worktreePath) return;
 
+    // Check if there's already a terminal for this worktree
+    const existingTerminal = terminals.find(t => t.worktreeId === sessionWorktreeId);
+    if (existingTerminal) {
+      // Reuse existing terminal - activate it and show panel
+      setActiveTerminal(existingTerminal.id);
+      await window.electronAPI.terminal.setActive(workspacePath, existingTerminal.id);
+      window.dispatchEvent(new CustomEvent('terminal:show'));
+      return;
+    }
+
+    // No existing terminal, create a new one
     try {
-      // Create terminal with worktree association
       const result = await window.electronAPI.terminal.create(workspacePath, {
         cwd: worktreePath,
         worktreeId: sessionWorktreeId,
@@ -576,6 +652,29 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
           detail: { terminalId: result.terminalId }
         }));
         // Dispatch event to notify App.tsx to show terminal panel
+        window.dispatchEvent(new CustomEvent('terminal:show'));
+      }
+    } catch (error) {
+      console.error('[AgentWorkstreamPanel] Failed to create terminal:', error);
+    }
+  }, [workspacePath, sessionWorktreeId, worktreePath, terminals]);
+
+  // Create a new terminal (for right-click context menu)
+  const handleCreateNewTerminal = useCallback(async () => {
+    if (!sessionWorktreeId || !worktreePath) return;
+
+    try {
+      const result = await window.electronAPI.terminal.create(workspacePath, {
+        cwd: worktreePath,
+        worktreeId: sessionWorktreeId,
+        title: `Terminal (${worktreePath.split('/').pop()})`,
+        source: 'worktree',
+      });
+
+      if (result.success && result.terminalId) {
+        window.dispatchEvent(new CustomEvent('terminal:created', {
+          detail: { terminalId: result.terminalId }
+        }));
         window.dispatchEvent(new CustomEvent('terminal:show'));
       }
     } catch (error) {
@@ -771,6 +870,7 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
           onToggleSidebar={handleToggleSidebar}
           sidebarVisible={sidebarVisible}
           onOpenTerminal={sessionWorktreeId ? handleOpenTerminal : undefined}
+          onCreateNewTerminal={sessionWorktreeId ? handleCreateNewTerminal : undefined}
           onShowArchiveDialog={sessionWorktreeId ? handleShowArchiveDialog : undefined}
           onArchiveStatusChange={onWorktreeArchived}
         />

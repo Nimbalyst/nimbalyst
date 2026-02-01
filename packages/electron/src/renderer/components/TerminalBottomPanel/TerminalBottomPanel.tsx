@@ -27,6 +27,7 @@ import {
   terminalCommandRunningAtom,
   type TerminalInstance,
 } from '../../store/atoms/terminals';
+import { selectedWorkstreamAtom, sessionWorktreeIdAtom } from '../../store/atoms/sessions';
 
 interface TerminalBottomPanelProps {
   workspacePath: string;
@@ -45,6 +46,7 @@ interface TerminalBottomPanelProps {
 interface TerminalTabWrapperProps {
   terminal: TerminalInstance;
   isActive: boolean;
+  isActiveWorktree: boolean;
   terminalIndex: number;
   terminalCount: number;
   onSelect: () => void;
@@ -56,6 +58,7 @@ interface TerminalTabWrapperProps {
 
 const TerminalTabWrapper: React.FC<TerminalTabWrapperProps> = ({
   terminal,
+  isActiveWorktree,
   ...props
 }) => {
   const isCommandRunning = useAtomValue(terminalCommandRunningAtom(terminal.id));
@@ -64,6 +67,7 @@ const TerminalTabWrapper: React.FC<TerminalTabWrapperProps> = ({
     <TerminalTab
       terminal={terminal}
       isCommandRunning={isCommandRunning}
+      isActiveWorktree={isActiveWorktree}
       {...props}
     />
   );
@@ -85,6 +89,17 @@ export const TerminalBottomPanel: React.FC<TerminalBottomPanelProps> = ({
   const resizeStartY = useRef<number>(0);
   const resizeStartHeight = useRef<number>(0);
   const posthog = usePostHog();
+
+  // Get the currently viewed worktree ID from the selected workstream
+  const selectedWorkstream = useAtomValue(selectedWorkstreamAtom(workspacePath));
+  const selectedSessionWorktreeId = useAtomValue(
+    sessionWorktreeIdAtom(selectedWorkstream?.id ?? '')
+  );
+  // The active worktree is the worktree ID of the currently viewed session
+  // This is used to highlight terminal tabs that belong to the viewed worktree
+  const activeWorktreeId = selectedWorkstream?.type === 'worktree'
+    ? selectedSessionWorktreeId
+    : null;
 
   // Load terminals and set up IPC listeners on mount
   useEffect(() => {
@@ -332,6 +347,7 @@ export const TerminalBottomPanel: React.FC<TerminalBottomPanelProps> = ({
                 key={terminal.id}
                 terminal={terminal}
                 isActive={activeTerminalId === terminal.id}
+                isActiveWorktree={!!activeWorktreeId && terminal.worktreeId === activeWorktreeId}
                 terminalIndex={index}
                 terminalCount={terminals.length}
                 onSelect={() => handleSelectTerminal(terminal.id)}

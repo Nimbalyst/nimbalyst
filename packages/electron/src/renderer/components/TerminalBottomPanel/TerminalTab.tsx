@@ -22,6 +22,7 @@ interface TerminalInstance {
 interface TerminalTabProps {
   terminal: TerminalInstance;
   isActive: boolean;
+  isActiveWorktree?: boolean;
   terminalIndex: number;
   terminalCount: number;
   isCommandRunning?: boolean;
@@ -35,6 +36,7 @@ interface TerminalTabProps {
 export const TerminalTab: React.FC<TerminalTabProps> = ({
   terminal,
   isActive,
+  isActiveWorktree,
   terminalIndex,
   terminalCount,
   isCommandRunning,
@@ -90,20 +92,33 @@ export const TerminalTab: React.FC<TerminalTabProps> = ({
     setContextMenu({ x: e.clientX, y: e.clientY });
   };
 
+  // Compute class names for the tab
+  // - isActive: the terminal tab that is currently selected
+  // - isActiveWorktree: the terminal belongs to the worktree currently being viewed
+  const baseClasses = 'terminal-tab group flex items-center gap-1 px-2 py-1 border-none text-xs cursor-pointer rounded whitespace-nowrap max-w-[200px] transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)]';
+  const activeClasses = isActive
+    ? 'active bg-[var(--nim-bg)] text-[var(--nim-text)] font-medium'
+    : 'bg-transparent text-[var(--nim-text-muted)]';
+
   return (
     <>
       <div
-        className={`terminal-tab group flex items-center gap-1 px-2 py-1 bg-transparent border-none text-xs cursor-pointer rounded whitespace-nowrap max-w-[200px] transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)] ${isActive ? 'active bg-[var(--nim-bg)] text-[var(--nim-text)] font-medium' : 'text-[var(--nim-text-muted)]'}`}
+        className={`${baseClasses} ${activeClasses}`}
         onClick={onSelect}
         onKeyDown={handleKeyDown}
         onContextMenu={handleContextMenu}
         role="tab"
         tabIndex={0}
         aria-selected={isActive}
-        title={`${terminal.title}\n${terminal.cwd}\nShell: ${terminal.shellName}`}
+        title={`${terminal.title}\n${terminal.cwd}\nShell: ${terminal.shellName}${isActiveWorktree ? '\n(Current worktree)' : ''}`}
       >
       {terminal.worktreeId ? (
-        <MaterialSymbol icon="alt_route" size={14} title="Worktree terminal" />
+        <MaterialSymbol
+          icon="alt_route"
+          size={14}
+          title={isActiveWorktree ? 'Current worktree terminal' : 'Worktree terminal'}
+          className={isActiveWorktree ? 'text-[var(--nim-primary)]' : undefined}
+        />
       ) : (
         <MaterialSymbol icon={getShellIcon(terminal.shellName)} size={14} />
       )}
