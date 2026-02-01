@@ -42,7 +42,7 @@ interface KeyboardShortcutsOptions {
  * - Cmd+E: Switch to Files mode (or toggle sidebar if already in Files mode)
  * - Cmd+K: Switch to Agent mode (or toggle session history if already in Agent mode)
  * - Cmd+Y: Open history dialog (Files mode only)
- * - Cmd+Shift+T: Toggle Tracker panel (remembers last active type)
+ * - Cmd+T: Toggle Tracker panel (remembers last active type)
  * - Cmd+Alt+W: Create new worktree session
  * - Cmd+`: Toggle Terminal panel
  */
@@ -112,8 +112,8 @@ export function useKeyboardShortcuts({
         }
       }
 
-      // Cmd+Shift+T to toggle tracker panel (remembers last active type)
-      if (workspaceMode && (e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 't') {
+      // Cmd+T to toggle tracker panel (remembers last active type)
+      if (workspaceMode && (e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key === 't') {
         e.preventDefault();
         toggleTrackerPanel();
         setTerminalPanelVisible(false);

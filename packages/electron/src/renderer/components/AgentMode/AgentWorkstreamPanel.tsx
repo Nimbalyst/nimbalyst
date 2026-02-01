@@ -662,7 +662,7 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
         activeElement?.dispatchEvent(event);
       } else if (activeSessionId) {
         // Transcript has focus - dispatch to transcript with sessionId
-        window.dispatchEvent(new CustomEvent('menu:find', {
+        window.dispatchEvent(new CustomEvent('transcript:find', {
           detail: { sessionId: activeSessionId }
         }));
       }
@@ -684,7 +684,7 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
         activeElement?.dispatchEvent(event);
       } else if (activeSessionId) {
         // Transcript has focus - dispatch to transcript with sessionId
-        window.dispatchEvent(new CustomEvent('menu:find-next', {
+        window.dispatchEvent(new CustomEvent('transcript:find-next', {
           detail: { sessionId: activeSessionId }
         }));
       }
@@ -705,12 +705,8 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
           cancelable: true,
         });
         activeElement?.dispatchEvent(event);
-      } else if (activeSessionId) {
-        // Transcript has focus - dispatch to transcript with sessionId
-        window.dispatchEvent(new CustomEvent('menu:find-previous', {
-          detail: { sessionId: activeSessionId }
-        }));
       }
+      // Note: transcript find-previous not yet implemented
     };
 
     window.addEventListener('menu:find', handleFind);

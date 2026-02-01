@@ -125,7 +125,7 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
     {
       id: 'tracker',
       icon: 'edit_note',
-      label: 'Trackers (Cmd+Shift+T)',
+      label: 'Trackers (Cmd+T)',
       onClick: () => {
         toggleTrackerPanel();
       },
