@@ -32,6 +32,7 @@ import {
   resetWalkthroughState as resetWalkthroughStateIPC,
   resolveTarget,
   registerWalkthroughMenuEntries,
+  hasVisibleOverlay,
 } from '../WalkthroughService';
 import { WalkthroughCallout } from './WalkthroughCallout';
 import { walkthroughs } from '../definitions';
@@ -40,6 +41,7 @@ import {
   activeWalkthroughIdAtom,
   currentStepIndexAtom,
 } from '../atoms';
+import { hasActiveDialogsAtom } from '../../contexts/DialogContext';
 import { errorNotificationService } from '../../services/ErrorNotificationService';
 
 const WalkthroughContext = createContext<WalkthroughContextValue | null>(null);
@@ -63,6 +65,9 @@ export function WalkthroughProvider({
   const [state, setState] = useAtom(walkthroughStateAtom);
   const [activeWalkthroughId, setActiveWalkthroughId] = useAtom(activeWalkthroughIdAtom);
   const [currentStepIndex, setCurrentStepIndex] = useAtom(currentStepIndexAtom);
+
+  // Check if any dialogs are open (don't show walkthroughs while dialogs are visible)
+  const hasActiveDialogs = useAtomValue(hasActiveDialogsAtom);
 
   // Track whether we've already triggered for this mode to avoid re-triggering
   const lastTriggeredModeRef = useRef<string | null>(null);
@@ -208,14 +213,17 @@ export function WalkthroughProvider({
 
   // Evaluate triggers when mode changes or state loads
   useEffect(() => {
-    // Skip if disabled, no state yet, or already showing a walkthrough
-    if (!autoTrigger || !state || !state.enabled || activeWalkthroughId) {
+    // Skip if disabled, no state yet, already showing a walkthrough, or a dialog/overlay is open
+    const hasOverlay = hasVisibleOverlay();
+    if (!autoTrigger || !state || !state.enabled || activeWalkthroughId || hasActiveDialogs || hasOverlay) {
       if (import.meta.env.DEV) {
         console.log('[Walkthrough] Trigger check skipped:', {
           autoTrigger,
           hasState: !!state,
           enabled: state?.enabled,
           activeWalkthroughId,
+          hasActiveDialogs,
+          hasOverlay,
         });
       }
       return;
@@ -281,6 +289,13 @@ export function WalkthroughProvider({
 
       // Delay trigger to let UI settle
       triggerDelayRef.current = setTimeout(() => {
+        // Re-check for overlays right before triggering (a dialog may have opened during delay)
+        if (hasVisibleOverlay()) {
+          if (import.meta.env.DEV) {
+            console.log(`[Walkthrough] ${walkthrough.id} skipped - overlay appeared during delay`);
+          }
+          return;
+        }
         // Re-check condition right before triggering (UI may have changed)
         if (walkthrough.trigger.condition && !walkthrough.trigger.condition()) {
           if (import.meta.env.DEV) {
@@ -298,7 +313,7 @@ export function WalkthroughProvider({
         clearTimeout(triggerDelayRef.current);
       }
     };
-  }, [currentMode, state, activeWalkthroughId, autoTrigger, startWalkthrough]);
+  }, [currentMode, state, activeWalkthroughId, autoTrigger, startWalkthrough, hasActiveDialogs]);
 
   // Expose test helpers in development mode
   useEffect(() => {

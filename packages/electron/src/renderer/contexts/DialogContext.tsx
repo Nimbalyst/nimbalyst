@@ -26,6 +26,12 @@ const DialogContext = createContext<DialogContextValue | undefined>(undefined);
 export const dialogReadyAtom = atom(false);
 
 /**
+ * Atom that tracks whether any dialogs are currently open.
+ * Useful for preventing other UI (like walkthroughs) from showing when dialogs are active.
+ */
+export const hasActiveDialogsAtom = atom(false);
+
+/**
  * Global ref for accessing dialog functions from outside React components.
  * This is useful for IPC handlers and other non-component code.
  *
@@ -237,6 +243,12 @@ export function DialogProvider({
 
   // Track dialog ready state via Jotai atom
   const setDialogReady = useSetAtom(dialogReadyAtom);
+  const setHasActiveDialogs = useSetAtom(hasActiveDialogsAtom);
+
+  // Sync hasActiveDialogsAtom when dialogs change
+  useEffect(() => {
+    setHasActiveDialogs(activeDialogs.size > 0);
+  }, [activeDialogs, setHasActiveDialogs]);
 
   // Populate the global ref for access from outside React components
   useEffect(() => {

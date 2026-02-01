@@ -180,6 +180,32 @@ export function isTargetValid(element: HTMLElement): boolean {
 }
 
 /**
+ * Check if any modal/overlay is currently visible in the DOM.
+ * This catches dialogs that aren't managed by DialogProvider.
+ */
+export function hasVisibleOverlay(): boolean {
+  // Check for elements with the nim-overlay class (common pattern for modals)
+  const overlays = document.querySelectorAll('.nim-overlay');
+  for (const overlay of overlays) {
+    if (isTargetValid(overlay as HTMLElement)) {
+      return true;
+    }
+  }
+
+  // Also check for common overlay patterns that might not use nim-overlay
+  const otherOverlays = document.querySelectorAll(
+    '.project-trust-toast-overlay, .welcome-modal-overlay, .onboarding-overlay, [class*="-overlay"][class*="fixed"]'
+  );
+  for (const overlay of otherOverlays) {
+    if (isTargetValid(overlay as HTMLElement)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
  * Calculate callout position relative to target element.
  * Returns absolute coordinates for positioning.
  */
