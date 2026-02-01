@@ -20,6 +20,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.26] - 2026-01-31
+
+
+### Added
+- AI session tabs and input now visible in FILES layout mode
+
+### Changed
+- Tracker panel shortcut changed to Cmd+T
+- Extension command namespaces standardized with nimbalyst- prefix
+- Tracker panel state migrated to Jotai atoms
+
+### Fixed
+- Empty screenshots no longer cause API errors
+- MCP tools now use session-specific document state
+- Document content read from disk for AI context
+- Auto-switch to agent mode when /implement command is used
+- Find-previous stack overflow in search
+
 ## [0.52.25] - 2026-01-31
 
 
