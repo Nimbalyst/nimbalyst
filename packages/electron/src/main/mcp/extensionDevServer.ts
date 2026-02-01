@@ -790,7 +790,26 @@ async function tryCreateExtensionDevServer(port: number): Promise<any> {
                     }
                   }
                 }
-              }
+              },
+              // Only include renderer_eval in development mode
+              ...(process.env.NODE_ENV === 'development' || !!process.env.ELECTRON_RENDERER_URL ? [{
+                name: 'renderer_eval',
+                description: 'Execute JavaScript in the Nimbalyst renderer context. Only available in development mode. Useful for debugging, inspecting DOM state, and checking computed styles. Supports async/await expressions.',
+                inputSchema: {
+                  type: 'object',
+                  properties: {
+                    expression: {
+                      type: 'string',
+                      description: 'JavaScript expression to evaluate. Supports async/await. Return values will be serialized. Examples: "document.querySelector(\'.my-class\').textContent", "getComputedStyle(document.documentElement).getPropertyValue(\'--nim-text\')", "await fetch(\'/api/status\').then(r => r.json())"'
+                    },
+                    timeout: {
+                      type: 'number',
+                      description: 'Maximum execution time in milliseconds (default: 5000, max: 30000)'
+                    }
+                  },
+                  required: ['expression']
+                }
+              }] : [])
             ]
           };
         });
@@ -1555,6 +1574,81 @@ async function tryCreateExtensionDevServer(port: number): Promise<any> {
                   isError: true
                 };
               }
+            }
+
+            case 'renderer_eval': {
+              // Double-check dev mode (tool definition should already be hidden in prod)
+              const isDev = process.env.NODE_ENV === 'development' || !!process.env.ELECTRON_RENDERER_URL;
+              if (!isDev) {
+                return {
+                  content: [{ type: 'text', text: 'Error: renderer_eval is only available in development mode.' }],
+                  isError: true
+                };
+              }
+
+              const expression = args?.expression as string;
+              if (!expression) {
+                return {
+                  content: [{ type: 'text', text: 'Error: expression is required' }],
+                  isError: true
+                };
+              }
+
+              // Validate and cap timeout
+              let timeout = (args?.timeout as number) || 5000;
+              timeout = Math.min(Math.max(100, timeout), 30000);
+
+              // Require workspace path for routing to the correct window
+              if (!workspacePath) {
+                return {
+                  content: [{ type: 'text', text: 'Error: workspacePath is required to route to the correct window' }],
+                  isError: true
+                };
+              }
+
+              // Find the target window
+              const targetWindow = findWindowByWorkspace(workspacePath);
+              if (!targetWindow || targetWindow.isDestroyed()) {
+                return {
+                  content: [{ type: 'text', text: `Error: No window found for workspace: ${workspacePath}` }],
+                  isError: true
+                };
+              }
+
+              // Execute in renderer via IPC
+              return new Promise((resolve) => {
+                const responseChannel = `renderer-eval-response-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+                const timeoutId = setTimeout(() => {
+                  resolve({
+                    content: [{ type: 'text', text: `Error: Evaluation timed out after ${timeout}ms` }],
+                    isError: true
+                  });
+                }, timeout);
+
+                const { ipcMain } = require('electron');
+                ipcMain.once(responseChannel, (_event: any, result: any) => {
+                  clearTimeout(timeoutId);
+
+                  if (result.error) {
+                    resolve({
+                      content: [{ type: 'text', text: `Error: ${result.error}${result.stack ? '\n\nStack:\n' + result.stack : ''}` }],
+                      isError: true
+                    });
+                    return;
+                  }
+
+                  resolve({
+                    content: [{ type: 'text', text: `Result:\n${result.value}` }],
+                    isError: false
+                  });
+                });
+
+                targetWindow.webContents.send('renderer:eval', {
+                  expression,
+                  responseChannel
+                });
+              });
             }
 
             default:

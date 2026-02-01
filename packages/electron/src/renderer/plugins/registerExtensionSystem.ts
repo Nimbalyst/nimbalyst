@@ -42,6 +42,9 @@ let extensionStatusListenerSetup = false;
 // Track if extension tool execution listener is set up
 let extensionToolListenerSetup = false;
 
+// Track if renderer eval listener is set up
+let rendererEvalListenerSetup = false;
+
 /**
  * Set up IPC listener for screenshot capture requests from main process.
  * Uses the generic screenshotService to route requests to the appropriate capability.
@@ -398,6 +401,80 @@ function setupExtensionStatusListener(): void {
 }
 
 /**
+ * Serialize a value for returning to the MCP renderer_eval tool.
+ * Handles special types like DOM elements, functions, etc.
+ */
+function serializeEvalResult(result: unknown): string {
+  try {
+    if (result === undefined) {
+      return 'undefined';
+    } else if (result === null) {
+      return 'null';
+    } else if (typeof result === 'function') {
+      return `[Function: ${(result as { name?: string }).name || 'anonymous'}]`;
+    } else if (result instanceof Element) {
+      const html = result.outerHTML;
+      return html.substring(0, 1000) + (html.length > 1000 ? '...' : '');
+    } else if (result instanceof NodeList || result instanceof HTMLCollection) {
+      return `[${result.constructor.name}: ${result.length} items]`;
+    } else if (typeof result === 'object') {
+      const json = JSON.stringify(result, null, 2);
+      if (json.length > 10000) {
+        return json.substring(0, 10000) + '\n... (truncated)';
+      }
+      return json;
+    } else {
+      return String(result);
+    }
+  } catch {
+    return `[Unserializable: ${typeof result}]`;
+  }
+}
+
+/**
+ * Set up IPC listener for renderer eval requests.
+ * Executes JavaScript expressions in the renderer context for debugging.
+ * Only active in development mode.
+ */
+function setupRendererEvalListener(): void {
+  if (rendererEvalListenerSetup) return;
+  rendererEvalListenerSetup = true;
+
+  const electronAPI = (window as any).electronAPI;
+  if (!electronAPI?.on) {
+    console.warn('[ExtensionSystem] electronAPI.on not available for renderer eval listener');
+    return;
+  }
+
+  electronAPI.on('renderer:eval', async (data: { expression: string; responseChannel: string }) => {
+    console.log('[ExtensionSystem] Renderer eval request');
+
+    try {
+      // Wrap in async IIFE to support await expressions
+      // This allows expressions like: await fetch('/api/status').then(r => r.json())
+      // eslint-disable-next-line no-eval
+      const asyncEval = eval(`(async () => { return (${data.expression}); })()`);
+
+      // Await the result (handles both sync and async expressions)
+      const result = await asyncEval;
+
+      electronAPI.send(data.responseChannel, {
+        value: serializeEvalResult(result)
+      });
+    } catch (error) {
+      console.error('[ExtensionSystem] Renderer eval failed:', error);
+
+      electronAPI.send(data.responseChannel, {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
+    }
+  });
+
+  console.log('[ExtensionSystem] Renderer eval IPC listener set up');
+}
+
+/**
  * Set the workspace path for extension tool registration.
  * Should be called when workspace changes.
  */
@@ -472,6 +549,9 @@ export async function registerExtensionSystem(): Promise<void> {
 
     // Set up IPC listener for extension status queries
     setupExtensionStatusListener();
+
+    // Set up IPC listener for renderer eval requests (dev mode only)
+    setupRendererEvalListener();
 
     // Initialize the AI tools bridge to register extension tools with the tool registry
     initializeExtensionAIToolsBridge();
