@@ -1,5 +1,5 @@
 {
-  "name": "datamodellm",
+  "name": "nimbalyst-datamodellm",
   "version": "1.0.0",
   "description": "Data modeling commands for creating Prisma-based data models in Nimbalyst",
   "author": {

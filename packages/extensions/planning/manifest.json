@@ -27,14 +27,6 @@
         {
           "name": "track",
           "description": "Track bugs, tasks, ideas, and other items"
-        },
-        {
-          "name": "track-bug",
-          "description": "Quick bug tracking"
-        },
-        {
-          "name": "track-idea",
-          "description": "Quick idea tracking"
         }
       ]
     }
