@@ -4,7 +4,6 @@
  * Provides git operations and developer workflows through AI-accessible MCP tools.
  */
 
-import { gitStatusTool } from './mcp/gitStatusTool';
 import { gitLogTool } from './mcp/gitLogTool';
 
 // Note: gitCommitProposalTool is NOT exported here because the built-in MCP server
@@ -13,7 +12,7 @@ import { gitLogTool } from './mcp/gitLogTool';
 // the user to confirm/cancel and returns the actual commit result to Claude.
 
 // Export types for consumers
-export type { GitStatus, GitCommit, SessionFileEdit, CommitProposal } from './types';
+export type { GitCommit, SessionFileEdit, CommitProposal } from './types';
 
 /**
  * Extension activation
@@ -35,4 +34,4 @@ export async function deactivate() {
  * AI tools exported by this extension
  * These enable the coding agent to perform git operations through conversation.
  */
-export const aiTools = [gitStatusTool, gitLogTool];
+export const aiTools = [gitLogTool];

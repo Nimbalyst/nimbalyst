@@ -9,16 +9,10 @@ When committing changes in Nimbalyst, use the interactive commit proposal widget
 
 ## Required Steps
 
-1. **Get session-edited files first**
+1. **Get session-edited files**
    Call `mcp__nimbalyst-mcp__get_session_edited_files` to get ALL files you edited during this AI session.
 
-2. **Check git status**
-   Call `mcp__nimbalyst-mcp__developer_git_status` to see the current state of the repository.
-
-3. **Cross-reference files**
-   Compare the session-edited files with git status to identify which files have uncommitted changes.
-
-4. **Propose the commit**
+2. **Propose the commit**
    Call `mcp__nimbalyst-mcp__developer_git_commit_proposal` with:
    - `filesToStage`: ALL session-edited files that have changes (do not cherry-pick a subset)
    - `commitMessage`: A well-crafted commit message following the guidelines below

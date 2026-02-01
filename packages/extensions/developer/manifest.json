@@ -13,7 +13,6 @@
   "contributions": {
     "aiTools": [
       "git_commit_proposal",
-      "git_status",
       "git_log"
     ],
     "claudePlugin": {
