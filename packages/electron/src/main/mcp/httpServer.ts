@@ -598,8 +598,7 @@ async function tryCreateServer(port: number): Promise<any> {
       // Register tool handlers
       server.setRequestHandler(ListToolsRequestSchema, async () => {
         // Get current document state to determine which extension tools to show
-        const states = Array.from(documentStateBySession.values());
-        const currentDocState = states[states.length - 1];
+        const currentDocState = sessionId ? documentStateBySession.get(sessionId) : undefined;
         const currentFilePath = currentDocState?.filePath;
 
         // Built-in tools exposed via MCP (for Claude Code / agent mode)
@@ -891,14 +890,13 @@ The commit message should follow these guidelines:
         switch (toolName) {
           case 'applyDiff': {
             const typedArgs = args as { filePath?: string; replacements?: any[] } | undefined;
-            // Use explicit filePath from args, or fall back to current document state
-            let targetFilePath: string | undefined = typedArgs?.filePath;
+            const targetFilePath = typedArgs?.filePath;
 
             if (!targetFilePath) {
-              // Get the current document state for file path
-              const states = Array.from(documentStateBySession.values());
-              const currentDocState = states[states.length - 1];
-              targetFilePath = currentDocState?.filePath;
+              return {
+                content: [{ type: 'text', text: 'Error: filePath is required for applyDiff' }],
+                isError: true
+              };
             }
 
             // Find the correct window for this file
@@ -906,7 +904,7 @@ The commit message should follow these guidelines:
             if (targetWindow) {
 
               // Validate that the file is a markdown file
-              if (targetFilePath && !targetFilePath.endsWith('.md')) {
+              if (!targetFilePath.endsWith('.md')) {
                 return {
                   content: [
                     {
@@ -981,14 +979,13 @@ The commit message should follow these guidelines:
 
           case 'streamContent': {
             const typedArgs = args as { filePath?: string; content?: string; position?: string; insertAfter?: string } | undefined;
-            // Use explicit filePath from args, or fall back to current document state
-            let targetFilePath: string | undefined = typedArgs?.filePath;
+            const targetFilePath = typedArgs?.filePath;
 
             if (!targetFilePath) {
-              // Get the current document state for file path
-              const states = Array.from(documentStateBySession.values());
-              const currentDocState = states[states.length - 1];
-              targetFilePath = currentDocState?.filePath;
+              return {
+                content: [{ type: 'text', text: 'Error: filePath is required for streamContent' }],
+                isError: true
+              };
             }
 
             // Find the correct window for this file
@@ -1298,26 +1295,14 @@ The commit message should follow these guidelines:
           }
 
           case 'capture_editor_screenshot': {
-            let filePath = args?.file_path as string | undefined;
+            const filePath = args?.file_path as string | undefined;
             const selector = args?.selector as string | undefined;
 
             console.log('[MCP Server] capture_editor_screenshot called with:', { filePath, selector, workspacePath });
 
-            // If no file path provided, try to get the active file from document state
-            if (!filePath) {
-              const states = Array.from(documentStateBySession.values());
-              const currentDocState = states[states.length - 1];
-              filePath = currentDocState?.filePath;
-            }
-
             if (!filePath) {
               return {
-                content: [
-                  {
-                    type: 'text',
-                    text: 'Error: No file specified and no active file found. Please specify a file_path or ensure a file is open in the editor.'
-                  }
-                ],
+                content: [{ type: 'text', text: 'Error: file_path is required for capture_editor_screenshot' }],
                 isError: true
               };
             }
@@ -1940,12 +1925,9 @@ The commit message should follow these guidelines:
           }
 
           default: {
-            // Check if this is an extension tool
-            const extensionTools = getAvailableExtensionTools(workspacePath, (() => {
-              const states = Array.from(documentStateBySession.values());
-              const currentDocState = states[states.length - 1];
-              return currentDocState?.filePath;
-            })());
+            // Check if this is an extension tool - use session-specific state
+            const currentDocState = sessionId ? documentStateBySession.get(sessionId) : undefined;
+            const extensionTools = getAvailableExtensionTools(workspacePath, currentDocState?.filePath);
 
             const extensionTool = extensionTools.find(t => t.name === toolName);
             if (!extensionTool) {
@@ -1998,9 +1980,7 @@ The commit message should follow these guidelines:
             // Create a unique channel for the result
             const resultChannel = `mcp-extension-result-${Date.now()}-${Math.random()}`;
 
-            // Get current file path for context
-            const states = Array.from(documentStateBySession.values());
-            const currentDocState = states[states.length - 1];
+            // activeFilePath comes from currentDocState declared at the start of this block
             const activeFilePath = currentDocState?.filePath;
 
             return new Promise((resolve) => {

@@ -54,10 +54,21 @@ class OffscreenEditorRendererImpl {
       this.initialize();
     }
 
-    // Check if already mounted
+    // Check if already mounted offscreen
     if (this.editors.has(filePath)) {
-      console.log('[OffscreenEditorRenderer] Already mounted');
+      console.log('[OffscreenEditorRenderer] Already mounted offscreen');
       return;
+    }
+
+    // Check if a visible editor already has this file open by checking the extension's registry
+    // Extensions expose their editor API on window for this purpose
+    // For Excalidraw: window.__excalidraw_getEditorAPI(filePath)
+    if (filePath.endsWith('.excalidraw')) {
+      const getAPI = (window as any).__excalidraw_getEditorAPI;
+      if (getAPI && getAPI(filePath)) {
+        console.log('[OffscreenEditorRenderer] Visible editor already open, skipping offscreen mount');
+        return;
+      }
     }
 
     // Find extension that handles this file
