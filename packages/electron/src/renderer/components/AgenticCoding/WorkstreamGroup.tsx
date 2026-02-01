@@ -76,6 +76,7 @@ interface WorkstreamGroupProps {
   gitStatus?: GitStatus;
   onWorktreePinToggle?: (worktreeId: string, isPinned: boolean) => void;
   onWorktreeArchive?: (worktreeId: string) => void;
+  onWorktreeRename?: (worktreeId: string, newName: string) => void;
   onFilesMode?: (worktreeId: string) => void;
   onChangesMode?: (worktreeId: string) => void;
   onAddSession?: (worktreeId: string) => void;
@@ -109,6 +110,7 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
   onWorkstreamPinToggle,
   onWorktreePinToggle,
   onWorktreeArchive,
+  onWorktreeRename,
   onFilesMode,
   onChangesMode,
   onAddSession,
@@ -118,6 +120,11 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
   const [adjustedContextMenuPosition, setAdjustedContextMenuPosition] = useState<{ x: number; y: number } | null>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
+
+  // Worktree rename state
+  const [isRenamingWorktree, setIsRenamingWorktree] = useState(false);
+  const [worktreeRenameValue, setWorktreeRenameValue] = useState('');
+  const worktreeRenameInputRef = useRef<HTMLInputElement>(null);
 
   // Sort sessions: pinned first, then by updatedAt
   const sortedSessions = React.useMemo(() => {
@@ -180,6 +187,43 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
       onAddTerminal(worktree.id);
     }
   }, [type, worktree, onAddTerminal]);
+
+  const handleRenameClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowContextMenu(false);
+    if (type === 'worktree' && worktree) {
+      setWorktreeRenameValue(worktree.displayName || worktree.name || '');
+      setIsRenamingWorktree(true);
+    }
+  }, [type, worktree]);
+
+  const handleWorktreeRenameSubmit = useCallback(() => {
+    const trimmedValue = worktreeRenameValue.trim();
+    const currentName = worktree?.displayName || worktree?.name || '';
+    if (trimmedValue && trimmedValue !== currentName && onWorktreeRename && worktree) {
+      onWorktreeRename(worktree.id, trimmedValue);
+    }
+    setIsRenamingWorktree(false);
+  }, [worktreeRenameValue, worktree, onWorktreeRename]);
+
+  const handleWorktreeRenameKeyDown = useCallback((e: React.KeyboardEvent) => {
+    e.stopPropagation();
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleWorktreeRenameSubmit();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setIsRenamingWorktree(false);
+    }
+  }, [handleWorktreeRenameSubmit]);
+
+  // Focus and select input when entering worktree rename mode
+  useEffect(() => {
+    if (isRenamingWorktree && worktreeRenameInputRef.current) {
+      worktreeRenameInputRef.current.focus();
+      worktreeRenameInputRef.current.select();
+    }
+  }, [isRenamingWorktree]);
 
   const handleFilesMode = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -307,11 +351,24 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
           {/* Content */}
           <div className="workstream-group-content flex-1 min-w-0 flex flex-col gap-0.5">
             <div className="workstream-group-row-primary flex items-center gap-1">
-              <span className="workstream-group-name font-medium text-[var(--nim-text)] whitespace-nowrap overflow-hidden text-ellipsis">{displayTitle}</span>
-              {displayIsPinned && (
+              {isRenamingWorktree && type === 'worktree' ? (
+                <input
+                  ref={worktreeRenameInputRef}
+                  type="text"
+                  className="workstream-group-rename-input flex-1 min-w-0 px-1 py-0 text-[0.8125rem] font-medium border border-[var(--nim-primary)] rounded bg-[var(--nim-bg)] text-[var(--nim-text)] outline-none"
+                  value={worktreeRenameValue}
+                  onChange={(e) => setWorktreeRenameValue(e.target.value)}
+                  onKeyDown={handleWorktreeRenameKeyDown}
+                  onBlur={handleWorktreeRenameSubmit}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              ) : (
+                <span className="workstream-group-name font-medium text-[var(--nim-text)] whitespace-nowrap overflow-hidden text-ellipsis">{displayTitle}</span>
+              )}
+              {displayIsPinned && !isRenamingWorktree && (
                 <MaterialSymbol icon="push_pin" size={12} className="workstream-group-pin-icon shrink-0 text-[var(--nim-text-faint)] opacity-70" />
               )}
-              {displayIsArchived && (
+              {displayIsArchived && !isRenamingWorktree && (
                 <span className="workstream-group-badge archived text-[0.5625rem] px-1.5 py-[0.0625rem] rounded-[0.625rem] font-medium bg-[rgba(156,163,175,0.15)] text-[var(--nim-text-faint)]">archived</span>
               )}
             </div>
@@ -418,6 +475,15 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
           onClick={(e) => e.stopPropagation()}
         >
           {/* Worktree menu items */}
+          {type === 'worktree' && onWorktreeRename && (
+            <button
+              className="workstream-group-context-menu-item flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
+              onClick={handleRenameClick}
+            >
+              <MaterialSymbol icon="edit" size={14} />
+              Rename
+            </button>
+          )}
           {type === 'worktree' && onWorktreePinToggle && (
             <button
               className="workstream-group-context-menu-item flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"

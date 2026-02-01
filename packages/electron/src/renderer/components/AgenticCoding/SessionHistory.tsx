@@ -341,6 +341,14 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     isArchived?: boolean;
   } | null>(null);
   const cardContextMenuRef = useRef<HTMLDivElement>(null);
+
+  // Card view inline rename state (for worktrees and sessions)
+  const [renamingWorktreeId, setRenamingWorktreeId] = useState<string | null>(null);
+  const [worktreeRenameValue, setWorktreeRenameValue] = useState('');
+  const worktreeRenameInputRef = useRef<HTMLInputElement>(null);
+  const [renamingSessionId, setRenamingSessionId] = useState<string | null>(null);
+  const [sessionRenameValue, setSessionRenameValue] = useState('');
+  const sessionRenameInputRef = useRef<HTMLInputElement>(null);
   const [isIndexBuilding, setIsIndexBuilding] = useState(false);
   const [pendingSearchQuery, setPendingSearchQuery] = useState<string | null>(null); // Query to run after index build
   const [searchFilters, setSearchFilters] = useState<SearchFilters>(DEFAULT_SEARCH_FILTERS);
@@ -1025,27 +1033,93 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     setCardContextMenu(null);
   }, []);
 
-  // Context menu action handlers
+  // Context menu action handlers - initiate inline editing
   const handleCardRename = useCallback(() => {
     if (!cardContextMenu) return;
     closeCardContextMenu();
 
     if (cardContextMenu.type === 'worktree' && cardContextMenu.worktreeId) {
+      // Multi-session worktree: start inline rename for the worktree
       const worktree = worktreeCache.get(cardContextMenu.worktreeId);
       const currentName = worktree?.displayName || worktree?.name || '';
-      const newName = prompt('Rename worktree:', currentName);
-      if (newName && newName !== currentName) {
-        handleWorktreeRename(cardContextMenu.worktreeId, newName);
-      }
-    } else if (cardContextMenu.sessionId && onSessionRename) {
+      setWorktreeRenameValue(currentName);
+      setRenamingWorktreeId(cardContextMenu.worktreeId);
+    } else if (cardContextMenu.sessionId) {
+      // Session: start inline rename for the session
       const session = sessions.find(s => s.id === cardContextMenu.sessionId);
       const currentTitle = session?.title || '';
-      const newTitle = prompt('Rename session:', currentTitle);
-      if (newTitle && newTitle !== currentTitle) {
-        onSessionRename(cardContextMenu.sessionId, newTitle);
+      setSessionRenameValue(currentTitle);
+      setRenamingSessionId(cardContextMenu.sessionId);
+    }
+  }, [cardContextMenu, closeCardContextMenu, worktreeCache, sessions]);
+
+  // Handle worktree rename submit (for card view)
+  const handleWorktreeRenameSubmit = useCallback(() => {
+    if (!renamingWorktreeId) return;
+    const trimmedValue = worktreeRenameValue.trim();
+    const worktree = worktreeCache.get(renamingWorktreeId);
+    const currentName = worktree?.displayName || worktree?.name || '';
+    if (trimmedValue && trimmedValue !== currentName) {
+      handleWorktreeRename(renamingWorktreeId, trimmedValue);
+    }
+    setRenamingWorktreeId(null);
+  }, [renamingWorktreeId, worktreeRenameValue, worktreeCache, handleWorktreeRename]);
+
+  // Handle session rename submit (for card view)
+  const handleSessionRenameSubmit = useCallback(() => {
+    if (!renamingSessionId || !onSessionRename) return;
+    const trimmedValue = sessionRenameValue.trim();
+    const session = sessions.find(s => s.id === renamingSessionId);
+    const currentTitle = session?.title || '';
+    if (trimmedValue && trimmedValue !== currentTitle) {
+      onSessionRename(renamingSessionId, trimmedValue);
+
+      // If this session belongs to a worktree and is the only session in that worktree,
+      // also rename the worktree to keep them in sync
+      if (session?.worktree_id) {
+        const worktreeSessionCount = sessions.filter(s => s.worktree_id === session.worktree_id).length;
+        if (worktreeSessionCount === 1) {
+          handleWorktreeRename(session.worktree_id, trimmedValue);
+        }
       }
     }
-  }, [cardContextMenu, closeCardContextMenu, worktreeCache, handleWorktreeRename, sessions, onSessionRename]);
+    setRenamingSessionId(null);
+  }, [renamingSessionId, sessionRenameValue, sessions, onSessionRename, handleWorktreeRename]);
+
+  // Handle keyboard events for inline rename
+  const handleRenameKeyDown = useCallback((e: React.KeyboardEvent, isWorktree: boolean) => {
+    e.stopPropagation();
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (isWorktree) {
+        handleWorktreeRenameSubmit();
+      } else {
+        handleSessionRenameSubmit();
+      }
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      if (isWorktree) {
+        setRenamingWorktreeId(null);
+      } else {
+        setRenamingSessionId(null);
+      }
+    }
+  }, [handleWorktreeRenameSubmit, handleSessionRenameSubmit]);
+
+  // Focus inputs when entering rename mode
+  useEffect(() => {
+    if (renamingWorktreeId && worktreeRenameInputRef.current) {
+      worktreeRenameInputRef.current.focus();
+      worktreeRenameInputRef.current.select();
+    }
+  }, [renamingWorktreeId]);
+
+  useEffect(() => {
+    if (renamingSessionId && sessionRenameInputRef.current) {
+      sessionRenameInputRef.current.focus();
+      sessionRenameInputRef.current.select();
+    }
+  }, [renamingSessionId]);
 
   const handleCardPinToggle = useCallback(() => {
     if (!cardContextMenu) return;
@@ -1914,16 +1988,29 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                         </div>
                         <div className="session-history-card-content">
                           <div className="session-history-card-header">
-                            <span className="session-history-card-title">{worktreeData?.displayName || worktreeData?.name || 'Loading...'}</span>
+                            {renamingWorktreeId === item.worktreeId ? (
+                              <input
+                                ref={worktreeRenameInputRef}
+                                type="text"
+                                className="session-history-card-rename-input flex-1 min-w-0 px-1 py-0.5 text-[0.8125rem] font-medium border border-[var(--nim-primary)] rounded bg-[var(--nim-bg)] text-[var(--nim-text)] outline-none"
+                                value={worktreeRenameValue}
+                                onChange={(e) => setWorktreeRenameValue(e.target.value)}
+                                onKeyDown={(e) => handleRenameKeyDown(e, true)}
+                                onBlur={handleWorktreeRenameSubmit}
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                            ) : (
+                              <span className="session-history-card-title">{worktreeData?.displayName || worktreeData?.name || 'Loading...'}</span>
+                            )}
                             <div className="session-history-card-badges">
                               <GroupCardStatus sessionIds={item.sessions.map(s => s.id)} />
-                              {worktreeData?.isPinned && (
+                              {worktreeData?.isPinned && renamingWorktreeId !== item.worktreeId && (
                                 <svg className="session-history-card-pin-icon" width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
                                   <path d="M9.828 3.172a.5.5 0 0 1 .707 0l2.293 2.293a.5.5 0 0 1 0 .707l-4 4a.5.5 0 0 1-.708 0L5.828 7.879a.5.5 0 0 1 0-.707l4-4z"/>
                                   <path d="M8 12l-1.5 1.5a.5.5 0 0 1-.707-.707L7.293 11.5 8 12z"/>
                                 </svg>
                               )}
-                              {worktreeData?.isArchived && (
+                              {worktreeData?.isArchived && renamingWorktreeId !== item.worktreeId && (
                                 <span className="session-history-card-archive-badge">archived</span>
                               )}
                             </div>
@@ -2109,6 +2196,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                           gitStatus={worktreeData?.gitStatus}
                           onWorktreePinToggle={handleWorktreePinToggle}
                           onWorktreeArchive={handleArchiveWorktree}
+                          onWorktreeRename={handleWorktreeRename}
                           onFilesMode={onWorktreeFilesMode}
                           onChangesMode={onWorktreeChangesMode}
                           onAddSession={onAddSessionToWorktree}
@@ -2307,6 +2395,13 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
           {/* Worktree menu items */}
           {cardContextMenu.type === 'worktree' && (
             <>
+              <button
+                className="session-card-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
+                onClick={handleCardRename}
+              >
+                <MaterialSymbol icon="edit" size={14} />
+                Rename
+              </button>
               <button
                 className="session-card-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
                 onClick={handleCardPinToggle}

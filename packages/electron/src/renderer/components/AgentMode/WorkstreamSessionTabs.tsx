@@ -37,6 +37,7 @@ export interface WorkstreamSessionTabsProps {
   onCreateWorktreeSession?: (worktreeId: string) => Promise<string | null>; // Callback to create session in worktree (returns session ID)
   onSessionArchive?: (sessionId: string) => void; // Callback to archive a session
   onSessionUnarchive?: (sessionId: string) => void; // Callback to unarchive a session
+  onSessionRename?: (sessionId: string, newName: string) => void; // Callback to rename a session
   /** Getter for document context from the workstream editor (for AI file/selection context) */
   getDocumentContext?: () => {
     filePath?: string;
@@ -62,7 +63,8 @@ const SessionTab: React.FC<{
   onClick: () => void;
   onArchive?: () => void;
   onUnarchive?: () => void;
-}> = React.memo(({ sessionId, isActive, onClick, onArchive, onUnarchive }) => {
+  onRename?: (newName: string) => void;
+}> = React.memo(({ sessionId, isActive, onClick, onArchive, onUnarchive, onRename }) => {
   const title = useAtomValue(sessionTitleAtom(sessionId));
   const provider = useAtomValue(sessionProviderAtom(sessionId));
   const isProcessing = useAtomValue(sessionProcessingAtom(sessionId));
@@ -72,6 +74,11 @@ const SessionTab: React.FC<{
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
   const contextMenuRef = useRef<HTMLDivElement>(null);
+
+  // Rename state
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState('');
+  const renameInputRef = useRef<HTMLInputElement>(null);
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -91,6 +98,40 @@ const SessionTab: React.FC<{
     setShowContextMenu(false);
     onUnarchive?.();
   }, [onUnarchive]);
+
+  const handleRenameClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowContextMenu(false);
+    setRenameValue(title || '');
+    setIsRenaming(true);
+  }, [title]);
+
+  const handleRenameSubmit = useCallback(() => {
+    const trimmedValue = renameValue.trim();
+    if (trimmedValue && trimmedValue !== title && onRename) {
+      onRename(trimmedValue);
+    }
+    setIsRenaming(false);
+  }, [renameValue, title, onRename]);
+
+  const handleRenameKeyDown = useCallback((e: React.KeyboardEvent) => {
+    e.stopPropagation();
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleRenameSubmit();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setIsRenaming(false);
+    }
+  }, [handleRenameSubmit]);
+
+  // Focus and select input when entering rename mode
+  useEffect(() => {
+    if (isRenaming && renameInputRef.current) {
+      renameInputRef.current.focus();
+      renameInputRef.current.select();
+    }
+  }, [isRenaming]);
 
   // Close context menu when clicking outside
   useEffect(() => {
@@ -124,16 +165,29 @@ const SessionTab: React.FC<{
           size={14}
           className={`session-tab-icon shrink-0 ${isActive ? 'opacity-100' : 'opacity-80'}`}
         />
-        <span className={`session-tab-title max-w-[150px] overflow-hidden text-ellipsis ${hasUnread ? 'font-semibold' : ''}`}>
-          {title || 'Untitled'}
-        </span>
-        {hasUnread && (
+        {isRenaming ? (
+          <input
+            ref={renameInputRef}
+            type="text"
+            className="session-tab-rename-input w-full max-w-[150px] px-1 py-0 text-xs font-medium border border-[var(--nim-primary)] rounded bg-[var(--nim-bg)] text-[var(--nim-text)] outline-none"
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            onKeyDown={handleRenameKeyDown}
+            onBlur={handleRenameSubmit}
+            onClick={(e) => e.stopPropagation()}
+          />
+        ) : (
+          <span className={`session-tab-title max-w-[150px] overflow-hidden text-ellipsis ${hasUnread ? 'font-semibold' : ''}`}>
+            {title || 'Untitled'}
+          </span>
+        )}
+        {hasUnread && !isRenaming && (
           <span className="session-tab-unread-dot w-1.5 h-1.5 rounded-full bg-[var(--nim-warning)]" />
         )}
       </button>
 
       {/* Context Menu */}
-      {showContextMenu && (onArchive || onUnarchive) && (
+      {showContextMenu && (onArchive || onUnarchive || onRename) && (
         <div
           ref={contextMenuRef}
           className="fixed z-[1000] min-w-[140px] bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-md shadow-[0_4px_12px_rgba(0,0,0,0.15)] p-1"
@@ -143,13 +197,24 @@ const SessionTab: React.FC<{
           }}
           onClick={(e) => e.stopPropagation()}
         >
-          <button
-            className="flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
-            onClick={isArchived ? handleUnarchive : handleArchive}
-          >
-            <MaterialSymbol icon={isArchived ? "unarchive" : "archive"} size={14} />
-            {isArchived ? 'Unarchive' : 'Archive'}
-          </button>
+          {onRename && (
+            <button
+              className="flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
+              onClick={handleRenameClick}
+            >
+              <MaterialSymbol icon="edit" size={14} />
+              Rename
+            </button>
+          )}
+          {(onArchive || onUnarchive) && (
+            <button
+              className="flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
+              onClick={isArchived ? handleUnarchive : handleArchive}
+            >
+              <MaterialSymbol icon={isArchived ? "unarchive" : "archive"} size={14} />
+              {isArchived ? 'Unarchive' : 'Archive'}
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -170,7 +235,8 @@ const SessionTabBar: React.FC<{
   onNewSession: () => void;
   onSessionArchive?: (sessionId: string) => void;
   onSessionUnarchive?: (sessionId: string) => void;
-}> = React.memo(({ sessions, activeSessionId, onSessionSelect, onNewSession, onSessionArchive, onSessionUnarchive }) => {
+  onSessionRename?: (sessionId: string, newName: string) => void;
+}> = React.memo(({ sessions, activeSessionId, onSessionSelect, onNewSession, onSessionArchive, onSessionUnarchive, onSessionRename }) => {
   // Always show the tab bar - even for single sessions, the user should see their session tab
   return (
     <div className="session-tab-bar flex flex-wrap items-center gap-0.5 px-3 pt-1 pb-1.5 bg-[var(--nim-bg-secondary)] border-t-[3px] border-b border-[var(--nim-border)] shrink-0">
@@ -182,6 +248,7 @@ const SessionTabBar: React.FC<{
           onClick={() => onSessionSelect(sessionId)}
           onArchive={onSessionArchive ? () => onSessionArchive(sessionId) : undefined}
           onUnarchive={onSessionUnarchive ? () => onSessionUnarchive(sessionId) : undefined}
+          onRename={onSessionRename ? (newName) => onSessionRename(sessionId, newName) : undefined}
         />
       ))}
       <button
@@ -212,6 +279,7 @@ export const WorkstreamSessionTabs: React.FC<WorkstreamSessionTabsProps> = React
   onCreateWorktreeSession,
   onSessionArchive,
   onSessionUnarchive,
+  onSessionRename,
   getDocumentContext,
   collapseTranscript = false,
 }) => {
@@ -260,6 +328,7 @@ export const WorkstreamSessionTabs: React.FC<WorkstreamSessionTabsProps> = React
         onNewSession={handleNewSession}
         onSessionArchive={onSessionArchive}
         onSessionUnarchive={onSessionUnarchive}
+        onSessionRename={onSessionRename}
       />
 
       <div className={`workstream-session-tabs-content overflow-hidden ${collapseTranscript ? '' : 'flex-1 min-h-0'}`}>

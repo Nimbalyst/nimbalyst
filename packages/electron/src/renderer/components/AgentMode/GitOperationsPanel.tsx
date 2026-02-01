@@ -542,7 +542,7 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
       // Skip the initial render (counter starts at 0)
       if (!worktreeId || worktreeRefreshCounter === 0) return;
 
-      if (isVisible) {
+      if (isVisible && worktreePath) {
         // Visible: refresh immediately
         Promise.all([
           loadWorktreeChangedFiles(),
@@ -550,10 +550,10 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
           loadWorktreeStatus(),
         ]);
       } else {
-        // Not visible: mark as pending, will refresh when becoming visible
+        // Not visible or path not resolved: mark as pending, will refresh when becoming visible
         pendingRefreshRef.current = true;
       }
-    }, [worktreeId, worktreeRefreshCounter, isVisible, loadWorktreeChangedFiles, loadWorktreeCommits, loadWorktreeStatus]);
+    }, [worktreeId, worktreeRefreshCounter, isVisible, worktreePath, loadWorktreeChangedFiles, loadWorktreeCommits, loadWorktreeStatus]);
 
     // Toggle worktree file staged state
     const handleWorktreeToggleStaged = useCallback((filePath: string) => {

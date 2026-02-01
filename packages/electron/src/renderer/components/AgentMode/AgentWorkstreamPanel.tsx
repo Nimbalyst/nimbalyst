@@ -467,6 +467,30 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
     }
   }, [updateSessionStore]);
 
+  // Rename a session
+  // If this is a worktree with only one session, also rename the worktree to keep them in sync
+  const handleSessionRename = useCallback(async (sessionId: string, newName: string) => {
+    try {
+      console.log('[AgentWorkstreamPanel] Renaming session', { sessionId, newName, sessionWorktreeId, sessionsLength: sessions.length });
+      const result = await window.electronAPI.invoke('sessions:update-metadata', sessionId, { title: newName });
+      if (result.success) {
+        const now = Date.now();
+        updateSessionStore({ sessionId, updates: { title: newName, updatedAt: now } });
+
+        // If this is a single-session worktree, also rename the worktree
+        if (sessionWorktreeId && sessions.length === 1) {
+          console.log('[AgentWorkstreamPanel] Also renaming worktree', { sessionWorktreeId, newName });
+          const worktreeResult = await window.electronAPI.invoke('worktree:update-display-name', sessionWorktreeId, newName);
+          console.log('[AgentWorkstreamPanel] Worktree rename result', worktreeResult);
+        }
+      } else {
+        console.error('[AgentWorkstreamPanel] Failed to rename session:', result.error);
+      }
+    } catch (error) {
+      console.error('[AgentWorkstreamPanel] Error renaming session:', error);
+    }
+  }, [updateSessionStore, sessionWorktreeId, sessions.length]);
+
   // Track pending file open when switching to split mode
   const pendingFileOpenRef = useRef<string | null>(null);
 
@@ -793,6 +817,7 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
                 onCreateWorktreeSession={onCreateWorktreeSession}
                 onSessionArchive={handleSessionArchive}
                 onSessionUnarchive={handleSessionUnarchive}
+                onSessionRename={handleSessionRename}
                 getDocumentContext={getDocumentContext}
                 collapseTranscript={collapseTranscript}
               />
