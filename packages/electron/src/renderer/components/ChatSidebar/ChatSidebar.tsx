@@ -31,19 +31,18 @@ export interface ChatSidebarProps {
     content?: string;
     fileType?: string;
   };
-  /** Getter function for document context - called on-demand to avoid re-renders */
-  getDocumentContext?: () => {
+  /** Getter function for document context - async, reads from disk */
+  getDocumentContext?: () => Promise<{
     filePath?: string;
     content?: string;
     fileType?: string;
-    getLatestContent?: () => string;
     textSelection?: {
       text: string;
       filePath: string;
       timestamp: number;
     };
     textSelectionTimestamp?: number;
-  };
+  }>;
   onFileOpen?: (filePath: string) => Promise<void>;
   /** Whether the sidebar is collapsed */
   isCollapsed?: boolean;
@@ -296,9 +295,6 @@ export const ChatSidebar = forwardRef<ChatSidebarRef, ChatSidebarProps>(({
     );
   }
 
-  // Compute effective document context - prefer getter for on-demand access
-  const effectiveDocumentContext = getDocumentContext ? getDocumentContext() : documentContext;
-
   return (
     <div
       ref={panelRef}
@@ -343,7 +339,7 @@ export const ChatSidebar = forwardRef<ChatSidebarRef, ChatSidebarProps>(({
         hideSidebar={true}
         onFileClick={handleFileClick}
         onClearSession={handleNewSession}
-        documentContext={effectiveDocumentContext}
+        documentContext={documentContext}
         getDocumentContext={getDocumentContext}
       />
     </div>

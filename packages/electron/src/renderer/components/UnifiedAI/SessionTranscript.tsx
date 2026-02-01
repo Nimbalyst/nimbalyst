@@ -113,14 +113,14 @@ export interface SessionTranscriptProps {
   };
 
   // On-demand getter for document context (preferred over static documentContext)
-  // This allows fresh text selection to be captured at message send time
-  getDocumentContext?: () => {
+  // Async because it reads file content from disk for consistency across all editor types
+  getDocumentContext?: () => Promise<{
     filePath?: string;
     content?: string;
     fileType?: string;
     textSelection?: TextSelection;
     textSelectionTimestamp?: number;
-  };
+  }>;
 }
 
 /**
@@ -219,9 +219,9 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   const posthog = usePostHog();
   const inputRef = useRef<AIInputRef>(null);
 
-  // Get effective document context - prefer getter for fresh data (captures text selection at call time)
-  const getEffectiveDocumentContext = useCallback(() => {
-    return getDocumentContext ? getDocumentContext() : documentContext;
+  // Get effective document context - prefer getter for fresh data (reads from disk at call time)
+  const getEffectiveDocumentContext = useCallback(async () => {
+    return getDocumentContext ? await getDocumentContext() : documentContext;
   }, [getDocumentContext, documentContext]);
 
   // Get current file path for selection indicator - prefer static prop, fall back to getter
@@ -718,8 +718,8 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     setIsQueueing(true);
 
     try {
-      // Get fresh document context at queue time (captures current text selection)
-      const effectiveContext = getEffectiveDocumentContext();
+      // Get fresh document context at queue time (reads from disk)
+      const effectiveContext = await getEffectiveDocumentContext();
       const serializableContext = serializeDocumentContext(effectiveContext);
 
       const result = await window.electronAPI.invoke(
@@ -955,8 +955,8 @@ Your goal is to build a comprehensive plan through iterative refinement:
     });
 
     try {
-      // Get fresh document context at send time (captures current text selection)
-      const effectiveContext = getEffectiveDocumentContext();
+      // Get fresh document context at send time (reads from disk)
+      const effectiveContext = await getEffectiveDocumentContext();
 
       // Always send full document content - backend handles diff optimization
       const docContext = {
@@ -1023,8 +1023,8 @@ Your goal is to build a comprehensive plan through iterative refinement:
     });
 
     try {
-      // Get fresh document context at compact time
-      const effectiveContext = getEffectiveDocumentContext();
+      // Get fresh document context at compact time (reads from disk)
+      const effectiveContext = await getEffectiveDocumentContext();
       const docContext = {
         ...serializeDocumentContext(effectiveContext),
         mode: aiMode,

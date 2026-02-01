@@ -328,9 +328,9 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
   }, [currentFilePath, workspacePath]);
 
   // Build document context for AI features
-  // Uses ref - context is computed on-demand, not on every tab switch
-  // AIChat will read this when it needs it (e.g., when sending a message)
-  const getDocumentContext = useCallback(() => {
+  // Reads file content from disk on-demand for consistent behavior across all editor types
+  // AIChat will call this when it needs it (e.g., when sending a message)
+  const getDocumentContext = useCallback(async () => {
     const activeTab = activeTabForContextRef.current;
     if (!activeTab) {
       // No active tab - don't include text selection as it would be stale from a previous tab
@@ -340,7 +340,6 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
         content: '',
         cursorPosition: undefined,
         selection: undefined,
-        getLatestContent: undefined,
         textSelection: undefined,
         textSelectionTimestamp: undefined
       };
@@ -390,6 +389,19 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
       }
     }
 
+    // Read content from disk - the source of truth for all editor types
+    let content = '';
+    if (filePath && window.electronAPI) {
+      try {
+        const result = await window.electronAPI.readFileContent(filePath);
+        if (result?.success && result.content) {
+          content = result.content;
+        }
+      } catch (err) {
+        console.error('[EditorMode] Failed to read file content for AI context:', err);
+      }
+    }
+
     const textSelectionData = getTextSelection();
     // Only include text selection if it belongs to the current file
     const textSelection = textSelectionData && textSelectionData.filePath === filePath
@@ -398,10 +410,9 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
     return {
       filePath,
       fileType,
-      content: getContentRef.current ? getContentRef.current() : '',
+      content,
       cursorPosition: undefined,
       selection: undefined,
-      getLatestContent: getContentRef.current || undefined,
       mockupSelection: fileType === 'mockup' ? (window as any).__mockupSelectedElement : undefined,
       mockupDrawing: fileType === 'mockup' ? (window as any).__mockupDrawing : undefined,
       mockupAnnotationTimestamp: fileType === 'mockup' ? (window as any).__mockupAnnotationTimestamp : undefined,
