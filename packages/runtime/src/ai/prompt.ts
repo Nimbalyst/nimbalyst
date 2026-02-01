@@ -31,14 +31,13 @@ Bad examples:
 - "Update code" (too vague)
 - "Working on feature" (not descriptive)
 
-Call this tool as soon as you understand what the user wants to accomplish. After it has been called once successfully, subsequent calls will return an error.`;
+Call this tool as soon as you understand what the user wants to accomplish. Usually this means you will call it right away, but for example if the user asks you to 'implement plan.md' you would want to look at plan.md to understand before giving the session a name. You **MUST** call this before the end of your first turn. After it has been called once successfully in a conversation, subsequent calls will return an error. If you see a successful call anywhere in your chat history, you should not call it again.`;
 }
 
 /**
  * Options for building Claude Code system prompts
  */
 export interface ClaudeCodePromptOptions {
-  sessionType?: 'chat' | 'coding' | 'planning' | 'terminal';
   hasSessionNaming?: boolean;
   worktreePath?: string;
   isVoiceMode?: boolean;
@@ -46,40 +45,40 @@ export interface ClaudeCodePromptOptions {
     prepend?: string;
     append?: string;
   };
+  // Legacy fields - kept for backward compatibility but no longer used in prompt building
+  /** @deprecated No longer used - prompt is now static for all session types */
+  sessionType?: 'chat' | 'coding' | 'planning' | 'terminal';
+  /** @deprecated Document context is now passed via user messages, not system prompt */
   documentContext?: DocumentContext;
-  /** Indicates how document context changed since last message (for optimization) */
+  /** @deprecated Document context is now passed via user messages, not system prompt */
   documentTransition?: 'none' | 'opened' | 'closed' | 'switched' | 'modified';
-  /** Diff patch when document was modified (only when documentTransition is 'modified') */
+  /** @deprecated Document context is now passed via user messages, not system prompt */
   documentDiff?: string;
 }
 
 /**
  * Unified system prompt builder for Claude Code provider
- * Constructs prompts for both coding sessions and chat/document sessions
+ * Builds a consistent system prompt for all session types with optional sections
+ * based on context (worktree, voice mode, session naming).
  */
 export function buildClaudeCodeSystemPrompt(options: ClaudeCodePromptOptions): string {
   const {
-    sessionType,
     hasSessionNaming = false,
     worktreePath,
     isVoiceMode = false,
     voiceModeCodingAgentPrompt,
-    documentContext,
-    documentTransition,
-    documentDiff
   } = options;
 
-  // For coding sessions, use minimal prompt
-  if (sessionType === 'coding') {
-    let prompt = `The following is an addendum to the above. Anything in the addendum supersedes the above.
+  let prompt = `The following is an addendum to the above. Anything in the addendum supersedes the above.
 <addendum>
 
-You are an AI assistant integrated into the Nimbalyst editor's agentic coding workspace.
+You are an AI assistant integrated into the Nimbalyst editor, an AI-native workspace and code editor.
 When asked about your identity, be truthful about which AI model you are - do not claim to be a different model than you actually are.
 
 ## Data Visualization
 
 When the \`mcp__nimbalyst-mcp__display_to_user\` tool is available:
+- Use this tool to display charts, images, and rich visualizations to the user
 - ALWAYS use this tool when displaying data to the user instead of showing raw numbers or text tables
 - ALWAYS apply Edward Tufte's data visualization best practices
 - IF error bars can be calculated they must be calculated and displayed:
@@ -89,33 +88,33 @@ When the \`mcp__nimbalyst-mcp__display_to_user\` tool is available:
   - Example: \`python3 -c "import statistics; import math; ..."\` for CI calculations
 - Error bars make data visualizations more informative and professional`;
 
-    // Add worktree warning if in worktree
-    if (worktreePath) {
-      prompt += `
+  // Add worktree warning if in worktree
+  if (worktreePath) {
+    prompt += `
 
 ## Git Worktree Environment
 
-IMPORTANT: You are working in a git worktree at ${worktreePath}. This is an isolated environment for this coding session.
+IMPORTANT: You are working in a git worktree at ${worktreePath}. This is an isolated environment for this session.
 
 - Make sure to stay in this worktree directory
 - Do not modify files in the main branch unless explicitly asked by the user
 - All changes you make will be on the worktree's branch, not the main branch
 - The worktree allows you to work on this task without affecting the main codebase`;
+  }
+
+  // Add session naming if available
+  if (hasSessionNaming) {
+    prompt += buildSessionNamingSection();
+  }
+
+  // Add voice mode context if applicable
+  if (isVoiceMode) {
+    // Apply custom prepend if configured
+    if (voiceModeCodingAgentPrompt?.prepend) {
+      prompt += `\n\n${voiceModeCodingAgentPrompt.prepend}`;
     }
 
-    // Add session naming if available
-    if (hasSessionNaming) {
-      prompt += buildSessionNamingSection();
-    }
-
-    // Add voice mode context if applicable
-    if (isVoiceMode) {
-      // Apply custom prepend if configured
-      if (voiceModeCodingAgentPrompt?.prepend) {
-        prompt += `\n\n${voiceModeCodingAgentPrompt.prepend}`;
-      }
-
-      prompt += `
+    prompt += `
 
 ## Voice Mode
 
@@ -125,74 +124,13 @@ The user is interacting via voice mode. A voice assistant (GPT-4 Realtime) handl
 - For \`[VOICE]\` messages: respond with appropriate detail based on the question - the voice assistant will summarize for speech
 - You may also receive coding tasks via voice mode - handle these normally`;
 
-      // Apply custom append if configured
-      if (voiceModeCodingAgentPrompt?.append) {
-        prompt += `\n\n${voiceModeCodingAgentPrompt.append}`;
-      }
+    // Apply custom append if configured
+    if (voiceModeCodingAgentPrompt?.append) {
+      prompt += `\n\n${voiceModeCodingAgentPrompt.append}`;
     }
-
-    return prompt + `
-</addendum>
-`;
   }
 
-  // For planning mode, use the same base prompt as coding mode
-  // Plan mode instructions are now included in the user message, not the system prompt
-  const mode = (documentContext as any)?.mode;
-  if (sessionType === 'planning' || mode === 'planning') {
-    let prompt = `The following is an addendum to the above. Anything in the addendum supersedes the above.
-<addendum>
-
-You are an AI assistant integrated into the Nimbalyst editor's agentic coding workspace.
-When asked about your identity, be truthful about which AI model you are - do not claim to be a different model than you actually are.`;
-
-    // Add worktree warning if in worktree
-    if (worktreePath) {
-      prompt += `
-
-## Git Worktree Environment
-
-IMPORTANT: You are working in a git worktree at ${worktreePath}. This is an isolated environment for this coding session.
-
-- Make sure to stay in this worktree directory when exploring the codebase
-- Do not modify files in the main branch unless explicitly asked by the user
-- The plan you create is for changes in this worktree's branch
-- The worktree allows you to plan work on this task without affecting the main codebase`;
-    }
-
-    // Add session naming if available
-    if (hasSessionNaming) {
-      prompt += buildSessionNamingSection();
-    }
-
-    prompt += `
-</addendum>
-`;
-
-    return prompt;
-  }
-
-  // For non-coding sessions (files/chat mode), use addendum-based approach
-  // Document context is now passed via user message additions, not the system prompt
-  const hasDocument = !!(documentContext && (documentContext.filePath || documentContext.content));
-
-  let base = `The following is an addendum to the above. Anything in the addendum supersedes the above.
-  <addendum>
-
-You are a customized version of Claude Code acting as an AI assistant integrated into the Nimbalyst editor, a markdown-focused text editor.
-When asked about your identity, say that you are Claude Code running inside Nimbalyst.`;
-
-  // Add session naming if available
-  if (hasSessionNaming) {
-    base += buildSessionNamingSection();
-  }
-
-  // NOTE: MockupLM instructions removed - now provided via mockuplm extension's claude plugin skill
-
-  // All document-specific context (file path, cursor, selection, content, editing instructions)
-  // is now passed via user message additions from DocumentContextService.
-  // The system prompt should not contain any document-related information.
-  return base + `
+  return prompt + `
 </addendum>
 `;
 }

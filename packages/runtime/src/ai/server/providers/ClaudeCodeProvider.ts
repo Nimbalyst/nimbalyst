@@ -3609,20 +3609,16 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   }
 
   protected buildSystemPrompt(documentContext?: DocumentContext): string {
-    const sessionType = (documentContext as any)?.sessionType;
     const hasSessionNaming = ClaudeCodeProvider.sessionNamingServerPort !== null;
     const worktreePath = documentContext?.worktreePath;
     const isVoiceMode = (documentContext as any)?.isVoiceMode;
     const voiceModeCodingAgentPrompt = (documentContext as any)?.voiceModeCodingAgentPrompt;
 
-
     const prompt = buildClaudeCodeSystemPrompt({
-      sessionType,
       hasSessionNaming,
       worktreePath,
       isVoiceMode,
       voiceModeCodingAgentPrompt,
-      documentContext
     });
 
     // console.log('[CLAUDE-CODE] Built system prompt - length:', prompt.length, 'characters');
