@@ -252,10 +252,11 @@ export class GitStatusService {
       const cacheResult: GitStatusResult = {};
 
       for (const [relativePath, fileStatus] of statusMap.entries()) {
-        // Include if untracked, modified, or staged (but not deleted or unchanged)
+        // Include if untracked, modified, staged, or deleted (but not unchanged)
         if (fileStatus.status === 'untracked' ||
             fileStatus.status === 'modified' ||
-            fileStatus.status === 'staged') {
+            fileStatus.status === 'staged' ||
+            fileStatus.status === 'deleted') {
           // Convert to absolute path (git returns paths relative to workspace)
           const absolutePath = resolve(workspacePath, relativePath);
           uncommittedFiles.push(absolutePath);

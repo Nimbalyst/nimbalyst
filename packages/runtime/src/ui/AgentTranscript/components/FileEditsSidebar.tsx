@@ -538,7 +538,10 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
   const renderFile = ({ filePath, operation }: { filePath: string; totalAdded: number; totalRemoved: number; operation?: string }, isInDirectory = false) => {
     const hasPendingReview = pendingReviewFiles?.has(filePath);
     const fileColorClass = getFileStatusColor(filePath, operation);
-    const isDeleted = operation === 'delete';
+    // Check both operation and git status for deleted files
+    const relativePath = getRelativePath(filePath);
+    const gitFileStatus = gitStatus[relativePath];
+    const isDeleted = operation === 'delete' || gitFileStatus?.status === 'deleted';
     const tooltip = getFileStatusTooltip(filePath, operation);
     const committed = isFileCommitted(filePath);
     const isSelected = selectedFiles?.has(filePath) ?? false;
@@ -552,7 +555,12 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
     return (
       <button
         key={filePath}
-        onClick={() => onFileClick?.(filePath)}
+        onClick={() => {
+          // Don't open deleted files - they don't exist anymore
+          if (!isDeleted) {
+            onFileClick?.(filePath);
+          }
+        }}
         onContextMenu={(e) => handleContextMenu(e, filePath)}
         className={`file-edits-sidebar__file w-full text-left px-2 py-0.5 rounded border border-transparent transition-all bg-transparent hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-border)] ${hasPendingReview ? 'bg-[rgba(251,191,36,0.08)] border-[rgba(251,191,36,0.2)] hover:bg-[rgba(251,191,36,0.12)] hover:border-[rgba(251,191,36,0.3)]' : ''}`}
         title={tooltip}
@@ -585,12 +593,15 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
               </div>
             )
           )}
-          <div className="file-edits-sidebar__file-info flex-1 min-w-0">
+          <div className="file-edits-sidebar__file-info flex-1 min-w-0 flex items-center gap-1">
             <div
-              className={`file-edits-sidebar__file-name text-[0.8125rem] font-medium overflow-hidden text-ellipsis whitespace-nowrap ${fileColorClass} ${isDeleted ? 'line-through' : ''}`}
+              className={`file-edits-sidebar__file-name text-[0.8125rem] font-medium overflow-hidden text-ellipsis whitespace-nowrap ${isDeleted ? 'line-through text-[var(--nim-text-muted)]' : fileColorClass}`}
             >
               {formatFileName(filePath)}
             </div>
+            {isDeleted && (
+              <span className="text-[0.6875rem] text-[var(--nim-text-muted)] shrink-0">(deleted)</span>
+            )}
           </div>
         </div>
       </button>
