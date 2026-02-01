@@ -188,13 +188,13 @@ async function tryCreateSessionNamingServer(port: number): Promise<any> {
             tools: [
               {
                 name: 'name_session',
-                description: 'Set a concise, descriptive name for the current AI chat session. This should be called ONCE at the start of the conversation after understanding the user\'s task. The name should be 2-5 words that clearly describe the task or goal.',
+                description: 'Set a concise, descriptive name for the current AI chat session. This should be called ONCE at the start of the conversation after understanding the user\'s task. The name should be 2-5 words with the descriptive part FIRST and action word LAST (noun-phrase style for easier scanning).',
                 inputSchema: {
                   type: 'object',
                   properties: {
                     name: {
                       type: 'string',
-                      description: 'A concise session name (2-5 words) that describes the task. Examples: "Fix authentication bug", "Add dark mode", "Refactor database layer", "Implement session naming"'
+                      description: 'A concise session name (2-5 words) with descriptive part first. Examples: "Authentication bug fix", "Dark mode implementation", "Database layer refactor", "Crash report analysis"'
                     }
                   },
                   required: ['name']

@@ -16,9 +16,20 @@ CRITICAL: You MUST call this tool ONCE per conversation, during your first turn.
 Requirements for the session name:
 - 2-5 words long
 - Concise and descriptive
-- Based on what the USER asked for, not your solution (e.g., if user asks to "debug the login issue", name it "Debug login issue", not "Fix null pointer in auth")
-- Good examples: "Debug login issue", "Add dark mode", "Refactor database layer"
-- Bad examples: "Fix null check in handleAuth" (too specific to solution), "Update code" (too vague)
+- Put the unique/descriptive part FIRST, action word LAST (noun-phrase style for easier scanning)
+- Based on what the USER asked for, not your solution
+
+Good examples (descriptive part first):
+- "Electron crash report analysis" (not "Analyze Electron crash report")
+- "Dark mode implementation" (not "Implement dark mode")
+- "Login bug debugging" (not "Debug login bug")
+- "Database layer refactor" (not "Refactor database layer")
+- "Session naming prompt update" (not "Update session naming prompt")
+
+Bad examples:
+- "Fix null check in handleAuth" (too specific to solution)
+- "Update code" (too vague)
+- "Working on feature" (not descriptive)
 
 Call this tool as soon as you understand what the user wants to accomplish. After it has been called once successfully, subsequent calls will return an error.`;
 }
