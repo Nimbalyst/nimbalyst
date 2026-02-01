@@ -36,7 +36,8 @@ export const TodoPanel: React.FC<TodoPanelProps> = React.memo(({
   }, [toggleCollapsed]);
 
   // Extract todos from session metadata
-  const todos: Todo[] = (sessionData?.metadata?.currentTodos as Todo[] | undefined) ?? [];
+  const rawTodos = sessionData?.metadata?.currentTodos;
+  const todos: Todo[] = Array.isArray(rawTodos) ? rawTodos : [];
 
   // Don't render if no todos
   if (todos.length === 0) {
