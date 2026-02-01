@@ -70,6 +70,27 @@ export const PostHogSurvey: React.FC<PostHogSurveyProps> = ({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Email field state
+  const [email, setEmail] = useState('');
+  const [existingEmail, setExistingEmail] = useState<string | null>(null);
+  const hasExistingEmail = !!existingEmail;
+
+  // Fetch existing email from onboarding state on mount
+  useEffect(() => {
+    const loadExistingEmail = async () => {
+      try {
+        const state = await window.electronAPI.invoke('onboarding:get');
+        if (state.userEmail) {
+          setExistingEmail(state.userEmail);
+          setEmail(state.userEmail);
+        }
+      } catch (err) {
+        console.error('Failed to load existing email:', err);
+      }
+    };
+    loadExistingEmail();
+  }, []);
+
   // Fetch the specific feedback survey on mount
   // Since this is triggered by explicit user action (clicking feedback button),
   // we always show the survey regardless of completion status
@@ -117,7 +138,7 @@ export const PostHogSurvey: React.FC<PostHogSurveyProps> = ({
     onClose?.();
   }, [survey, posthog, onClose]);
 
-  const handleSubmit = useCallback(() => {
+  const handleSubmit = useCallback(async () => {
     if (!survey || !posthog) return;
 
     // Build the response object with question ID-based keys
@@ -141,10 +162,25 @@ export const PostHogSurvey: React.FC<PostHogSurveyProps> = ({
       ...responsePayload,
     });
 
+    // Save email if provided and not already stored
+    // Uses the same storage mechanism as onboarding for consistency
+    if (email && !hasExistingEmail) {
+      try {
+        // Store email in app settings via onboarding:update
+        await window.electronAPI.invoke('onboarding:update', {
+          userEmail: email,
+        });
+        // Also send to PostHog as a person property (same as onboarding does)
+        posthog.people.set({ email });
+      } catch (err) {
+        console.error('Failed to save email:', err);
+      }
+    }
+
     // Don't mark as completed - user explicitly clicked feedback button,
     // so they should be able to submit feedback again later
     setIsSubmitted(true);
-  }, [survey, posthog, responses]);
+  }, [survey, posthog, responses, email, hasExistingEmail]);
 
   const handleClose = useCallback(() => {
     setIsVisible(false);
@@ -335,6 +371,30 @@ export const PostHogSurvey: React.FC<PostHogSurveyProps> = ({
               link={'link' in currentQuestion && currentQuestion.link ? currentQuestion.link : ''}
               buttonText={currentQuestion.buttonText || 'Learn More'}
             />
+          )}
+
+          {/* Email field - shown on last question */}
+          {isLastQuestion && (
+            <div className="posthog-survey-email mt-6 pt-6 border-t border-[var(--nim-border)]">
+              <label className="block text-sm font-medium text-[var(--nim-text)] mb-2">
+                Email address <span className="text-[var(--nim-text-faint)] font-normal">(optional)</span>
+              </label>
+              <p className="text-xs text-[var(--nim-text-muted)] mb-3">
+                {hasExistingEmail
+                  ? 'Your email has already been saved.'
+                  : 'Provide your email if you would like us to follow up on your feedback.'}
+              </p>
+              <input
+                type="email"
+                className={`w-full px-4 py-3 border border-[var(--nim-border)] rounded-lg text-sm font-inherit transition-[border-color,box-shadow] duration-200 bg-[var(--nim-bg-secondary)] text-[var(--nim-text)] placeholder:text-[var(--nim-text-faint)] focus:outline-none focus:border-[var(--nim-border-focus)] focus:shadow-[0_0_0_3px_rgba(96,165,250,0.15)] ${
+                  hasExistingEmail ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="your@email.com"
+                disabled={hasExistingEmail}
+              />
+            </div>
           )}
 
           {/* Navigation buttons */}
