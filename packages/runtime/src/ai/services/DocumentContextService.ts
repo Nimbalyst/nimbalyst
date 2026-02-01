@@ -90,7 +90,7 @@ export class DocumentContextService implements IDocumentContextService {
     );
 
     // 4. Build user message additions (includes document context prompt and one-time editing instructions)
-    const userMessageAdditions = this.buildUserMessageAdditions(modeTransition, documentContext, sessionId);
+    const userMessageAdditions = this.buildUserMessageAdditions(modeTransition, documentContext, sessionId, providerType);
 
     this.debug('prepareContext OUTPUT', {
       sessionId,
@@ -316,7 +316,8 @@ export class DocumentContextService implements IDocumentContextService {
   private buildUserMessageAdditions(
     modeTransition: ModeTransition | undefined,
     documentContext: PreparedDocumentContext,
-    sessionId: string
+    sessionId: string,
+    providerType: AIProviderType
   ): UserMessageAdditions {
     const additions: UserMessageAdditions = {};
 
@@ -329,7 +330,7 @@ export class DocumentContextService implements IDocumentContextService {
     }
 
     // Build document context prompt (file path, cursor, selection, content/diff, transitions)
-    const documentContextPrompt = this.buildDocumentContextPrompt(documentContext);
+    const documentContextPrompt = this.buildDocumentContextPrompt(documentContext, providerType);
     if (documentContextPrompt) {
       additions.documentContextPrompt = documentContextPrompt;
     }
@@ -420,7 +421,7 @@ Your goal is to build a comprehensive plan through iterative refinement:
    * Build the document context prompt that gets appended to the user message.
    * This includes file path, cursor position, selected text, content/diff, and transition info.
    */
-  private buildDocumentContextPrompt(context: PreparedDocumentContext): string | undefined {
+  private buildDocumentContextPrompt(context: PreparedDocumentContext, providerType: AIProviderType): string | undefined {
     const hasDocument = !!context.filePath;
     const transition = context.documentTransition;
 
@@ -481,11 +482,12 @@ Your goal is to build a comprehensive plan through iterative refinement:
       }
 
       // Add content or diff based on transition
+      // For claude-code, skip DOCUMENT_CONTENT entirely (it has file system access via tools)
       if (transition === 'modified' && context.documentDiff) {
         prompt += `\nThe document has changed since your last message:\n<DOCUMENT_DIFF>\n${context.documentDiff}\n</DOCUMENT_DIFF>\n`;
       } else if (transition === 'none') {
         prompt += `\n(Document content unchanged since last message.)\n`;
-      } else if (context.content) {
+      } else if (context.content && providerType !== 'claude-code') {
         prompt += `\n<DOCUMENT_CONTENT>\n${context.content}\n</DOCUMENT_CONTENT>\n`;
         if (context.contentTruncated) {
           const length = context.truncateLength ?? DocumentContextService.DEFAULT_TRUNCATE_LENGTH;

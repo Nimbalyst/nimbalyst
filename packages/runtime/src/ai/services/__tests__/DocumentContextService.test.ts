@@ -273,7 +273,23 @@ function test6() {
         expect(result.documentContext.contentTruncated).toBeUndefined();
       });
 
-      it('includes truncation notice in document context prompt', () => {
+      it('includes truncation notice in document context prompt for chat providers', () => {
+        const longContent = 'x'.repeat(3000);
+
+        const rawContext: RawDocumentContext = {
+          filePath: '/test/file.ts',
+          fileType: 'typescript',
+          content: longContent,
+        };
+
+        // Use a chat provider (like 'claude') which includes content in the prompt
+        const result = service.prepareContext(rawContext, 'session-1', 'claude', undefined, { truncateContent: true });
+
+        expect(result.userMessageAdditions.documentContextPrompt).toContain('Content truncated to first 2000 characters');
+        expect(result.userMessageAdditions.documentContextPrompt).toContain('Use the Read tool to see the full file');
+      });
+
+      it('excludes content entirely for claude-code (no truncation notice needed)', () => {
         const longContent = 'x'.repeat(3000);
 
         const rawContext: RawDocumentContext = {
@@ -284,8 +300,9 @@ function test6() {
 
         const result = service.prepareContext(rawContext, 'session-1', 'claude-code', undefined);
 
-        expect(result.userMessageAdditions.documentContextPrompt).toContain('Content truncated to first 2000 characters');
-        expect(result.userMessageAdditions.documentContextPrompt).toContain('Use the Read tool to see the full file');
+        // claude-code should not get DOCUMENT_CONTENT at all
+        expect(result.userMessageAdditions.documentContextPrompt).not.toContain('<DOCUMENT_CONTENT>');
+        expect(result.userMessageAdditions.documentContextPrompt).not.toContain('Content truncated');
       });
     });
 
@@ -426,6 +443,22 @@ function test6() {
         expect(result.userMessageAdditions.documentContextPrompt).toContain('<DOCUMENT_CONTENT>');
         expect(result.userMessageAdditions.documentContextPrompt).toContain('const x = 1;');
         expect(result.userMessageAdditions.documentContextPrompt).toContain('</DOCUMENT_CONTENT>');
+      });
+
+      it('excludes DOCUMENT_CONTENT for claude-code sessions', () => {
+        const rawContext: RawDocumentContext = {
+          filePath: '/test/file.ts',
+          fileType: 'typescript',
+          content: 'const x = 1;',
+        };
+
+        const result = service.prepareContext(rawContext, 'session-1', 'claude-code', undefined);
+
+        expect(result.userMessageAdditions.documentContextPrompt).toBeDefined();
+        expect(result.userMessageAdditions.documentContextPrompt).toContain('<ACTIVE_DOCUMENT>/test/file.ts</ACTIVE_DOCUMENT>');
+        // Should NOT include DOCUMENT_CONTENT for claude-code (it has file system access)
+        expect(result.userMessageAdditions.documentContextPrompt).not.toContain('<DOCUMENT_CONTENT>');
+        expect(result.userMessageAdditions.documentContextPrompt).not.toContain('const x = 1;');
       });
 
       it('includes cursor position in document context prompt when provided', () => {
