@@ -20,6 +20,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.25] - 2026-01-31
+
+
+### Added
+- File context and text selection support in agent mode (including worktrees)
+
+### Fixed
+- MCP tools (like git commit proposal) now work correctly in worktree sessions
+- Removed deprecated "no document open" warning from system prompt
+
 ## [0.52.24] - 2026-01-31
 
 
