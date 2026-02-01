@@ -5,48 +5,54 @@
 
 set -e
 
-# Check if we're in a container (running as root on Linux)
-if [ "$(id -u)" = "0" ] && [ "$(uname -s)" = "Linux" ]; then
-    echo "Running in container mode..."
-    NOSANDBOX="--noSandbox"
-else
-    NOSANDBOX=""
-fi
+# Ensure DISPLAY is set for Xvfb
+export DISPLAY=:99
 
-# Start Xvfb if DISPLAY is set but Xvfb isn't running
-if [ -n "$DISPLAY" ] && ! pgrep -x Xvfb > /dev/null 2>&1; then
-    echo "Starting Xvfb..."
+# Start Xvfb if not running
+if ! pgrep -x Xvfb > /dev/null 2>&1; then
+    echo "Starting Xvfb on display $DISPLAY..."
     Xvfb :99 -screen 0 1920x1080x24 &
     sleep 2
 fi
 
+# Clean up any zombie processes from previous runs
+echo "Cleaning up zombie processes..."
+pkill -9 -f "electron" 2>/dev/null || true
+sleep 1
+
 # Navigate to project root
 cd "$(dirname "$0")/.."
 
-# Start the dev server in background
-echo "Starting Vite dev server..."
+# Build the worker before starting dev server (required for Electron to work)
+echo "Building worker..."
 cd packages/electron
-npx electron-vite dev $NOSANDBOX > /tmp/vite-e2e.log 2>&1 &
-DEV_PID=$!
+npm run build:worker
 cd ../..
 
-# Wait for dev server
+# Start vite dev server for renderer only
+# We use a minimal vite config instead of electron-vite because:
+# 1. electron-vite always starts Electron which crashes or conflicts in containers
+# 2. The main and preload are already built by post-create.sh
+# Playwright launches Electron separately with --no-sandbox flag
+echo "Starting Vite dev server for renderer..."
+npx vite --config .devcontainer/e2e-vite.config.ts > /tmp/vite-e2e.log 2>&1 &
+DEV_PID=$!
+
+# Wait for dev server to be accessible
 echo "Waiting for dev server on localhost:5273..."
-for i in $(seq 1 120); do
+for i in $(seq 1 60); do
     if curl -s --max-time 2 http://localhost:5273 > /dev/null 2>&1; then
         echo "Dev server ready after ${i}s"
         break
     fi
-    if [ $i -eq 120 ]; then
-        echo "Dev server failed to start. Check /tmp/vite-e2e.log"
+    if [ $i -eq 60 ]; then
+        echo "Dev server failed to start. Log:"
+        cat /tmp/vite-e2e.log
         kill $DEV_PID 2>/dev/null || true
         exit 1
     fi
     sleep 1
 done
-
-# Wait for app to stabilize
-sleep 3
 
 # Run tests
 echo ""

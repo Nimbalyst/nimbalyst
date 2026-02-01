@@ -17,6 +17,9 @@ cd packages/rexical && npm run build && cd ../..
 echo "Building extension-sdk..."
 cd packages/extension-sdk && npm run build && cd ../..
 
+echo "Building runtime package..."
+cd packages/runtime && npm run build && cd ../..
+
 echo "Building extensions..."
 cd packages/extensions/datamodellm && npm run build && cd ../../..
 cd packages/extensions/pdf-viewer && npm run build && cd ../../..
