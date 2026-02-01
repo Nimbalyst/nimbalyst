@@ -220,7 +220,7 @@ async function tryCreateSessionNamingServer(port: number): Promise<any> {
                 content: [
                   {
                     type: 'text',
-                    text: 'Error: Session name is required and must be a string'
+                    text: 'Error: The "name" parameter is required and must be a string. Example: { "name": "Database layer refactor" }'
                   }
                 ],
                 isError: true
