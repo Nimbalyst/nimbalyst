@@ -246,6 +246,17 @@ export const sessionTempInputAtom = atomFamily((_sessionId: string) =>
 );
 
 /**
+ * Strip system message additions from a user message for display in history recall.
+ * These are internal instructions wrapped in <NIMBALYST_SYSTEM_MESSAGE> tags
+ * that should not be shown to the user when navigating prompt history.
+ */
+function stripSystemMessageAdditions(content: string): string {
+  // Remove all <NIMBALYST_SYSTEM_MESSAGE>...</NIMBALYST_SYSTEM_MESSAGE> blocks
+  // Including any whitespace before the tag (e.g., newlines)
+  return content.replace(/\s*<NIMBALYST_SYSTEM_MESSAGE>[\s\S]*?<\/NIMBALYST_SYSTEM_MESSAGE>/g, '').trim();
+}
+
+/**
  * Navigate through prompt history for a session.
  * Uses messages from sessionStoreAtom to find user prompts.
  */
@@ -293,7 +304,10 @@ export const navigateSessionHistoryAtom = atom(
 
     if (newIndex >= 0 && newIndex < userMessages.length) {
       set(sessionHistoryIndexAtom(sessionId), newIndex);
-      set(sessionDraftInputAtom(sessionId), userMessages[newIndex].content);
+      // Strip system message additions when recalling history
+      // so user only sees what they originally typed
+      const cleanContent = stripSystemMessageAdditions(userMessages[newIndex].content);
+      set(sessionDraftInputAtom(sessionId), cleanContent);
     }
   }
 );
