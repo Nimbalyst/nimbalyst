@@ -1176,11 +1176,9 @@ Please proceed with this strategy.`;
     const worktreeStagedCount = worktreeStagedFiles.length;
     const worktreeHasCommits = worktreeCommits.length > 0;
     const worktreeHasUncommittedChanges = worktreeChangedFiles.length > 0;
-    // If merged, ignore commitsBehind (the merge commit doesn't need to be rebased)
-    const effectiveWorktreeCommitsBehind = worktreeIsMerged ? 0 : worktreeCommitsBehind;
     const worktreeCanCommit = worktreeStagedCount > 0 && worktreeCommitMessage.trim().length > 0 && !worktreeIsCommitting;
-    const worktreeCanMerge = worktreeHasCommits && !worktreeHasUncommittedChanges && !worktreeIsMerging && !worktreeIsMerged && effectiveWorktreeCommitsBehind === 0;
-    const worktreeCanRebase = effectiveWorktreeCommitsBehind > 0 && !worktreeIsRebasing;
+    const worktreeCanMerge = worktreeHasCommits && !worktreeHasUncommittedChanges && !worktreeIsMerging && !worktreeIsMerged && worktreeCommitsBehind === 0;
+    const worktreeCanRebase = worktreeCommitsBehind > 0 && !worktreeIsRebasing;
 
     // Debug: Log current state values on each render
     // console.log('[GitOperationsPanel] Render state:', {
@@ -1355,12 +1353,12 @@ Please proceed with this strategy.`;
                 </div>
 
                 {/* Worktree Status Info */}
-                {(effectiveWorktreeCommitsBehind > 0 || worktreeIsMerged) && (
+                {(worktreeCommitsBehind > 0 || worktreeIsMerged) && (
                   <div className="flex flex-col gap-1 text-[11px]">
-                    {effectiveWorktreeCommitsBehind > 0 && (
+                    {worktreeCommitsBehind > 0 && (
                       <span className="flex items-center gap-1.5 text-[var(--nim-warning)] font-medium">
                         <MaterialSymbol icon="warning" size={14} />
-                        {effectiveWorktreeCommitsBehind} commit{effectiveWorktreeCommitsBehind !== 1 ? 's' : ''} behind {worktreeRepoRootBranch || 'base'}
+                        {worktreeCommitsBehind} commit{worktreeCommitsBehind !== 1 ? 's' : ''} behind {worktreeRepoRootBranch || 'base'}
                       </span>
                     )}
                     {worktreeIsMerged && (
@@ -1408,18 +1406,18 @@ Please proceed with this strategy.`;
                   <button
                     type="button"
                     className={`w-full p-2 border-none rounded text-white text-xs font-semibold cursor-pointer flex items-center justify-center gap-1.5 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed ${
-                      effectiveWorktreeCommitsBehind > 0
+                      worktreeCommitsBehind > 0
                         ? 'bg-[var(--nim-warning)]'
                         : 'bg-[var(--nim-bg-tertiary)] text-[var(--nim-text)]'
                     }`}
                     onClick={handleWorktreeRebase}
                     disabled={!worktreeCanRebase}
                     title={
-                      effectiveWorktreeCommitsBehind === 0
+                      worktreeCommitsBehind === 0
                         ? 'Already up to date with base branch'
                         : worktreeHasUncommittedChanges
-                          ? `Bring in ${effectiveWorktreeCommitsBehind} commit${effectiveWorktreeCommitsBehind === 1 ? '' : 's'} from ${worktreeRepoRootBranch || 'base branch'} (uncommitted changes will be auto-stashed)`
-                          : `Bring in ${effectiveWorktreeCommitsBehind} commit${effectiveWorktreeCommitsBehind === 1 ? '' : 's'} from ${worktreeRepoRootBranch || 'base branch'}`
+                          ? `Bring in ${worktreeCommitsBehind} commit${worktreeCommitsBehind === 1 ? '' : 's'} from ${worktreeRepoRootBranch || 'base branch'} (uncommitted changes will be auto-stashed)`
+                          : `Bring in ${worktreeCommitsBehind} commit${worktreeCommitsBehind === 1 ? '' : 's'} from ${worktreeRepoRootBranch || 'base branch'}`
                     }
                   >
                     {worktreeIsRebasing ? (
@@ -1430,7 +1428,7 @@ Please proceed with this strategy.`;
                     ) : (
                       <>
                         <MaterialSymbol icon="sync" size={16} />
-                        <span>Rebase{effectiveWorktreeCommitsBehind > 0 ? ` (${effectiveWorktreeCommitsBehind})` : ''}</span>
+                        <span>Rebase{worktreeCommitsBehind > 0 ? ` (${worktreeCommitsBehind})` : ''}</span>
                       </>
                     )}
                   </button>
@@ -1442,8 +1440,8 @@ Please proceed with this strategy.`;
                     title={
                       worktreeIsMerged
                         ? 'Already merged to base branch'
-                        : effectiveWorktreeCommitsBehind > 0
-                          ? `Rebase first to bring in ${effectiveWorktreeCommitsBehind} commit${effectiveWorktreeCommitsBehind === 1 ? '' : 's'} from ${worktreeRepoRootBranch || 'base branch'}`
+                        : worktreeCommitsBehind > 0
+                          ? `Rebase first to bring in ${worktreeCommitsBehind} commit${worktreeCommitsBehind === 1 ? '' : 's'} from ${worktreeRepoRootBranch || 'base branch'}`
                           : worktreeHasUncommittedChanges
                             ? 'Commit all changes before merging'
                             : !worktreeHasCommits
