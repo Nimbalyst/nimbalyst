@@ -55,6 +55,7 @@ export default defineConfig({
     })()
   ],
   server: {
+    host: true,  // Listen on all interfaces (0.0.0.0)
     port: 5273,
     strictPort: true,
     fs: {

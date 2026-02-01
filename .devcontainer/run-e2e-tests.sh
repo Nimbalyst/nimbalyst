@@ -38,11 +38,15 @@ echo "Starting Vite dev server for renderer..."
 npx vite --config .devcontainer/e2e-vite.config.ts > /tmp/vite-e2e.log 2>&1 &
 DEV_PID=$!
 
-# Wait for dev server to be accessible
-echo "Waiting for dev server on localhost:5273..."
+# Wait for dev server to be accessible (try both IPv4 and IPv6)
+echo "Waiting for dev server on port 5273..."
 for i in $(seq 1 60); do
-    if curl -s --max-time 2 http://localhost:5273 > /dev/null 2>&1; then
-        echo "Dev server ready after ${i}s"
+    # Try IPv4 first, then IPv6
+    if curl -s --max-time 2 http://127.0.0.1:5273 > /dev/null 2>&1; then
+        echo "Dev server ready after ${i}s (IPv4)"
+        break
+    elif curl -s --max-time 2 "http://[::1]:5273" > /dev/null 2>&1; then
+        echo "Dev server ready after ${i}s (IPv6)"
         break
     fi
     if [ $i -eq 60 ]; then
