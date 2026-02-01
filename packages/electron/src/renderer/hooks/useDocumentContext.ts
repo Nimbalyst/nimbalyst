@@ -36,7 +36,7 @@ interface UseDocumentContextProps {
 /**
  * Detect file type from file path for AI context
  */
-function detectFileType(filePath: string): string {
+export function detectFileType(filePath: string): string {
   if (!filePath) return 'unknown';
 
   const lowerPath = filePath.toLowerCase();

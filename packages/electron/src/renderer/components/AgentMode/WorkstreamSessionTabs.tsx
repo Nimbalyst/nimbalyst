@@ -37,6 +37,18 @@ export interface WorkstreamSessionTabsProps {
   onCreateWorktreeSession?: (worktreeId: string) => Promise<string | null>; // Callback to create session in worktree (returns session ID)
   onSessionArchive?: (sessionId: string) => void; // Callback to archive a session
   onSessionUnarchive?: (sessionId: string) => void; // Callback to unarchive a session
+  /** Getter for document context from the workstream editor (for AI file/selection context) */
+  getDocumentContext?: () => {
+    filePath?: string;
+    content?: string;
+    fileType?: string;
+    textSelection?: {
+      text: string;
+      filePath: string;
+      timestamp: number;
+    };
+    textSelectionTimestamp?: number;
+  };
 }
 
 /**
@@ -198,6 +210,7 @@ export const WorkstreamSessionTabs: React.FC<WorkstreamSessionTabsProps> = React
   onCreateWorktreeSession,
   onSessionArchive,
   onSessionUnarchive,
+  getDocumentContext,
 }) => {
   const hasChildren = useAtomValue(workstreamHasChildrenAtom(workstreamId));
   const createChildSession = useSetAtom(createChildSessionAtom);
@@ -254,6 +267,7 @@ export const WorkstreamSessionTabs: React.FC<WorkstreamSessionTabsProps> = React
           onFileClick={onFileClick}
           onClearAgentSession={handleNewSession}
           onCreateWorktreeSession={onCreateWorktreeSession}
+          getDocumentContext={getDocumentContext}
         />
       </div>
     </div>

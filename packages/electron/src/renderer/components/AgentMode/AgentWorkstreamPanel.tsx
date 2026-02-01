@@ -57,6 +57,8 @@ import {
 } from '../../store/atoms/agentMode';
 import { ArchiveWorktreeDialog } from './ArchiveWorktreeDialog';
 import { useArchiveWorktreeDialog } from '../../hooks/useArchiveWorktreeDialog';
+import { detectFileType } from '../../hooks/useDocumentContext';
+import { getTextSelection } from '../UnifiedAI/TextSelectionIndicator';
 
 export interface AgentWorkstreamPanelRef {
   closeActiveTab: () => void;
@@ -482,6 +484,37 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
     }
   }, [workstreamId, setLayoutMode]);
 
+  // Get document context from the workstream editor tabs (for AI selection/file context)
+  // This is called on-demand when sending a message to capture fresh selection state
+  const getDocumentContext = useCallback(() => {
+    const activeTab = editorTabsRef.current?.getActiveTab();
+    if (!activeTab) {
+      return {
+        filePath: undefined,
+        content: undefined,
+        fileType: undefined,
+        textSelection: undefined,
+        textSelectionTimestamp: undefined,
+      };
+    }
+
+    const fileType = detectFileType(activeTab.filePath);
+
+    // Get text selection if it matches the current file
+    const textSelectionData = getTextSelection();
+    const textSelection = textSelectionData && textSelectionData.filePath === activeTab.filePath
+      ? textSelectionData
+      : undefined;
+
+    return {
+      filePath: activeTab.filePath,
+      content: activeTab.content,
+      fileType,
+      textSelection,
+      textSelectionTimestamp: textSelection?.timestamp,
+    };
+  }, []);
+
   const handleToggleSidebar = useCallback(() => {
     toggleSidebar(workstreamId);
   }, [workstreamId, toggleSidebar]);
@@ -760,6 +793,7 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
                 onCreateWorktreeSession={onCreateWorktreeSession}
                 onSessionArchive={handleSessionArchive}
                 onSessionUnarchive={handleSessionUnarchive}
+                getDocumentContext={getDocumentContext}
               />
             </div>
           )}

@@ -184,6 +184,8 @@ export interface WorkstreamEditorTabsRef {
   hasTabs: () => boolean;
   getActiveFilePath: () => string | null;
   closeActiveTab: () => void;
+  /** Get the active tab's full data including content */
+  getActiveTab: () => { filePath: string; content: string } | null;
 }
 
 interface WorkstreamEditorTabsProps {
@@ -310,6 +312,15 @@ const WorkstreamEditorTabsInner = forwardRef<WorkstreamEditorTabsRef, Workstream
             tabsActions.removeTab(activeTabId);
           }
         },
+        getActiveTab: () => {
+          if (!activeTabId) return null;
+          const tabState = tabsActions.getTabState(activeTabId);
+          if (!tabState) return null;
+          return {
+            filePath: tabState.filePath,
+            content: tabState.content || '',
+          };
+        },
       }),
       [tabs, activeTabId, tabsActions]
     );
@@ -367,6 +378,7 @@ export const WorkstreamEditorTabs = forwardRef<WorkstreamEditorTabsRef, Workstre
       hasTabs: () => innerRef.current?.hasTabs() ?? false,
       getActiveFilePath: () => innerRef.current?.getActiveFilePath() ?? null,
       closeActiveTab: () => innerRef.current?.closeActiveTab(),
+      getActiveTab: () => innerRef.current?.getActiveTab() ?? null,
     }), []);
 
     return (

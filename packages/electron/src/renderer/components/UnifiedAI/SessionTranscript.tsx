@@ -219,6 +219,10 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     return getDocumentContext ? getDocumentContext() : documentContext;
   }, [getDocumentContext, documentContext]);
 
+  // Get current file path for selection indicator - prefer static prop, fall back to getter
+  // This is called on render so we prefer the static prop when available
+  const currentFilePath = documentContext?.filePath ?? getDocumentContext?.()?.filePath;
+
   // ============================================================
   // Session state via Jotai atoms - component owns its own data
   // Use derived atoms to avoid re-rendering on unrelated changes
@@ -1463,7 +1467,7 @@ Your goal is to build a comprehensive plan through iterative refinement:
         provider={provider}
         onQueue={handleQueue}
         queueCount={queuedPrompts.length}
-        currentFilePath={documentContext?.filePath}
+        currentFilePath={currentFilePath}
         lastUserMessageTimestamp={lastUserMessageTimestamp}
       />
     </div>

@@ -25,6 +25,18 @@ export interface AgentSessionPanelProps {
   onFileClick?: (filePath: string) => void;
   onClearAgentSession?: () => void;
   onCreateWorktreeSession?: (worktreeId: string) => Promise<string | null>;
+  /** Getter for document context from the workstream editor (for AI file/selection context) */
+  getDocumentContext?: () => {
+    filePath?: string;
+    content?: string;
+    fileType?: string;
+    textSelection?: {
+      text: string;
+      filePath: string;
+      timestamp: number;
+    };
+    textSelectionTimestamp?: number;
+  };
 }
 
 /**
@@ -40,6 +52,7 @@ export const AgentSessionPanel = forwardRef<AgentSessionPanelRef, AgentSessionPa
   onFileClick,
   onClearAgentSession,
   onCreateWorktreeSession,
+  getDocumentContext,
 }, ref) => {
   const transcriptRef = useRef<SessionTranscriptRef>(null);
 
@@ -67,6 +80,7 @@ export const AgentSessionPanel = forwardRef<AgentSessionPanelRef, AgentSessionPa
         onFileClick={handleFileClick}
         onClearAgentSession={onClearAgentSession}
         onCreateWorktreeSession={onCreateWorktreeSession}
+        getDocumentContext={getDocumentContext}
       />
     </div>
   );
