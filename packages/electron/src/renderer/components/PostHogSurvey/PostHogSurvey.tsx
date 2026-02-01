@@ -58,6 +58,14 @@ function isSurveyCompleted(surveyId: string): boolean {
 // The feedback survey ID configured in PostHog
 const FEEDBACK_SURVEY_ID = '019aad12-f478-0000-9fdb-18041da422b4';
 
+/**
+ * Validate email format (same regex as UnifiedOnboarding)
+ */
+const isValidEmail = (email: string): boolean => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+};
+
 export const PostHogSurvey: React.FC<PostHogSurveyProps> = ({
   onClose,
 }) => {
@@ -74,6 +82,8 @@ export const PostHogSurvey: React.FC<PostHogSurveyProps> = ({
   const [email, setEmail] = useState('');
   const [existingEmail, setExistingEmail] = useState<string | null>(null);
   const hasExistingEmail = !!existingEmail;
+  // Email is valid if empty (optional) or matches valid format
+  const isEmailValid = email === '' || isValidEmail(email);
 
   // Fetch existing email from onboarding state on mount
   useEffect(() => {
@@ -162,9 +172,9 @@ export const PostHogSurvey: React.FC<PostHogSurveyProps> = ({
       ...responsePayload,
     });
 
-    // Save email if provided and not already stored
+    // Save email if provided, valid, and not already stored
     // Uses the same storage mechanism as onboarding for consistency
-    if (email && !hasExistingEmail) {
+    if (email && isValidEmail(email) && !hasExistingEmail) {
       try {
         // Store email in app settings via onboarding:update
         await window.electronAPI.invoke('onboarding:update', {
@@ -386,14 +396,23 @@ export const PostHogSurvey: React.FC<PostHogSurveyProps> = ({
               </p>
               <input
                 type="email"
-                className={`w-full px-4 py-3 border border-[var(--nim-border)] rounded-lg text-sm font-inherit transition-[border-color,box-shadow] duration-200 bg-[var(--nim-bg-secondary)] text-[var(--nim-text)] placeholder:text-[var(--nim-text-faint)] focus:outline-none focus:border-[var(--nim-border-focus)] focus:shadow-[0_0_0_3px_rgba(96,165,250,0.15)] ${
-                  hasExistingEmail ? 'opacity-50 cursor-not-allowed' : ''
+                className={`w-full px-4 py-3 border rounded-lg text-sm font-inherit transition-[border-color,box-shadow] duration-200 bg-[var(--nim-bg-secondary)] text-[var(--nim-text)] placeholder:text-[var(--nim-text-faint)] focus:outline-none focus:shadow-[0_0_0_3px_rgba(96,165,250,0.15)] ${
+                  hasExistingEmail
+                    ? 'opacity-50 cursor-not-allowed border-[var(--nim-border)]'
+                    : !isEmailValid
+                      ? 'border-[var(--nim-error)] focus:border-[var(--nim-error)]'
+                      : 'border-[var(--nim-border)] focus:border-[var(--nim-border-focus)]'
                 }`}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="your@email.com"
                 disabled={hasExistingEmail}
               />
+              {!isEmailValid && (
+                <p className="text-xs text-[var(--nim-error)] mt-2">
+                  Please enter a valid email address.
+                </p>
+              )}
             </div>
           )}
 
@@ -410,7 +429,7 @@ export const PostHogSurvey: React.FC<PostHogSurveyProps> = ({
             <button
               className="posthog-survey-button posthog-survey-button-primary nim-btn-primary px-6 py-3 rounded-lg text-sm font-semibold whitespace-nowrap transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
               onClick={handleNextQuestion}
-              disabled={!hasResponse && currentQuestion?.type !== 'link'}
+              disabled={(!hasResponse && currentQuestion?.type !== 'link') || (isLastQuestion && !isEmailValid)}
             >
               {isLastQuestion ? 'Submit' : 'Next'}
             </button>
