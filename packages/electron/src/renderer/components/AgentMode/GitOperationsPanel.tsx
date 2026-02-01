@@ -36,6 +36,7 @@ import { MergeConfirmDialog } from './MergeConfirmDialog';
 import { UntrackedFilesConflictDialog } from './UntrackedFilesConflictDialog';
 import { ArchiveWorktreeDialog } from './ArchiveWorktreeDialog';
 import { SquashCommitModal } from './SquashCommitModal';
+import { BadGitStateDialog } from './BadGitStateDialog';
 
 // Types for worktree mode (copied from DiffModeView)
 interface WorktreeChangedFile {
@@ -141,6 +142,7 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
     } | null>(null);
     const [mergeConflictFiles, setMergeConflictFiles] = useState<string[] | null>(null);
     const [untrackedFilesConflict, setUntrackedFilesConflict] = useState<string[] | null>(null);
+    const [badGitStateError, setBadGitStateError] = useState<{ message: string; conflictedFiles?: string[] } | null>(null);
     const [worktreeName, setWorktreeName] = useState<string>('');
     const [showArchiveDialog, setShowArchiveDialog] = useState(false);
     const [showMergeConfirmDialog, setShowMergeConfirmDialog] = useState(false);
@@ -650,6 +652,12 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
           } else if (result?.message === 'untracked-files-conflict' && result?.untrackedFiles) {
             // Show untracked files conflict dialog
             setUntrackedFilesConflict(result.untrackedFiles);
+          } else if (result?.message) {
+            // Show bad git state or other error dialog
+            setBadGitStateError({
+              message: result.message,
+              conflictedFiles: result.conflictedFiles,
+            });
           } else {
             console.error('[GitOperationsPanel] Worktree rebase failed:', result?.error || result?.message);
           }
@@ -660,6 +668,48 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
         setWorktreeIsRebasing(false);
       }
     }, [worktreePath, loadWorktreeChangedFiles, loadWorktreeCommits, loadWorktreeStatus]);
+
+    // Resolve bad git state with Claude Agent
+    const handleResolveBadGitStateWithAgent = useCallback(async () => {
+      if (!badGitStateError) return;
+
+      console.log('[GitOperationsPanel] Resolving bad git state with agent', { badGitStateError, worktreePath });
+
+      // Close the dialog
+      setBadGitStateError(null);
+
+      try {
+        // Create a prompt describing the issue
+        const conflictFilesList = badGitStateError.conflictedFiles
+          ? badGitStateError.conflictedFiles.map(f => `  - ${f}`).join('\n')
+          : '';
+
+        const draftMessage = `I'm having a git issue that needs to be resolved.
+
+**Context:**
+- Worktree location: ${worktreePath}
+- Main repository: ${workspacePath}
+
+**The Problem:**
+${badGitStateError.message}
+
+${badGitStateError.conflictedFiles && badGitStateError.conflictedFiles.length > 0 ? `**Conflicted Files:**
+${conflictFilesList}
+
+` : ''}**What you need to do:**
+1. Examine the git state to understand the issue
+2. Resolve any conflicts or incomplete operations
+3. Clean up the git state so operations can proceed
+
+Please help me resolve this git issue.`;
+
+        // Send message to Claude Agent
+        const result = await window.electronAPI.invoke('ai:send-message', sessionId, draftMessage);
+        console.log('[GitOperationsPanel] Sent bad git state resolution request to agent', { result });
+      } catch (err) {
+        console.error('[GitOperationsPanel] Failed to send bad git state resolution request:', err);
+      }
+    }, [badGitStateError, sessionId, worktreePath, workspacePath]);
 
     // Resolve rebase conflicts with Claude Agent (using Crystal's prompt pattern)
     const handleResolveRebaseConflictsWithAgent = useCallback(async () => {
@@ -1593,6 +1643,17 @@ Please proceed with this strategy.`;
             untrackedFiles={untrackedFilesConflict}
             onResolveWithAgent={handleResolveUntrackedFilesWithAgent}
             onCancel={() => setUntrackedFilesConflict(null)}
+          />
+        )}
+
+        {/* Bad git state error dialog */}
+        {badGitStateError && (
+          <BadGitStateDialog
+            worktreePath={worktreePath || ''}
+            errorMessage={badGitStateError.message}
+            conflictedFiles={badGitStateError.conflictedFiles}
+            onResolveWithAgent={handleResolveBadGitStateWithAgent}
+            onCancel={() => setBadGitStateError(null)}
           />
         )}
 

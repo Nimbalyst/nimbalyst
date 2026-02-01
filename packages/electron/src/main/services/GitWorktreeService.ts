@@ -98,6 +98,18 @@ export interface WorktreeValidationResult {
 }
 
 /**
+ * Git state information
+ */
+export interface GitState {
+  isClean: boolean;
+  inMerge: boolean;
+  inRebase: boolean;
+  inCherryPick: boolean;
+  inRevert: boolean;
+  conflictedFiles: string[];
+}
+
+/**
  * Service for managing git worktrees
  */
 export class GitWorktreeService {
@@ -810,6 +822,98 @@ export class GitWorktreeService {
   }
 
   /**
+   * Check the git state of a repository to detect if it's in the middle of a merge, rebase, or other operation
+   *
+   * @param repoPath - Path to the git repository
+   * @returns Git state information
+   */
+  async checkGitState(repoPath: string): Promise<GitState> {
+    if (!repoPath) {
+      throw new Error('repoPath is required');
+    }
+
+    logger.info('Checking git state', { repoPath });
+
+    const gitDir = path.join(repoPath, '.git');
+    const git: SimpleGit = simpleGit(repoPath);
+
+    try {
+      const status = await git.status();
+
+      // Check for various git states by looking for specific files in .git directory
+      const inMerge = fs.existsSync(path.join(gitDir, 'MERGE_HEAD'));
+      const inRebase = fs.existsSync(path.join(gitDir, 'REBASE_HEAD')) ||
+                       fs.existsSync(path.join(gitDir, 'rebase-merge')) ||
+                       fs.existsSync(path.join(gitDir, 'rebase-apply'));
+      const inCherryPick = fs.existsSync(path.join(gitDir, 'CHERRY_PICK_HEAD'));
+      const inRevert = fs.existsSync(path.join(gitDir, 'REVERT_HEAD'));
+
+      // isClean means no in-progress operations (not about uncommitted files)
+      const isClean = !inMerge && !inRebase && !inCherryPick && !inRevert;
+      const conflictedFiles = status.conflicted || [];
+
+      const state: GitState = {
+        isClean,
+        inMerge,
+        inRebase,
+        inCherryPick,
+        inRevert,
+        conflictedFiles,
+      };
+
+      logger.info('Git state check complete', { state });
+      return state;
+    } catch (error) {
+      logger.error('Failed to check git state', { error, repoPath });
+      throw new Error(`Failed to check git state: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * Check if stashing would succeed or fail due to conflicts
+   * Returns an array of files that would cause stash to fail
+   *
+   * IMPORTANT: Git stashes are stored in .git/refs/stash and are SHARED across all worktrees.
+   * This means:
+   * 1. A stash created in one worktree is visible in all worktrees
+   * 2. Stash operations in different worktrees can interfere with each other
+   * 3. Always check for stash conflicts before attempting to stash
+   * 4. Be careful when popping stashes - verify you're in the correct worktree
+   *
+   * The stash stores the branch name with each stash entry, which helps track which
+   * worktree a stash came from, but concurrent stash operations across worktrees
+   * should be avoided.
+   *
+   * @param repoPath - Path to the git repository
+   * @returns Array of problematic files, or empty array if stash would succeed
+   */
+  async checkStashConflicts(repoPath: string): Promise<string[]> {
+    if (!repoPath) {
+      throw new Error('repoPath is required');
+    }
+
+    logger.info('Checking for potential stash conflicts', { repoPath });
+
+    const git: SimpleGit = simpleGit(repoPath);
+
+    try {
+      // Get status to check for conflicted files
+      const status = await git.status();
+
+      // If there are conflicted files (needs merge), stash will fail
+      if (status.conflicted && status.conflicted.length > 0) {
+        logger.warn('Stash would fail due to conflicted files', { conflictedFiles: status.conflicted });
+        return status.conflicted;
+      }
+
+      return [];
+    } catch (error) {
+      logger.error('Failed to check stash conflicts', { error, repoPath });
+      throw new Error(`Failed to check stash conflicts: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
    * Get diff for a specific file in a worktree
    *
    * @param worktreePath - Path to the worktree
@@ -1132,6 +1236,19 @@ ${newLines.map(line => '+' + line).join('\n')}`;
     const git: SimpleGit = simpleGit(worktreePath);
 
     try {
+      // CRITICAL: Check git state before committing
+      const gitState = await this.checkGitState(worktreePath);
+
+      if (!gitState.isClean) {
+        const issues = [];
+        if (gitState.inMerge) issues.push('in the middle of a merge');
+        if (gitState.inRebase) issues.push('in the middle of a rebase');
+        if (gitState.inCherryPick) issues.push('in the middle of a cherry-pick');
+        if (gitState.inRevert) issues.push('in the middle of a revert');
+
+        logger.error('Cannot commit: repository is in a bad state', { gitState });
+        throw new Error(`Cannot commit: repository is ${issues.join(', ')}. Please resolve the existing operation first.`);
+      }
       // Stage files
       if (files && files.length > 0) {
         // First unstage everything to ensure we only commit the specified files
@@ -1213,6 +1330,41 @@ ${newLines.map(line => '+' + line).join('\n')}`;
     const mainGit: SimpleGit = simpleGit(mainRepoPath);
 
     try {
+      // CRITICAL: Check git state before any operations
+      const worktreeGitState = await this.checkGitState(worktreePath);
+
+      if (!worktreeGitState.isClean) {
+        const issues = [];
+        if (worktreeGitState.inMerge) issues.push('in the middle of a merge');
+        if (worktreeGitState.inRebase) issues.push('in the middle of a rebase');
+        if (worktreeGitState.inCherryPick) issues.push('in the middle of a cherry-pick');
+        if (worktreeGitState.inRevert) issues.push('in the middle of a revert');
+
+        logger.error('Cannot merge: worktree is in a bad state', { worktreeGitState });
+        return {
+          success: false,
+          message: `Cannot merge: worktree is ${issues.join(', ')}. Please resolve the existing operation first.`,
+          conflictedFiles: worktreeGitState.conflictedFiles,
+        };
+      }
+
+      const mainGitState = await this.checkGitState(mainRepoPath);
+
+      if (!mainGitState.isClean) {
+        const issues = [];
+        if (mainGitState.inMerge) issues.push('in the middle of a merge');
+        if (mainGitState.inRebase) issues.push('in the middle of a rebase');
+        if (mainGitState.inCherryPick) issues.push('in the middle of a cherry-pick');
+        if (mainGitState.inRevert) issues.push('in the middle of a revert');
+
+        logger.error('Cannot merge: main repository is in a bad state', { mainGitState });
+        return {
+          success: false,
+          message: `Cannot merge: main repository is ${issues.join(', ')}. Please resolve the existing operation first.`,
+          conflictedFiles: mainGitState.conflictedFiles,
+        };
+      }
+
       // Check for uncommitted changes in worktree
       const worktreeStatus = await worktreeGit.status();
       if (!worktreeStatus.isClean()) {
@@ -1234,6 +1386,7 @@ ${newLines.map(line => '+' + line).join('\n')}`;
 
       // Track whether we stashed changes
       let didStash = false;
+      let stashMessage = '';
 
       // CRITICAL: Check if any uncommitted files would be affected by the merge
       // If a file has uncommitted changes AND the worktree branch modifies it, always ask Claude
@@ -1272,35 +1425,87 @@ ${newLines.map(line => '+' + line).join('\n')}`;
         }
 
         // No overlapping files - safe to auto-stash
-        logger.info('Auto-stashing uncommitted changes in main repository', { fileCount: mainStatus.files.length });
-        const stashStartTime = Date.now();
-        try {
-          // Don't use -u flag to avoid stashing large untracked files (performance issue)
-          await mainGit.stash(['push', '-m', 'Auto-stash before merge']);
-          didStash = true;
-          const stashDuration = Date.now() - stashStartTime;
-          logger.info('Auto-stash successful', { stashDuration });
-        } catch (stashError) {
-          logger.error('Failed to auto-stash changes', { stashError });
+        // Only stash if there are MODIFIED/STAGED files (not just untracked files)
+        const hasModifiedFiles = mainStatus.files.some(f => f.working_dir !== '?' && f.working_dir !== '!');
 
-          // Check if this is a merge conflict preventing stash
-          const errorMessage = stashError instanceof Error ? stashError.message : String(stashError);
-          if (errorMessage.includes('needs merge') || errorMessage.includes('needs update')) {
-            // There are merge conflicts in the main repository
-            const conflictedFiles = mainStatus.conflicted || [];
+        if (hasModifiedFiles) {
+          // CRITICAL: Check if stash will succeed before attempting
+          const stashConflicts = await this.checkStashConflicts(mainRepoPath);
 
-            // Return a special error that the IPC handler can detect
+          if (stashConflicts.length > 0) {
+            logger.error('Cannot stash: files have merge conflicts', { conflictedFiles: stashConflicts });
             return {
               success: false,
-              message: 'merge-conflict-in-main',
-              conflictedFiles,
+              message: 'Cannot merge: uncommitted changes in main repository have merge conflicts. Please use AI to resolve the conflicts first, or commit/discard the changes.',
+              conflictedFiles: stashConflicts,
             };
           }
 
-          return {
-            success: false,
-            message: 'Cannot merge: uncommitted changes in main repository and auto-stash failed. Please commit or stash changes manually.',
-          };
+          // Check for existing stashes that might interfere
+          const stashListBefore = await mainGit.stash(['list']);
+          const stashCountBefore = stashListBefore ? stashListBefore.split('\n').filter(s => s.trim()).length : 0;
+
+          if (stashCountBefore > 0) {
+            logger.warn('Existing stashes detected in main repo - these could interfere with auto-stash', { stashCountBefore });
+          }
+
+          logger.info('Auto-stashing uncommitted changes in main repository', {
+            fileCount: mainStatus.files.filter(f => f.working_dir !== '?' && f.working_dir !== '!').length,
+            existingStashes: stashCountBefore,
+          });
+          const stashStartTime = Date.now();
+
+          // Create a unique stash message to verify we pop the right one
+          stashMessage = `Auto-stash before merge ${Date.now()}`;
+
+          try {
+            // Don't use -u flag to avoid stashing large untracked files (performance issue)
+            await mainGit.stash(['push', '-m', stashMessage]);
+
+            // CRITICAL: Verify the stash was actually created
+            const stashListAfter = await mainGit.stash(['list']);
+            const stashCountAfter = stashListAfter ? stashListAfter.split('\n').filter(s => s.trim()).length : 0;
+
+            if (stashCountAfter > stashCountBefore) {
+              // Verify the top stash has our message
+              const topStash = stashListAfter.split('\n')[0];
+              if (topStash && topStash.includes(stashMessage)) {
+                didStash = true;
+                const stashDuration = Date.now() - stashStartTime;
+                logger.info('Auto-stash successful', { stashDuration, stashMessage });
+              } else {
+                logger.error('Stash created but with wrong message', { topStash, expectedMessage: stashMessage });
+                return {
+                  success: false,
+                  message: 'Internal error: stash created with wrong message. Please contact support.',
+                };
+              }
+            } else {
+              logger.warn('git stash succeeded but no stash was created - working directory might be clean');
+              didStash = false;
+            }
+          } catch (stashError) {
+            logger.error('Failed to auto-stash changes', { stashError });
+
+            // Check if this is a merge conflict preventing stash
+            const errorMessage = stashError instanceof Error ? stashError.message : String(stashError);
+            if (errorMessage.includes('needs merge') || errorMessage.includes('needs update')) {
+              // There are merge conflicts in the main repository
+              const conflictedFiles = mainStatus.conflicted || [];
+
+              // Return a special error that the IPC handler can detect
+              return {
+                success: false,
+                message: 'merge-conflict-in-main',
+                conflictedFiles,
+              };
+            }
+
+            return {
+              success: false,
+              message: 'Cannot merge: uncommitted changes in main repository and auto-stash failed. Please commit or stash changes manually.',
+            };
+          }
         }
       }
 
@@ -1322,13 +1527,76 @@ ${newLines.map(line => '+' + line).join('\n')}`;
 
         logger.info('Merge completed successfully', { mergeDuration });
 
+        // CRITICAL: Verify git state after merge
+        const postMergeState = await this.checkGitState(mainRepoPath);
+
+        if (!postMergeState.isClean) {
+          const issues = [];
+          if (postMergeState.inMerge) issues.push('in the middle of a merge');
+          if (postMergeState.inRebase) issues.push('in the middle of a rebase');
+          if (postMergeState.inCherryPick) issues.push('in the middle of a cherry-pick');
+          if (postMergeState.inRevert) issues.push('in the middle of a revert');
+
+          logger.error('Merge completed but repository is in a bad state', { postMergeState });
+
+          // Try to restore stash if needed
+          if (didStash) {
+            try {
+              await mainGit.stash(['pop']);
+              logger.info('Restored stash after detecting bad git state');
+            } catch (popError) {
+              logger.error('Failed to restore stash after detecting bad state', { popError });
+            }
+          }
+
+          return {
+            success: false,
+            message: `Merge completed but repository is ${issues.join(', ')}. Please resolve the issue manually.`,
+            conflictedFiles: postMergeState.conflictedFiles,
+          };
+        }
+
         // Pop the stash if we auto-stashed
         if (didStash) {
           try {
+            // CRITICAL: Verify the top stash is ours before popping
+            const stashListBeforePop = await mainGit.stash(['list']);
+            const topStash = stashListBeforePop ? stashListBeforePop.split('\n')[0] : '';
+
+            if (!topStash || !topStash.includes(stashMessage)) {
+              logger.error('Top stash is not ours - refusing to pop', {
+                topStash,
+                expectedMessage: stashMessage,
+              });
+              return {
+                success: true,
+                message: `Successfully merged ${worktreeBranch} into ${baseBranch}. Warning: Stash stack was corrupted - your changes are in stash. Use 'git stash list' to find them.`,
+                stashWarning: true,
+              };
+            }
+
             const popStartTime = Date.now();
             await mainGit.stash(['pop']);
             const popDuration = Date.now() - popStartTime;
             logger.info('Auto-stash popped successfully', { popDuration });
+
+            // CRITICAL: Check git state after stash pop to detect conflicts
+            const postStashState = await this.checkGitState(mainRepoPath);
+            const postStashStatus = await mainGit.status();
+
+            // Check if stash pop created conflicts
+            if (!postStashState.isClean || postStashStatus.conflicted.length > 0) {
+              logger.error('Stash pop created conflicts', {
+                postStashState,
+                conflictedFiles: postStashStatus.conflicted,
+              });
+
+              return {
+                success: false,
+                message: `Merge succeeded, but restoring your uncommitted changes created conflicts. Please resolve the conflicts in the uncommitted changes.`,
+                conflictedFiles: postStashStatus.conflicted,
+              };
+            }
           } catch (popError) {
             logger.warn('Failed to pop stash after merge', { popError });
             return {
@@ -1538,6 +1806,24 @@ ${newLines.map(line => '+' + line).join('\n')}`;
     const git: SimpleGit = simpleGit(worktreePath);
 
     try {
+      // CRITICAL: Check git state before any operations
+      const gitState = await this.checkGitState(worktreePath);
+
+      if (!gitState.isClean) {
+        const issues = [];
+        if (gitState.inMerge) issues.push('in the middle of a merge');
+        if (gitState.inRebase) issues.push('in the middle of a rebase');
+        if (gitState.inCherryPick) issues.push('in the middle of a cherry-pick');
+        if (gitState.inRevert) issues.push('in the middle of a revert');
+
+        logger.error('Cannot rebase: repository is in a bad state', { gitState });
+        return {
+          success: false,
+          message: `Cannot rebase: repository is ${issues.join(', ')}. Please resolve the existing operation first.`,
+          conflictedFiles: gitState.conflictedFiles,
+        };
+      }
+
       const currentBranch = (await git.revparse(['--abbrev-ref', 'HEAD'])).trim();
       logger.info('Rebase details', { currentBranch, baseBranch });
 
@@ -1560,16 +1846,68 @@ ${newLines.map(line => '+' + line).join('\n')}`;
       // Check for uncommitted changes and auto-stash if needed
       const status = await git.status();
       let didStash = false;
+      let stashMessage = '';
 
-      if (!status.isClean()) {
-        logger.info('Auto-stashing uncommitted changes before rebase', { fileCount: status.files.length });
+      // Only stash if there are MODIFIED/STAGED files (not just untracked files)
+      // Untracked files don't need to be stashed and can cause issues
+      const hasModifiedFiles = status.files.some(f => f.working_dir !== '?' && f.working_dir !== '!');
+
+      if (hasModifiedFiles) {
+        // CRITICAL: Check if stash will succeed before attempting
+        const stashConflicts = await this.checkStashConflicts(worktreePath);
+
+        if (stashConflicts.length > 0) {
+          logger.error('Cannot stash: files have merge conflicts', { conflictedFiles: stashConflicts });
+          return {
+            success: false,
+            message: 'Cannot rebase: uncommitted changes have merge conflicts. Please use AI to resolve the conflicts first, or commit/discard the changes.',
+            conflictedFiles: stashConflicts,
+          };
+        }
+
+        // Check for existing stashes that might interfere
+        const stashListBefore = await git.stash(['list']);
+        const stashCountBefore = stashListBefore ? stashListBefore.split('\n').filter(s => s.trim()).length : 0;
+
+        if (stashCountBefore > 0) {
+          logger.warn('Existing stashes detected - these could interfere with auto-stash', { stashCountBefore });
+        }
+
+        logger.info('Auto-stashing uncommitted changes before rebase', {
+          fileCount: status.files.filter(f => f.working_dir !== '?' && f.working_dir !== '!').length,
+          existingStashes: stashCountBefore,
+        });
         const stashStartTime = Date.now();
+
+        // Create a unique stash message to verify we pop the right one
+        stashMessage = `Auto-stash before rebase ${Date.now()}`;
+
         try {
           // Don't use -u flag to avoid stashing large untracked files
-          await git.stash(['push', '-m', 'Auto-stash before rebase']);
-          didStash = true;
-          const stashDuration = Date.now() - stashStartTime;
-          logger.info('Auto-stash successful', { stashDuration });
+          await git.stash(['push', '-m', stashMessage]);
+
+          // CRITICAL: Verify the stash was actually created
+          const stashListAfter = await git.stash(['list']);
+          const stashCountAfter = stashListAfter ? stashListAfter.split('\n').filter(s => s.trim()).length : 0;
+
+          if (stashCountAfter > stashCountBefore) {
+            // Verify the top stash has our message
+            const topStash = stashListAfter.split('\n')[0];
+            if (topStash && topStash.includes(stashMessage)) {
+              didStash = true;
+              const stashDuration = Date.now() - stashStartTime;
+              logger.info('Auto-stash successful', { stashDuration, stashMessage });
+            } else {
+              logger.error('Stash created but with wrong message', { topStash, expectedMessage: stashMessage });
+              return {
+                success: false,
+                message: 'Internal error: stash created with wrong message. Please contact support.',
+              };
+            }
+          } else {
+            logger.warn('git stash succeeded but no stash was created - working directory might be clean');
+            didStash = false;
+          }
         } catch (stashError) {
           logger.error('Failed to auto-stash changes', { stashError });
           return {
@@ -1585,12 +1923,76 @@ ${newLines.map(line => '+' + line).join('\n')}`;
 
         logger.info('Rebase completed successfully');
 
+        // CRITICAL: Verify git state after rebase
+        const postRebaseState = await this.checkGitState(worktreePath);
+
+        if (!postRebaseState.isClean) {
+          const issues = [];
+          if (postRebaseState.inMerge) issues.push('in the middle of a merge');
+          if (postRebaseState.inRebase) issues.push('in the middle of a rebase');
+          if (postRebaseState.inCherryPick) issues.push('in the middle of a cherry-pick');
+          if (postRebaseState.inRevert) issues.push('in the middle of a revert');
+
+          logger.error('Rebase completed but repository is in a bad state', { postRebaseState });
+
+          // Try to restore stash if needed
+          if (didStash) {
+            try {
+              await git.stash(['pop']);
+              logger.info('Restored stash after detecting bad git state');
+            } catch (popError) {
+              logger.error('Failed to restore stash after detecting bad state', { popError });
+            }
+          }
+
+          return {
+            success: false,
+            message: `Rebase completed but repository is ${issues.join(', ')}. Please resolve the issue manually.`,
+            conflictedFiles: postRebaseState.conflictedFiles,
+          };
+        }
+
         // Pop stash if we stashed changes
         if (didStash) {
           try {
             logger.info('Attempting to restore stashed changes');
+
+            // CRITICAL: Verify the top stash is ours before popping
+            const stashListBeforePop = await git.stash(['list']);
+            const topStash = stashListBeforePop ? stashListBeforePop.split('\n')[0] : '';
+
+            if (!topStash || !topStash.includes(stashMessage)) {
+              logger.error('Top stash is not ours - refusing to pop', {
+                topStash,
+                expectedMessage: stashMessage,
+              });
+              return {
+                success: true,
+                message: `Rebase succeeded but cannot restore stashed changes: stash stack was corrupted. Your changes are in stash - use 'git stash list' to find them.`,
+                stashWarning: true,
+              };
+            }
+
             await git.stash(['pop']);
             logger.info('Stashed changes restored successfully');
+
+            // CRITICAL: Check git state after stash pop to detect conflicts
+            const postStashState = await this.checkGitState(worktreePath);
+            const postStashStatus = await git.status();
+
+            // Check if stash pop created conflicts
+            if (!postStashState.isClean || postStashStatus.conflicted.length > 0) {
+              logger.error('Stash pop created conflicts', {
+                postStashState,
+                conflictedFiles: postStashStatus.conflicted,
+              });
+
+              return {
+                success: false,
+                message: `Rebase succeeded, but restoring your uncommitted changes created conflicts. Please resolve the conflicts in the uncommitted changes.`,
+                conflictedFiles: postStashStatus.conflicted,
+              };
+            }
           } catch (popError) {
             logger.error('Failed to restore stashed changes', { popError });
             // Return success=true because the rebase itself worked, but flag the stash warning
