@@ -81,6 +81,10 @@ export interface SessionTranscriptProps {
   // Whether to hide the internal sidebar (parent may render an external one)
   hideSidebar?: boolean;
 
+  // Whether to collapse the transcript (hide messages, show only input and dialogs)
+  // Used when editor is maximized but we still want to show the AI input
+  collapseTranscript?: boolean;
+
   // Click handlers
   onFileClick?: (filePath: string) => void;
   onTodoClick?: (todo: TodoItem) => void;
@@ -201,6 +205,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   workspacePath,
   mode,
   hideSidebar = false,
+  collapseTranscript = false,
   onFileClick,
   onTodoClick,
   onCloseAndArchive,
@@ -816,6 +821,24 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
       }
     }
 
+    // Intercept /implement command - switch to agent mode if in planning mode
+    // This allows the /implement command (or nimbalyst-planning:implement) to actually code
+    // Match both "/implement" and "/nimbalyst-planning:implement" followed by space or end
+    const implementCommandMatch = message.match(/^\/(nimbalyst-planning:)?implement(?:\s|$)/);
+    if (implementCommandMatch && overrideMode === 'planning') {
+      // Switch to agent mode for implementation
+      overrideMode = 'agent';
+      setAiMode('agent');
+      try {
+        await window.electronAPI.invoke('sessions:update-metadata', sessionId, { mode: 'agent' });
+      } catch (error) {
+        console.error('[SessionTranscript] Failed to update session mode for implement:', error);
+        // Continue anyway - the command should still work even if mode update fails
+      }
+      // Signal mode transition from planning to agent
+      includePlanModeDeactivation = true;
+    }
+
     // Intercept /clear command - create new session attached to current
     const clearCommandMatch = message.match(/^\/clear(?:\s|$)/);
     if (clearCommandMatch) {
@@ -1345,49 +1368,51 @@ Your goal is to build a comprehensive plan through iterative refinement:
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', minHeight: 0 }}>
-      {/* Main transcript area */}
-      <div style={{ flex: 1, overflow: 'hidden', minHeight: 0 }}>
-        <AgentTranscriptPanel
-          sessionId={sessionId}
-          sessionData={sessionData}
-          todos={todos}
-          isProcessing={isLoading}
-          onFileClick={handleFileClick}
-          hideSidebar={hideSidebar || mode === 'chat'}
-          showFloatingActions={mode === 'agent'}
-          workspacePath={workspacePath}
-          initialSettings={{
-            showToolCalls: true,
-            compactMode: false,
-            collapseTools: false,
-            showThinking: true,
-            showSessionInit: false
-          }}
-          renderEmptyExtra={renderEmptyExtra}
-          isArchived={isArchived}
-          onCloseAndArchive={handleCloseAndArchive}
-          onUnarchive={handleUnarchive}
-          readFile={readFile}
-          renderFilesHeader={mode === 'agent' ? () => (
-            <PendingReviewBanner workspacePath={workspacePath} sessionId={sessionId} />
-          ) : undefined}
-          pendingReviewFiles={pendingReviewFiles}
-          groupByDirectory={groupByDirectory}
-          onGroupByDirectoryChange={setGroupByDirectory}
-          onOpenInExternalEditor={hasExternalEditor ? handleOpenInExternalEditor : undefined}
-          externalEditorName={externalEditorName}
-          onCompact={handleCompact}
-          promptAdditions={promptAdditions}
-        />
-      </div>
+      {/* Main transcript area - hidden when collapsed */}
+      {!collapseTranscript && (
+        <div style={{ flex: 1, overflow: 'hidden', minHeight: 0 }}>
+          <AgentTranscriptPanel
+            sessionId={sessionId}
+            sessionData={sessionData}
+            todos={todos}
+            isProcessing={isLoading}
+            onFileClick={handleFileClick}
+            hideSidebar={hideSidebar || mode === 'chat'}
+            showFloatingActions={mode === 'agent'}
+            workspacePath={workspacePath}
+            initialSettings={{
+              showToolCalls: true,
+              compactMode: false,
+              collapseTools: false,
+              showThinking: true,
+              showSessionInit: false
+            }}
+            renderEmptyExtra={renderEmptyExtra}
+            isArchived={isArchived}
+            onCloseAndArchive={handleCloseAndArchive}
+            onUnarchive={handleUnarchive}
+            readFile={readFile}
+            renderFilesHeader={mode === 'agent' ? () => (
+              <PendingReviewBanner workspacePath={workspacePath} sessionId={sessionId} />
+            ) : undefined}
+            pendingReviewFiles={pendingReviewFiles}
+            groupByDirectory={groupByDirectory}
+            onGroupByDirectoryChange={setGroupByDirectory}
+            onOpenInExternalEditor={hasExternalEditor ? handleOpenInExternalEditor : undefined}
+            externalEditorName={externalEditorName}
+            onCompact={handleCompact}
+            promptAdditions={promptAdditions}
+          />
+        </div>
+      )}
 
-      {/* Pending review banner - only in chat mode */}
-      {mode === 'chat' && (
+      {/* Pending review banner - only in chat mode, hidden when collapsed */}
+      {mode === 'chat' && !collapseTranscript && (
         <PendingReviewBanner workspacePath={workspacePath} sessionId={sessionId} />
       )}
 
-      {/* Edited files gutter at bottom - only in chat mode */}
-      {mode === 'chat' && (
+      {/* Edited files gutter at bottom - only in chat mode, hidden when collapsed */}
+      {mode === 'chat' && !collapseTranscript && (
         <FileGutter
           sessionId={sessionId}
           workspacePath={workspacePath}

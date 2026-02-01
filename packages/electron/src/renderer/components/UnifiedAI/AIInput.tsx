@@ -539,6 +539,17 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
       }
     }, [value, mode, onModeChange, onChange]);
 
+    // Detect /implement command trigger - switch to agent mode when user types "/implement"
+    // This allows the implement command to work even if user was in planning mode
+    useEffect(() => {
+      // Match "/implement" or "/nimbalyst-planning:implement" at start, followed by end of string or whitespace
+      const implementCommandMatch = value.match(/^\/(nimbalyst-planning:)?implement(?:\s|$)/);
+      if (implementCommandMatch && mode === 'planning' && onModeChange) {
+        // Switch to agent mode immediately - implementing requires coding
+        onModeChange('agent');
+      }
+    }, [value, mode, onModeChange]);
+
     // Handle typeahead option selection
     const handleTypeaheadSelect = useCallback((option: TypeaheadOption) => {
       if (!typeaheadMatch || !textareaRef.current) return;
