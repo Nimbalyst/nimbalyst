@@ -160,42 +160,88 @@ function generateMacYml() {
   return true;
 }
 
-// Function to generate latest.yml (for Windows/Linux)
-function generateLatestYml() {
-  // Find the exe file for Windows
-  const exeFile = `${productName} Setup ${version}.exe`;
+// Function to generate latest.yml (for Windows)
+function generateWindowsYml() {
+  // Use the artifactName from package.json: "${productName}-Windows.${ext}"
+  const exeFile = `${productName}-Windows.exe`;
   const exePath = path.join(releaseDir, exeFile);
-  
-  if (fs.existsSync(exePath)) {
-    const yamlContent = {
-      version: version,
-      files: [{
-        url: exeFile,
-        sha512: calculateSHA512(exePath),
-        size: getFileSize(exePath)
-      }],
-      path: exeFile,
-      sha512: calculateSHA512(exePath),
-      releaseDate: new Date().toISOString()
-    };
-    
-    // Convert to YAML format
-    let yamlString = `version: ${yamlContent.version}\n`;
-    yamlString += `files:\n`;
-    yamlContent.files.forEach(file => {
-      yamlString += `  - url: ${file.url}\n`;
-      yamlString += `    sha512: ${file.sha512}\n`;
-      yamlString += `    size: ${file.size}\n`;
-    });
-    yamlString += `path: ${yamlContent.path}\n`;
-    yamlString += `sha512: ${yamlContent.sha512}\n`;
-    yamlString += `releaseDate: '${yamlContent.releaseDate}'\n`;
-    
-    // Write the file
-    const outputPath = path.join(releaseDir, 'latest.yml');
-    fs.writeFileSync(outputPath, yamlString);
-    console.log(`Generated ${outputPath}`);
+
+  if (!fs.existsSync(exePath)) {
+    console.log(`Windows exe not found: ${exePath}, skipping latest.yml`);
+    return false;
   }
+
+  const yamlContent = {
+    version: version,
+    files: [{
+      url: exeFile,
+      sha512: calculateSHA512(exePath),
+      size: getFileSize(exePath)
+    }],
+    path: exeFile,
+    sha512: calculateSHA512(exePath),
+    releaseDate: new Date().toISOString()
+  };
+
+  // Convert to YAML format
+  let yamlString = `version: ${yamlContent.version}\n`;
+  yamlString += `files:\n`;
+  yamlContent.files.forEach(file => {
+    yamlString += `  - url: ${file.url}\n`;
+    yamlString += `    sha512: ${file.sha512}\n`;
+    yamlString += `    size: ${file.size}\n`;
+  });
+  yamlString += `path: ${yamlContent.path}\n`;
+  yamlString += `sha512: ${yamlContent.sha512}\n`;
+  yamlString += `releaseDate: '${yamlContent.releaseDate}'\n`;
+
+  // Write the file
+  const outputPath = path.join(releaseDir, 'latest.yml');
+  fs.writeFileSync(outputPath, yamlString);
+  console.log(`Generated ${outputPath}`);
+  return true;
+}
+
+// Function to generate latest-linux.yml (for Linux)
+function generateLinuxYml() {
+  // Use the artifactName from package.json: "${productName}-Linux.${ext}"
+  const appImageFile = `${productName}-Linux.AppImage`;
+  const appImagePath = path.join(releaseDir, appImageFile);
+
+  if (!fs.existsSync(appImagePath)) {
+    console.log(`Linux AppImage not found: ${appImagePath}, skipping latest-linux.yml`);
+    return false;
+  }
+
+  const yamlContent = {
+    version: version,
+    files: [{
+      url: appImageFile,
+      sha512: calculateSHA512(appImagePath),
+      size: getFileSize(appImagePath)
+    }],
+    path: appImageFile,
+    sha512: calculateSHA512(appImagePath),
+    releaseDate: new Date().toISOString()
+  };
+
+  // Convert to YAML format
+  let yamlString = `version: ${yamlContent.version}\n`;
+  yamlString += `files:\n`;
+  yamlContent.files.forEach(file => {
+    yamlString += `  - url: ${file.url}\n`;
+    yamlString += `    sha512: ${file.sha512}\n`;
+    yamlString += `    size: ${file.size}\n`;
+  });
+  yamlString += `path: ${yamlContent.path}\n`;
+  yamlString += `sha512: ${yamlContent.sha512}\n`;
+  yamlString += `releaseDate: '${yamlContent.releaseDate}'\n`;
+
+  // Write the file
+  const outputPath = path.join(releaseDir, 'latest-linux.yml');
+  fs.writeFileSync(outputPath, yamlString);
+  console.log(`Generated ${outputPath}`);
+  return true;
 }
 
 // Check if release directory exists
@@ -208,11 +254,19 @@ if (!fs.existsSync(releaseDir)) {
 console.log(`Generating update metadata files for version ${version}...`);
 
 const macSuccess = generateMacYml();
-generateLatestYml();
+const windowsSuccess = generateWindowsYml();
+const linuxSuccess = generateLinuxYml();
 
-if (!macSuccess) {
-  console.error('Failed to generate update metadata files');
+console.log('');
+console.log('Generation results:');
+console.log(`  latest-mac.yml: ${macSuccess ? 'OK' : 'SKIPPED (no macOS files found)'}`);
+console.log(`  latest.yml (Windows): ${windowsSuccess ? 'OK' : 'SKIPPED (no Windows exe found)'}`);
+console.log(`  latest-linux.yml: ${linuxSuccess ? 'OK' : 'SKIPPED (no Linux AppImage found)'}`);
+
+if (!macSuccess && !windowsSuccess && !linuxSuccess) {
+  console.error('Failed to generate any update metadata files');
   process.exit(1);
 }
 
+console.log('');
 console.log('Update metadata files generated successfully');
