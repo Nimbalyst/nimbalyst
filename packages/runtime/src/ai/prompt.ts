@@ -178,21 +178,9 @@ When asked about your identity, say that you are Claude Code running inside Nimb
 
   // NOTE: MockupLM instructions removed - now provided via mockuplm extension's claude plugin skill
 
-  // Only static configuration goes in system prompt
-  // Document context (file path, cursor, selection, content) is now in user message additions
-  if (!hasDocument) {
-    return base + `
-
-IMPORTANT: No document is currently open. You cannot perform any editing operations.
-The user needs to open a document first before you can help with editing.
-You can still answer questions, provide information, and have general conversations.
-</addendum>
-`;
-  }
-
-  // When a document is open, just close the addendum
   // All document-specific context (file path, cursor, selection, content, editing instructions)
-  // is now passed via user message additions from DocumentContextService
+  // is now passed via user message additions from DocumentContextService.
+  // The system prompt should not contain any document-related information.
   return base + `
 </addendum>
 `;
@@ -241,12 +229,10 @@ You are working in agentic coding mode with access to the entire workspace.
 You can read, edit, and create files as needed to complete tasks.`;
   }
 
+  // If no document is open, the prompt just uses the base - no special warning needed.
+  // Document context (including "no document" state) is handled via user message additions.
   if (!hasDocument) {
-    return base + `
-
-IMPORTANT: No document is currently open. You cannot perform any editing operations.
-The user needs to open a document first before you can help with editing.
-You can still answer questions, provide information, and have general conversations.`;
+    return base;
   }
 
   // Document context (file path, cursor, selection, content) is now passed via
