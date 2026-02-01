@@ -38,6 +38,52 @@ async function ensureGhosttyInit(): Promise<void> {
 }
 
 /**
+ * Strip escape sequences that can corrupt terminal state when replayed.
+ *
+ * When scrollback contains certain escape sequences and is written back to a fresh
+ * terminal instance, these sequences can leave the terminal in a corrupted state
+ * where old content appears mixed with new output.
+ *
+ * Problematic sequences include:
+ * - Cursor save/restore (ESC 7, ESC 8, CSI s, CSI u)
+ * - Scroll region settings (CSI r, CSI Ps;Ps r)
+ * - Cursor position (CSI H, CSI Ps;Ps H, CSI f)
+ * - Alternate screen buffer (CSI ?1049h/l, CSI ?47h/l, CSI ?1047h/l)
+ * - Various DEC private modes that affect display
+ */
+function stripProblematicEscapeSequences(raw: string): string {
+  // Remove cursor save/restore sequences
+  // ESC 7 (save) and ESC 8 (restore) - DEC sequences
+  let result = raw.replace(/\x1b[78]/g, '');
+
+  // Remove CSI cursor save/restore: CSI s and CSI u
+  result = result.replace(/\x1b\[s/g, '');
+  result = result.replace(/\x1b\[u/g, '');
+
+  // Remove scroll region settings: CSI r or CSI Ps;Ps r
+  // This matches ESC [ followed by optional numbers and semicolons, ending with 'r'
+  result = result.replace(/\x1b\[\d*;?\d*r/g, '');
+
+  // Remove absolute cursor positioning: CSI H, CSI f, CSI Ps;Ps H, CSI Ps;Ps f
+  // These position the cursor at specific row/col which can cause issues
+  result = result.replace(/\x1b\[\d*;?\d*[Hf]/g, '');
+
+  // Remove alternate screen buffer switches
+  // CSI ?1049h/l (alternate screen with save/restore cursor)
+  // CSI ?47h/l (alternate screen)
+  // CSI ?1047h/l (alternate screen, different variant)
+  result = result.replace(/\x1b\[\?(1049|47|1047)[hl]/g, '');
+
+  // Remove other problematic DEC private modes
+  // CSI ?1h/l (cursor keys mode)
+  // CSI ?25h/l (cursor visibility) - keep these as they're harmless
+  // CSI ?7h/l (autowrap) - can cause issues
+  result = result.replace(/\x1b\[\?7[hl]/g, '');
+
+  return result;
+}
+
+/**
  * Clean up scrollback content before restoring to terminal.
  *
  * The raw PTY output often contains excessive whitespace from terminal width
@@ -353,9 +399,11 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
               console.warn('[TerminalPanel] Discarding severely corrupted scrollback data');
               window.electronAPI.terminal.clearScrollback?.(sessionId);
             } else {
+              // Strip escape sequences that can corrupt terminal state when replayed
+              const stripped = stripProblematicEscapeSequences(sanitized);
               // Clean up the scrollback to remove trailing whitespace that was
               // added for a potentially different terminal width
-              const cleaned = cleanScrollback(sanitized);
+              const cleaned = cleanScrollback(stripped);
 
               // Write scrollback in chunks to avoid WASM memory issues.
               // Use smaller chunks and yield between them to keep UI responsive.
@@ -400,6 +448,15 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
                 console.warn('[TerminalPanel] Failed to restore scrollback, clearing corrupted data:', writeError);
                 // Clear the corrupted scrollback file to prevent future crashes
                 window.electronAPI.terminal.clearScrollback?.(sessionId);
+              } else if (terminal && !disposed) {
+                // Send a soft terminal reset to clear any stale state from scrollback
+                // This resets scroll regions, cursor attributes, and other state that
+                // might have been left in a bad state by the scrollback content.
+                // CSI ! p = Soft Terminal Reset (DECSTR)
+                terminal.write('\x1b[!p');
+                // Also reset scroll margins to full screen
+                // CSI r = Set scroll region to entire screen
+                terminal.write('\x1b[r');
               }
             }
           }
