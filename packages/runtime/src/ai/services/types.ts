@@ -71,7 +71,8 @@ export interface PreparedDocumentContext {
 
   // Content (mutually exclusive based on transition)
   content?: string;       // Full content (for 'opened', 'switched', or when no diff available)
-  contentTruncated?: boolean;  // True if content was truncated (Claude Code only, >2000 chars)
+  contentTruncated?: boolean;  // True if content was truncated (for context reduction)
+  truncateLength?: number;  // The length content was truncated to (for display in prompt)
   documentDiff?: string;  // Unified diff (for 'modified' when diff is smaller than content)
 
   // Document transition

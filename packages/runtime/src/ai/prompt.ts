@@ -203,10 +203,6 @@ You can still answer questions, provide information, and have general conversati
  */
 export interface BasePromptOptions {
   documentContext?: DocumentContext;
-  /** Indicates how document context changed since last message (for optimization) */
-  documentTransition?: 'none' | 'opened' | 'closed' | 'switched' | 'modified';
-  /** Diff patch when document was modified (only when documentTransition is 'modified') */
-  documentDiff?: string;
 }
 
 /**

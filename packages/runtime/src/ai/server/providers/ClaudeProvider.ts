@@ -15,6 +15,7 @@ import {
   ModelIdentifier
 } from '../types';
 import { CLAUDE_MODELS, DEFAULT_MODELS } from '../../modelConstants';
+import { buildUserMessageAddition } from './documentContextUtils';
 
 const LOG_PREVIEW_LENGTH = 400;
 
@@ -66,31 +67,8 @@ export class ClaudeProvider extends BaseAIProvider {
     const systemPrompt = this.buildSystemPrompt(documentContext);
 
     // Append document context to message using pre-built prompts from DocumentContextService
-    // Skip adding system message if the prompt starts with a slash command
-    const isSlashCommand = message.trimStart().startsWith('/');
-    const documentContextPrompt = (documentContext as any)?.documentContextPrompt;
-    const editingInstructions = (documentContext as any)?.editingInstructions;
-
-    // Build user message addition from pre-built prompts
-    let userMessageAddition: string | null = null;
-    if (!isSlashCommand) {
-      const parts: string[] = [];
-
-      // Add document context prompt (file path, cursor, selection, content/diff, transitions)
-      if (documentContextPrompt) {
-        parts.push(documentContextPrompt);
-      }
-
-      // Add one-time editing instructions (only on first message with document open)
-      if (editingInstructions) {
-        parts.push(editingInstructions);
-      }
-
-      if (parts.length > 0) {
-        userMessageAddition = parts.join('\n\n');
-        message = `${message}\n\n<NIMBALYST_SYSTEM_MESSAGE>\n${userMessageAddition}\n</NIMBALYST_SYSTEM_MESSAGE>`;
-      }
-    }
+    const { userMessageAddition, messageWithContext } = buildUserMessageAddition(message, documentContext);
+    message = messageWithContext;
 
     // Emit prompt additions for debugging UI
     const hasAttachments = attachments && attachments.length > 0;

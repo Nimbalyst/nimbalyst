@@ -301,6 +301,7 @@ export class DocumentContextService implements IDocumentContextService {
       if (shouldTruncate && rawContext.content.length > truncateLength) {
         baseContext.content = rawContext.content.slice(0, truncateLength);
         baseContext.contentTruncated = true;
+        baseContext.truncateLength = truncateLength;
       } else {
         baseContext.content = rawContext.content;
       }
@@ -487,7 +488,8 @@ Your goal is to build a comprehensive plan through iterative refinement:
       } else if (context.content) {
         prompt += `\n<DOCUMENT_CONTENT>\n${context.content}\n</DOCUMENT_CONTENT>\n`;
         if (context.contentTruncated) {
-          prompt += `(Content truncated to first 2000 characters. Use the Read tool to see the full file.)\n`;
+          const length = context.truncateLength ?? DocumentContextService.DEFAULT_TRUNCATE_LENGTH;
+          prompt += `(Content truncated to first ${length} characters. Use the Read tool to see the full file.)\n`;
         }
       }
 
