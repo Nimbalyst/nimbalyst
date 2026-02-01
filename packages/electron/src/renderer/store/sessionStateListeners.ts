@@ -106,9 +106,11 @@ export function initSessionStateListeners(): () => void {
     // ensures unmounted sessions (child sessions, inactive tabs) get updated too
     store.set(reloadSessionDataAtom, { sessionId, workspacePath });
 
-    // Update session metadata with updatedAt timestamp
+    // Update session metadata with updatedAt timestamp and ensure it's unarchived
+    // The database layer already sets is_archived = FALSE when a message is added,
+    // but we need to update the UI state to match
     // This automatically syncs both sessionStoreAtom and sessionRegistryAtom
-    store.set(updateSessionStoreAtom, { sessionId, updates: { updatedAt: Date.now() } });
+    store.set(updateSessionStoreAtom, { sessionId, updates: { updatedAt: Date.now(), isArchived: false } });
 
     // Mark as unread if this is an output message (agent response) and the session
     // is not currently being viewed

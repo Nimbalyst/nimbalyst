@@ -60,8 +60,10 @@ export function createPGLiteAgentMessagesStore(db: PGliteLike, ensureDbReady?: E
 
         // Update session's updated_at to SAME timestamp as message
         // This ensures local DB and sync have identical timestamps
+        // Also unarchive the session if it was archived - sending a new message
+        // means the user wants to continue the conversation
         await db.query(
-          `UPDATE ai_sessions SET updated_at = $2 WHERE id = $1`,
+          `UPDATE ai_sessions SET updated_at = $2, is_archived = FALSE WHERE id = $1`,
           [message.sessionId, timestamp]
         );
 
