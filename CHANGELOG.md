@@ -20,6 +20,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.27] - 2026-02-01
+
+
+### Added
+- PDF attachment support for Claude providers
+
+### Fixed
+- Auto-update YML files now generated correctly for Windows and Linux
+
 ## [0.52.26] - 2026-01-31
 
 
