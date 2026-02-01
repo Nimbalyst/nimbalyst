@@ -217,17 +217,17 @@ export function initVoiceModeService() {
         throw new Error('Session ID is required for voice mode');
       }
 
-      // Request microphone permission on macOS (required for packaged builds)
+      // Check microphone permission on macOS
       if (process.platform === 'darwin') {
         const micStatus = systemPreferences.getMediaAccessStatus('microphone');
         console.log('[VoiceModeService] Microphone access status:', micStatus);
 
         if (micStatus !== 'granted') {
-          // Request permission - this will show the system dialog
-          const granted = await systemPreferences.askForMediaAccess('microphone');
-          if (!granted) {
-            throw new Error('Microphone access is required for Voice Mode. Please grant permission in System Settings > Privacy & Security > Microphone.');
-          }
+          // NOTE: We cannot programmatically request microphone permission because
+          // the app intentionally omits the audio-input entitlement to prevent
+          // permission prompts when Claude Agent SDK spawns subprocesses.
+          // Users must manually grant permission in System Settings.
+          throw new Error('Microphone access is required for Voice Mode.\n\nPlease manually grant permission:\n1. Open System Settings\n2. Go to Privacy & Security > Microphone\n3. Enable access for Nimbalyst\n4. Try again');
         }
       }
 
