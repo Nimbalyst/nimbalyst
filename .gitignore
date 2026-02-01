@@ -157,3 +157,6 @@ nimalyst-local/
 
 # E2E test output (screenshots, videos, etc.)
 e2e_test_output/
+e2e-screenshots/
+e2e/
+.ralph/
