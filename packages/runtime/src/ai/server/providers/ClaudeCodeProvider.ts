@@ -411,6 +411,24 @@ export class ClaudeCodeProvider extends BaseAIProvider {
           } catch (error) {
             console.error(`[CLAUDE-CODE] Failed to read image attachment:`, error);
           }
+        } else if (attachment.type === 'pdf' && attachment.filepath) {
+          // Read PDF files and send as document content blocks with base64 encoding
+          try {
+            const pdfData = await fs.promises.readFile(attachment.filepath);
+            const base64Data = pdfData.toString('base64');
+            const filename = attachment.filename || path.basename(attachment.filepath);
+            documentContentBlocks.push({
+              type: 'document',
+              source: {
+                type: 'base64',
+                media_type: 'application/pdf',
+                data: base64Data
+              },
+              title: filename
+            } as DocumentBlockParam);
+          } catch (error) {
+            console.error(`[CLAUDE-CODE] Failed to read PDF attachment:`, error);
+          }
         } else if (attachment.type === 'document' && attachment.filepath) {
           // Read text/document files and send as document content blocks
           try {

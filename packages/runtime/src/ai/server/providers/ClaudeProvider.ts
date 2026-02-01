@@ -111,7 +111,7 @@ export class ClaudeProvider extends BaseAIProvider {
           // Format as content array with images and text
           const content: any[] = [];
 
-          // Add images first
+          // Add images and documents first
           for (const attachment of msg.attachments) {
             if (attachment.type === 'image') {
               // Read image as base64
@@ -129,6 +129,24 @@ export class ClaudeProvider extends BaseAIProvider {
                 });
               } catch (error) {
                 console.error('[ClaudeProvider] Failed to read attachment:', error);
+              }
+            } else if (attachment.type === 'pdf') {
+              // Read PDF as base64
+              try {
+                const fileBuffer = await fs.readFile(attachment.filepath);
+                const base64Data = fileBuffer.toString('base64');
+
+                content.push({
+                  type: 'document',
+                  source: {
+                    type: 'base64',
+                    media_type: 'application/pdf',
+                    data: base64Data
+                  },
+                  title: attachment.filename
+                });
+              } catch (error) {
+                console.error('[ClaudeProvider] Failed to read PDF attachment:', error);
               }
             }
           }
@@ -168,7 +186,7 @@ export class ClaudeProvider extends BaseAIProvider {
     if (attachments && attachments.length > 0) {
       const content: any[] = [];
 
-      // Add images first
+      // Add images and documents first
       for (const attachment of attachments) {
         if (attachment.type === 'image') {
           try {
@@ -185,6 +203,23 @@ export class ClaudeProvider extends BaseAIProvider {
             });
           } catch (error) {
             console.error('[ClaudeProvider] Failed to read attachment:', error);
+          }
+        } else if (attachment.type === 'pdf') {
+          try {
+            const fileBuffer = await fs.readFile(attachment.filepath);
+            const base64Data = fileBuffer.toString('base64');
+
+            content.push({
+              type: 'document',
+              source: {
+                type: 'base64',
+                media_type: 'application/pdf',
+                data: base64Data
+              },
+              title: attachment.filename
+            });
+          } catch (error) {
+            console.error('[ClaudeProvider] Failed to read PDF attachment:', error);
           }
         }
       }
