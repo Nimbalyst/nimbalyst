@@ -37,6 +37,8 @@ export interface AgentSessionPanelProps {
     };
     textSelectionTimestamp?: number;
   };
+  /** When true, collapse the transcript but keep input and dialogs visible */
+  collapseTranscript?: boolean;
 }
 
 /**
@@ -53,6 +55,7 @@ export const AgentSessionPanel = forwardRef<AgentSessionPanelRef, AgentSessionPa
   onClearAgentSession,
   onCreateWorktreeSession,
   getDocumentContext,
+  collapseTranscript = false,
 }, ref) => {
   const transcriptRef = useRef<SessionTranscriptRef>(null);
 
@@ -70,13 +73,14 @@ export const AgentSessionPanel = forwardRef<AgentSessionPanelRef, AgentSessionPa
   }, [onFileClick]);
 
   return (
-    <div className="agent-session-panel flex flex-col h-full min-h-0 overflow-hidden [&>div]:flex-1 [&>div]:min-h-0">
+    <div className={`agent-session-panel flex flex-col overflow-hidden ${collapseTranscript ? '' : 'h-full min-h-0 [&>div]:flex-1 [&>div]:min-h-0'}`}>
       <SessionTranscript
         ref={transcriptRef}
         sessionId={sessionId}
         workspacePath={workspacePath}
         mode="agent"
         hideSidebar={true}
+        collapseTranscript={collapseTranscript}
         onFileClick={handleFileClick}
         onClearAgentSession={onClearAgentSession}
         onCreateWorktreeSession={onCreateWorktreeSession}

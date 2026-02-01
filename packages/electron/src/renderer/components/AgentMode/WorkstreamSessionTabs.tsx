@@ -49,6 +49,8 @@ export interface WorkstreamSessionTabsProps {
     };
     textSelectionTimestamp?: number;
   };
+  /** When true, collapse the transcript but keep tab bar and AI input visible */
+  collapseTranscript?: boolean;
 }
 
 /**
@@ -211,6 +213,7 @@ export const WorkstreamSessionTabs: React.FC<WorkstreamSessionTabsProps> = React
   onSessionArchive,
   onSessionUnarchive,
   getDocumentContext,
+  collapseTranscript = false,
 }) => {
   const hasChildren = useAtomValue(workstreamHasChildrenAtom(workstreamId));
   const createChildSession = useSetAtom(createChildSessionAtom);
@@ -249,7 +252,7 @@ export const WorkstreamSessionTabs: React.FC<WorkstreamSessionTabsProps> = React
   }
 
   return (
-    <div className="workstream-session-tabs flex flex-col h-full overflow-hidden">
+    <div className={`workstream-session-tabs flex flex-col overflow-hidden ${collapseTranscript ? '' : 'h-full'}`}>
       <SessionTabBar
         sessions={sessions}
         activeSessionId={activeSessionId}
@@ -259,7 +262,7 @@ export const WorkstreamSessionTabs: React.FC<WorkstreamSessionTabsProps> = React
         onSessionUnarchive={onSessionUnarchive}
       />
 
-      <div className="workstream-session-tabs-content flex-1 min-h-0 overflow-hidden">
+      <div className={`workstream-session-tabs-content overflow-hidden ${collapseTranscript ? '' : 'flex-1 min-h-0'}`}>
         <AgentSessionPanel
           key={activeSessionId}
           sessionId={activeSessionId}
@@ -268,6 +271,7 @@ export const WorkstreamSessionTabs: React.FC<WorkstreamSessionTabsProps> = React
           onClearAgentSession={handleNewSession}
           onCreateWorktreeSession={onCreateWorktreeSession}
           getDocumentContext={getDocumentContext}
+          collapseTranscript={collapseTranscript}
         />
       </div>
     </div>

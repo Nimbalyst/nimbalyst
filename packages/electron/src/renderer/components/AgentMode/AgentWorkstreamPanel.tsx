@@ -560,8 +560,12 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
   }, [workspacePath, sessionWorktreeId, worktreePath]);
 
   // Determine what to show based on layout mode
+  // Editor tabs are shown in editor and split modes
   const showEditorTabs = layoutMode === 'split' || layoutMode === 'editor';
-  const showSessionTabs = layoutMode === 'split' || layoutMode === 'transcript';
+  // Session tabs are always shown - in editor mode, the transcript is collapsed but tabs + input remain visible
+  const showSessionTabs = true;
+  // Collapse the transcript content (hide messages) when in editor mode
+  const collapseTranscript = layoutMode === 'editor';
 
   // Open pending file once editor mounts after layout mode change
   useEffect(() => {
@@ -780,7 +784,7 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
 
           {/* Session tabs + active session panel */}
           {showSessionTabs && (
-            <div className={`agent-workstream-session-area flex-1 min-h-0 flex flex-col overflow-hidden ${layoutMode === 'transcript' ? 'maximized' : ''}`}>
+            <div className={`agent-workstream-session-area flex flex-col overflow-hidden ${collapseTranscript ? 'shrink-0' : 'flex-1 min-h-0'} ${layoutMode === 'transcript' ? 'maximized' : ''}`}>
               <WorkstreamSessionTabs
                 workspacePath={workspacePath}
                 workstreamId={workstreamId}
@@ -794,6 +798,7 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
                 onSessionArchive={handleSessionArchive}
                 onSessionUnarchive={handleSessionUnarchive}
                 getDocumentContext={getDocumentContext}
+                collapseTranscript={collapseTranscript}
               />
             </div>
           )}
