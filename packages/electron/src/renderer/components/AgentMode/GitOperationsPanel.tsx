@@ -18,6 +18,7 @@ import {
   isCommittingAtom,
   pendingProposalForWorkstreamAtom,
   removePendingGitCommitProposalAtom,
+  worktreeRefreshCounterAtom,
 } from '../../store/atoms/gitOperations';
 import {
   workstreamStagedFilesAtom,
@@ -152,6 +153,16 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
     // Track if worktree data has been loaded for the current worktreePath
     // This prevents redundant fetches when switching between manual/smart modes
     const worktreeDataLoadedForPath = useRef<string | null>(null);
+
+    // Visibility tracking for efficient refresh
+    const panelRef = useRef<HTMLDivElement>(null);
+    const [isVisible, setIsVisible] = useState(false);
+    const pendingRefreshRef = useRef(false);
+
+    // Subscribe to worktree refresh counter (incremented when session in worktree completes)
+    const worktreeRefreshCounter = useAtomValue(
+      worktreeId ? worktreeRefreshCounterAtom(worktreeId) : worktreeRefreshCounterAtom('')
+    );
 
     // When AI proposes a commit, populate the UI (but stay in current mode)
     // Uses activeProposalId (persisted in Jotai) for deduplication instead of a ref,
@@ -483,6 +494,66 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
         worktreeDataLoadedForPath.current = null;
       }
     }, [worktreePath]);
+
+    // ============================================================
+    // Visibility-based refresh for worktrees
+    // ============================================================
+
+    // Track visibility using IntersectionObserver
+    useEffect(() => {
+      const panel = panelRef.current;
+      if (!panel) return;
+
+      const observer = new IntersectionObserver(
+        (entries) => {
+          const entry = entries[0];
+          setIsVisible(entry.isIntersecting);
+        },
+        { threshold: 0.1 } // Consider visible when at least 10% is showing
+      );
+
+      observer.observe(panel);
+
+      return () => {
+        observer.disconnect();
+      };
+    }, []);
+
+    // Refresh worktree data when becoming visible (if we have pending refresh)
+    // or when the panel becomes visible for the first time
+    useEffect(() => {
+      if (!worktreePath || !isVisible) return;
+
+      // If we have a pending refresh, execute it now
+      if (pendingRefreshRef.current) {
+        pendingRefreshRef.current = false;
+        // Refresh worktree data
+        Promise.all([
+          loadWorktreeChangedFiles(),
+          loadWorktreeCommits(),
+          loadWorktreeStatus(),
+        ]);
+      }
+    }, [isVisible, worktreePath, loadWorktreeChangedFiles, loadWorktreeCommits, loadWorktreeStatus]);
+
+    // When worktree refresh counter changes (session completed), refresh if visible
+    // or mark as pending if not visible
+    useEffect(() => {
+      // Skip the initial render (counter starts at 0)
+      if (!worktreeId || worktreeRefreshCounter === 0) return;
+
+      if (isVisible) {
+        // Visible: refresh immediately
+        Promise.all([
+          loadWorktreeChangedFiles(),
+          loadWorktreeCommits(),
+          loadWorktreeStatus(),
+        ]);
+      } else {
+        // Not visible: mark as pending, will refresh when becoming visible
+        pendingRefreshRef.current = true;
+      }
+    }, [worktreeId, worktreeRefreshCounter, isVisible, loadWorktreeChangedFiles, loadWorktreeCommits, loadWorktreeStatus]);
 
     // Toggle worktree file staged state
     const handleWorktreeToggleStaged = useCallback((filePath: string) => {
@@ -1127,7 +1198,7 @@ Please proceed with this strategy.`;
     const hasChanges = editedFiles.length > 0 || gitStatus.hasUncommitted;
 
     return (
-      <div className="git-operations-panel min-w-[200px] border-t border-[var(--nim-border)] bg-[var(--nim-bg-secondary)]">
+      <div ref={panelRef} className="git-operations-panel min-w-[200px] border-t border-[var(--nim-border)] bg-[var(--nim-bg-secondary)]">
         {/* Header */}
         <div className="git-operations-panel__header flex items-center justify-between py-2 px-3 select-none text-xs font-medium text-[var(--nim-text)] border-b border-[var(--nim-border)]">
           <div

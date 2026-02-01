@@ -32,8 +32,11 @@ import {
   sessionUnreadAtom,
   sessionWaitingForQuestionAtom,
   sessionWaitingForPlanApprovalAtom,
+  sessionRegistryAtom,
+  sessionStoreAtom,
 } from './atoms/sessions';
-import { workstreamActiveChildAtom } from './atoms/workstreamState';
+import { workstreamActiveChildAtom, workstreamStateAtom } from './atoms/workstreamState';
+import { triggerWorktreeRefreshAtom } from './atoms/gitOperations';
 
 /**
  * Initialize global session state listeners.
@@ -74,6 +77,45 @@ export function initSessionStateListeners(): () => void {
         // Also clear waiting states - if session ended, no longer waiting
         store.set(sessionWaitingForQuestionAtom(sessionId), false);
         store.set(sessionWaitingForPlanApprovalAtom(sessionId), false);
+
+        // If this session is in a worktree, trigger a git panel refresh
+        // This ensures the GitOperationsPanel shows updated status after agent work
+        //
+        // We check multiple sources for worktreeId since there can be race conditions
+        // between IPC events and renderer state updates:
+        // 1. sessionRegistryAtom - populated by addSessionFullAtom (optimistic)
+        // 2. sessionStoreAtom - loaded session data from database
+        // 3. workstreamStateAtom - initialized when session is selected
+        {
+          let worktreeId: string | null = null;
+
+          // Try registry first (most common case)
+          const registry = store.get(sessionRegistryAtom);
+          const sessionMeta = registry.get(sessionId);
+          if (sessionMeta?.worktreeId) {
+            worktreeId = sessionMeta.worktreeId;
+          }
+
+          // Fallback to session store (loaded session data)
+          if (!worktreeId) {
+            const sessionData = store.get(sessionStoreAtom(sessionId));
+            if (sessionData?.worktreeId) {
+              worktreeId = sessionData.worktreeId;
+            }
+          }
+
+          // Fallback to workstream state (set when session is initialized)
+          if (!worktreeId) {
+            const workstreamState = store.get(workstreamStateAtom(sessionId));
+            if (workstreamState?.worktreeId) {
+              worktreeId = workstreamState.worktreeId;
+            }
+          }
+
+          if (worktreeId) {
+            store.set(triggerWorktreeRefreshAtom, worktreeId);
+          }
+        }
         break;
 
       default:

@@ -167,3 +167,33 @@ export const pendingProposalForWorkstreamAtom = atomFamily(
   // Custom equality function for atomFamily key
   (a, b) => a.workstreamId === b.workstreamId && JSON.stringify(a.childSessionIds) === JSON.stringify(b.childSessionIds)
 );
+
+// ============================================================
+// Git Panel Refresh Triggers
+// ============================================================
+
+/**
+ * Per-worktree refresh counter.
+ * Incremented when a session in this worktree completes, triggering the
+ * GitOperationsPanel to refresh its data.
+ *
+ * The counter approach is used instead of a boolean because:
+ * 1. Multiple sessions can complete in sequence
+ * 2. The counter ensures each completion triggers a refresh
+ * 3. Components can use useEffect with this value as a dependency
+ */
+export const worktreeRefreshCounterAtom = atomFamily((_worktreeId: string) =>
+  atom(0)
+);
+
+/**
+ * Action atom to trigger a refresh for a specific worktree.
+ * Called when a session in that worktree completes.
+ */
+export const triggerWorktreeRefreshAtom = atom(
+  null,
+  (get, set, worktreeId: string) => {
+    const current = get(worktreeRefreshCounterAtom(worktreeId));
+    set(worktreeRefreshCounterAtom(worktreeId), current + 1);
+  }
+);
