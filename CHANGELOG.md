@@ -20,6 +20,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.24] - 2026-01-31
+
+
+### Added
+- Optional email field to feedback survey
+- Diagnostic logging for theme and preload path debugging
+- Renderer eval MCP tool for debugging
+- Rebuild Extensions submenu to Extension Dev Mode
+- Git commit mode walkthrough
+- Fuzzy file search and content search shortcut to QuickOpen
+- Walkthrough system improvements and new walkthroughs
+- Layout controls walkthrough with markdown support
+
+### Changed
+- Unified document context handling across all AI providers
+- Eliminated hardcoded colors in favor of theme variables
+- Improved Prompt Additions widget for all AI providers
+- Reduced context usage for Claude Code by truncating long documents
+
+### Fixed
+- Email format validation in feedback survey
+- Onboarding dialog not showing for new users
+- Todo panel error on truthyness
+- Reverted bad user-select CSS changes
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.52.23] - 2026-01-31
 
 
