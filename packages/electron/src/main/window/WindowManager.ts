@@ -176,6 +176,28 @@ export function createWindow(
         }
         // console.log('[WINDOW-MANAGER] Background color:', backgroundColor);
 
+        // Calculate preload path - with diagnostic logging for debugging theme issues on different platforms
+        const preloadPath = (() => {
+            const appPath = app.getAppPath();
+            let resolvedPath: string;
+            if (app.isPackaged) {
+                resolvedPath = join(appPath, 'out/preload/index.js');
+            } else if (appPath.includes('/out/main') || appPath.includes('\\out\\main')) {
+                resolvedPath = join(appPath, '../preload/index.js');
+            } else {
+                resolvedPath = join(appPath, 'out/preload/index.js');
+            }
+            console.log('[WindowManager] Preload path diagnostic:', {
+                platform: process.platform,
+                arch: process.arch,
+                isPackaged: app.isPackaged,
+                appPath,
+                resolvedPreloadPath: resolvedPath,
+                preloadExists: existsSync(resolvedPath)
+            });
+            return resolvedPath;
+        })();
+
         const windowOptions: Electron.BrowserWindowConstructorOptions = {
             width,
             height,
@@ -186,18 +208,7 @@ export function createWindow(
             webPreferences: {
                 nodeIntegration: false,
                 contextIsolation: true,
-                // Preload path: Due to code splitting, __dirname is out/main/chunks/, not out/main/
-                // Use app.getAppPath() which returns asar root (packaged) or out/main (playwright)
-                preload: (() => {
-                    const appPath = app.getAppPath();
-                    if (app.isPackaged) {
-                        return join(appPath, 'out/preload/index.js');
-                    }
-                    if (appPath.includes('/out/main') || appPath.includes('\\out\\main')) {
-                        return join(appPath, '../preload/index.js');
-                    }
-                    return join(appPath, 'out/preload/index.js');
-                })(),
+                preload: preloadPath,
                 webSecurity: false,
                 webviewTag: false
             },

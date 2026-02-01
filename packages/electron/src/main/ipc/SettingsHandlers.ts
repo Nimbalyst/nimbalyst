@@ -201,7 +201,9 @@ export function registerSettingsHandlers() {
     // Get theme (sync) - for immediate HTML script use
     // CRITICAL: Must use getThemeSync() to resolve 'system' to actual theme
     safeOn('get-theme-sync', (event) => {
-        event.returnValue = getThemeSync();
+        const theme = getThemeSync();
+        console.log('[SettingsHandlers] get-theme-sync returning:', theme);
+        event.returnValue = theme;
     });
 
     // Get app version (from app.getVersion)
