@@ -74,6 +74,11 @@ export interface MergeResult {
   success: boolean;
   message: string;
   conflictedFiles?: string[];
+  /**
+   * True if the operation succeeded but stash pop failed after completion.
+   * When set, the user's changes are still in the stash and need manual recovery.
+   */
+  stashWarning?: boolean;
 }
 
 /**
@@ -85,9 +90,151 @@ export interface CreateWorktreeOptions {
 }
 
 /**
+ * Result of worktree validation check
+ */
+export interface WorktreeValidationResult {
+  valid: boolean;
+  issues: string[];
+}
+
+/**
  * Service for managing git worktrees
  */
 export class GitWorktreeService {
+  /**
+   * Per-repository operation locks to prevent concurrent destructive git operations
+   * Maps repository path to a promise that resolves when the current operation completes
+   */
+  private operationLocks: Map<string, Promise<void>> = new Map();
+
+  /**
+   * Execute an operation with a lock on the repository.
+   * Prevents concurrent execution of operations like merge, rebase, and squash
+   * that could corrupt git state if run simultaneously.
+   *
+   * @param repoPath - Path to the repository to lock
+   * @param operationName - Name of the operation (for logging)
+   * @param operation - The async operation to execute
+   * @returns The result of the operation
+   */
+  private async withLock<T>(repoPath: string, operationName: string, operation: () => Promise<T>): Promise<T> {
+    // Wait for any existing operation to complete
+    const existingLock = this.operationLocks.get(repoPath);
+    if (existingLock) {
+      logger.info('Waiting for existing operation to complete', { repoPath, operationName });
+      try {
+        await existingLock;
+      } catch {
+        // Ignore errors from previous operation - we still want to proceed
+      }
+    }
+
+    // Create a new lock promise
+    let releaseLock: () => void;
+    const lockPromise = new Promise<void>((resolve) => {
+      releaseLock = resolve;
+    });
+
+    this.operationLocks.set(repoPath, lockPromise);
+    logger.info('Acquired operation lock', { repoPath, operationName });
+
+    try {
+      const result = await operation();
+      return result;
+    } finally {
+      // Release the lock
+      releaseLock!();
+      // Clean up the map entry if it's still our lock
+      if (this.operationLocks.get(repoPath) === lockPromise) {
+        this.operationLocks.delete(repoPath);
+      }
+      logger.info('Released operation lock', { repoPath, operationName });
+    }
+  }
+
+  /**
+   * Validate that a worktree is in a healthy state.
+   *
+   * Checks:
+   * 1. Directory exists on disk
+   * 2. .git file exists in the directory
+   * 3. git rev-parse --is-inside-work-tree succeeds
+   * 4. The expected branch exists (if provided)
+   *
+   * @param worktreePath - Path to the worktree directory
+   * @param expectedBranch - Optional branch name that should exist
+   * @returns Validation result with valid flag and list of issues
+   */
+  async validateWorktree(worktreePath: string, expectedBranch?: string): Promise<WorktreeValidationResult> {
+    const issues: string[] = [];
+
+    try {
+      logger.info('Validating worktree', { worktreePath, expectedBranch });
+
+      // Check 1: Directory exists
+      if (!fs.existsSync(worktreePath)) {
+        issues.push(`Directory does not exist: ${worktreePath}`);
+        return { valid: false, issues };
+      }
+
+      // Check 2: .git file exists (worktrees have a .git file, not a .git directory)
+      const gitFilePath = path.join(worktreePath, '.git');
+      if (!fs.existsSync(gitFilePath)) {
+        issues.push(`.git file/directory missing at ${gitFilePath}`);
+        return { valid: false, issues };
+      }
+
+      // Check 3: git rev-parse --is-inside-work-tree succeeds
+      const git: SimpleGit = simpleGit(worktreePath);
+      try {
+        const isWorkTree = await git.revparse(['--is-inside-work-tree']);
+        if (isWorkTree.trim() !== 'true') {
+          issues.push('git rev-parse --is-inside-work-tree did not return true');
+        }
+      } catch (revParseError) {
+        issues.push(`git rev-parse failed: ${revParseError instanceof Error ? revParseError.message : String(revParseError)}`);
+      }
+
+      // Check 4: Expected branch exists (if provided)
+      if (expectedBranch) {
+        try {
+          const currentBranch = await git.revparse(['--abbrev-ref', 'HEAD']);
+          if (currentBranch.trim() !== expectedBranch) {
+            // Branch exists but isn't the current one - this might be okay
+            // Let's check if the branch actually exists
+            try {
+              await git.raw(['rev-parse', '--verify', expectedBranch]);
+              // Branch exists, just not checked out - add a warning but not critical
+              logger.info('Worktree is on different branch than expected', {
+                worktreePath,
+                currentBranch: currentBranch.trim(),
+                expectedBranch,
+              });
+            } catch {
+              issues.push(`Expected branch '${expectedBranch}' does not exist`);
+            }
+          }
+        } catch (branchError) {
+          issues.push(`Failed to check branch: ${branchError instanceof Error ? branchError.message : String(branchError)}`);
+        }
+      }
+
+      const valid = issues.length === 0;
+
+      if (!valid) {
+        logger.warn('Worktree validation failed', { worktreePath, issues });
+      } else {
+        logger.info('Worktree validation passed', { worktreePath });
+      }
+
+      return { valid, issues };
+    } catch (error) {
+      logger.error('Worktree validation encountered unexpected error', { error, worktreePath });
+      issues.push(`Unexpected error: ${error instanceof Error ? error.message : String(error)}`);
+      return { valid: false, issues };
+    }
+  }
+
   /**
    * Create a new git worktree
    *
@@ -347,6 +494,40 @@ export class GitWorktreeService {
       } catch (pruneError) {
         logger.warn('Final git worktree prune failed', { pruneError });
       }
+    }
+
+    // Step 7: Verify the worktree is no longer in git's list
+    try {
+      const worktrees = await this.listWorktrees(workspacePath);
+      const stillInList = worktrees.some(wt => wt.path === worktreePath);
+
+      if (stillInList) {
+        // Try one more prune
+        logger.warn('Worktree still in git list after deletion, attempting final prune', { worktreePath });
+        await git.raw(['worktree', 'prune']);
+
+        // Check again
+        const worktreesAfterPrune = await this.listWorktrees(workspacePath);
+        const stillInListAfterPrune = worktreesAfterPrune.some(wt => wt.path === worktreePath);
+
+        if (stillInListAfterPrune) {
+          const errorMsg = `Worktree ${worktreePath} still in git worktree list after deletion. Git index may be corrupted.`;
+          logger.error(errorMsg, {
+            worktreePath,
+            remainingWorktrees: worktreesAfterPrune.map(wt => wt.path),
+          });
+          throw new Error(errorMsg);
+        }
+      }
+
+      logger.info('Verified worktree is no longer in git list', { worktreePath });
+    } catch (verifyError) {
+      // Only throw if it's our specific verification error
+      if (verifyError instanceof Error && verifyError.message.includes('still in git worktree list')) {
+        throw verifyError;
+      }
+      // For other errors (like listWorktrees failure), just log a warning
+      logger.warn('Could not verify worktree removal from git list', { worktreePath, error: verifyError });
     }
 
     logger.info('Worktree deletion complete', { worktreePath });
@@ -1018,6 +1199,14 @@ ${newLines.map(line => '+' + line).join('\n')}`;
       throw new Error('mainRepoPath is required');
     }
 
+    // Use lock to prevent concurrent merge/rebase/squash operations
+    return this.withLock(mainRepoPath, 'mergeToMain', () => this.mergeToMainImpl(worktreePath, mainRepoPath));
+  }
+
+  /**
+   * Internal implementation of mergeToMain (called within lock)
+   */
+  private async mergeToMainImpl(worktreePath: string, mainRepoPath: string): Promise<MergeResult> {
     logger.info('Merging worktree to main', { worktreePath, mainRepoPath });
 
     const worktreeGit: SimpleGit = simpleGit(worktreePath);
@@ -1145,6 +1334,7 @@ ${newLines.map(line => '+' + line).join('\n')}`;
             return {
               success: true,
               message: `Successfully merged ${worktreeBranch} into ${baseBranch}. Warning: Auto-stashed changes could not be restored automatically. Use 'git stash pop' to restore them.`,
+              stashWarning: true, // Flag for UI to show prominent alert
             };
           }
           return {
@@ -1316,6 +1506,7 @@ ${newLines.map(line => '+' + line).join('\n')}`;
     conflictedFiles?: string[];
     conflictingCommits?: { ours: string[]; theirs: string[] };
     untrackedFiles?: string[];
+    stashWarning?: boolean;
   }> {
     if (!worktreePath) {
       throw new Error('worktreePath is required');
@@ -1324,6 +1515,24 @@ ${newLines.map(line => '+' + line).join('\n')}`;
       throw new Error('baseBranch is required');
     }
 
+    // Use lock to prevent concurrent merge/rebase/squash operations
+    return this.withLock(worktreePath, 'rebaseFromBase', () => this.rebaseFromBaseImpl(worktreePath, baseBranch));
+  }
+
+  /**
+   * Internal implementation of rebaseFromBase (called within lock)
+   */
+  private async rebaseFromBaseImpl(
+    worktreePath: string,
+    baseBranch: string
+  ): Promise<{
+    success: boolean;
+    message?: string;
+    conflictedFiles?: string[];
+    conflictingCommits?: { ours: string[]; theirs: string[] };
+    untrackedFiles?: string[];
+    stashWarning?: boolean;
+  }> {
     logger.info('Rebasing worktree from base branch', { worktreePath, baseBranch });
 
     const git: SimpleGit = simpleGit(worktreePath);
@@ -1384,9 +1593,11 @@ ${newLines.map(line => '+' + line).join('\n')}`;
             logger.info('Stashed changes restored successfully');
           } catch (popError) {
             logger.error('Failed to restore stashed changes', { popError });
+            // Return success=true because the rebase itself worked, but flag the stash warning
             return {
-              success: false,
+              success: true,
               message: `Rebase succeeded but failed to restore stashed changes: ${popError instanceof Error ? popError.message : String(popError)}. Use 'git stash pop' manually to restore.`,
+              stashWarning: true, // Flag for UI to show prominent alert
             };
           }
         }
@@ -1580,6 +1791,8 @@ ${newLines.map(line => '+' + line).join('\n')}`;
   /**
    * Squash multiple commits into a single commit
    *
+   * Creates a backup branch before squashing to allow recovery if the operation fails.
+   *
    * @param worktreePath - Path to the worktree
    * @param commitHashes - Array of commit hashes to squash (must be consecutive)
    * @param message - Commit message for the squashed commit
@@ -1598,9 +1811,21 @@ ${newLines.map(line => '+' + line).join('\n')}`;
       throw new Error('Commit message is required');
     }
 
+    // Use lock to prevent concurrent merge/rebase/squash operations
+    return this.withLock(worktreePath, 'squashCommits', () => this.squashCommitsImpl(worktreePath, commitHashes, message));
+  }
+
+  /**
+   * Internal implementation of squashCommits (called within lock)
+   */
+  private async squashCommitsImpl(worktreePath: string, commitHashes: string[], message: string): Promise<string> {
     logger.info('Squashing commits', { worktreePath, commitCount: commitHashes.length });
 
     const git: SimpleGit = simpleGit(worktreePath);
+
+    // Create backup branch name with timestamp
+    const backupBranchName = `backup-before-squash-${Date.now()}`;
+    let backupCreated = false;
 
     try {
       // Get all commits to validate the selection is consecutive
@@ -1627,6 +1852,11 @@ ${newLines.map(line => '+' + line).join('\n')}`;
       const oldestIndex = commitIndices[commitIndices.length - 1];
       const oldestCommit = allCommits.all[oldestIndex];
 
+      // Create a backup branch before squashing (for recovery if operation fails)
+      logger.info('Creating backup branch before squash', { backupBranchName });
+      await git.branch([backupBranchName]);
+      backupCreated = true;
+
       // Use reset --soft to move HEAD to the commit before the oldest selected commit
       // This keeps all changes from the squashed commits in the staging area
       const baseCommit = oldestCommit.hash + '~1';
@@ -1641,11 +1871,31 @@ ${newLines.map(line => '+' + line).join('\n')}`;
       // Get the new commit hash
       const newCommit = await git.revparse(['HEAD']);
 
+      // Squash succeeded - delete the backup branch
+      logger.info('Squash succeeded, deleting backup branch', { backupBranchName });
+      try {
+        await git.deleteLocalBranch(backupBranchName, true);
+      } catch (deleteBranchError) {
+        // Non-critical - just log a warning
+        logger.warn('Failed to delete backup branch after successful squash', {
+          backupBranchName,
+          error: deleteBranchError,
+        });
+      }
+
       logger.info('Successfully squashed commits', { newCommit });
       return newCommit;
     } catch (error) {
       logger.error('Failed to squash commits', { error, worktreePath });
-      throw new Error(`Failed to squash commits: ${error instanceof Error ? error.message : String(error)}`);
+
+      if (backupCreated) {
+        logger.warn('Squash failed - backup branch remains for manual recovery', {
+          backupBranchName,
+          recoveryCommand: `git checkout ${backupBranchName}`,
+        });
+      }
+
+      throw new Error(`Failed to squash commits: ${error instanceof Error ? error.message : String(error)}. ${backupCreated ? `Backup branch '${backupBranchName}' available for recovery.` : ''}`);
     }
   }
 }

@@ -59,92 +59,151 @@ export function registerWorktreeHandlers(): void {
    */
   ipcMain.handle('worktree:create', async (_event, workspacePath: string, name?: string): Promise<WorktreeCreateResult> => {
     const startTime = Date.now();
-    const timings: Record<string, number> = {};
+    const MAX_RETRIES = 3;
 
-    try {
-      if (!workspacePath) {
-        throw new Error('workspacePath is required');
-      }
+    // Retry loop for handling race conditions where concurrent requests pick the same name
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      const timings: Record<string, number> = {};
+      // Track created worktree for cleanup on DB insert failure
+      let createdWorktree: { path: string; branch: string } | null = null;
 
-      logger.info('Creating worktree', { workspacePath, name });
+      try {
+        if (!workspacePath) {
+          throw new Error('workspacePath is required');
+        }
 
-      // Get database early for de-duplication
-      const db = getDatabase();
-      if (!db) {
-        throw new Error('Database not initialized');
-      }
+        logger.info('Creating worktree', { workspacePath, name, attempt });
 
-      const worktreeStore = createWorktreeStore(db);
+        // Get database early for de-duplication
+        const db = getDatabase();
+        if (!db) {
+          throw new Error('Database not initialized');
+        }
 
-      // If no custom name provided, generate a unique name using all three sources
-      let finalName = name;
-      if (!finalName) {
-        // Gather existing names from all three sources in parallel
-        const dedupeStartTime = Date.now();
+        const worktreeStore = createWorktreeStore(db);
 
-        const [dbNames, filesystemNames, branchNames] = await Promise.all([
-          worktreeStore.getAllNames(),
-          Promise.resolve(gitWorktreeService.getExistingWorktreeDirectories(workspacePath)),
-          gitWorktreeService.getAllBranchNames(workspacePath),
-        ]);
+        // If no custom name provided, generate a unique name using all three sources
+        let finalName = name;
+        if (!finalName) {
+          // Gather existing names from all three sources in parallel
+          const dedupeStartTime = Date.now();
 
-        timings.deduplication = Date.now() - dedupeStartTime;
+          const [dbNames, filesystemNames, branchNames] = await Promise.all([
+            worktreeStore.getAllNames(),
+            Promise.resolve(gitWorktreeService.getExistingWorktreeDirectories(workspacePath)),
+            gitWorktreeService.getAllBranchNames(workspacePath),
+          ]);
 
-        // Combine all existing names into a single set
-        const existingNames = new Set<string>();
-        for (const name of dbNames) existingNames.add(name);
-        for (const name of filesystemNames) existingNames.add(name);
-        for (const name of branchNames) existingNames.add(name);
+          timings.deduplication = Date.now() - dedupeStartTime;
 
-        logger.info('Gathered existing names for de-duplication', {
-          dbCount: dbNames.size,
-          filesystemCount: filesystemNames.size,
-          branchCount: branchNames.size,
-          totalUnique: existingNames.size,
-          durationMs: timings.deduplication,
+          // Combine all existing names into a single set
+          const existingNames = new Set<string>();
+          for (const dbName of dbNames) existingNames.add(dbName);
+          for (const fsName of filesystemNames) existingNames.add(fsName);
+          for (const branchName of branchNames) existingNames.add(branchName);
+
+          logger.info('Gathered existing names for de-duplication', {
+            dbCount: dbNames.size,
+            filesystemCount: filesystemNames.size,
+            branchCount: branchNames.size,
+            totalUnique: existingNames.size,
+            durationMs: timings.deduplication,
+          });
+
+          // Generate a unique name
+          finalName = gitWorktreeService.generateUniqueWorktreeName(existingNames);
+        }
+
+        // Create the git worktree
+        const gitCreateStartTime = Date.now();
+        const worktree = await gitWorktreeService.createWorktree(workspacePath, { name: finalName });
+        timings.gitWorktreeCreate = Date.now() - gitCreateStartTime;
+
+        // Track the created worktree for potential cleanup
+        createdWorktree = { path: worktree.path, branch: worktree.branch };
+
+        // Store worktree metadata in database
+        const dbInsertStartTime = Date.now();
+        await worktreeStore.create(worktree);
+        timings.dbInsert = Date.now() - dbInsertStartTime;
+
+        // DB insert succeeded, clear cleanup tracking
+        createdWorktree = null;
+
+        const totalDuration = Date.now() - startTime;
+        logger.info('Worktree created successfully', {
+          id: worktree.id,
+          path: worktree.path,
+          name: worktree.name,
+          totalDurationMs: totalDuration,
+          timings,
+          attempts: attempt,
         });
 
-        // Generate a unique name
-        finalName = gitWorktreeService.generateUniqueWorktreeName(existingNames);
+        // Track worktree creation
+        const analyticsService = AnalyticsService.getInstance();
+        analyticsService.sendEvent('worktree_created', {
+          duration_ms: totalDuration,
+          retry_count: attempt - 1,
+        });
+
+        return {
+          success: true,
+          worktree,
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        const isCollisionError =
+          errorMessage.includes('already exists') ||
+          errorMessage.includes('branch') ||
+          errorMessage.includes('fatal: A worktree');
+
+        // Critical: Clean up orphaned git worktree if DB insert failed
+        // This prevents database-git state inconsistency where a worktree exists on disk
+        // but isn't tracked in the database
+        if (createdWorktree) {
+          logger.warn('DB insert failed after git worktree was created, cleaning up orphaned worktree', {
+            worktreePath: createdWorktree.path,
+          });
+          try {
+            await gitWorktreeService.deleteWorktree(createdWorktree.path, workspacePath);
+            logger.info('Successfully cleaned up orphaned worktree', { worktreePath: createdWorktree.path });
+          } catch (cleanupError) {
+            logger.error('Failed to clean up orphaned worktree - manual cleanup required', {
+              worktreePath: createdWorktree.path,
+              cleanupError,
+            });
+          }
+        }
+
+        // If this is a collision error and we haven't exhausted retries, try again with a new name
+        // Only retry if no custom name was provided (race condition on auto-generated names)
+        if (isCollisionError && attempt < MAX_RETRIES && !name) {
+          logger.warn('Worktree creation failed due to name collision, retrying with new name', {
+            attempt,
+            maxRetries: MAX_RETRIES,
+            errorMessage,
+          });
+          // Continue to next iteration
+          continue;
+        }
+
+        // Final failure
+        const totalDuration = Date.now() - startTime;
+        logger.error('Failed to create worktree:', { error, durationMs: totalDuration, timings, attempt });
+
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Failed to create worktree',
+        };
       }
-
-      // Create the git worktree
-      const gitCreateStartTime = Date.now();
-      const worktree = await gitWorktreeService.createWorktree(workspacePath, { name: finalName });
-      timings.gitWorktreeCreate = Date.now() - gitCreateStartTime;
-
-      // Store worktree metadata in database
-      const dbInsertStartTime = Date.now();
-      await worktreeStore.create(worktree);
-      timings.dbInsert = Date.now() - dbInsertStartTime;
-
-      const totalDuration = Date.now() - startTime;
-      logger.info('Worktree created successfully', {
-        id: worktree.id,
-        path: worktree.path,
-        name: worktree.name,
-        totalDurationMs: totalDuration,
-        timings,
-      });
-
-      // Track worktree creation
-      const analyticsService = AnalyticsService.getInstance();
-      analyticsService.sendEvent('worktree_created', {
-        duration_ms: totalDuration,
-      });
-
-      return {
-        success: true,
-        worktree,
-      };
-    } catch (error) {
-      const totalDuration = Date.now() - startTime;
-      logger.error('Failed to create worktree:', { error, durationMs: totalDuration, timings });
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Failed to create worktree',
-      };
     }
+
+    // Should never reach here, but TypeScript needs a return
+    return {
+      success: false,
+      error: 'Failed to create worktree after maximum retries',
+    };
   });
 
   /**
@@ -526,6 +585,17 @@ export function registerWorktreeHandlers(): void {
 
       const worktreeStore = createWorktreeStore(db);
       await worktreeStore.update(worktreeId, { displayName });
+
+      // Notify all windows that the worktree display name has changed
+      const windows = BrowserWindow.getAllWindows();
+      for (const window of windows) {
+        if (!window.isDestroyed()) {
+          window.webContents.send('worktree:display-name-updated', {
+            worktreeId,
+            displayName,
+          });
+        }
+      }
 
       return {
         success: true,

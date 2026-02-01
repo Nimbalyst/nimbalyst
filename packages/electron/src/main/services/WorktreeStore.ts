@@ -438,3 +438,125 @@ export function createWorktreeStore(db: PGliteLike, ensureDbReady?: EnsureReadyF
  * WorktreeStore type
  */
 export type WorktreeStore = ReturnType<typeof createWorktreeStore>;
+
+/**
+ * Check for inconsistent worktree/session archive states at startup.
+ *
+ * This handles the case where the app crashed between archiving sessions and
+ * marking the worktree as archived (Critical #2 in reliability improvements).
+ *
+ * Finds worktrees where isArchived=false but ALL associated sessions have isArchived=true,
+ * then either completes the archive operation or reverts the session archiving.
+ *
+ * @param db - Database instance
+ * @returns Array of inconsistencies found and how they were handled
+ */
+export async function checkWorktreeArchiveConsistency(
+  db: { query<T = any>(sql: string, params?: any[]): Promise<{ rows: T[] }> }
+): Promise<Array<{ worktreeId: string; action: 'completed' | 'reverted' | 'error'; details: string }>> {
+  const results: Array<{ worktreeId: string; action: 'completed' | 'reverted' | 'error'; details: string }> = [];
+
+  try {
+    logger.info('Running worktree archive consistency check...');
+
+    // Find worktrees that are not archived but have all sessions archived
+    // This query finds worktrees where:
+    // 1. The worktree is NOT archived (is_archived = false OR is_archived IS NULL)
+    // 2. The worktree has at least one session
+    // 3. ALL sessions for this worktree ARE archived
+    const { rows: inconsistentWorktrees } = await db.query<{
+      worktree_id: string;
+      worktree_path: string;
+      session_count: number;
+      archived_session_count: number;
+    }>(`
+      SELECT
+        w.id as worktree_id,
+        w.path as worktree_path,
+        COUNT(s.id) as session_count,
+        COUNT(CASE WHEN s.is_archived = true THEN 1 END) as archived_session_count
+      FROM worktrees w
+      INNER JOIN ai_sessions s ON s.worktree_id = w.id
+      WHERE (w.is_archived = false OR w.is_archived IS NULL)
+      GROUP BY w.id, w.path
+      HAVING COUNT(s.id) > 0 AND COUNT(s.id) = COUNT(CASE WHEN s.is_archived = true THEN 1 END)
+    `);
+
+    if (inconsistentWorktrees.length === 0) {
+      logger.info('No worktree archive inconsistencies found');
+      return results;
+    }
+
+    logger.warn('Found worktree archive inconsistencies', {
+      count: inconsistentWorktrees.length,
+      worktreeIds: inconsistentWorktrees.map(w => w.worktree_id),
+    });
+
+    // For each inconsistent worktree, decide how to handle it
+    for (const worktree of inconsistentWorktrees) {
+      try {
+        // Check if the worktree directory still exists on disk
+        const fs = await import('fs');
+        const directoryExists = fs.existsSync(worktree.worktree_path);
+
+        if (directoryExists) {
+          // Directory still exists - revert session archiving since cleanup didn't complete
+          logger.warn('Worktree directory still exists, reverting session archiving', {
+            worktreeId: worktree.worktree_id,
+            path: worktree.worktree_path,
+          });
+
+          await db.query(
+            `UPDATE ai_sessions SET is_archived = false WHERE worktree_id = $1`,
+            [worktree.worktree_id]
+          );
+
+          results.push({
+            worktreeId: worktree.worktree_id,
+            action: 'reverted',
+            details: `Directory still exists at ${worktree.worktree_path}, reverted ${worktree.session_count} sessions to non-archived`,
+          });
+        } else {
+          // Directory doesn't exist - complete the archive by marking worktree as archived
+          logger.info('Worktree directory does not exist, completing archive operation', {
+            worktreeId: worktree.worktree_id,
+            path: worktree.worktree_path,
+          });
+
+          await db.query(
+            `UPDATE worktrees SET is_archived = true, updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+            [worktree.worktree_id]
+          );
+
+          results.push({
+            worktreeId: worktree.worktree_id,
+            action: 'completed',
+            details: `Directory no longer exists, marked worktree as archived with ${worktree.session_count} sessions`,
+          });
+        }
+      } catch (error) {
+        logger.error('Failed to resolve worktree inconsistency', {
+          worktreeId: worktree.worktree_id,
+          error,
+        });
+        results.push({
+          worktreeId: worktree.worktree_id,
+          action: 'error',
+          details: `Failed to resolve: ${error instanceof Error ? error.message : String(error)}`,
+        });
+      }
+    }
+
+    logger.info('Worktree archive consistency check completed', {
+      total: inconsistentWorktrees.length,
+      completed: results.filter(r => r.action === 'completed').length,
+      reverted: results.filter(r => r.action === 'reverted').length,
+      errors: results.filter(r => r.action === 'error').length,
+    });
+
+    return results;
+  } catch (error) {
+    logger.error('Worktree archive consistency check failed', { error });
+    return results;
+  }
+}

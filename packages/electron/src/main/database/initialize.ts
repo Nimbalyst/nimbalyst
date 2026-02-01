@@ -10,6 +10,9 @@ import { logger } from '../utils/logger';
 import type { SessionStore } from '@nimbalyst/runtime';
 import { repositoryManager } from '../services/RepositoryManager';
 import { DatabaseBackupService } from '../services/database/DatabaseBackupService';
+import { checkWorktreeArchiveConsistency, createWorktreeStore } from '../services/WorktreeStore';
+import { archiveProgressManager } from '../services/ArchiveProgressManager';
+import { GitWorktreeService } from '../services/GitWorktreeService';
 
 // Backup service instance
 let backupService: DatabaseBackupService | null = null;
@@ -49,6 +52,64 @@ export async function initializeDatabase(): Promise<SessionStore> {
     await repositoryManager.initialize();
     const sessionStore = repositoryManager.getSessionStore();
     logger.main.info('[Database] All repositories initialized');
+
+    // Run worktree archive consistency check
+    // This handles cases where the app crashed between archiving sessions and marking worktree as archived
+    try {
+      const consistencyResults = await checkWorktreeArchiveConsistency(database);
+      if (consistencyResults.length > 0) {
+        logger.main.warn('[Database] Worktree archive consistency issues resolved:', consistencyResults);
+      }
+    } catch (consistencyError) {
+      // Don't fail startup if consistency check fails
+      logger.main.error('[Database] Worktree archive consistency check failed:', consistencyError);
+    }
+
+    // Load persisted archive queue tasks
+    // This handles cases where the app crashed while processing archive cleanup
+    try {
+      const gitWorktreeService = new GitWorktreeService();
+      const worktreeStore = createWorktreeStore(database);
+
+      const { recovered, failed } = await archiveProgressManager.loadPersistedTasks(
+        async (worktreeId: string, worktreeName: string) => {
+          // Look up the worktree to get necessary context
+          const worktree = await worktreeStore.get(worktreeId);
+          if (!worktree) {
+            logger.main.warn('[Database] Worktree not found for persisted archive task', { worktreeId });
+            return null;
+          }
+
+          // If worktree is already archived, no callback needed
+          if (worktree.isArchived) {
+            logger.main.info('[Database] Worktree already archived, skipping persisted task', { worktreeId });
+            return null;
+          }
+
+          // Create cleanup callback that mirrors the original archive flow
+          return async () => {
+            archiveProgressManager.updateTaskStatus(worktreeId, 'removing-worktree');
+
+            // Delete the worktree from disk
+            await gitWorktreeService.deleteWorktree(worktree.path, worktree.projectPath);
+
+            logger.main.info('[Database] Recovered archive task cleanup completed', { worktreeId });
+
+            // Mark as archived in database
+            await worktreeStore.updateArchived(worktreeId, true);
+
+            logger.main.info('[Database] Recovered archive task marked as archived', { worktreeId });
+          };
+        }
+      );
+
+      if (recovered > 0 || failed > 0) {
+        logger.main.info('[Database] Archive queue recovery completed', { recovered, failed });
+      }
+    } catch (archiveQueueError) {
+      // Don't fail startup if archive queue recovery fails
+      logger.main.error('[Database] Archive queue recovery failed:', archiveQueueError);
+    }
 
     // Get database stats
     const stats = await database.getStats();
