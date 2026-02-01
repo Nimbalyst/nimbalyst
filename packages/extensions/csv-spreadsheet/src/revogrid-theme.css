@@ -1,17 +1,18 @@
 /**
  * RevoGrid Theme and Diff Mode Styles
  *
- * These styles must remain in CSS because they:
- * 1. Override RevoGrid's CSS variables for theming
- * 2. Target deep RevoGrid shadow DOM selectors
- * 3. Provide diff mode styling for AI edit review
+ * These styles use the --nim-* CSS variable system exclusively.
+ * The theme system sets these variables on the document root,
+ * and all styling inherits from them automatically.
+ *
+ * NO THEME-SPECIFIC SELECTORS (like [data-theme="dark"]) should be used here.
  */
 
 /* ========================================
    RevoGrid Theme Overrides
    ======================================== */
 
-/* Main container - used as CSS variable scope */
+/* Map RevoGrid's internal variables to Nimbalyst theme variables */
 .spreadsheet-editor revo-grid {
   --revo-bg-color: var(--nim-bg);
   --revo-row-odd-color: var(--nim-bg);
@@ -20,28 +21,10 @@
   --revo-border-color: var(--nim-border);
   --revo-text-color: var(--nim-text);
   --revo-header-text-color: var(--nim-text-muted);
-  --revo-selected-bg-color: rgba(59, 130, 246, 0.15);
-  --revo-focus-bg-color: rgba(59, 130, 246, 0.25);
-}
-
-/* Dark theme overrides */
-[data-theme="dark"] .spreadsheet-editor revo-grid,
-[data-theme="crystal-dark"] .spreadsheet-editor revo-grid {
-  --revo-bg-color: var(--nim-bg);
-  --revo-row-odd-color: var(--nim-bg);
-  --revo-row-even-color: var(--nim-bg);
-  --revo-header-bg-color: var(--nim-bg-secondary);
-  --revo-border-color: var(--nim-border);
-  --revo-text-color: var(--nim-text);
-  --revo-header-text-color: var(--nim-text-muted);
-  --revo-grid-cell-border: rgba(255, 255, 255, 0.15);
-  --revo-grid-header-border: rgba(255, 255, 255, 0.2);
-}
-
-/* Add vertical cell borders for dark themes (darkCompact theme doesn't include them) */
-[data-theme="dark"] .spreadsheet-editor revo-grid revogr-data .rgCell,
-[data-theme="crystal-dark"] .spreadsheet-editor revo-grid revogr-data .rgCell {
-  box-shadow: 0 -1px 0 0 rgba(255, 255, 255, 0.15) inset, -1px 0 0 0 rgba(255, 255, 255, 0.15) inset;
+  --revo-selected-bg-color: var(--nim-bg-selected);
+  --revo-focus-bg-color: var(--nim-bg-active);
+  --revo-grid-cell-border: var(--nim-border);
+  --revo-grid-header-border: var(--nim-border);
 }
 
 /* Disable full row highlighting on selection - only show cell selection border */
@@ -51,12 +34,12 @@
 
 /* Highlight row headers when rows are selected */
 .spreadsheet-editor revo-grid .rowHeaders revogr-data .rgRow.focused-rgRow .rgCell {
-  background-color: var(--revo-grid-focused-bg, rgba(59, 130, 246, 0.15));
+  background-color: var(--nim-bg-selected);
 }
 
 /* Selection range background fill */
 .spreadsheet-editor revo-grid revogr-overlay-selection .selection-border-range {
-  background-color: rgba(59, 130, 246, 0.1);
+  background-color: var(--nim-bg-selected);
 }
 
 /* Column header height - slightly taller than data rows (32px + 5px = 37px) */
@@ -88,24 +71,38 @@
   background-color: var(--nim-bg-secondary) !important;
 }
 
-/* Cell editing styles for dark mode */
-[data-theme="dark"] .spreadsheet-editor revo-grid revogr-edit,
-[data-theme="crystal-dark"] .spreadsheet-editor revo-grid revogr-edit {
+/* Cell editing styles */
+.spreadsheet-editor revo-grid revogr-edit {
   background-color: var(--nim-bg);
 }
 
-[data-theme="dark"] .spreadsheet-editor revo-grid revogr-edit input,
-[data-theme="crystal-dark"] .spreadsheet-editor revo-grid revogr-edit input {
+.spreadsheet-editor revo-grid revogr-edit input {
   background-color: var(--nim-bg);
   color: var(--nim-text);
   border: 1px solid var(--nim-primary);
   outline: none;
 }
 
-/* Cell content styling */
+/* Cell content styling - use !important to override RevoGrid defaults */
 .spreadsheet-editor revogr-cell {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-size: 13px;
+  color: var(--nim-text) !important;
+}
+
+/* Ensure all cells have correct text color */
+.spreadsheet-editor revo-grid .rgCell {
+  color: var(--nim-text) !important;
+}
+
+/* Row headers text color */
+.spreadsheet-editor revo-grid .rowHeaders .rgCell {
+  color: var(--nim-text-muted) !important;
+}
+
+/* Column headers text color */
+.spreadsheet-editor revo-grid revogr-header .rgHeaderCell {
+  color: var(--nim-text-muted) !important;
 }
 
 /* Cell padding - add space around content */
@@ -137,11 +134,6 @@
   border-right: 2px solid var(--nim-primary);
 }
 
-[data-theme="dark"] .spreadsheet-editor revo-grid [slot="colPinStart"] revogr-data .rgCell,
-[data-theme="crystal-dark"] .spreadsheet-editor revo-grid [slot="colPinStart"] revogr-data .rgCell {
-  background-color: var(--nim-bg-secondary);
-}
-
 /* Cell alignment classes */
 .spreadsheet-editor revo-grid .cell-align-right {
   text-align: right;
@@ -153,7 +145,7 @@
 
 /* Error cells */
 .spreadsheet-editor .cell-error {
-  color: #ef4444;
+  color: var(--nim-error);
   font-style: italic;
 }
 
@@ -166,59 +158,38 @@
    Diff Mode Styles (AI Edit Review)
    ======================================== */
 
-/* Diff color variables */
-.spreadsheet-editor {
-  --diff-added-bg: #d4edda;
-  --diff-added-text: #155724;
-  --diff-modified-bg: #fff3cd;
-  --diff-modified-text: #856404;
-  --diff-deleted-bg: #f8d7da;
-  --diff-deleted-text: #721c24;
-}
-
-/* Dark theme diff colors */
-[data-theme="dark"] .spreadsheet-editor,
-[data-theme="crystal-dark"] .spreadsheet-editor {
-  --diff-added-bg: #1e4620;
-  --diff-added-text: #8fd694;
-  --diff-modified-bg: #4a3f00;
-  --diff-modified-text: #ffd966;
-  --diff-deleted-bg: #4a1c1c;
-  --diff-deleted-text: #f5a5a5;
-}
-
-/* Cell-level diff styling */
+/* Diff colors use the Nimbalyst diff variables */
 .spreadsheet-editor revo-grid .cell-diff-added {
-  background-color: var(--diff-added-bg) !important;
-  color: var(--diff-added-text);
+  background-color: var(--nim-diff-add-bg) !important;
+  color: var(--nim-success);
 }
 
 .spreadsheet-editor revo-grid .cell-diff-modified {
-  background-color: var(--diff-modified-bg) !important;
-  color: var(--diff-modified-text);
+  background-color: var(--nim-highlight-bg) !important;
+  color: var(--nim-warning);
 }
 
 .spreadsheet-editor revo-grid .cell-diff-deleted {
-  background-color: var(--diff-deleted-bg) !important;
-  color: var(--diff-deleted-text);
+  background-color: var(--nim-diff-remove-bg) !important;
+  color: var(--nim-error);
   text-decoration: line-through;
 }
 
 /* Row-level diff styling for phantom (deleted) rows */
 .spreadsheet-editor revo-grid .row-diff-deleted {
-  background-color: var(--diff-deleted-bg) !important;
+  background-color: var(--nim-diff-remove-bg) !important;
   opacity: 0.7;
   pointer-events: none;
 }
 
 .spreadsheet-editor revo-grid .row-diff-deleted revogr-cell {
   text-decoration: line-through;
-  color: var(--diff-deleted-text);
+  color: var(--nim-error);
 }
 
 /* Row-level diff styling for added rows */
 .spreadsheet-editor revo-grid .row-diff-added {
-  background-color: var(--diff-added-bg) !important;
+  background-color: var(--nim-diff-add-bg) !important;
 }
 
 /* Tooltip for previous value - using native title attribute */

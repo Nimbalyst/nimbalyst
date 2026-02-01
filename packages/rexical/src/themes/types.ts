@@ -59,6 +59,7 @@ export interface ThemeColors {
   'warning': string;
   'error': string;
   'info': string;
+  'purple': string;
 }
 
 /**

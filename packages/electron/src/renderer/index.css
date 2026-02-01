@@ -493,11 +493,12 @@ body[data-dev-mode="true"] .nav-quick-access::before {
 
 /* Special directories (nimbalyst-local) */
 .file-tree-directory.special-directory .file-tree-icon {
-  color: #7c3aed;
+  color: var(--nim-purple);
 }
 
 .file-tree-directory.special-directory.selected .file-tree-icon {
-  color: #a78bfa;
+  color: var(--nim-purple);
+  opacity: 0.8;
 }
 
 .file-tree-name {

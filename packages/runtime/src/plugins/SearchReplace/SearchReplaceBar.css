@@ -18,12 +18,10 @@
 }
 
 /* Dark mode support for highlights */
-[data-theme="dark"] .search-highlight,
-[data-theme="crystal-dark"] .search-highlight {
-  background-color: rgba(255, 235, 59, 0.3);
+.dark-theme .search-highlight {
+  background-color: var(--nim-highlight-bg);
 }
 
-[data-theme="dark"] .search-highlight-current,
-[data-theme="crystal-dark"] .search-highlight-current {
-  background-color: rgba(255, 152, 0, 0.5);
+.dark-theme .search-highlight-current {
+  background-color: color-mix(in srgb, var(--nim-warning) 50%, transparent);
 }

@@ -15,10 +15,26 @@
         // Determine theme FIRST, before any CSS - using SYNC API to prevent flash
         // IMPORTANT: getThemeSync() resolves 'system' to actual theme, so we get 'light' or 'dark' directly
         (function() {
-            // Get theme SYNCHRONOUSLY from main process - already resolved!
-            const theme = window.electronAPI?.getThemeSync?.() || 'light';
+            // Diagnostic logging for theme initialization issues
+            const hasElectronAPI = !!window.electronAPI;
+            const hasGetThemeSync = !!(window.electronAPI?.getThemeSync);
+            console.log('[THEME-INIT] Diagnostic:', {
+                hasElectronAPI,
+                hasGetThemeSync,
+                platform: navigator.platform,
+                userAgent: navigator.userAgent
+            });
 
-            // console.log('[THEME-INIT] Resolved theme from main process:', theme);
+            // Get theme SYNCHRONOUSLY from main process - already resolved!
+            let theme;
+            try {
+                theme = window.electronAPI?.getThemeSync?.() || 'light';
+            } catch (err) {
+                console.error('[THEME-INIT] Error calling getThemeSync:', err);
+                theme = 'light';
+            }
+
+            console.log('[THEME-INIT] Resolved theme from main process:', theme);
 
             const root = document.documentElement;
 
@@ -40,7 +56,7 @@
                 root.setAttribute('data-theme', 'light');
             }
 
-            // console.log('[THEME-INIT] Applied class:', theme + '-theme');
+            console.log('[THEME-INIT] Applied class:', theme + '-theme', 'to document.documentElement');
         })();
     </script>
 </head>

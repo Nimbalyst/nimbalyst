@@ -128,7 +128,7 @@ export function ColumnFormatDialog({
             <select
               value={type}
               onChange={(e) => handleTypeChange(e.target.value as ColumnType)}
-              className="px-3 py-2 text-sm bg-nim-secondary border border-nim rounded text-nim outline-none focus:border-[var(--nim-primary)] focus:shadow-[0_0_0_2px_rgba(59,130,246,0.2)]"
+              className="px-3 py-2 text-sm bg-nim-secondary border border-nim rounded text-nim outline-none focus:border-[var(--nim-primary)] focus:shadow-[0_0_0_2px_color-mix(in_srgb,var(--nim-primary)_20%,transparent)]"
             >
               {COLUMN_TYPES.map((t) => (
                 <option key={t} value={t}>
@@ -148,7 +148,7 @@ export function ColumnFormatDialog({
                 max={10}
                 value={decimals}
                 onChange={(e) => setDecimals(Math.max(0, Math.min(10, parseInt(e.target.value) || 0)))}
-                className="px-3 py-2 text-sm bg-nim-secondary border border-nim rounded text-nim outline-none focus:border-[var(--nim-primary)] focus:shadow-[0_0_0_2px_rgba(59,130,246,0.2)]"
+                className="px-3 py-2 text-sm bg-nim-secondary border border-nim rounded text-nim outline-none focus:border-[var(--nim-primary)] focus:shadow-[0_0_0_2px_color-mix(in_srgb,var(--nim-primary)_20%,transparent)]"
               />
             </div>
           )}
@@ -175,7 +175,7 @@ export function ColumnFormatDialog({
               <select
                 value={currency}
                 onChange={(e) => setCurrency(e.target.value as CurrencyCode)}
-                className="px-3 py-2 text-sm bg-nim-secondary border border-nim rounded text-nim outline-none focus:border-[var(--nim-primary)] focus:shadow-[0_0_0_2px_rgba(59,130,246,0.2)]"
+                className="px-3 py-2 text-sm bg-nim-secondary border border-nim rounded text-nim outline-none focus:border-[var(--nim-primary)] focus:shadow-[0_0_0_2px_color-mix(in_srgb,var(--nim-primary)_20%,transparent)]"
               >
                 {CURRENCIES.map((c) => (
                   <option key={c} value={c}>
@@ -193,7 +193,7 @@ export function ColumnFormatDialog({
               <select
                 value={dateFormat}
                 onChange={(e) => setDateFormat(e.target.value as DateFormat)}
-                className="px-3 py-2 text-sm bg-nim-secondary border border-nim rounded text-nim outline-none focus:border-[var(--nim-primary)] focus:shadow-[0_0_0_2px_rgba(59,130,246,0.2)]"
+                className="px-3 py-2 text-sm bg-nim-secondary border border-nim rounded text-nim outline-none focus:border-[var(--nim-primary)] focus:shadow-[0_0_0_2px_color-mix(in_srgb,var(--nim-primary)_20%,transparent)]"
               >
                 {DATE_FORMATS.map((f) => (
                   <option key={f} value={f}>

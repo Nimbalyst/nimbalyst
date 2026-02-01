@@ -259,57 +259,6 @@
         background: #444;
       }
 
-      body.crystal-dark-theme {
-        background: #0f0f0f;
-      }
-
-      body.crystal-dark-theme .about-container {
-        background: #1a1a1a;
-        color: #e0e0e0;
-      }
-
-      body.crystal-dark-theme .about-title {
-        color: #f0f0f0;
-      }
-
-      body.crystal-dark-theme .about-version {
-        color: #aaa;
-      }
-
-      body.crystal-dark-theme .about-description {
-        color: #ccc;
-      }
-
-      body.crystal-dark-theme .about-features ul {
-        color: #bbb;
-      }
-
-      body.crystal-dark-theme .about-footer {
-        color: #999;
-      }
-
-      body.crystal-dark-theme .about-footer a {
-        color: #66b3ff;
-      }
-
-      body.crystal-dark-theme .support-id-container {
-        border-top-color: #334155;
-        color: #aaa;
-      }
-
-      body.crystal-dark-theme .support-id-value {
-        background: #1e293b;
-        border-color: #334155;
-        color: #e0e0e0;
-      }
-
-      body.crystal-dark-theme .support-id-value:hover {
-        background: #334155;
-      }
-
-      body.crystal-dark-theme .support-id-value:active {
-        background: #475569;
-      }
     </style>
   </head>
   <body>
@@ -355,23 +304,20 @@
         const body = document.body;
         if (body.dataset.theme === theme) return;
         body.dataset.theme = theme;
-        body.classList.remove('dark-theme', 'light-theme', 'crystal-dark-theme');
-
-        if (theme === 'dark') {
+        body.classList.remove('dark-theme', 'light-theme');
+        // crystal-dark uses dark-theme styles
+        if (theme === 'dark' || theme === 'crystal-dark') {
           body.classList.add('dark-theme');
         } else if (theme === 'light') {
           body.classList.add('light-theme');
-        } else if (theme === 'crystal-dark') {
-          body.classList.add('crystal-dark-theme');
         }
       });
 
       // Request initial theme
       window.electronAPI?.getTheme?.().then(theme => {
-        if (theme === 'dark') {
+        // crystal-dark uses dark-theme styles
+        if (theme === 'dark' || theme === 'crystal-dark') {
           document.body.classList.add('dark-theme');
-        } else if (theme === 'crystal-dark') {
-          document.body.classList.add('crystal-dark-theme');
         }
         document.body.dataset.theme = theme;
       });

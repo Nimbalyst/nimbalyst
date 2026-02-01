@@ -12,7 +12,7 @@
 }
 
 .datamodel-container.focused {
-  outline: 2px solid var(--nim-primary, #3b82f6);
+  outline: 2px solid var(--nim-primary);
   outline-offset: 2px;
 }
 
@@ -20,7 +20,7 @@
   display: block;
   max-width: 100%;
   border-radius: 4px;
-  border: 1px solid var(--nim-border, #e5e7eb);
+  border: 1px solid var(--nim-border);
 }
 
 .datamodel-image.focused {
@@ -42,9 +42,9 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  background-color: rgba(255, 255, 255, 0.8);
+  background-color: color-mix(in srgb, var(--nim-bg) 80%, transparent);
   border-radius: 4px;
-  color: var(--nim-text-muted, #6b7280);
+  color: var(--nim-text-muted);
   font-size: 13px;
 }
 
@@ -55,8 +55,8 @@
   justify-content: center;
   min-width: 200px;
   min-height: 150px;
-  background-color: var(--nim-bg-secondary, #f3f4f6);
-  border: 1px dashed var(--nim-border, #e5e7eb);
+  background-color: var(--nim-bg-secondary);
+  border: 1px dashed var(--nim-border);
   border-radius: 4px;
 }
 
@@ -64,7 +64,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  color: var(--nim-text-muted, #6b7280);
+  color: var(--nim-text-muted);
   font-size: 14px;
 }
 
@@ -72,8 +72,8 @@
   display: inline-block;
   width: 16px;
   height: 16px;
-  border: 2px solid var(--nim-border, #e5e7eb);
-  border-top-color: var(--nim-primary, #3b82f6);
+  border: 2px solid var(--nim-border);
+  border-top-color: var(--nim-primary);
   border-radius: 50%;
   animation: datamodel-spin 0.8s linear infinite;
 }
@@ -87,7 +87,7 @@
 .datamodel-error {
   flex-direction: column;
   gap: 8px;
-  color: var(--nim-text-muted, #6b7280);
+  color: var(--nim-text-muted);
 }
 
 .datamodel-error-icon {
@@ -97,8 +97,8 @@
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background-color: var(--nim-bg-tertiary, #e5e7eb);
-  color: var(--nim-text-faint, #9ca3af);
+  background-color: var(--nim-bg-tertiary);
+  color: var(--nim-text-faint);
   font-weight: bold;
   font-size: 18px;
 }
@@ -109,7 +109,7 @@
 
 .datamodel-error-hint {
   font-size: 11px;
-  color: var(--nim-text-faint, #9ca3af);
+  color: var(--nim-text-faint);
 }
 
 .datamodel-edit-button {
@@ -120,24 +120,24 @@
   align-items: center;
   gap: 4px;
   padding: 6px 10px;
-  background-color: var(--nim-bg, #ffffff);
-  border: 1px solid var(--nim-border, #e5e7eb);
+  background-color: var(--nim-bg);
+  border: 1px solid var(--nim-border);
   border-radius: 4px;
   font-size: 12px;
   font-weight: 500;
-  color: var(--nim-text, #1f2937);
+  color: var(--nim-text);
   cursor: pointer;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   transition: background-color 0.15s, box-shadow 0.15s;
 }
 
 .datamodel-edit-button:hover {
-  background-color: var(--nim-bg-hover, #f9fafb);
+  background-color: var(--nim-bg-hover);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
 }
 
 .datamodel-edit-button:active {
-  background-color: var(--nim-bg-secondary, #f3f4f6);
+  background-color: var(--nim-bg-secondary);
 }
 
 .datamodel-edit-button svg {
@@ -160,8 +160,8 @@
   position: absolute;
   width: 10px;
   height: 10px;
-  background-color: var(--nim-primary, #3b82f6);
-  border: 2px solid var(--nim-bg, #ffffff);
+  background-color: var(--nim-primary);
+  border: 2px solid var(--nim-bg);
   border-radius: 50%;
   pointer-events: auto;
   box-sizing: border-box;

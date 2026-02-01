@@ -206,7 +206,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Theme operations
   getTheme: () => ipcRenderer.invoke('get-theme'),
-  getThemeSync: () => ipcRenderer.sendSync('get-theme-sync'),
+  getThemeSync: () => {
+    try {
+      const theme = ipcRenderer.sendSync('get-theme-sync');
+      console.log('[preload] getThemeSync returned:', theme);
+      return theme;
+    } catch (err) {
+      console.error('[preload] getThemeSync error:', err);
+      return 'light';
+    }
+  },
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
   setTheme: (theme: string) => ipcRenderer.invoke('set-theme', theme),
 

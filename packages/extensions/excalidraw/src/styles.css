@@ -10,8 +10,8 @@
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: var(--nim-bg, #ffffff);
-  color: var(--nim-text, #000000);
+  background: var(--nim-bg);
+  color: var(--nim-text);
 }
 
 /* Ensure Excalidraw fills the container */

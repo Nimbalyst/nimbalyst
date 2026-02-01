@@ -74,17 +74,17 @@ body {
 }
 
 .status-badge.connected {
-  background-color: rgba(34, 197, 94, 0.1);
+  background-color: color-mix(in srgb, var(--nim-success) 10%, transparent);
   color: var(--nim-success);
 }
 
 .status-badge.disconnected {
-  background-color: rgba(239, 68, 68, 0.1);
+  background-color: color-mix(in srgb, var(--nim-error) 10%, transparent);
   color: var(--nim-error);
 }
 
 .status-badge.syncing {
-  background-color: rgba(59, 130, 246, 0.1);
+  background-color: color-mix(in srgb, var(--nim-primary) 10%, transparent);
   color: var(--nim-primary);
 }
 

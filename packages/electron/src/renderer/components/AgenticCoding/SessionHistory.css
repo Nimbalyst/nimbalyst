@@ -95,7 +95,7 @@
 .session-history-card-archive-badge {
   font-size: 0.625rem;
   padding: 2px 6px;
-  background-color: rgba(128, 128, 128, 0.15);
+  background-color: color-mix(in srgb, var(--nim-text-faint) 15%, transparent);
   color: var(--nim-text-faint);
   border-radius: 3px;
   font-weight: 500;
@@ -138,7 +138,7 @@
 
 .session-history-card-uncommitted-badge {
   padding: 2px 6px;
-  background-color: rgba(245, 158, 11, 0.15);
+  background-color: color-mix(in srgb, var(--nim-warning) 15%, transparent);
   color: var(--nim-warning);
   border-radius: 3px;
   font-size: 0.6875rem;
@@ -168,17 +168,17 @@
 }
 
 .session-history-card-git-badge.ahead {
-  background-color: rgba(59, 130, 246, 0.15);
+  background-color: color-mix(in srgb, var(--nim-primary) 15%, transparent);
   color: var(--nim-primary);
 }
 
 .session-history-card-git-badge.behind {
-  background-color: rgba(245, 158, 11, 0.15);
+  background-color: color-mix(in srgb, var(--nim-warning) 15%, transparent);
   color: var(--nim-warning);
 }
 
 .session-history-card-git-badge.uncommitted {
-  background-color: rgba(245, 158, 11, 0.15);
+  background-color: color-mix(in srgb, var(--nim-warning) 15%, transparent);
   color: var(--nim-warning);
 }
 

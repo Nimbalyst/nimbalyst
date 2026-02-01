@@ -153,7 +153,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: var(--nim-error, #dc3545);
+  background-color: var(--nim-error);
   color: white;
   border: none;
   border-radius: 6px;
@@ -171,7 +171,7 @@
 }
 
 .ai-input-cancel-button:focus-visible {
-  outline: 2px solid var(--nim-error, #dc3545);
+  outline: 2px solid var(--nim-error);
   outline-offset: 2px;
 }
 

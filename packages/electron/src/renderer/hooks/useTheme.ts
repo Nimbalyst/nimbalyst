@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import type { ConfigTheme } from 'rexical';
 import { themeIdAtom, setThemeAtom, store, type ThemeId } from '@nimbalyst/runtime/store';
-import { getBaseThemeColors, type ExtendedThemeColors } from 'rexical';
+import { getBaseThemeColors, getTheme as getThemeFromRexical, type ExtendedThemeColors } from 'rexical';
 
 /**
  * Map of ExtendedThemeColors keys to CSS variable names.
@@ -32,6 +32,7 @@ const CSS_VAR_MAP: Record<keyof ExtendedThemeColors, string> = {
   'warning': '--nim-warning',
   'error': '--nim-error',
   'info': '--nim-info',
+  'purple': '--nim-purple',
 
   // Code blocks
   'code-bg': '--nim-code-bg',
@@ -139,41 +140,48 @@ export function initializeTheme(): void {
 async function applyThemeToDOM(theme: ThemeId): Promise<void> {
   const root = document.documentElement;
 
-  // Determine if this is a custom theme or built-in
+  // Determine if this is a built-in theme
   const builtInThemes = ['light', 'dark', 'crystal-dark'];
   const isBuiltIn = builtInThemes.includes(theme);
 
+  // Set appropriate class for dark mode detection (used by Tailwind, icon filters, etc.)
+  let isDark = false;
+  if (theme === 'dark' || theme === 'crystal-dark') {
+    isDark = true;
+  }
+
   if (isBuiltIn) {
-    // Built-in themes use classes only
-    let targetClass = '';
+    // Built-in themes: use getBaseThemeColors to get full color definitions
+    const colors = getBaseThemeColors(isDark);
 
-    if (theme === 'dark') {
-      targetClass = 'dark-theme';
-    } else if (theme === 'light') {
-      targetClass = 'light-theme';
-    } else if (theme === 'crystal-dark') {
-      targetClass = 'crystal-dark-theme';
-    }
-
+    // Set class and data-theme
+    const targetClass = isDark ? 'dark-theme' : 'light-theme';
     root.classList.remove('dark-theme', 'light-theme', 'crystal-dark-theme');
     root.classList.add(targetClass);
     root.setAttribute('data-theme', theme);
 
-    // Clear any custom CSS variables
-    clearCustomThemeVariables();
+    // Apply colors as inline styles (single source of truth)
+    for (const [key, cssVar] of Object.entries(CSS_VAR_MAP)) {
+      const colorKey = key as keyof ExtendedThemeColors;
+      const value = colors[colorKey];
+      if (value) {
+        root.style.setProperty(cssVar, value);
+      }
+    }
   } else {
     // Custom theme - fetch and apply colors
     try {
       const themeData = await window.electronAPI.invoke('theme:get', theme);
+      isDark = themeData.isDark;
 
-      // Set base class based on isDark
-      const baseClass = themeData.isDark ? 'dark-theme' : 'light-theme';
+      // Set base class based on isDark (for Tailwind dark mode, icon filters, etc.)
+      const baseClass = isDark ? 'dark-theme' : 'light-theme';
       root.classList.remove('dark-theme', 'light-theme', 'crystal-dark-theme');
       root.classList.add(baseClass);
       root.setAttribute('data-theme', theme);
 
       // Get base colors for fallbacks
-      const baseColors = getBaseThemeColors(themeData.isDark);
+      const baseColors = getBaseThemeColors(isDark);
 
       // Apply theme colors as CSS variables
       for (const [key, cssVar] of Object.entries(CSS_VAR_MAP)) {
@@ -195,7 +203,15 @@ async function applyThemeToDOM(theme: ThemeId): Promise<void> {
       root.classList.remove('dark-theme', 'light-theme', 'crystal-dark-theme');
       root.classList.add('light-theme');
       root.setAttribute('data-theme', 'light');
-      clearCustomThemeVariables();
+      // Apply light theme colors
+      const colors = getBaseThemeColors(false);
+      for (const [key, cssVar] of Object.entries(CSS_VAR_MAP)) {
+        const colorKey = key as keyof ExtendedThemeColors;
+        const value = colors[colorKey];
+        if (value) {
+          root.style.setProperty(cssVar, value);
+        }
+      }
     }
   }
 }

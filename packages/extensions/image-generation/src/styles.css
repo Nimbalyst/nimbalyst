@@ -8,20 +8,20 @@
 .image-project-editor {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu',
     'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
-  background-color: var(--nim-bg, #ffffff);
-  color: var(--nim-text, #1f2937);
+  background-color: var(--nim-bg);
+  color: var(--nim-text);
 }
 
 /* Dark theme - applied via data-theme attribute */
 .image-project-editor[data-theme='dark'] {
-  background-color: var(--nim-bg, #1a1a1a);
-  color: var(--nim-text, #e5e5e5);
+  background-color: var(--nim-bg);
+  color: var(--nim-text);
 }
 
 /* Light theme explicit */
 .image-project-editor[data-theme='light'] {
-  background-color: var(--nim-bg, #ffffff);
-  color: var(--nim-text, #1f2937);
+  background-color: var(--nim-bg);
+  color: var(--nim-text);
 }
 
 /* Focus styles */

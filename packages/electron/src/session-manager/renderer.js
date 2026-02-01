@@ -41,9 +41,8 @@ function applyTheme(theme) {
   if (document.body.dataset.theme === theme) return;
   document.body.dataset.theme = theme;
   document.body.className = '';
-  if (theme === 'crystal-dark') {
-    document.body.classList.add('crystal-dark');
-  } else if (theme === 'dark') {
+  // crystal-dark uses dark theme styles
+  if (theme === 'dark' || theme === 'crystal-dark') {
     document.body.classList.add('dark');
   }
 }

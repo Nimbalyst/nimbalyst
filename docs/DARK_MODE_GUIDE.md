@@ -1,256 +1,95 @@
-# Dark Mode Support Guide for Stravu Editor
+# Dark Mode Support Guide
 
-This guide explains how to properly implement dark mode support for new components in Stravu Editor.
+This guide explains how to properly implement dark mode support for components in Nimbalyst.
 
 ## Overview
 
-Stravu Editor supports two dark themes:
-- `dark` - The standard dark theme
-- `crystal-dark` - A Tailwind-inspired gray-scale dark theme
+Nimbalyst uses a unified theming system with CSS variables. All themes (including dark themes) are applied via the `--nim-*` CSS variables, which are set dynamically by the theme system.
 
-Dark mode is implemented using CSS custom properties (CSS variables) that change based on the `data-theme` attribute.
+For detailed theming documentation, see **[packages/electron/THEMING.md](/packages/electron/THEMING.md)**.
 
-## Important: Separate Electron Windows
+## Quick Start
 
-**localStorage is NOT shared between Electron windows!** Each BrowserWindow has its own isolated localStorage. This means:
-
-- The main app window's theme setting won't automatically apply to new windows (AI Models, About, etc.)
-- New windows need the theme explicitly injected when they're created
-- Theme changes need to be synchronized across all open windows
-
-### For Separate Window Components
-
-If you're creating a new Electron window (like AI Models, Session Manager, etc.), you must:
-
-1. **Inject the theme on window creation** (in main process):
-```javascript
-// In your window creation file
-import { getTheme } from '../utils/store';
-import { getBackgroundColor } from '../theme/ThemeManager';
-
-// Set initial background color
-const window = new BrowserWindow({
-    backgroundColor: getBackgroundColor(),
-    // ... other options
-});
-
-// Inject theme into localStorage before React loads
-window.webContents.once('dom-ready', () => {
-    const currentTheme = getTheme();
-    window.webContents.executeJavaScript(`
-        localStorage.setItem('theme', '${currentTheme}');
-    `);
-});
-```
-
-2. **Add theme sync function** (in main process):
-```javascript
-export function updateMyWindowTheme() {
-    if (myWindow && !myWindow.isDestroyed()) {
-        const currentTheme = getTheme();
-        myWindow.webContents.executeJavaScript(`
-            localStorage.setItem('theme', '${currentTheme}');
-            window.dispatchEvent(new StorageEvent('storage', {
-                key: 'theme',
-                newValue: '${currentTheme}'
-            }));
-        `);
-    }
-}
-```
-
-3. **Register with ThemeManager** to receive theme updates:
-```javascript
-// In ThemeManager.ts, add your update function to updateWindowTitleBars()
-import { updateMyWindowTheme } from '../window/MyWindow';
-// ... in updateWindowTitleBars():
-updateMyWindowTheme();
-```
-
-## CSS Variable System
-
-Both themes define a comprehensive set of CSS variables in their respective theme files:
-- `/packages/rexical/src/themes/DarkEditorTheme.css`
-- `/packages/rexical/src/themes/CrystalDarkTheme.css`
-
-### Core Variables
+### Use CSS Variables for All Colors
 
 ```css
-/* Background colors */
---stravu-bg-primary      /* Main background */
---stravu-bg-secondary    /* Cards, dialogs, dropdowns */
---stravu-bg-tertiary     /* Hover states, secondary backgrounds */
-
-/* Text colors */
---stravu-text-primary    /* Main text color */
---stravu-text-secondary  /* Muted text */
---stravu-text-muted      /* Disabled/placeholder text */
-
-/* Interactive states */
---stravu-hover-bg        /* Hover background */
---stravu-active-bg       /* Active/pressed state */
---stravu-focus-border    /* Focus outline color */
-
-/* Component-specific */
---stravu-editor-border   /* Border color for components */
---stravu-toolbar-bg      /* Toolbar background */
---stravu-link-color      /* Link text color */
-```
-
-## Implementation Steps
-
-### 1. Use CSS Variables in Your Component
-
-```css
-/* Default light theme styles */
+/* Always use --nim-* variables - they automatically adapt to any theme */
 .my-component {
-  background: #fff;
-  color: #000;
-  border: 1px solid #e0e0e0;
+  background-color: var(--nim-bg);
+  color: var(--nim-text);
+  border: 1px solid var(--nim-border);
+}
+
+.my-component:hover {
+  background-color: var(--nim-bg-hover);
 }
 
 .my-button {
-  background: #4a90e2;
+  background-color: var(--nim-primary);
   color: white;
 }
 
 .my-button:hover {
-  background: #357abd;
+  background-color: var(--nim-primary-hover);
 }
 ```
 
-### 2. Add Dark Theme Support
+### No Theme-Specific Selectors Needed
+
+With the unified theme system, you do NOT need to add separate selectors for dark themes. The CSS variables automatically get the correct values for each theme.
+
+**Avoid this pattern:**
+```css
+/* BAD: Theme-specific selectors are not needed */
+[data-theme="dark"] .my-component { ... }
+[data-theme="crystal-dark"] .my-component { ... }
+```
+
+**Use this pattern instead:**
+```css
+/* GOOD: Just use CSS variables */
+.my-component {
+  background: var(--nim-bg);
+  color: var(--nim-text);
+}
+```
+
+### When You Need Dark-Specific Styling
+
+In rare cases where you need truly different styling in dark mode (not just different colors), use the `.dark-theme` class which is applied to both dark and crystal-dark themes:
 
 ```css
-/* Dark theme overrides */
-.stravu-editor[data-theme="dark"] .my-component {
-    background: var(--surface-secondary);
-    color: var(--text-primary);
-    border-color: var(--stravu-editor-border);
-}
-
-.stravu-editor[data-theme="dark"] .my-button {
-    background: var(--stravu-focus-border);
-    color: white;
-}
-
-.stravu-editor[data-theme="dark"] .my-button:hover {
-    background-color: var(--stravu-active-bg);
+/* Only use this for structural differences, not colors */
+.dark-theme .my-icon {
+  filter: invert(1);
 }
 ```
 
-### 3. Add Crystal Dark Theme Support
+## Available CSS Variables
 
-```css
-/* Crystal Dark theme overrides */
-.stravu-editor[data-theme="crystal-dark"] .my-component {
-    background: var(--surface-secondary);
-    color: var(--text-primary);
-    border-color: var(--stravu-editor-border);
-}
+See [THEMING.md](/packages/electron/THEMING.md) for the complete list of `--nim-*` variables.
 
-.stravu-editor[data-theme="crystal-dark"] .my-button {
-    background: var(--stravu-focus-border);
-    color: white;
-}
+Key variables:
+- `--nim-bg`, `--nim-bg-secondary`, `--nim-bg-tertiary` - Backgrounds
+- `--nim-text`, `--nim-text-muted`, `--nim-text-faint` - Text colors
+- `--nim-border`, `--nim-border-focus` - Borders
+- `--nim-primary`, `--nim-primary-hover` - Action/brand colors
+- `--nim-success`, `--nim-error`, `--nim-warning` - Status colors
 
-.stravu-editor[data-theme="crystal-dark"] .my-button:hover {
-    background-color: var(--stravu-active-bg);
-}
-```
+## Separate Electron Windows
 
-## Best Practices
+Each Electron window (About, Session Manager, etc.) receives theme updates via IPC. The main window broadcasts theme changes, and each window applies the appropriate class.
 
-### 1. Always Use CSS Variables
+For new windows, ensure they:
+1. Listen for `theme-change` IPC events
+2. Apply `dark-theme` class when theme is `dark` or `crystal-dark`
+3. Set `data-theme` attribute for any legacy selectors
 
-Instead of hardcoding colors for dark themes, use the predefined CSS variables. This ensures consistency and makes it easier to update themes.
+## Testing
 
-### 2. Test Both Dark Themes
+Always test your component in:
+1. Light theme
+2. Dark theme
+3. Crystal Dark theme (or any other dark theme variants)
 
-Always test your component with both `dark` and `crystal-dark` themes to ensure proper support.
-
-### 3. Handle All Interactive States
-
-Don't forget to style:
-- Hover states
-- Active/pressed states
-- Disabled states
-- Focus states
-
-### 4. Consider Contrast
-
-Ensure sufficient contrast between text and backgrounds. Use:
-- `--stravu-text-primary` for important text on dark backgrounds
-- `--stravu-text-secondary` for less important text
-- `--stravu-text-muted` for disabled or placeholder text
-
-### 5. Use Semantic Variables
-
-Choose variables based on their semantic meaning rather than their color:
-- Use `--stravu-hover-bg` for hover states, not a specific color
-- Use `--stravu-focus-border` for focus indicators
-- Use `--stravu-bg-secondary` for card/dialog backgrounds
-
-## Complete Example: Search Dialog
-
-Here's a complete example from the SearchReplacePlugin:
-
-```css
-/* Light theme (default) */
-.search-replace-dialog {
-    background: #fff;
-    border: 1px solid #e0e0e0;
-}
-
-.search-replace-button {
-    background: #4a90e2;
-    color: white;
-}
-
-/* Dark theme */
-.stravu-editor[data-theme="dark"] .search-replace-dialog {
-    background: var(--surface-secondary);
-    border-color: var(--stravu-editor-border);
-}
-
-.stravu-editor[data-theme="dark"] .search-replace-button {
-    background: var(--stravu-focus-border);
-    color: white;
-}
-
-.stravu-editor[data-theme="dark"] .search-replace-button:hover:not(:disabled) {
-    background-color: var(--stravu-active-bg);
-}
-
-/* Crystal Dark theme */
-.stravu-editor[data-theme="crystal-dark"] .search-replace-dialog {
-    background: var(--surface-secondary);
-    border-color: var(--stravu-editor-border);
-}
-
-.stravu-editor[data-theme="crystal-dark"] .search-replace-button {
-    background: var(--stravu-focus-border);
-    color: white;
-}
-
-.stravu-editor[data-theme="crystal-dark"] .search-replace-button:hover:not(:disabled) {
-    background-color: var(--stravu-active-bg);
-}
-```
-
-## Testing Dark Mode
-
-To test dark mode in the playground:
-
-1. Use the theme selector in the toolbar to switch between themes
-2. Check all component states (normal, hover, active, disabled)
-3. Verify text readability and contrast
-4. Test in different contexts (toolbar, dialogs, editor content)
-
-## Common Pitfalls
-
-1. **Forgetting hover states** - Always style hover states for interactive elements
-2. **Using hardcoded colors** - Always use CSS variables for dark theme colors
-3. **Missing disabled states** - Disabled elements need proper styling too
-4. **Insufficient contrast** - Test readability in both themes
-5. **Forgetting crystal-dark** - Don't just add dark theme support, add crystal-dark too
+Theme changes can be tested via Window > Theme menu.

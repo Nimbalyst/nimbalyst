@@ -1,8 +1,13 @@
 /**
  * Nimbalyst Unified Theme System
  *
- * This file defines the new `--nim-*` CSS variables that provide a consistent,
- * conventional naming system for theming across all packages.
+ * This file defines the `--nim-*` CSS variables with DEFAULT (light theme) values.
+ *
+ * IMPORTANT: Theme colors are applied via inline styles on document.documentElement
+ * by the theme system (useTheme.ts). This CSS only provides fallback defaults.
+ *
+ * DO NOT add theme-specific selectors like [data-theme="dark"] or .dark-theme here.
+ * Those would override the inline styles set by the theme system, breaking custom themes.
  *
  * The naming follows CSS/Tailwind conventions:
  * - --nim-bg: Main background (matches Tailwind's `bg-*`)
@@ -10,280 +15,97 @@
  * - --nim-border: Border color (matches Tailwind's `border-*`)
  * - --nim-primary: Primary action/brand color
  *
- * These variables are derived from the existing theme CSS variables defined in
- * PlaygroundEditorTheme.css, DarkEditorTheme.css, and CrystalDarkTheme.css.
- *
  * Usage:
  * - CSS: background-color: var(--nim-bg);
  * - Tailwind: bg-nim, text-nim, border-nim, etc.
  */
 
-/* ===== LIGHT THEME (Default) ===== */
-:root,
-.light-theme {
+/* ===== DEFAULT VALUES (Light Theme Fallbacks) ===== */
+:root {
   /* Backgrounds */
-  --nim-bg: var(--surface-primary, #ffffff);
-  --nim-bg-secondary: var(--surface-secondary, #f9fafb);
-  --nim-bg-tertiary: var(--surface-tertiary, #f3f4f6);
-  --nim-bg-hover: var(--surface-hover, rgba(0, 0, 0, 0.05));
-  --nim-bg-selected: var(--surface-selected, rgba(59, 130, 246, 0.1));
-  --nim-bg-active: var(--surface-active, rgba(59, 130, 246, 0.2));
+  --nim-bg: #ffffff;
+  --nim-bg-secondary: #f9fafb;
+  --nim-bg-tertiary: #f3f4f6;
+  --nim-bg-hover: rgba(0, 0, 0, 0.05);
+  --nim-bg-selected: rgba(59, 130, 246, 0.1);
+  --nim-bg-active: rgba(59, 130, 246, 0.2);
 
   /* Text */
-  --nim-text: var(--text-primary, #111827);
-  --nim-text-muted: var(--text-secondary, #6b7280);
-  --nim-text-faint: var(--text-tertiary, #9ca3af);
-  --nim-text-disabled: var(--text-disabled, #d1d5db);
+  --nim-text: #111827;
+  --nim-text-muted: #6b7280;
+  --nim-text-faint: #9ca3af;
+  --nim-text-disabled: #d1d5db;
 
   /* Borders */
-  --nim-border: var(--border-primary, #e5e7eb);
-  --nim-border-focus: var(--border-focus, #3b82f6);
+  --nim-border: #e5e7eb;
+  --nim-border-focus: #3b82f6;
 
   /* Primary (action/brand color) */
-  --nim-primary: var(--accent-primary, #3b82f6);
-  --nim-primary-hover: var(--accent-primary-hover, #2563eb);
+  --nim-primary: #3b82f6;
+  --nim-primary-hover: #2563eb;
 
   /* Links */
-  --nim-link: var(--accent-link, rgb(33, 111, 219));
-  --nim-link-hover: var(--accent-link-hover, rgb(33, 111, 219));
+  --nim-link: rgb(33, 111, 219);
+  --nim-link-hover: rgb(33, 111, 219);
 
   /* Accent subtle (for override banners, etc.) */
   --nim-accent-subtle: rgba(59, 130, 246, 0.1);
 
   /* Status */
-  --nim-success: var(--success-color, #10b981);
-  --nim-warning: var(--warning-color, #f59e0b);
-  --nim-error: var(--error-color, #ef4444);
-  --nim-info: var(--info-color, #3b82f6);
+  --nim-success: #10b981;
+  --nim-warning: #f59e0b;
+  --nim-error: #ef4444;
+  --nim-info: #3b82f6;
+  --nim-purple: #7c3aed;
 
   /* Code blocks */
-  --nim-code-bg: var(--code-background, rgb(240, 242, 245));
-  --nim-code-text: var(--code-text, #111827);
-  --nim-code-border: var(--code-border, #ccc);
-  --nim-code-gutter: var(--code-gutter, #eee);
+  --nim-code-bg: rgb(240, 242, 245);
+  --nim-code-text: #111827;
+  --nim-code-border: #ccc;
+  --nim-code-gutter: #eee;
 
   /* Table */
-  --nim-table-border: var(--table-border, #bbb);
-  --nim-table-header: var(--table-header, #f2f3f5);
-  --nim-table-cell: var(--table-cell, #ffffff);
-  --nim-table-stripe: var(--table-stripe, #f2f5fb);
+  --nim-table-border: #bbb;
+  --nim-table-header: #f2f3f5;
+  --nim-table-cell: #ffffff;
+  --nim-table-stripe: #f2f5fb;
 
   /* Toolbar */
-  --nim-toolbar-bg: var(--toolbar-background, #ffffff);
-  --nim-toolbar-border: var(--toolbar-border, #e5e7eb);
-  --nim-toolbar-hover: var(--toolbar-button-hover, #f3f4f6);
-  --nim-toolbar-active: var(--toolbar-button-active, rgba(59, 130, 246, 0.2));
+  --nim-toolbar-bg: #ffffff;
+  --nim-toolbar-border: #e5e7eb;
+  --nim-toolbar-hover: #f3f4f6;
+  --nim-toolbar-active: rgba(59, 130, 246, 0.2);
 
   /* Special */
-  --nim-highlight-bg: var(--highlight-background, rgba(255, 212, 0, 0.14));
-  --nim-highlight-border: var(--highlight-border, rgba(255, 212, 0, 0.3));
-  --nim-quote-text: var(--quote-text, rgb(101, 103, 107));
-  --nim-quote-border: var(--quote-border, rgb(206, 208, 212));
+  --nim-highlight-bg: rgba(255, 212, 0, 0.14);
+  --nim-highlight-border: rgba(255, 212, 0, 0.3);
+  --nim-quote-text: rgb(101, 103, 107);
+  --nim-quote-border: rgb(206, 208, 212);
 
   /* Scrollbar */
-  --nim-scrollbar-thumb: var(--scrollbar-thumb, #d1d5db);
-  --nim-scrollbar-thumb-hover: var(--scrollbar-thumb-hover, #9ca3af);
-  --nim-scrollbar-track: var(--scrollbar-track, transparent);
+  --nim-scrollbar-thumb: #d1d5db;
+  --nim-scrollbar-thumb-hover: #9ca3af;
+  --nim-scrollbar-track: transparent;
 
   /* Diff */
-  --nim-diff-add-bg: var(--diff-add-bg, #e6ffed);
-  --nim-diff-add-border: var(--diff-add-border, #e6ffed);
-  --nim-diff-remove-bg: var(--diff-remove-bg, #ffebe9);
-  --nim-diff-remove-border: var(--diff-remove-border, #ffebe9);
+  --nim-diff-add-bg: #e6ffed;
+  --nim-diff-add-border: #e6ffed;
+  --nim-diff-remove-bg: #ffebe9;
+  --nim-diff-remove-border: #ffebe9;
 
-  /* Syntax highlighting - use var() pattern to allow inline style overrides */
-  --nim-code-comment: var(--code-comment, slategray);
-  --nim-code-punctuation: var(--code-punctuation, #999);
-  --nim-code-property: var(--code-property, #905);
-  --nim-code-selector: var(--code-selector, #690);
-  --nim-code-operator: var(--code-operator, #9a6e3a);
-  --nim-code-attr: var(--code-attr, #07a);
-  --nim-code-variable: var(--code-variable, #e90);
-  --nim-code-function: var(--code-function, #dd4a68);
+  /* Syntax highlighting */
+  --nim-code-comment: slategray;
+  --nim-code-punctuation: #999;
+  --nim-code-property: #905;
+  --nim-code-selector: #690;
+  --nim-code-operator: #9a6e3a;
+  --nim-code-attr: #07a;
+  --nim-code-variable: #e90;
+  --nim-code-function: #dd4a68;
 
   /* File status colors (for FilesEditedSidebar) */
   --nim-file-new: #2d8a6e;
   --nim-file-edited: #4a7ab8;
   --nim-file-deleted: #b85c5c;
-  --nim-file-committed: var(--nim-text-muted);
-}
-
-/* ===== DARK THEME ===== */
-[data-theme="dark"],
-.dark-theme {
-  /* Backgrounds */
-  --nim-bg: var(--surface-primary, #2d2d2d);
-  --nim-bg-secondary: var(--surface-secondary, #1a1a1a);
-  --nim-bg-tertiary: var(--surface-tertiary, #3a3a3a);
-  --nim-bg-hover: var(--surface-hover, rgba(255, 255, 255, 0.05));
-  --nim-bg-selected: var(--surface-selected, rgba(96, 165, 250, 0.15));
-  --nim-bg-active: var(--surface-active, #4a4a4a);
-
-  /* Text */
-  --nim-text: var(--text-primary, #ffffff);
-  --nim-text-muted: var(--text-secondary, #b3b3b3);
-  --nim-text-faint: var(--text-tertiary, #808080);
-  --nim-text-disabled: var(--text-disabled, #666666);
-
-  /* Borders */
-  --nim-border: var(--border-primary, #4a4a4a);
-  --nim-border-focus: var(--border-focus, #60a5fa);
-
-  /* Primary (action/brand color) */
-  --nim-primary: var(--accent-primary, #60a5fa);
-  --nim-primary-hover: var(--accent-primary-hover, #3b82f6);
-
-  /* Links */
-  --nim-link: var(--accent-link, #60a5fa);
-  --nim-link-hover: var(--accent-link-hover, #93c5fd);
-
-  /* Accent subtle (for override banners, etc.) */
-  --nim-accent-subtle: rgba(96, 165, 250, 0.15);
-
-  /* Status */
-  --nim-success: var(--success-color, #4ade80);
-  --nim-warning: var(--warning-color, #fbbf24);
-  --nim-error: var(--error-color, #ef4444);
-  --nim-info: var(--info-color, #60a5fa);
-
-  /* Code blocks */
-  --nim-code-bg: var(--code-background, #1e1e1e);
-  --nim-code-text: var(--code-text, #d4d4d4);
-  --nim-code-border: var(--code-border, #4a4a4a);
-  --nim-code-gutter: var(--code-gutter, #2a2a2a);
-
-  /* Table */
-  --nim-table-border: var(--table-border, #4a4a4a);
-  --nim-table-header: var(--table-header, #3a3a3a);
-  --nim-table-cell: var(--table-cell, #2d2d2d);
-  --nim-table-stripe: var(--table-stripe, #363636);
-
-  /* Toolbar */
-  --nim-toolbar-bg: var(--toolbar-background, #2d2d2d);
-  --nim-toolbar-border: var(--toolbar-border, #4a4a4a);
-  --nim-toolbar-hover: var(--toolbar-button-hover, #3a3a3a);
-  --nim-toolbar-active: var(--toolbar-button-active, rgba(96, 165, 250, 0.2));
-
-  /* Special */
-  --nim-highlight-bg: var(--highlight-background, rgba(255, 212, 0, 0.2));
-  --nim-highlight-border: var(--highlight-border, rgba(255, 212, 0, 0.4));
-  --nim-quote-text: var(--quote-text, #b3b3b3);
-  --nim-quote-border: var(--quote-border, #4a4a4a);
-
-  /* Scrollbar */
-  --nim-scrollbar-thumb: var(--scrollbar-thumb, #4a4a4a);
-  --nim-scrollbar-thumb-hover: var(--scrollbar-thumb-hover, #5a5a5a);
-  --nim-scrollbar-track: var(--scrollbar-track, transparent);
-
-  /* Diff */
-  --nim-diff-add-bg: var(--diff-add-bg, rgba(40, 167, 69, 0.15));
-  --nim-diff-add-border: var(--diff-add-border, rgba(40, 167, 69, 0.4));
-  --nim-diff-remove-bg: var(--diff-remove-bg, rgba(220, 53, 69, 0.15));
-  --nim-diff-remove-border: var(--diff-remove-border, rgba(220, 53, 69, 0.4));
-
-  /* Syntax highlighting - use var() pattern to allow inline style overrides */
-  --nim-code-comment: var(--code-comment, #6a9955);
-  --nim-code-punctuation: var(--code-punctuation, #cccccc);
-  --nim-code-property: var(--code-property, #9cdcfe);
-  --nim-code-selector: var(--code-selector, #d7ba7d);
-  --nim-code-operator: var(--code-operator, #d4d4d4);
-  --nim-code-attr: var(--code-attr, #92c5f8);
-  --nim-code-variable: var(--code-variable, #4fc1ff);
-  --nim-code-function: var(--code-function, #dcdcaa);
-
-  /* File status colors (for FilesEditedSidebar) */
-  --nim-file-new: #5eaa8d;
-  --nim-file-edited: #7aa2d4;
-  --nim-file-deleted: #c97a7a;
-  --nim-file-committed: var(--nim-text-muted);
-}
-
-/* ===== CRYSTAL DARK THEME ===== */
-[data-theme="crystal-dark"],
-.crystal-dark-theme {
-  /* Backgrounds */
-  --nim-bg: var(--surface-primary, #0f172a);
-  --nim-bg-secondary: var(--surface-secondary, #020617);
-  --nim-bg-tertiary: var(--surface-tertiary, #1e293b);
-  --nim-bg-hover: var(--surface-hover, rgba(255, 255, 255, 0.05));
-  --nim-bg-selected: var(--surface-selected, rgba(56, 189, 248, 0.15));
-  --nim-bg-active: var(--surface-active, #4B5563);
-
-  /* Text */
-  --nim-text: var(--text-primary, #f8fafc);
-  --nim-text-muted: var(--text-secondary, #cbd5e1);
-  --nim-text-faint: var(--text-tertiary, #94a3b8);
-  --nim-text-disabled: var(--text-disabled, #64748b);
-
-  /* Borders */
-  --nim-border: var(--border-primary, #1e293b);
-  --nim-border-focus: var(--border-focus, #3B82F6);
-
-  /* Primary (action/brand color) */
-  --nim-primary: var(--accent-primary, #38bdf8);
-  --nim-primary-hover: var(--accent-primary-hover, #7dd3fc);
-
-  /* Links */
-  --nim-link: var(--accent-link, #60A5FA);
-  --nim-link-hover: var(--accent-link-hover, #93C5FD);
-
-  /* Accent subtle (for override banners, etc.) */
-  --nim-accent-subtle: rgba(56, 189, 248, 0.15);
-
-  /* Status */
-  --nim-success: var(--success-color, #10B981);
-  --nim-warning: var(--warning-color, #EAB308);
-  --nim-error: var(--error-color, #EF4444);
-  --nim-info: var(--info-color, #38bdf8);
-
-  /* Code blocks */
-  --nim-code-bg: var(--code-background, #0F172A);
-  --nim-code-text: var(--code-text, #F1F5F9);
-  --nim-code-border: var(--code-border, #374151);
-  --nim-code-gutter: var(--code-gutter, #1E293B);
-
-  /* Table */
-  --nim-table-border: var(--table-border, #374151);
-  --nim-table-header: var(--table-header, #374151);
-  --nim-table-cell: var(--table-cell, #1F2837);
-  --nim-table-stripe: var(--table-stripe, #374151);
-
-  /* Toolbar */
-  --nim-toolbar-bg: var(--toolbar-background, #1F2837);
-  --nim-toolbar-border: var(--toolbar-border, #374151);
-  --nim-toolbar-hover: var(--toolbar-button-hover, #374151);
-  --nim-toolbar-active: var(--toolbar-button-active, rgba(37, 99, 235, 0.2));
-
-  /* Special */
-  --nim-highlight-bg: var(--highlight-background, rgba(234, 179, 8, 0.2));
-  --nim-highlight-border: var(--highlight-border, rgba(234, 179, 8, 0.4));
-  --nim-quote-text: var(--quote-text, #D1D5DB);
-  --nim-quote-border: var(--quote-border, #4B5563);
-
-  /* Scrollbar */
-  --nim-scrollbar-thumb: var(--scrollbar-thumb, #374151);
-  --nim-scrollbar-thumb-hover: var(--scrollbar-thumb-hover, #4B5563);
-  --nim-scrollbar-track: var(--scrollbar-track, transparent);
-
-  /* Diff */
-  --nim-diff-add-bg: var(--diff-add-bg, rgba(40, 167, 69, 0.15));
-  --nim-diff-add-border: var(--diff-add-border, rgba(40, 167, 69, 0.4));
-  --nim-diff-remove-bg: var(--diff-remove-bg, rgba(220, 53, 69, 0.15));
-  --nim-diff-remove-border: var(--diff-remove-border, rgba(220, 53, 69, 0.4));
-
-  /* Syntax highlighting - use var() pattern to allow inline style overrides */
-  --nim-code-comment: var(--code-comment, #9CA3AF);
-  --nim-code-punctuation: var(--code-punctuation, #D1D5DB);
-  --nim-code-property: var(--code-property, #60A5FA);
-  --nim-code-selector: var(--code-selector, #FDE047);
-  --nim-code-operator: var(--code-operator, #E5E7EB);
-  --nim-code-attr: var(--code-attr, #60A5FA);
-  --nim-code-variable: var(--code-variable, #34D399);
-  --nim-code-function: var(--code-function, #A78BFA);
-
-  /* File status colors (for FilesEditedSidebar) */
-  --nim-file-new: #5eaa8d;
-  --nim-file-edited: #7aa2d4;
-  --nim-file-deleted: #c97a7a;
   --nim-file-committed: var(--nim-text-muted);
 }

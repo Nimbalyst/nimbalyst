@@ -405,6 +405,8 @@ interface ElectronAPI {
     getSettings: () => Promise<{ projectCommandsEnabled: boolean; userCommandsEnabled: boolean }>;
     setProjectCommandsEnabled: (enabled: boolean) => Promise<void>;
     setUserCommandsEnabled: (enabled: boolean) => Promise<void>;
+    getEnv: () => Promise<Record<string, string>>;
+    setEnv: (env: Record<string, string>) => Promise<void>;
   };
 
   // Extension Development Kit (EDK) API

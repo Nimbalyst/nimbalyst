@@ -191,7 +191,7 @@
 /* ===== HASHTAGS ===== */
 
 .nim-hashtag {
-  background-color: rgba(88, 144, 255, 0.15);
+  background-color: color-mix(in srgb, var(--nim-primary) 15%, transparent);
   border-radius: 4px;
   padding-left: 3px;
   padding-right: 3px;
@@ -791,8 +791,7 @@ table.nim-diff-add {
 /* Mermaid SVG dark theme overrides.
    Mermaid renders inline styles, so !important is needed to override them.
    Uses CSS variables so they adapt to any dark theme variant. */
-[data-theme="dark"] .mermaid-render-container svg,
-[data-theme="crystal-dark"] .mermaid-render-container svg {
+.dark-theme .mermaid-render-container svg {
   /* Node/box fills */
   & .node rect,
   & .node circle,
@@ -935,21 +934,12 @@ table.nim-diff-add {
 
 /* ===== DARK THEME OVERRIDES ===== */
 
-[data-theme="dark"] .nim-diff-add,
-[data-theme="crystal-dark"] .nim-diff-add {
+.dark-theme .nim-diff-add {
   outline: 1px solid var(--nim-diff-add-border);
 }
 
-[data-theme="dark"] .nim-diff-remove,
-[data-theme="crystal-dark"] .nim-diff-remove {
+.dark-theme .nim-diff-remove {
   outline: 1px solid var(--nim-diff-remove-border);
   text-decoration: line-through;
   text-decoration-color: var(--nim-diff-remove-border);
-}
-
-/* Dark theme code gutter */
-[data-theme="dark"] .nim-code:before {
-  background-color: var(--nim-code-gutter);
-  border-right: 1px solid var(--nim-code-border);
-  color: var(--nim-text-faint);
 }

@@ -17,14 +17,14 @@
   margin: 0;
   cursor: pointer;
   appearance: none;
-  border: 2px solid #9ca3af;
+  border: 2px solid var(--nim-text-faint);
   border-radius: 3px;
   position: relative;
   transition: all 0.2s ease;
 }
 
 .tracker-checkbox:hover {
-  border-color: #6b7280;
+  border-color: var(--nim-text-muted);
 }
 
 .tracker-checkbox:checked::before {
@@ -41,39 +41,39 @@
 
 /* Type-specific checkbox colors */
 .tracker-checkbox.tracker-task {
-  border-color: #3b82f6;
+  border-color: var(--nim-info);
 }
 
 .tracker-checkbox.tracker-task:checked {
-  background: #3b82f6;
-  border-color: #3b82f6;
+  background: var(--nim-info);
+  border-color: var(--nim-info);
 }
 
 .tracker-checkbox.tracker-bug {
-  border-color: #dc2626;
+  border-color: var(--nim-error);
 }
 
 .tracker-checkbox.tracker-bug:checked {
-  background: #dc2626;
-  border-color: #dc2626;
+  background: var(--nim-error);
+  border-color: var(--nim-error);
 }
 
 .tracker-checkbox.tracker-plan {
-  border-color: #7c3aed;
+  border-color: var(--nim-purple);
 }
 
 .tracker-checkbox.tracker-plan:checked {
-  background: #7c3aed;
-  border-color: #7c3aed;
+  background: var(--nim-purple);
+  border-color: var(--nim-purple);
 }
 
 .tracker-checkbox.tracker-idea {
-  border-color: #f59e0b;
+  border-color: var(--nim-warning);
 }
 
 .tracker-checkbox.tracker-idea:checked {
-  background: #f59e0b;
-  border-color: #f59e0b;
+  background: var(--nim-warning);
+  border-color: var(--nim-warning);
 }
 
 /* Type badge (e.g., @bug, @task, @plan) with icons inside */
@@ -96,19 +96,19 @@
 
 /* Priority icon colors */
 .tracker-priority-icon[data-priority="low"] {
-  color: #10b981;
+  color: var(--nim-success);
 }
 
 .tracker-priority-icon[data-priority="medium"] {
-  color: #f59e0b;
+  color: var(--nim-warning);
 }
 
 .tracker-priority-icon[data-priority="high"] {
-  color: #ef4444;
+  color: var(--nim-error);
 }
 
 .tracker-priority-icon[data-priority="critical"] {
-  color: #dc2626;
+  color: var(--nim-error);
   animation: pulse-priority 1.5s ease-in-out infinite;
 }
 
@@ -119,44 +119,44 @@
 
 /* Status icon colors */
 .tracker-status-icon[data-status="to-do"] {
-  color: #9ca3af;
+  color: var(--nim-text-faint);
 }
 
 .tracker-status-icon[data-status="in-progress"] {
-  color: #f59e0b;
+  color: var(--nim-warning);
 }
 
 .tracker-status-icon[data-status="in-review"] {
-  color: #8b5cf6;
+  color: var(--nim-purple);
 }
 
 .tracker-status-icon[data-status="done"] {
-  color: #10b981;
+  color: var(--nim-success);
 }
 
 .tracker-status-icon[data-status="blocked"] {
-  color: #ef4444;
+  color: var(--nim-error);
 }
 
 /* Type badge background colors */
 .tracker-type-badge.tracker-type-task {
-  background: #dbeafe;
-  color: #1e40af;
+  background: color-mix(in srgb, var(--nim-info) 15%, transparent);
+  color: var(--nim-info);
 }
 
 .tracker-type-badge.tracker-type-bug {
-  background: #fee2e2;
-  color: #991b1b;
+  background: color-mix(in srgb, var(--nim-error) 15%, transparent);
+  color: var(--nim-error);
 }
 
 .tracker-type-badge.tracker-type-plan {
-  background: #ede9fe;
-  color: #6b21a8;
+  background: color-mix(in srgb, var(--nim-purple) 15%, transparent);
+  color: var(--nim-purple);
 }
 
 .tracker-type-badge.tracker-type-idea {
-  background: #fef3c7;
-  color: #92400e;
+  background: color-mix(in srgb, var(--nim-warning) 15%, transparent);
+  color: var(--nim-warning);
 }
 
 /* Content area where children render */
@@ -173,16 +173,6 @@
   opacity: 0.6;
 }
 
-/* Dark theme adjustments */
-[data-theme="dark"] .tracker-checkbox,
-[data-theme="crystal-dark"] .tracker-checkbox {
-  border-color: #6b7280;
-}
-
-[data-theme="dark"] .tracker-checkbox:hover,
-[data-theme="crystal-dark"] .tracker-checkbox:hover {
-  border-color: #9ca3af;
-}
 
 /* TrackerItem Badge Styles (legacy DecoratorNode styles - keep for now) */
 
@@ -212,23 +202,23 @@
 
 /* Type-specific badge colors */
 .tracker-item-badge.task {
-  background: #e0f2fe;
-  color: #0369a1;
+  background: color-mix(in srgb, var(--nim-info) 15%, transparent);
+  color: var(--nim-info);
 }
 
 .tracker-item-badge.bug {
-  background: #fee2e2;
-  color: #dc2626;
+  background: color-mix(in srgb, var(--nim-error) 15%, transparent);
+  color: var(--nim-error);
 }
 
 .tracker-item-badge.plan {
-  background: #f3e8ff;
-  color: #7c3aed;
+  background: color-mix(in srgb, var(--nim-purple) 15%, transparent);
+  color: var(--nim-purple);
 }
 
 .tracker-item-badge.idea {
-  background: #fef3c7;
-  color: #f59e0b;
+  background: color-mix(in srgb, var(--nim-warning) 15%, transparent);
+  color: var(--nim-warning);
 }
 
 .tracker-item-type-label {
@@ -259,19 +249,13 @@
   top: 100%;
   left: 0;
   margin-top: 4px;
-  background: white;
-  border: 1px solid #d1d5db;
+  background: var(--nim-bg-secondary);
+  border: 1px solid var(--nim-border);
   border-radius: 8px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
   z-index: 1000;
   width: 480px;
   padding: 16px;
-}
-
-[data-theme="dark"] .tracker-item-popover,
-[data-theme="crystal-dark"] .tracker-item-popover {
-  background: #1e293b;
-  border-color: #334155;
 }
 
 .tracker-item-popover-header {
@@ -280,16 +264,10 @@
   gap: 8px;
   padding-bottom: 10px;
   margin-bottom: 12px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--nim-border);
   font-weight: 600;
   font-size: 14px;
-  color: #374151;
-}
-
-[data-theme="dark"] .tracker-item-popover-header,
-[data-theme="crystal-dark"] .tracker-item-popover-header {
-  border-bottom-color: #334155;
-  color: #e2e8f0;
+  color: var(--nim-text);
 }
 
 .tracker-item-popover-header .material-symbols-outlined {
@@ -326,32 +304,21 @@
 .tracker-item-popover-field textarea {
   width: 100%;
   padding: 8px 10px;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--nim-border);
   border-radius: 6px;
   font-size: 14px;
   font-family: inherit;
-  background: white;
-  color: #1f2937;
+  background: var(--nim-bg-secondary);
+  color: var(--nim-text);
   transition: border-color 0.15s ease;
-}
-
-[data-theme="dark"] .tracker-item-popover-field input,
-[data-theme="dark"] .tracker-item-popover-field select,
-[data-theme="dark"] .tracker-item-popover-field textarea,
-[data-theme="crystal-dark"] .tracker-item-popover-field input,
-[data-theme="crystal-dark"] .tracker-item-popover-field select,
-[data-theme="crystal-dark"] .tracker-item-popover-field textarea {
-  background: #1e293b;
-  color: #e2e8f0;
-  border-color: #334155;
 }
 
 .tracker-item-popover-field input:focus,
 .tracker-item-popover-field select:focus,
 .tracker-item-popover-field textarea:focus {
   outline: none;
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  border-color: var(--nim-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--nim-primary) 10%, transparent);
 }
 
 .tracker-item-popover-description {
@@ -367,29 +334,17 @@
 .tracker-item-popover-footer {
   padding-top: 10px;
   margin-top: 12px;
-  border-top: 1px solid #e5e7eb;
+  border-top: 1px solid var(--nim-border);
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
-[data-theme="dark"] .tracker-item-popover-footer,
-[data-theme="crystal-dark"] .tracker-item-popover-footer {
-  border-top-color: #334155;
-}
-
 .tracker-item-id,
 .tracker-item-date {
   font-size: 11px;
-  color: #6b7280;
+  color: var(--nim-text-muted);
   font-family: -apple-system, BlinkMacSystemFont, 'SF Mono', 'Monaco', 'Consolas', monospace;
-}
-
-[data-theme="dark"] .tracker-item-id,
-[data-theme="dark"] .tracker-item-date,
-[data-theme="crystal-dark"] .tracker-item-id,
-[data-theme="crystal-dark"] .tracker-item-date {
-  color: #9ca3af;
 }
 
 .tracker-item-id {

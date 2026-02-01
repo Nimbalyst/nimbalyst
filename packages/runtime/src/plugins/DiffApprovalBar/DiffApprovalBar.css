@@ -1,12 +1,12 @@
 /* Highlight the currently selected change group - these are applied dynamically to editor nodes */
 .diff-group-highlight-removed {
-  background-color: rgba(220, 38, 38, 0.15) !important;
+  background-color: color-mix(in srgb, var(--nim-error) 15%, transparent) !important;
 }
 
 .diff-group-highlight-added {
-  background-color: rgba(22, 163, 74, 0.15) !important;
+  background-color: color-mix(in srgb, var(--nim-success) 15%, transparent) !important;
 }
 
 .diff-group-highlight-modified {
-  background-color: rgba(59, 130, 246, 0.15) !important;
+  background-color: color-mix(in srgb, var(--nim-info) 15%, transparent) !important;
 }

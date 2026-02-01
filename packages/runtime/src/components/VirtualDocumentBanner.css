@@ -1,6 +1,6 @@
 .virtual-document-banner {
-  background-color: var(--banner-background);
-  border-bottom: 1px solid var(--banner-border);
+  background-color: var(--nim-accent-subtle);
+  border-bottom: 1px solid var(--nim-border);
   padding: 0.5rem 1rem;
   display: flex;
   align-items: center;
@@ -12,7 +12,7 @@
   align-items: center;
   gap: 0.5rem;
   font-size: 0.875rem;
-  color: var(--banner-text);
+  color: var(--nim-info);
 }
 
 .virtual-document-banner-icon {
@@ -27,7 +27,7 @@
 .virtual-document-banner-dismiss {
   background: none;
   border: none;
-  color: var(--banner-text);
+  color: var(--nim-info);
   font-size: 1.5rem;
   line-height: 1;
   cursor: pointer;
@@ -38,18 +38,4 @@
 
 .virtual-document-banner-dismiss:hover {
   opacity: 1;
-}
-
-/* Theme support - add these to your main theme file */
-:root {
-  --banner-background: #e3f2fd;
-  --banner-border: #90caf9;
-  --banner-text: #1565c0;
-}
-
-[data-theme="dark"],
-[data-theme="crystal-dark"] {
-  --banner-background: #1a2332;
-  --banner-border: #2d3748;
-  --banner-text: #93c5fd;
 }

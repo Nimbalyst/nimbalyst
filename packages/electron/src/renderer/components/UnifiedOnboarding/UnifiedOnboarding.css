@@ -100,7 +100,7 @@
 }
 
 .required-asterisk {
-  color: #e74c3c;
+  color: var(--nim-error);
   margin-left: 4px;
 }
 
@@ -169,7 +169,7 @@
 .role-option.selected {
   background: var(--nim-bg-hover);
   border-color: var(--nim-primary);
-  box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.15);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--nim-primary) 15%, transparent);
 }
 
 .role-option input[type="radio"] {
@@ -242,15 +242,15 @@
 
 .unified-onboarding-input:focus {
   border-color: var(--nim-primary);
-  box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.1);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--nim-primary) 10%, transparent);
 }
 
 .unified-onboarding-input.error {
-  border-color: #e74c3c;
+  border-color: var(--nim-error);
 }
 
 .unified-onboarding-input.error:focus {
-  box-shadow: 0 0 0 3px rgba(231, 76, 60, 0.1);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--nim-error) 10%, transparent);
 }
 
 .unified-onboarding-select {
@@ -269,13 +269,13 @@
 
 .unified-onboarding-select:focus {
   border-color: var(--nim-primary);
-  box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.1);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--nim-primary) 10%, transparent);
 }
 
 .error-text {
   margin: 8px 0 0 0;
   font-size: 13px;
-  color: #e74c3c;
+  color: var(--nim-error);
 }
 
 /* Mode selection */
@@ -307,7 +307,7 @@
 .mode-option.selected {
   background: var(--nim-bg-hover);
   border-color: var(--nim-primary);
-  box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.15);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--nim-primary) 15%, transparent);
 }
 
 .mode-option input[type="radio"] {
@@ -524,12 +524,12 @@
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.15s ease;
-  box-shadow: 0 2px 8px rgba(88, 166, 255, 0.2);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--nim-primary) 20%, transparent);
 }
 
 .unified-onboarding-submit:hover:not(:disabled) {
-  background: #4d9eff;
-  box-shadow: 0 4px 12px rgba(88, 166, 255, 0.3);
+  background: var(--nim-primary-hover);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--nim-primary) 30%, transparent);
   transform: translateY(-1px);
 }
 
@@ -590,12 +590,12 @@
   color: white;
   background: var(--nim-primary);
   border: none;
-  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.2);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--nim-primary) 20%, transparent);
 }
 
 .unified-onboarding-nav-button.primary:hover {
   background: var(--nim-primary-hover);
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--nim-primary) 30%, transparent);
   transform: translateY(-1px);
 }
 

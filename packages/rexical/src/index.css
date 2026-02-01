@@ -485,7 +485,7 @@ i.horizontal-rule {
 }
 
 .icon.table {
-  background-color: #6c757d;
+  background-color: var(--nim-text-muted);
   mask-image: url(images/icons/table.svg);
   -webkit-mask-image: url(images/icons/table.svg);
   mask-repeat: no-repeat;
@@ -1110,7 +1110,7 @@ i.page-break,
 }
 
 .editor-shell .editor-image .image-caption-button:hover {
-  background-color: rgba(60, 132, 244, 0.5);
+  background-color: color-mix(in srgb, var(--nim-primary) 50%, transparent);
 }
 
 .editor-shell .editor-image .image-edit-button {
@@ -1131,7 +1131,7 @@ i.page-break,
 }
 
 .editor-shell .editor-image .image-edit-button:hover {
-  background-color: rgba(60, 132, 244, 0.1);
+  background-color: color-mix(in srgb, var(--nim-primary) 10%, transparent);
 }
 
 .editor-shell .editor-image .image-resizer {
@@ -1139,8 +1139,8 @@ i.page-break,
   width: 7px;
   height: 7px;
   position: absolute;
-  background-color: rgb(60, 132, 244);
-  border: 1px solid #fff;
+  background-color: var(--nim-primary);
+  border: 1px solid var(--nim-bg);
 }
 
 .editor-shell .editor-image .image-resizer.image-resizer-n {
@@ -1258,9 +1258,9 @@ i.page-break,
 
 .editor-shell .inline-editor-image .image-caption-container {
   display: block;
-  background-color: #f4f4f4;
+  background-color: var(--nim-bg-tertiary);
   min-width: 100%;
-  color: #000;
+  color: var(--nim-text);
   overflow: hidden;
 }
 
@@ -1462,15 +1462,15 @@ button.action-button:disabled {
 
 @keyframes mic-pulsate-color {
   0% {
-    background-color: #ffdcdc;
+    background-color: color-mix(in srgb, var(--nim-error) 20%, transparent);
   }
 
   50% {
-    background-color: #ff8585;
+    background-color: color-mix(in srgb, var(--nim-error) 50%, transparent);
   }
 
   100% {
-    background-color: #ffdcdc;
+    background-color: color-mix(in srgb, var(--nim-error) 20%, transparent);
   }
 }
 
@@ -1554,7 +1554,7 @@ button.action-button:disabled {
 .stravu-editor .toolbar {
   display: flex;
   margin-bottom: 1px;
-  background: var(--nim-toolbar-bg, var(--nim-bg));
+  background: var(--nim-toolbar-bg);
   padding: 2px;
   border-top-left-radius: 10px;
   flex-shrink: 0;
@@ -1607,7 +1607,7 @@ button.action-button:disabled {
 }
 
 .stravu-editor button.toolbar-item.active {
-  background-color: rgba(223, 232, 250, 0.3);
+  background-color: var(--nim-toolbar-active);
 }
 
 .stravu-editor button.toolbar-item.active i {
@@ -1615,7 +1615,7 @@ button.action-button:disabled {
 }
 
 .stravu-editor .toolbar-item:hover:not([disabled]) {
-  background-color: #eee;
+  background-color: var(--nim-toolbar-hover);
 }
 
 .stravu-editor .toolbar-item.font-family .text {
@@ -1777,7 +1777,7 @@ button.action-button:disabled {
   margin: 25px;
   padding: 20px 10px;
   position: relative;
-  border: 1px solid #e8e8e8;
+  border: 1px solid var(--nim-border);
   font-family: 'Reenie Beanie';
   font-size: 24px;
   border-bottom-right-radius: 60px 5px;
@@ -1918,7 +1918,7 @@ button.action-button:disabled {
 }
 
 .editor-equation.focused {
-  outline: 2px solid rgb(60, 132, 244);
+  outline: 2px solid var(--nim-primary);
 }
 
 button.item i {
@@ -1926,7 +1926,7 @@ button.item i {
 }
 
 .stravu-editor button.item.dropdown-item-active {
-  background-color: rgba(223, 232, 250, 0.3);
+  background-color: var(--nim-toolbar-active);
 }
 
 .stravu-editor button.item.dropdown-item-active i {

@@ -218,11 +218,9 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
     [displayColumnCount, frozenColumnCount, columnFormats, columnWidths, diffState]
   );
 
-  // Theme for RevoGrid
-  const gridTheme = useMemo(
-    () => (theme === 'light' ? 'default' : 'darkCompact') as 'default' | 'darkCompact',
-    [theme]
-  );
+  // Note: We don't use RevoGrid's built-in themes (default/darkCompact) because
+  // they apply hardcoded colors that override our CSS variables.
+  // Instead, we rely entirely on our CSS that maps --revo-* to --nim-* variables.
 
   // Initialize grid operations when grid is ready
   useEffect(() => {
@@ -1569,7 +1567,6 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
             }
           }}
           columns={columns}
-          theme={gridTheme}
           rowHeaders={true}
           resize={true}
           autoSizeColumn={false}

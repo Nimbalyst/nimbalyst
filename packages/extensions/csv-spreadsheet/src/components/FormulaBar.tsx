@@ -71,7 +71,7 @@ export const FormulaBar = forwardRef<FormulaBarHandle, FormulaBarProps>(
         <input
           ref={inputRef}
           type="text"
-          className="flex-1 px-2.5 py-1.5 font-mono text-[13px] bg-nim border border-nim rounded text-nim outline-none focus:border-[var(--nim-primary)] focus:shadow-[0_0_0_2px_rgba(59,130,246,0.2)] disabled:bg-nim-secondary disabled:text-nim-faint disabled:cursor-not-allowed placeholder:text-nim-faint"
+          className="flex-1 px-2.5 py-1.5 font-mono text-[13px] bg-nim border border-nim rounded text-nim outline-none focus:border-[var(--nim-primary)] focus:shadow-[0_0_0_2px_color-mix(in_srgb,var(--nim-primary)_20%,transparent)] disabled:bg-nim-secondary disabled:text-nim-faint disabled:cursor-not-allowed placeholder:text-nim-faint"
           value={localValue}
           onChange={handleChange}
           onBlur={handleBlur}

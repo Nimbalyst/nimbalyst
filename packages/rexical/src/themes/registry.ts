@@ -62,6 +62,7 @@ const lightThemeColors: ExtendedThemeColors = {
   'warning': '#f59e0b',
   'error': '#ef4444',
   'info': '#3b82f6',
+  'purple': '#7c3aed',
 
   // Code
   'code-bg': 'rgb(240, 242, 245)',
@@ -171,6 +172,7 @@ const darkThemeColors: ExtendedThemeColors = {
   'warning': '#fbbf24',
   'error': '#ef4444',
   'info': '#60a5fa',
+  'purple': '#a78bfa',
 
   // Code
   'code-bg': '#1e1e1e',
@@ -280,6 +282,7 @@ const crystalDarkThemeColors: ExtendedThemeColors = {
   'warning': '#EAB308',
   'error': '#EF4444',
   'info': '#38bdf8',
+  'purple': '#a78bfa',
 
   // Code
   'code-bg': '#0F172A',

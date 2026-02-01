@@ -97,16 +97,29 @@ function getBuiltInThemesDir(): string {
   // In production: Resources/node_modules/@nimbalyst/runtime/dist/themes/builtin (extraResources)
   const isDev = !app.isPackaged;
 
+  let themesDir: string;
   if (isDev) {
     const appPath = app.getAppPath();
     // Development: appPath is packages/electron, so go up one level to packages/
     // then into runtime/src/themes/builtin
-    return path.join(appPath, '..', 'runtime', 'src', 'themes', 'builtin');
+    themesDir = path.join(appPath, '..', 'runtime', 'src', 'themes', 'builtin');
   } else {
     // Production: Themes are in extraResources (Resources/ not app.asar/)
     // process.resourcesPath points to app.asar/../ (the Resources directory)
-    return path.join(process.resourcesPath, 'node_modules', '@nimbalyst', 'runtime', 'dist', 'themes', 'builtin');
+    themesDir = path.join(process.resourcesPath, 'node_modules', '@nimbalyst', 'runtime', 'dist', 'themes', 'builtin');
   }
+
+  // Log diagnostic info for debugging theme issues on different platforms
+  console.log('[ThemeHandlers] Platform diagnostic:', {
+    platform: process.platform,
+    arch: process.arch,
+    isDev,
+    appPath: isDev ? app.getAppPath() : undefined,
+    resourcesPath: !isDev ? process.resourcesPath : undefined,
+    calculatedThemesDir: themesDir
+  });
+
+  return themesDir;
 }
 
 export async function registerThemeHandlers() {
@@ -122,11 +135,25 @@ export async function registerThemeHandlers() {
   console.log('[ThemeHandlers] User themes directory:', userThemesDir);
   console.log('[ThemeHandlers] Built-in themes directory:', builtInThemesDir);
 
+  // Check if built-in themes directory exists before discovery
+  const builtInExists = await platformService.exists(builtInThemesDir);
+  console.log('[ThemeHandlers] Built-in themes directory exists:', builtInExists);
+
   const userThemes = await themeLoader.discoverThemes(userThemesDir);
   const builtInThemes = await themeLoader.discoverThemes(builtInThemesDir);
 
   console.log('[ThemeHandlers] Discovered', userThemes.length, 'user themes');
   console.log('[ThemeHandlers] Discovered', builtInThemes.length, 'built-in themes');
+
+  // If no built-in themes found, log more details for debugging
+  if (builtInThemes.length === 0 && builtInExists) {
+    try {
+      const entries = await fs.readdir(builtInThemesDir);
+      console.log('[ThemeHandlers] Built-in themes directory contents:', entries);
+    } catch (err) {
+      console.error('[ThemeHandlers] Failed to read built-in themes directory:', err);
+    }
+  }
 
   // List all discovered themes
   safeHandle('theme:list', async () => {
