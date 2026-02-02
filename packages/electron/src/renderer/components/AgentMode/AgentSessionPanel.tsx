@@ -64,7 +64,10 @@ export const AgentSessionPanel = forwardRef<AgentSessionPanelRef, AgentSessionPa
   }, [onFileClick]);
 
   return (
-    <div className={`agent-session-panel flex flex-col overflow-hidden ${collapseTranscript ? '' : 'h-full min-h-0 [&>div]:flex-1 [&>div]:min-h-0'}`}>
+    <div
+      className={`agent-session-panel flex flex-col overflow-hidden ${collapseTranscript ? '' : 'h-full min-h-0 [&>div]:flex-1 [&>div]:min-h-0'}`}
+      data-session-id={sessionId}
+    >
       <SessionTranscript
         ref={transcriptRef}
         sessionId={sessionId}
