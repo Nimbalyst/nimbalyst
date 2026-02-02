@@ -20,6 +20,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.30] - 2026-02-02
+
+
+### Added
+- Support for .mdc files as markdown
+
+### Changed
+- Updated @anthropic-ai/claude-agent-sdk to 0.2.29
+- Mockup annotation prompt now uses capture_editor_screenshot
+
+### Fixed
+- Clear mockup annotation indicator when switching tabs
+- Include mockup annotations in capture_editor_screenshot tool
+- Theme variable for text selection indicator corrected
+- Theme variable for mockup annotation indicator text corrected
+- Mockup annotation data now properly passes through IPC serialization
+- Tailwind theme classes corrected for dark mode compatibility
+- ExtensionDevIndicator now updates reactively when setting changes
+- Built-in themes included in production build extraResources
+- Tracker bottom panel tab and icon behavior improved
+
 ## [0.52.29] - 2026-02-01
 
 
