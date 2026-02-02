@@ -46,7 +46,7 @@ export function getFileType(
 ): EditorType {
   const ext = getExtname(filePath).toLowerCase();
 
-  if (ext === '.md' || ext === '.markdown') {
+  if (ext === '.md' || ext === '.markdown' || ext === '.mdc') {
     return 'markdown';
   }
 
@@ -143,6 +143,7 @@ export function getMonacoLanguage(filePath: string): string {
     // Markup/Config
     '.md': 'markdown',
     '.markdown': 'markdown',
+    '.mdc': 'markdown',
     '.sql': 'sql',
     '.graphql': 'graphql',
     '.dockerfile': 'dockerfile',
