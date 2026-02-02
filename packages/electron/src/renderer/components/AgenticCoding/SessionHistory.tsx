@@ -523,23 +523,8 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     };
   }, [workspacePath, updateSessionStore]);
 
-  // Listen for session list refresh requests (e.g., from mobile sync)
-  useEffect(() => {
-    if (!workspacePath) return;
-
-    const handleRefreshRequest = (data: { workspacePath: string; sessionId?: string }) => {
-      if (data.workspacePath !== workspacePath) return;
-
-      console.log('[SessionHistory] Received refresh request from sync:', data);
-      loadAllSessions();
-    };
-
-    window.electronAPI?.on?.('sessions:refresh-list', handleRefreshRequest);
-
-    return () => {
-      window.electronAPI?.off?.('sessions:refresh-list', handleRefreshRequest);
-    };
-  }, [workspacePath, loadAllSessions]);
+  // Session list refresh is now handled by centralized listener in sessionListListeners.ts
+  // Components just read from sessionListAtom which updates automatically
 
   // Client-side title filtering (instant, no database query)
   // Note: Archived session filtering is handled by sessionListRootAtom based on showArchivedSessionsAtom

@@ -56,8 +56,14 @@ import {
   sessionParentIdAtom,
   sessionWaitingForQuestionAtom,
   sessionPendingQuestionAtom,
+  // New DB-derived atoms for durable prompts
+  sessionPendingPromptsAtom,
+  sessionPendingPermissionsAtom,
+  sessionPendingAskUserQuestionAtom,
+  refreshPendingPromptsAtom,
+  respondToPromptAtom,
 } from '../../store';
-import type { PendingAskUserQuestionData, PromptAdditionsData } from '../../store/atoms/sessions';
+import type { PendingAskUserQuestionData, PromptAdditionsData, PendingPrompt } from '../../store/atoms/sessions';
 import { convertToWorkstreamAtom, sessionPromptAdditionsAtom } from '../../store/atoms/sessions';
 import { usePostHog } from 'posthog-js/react';
 import { setAgentModeSettingsAtom, showPromptAdditionsAtom, hasExternalEditorAtom, externalEditorNameAtom, openInExternalEditorAtom } from '../../store/atoms/appSettings';
@@ -264,13 +270,52 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   // Local state
   const [todos, setTodos] = useState<Todo[]>([]);
   const [queuedPrompts, setQueuedPrompts] = useState<any[]>([]);
-  const [pendingExitPlanConfirmation, setPendingExitPlanConfirmation] = useState<ExitPlanModeConfirmationData | null>(null);
-  // Pending AskUserQuestion uses Jotai atom so it persists across navigation
-  const [pendingAskUserQuestion, setPendingAskUserQuestion] = useAtom(sessionPendingQuestionAtom(sessionId));
-  const [pendingToolPermissions, setPendingToolPermissions] = useState<ToolPermissionData[]>([]);
   const [pendingReviewFiles, setPendingReviewFiles] = useState<Set<string>>(new Set());
   // Prompt additions state (dev mode) - uses Jotai atom for persistence across navigation
   const [promptAdditions, setPromptAdditions] = useAtom(sessionPromptAdditionsAtom(sessionId));
+
+  // ============================================================
+  // DB-derived pending prompts (durable across session switches/restarts)
+  // ============================================================
+  const pendingPrompts = useAtomValue(sessionPendingPromptsAtom(sessionId));
+  const refreshPendingPrompts = useSetAtom(refreshPendingPromptsAtom);
+  const respondToPrompt = useSetAtom(respondToPromptAtom);
+
+  // Derived pending prompts for compatibility with existing UI components
+  const pendingAskUserQuestionRaw = useAtomValue(sessionPendingQuestionAtom(sessionId));
+  const pendingToolPermissionsRaw = useAtomValue(sessionPendingPermissionsAtom(sessionId));
+
+  // Only show prompts that are at the end of the conversation
+  // If the conversation has moved past the prompt, don't show the UI
+  const lastMessageTimestamp = React.useMemo(() => {
+    if (messages.length === 0) return 0;
+    const lastMsg = messages[messages.length - 1];
+    return lastMsg.timestamp || 0;
+  }, [messages]);
+
+  const pendingAskUserQuestion = React.useMemo(() => {
+    if (!pendingAskUserQuestionRaw) return null;
+    // Show only if the question was asked after the last message
+    // (or within a reasonable tolerance for timing differences)
+    const questionTimestamp = pendingAskUserQuestionRaw.timestamp || 0;
+    if (questionTimestamp >= lastMessageTimestamp - 1000) {
+      return pendingAskUserQuestionRaw;
+    }
+    return null;
+  }, [pendingAskUserQuestionRaw, lastMessageTimestamp]);
+
+  const pendingToolPermissions = React.useMemo(() => {
+    // Filter to only show permissions that are at the end of conversation
+    return pendingToolPermissionsRaw.filter(permission => {
+      const permissionTimestamp = permission.timestamp || 0;
+      return permissionTimestamp >= lastMessageTimestamp - 1000;
+    });
+  }, [pendingToolPermissionsRaw, lastMessageTimestamp]);
+
+  // ExitPlanMode confirmation - derived from pending prompts
+  // Note: ExitPlanMode doesn't use permission_request type, it has its own IPC flow
+  // For now, keep local state until we migrate ExitPlanMode to the generic schema
+  const [pendingExitPlanConfirmation, setPendingExitPlanConfirmation] = useState<ExitPlanModeConfirmationData | null>(null);
 
   // Track mode at last message send to detect mode transitions via toggle button
   const lastSentModeRef = useRef<AIMode | null>(null);
@@ -445,41 +490,22 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     return () => { cleanup?.(); };
   }, [sessionId, sessionData, updateSessionStore]);
 
-  // Restore pending AskUserQuestion from session metadata on app restart
-  // The Jotai atom persists across navigation, but on app restart we need to restore from DB
-  // Also register in global store so widget knows not to render as completed
+  // Register pending question in global store when it exists (for widget rendering)
+  // The central listener (sessionStateListeners.ts) handles IPC events and refreshes atoms
   useEffect(() => {
-    // If atom already has data (from navigation), just ensure it's registered
     if (pendingAskUserQuestion) {
       registerPendingQuestion(pendingAskUserQuestion.questionId, sessionId);
-      return;
     }
-    // Otherwise try to restore from metadata (app restart case)
-    const metadata = sessionData?.metadata as Record<string, unknown> | undefined;
-    const savedQuestion = metadata?.pendingAskUserQuestion as PendingAskUserQuestionData | undefined;
-    if (savedQuestion && savedQuestion.sessionId === sessionId) {
-      setPendingAskUserQuestion(savedQuestion);
-      registerPendingQuestion(savedQuestion.questionId, sessionId);
-    }
-  }, [sessionId, sessionData?.metadata, pendingAskUserQuestion, setPendingAskUserQuestion]);
+  }, [pendingAskUserQuestion, sessionId]);
 
+  // Refresh pending prompts when session loads
   useEffect(() => {
-    const handleAskUserQuestion = async (data: PendingAskUserQuestionData) => {
-      if (data.sessionId === sessionId) {
-        setPendingAskUserQuestion(prev => {
-          if (prev && prev.questionId === data.questionId) return prev;
-          return data;
-        });
-        // Register in global store so widget knows not to render as completed
-        registerPendingQuestion(data.questionId, sessionId);
-        // Also persist to metadata for app restart restoration
-        await updateSessionMetadataField(sessionId, 'pendingAskUserQuestion', data, sessionData, updateSessionStore);
-      }
-    };
-    const cleanup = window.electronAPI.on('ai:askUserQuestion', handleAskUserQuestion);
-    return () => { cleanup?.(); };
-  }, [sessionId, sessionData, updateSessionStore, setPendingAskUserQuestion]);
+    if (sessionId) {
+      refreshPendingPrompts(sessionId);
+    }
+  }, [sessionId, refreshPendingPrompts]);
 
+  // Listen for answered questions to store answers (needed for answer lookup)
   useEffect(() => {
     const handleAskUserQuestionAnswered = (data: { questionId: string; sessionId: string; answers: Record<string, string> }) => {
       if (data.sessionId === sessionId) {
@@ -487,48 +513,6 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
       }
     };
     const cleanup = window.electronAPI.on('ai:askUserQuestionAnswered', handleAskUserQuestionAnswered);
-    return () => { cleanup?.(); };
-  }, [sessionId]);
-
-  useEffect(() => {
-    const handleSessionCancelled = async (data: { sessionId: string }) => {
-      if (data.sessionId === sessionId) {
-        // Clear pending question from global Jotai store
-        clearPendingQuestionForSession(sessionId);
-        setPendingAskUserQuestion(null);
-        await updateSessionMetadataField(sessionId, 'pendingAskUserQuestion', null, null, updateSessionStore);
-      }
-    };
-    const cleanup = window.electronAPI.on('ai:sessionCancelled', handleSessionCancelled);
-    return () => { cleanup?.(); };
-  }, [sessionId, updateSessionStore, setPendingAskUserQuestion]);
-
-  // Sync pendingAskUserQuestion state to atom for sidebar indicator
-  const setWaitingForQuestion = useSetAtom(sessionWaitingForQuestionAtom(sessionId));
-  useEffect(() => {
-    setWaitingForQuestion(pendingAskUserQuestion !== null);
-  }, [pendingAskUserQuestion, setWaitingForQuestion, sessionId]);
-
-  useEffect(() => {
-    const handleToolPermission = (data: ToolPermissionData) => {
-      if (data.sessionId === sessionId) {
-        setPendingToolPermissions(prev => {
-          if (prev.some(p => p.requestId === data.requestId)) return prev;
-          return [...prev, data];
-        });
-      }
-    };
-    const cleanup = window.electronAPI.on('ai:toolPermission', handleToolPermission);
-    return () => { cleanup?.(); };
-  }, [sessionId]);
-
-  useEffect(() => {
-    const handleToolPermissionResolved = (data: { requestId: string; sessionId: string }) => {
-      if (data.sessionId === sessionId) {
-        setPendingToolPermissions(prev => prev.filter(p => p.requestId !== data.requestId));
-      }
-    };
-    const cleanup = window.electronAPI.on('ai:toolPermissionResolved', handleToolPermissionResolved);
     return () => { cleanup?.(); };
   }, [sessionId]);
 
@@ -1228,11 +1212,12 @@ Your goal is to build a comprehensive plan through iterative refinement:
     storeAskUserQuestionAnswers(answers);
     // Clear from global Jotai store so widget can render as completed
     clearPendingQuestionForSession(confirmSessionId);
-    setPendingAskUserQuestion(null);
-    await updateSessionMetadataField(confirmSessionId, 'pendingAskUserQuestion', null, null, updateSessionStore);
 
     // Try to answer via SDK first
     const result = await window.electronAPI.invoke('claude-code:answer-question', { questionId, answers }) as { success: boolean; error?: string };
+
+    // Refresh pending prompts from DB (clears the answered question)
+    refreshPendingPrompts(confirmSessionId);
 
     if (!result.success) {
       // SDK doesn't have this question anymore (session was interrupted)
@@ -1250,21 +1235,32 @@ Your goal is to build a comprehensive plan through iterative refinement:
         console.error('[SessionTranscript] Failed to send fallback message:', sendError);
       }
     }
-  }, [aiMode, workspacePath, updateSessionStore]);
+  }, [aiMode, workspacePath, refreshPendingPrompts]);
 
   const handleAskUserQuestionCancel = useCallback(async (questionId: string, confirmSessionId: string) => {
+    // Clear from global Jotai store
+    clearPendingQuestionForSession(confirmSessionId);
+
+    // Try SDK cancel (might fail for old/inactive sessions - that's OK)
     try {
       await window.electronAPI.invoke('claude-code:cancel-question', { questionId });
-      // Clear from global Jotai store
-      clearPendingQuestionForSession(confirmSessionId);
-      setPendingAskUserQuestion(null);
-      await updateSessionMetadataField(confirmSessionId, 'pendingAskUserQuestion', null, null, updateSessionStore);
     } catch (error) {
-      console.error('[SessionTranscript] Failed to cancel AskUserQuestion:', error);
-      clearPendingQuestionForSession(confirmSessionId);
-      setPendingAskUserQuestion(null);
+      // Debug logging - uncomment if needed
+      // console.log('[SessionTranscript] SDK cancel failed (session may be inactive):', error);
     }
-  }, [updateSessionStore]);
+
+    // Always mark as cancelled in DB so it doesn't reappear
+    // This creates a response message which the pending query will see
+    await respondToPrompt({
+      sessionId: confirmSessionId,
+      promptId: questionId,
+      promptType: 'ask_user_question_request',
+      response: { cancelled: true },
+    });
+
+    // Refresh pending prompts from DB
+    refreshPendingPrompts(confirmSessionId);
+  }, [refreshPendingPrompts, respondToPrompt]);
 
   const getToolCategory = useCallback((pattern: string): string => {
     if (pattern.startsWith('Bash')) return 'bash';
@@ -1295,24 +1291,36 @@ Your goal is to build a comprehensive plan through iterative refinement:
         toolCategory: firstPattern ? getToolCategory(firstPattern) : 'unknown',
       });
 
-      setPendingToolPermissions(prev => prev.filter(p => p.requestId !== requestId));
+      // Refresh pending prompts from DB (clears the answered permission)
+      refreshPendingPrompts(confirmSessionId);
     } catch (error) {
       console.error('[SessionTranscript] Failed to submit tool permission response:', error);
     }
-  }, [pendingToolPermissions, posthog, getToolCategory]);
+  }, [pendingToolPermissions, posthog, getToolCategory, refreshPendingPrompts]);
 
   const handleToolPermissionCancel = useCallback(async (requestId: string, confirmSessionId: string) => {
+    // Try SDK cancel (might fail for old/inactive sessions - that's OK)
     try {
       await window.electronAPI.invoke('claude-code:cancel-tool-permission', {
         requestId,
         sessionId: confirmSessionId
       });
-      setPendingToolPermissions(prev => prev.filter(p => p.requestId !== requestId));
     } catch (error) {
-      console.error('[SessionTranscript] Failed to cancel tool permission:', error);
-      setPendingToolPermissions(prev => prev.filter(p => p.requestId !== requestId));
+      // Debug logging - uncomment if needed
+      // console.log('[SessionTranscript] SDK cancel failed (session may be inactive):', error);
     }
-  }, []);
+
+    // Always mark as cancelled in DB so it doesn't reappear
+    await respondToPrompt({
+      sessionId: confirmSessionId,
+      promptId: requestId,
+      promptType: 'permission_request',
+      response: { decision: 'deny', scope: 'once', cancelled: true },
+    });
+
+    // Refresh pending prompts from DB
+    refreshPendingPrompts(confirmSessionId);
+  }, [refreshPendingPrompts, respondToPrompt]);
 
   // Feature flags
   const enableSlashCommands = sessionData?.provider === 'claude-code';
@@ -1345,20 +1353,26 @@ Your goal is to build a comprehensive plan through iterative refinement:
   // Loading state
   if (!sessionData) {
     return (
-      <div style={{
-        flex: 1,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        color: 'var(--nim-text-muted)',
-      }}>
+      <div
+        style={{
+          flex: 1,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: 'var(--nim-text-muted)',
+        }}
+        data-session-id={sessionId}
+      >
         {isDataLoading ? 'Loading session...' : 'Session not found'}
       </div>
     );
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', minHeight: 0 }}>
+    <div
+      style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', minHeight: 0 }}
+      data-session-id={sessionId}
+    >
       {/* Main transcript area - hidden when collapsed */}
       {!collapseTranscript && (
         <div style={{ flex: 1, overflow: 'hidden', minHeight: 0 }}>

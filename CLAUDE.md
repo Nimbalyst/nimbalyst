@@ -142,6 +142,58 @@ For detailed release instructions, see [RELEASING.md](./RELEASING.md).
 
 ## Cross-Cutting Patterns
 
+### Centralized IPC Listener Architecture
+
+**CRITICAL: Components NEVER subscribe to IPC events directly.**
+
+Following the pattern from `plans/centralized-ipc-listener-architecture.md`, all IPC event handling follows this architecture:
+
+1. **Central listeners** subscribe to IPC events ONCE at app startup
+2. **Listeners update atoms** when events fire (with debouncing where appropriate)
+3. **Components read from atoms** and re-render automatically
+
+**Pattern:**
+```typescript
+// BAD: Component subscribing to IPC directly
+useEffect(() => {
+  const handler = (data) => {
+    setLocalState(data);
+  };
+  window.electronAPI.on('some:event', handler);
+  return () => window.electronAPI.off('some:event', handler);
+}, []);
+
+// GOOD: Central listener updates atom, component reads atom
+// In store/listeners/someListeners.ts:
+export function initSomeListeners(): () => void {
+  const handleEvent = (data) => {
+    store.set(someAtom, data);
+  };
+  return window.electronAPI.on('some:event', handleEvent);
+}
+
+// In component:
+const data = useAtomValue(someAtom);
+```
+
+**Benefits:**
+- No race conditions when switching contexts (session, workspace, etc.)
+- No stale closures capturing old component state
+- No MaxListenersExceededWarning from N components subscribing
+- Debouncing in one place instead of every component
+- State persists across component unmounts
+
+**Already Implemented (DO NOT add component-level IPC subscriptions):**
+- **File state** (`store/listeners/fileStateListeners.ts`): `session-files:updated`, `git:status-changed`, `history:pending-count-changed`
+- **Session list** (`store/listeners/sessionListListeners.ts`): `sessions:refresh-list` (with 150ms debouncing)
+- **Session state** (`store/sessionStateListeners.ts`): Session-level state updates
+
+**When adding new IPC events:**
+1. Create or extend a centralized listener file in `store/listeners/`
+2. Initialize it in `AgentMode.tsx` or appropriate top-level component
+3. Update atoms from the listener, never from components
+4. Add debouncing if events can fire rapidly (e.g., file system watchers, sync events)
+
 ### Error Handling Philosophy
 
 **CRITICAL: Fail fast, fail loud. Never hide failures.**
@@ -316,6 +368,7 @@ The "lift state up" pattern is appropriate for simple React apps but becomes an 
   - Tab metadata - dirty, processing (atom families by tab ID)
   - Session state - unread, processing (atom families by session ID)
   - File tree git status (atom per file/directory)
+  - **IMPORTANT**: Atoms are updated by centralized IPC listeners, NOT by components directly (see Centralized IPC Listener Architecture above)
 
 3. **Communication via EditorHost, not props**
 ```typescript
@@ -343,6 +396,8 @@ The "lift state up" pattern is appropriate for simple React apps but becomes an 
 | Polling in render (`hasPendingDiffs()`) | O(n) on every render | Subscribe to atom updates |
 | 15 refs to avoid re-renders | Fighting the architecture | Fix state ownership |
 | `useState` for cross-component state | Prop drilling or context re-renders | Use Jotai atoms |
+| Component subscribes to IPC events | Race conditions, stale closures, memory leaks | Use centralized IPC listeners |
+| `isCurrent` flags everywhere | Defensive programming hiding architecture flaw | Isolate state by ID using atom families |
 
 #### Extension Contract
 
@@ -353,7 +408,59 @@ Extensions receive `EditorHost` and must:
 - Handle `onFileChanged()` for external edits
 - NEVER depend on parent re-rendering them
 
-### Jotai Atom Patterns for Settings
+### Jotai Atom Patterns
+
+#### Atom Families for Session-Keyed State
+
+Use **atom families** (from `jotai/utils`) for per-session or per-entity state. This prevents the "lifting state up" anti-pattern and allows isolated updates.
+
+**Pattern:**
+```typescript
+import { atomFamily } from 'jotai/utils';
+import { workstreamSessionsAtom } from './sessions'; // ALWAYS static import - NEVER dynamic
+
+// Each session gets its own atom instance
+export const sessionFileEditsAtom = atomFamily((sessionId: string) =>
+  atom<FileEdit[]>([])
+);
+
+// Workstream atoms combine data from multiple child sessions
+// CRITICAL: Must be synchronous (NOT async) to avoid React Suspense during session switches
+export const workstreamFileEditsAtom = atomFamily((workstreamId: string) =>
+  atom((get) => {  // NOT async - synchronous only
+    const childSessionIds = get(workstreamSessionsAtom(workstreamId));
+    const allFiles: FileEdit[] = [];
+    for (const sessionId of childSessionIds) {
+      const files = get(sessionFileEditsAtom(sessionId));
+      allFiles.push(...files);
+    }
+    return allFiles;
+  })
+);
+
+// Component usage - only re-renders when THIS session's data changes
+const files = useAtomValue(sessionFileEditsAtom(sessionId));
+```
+
+**Benefits:**
+- State keyed by stable ID (session, workspace, file path)
+- Component unmounting doesn't destroy state
+- Switching sessions doesn't cause race conditions
+- Each atom instance updates independently
+- Derived atoms can combine multiple sources
+
+**CRITICAL Rules:**
+- **NEVER use dynamic imports** (`await import()`) inside atoms - makes them async and triggers React Suspense
+- **ALWAYS use static imports** at the top of the file instead
+- **Derived atoms MUST be synchronous** - no `async` keyword in atom definitions that combine other atoms
+- If you think you need dynamic imports to avoid circular dependencies, verify the circular dependency actually exists first
+
+**Already Implemented:**
+- `sessionFileEditsAtom`, `sessionGitStatusAtom` - File state per session
+- `workstreamFileEditsAtom`, `workstreamGitStatusAtom` - Combined state across children
+- `sessionUnreadCountAtom`, `sessionHasPendingQuestionAtom` - Session metadata
+
+#### Settings Atoms
 
 App-level settings use Jotai atoms in `packages/electron/src/renderer/store/atoms/appSettings.ts`. Each settings domain follows a "blob atom" pattern:
 

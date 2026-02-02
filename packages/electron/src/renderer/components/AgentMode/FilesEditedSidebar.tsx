@@ -18,7 +18,6 @@ import { FileEditsSidebar as FileEditsSidebarComponent, MaterialSymbol } from '@
 import type { FileEditSummary } from '@nimbalyst/runtime';
 import { diffTreeGroupByDirectoryAtom, setDiffTreeGroupByDirectoryAtom } from '../../store/atoms/projectState';
 import { workstreamSessionsAtom } from '../../store/atoms/sessions';
-import { useIPCListener } from '../../hooks/useIPCListener';
 import {
   hasExternalEditorAtom,
   externalEditorNameAtom,
@@ -33,6 +32,18 @@ import {
   setWorkstreamFileScopeModeAtom,
   type FileScopeMode,
 } from '../../store/atoms/workstreamState';
+import {
+  sessionFileEditsAtom,
+  workstreamFileEditsAtom,
+  sessionGitStatusAtom,
+  workstreamGitStatusAtom,
+  sessionPendingReviewFilesAtom,
+  workstreamPendingReviewFilesAtom,
+  workspaceUncommittedFilesAtom,
+  worktreeChangedFilesAtom,
+  type FileEditWithSession,
+} from '../../store/atoms/sessionFiles';
+import { registerSessionWorkspace, registerWorktreePath, loadInitialSessionFileState } from '../../store/listeners/fileStateListeners';
 import { FilesScopeDropdown } from './FilesScopeDropdown';
 import { GitOperationsPanel } from './GitOperationsPanel';
 import { TodoPanel } from './TodoPanel';
@@ -55,11 +66,6 @@ interface FilesEditedSidebarProps {
   onWorktreeArchived?: () => void;
 }
 
-// Extended FileEditSummary to track which session the edit came from
-interface FileEditWithSession extends FileEditSummary {
-  sessionId: string;
-}
-
 
 export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(({
   workstreamId,
@@ -72,35 +78,46 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
   worktreePath,
   onWorktreeArchived,
 }) => {
-  const [allFileEdits, setAllFileEdits] = useState<FileEditWithSession[]>([]);
-  const [pendingReviewFiles, setPendingReviewFiles] = useState<Set<string>>(new Set());
-  const [filterSessionId, setFilterSessionId] = useState<string | null>(null);
-  const [isClearing, setIsClearing] = useState(false);
-  // Git status for session files (used to filter by current-changes scope)
-  const [sessionFilesGitStatus, setSessionFilesGitStatus] = useState<Record<string, { status: string; gitStatusCode?: string }>>({});
-  // All uncommitted files from the repo (for "all-uncommitted" scope)
-  const [allUncommittedFiles, setAllUncommittedFiles] = useState<string[]>([]);;
-
-  // Worktree-specific state for uncommitted changes
-  const [worktreeChangedFiles, setWorktreeChangedFiles] = useState<Array<{
-    path: string;
-    status: 'added' | 'modified' | 'deleted';
-    staged: boolean;
-  }>>([]);
-
-  // Get all session IDs in this workstream
+  // Get all session IDs in this workstream (must be declared before useEffects that use it)
   const workstreamSessions = useAtomValue(workstreamSessionsAtom(workstreamId));
-  // Show dropdown if there are multiple sessions in the workstream
   const hasMultipleSessions = workstreamSessions.length > 1;
 
-  // Keep stable refs for values used in IPC listeners
-  // This avoids adding these to effect deps (which causes listener churn)
-  const workstreamSessionsRef = useRef(workstreamSessions);
-  const workspacePathRef = useRef(workspacePath);
+  // Read all file/git data from atoms (NO local state, NO IPC subscriptions)
+  // Use workstream atoms which combine ALL data from all child sessions
+  // The filtering logic will filter down to specific sessions based on user selection
+  const allFileEdits = useAtomValue(workstreamFileEditsAtom(workstreamId));
+  const sessionFilesGitStatus = useAtomValue(workstreamGitStatusAtom(workstreamId));
+  const pendingReviewFiles = useAtomValue(workstreamPendingReviewFilesAtom(workstreamId));
+  const allUncommittedFiles = useAtomValue(workspaceUncommittedFilesAtom(workspacePath));
+  const worktreeChangedFiles = worktreeId ? useAtomValue(worktreeChangedFilesAtom(worktreeId)) : [];
+
+  // UI state (keep in local state - this is fine)
+  const [filterToCurrentSession, setFilterToCurrentSession] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
+
+  // Register this session/worktree with central listener for state updates
   useEffect(() => {
-    workstreamSessionsRef.current = workstreamSessions;
-    workspacePathRef.current = workspacePath;
-  }, [workstreamSessions, workspacePath]);
+    registerSessionWorkspace(workstreamId, workspacePath);
+    if (worktreeId && worktreePath) {
+      registerWorktreePath(worktreeId, worktreePath);
+    }
+  }, [workstreamId, workspacePath, worktreeId, worktreePath]);
+
+  // Lazy load file state for all child sessions in the workstream
+  useEffect(() => {
+    // Debug logging - uncomment if needed
+    // console.log('[FilesEditedSidebar] Loading file state for workstream', workstreamId, 'with', workstreamSessions.length, 'child sessions');
+
+    // Load file state for the workstream itself (parent)
+    loadInitialSessionFileState(workstreamId, workspacePath);
+
+    // Also load file state for all child sessions
+    workstreamSessions.forEach(sessionId => {
+      if (sessionId !== workstreamId) {
+        loadInitialSessionFileState(sessionId, workspacePath);
+      }
+    });
+  }, [workstreamId, workspacePath, workstreamSessions]);
 
   // Group by directory state from Jotai
   const [groupByDirectory] = useAtom(diffTreeGroupByDirectoryAtom);
@@ -160,12 +177,15 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
     return fileMap.size;
   }, [allFileEdits]);
 
-  // Filter file edits based on selected session and file scope mode
+  // Filter file edits based on session scope and file scope mode
   const fileEdits = useMemo(() => {
-    // First, filter by session
+    // First, filter by session scope
     let filtered: FileEditWithSession[];
-    if (!filterSessionId) {
-      // Show all files, deduplicated by filePath (most recent edit wins)
+    if (filterToCurrentSession && activeSessionId) {
+      // Filter to current session only
+      filtered = allFileEdits.filter(edit => edit.sessionId === activeSessionId);
+    } else {
+      // Show all files from workstream, deduplicated by filePath (most recent edit wins)
       const fileMap = new Map<string, FileEditWithSession>();
       for (const edit of allFileEdits) {
         const existing = fileMap.get(edit.filePath);
@@ -174,9 +194,6 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
         }
       }
       filtered = Array.from(fileMap.values());
-    } else {
-      // Filter to specific session
-      filtered = allFileEdits.filter(edit => edit.sessionId === filterSessionId);
     }
 
     // Then, filter by file scope mode
@@ -207,7 +224,7 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
       default:
         return filtered;
     }
-  }, [allFileEdits, filterSessionId, fileScopeMode, isFileUncommitted, allUncommittedFiles]);
+  }, [allFileEdits, filterToCurrentSession, activeSessionId, fileScopeMode, isFileUncommitted, allUncommittedFiles]);
 
   // Memoize editedFiles array for GitOperationsPanel to prevent unnecessary re-renders
   const editedFilePaths = useMemo(() => {
@@ -332,354 +349,21 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
     }
   }, [worktreeId, worktreePath, worktreeChangedFiles, stagedFilesArr, setStagedFilesAction, workstreamId, toRelativePath]);
 
-  // Listen for git status changes and prune committed files from staged set
-  // This ensures that when files are committed (via any method), they're removed from staging
-  useEffect(() => {
-    if (!workspacePath || typeof window === 'undefined' || !window.electronAPI) {
-      return;
-    }
+  // NOTE: Git status pruning of committed files is now handled by central listener in fileStateListeners.ts
 
-    const handleGitStatusChanged = async () => {
-      // Re-check git status for staged files and remove any that are now committed
-      if (stagedFilesArr.length === 0) return;
+  // NOTE: File edits are now loaded and updated by central listener in fileStateListeners.ts
 
-      try {
-        // Get relative paths for checking
-        const relativePaths = stagedFilesArr.map(fp => {
-          if (workspacePath && fp.startsWith(workspacePath)) {
-            return fp.slice(workspacePath.length + 1);
-          }
-          return fp;
-        });
+  // NOTE: Git status is now loaded and updated by central listener in fileStateListeners.ts
 
-        const result = await window.electronAPI.invoke(
-          'git:get-file-status',
-          workspacePath,
-          relativePaths
-        );
+  // NOTE: Uncommitted files are now loaded and updated by central listener in fileStateListeners.ts
 
-        if (result.success && result.status) {
-          // Filter out files that are now committed (unchanged)
-          const stillUncommitted = stagedFilesArr.filter(fp => {
-            const relativePath = fp.startsWith(workspacePath)
-              ? fp.slice(workspacePath.length + 1)
-              : fp;
-            const status = result.status[relativePath];
-            // Keep file if it still has uncommitted changes
-            return status && status.status !== 'unchanged';
-          });
+  // NOTE: Worktree changed files are now loaded and updated by central listener in fileStateListeners.ts
 
-          // Only update if some files were pruned
-          if (stillUncommitted.length !== stagedFilesArr.length) {
-            console.log('[FilesEditedSidebar] Pruning committed files from staging:',
-              stagedFilesArr.length - stillUncommitted.length, 'files');
-            setStagedFilesAction({ workstreamId, files: stillUncommitted });
-          }
-        }
-      } catch (error) {
-        console.error('[FilesEditedSidebar] Failed to check git status for staged files:', error);
-      }
-    };
+  // NOTE: Session file updates are now handled by central listener in fileStateListeners.ts
 
-    // Listen for git status changes
-    const unsubscribe = window.electronAPI.on('git:status-changed', handleGitStatusChanged);
+  // NOTE: Pending review files are now loaded and updated by central listener in fileStateListeners.ts
 
-    return () => {
-      unsubscribe?.();
-    };
-  }, [workspacePath, stagedFilesArr, workstreamId, setStagedFilesAction]);
-
-  // Fetch file edits from database for ALL sessions in the workstream
-  useEffect(() => {
-    if (!workstreamId || !workspacePath || workstreamSessions.length === 0) {
-      setAllFileEdits([]);
-      return;
-    }
-
-    // Track if this effect is still current to prevent stale updates
-    let isCurrent = true;
-    // Capture workstreamId at effect start to verify on completion
-    const effectWorkstreamId = workstreamId;
-
-    const fetchFileEdits = async () => {
-      try {
-        if (typeof window !== 'undefined' && window.electronAPI) {
-          // Use batch query instead of N individual calls
-          const result = await window.electronAPI.invoke(
-            'session-files:get-by-sessions',
-            workstreamSessions,
-            'edited'
-          );
-
-          if (result.success && result.files && isCurrent) {
-            const allEdits: FileEditWithSession[] = result.files.map((f: any) => ({
-              filePath: f.filePath,
-              linkType: 'edited' as const,
-              operation: f.metadata?.operation,
-              linesAdded: f.metadata?.linesAdded,
-              linesRemoved: f.metadata?.linesRemoved,
-              timestamp: f.createdAt || new Date().toISOString(),
-              sessionId: f.sessionId,
-            }));
-            setAllFileEdits(allEdits);
-          }
-        }
-      } catch (error) {
-        // Only log errors if this effect is still current
-        if (isCurrent) {
-          console.error('[FilesEditedSidebar] Failed to fetch file edits:', error);
-        }
-      }
-    };
-
-    fetchFileEdits();
-
-    return () => {
-      isCurrent = false;
-    };
-  }, [workstreamId, workspacePath, workstreamSessions]);
-
-  // Fetch git status for session files (used to filter by current-changes scope)
-  useEffect(() => {
-    if (!workspacePath || allFileEdits.length === 0) {
-      setSessionFilesGitStatus({});
-      return;
-    }
-
-    let isCurrent = true;
-
-    const fetchGitStatus = async () => {
-      try {
-        if (typeof window !== 'undefined' && window.electronAPI) {
-          // Get relative paths for status check
-          const effectiveWorkspacePath = worktreePath || workspacePath;
-          const filePaths = allFileEdits.map(f => {
-            if (f.filePath.startsWith(effectiveWorkspacePath)) {
-              return f.filePath.slice(effectiveWorkspacePath.length + 1);
-            }
-            return f.filePath;
-          });
-
-          const result = await window.electronAPI.invoke('git:get-file-status', effectiveWorkspacePath, filePaths);
-          if (result.success && result.status && isCurrent) {
-            setSessionFilesGitStatus(result.status);
-          }
-        }
-      } catch (error) {
-        if (isCurrent) {
-          console.error('[FilesEditedSidebar] Failed to fetch session files git status:', error);
-        }
-      }
-    };
-
-    fetchGitStatus();
-
-    // Listen for git status changes to refresh
-    const handleGitStatusChanged = () => {
-      fetchGitStatus();
-    };
-
-    const unsubscribe = window.electronAPI?.on('git:status-changed', handleGitStatusChanged);
-
-    return () => {
-      isCurrent = false;
-      unsubscribe?.();
-    };
-  }, [workspacePath, worktreePath, allFileEdits]);
-
-  // Fetch all uncommitted files from repo (for "all-changes" scope and hint link counts)
-  useEffect(() => {
-    if (!workspacePath) {
-      setAllUncommittedFiles([]);
-      return;
-    }
-
-    let isCurrent = true;
-
-    const fetchAllUncommitted = async () => {
-      try {
-        if (typeof window !== 'undefined' && window.electronAPI) {
-          const effectiveWorkspacePath = worktreePath || workspacePath;
-          const result = await window.electronAPI.invoke('git:get-uncommitted-files', effectiveWorkspacePath);
-          if (result.success && result.files && isCurrent) {
-            // Files are already absolute paths from git:get-uncommitted-files
-            setAllUncommittedFiles(result.files);
-          }
-        }
-      } catch (error) {
-        if (isCurrent) {
-          console.error('[FilesEditedSidebar] Failed to fetch all uncommitted files:', error);
-        }
-      }
-    };
-
-    fetchAllUncommitted();
-
-    // Listen for git status changes to refresh
-    const handleGitStatusChanged = () => {
-      fetchAllUncommitted();
-    };
-
-    const unsubscribe = window.electronAPI?.on('git:status-changed', handleGitStatusChanged);
-
-    return () => {
-      isCurrent = false;
-      unsubscribe?.();
-    };
-  }, [workspacePath, worktreePath]);
-
-  // Fetch worktree uncommitted files (for worktree sessions)
-  useEffect(() => {
-    if (!worktreePath || !worktreeId) {
-      setWorktreeChangedFiles([]);
-      return;
-    }
-
-    let isCurrent = true;
-
-    const fetchWorktreeChanges = async () => {
-      try {
-        if (typeof window !== 'undefined' && window.electronAPI) {
-          const result = await window.electronAPI.invoke('worktree:get-changed-files', worktreePath);
-          if (result.success && result.files && isCurrent) {
-            setWorktreeChangedFiles(result.files);
-          }
-        }
-      } catch (error) {
-        if (isCurrent) {
-          console.error('[FilesEditedSidebar] Failed to fetch worktree changes:', error);
-        }
-      }
-    };
-
-    fetchWorktreeChanges();
-
-    // Listen for git status changes to refresh
-    const handleGitStatusChanged = () => {
-      fetchWorktreeChanges();
-    };
-
-    const unsubscribe = window.electronAPI?.on('git:status-changed', handleGitStatusChanged);
-
-    return () => {
-      isCurrent = false;
-      unsubscribe?.();
-    };
-  }, [worktreePath, worktreeId]);
-
-  // Listen for file tracking updates from any session in the workstream
-  // Uses useIPCListener for stable subscription (avoids listener churn from workstreamSessions changes)
-  useIPCListener(
-    'session-files:updated',
-    async (updatedSessionId: string) => {
-      // Check if the update is from any session in our workstream using ref
-      if (workstreamSessionsRef.current.includes(updatedSessionId)) {
-        try {
-          const result = await window.electronAPI.invoke(
-            'session-files:get-by-session',
-            updatedSessionId,
-            'edited'
-          );
-          if (result.success && result.files) {
-            const newEdits: FileEditWithSession[] = result.files.map((f: any) => ({
-              filePath: f.filePath,
-              linkType: 'edited' as const,
-              operation: f.metadata?.operation,
-              linesAdded: f.metadata?.linesAdded,
-              linesRemoved: f.metadata?.linesRemoved,
-              timestamp: f.createdAt || new Date().toISOString(),
-              sessionId: updatedSessionId,
-            }));
-
-            setAllFileEdits(prev => {
-              const otherEdits = prev.filter(e => e.sessionId !== updatedSessionId);
-              return [...otherEdits, ...newEdits];
-            });
-          }
-        } catch (error) {
-          console.error('[FilesEditedSidebar] Failed to refresh file edits:', error);
-        }
-      }
-    },
-    { enabled: !!workstreamId && workstreamSessions.length > 0 }
-  );
-
-  // Fetch pending review files from all sessions in the workstream
-  useEffect(() => {
-    if (!workstreamId || !workspacePath || workstreamSessions.length === 0) {
-      setPendingReviewFiles(new Set());
-      return;
-    }
-
-    // Track if this effect is still current to prevent stale updates
-    let isCurrent = true;
-
-    const fetchPendingReviewFiles = async () => {
-      try {
-        if (typeof window !== 'undefined' && window.electronAPI) {
-          const allPendingFiles = new Set<string>();
-
-          // Fetch pending files from all sessions
-          await Promise.all(
-            workstreamSessions.map(async (sessionId) => {
-              const pendingFiles: string[] = await window.electronAPI.invoke(
-                'history:get-pending-files-for-session',
-                workspacePath,
-                sessionId
-              );
-              pendingFiles.forEach(f => allPendingFiles.add(f));
-            })
-          );
-
-          // Only update state if this effect is still current
-          if (isCurrent) {
-            setPendingReviewFiles(allPendingFiles);
-          }
-        }
-      } catch (error) {
-        if (isCurrent) {
-          console.error('[FilesEditedSidebar] Failed to fetch pending review files:', error);
-        }
-      }
-    };
-
-    fetchPendingReviewFiles();
-
-    return () => {
-      isCurrent = false;
-    };
-  }, [workstreamId, workspacePath, workstreamSessions]);
-
-  // Listen for pending diff updates
-  // Uses useIPCListener for stable subscription (avoids listener churn from dep changes)
-  useIPCListener(
-    'history:pending-count-changed',
-    async () => {
-      try {
-        const allPendingFiles = new Set<string>();
-        const sessions = workstreamSessionsRef.current;
-        const wsPath = workspacePathRef.current;
-
-        if (!wsPath || sessions.length === 0) return;
-
-        await Promise.all(
-          sessions.map(async (sessionId) => {
-            const pendingFiles: string[] = await window.electronAPI.invoke(
-              'history:get-pending-files-for-session',
-              wsPath,
-              sessionId
-            );
-            pendingFiles.forEach(f => allPendingFiles.add(f));
-          })
-        );
-
-        setPendingReviewFiles(allPendingFiles);
-      } catch (error) {
-        console.error('[FilesEditedSidebar] Failed to refresh pending review files:', error);
-      }
-    },
-    { enabled: !!workstreamId && !!workspacePath && workstreamSessions.length > 0 }
-  );
+  // NOTE: Pending review file updates are now handled by central listener in fileStateListeners.ts
 
   // Handle "Keep All" button click - clear pending for all sessions in workstream
   const handleKeepAll = useCallback(async () => {
@@ -754,9 +438,10 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
         <FilesScopeDropdown
           fileScopeMode={fileScopeMode}
           onFileScopeModeChange={setFileScopeMode}
-          sessionIds={hasMultipleSessions ? workstreamSessions : undefined}
-          filterSessionId={filterSessionId}
-          onFilterSessionIdChange={setFilterSessionId}
+          hasMultipleSessions={hasMultipleSessions}
+          activeSessionId={activeSessionId}
+          filterToCurrentSession={filterToCurrentSession}
+          onFilterToCurrentSessionChange={setFilterToCurrentSession}
           groupByDirectory={groupByDirectory}
           onGroupByDirectoryChange={setGroupByDirectory}
           isWorktree={!!worktreeId}

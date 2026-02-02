@@ -45,6 +45,8 @@ import {
 import { errorNotificationService } from '../../services/ErrorNotificationService';
 import { initWorkstreamState, loadWorkstreamStates, workstreamStateAtom, workstreamActiveChildAtom, setWorkstreamActiveChildAtom, setWorktreeActiveSessionAtom } from '../../store/atoms/workstreamState';
 import { initSessionStateListeners } from '../../store/sessionStateListeners';
+import { initFileStateListeners } from '../../store/listeners/fileStateListeners';
+import { initSessionListListeners } from '../../store/listeners/sessionListListeners';
 import type { WorktreeCreateResult, SessionCreateResult } from '../../../shared/ipc/types';
 
 export interface AgentModeRef {
@@ -139,6 +141,19 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
     const cleanup = initSessionStateListeners();
     return cleanup;
   }, []);
+
+  // Initialize session list listeners (global, runs once)
+  useEffect(() => {
+    const cleanup = initSessionListListeners();
+    return cleanup;
+  }, []);
+
+  // Initialize file state listeners (global, runs once per workspace)
+  useEffect(() => {
+    if (!workspacePath) return;
+    const cleanup = initFileStateListeners(workspacePath);
+    return cleanup;
+  }, [workspacePath]);
 
   // Check if workspace is a git repository (needed for worktree feature)
   useEffect(() => {
@@ -683,7 +698,7 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
       <p className="m-0 text-sm">Select a session or create a new one to get started</p>
       <button
         onClick={createNewSession}
-        className="agent-mode-new-button py-2 px-4 rounded-md border border-nim bg-nim-secondary text-nim cursor-pointer text-sm transition-colors hover:bg-nim-active"
+        className="agent-mode-new-button py-2 px-4 rounded-md border border-nim-border bg-nim-bg-secondary text-nim cursor-pointer text-sm transition-colors hover:bg-nim-bg-active"
       >
         New Session
       </button>
