@@ -183,6 +183,12 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
     }
   };
 
+  const handleCopySessionId = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowContextMenu(false);
+    navigator.clipboard.writeText(id);
+  };
+
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -537,6 +543,13 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
               Branch conversation
             </button>
           )}
+          <button
+            className="session-list-item-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
+            onClick={handleCopySessionId}
+          >
+            <MaterialSymbol icon="content_copy" size={14} />
+            Copy Session ID
+          </button>
           <button
             className="session-list-item-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
             onClick={handleArchiveToggle}
