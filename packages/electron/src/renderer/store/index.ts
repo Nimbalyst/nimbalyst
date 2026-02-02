@@ -363,3 +363,19 @@ export {
   type AgentNavigationState,
   type SettingsHistoryState,
 } from './atoms/navigationHistory';
+
+// Session transcript atoms (centralized state for SessionTranscript)
+export {
+  sessionErrorAtom,
+  sessionExitPlanModeConfirmAtom,
+  sessionQueuedPromptsAtom,
+  type QueuedPrompt,
+} from './atoms/sessionTranscript';
+
+// Session transcript listeners (centralized IPC handlers)
+export {
+  initSessionTranscriptListeners,
+  loadInitialQueuedPrompts,
+  clearSessionError,
+  clearSessionExitPlanModeConfirm,
+} from './listeners/sessionTranscriptListeners';

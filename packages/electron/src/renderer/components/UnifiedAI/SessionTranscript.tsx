@@ -47,23 +47,26 @@ import {
   sessionProcessingAtom,
   sessionWorktreeIdAtom,
   loadSessionDataAtom,
-  reloadSessionDataAtom,
   updateSessionStoreAtom,
   navigateSessionHistoryAtom,
   resetSessionHistoryAtom,
   createChildSessionAtom,
   sessionChildrenAtom,
   sessionParentIdAtom,
-  sessionWaitingForQuestionAtom,
   sessionPendingQuestionAtom,
-  // New DB-derived atoms for durable prompts
+  // DB-derived atoms for durable prompts
   sessionPendingPromptsAtom,
   sessionPendingPermissionsAtom,
-  sessionPendingAskUserQuestionAtom,
   refreshPendingPromptsAtom,
   respondToPromptAtom,
+  // Centralized transcript state atoms
+  sessionErrorAtom,
+  sessionExitPlanModeConfirmAtom,
+  sessionQueuedPromptsAtom,
+  clearSessionError,
+  clearSessionExitPlanModeConfirm,
+  loadInitialQueuedPrompts,
 } from '../../store';
-import type { PendingAskUserQuestionData, PromptAdditionsData, PendingPrompt } from '../../store/atoms/sessions';
 import { convertToWorkstreamAtom, sessionPromptAdditionsAtom } from '../../store/atoms/sessions';
 import { usePostHog } from 'posthog-js/react';
 import { setAgentModeSettingsAtom, showPromptAdditionsAtom, hasExternalEditorAtom, externalEditorNameAtom, openInExternalEditorAtom } from '../../store/atoms/appSettings';
@@ -239,7 +242,6 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   const [isProcessing, setIsProcessing] = useAtom(sessionProcessingAtom(sessionId));
   const worktreeId = useAtomValue(sessionWorktreeIdAtom(sessionId));
   const loadSessionData = useSetAtom(loadSessionDataAtom);
-  const reloadSessionData = useSetAtom(reloadSessionDataAtom);
   const updateSessionStore = useSetAtom(updateSessionStoreAtom);
 
   // Child session creation for "start new session" option
@@ -269,10 +271,11 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
 
   // Local state
   const [todos, setTodos] = useState<Todo[]>([]);
-  const [queuedPrompts, setQueuedPrompts] = useState<any[]>([]);
   const [pendingReviewFiles, setPendingReviewFiles] = useState<Set<string>>(new Set());
   // Prompt additions state (dev mode) - uses Jotai atom for persistence across navigation
   const [promptAdditions, setPromptAdditions] = useAtom(sessionPromptAdditionsAtom(sessionId));
+  // Queued prompts - centralized in atom, updated by sessionTranscriptListeners
+  const [queuedPrompts, setQueuedPrompts] = useAtom(sessionQueuedPromptsAtom(sessionId));
 
   // ============================================================
   // DB-derived pending prompts (durable across session switches/restarts)
@@ -312,10 +315,11 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     });
   }, [pendingToolPermissionsRaw, lastMessageTimestamp]);
 
-  // ExitPlanMode confirmation - derived from pending prompts
-  // Note: ExitPlanMode doesn't use permission_request type, it has its own IPC flow
-  // For now, keep local state until we migrate ExitPlanMode to the generic schema
-  const [pendingExitPlanConfirmation, setPendingExitPlanConfirmation] = useState<ExitPlanModeConfirmationData | null>(null);
+  // ExitPlanMode confirmation - centralized in atom, updated by sessionTranscriptListeners
+  const pendingExitPlanConfirmation = useAtomValue(sessionExitPlanModeConfirmAtom(sessionId));
+
+  // Error state - centralized in atom, updated by sessionTranscriptListeners
+  const sessionError = useAtomValue(sessionErrorAtom(sessionId));
 
   // Track mode at last message send to detect mode transitions via toggle button
   const lastSentModeRef = useRef<AIMode | null>(null);
@@ -372,55 +376,21 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   }, [sessionData]);
 
   // ============================================================
-  // Subscribe to IPC events for session updates
-  // ============================================================
-  useEffect(() => {
-    if (!sessionId || !window.electronAPI?.on) return;
-
-    const handleMessageLogged = (data: { sessionId: string; direction: string }) => {
-      if (data.sessionId !== sessionId) return;
-      // Reload on both input and output messages to ensure we stay in sync
-      reloadSessionData({ sessionId, workspacePath });
-      // Note: processing state is managed by sessionProcessingAtom via sessionStateListeners
-    };
-
-    const handleTitleUpdated = (data: { sessionId: string; title: string }) => {
-      if (data.sessionId === sessionId && sessionData) {
-        updateSessionStore({ sessionId, updates: { title: data.title } });
-        onSessionTitleChanged?.(sessionId, data.title);
-      }
-    };
-
-    const handleTokenUsageUpdated = (data: { sessionId: string; tokenUsage: any }) => {
-      if (data.sessionId === sessionId && sessionData) {
-        updateSessionStore({ sessionId, updates: { tokenUsage: data.tokenUsage } });
-      }
-    };
-
-    const cleanup1 = window.electronAPI.on('ai:message-logged', handleMessageLogged);
-    const cleanup2 = window.electronAPI.on('session:title-updated', handleTitleUpdated);
-    const cleanup3 = window.electronAPI.on('ai:tokenUsageUpdated', handleTokenUsageUpdated);
-
-    return () => {
-      cleanup1?.();
-      cleanup2?.();
-      cleanup3?.();
-    };
-  }, [sessionId, workspacePath, sessionData, reloadSessionData, updateSessionStore, onSessionTitleChanged]);
-
-  // ============================================================
-  // Subscribe to error events to show errors in the transcript
+  // IPC events handled by centralized listeners (sessionStateListeners.ts, sessionTranscriptListeners.ts)
+  // - ai:message-logged → sessionStateListeners reloads session data
+  // - session:title-updated → sessionStateListeners updates sessionStoreAtom
+  // - ai:tokenUsageUpdated → sessionTranscriptListeners updates sessionStoreAtom
+  // - ai:error → sessionTranscriptListeners updates sessionErrorAtom
   // ============================================================
   const { confirm } = useDialog();
 
+  // Handle errors from centralized atom
   useEffect(() => {
-    if (!sessionId || !window.electronAPI?.on) return;
+    if (!sessionError) return;
 
-    const handleError = async (data: { sessionId: string; message: string; isBedrockToolError?: boolean }) => {
-      if (data.sessionId !== sessionId) return;
-
+    const handleError = async () => {
       // For tool search errors (common with alternative AI providers like Bedrock)
-      if (data.isBedrockToolError) {
+      if (sessionError.isBedrockToolError) {
         const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
         const settingsShortcut = isMac ? 'Cmd+,' : 'Ctrl+,';
         await confirm({
@@ -444,7 +414,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
       const errorMessage = {
         id: `error-${Date.now()}`,
         role: 'assistant' as const,
-        content: `Error: ${data.message}`,
+        content: `Error: ${sessionError.message}`,
         timestamp: Date.now(),
         isError: true,
       };
@@ -455,11 +425,13 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
         },
       });
       setIsProcessing(false);
+
+      // Clear the error from the atom after handling
+      clearSessionError(sessionId);
     };
 
-    const cleanup = window.electronAPI.on('ai:error', handleError);
-    return () => { cleanup?.(); };
-  }, [sessionId, sessionData?.messages, updateSessionStore, setIsProcessing, confirm]);
+    handleError();
+  }, [sessionError, sessionId, sessionData?.messages, updateSessionStore, setIsProcessing, confirm]);
 
   // Derived values
   const isLoading = isProcessing;
@@ -468,27 +440,8 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
 
   // ============================================================
   // Confirmation dialogs (ExitPlanMode, AskUserQuestion, ToolPermission)
+  // ExitPlanMode IPC now handled by sessionTranscriptListeners.ts → sessionExitPlanModeConfirmAtom
   // ============================================================
-
-  // Restore pending ExitPlanMode confirmation from session metadata on load
-  useEffect(() => {
-    const metadata = sessionData?.metadata as Record<string, unknown> | undefined;
-    const savedConfirmation = metadata?.pendingExitPlanConfirmation as ExitPlanModeConfirmationData | undefined;
-    if (savedConfirmation && savedConfirmation.sessionId === sessionId) {
-      setPendingExitPlanConfirmation(savedConfirmation);
-    }
-  }, [sessionId, sessionData?.metadata]);
-
-  useEffect(() => {
-    const handleExitPlanModeConfirm = async (data: ExitPlanModeConfirmationData) => {
-      if (data.sessionId === sessionId) {
-        setPendingExitPlanConfirmation(data);
-        await updateSessionMetadataField(sessionId, 'pendingExitPlanConfirmation', data, sessionData, updateSessionStore);
-      }
-    };
-    const cleanup = window.electronAPI.on('ai:exitPlanModeConfirm', handleExitPlanModeConfirm);
-    return () => { cleanup?.(); };
-  }, [sessionId, sessionData, updateSessionStore]);
 
   // Register pending question in global store when it exists (for widget rendering)
   // The central listener (sessionStateListeners.ts) handles IPC events and refreshes atoms
@@ -505,59 +458,15 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     }
   }, [sessionId, refreshPendingPrompts]);
 
-  // Listen for answered questions to store answers (needed for answer lookup)
-  useEffect(() => {
-    const handleAskUserQuestionAnswered = (data: { questionId: string; sessionId: string; answers: Record<string, string> }) => {
-      if (data.sessionId === sessionId) {
-        storeAskUserQuestionAnswers(data.answers);
-      }
-    };
-    const cleanup = window.electronAPI.on('ai:askUserQuestionAnswered', handleAskUserQuestionAnswered);
-    return () => { cleanup?.(); };
-  }, [sessionId]);
+  // Note: ai:askUserQuestionAnswered handled by sessionStateListeners.ts
+  // Note: ai:promptAdditions handled by sessionTranscriptListeners.ts
 
-  // ============================================================
-  // Prompt additions (dev mode debugging)
-  // Persist across messages so users can see additions from previous prompts
-  // Store with message index to keep widget attached to the correct message
-  // ============================================================
+  // Clear prompt additions when dev mode is disabled
   useEffect(() => {
     if (!showPromptAdditions) {
       setPromptAdditions(null);
-      return;
     }
-
-    const handlePromptAdditions = (data: {
-      sessionId: string;
-      systemPromptAddition: string | null;
-      userMessageAddition: string | null;
-      attachments?: Array<{ type: string; filename: string; mimeType?: string; filepath?: string }>;
-      timestamp: number;
-    }) => {
-      if (data.sessionId === sessionId) {
-        // Get current messages directly from Jotai store to avoid stale ref issues
-        // The ref-based approach was unreliable because React's effect updating the ref
-        // might not have run yet when this IPC handler fires
-        const currentMessages = store.get(sessionMessagesAtom(sessionId));
-        let lastUserIdx = -1;
-        for (let i = currentMessages.length - 1; i >= 0; i--) {
-          if (currentMessages[i].role === 'user') {
-            lastUserIdx = i;
-            break;
-          }
-        }
-        setPromptAdditions({
-          systemPromptAddition: data.systemPromptAddition,
-          userMessageAddition: data.userMessageAddition,
-          attachments: data.attachments,
-          timestamp: data.timestamp,
-          messageIndex: lastUserIdx
-        });
-      }
-    };
-    const cleanup = window.electronAPI.on('ai:promptAdditions', handlePromptAdditions);
-    return () => { cleanup?.(); };
-  }, [sessionId, showPromptAdditions, setPromptAdditions]);
+  }, [showPromptAdditions, setPromptAdditions]);
 
   // ============================================================
   // Pending review files
@@ -600,59 +509,33 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   }, [workspacePath, sessionId]);
 
   // ============================================================
-  // Queued prompts
+  // Queued prompts - centralized in sessionTranscriptListeners.ts
   // ============================================================
-  const loadQueuedPrompts = useCallback(async () => {
-    try {
-      const pending = await window.electronAPI.invoke('ai:listPendingPrompts', sessionId);
-      setQueuedPrompts(pending || []);
-    } catch (error) {
-      console.error('[SessionTranscript] Failed to load queued prompts:', error);
-      setQueuedPrompts([]);
+  // Load initial queued prompts when session loads
+  useEffect(() => {
+    if (sessionId) {
+      loadInitialQueuedPrompts(sessionId);
     }
   }, [sessionId]);
 
-  useEffect(() => {
-    loadQueuedPrompts();
-  }, [loadQueuedPrompts]);
-
+  // Reload queued prompts when AI finishes processing (in case any were added)
   const prevIsLoadingRef = useRef(isLoading);
   useEffect(() => {
     if (prevIsLoadingRef.current && !isLoading) {
-      loadQueuedPrompts();
+      loadInitialQueuedPrompts(sessionId);
     }
     prevIsLoadingRef.current = isLoading;
-  }, [isLoading, loadQueuedPrompts]);
+  }, [isLoading, sessionId]);
 
+  // Trigger queue processing when queuedPrompts change and AI is idle
   useEffect(() => {
-    const handleQueuedPromptsReceived = async (data: { sessionId: string }) => {
-      if (data.sessionId === sessionId) {
-        loadQueuedPrompts();
-        // If AI is idle, trigger queue processing immediately
-        if (!isLoading && workspacePath) {
-          try {
-            await window.electronAPI.invoke('ai:triggerQueueProcessing', sessionId, workspacePath);
-          } catch (error) {
-            console.error('[SessionTranscript] Failed to trigger queue processing:', error);
-          }
-        }
-      }
-    };
-    const cleanup = window.electronAPI.on('ai:queuedPromptsReceived', handleQueuedPromptsReceived);
-    return () => { cleanup?.(); };
-  }, [sessionId, loadQueuedPrompts, isLoading, workspacePath]);
-
-  useEffect(() => {
-    const handlePromptClaimed = (event: CustomEvent<{ sessionId: string; promptId: string }>) => {
-      if (event.detail.sessionId === sessionId) {
-        setQueuedPrompts(prev => prev.filter(p => p.id !== event.detail.promptId));
-      }
-    };
-    window.addEventListener('ai:promptClaimed', handlePromptClaimed as EventListener);
-    return () => {
-      window.removeEventListener('ai:promptClaimed', handlePromptClaimed as EventListener);
-    };
-  }, [sessionId]);
+    if (queuedPrompts.length > 0 && !isLoading && workspacePath) {
+      window.electronAPI.invoke('ai:triggerQueueProcessing', sessionId, workspacePath)
+        .catch(error => {
+          console.error('[SessionTranscript] Failed to trigger queue processing:', error);
+        });
+    }
+  }, [queuedPrompts.length, isLoading, sessionId, workspacePath]);
 
   // ============================================================
   // Todos
@@ -1089,7 +972,7 @@ Your goal is to build a comprehensive plan through iterative refinement:
       await window.electronAPI.invoke('ai:exitPlanModeConfirmResponse', requestId, confirmSessionId, {
         approved: true
       });
-      setPendingExitPlanConfirmation(null);
+      clearSessionExitPlanModeConfirm(confirmSessionId);
       setAiMode('agent');
 
       // Track exit plan mode response
@@ -1109,7 +992,7 @@ Your goal is to build a comprehensive plan through iterative refinement:
         approved: false,
         feedback
       });
-      setPendingExitPlanConfirmation(null);
+      clearSessionExitPlanModeConfirm(confirmSessionId);
 
       // Track exit plan mode response
       posthog?.capture('exit_plan_mode_response', {
@@ -1133,7 +1016,7 @@ Your goal is to build a comprehensive plan through iterative refinement:
       await window.electronAPI.invoke('ai:exitPlanModeConfirmResponse', requestId, confirmSessionId, {
         approved: true
       });
-      setPendingExitPlanConfirmation(null);
+      clearSessionExitPlanModeConfirm(confirmSessionId);
       setAiMode('agent');
 
       // Track exit plan mode response

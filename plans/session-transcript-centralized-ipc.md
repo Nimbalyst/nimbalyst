@@ -2,7 +2,7 @@
 planStatus:
   planId: plan-session-transcript-centralized-ipc
   title: Centralize SessionTranscript IPC Listeners
-  status: draft
+  status: in-development
   planType: refactor
   priority: high
   owner: ghinkle
@@ -13,11 +13,25 @@ planStatus:
     - jotai
     - race-conditions
   created: "2026-02-02"
-  updated: "2026-02-02T21:45:00.000Z"
-  progress: 0
+  updated: "2026-02-02T22:30:00.000Z"
+  progress: 80
+  startDate: "2026-02-02"
 ---
 
 # Centralize SessionTranscript IPC Listeners
+
+## Implementation Progress
+
+- [x] Analyze existing atom coverage (what already exists vs what's new)
+- [x] Create sessionTranscriptListeners.ts with central IPC handlers
+- [x] Move ai:error handler to centralized listener
+- [x] Move ai:exitPlanModeConfirm handler to centralized listener
+- [x] Move ai:promptAdditions handler to centralized listener
+- [x] Move ai:queuedPromptsReceived handler to centralized listener
+- [x] Add initialization call in AgentMode.tsx
+- [x] Remove direct IPC subscriptions from SessionTranscript.tsx
+- [ ] Test session switching with AI responding
+- [ ] Test all event types update correctly
 
 ## Problem
 
