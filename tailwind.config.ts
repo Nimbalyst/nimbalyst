@@ -104,10 +104,22 @@ const config: Config = {
             transform: 'rotate(360deg)',
           },
         },
+        'focus-flash': {
+          '0%': {
+            backgroundColor: 'var(--nim-bg)',
+          },
+          '50%': {
+            backgroundColor: 'var(--nim-bg-hover)',
+          },
+          '100%': {
+            backgroundColor: 'var(--nim-bg)',
+          },
+        },
       },
       animation: {
         'bash-dot-pulse': 'bash-dot-pulse 1.4s ease-in-out infinite',
         'mockup-spin': 'mockup-spin 0.8s linear infinite',
+        'focus-flash': 'focus-flash 0.4s ease-out',
       },
     },
   },

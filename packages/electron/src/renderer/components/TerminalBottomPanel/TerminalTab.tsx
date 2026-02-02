@@ -2,7 +2,7 @@
  * TerminalTab - Tab component for terminal instances in the bottom panel
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import { TerminalTabContextMenu } from './TerminalTabContextMenu';
 
@@ -47,6 +47,24 @@ export const TerminalTab: React.FC<TerminalTabProps> = ({
   onCloseToRight,
 }) => {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const [isFocusFlashing, setIsFocusFlashing] = useState(false);
+
+  // Listen for terminal:focused event to trigger flash animation
+  useEffect(() => {
+    const handleTerminalFocused = (event: Event) => {
+      const customEvent = event as CustomEvent<{ terminalId: string }>;
+      if (customEvent.detail?.terminalId === terminal.id) {
+        setIsFocusFlashing(true);
+        // Remove flash after animation completes
+        setTimeout(() => setIsFocusFlashing(false), 400);
+      }
+    };
+
+    window.addEventListener('terminal:focused', handleTerminalFocused);
+    return () => {
+      window.removeEventListener('terminal:focused', handleTerminalFocused);
+    };
+  }, [terminal.id]);
   // Get shell icon based on shell name
   const getShellIcon = (shellName: string): string => {
     const name = shellName.toLowerCase();
@@ -95,15 +113,17 @@ export const TerminalTab: React.FC<TerminalTabProps> = ({
   // Compute class names for the tab
   // - isActive: the terminal tab that is currently selected
   // - isActiveWorktree: the terminal belongs to the worktree currently being viewed
+  // - isFocusFlashing: brief animation when terminal is focused via worktree button
   const baseClasses = 'terminal-tab group flex items-center gap-1 px-2 py-1 border-none text-xs cursor-pointer rounded whitespace-nowrap max-w-[200px] transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)]';
   const activeClasses = isActive
     ? 'active bg-[var(--nim-bg)] text-[var(--nim-text)] font-medium'
     : 'bg-transparent text-[var(--nim-text-muted)]';
+  const flashClasses = isFocusFlashing ? 'animate-focus-flash' : '';
 
   return (
     <>
       <div
-        className={`${baseClasses} ${activeClasses}`}
+        className={`${baseClasses} ${activeClasses} ${flashClasses}`}
         onClick={onSelect}
         onKeyDown={handleKeyDown}
         onContextMenu={handleContextMenu}

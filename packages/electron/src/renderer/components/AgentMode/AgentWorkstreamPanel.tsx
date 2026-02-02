@@ -646,6 +646,10 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
       setActiveTerminal(existingTerminal.id);
       await window.electronAPI.terminal.setActive(workspacePath, existingTerminal.id);
       window.dispatchEvent(new CustomEvent('terminal:show'));
+      // Dispatch event to trigger focus animation on the terminal tab
+      window.dispatchEvent(new CustomEvent('terminal:focused', {
+        detail: { terminalId: existingTerminal.id }
+      }));
       return;
     }
 
