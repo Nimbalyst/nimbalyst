@@ -33,6 +33,38 @@ function getSnapshot(): number {
 }
 
 /**
+ * Notify listeners that mockup annotation state has changed
+ */
+export function notifyMockupAnnotationChanged(): void {
+  snapshotVersion++;
+  listeners.forEach((listener) => listener());
+  window.dispatchEvent(new CustomEvent('mockup-annotation-changed'));
+}
+
+/**
+ * Get the current mockup file path from window globals
+ */
+export function getMockupFilePath(): string | undefined {
+  return (window as any).__mockupFilePath;
+}
+
+/**
+ * Clear mockup annotations for a specific file (when switching away from it)
+ * Only clears if the current mockup file path matches the specified path.
+ */
+export function clearMockupAnnotationsForFile(filePath: string): void {
+  const currentMockupFilePath = (window as any).__mockupFilePath;
+  if (currentMockupFilePath === filePath) {
+    delete (window as any).__mockupFilePath;
+    delete (window as any).__mockupSelectedElement;
+    delete (window as any).__mockupDrawing;
+    delete (window as any).__mockupDrawingPaths;
+    delete (window as any).__mockupAnnotationTimestamp;
+    notifyMockupAnnotationChanged();
+  }
+}
+
+/**
  * Indicator that shows when there are new mockup annotations
  * that haven't been sent with a prompt yet.
  *
@@ -61,6 +93,12 @@ export const MockupAnnotationIndicator: React.FC<MockupAnnotationIndicatorProps>
       return false;
     }
 
+    // Mockup annotations must be from the current file
+    // (hide if we switched to a different tab)
+    if (currentFilePath && mockupFilePath !== currentFilePath) {
+      return false;
+    }
+
     // Must have annotations
     if (!hasAnnotations) {
       return false;
@@ -78,7 +116,7 @@ export const MockupAnnotationIndicator: React.FC<MockupAnnotationIndicatorProps>
 
     // Show if annotations were made after the last prompt
     return annotationTimestamp > lastUserMessageTimestamp;
-  }, [hasAnnotations, annotationTimestamp, mockupFilePath, lastUserMessageTimestamp]);
+  }, [hasAnnotations, annotationTimestamp, mockupFilePath, currentFilePath, lastUserMessageTimestamp]);
 
   if (!shouldShow()) {
     return null;

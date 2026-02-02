@@ -21,6 +21,7 @@ import { TabEditorErrorBoundary } from '../TabEditorErrorBoundary';
 import { logger } from '../../utils/logger';
 import { useTabsActions, type TabData, notifyDirtyStateChange } from '../../contexts/TabsContext';
 import { store, editorDirtyAtom, editorHasUnacceptedChangesAtom, makeEditorKey } from '@nimbalyst/runtime/store';
+import { clearMockupAnnotationsForFile, getMockupFilePath } from '../UnifiedAI/MockupAnnotationIndicator';
 
 interface TabContentProps {
   textReplacements?: TextReplacement[];
@@ -369,6 +370,17 @@ const TabContentComponent: React.FC<TabContentProps> = ({
         }
         // Non-active tabs without editors: no action needed
         // They'll get an editor when they become active
+      }
+
+      // Clear mockup annotations when switching away from a mockup tab
+      // This ensures the "+ mockup annotations" indicator hides when switching to another file
+      const previousActiveTabId = activeTabIdRef.current;
+      if (previousActiveTabId !== newActiveTabId) {
+        const currentMockupPath = getMockupFilePath();
+        if (currentMockupPath) {
+          // Clear annotations for the mockup file we're switching away from
+          clearMockupAnnotationsForFile(currentMockupPath);
+        }
       }
 
       // Update active tab and visibility
