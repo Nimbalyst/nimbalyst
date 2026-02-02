@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useAtomValue } from 'jotai';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import { ExtensionErrorConsole } from './ExtensionErrorConsole';
+import { extensionDevToolsEnabledAtom } from '../../store/atoms/appSettings';
 
 /**
  * Format a timestamp as a relative time string (e.g., "5m ago", "2h ago")
@@ -39,7 +41,7 @@ interface ExtensionDevIndicatorProps {
 export const ExtensionDevIndicator: React.FC<ExtensionDevIndicatorProps> = ({
   onOpenSettings,
 }) => {
-  const [isEnabled, setIsEnabled] = useState(false);
+  const isEnabled = useAtomValue(extensionDevToolsEnabledAtom);
   const [menuOpen, setMenuOpen] = useState(false);
   const [rebuildSubmenuOpen, setRebuildSubmenuOpen] = useState(false);
   const [isRestarting, setIsRestarting] = useState(false);
@@ -73,26 +75,26 @@ export const ExtensionDevIndicator: React.FC<ExtensionDevIndicatorProps> = ({
     return () => clearInterval(interval);
   }, [checkErrors]);
 
-  // Check if extension dev tools are enabled and get process info
+  // Get process info when enabled
   useEffect(() => {
-    const checkEnabled = async () => {
-      try {
-        const enabled = await window.electronAPI.extensionDevTools.isEnabled();
-        setIsEnabled(enabled);
+    if (!isEnabled) {
+      setProcessStartTime(null);
+      setRelativeTime('');
+      return;
+    }
 
-        if (enabled) {
-          const processInfo = await window.electronAPI.extensionDevTools.getProcessInfo();
-          setProcessStartTime(processInfo.startTime);
-          setRelativeTime(formatRelativeTime(processInfo.startTime));
-        }
+    const fetchProcessInfo = async () => {
+      try {
+        const processInfo = await window.electronAPI.extensionDevTools.getProcessInfo();
+        setProcessStartTime(processInfo.startTime);
+        setRelativeTime(formatRelativeTime(processInfo.startTime));
       } catch (error) {
-        console.error('[ExtensionDevIndicator] Failed to check enabled status:', error);
-        setIsEnabled(false);
+        console.error('[ExtensionDevIndicator] Failed to get process info:', error);
       }
     };
 
-    checkEnabled();
-  }, []);
+    fetchProcessInfo();
+  }, [isEnabled]);
 
   // Update the relative time display every minute
   useEffect(() => {
