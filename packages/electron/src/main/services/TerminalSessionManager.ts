@@ -509,10 +509,22 @@ export class TerminalSessionManager {
       return { args: baseArgs };
     }
 
-    const args = [...baseArgs];
-    args.push('--rcfile', rcfilePath);
-    if (!args.some(arg => arg === '-i' || arg === '--interactive')) {
+    // Build args with --rcfile first, then other options
+    // Bash requires --rcfile before -i on some Linux systems, otherwise
+    // the double-dash prefix can be misinterpreted as an option terminator
+    const args = ['--rcfile', rcfilePath];
+
+    // Add -i if not already present in baseArgs
+    const hasInteractive = baseArgs.some(arg => arg === '-i' || arg === '--interactive');
+    if (!hasInteractive) {
       args.push('-i');
+    }
+
+    // Add any remaining args from baseArgs (excluding -i which we handle above)
+    for (const arg of baseArgs) {
+      if (arg !== '-i' && arg !== '--interactive') {
+        args.push(arg);
+      }
     }
 
     return { args };

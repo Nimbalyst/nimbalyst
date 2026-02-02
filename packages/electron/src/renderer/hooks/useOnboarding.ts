@@ -1,11 +1,12 @@
 import { useEffect, useCallback, useRef } from 'react';
-import { useAtomValue } from 'jotai';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { usePostHog } from 'posthog-js/react';
 import { dialogRef, dialogReadyAtom } from '../contexts/DialogContext';
 import { DIALOG_IDS } from '../dialogs';
 import type { OnboardingData, UnifiedOnboardingData, WindowsClaudeCodeWarningData } from '../dialogs';
 import OnboardingService from '../services/OnboardingService';
 import type { ContentMode } from '../types/WindowModeTypes';
+import { setDeveloperFeatureSettingsAtom } from '../store/atoms/appSettings';
 
 interface UseOnboardingOptions {
   workspacePath: string | null;
@@ -36,6 +37,7 @@ export function useOnboarding({
 }: UseOnboardingOptions): UseOnboardingReturn {
   const posthog = usePostHog();
   const dialogReady = useAtomValue(dialogReadyAtom);
+  const updateDeveloperSettings = useSetAtom(setDeveloperFeatureSettingsAtom);
 
   // Track state for onboarding flow
   const onboardingOpenRef = useRef(false);
@@ -57,6 +59,9 @@ export function useOnboarding({
 
     // Store developer mode globally in app settings
     await window.electronAPI.invoke('developer-mode:set', data.developerMode);
+
+    // Update the atom so UI reflects the change immediately (without requiring refresh)
+    updateDeveloperSettings({ developerMode: data.developerMode });
 
     if (posthog) {
       // Set person properties (persist to user profile)
@@ -128,7 +133,7 @@ export function useOnboarding({
 
     // After onboarding closes, check if we need to show Windows warning
     checkWindowsWarning();
-  }, [posthog, workspacePath]);
+  }, [posthog, workspacePath, updateDeveloperSettings]);
 
   // Handle unified onboarding skip
   const handleOnboardingSkip = useCallback(async () => {
