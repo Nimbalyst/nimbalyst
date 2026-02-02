@@ -290,8 +290,7 @@ class OffscreenEditorRendererImpl {
     if (filePath.endsWith('.mockup.html')) {
       const visibleMockup = this.findVisibleMockupEditor(filePath);
       if (visibleMockup) {
-        console.log('[OffscreenEditorRenderer] Visible mockup editor found, capturing from visible DOM');
-        return this.captureVisibleMockup(visibleMockup, selector);
+        return this.captureVisibleMockup(visibleMockup, filePath, selector);
       }
     }
 
@@ -467,33 +466,45 @@ class OffscreenEditorRendererImpl {
   }
 
   /**
-   * Find a visible mockup editor by checking data attributes on tab panels.
+   * Find a visible mockup editor by looking for the tab with this file path.
    */
   private findVisibleMockupEditor(filePath: string): HTMLElement | null {
-    // Mockup editors are rendered in tab panels with the mockup-preview-container class
-    const containers = document.querySelectorAll('.mockup-preview-container');
+    // Check if there's a visible tab editor for this file
+    const editorWrapper = document.querySelector(`[data-file-path="${filePath}"]`) as HTMLElement | null;
+    if (!editorWrapper) {
+      return null;
+    }
 
-    for (const container of containers) {
-      // Check if this container is for the right file
-      // The parent tab panel should have data attributes indicating the file path
-      const tabPanel = container.closest('[role="tabpanel"]');
-      if (tabPanel) {
-        // Tab panels may have data-testid or other attributes with file info
-        // For now, just return the first visible one if we find any
-        const rect = container.getBoundingClientRect();
-        if (rect.width > 0 && rect.height > 0) {
-          return container as HTMLElement;
-        }
+    // Check if it has an iframe (MockupEditor renders mockups in an iframe)
+    const iframe = editorWrapper.querySelector('iframe');
+    if (!iframe) {
+      return null;
+    }
+
+    // Check bounding rect to ensure it's visible
+    const rect = editorWrapper.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) {
+      return null;
+    }
+
+    // Find the content area that contains both iframe and canvas
+    const contentArea = iframe.closest('.flex-1.overflow-hidden') as HTMLElement | null;
+    if (contentArea) {
+      const contentRect = contentArea.getBoundingClientRect();
+      if (contentRect.width > 0 && contentRect.height > 0) {
+        return contentArea;
       }
     }
 
-    return null;
+    // Fall back to the wrapper itself
+    return editorWrapper;
   }
 
   /**
    * Capture screenshot from a visible mockup editor.
+   * Includes any drawing annotations that have been made on the mockup.
    */
-  private async captureVisibleMockup(container: HTMLElement, selector?: string): Promise<string> {
+  private async captureVisibleMockup(container: HTMLElement, filePath: string, selector?: string): Promise<string> {
     // Find the iframe inside the mockup container
     const iframe = container.querySelector('iframe');
 
@@ -517,7 +528,7 @@ class OffscreenEditorRendererImpl {
       const elemWidth = targetElement.scrollWidth || targetElement.offsetWidth || iframe.offsetWidth;
       const elemHeight = targetElement.scrollHeight || targetElement.offsetHeight || iframe.offsetHeight;
 
-      const canvas = await html2canvas(targetElement, {
+      const mockupCanvas = await html2canvas(targetElement, {
         backgroundColor: '#ffffff',
         scale: 2,
         logging: false,
@@ -531,22 +542,80 @@ class OffscreenEditorRendererImpl {
         windowHeight: elemHeight,
       });
 
-      // Validate canvas before converting to data URL
-      if (!canvas || canvas.width === 0 || canvas.height === 0) {
+      // Validate canvas before compositing
+      if (!mockupCanvas || mockupCanvas.width === 0 || mockupCanvas.height === 0) {
         throw new Error('html2canvas produced an empty canvas for visible mockup iframe');
       }
 
-      console.log('[OffscreenEditorRenderer] Visible mockup iframe canvas dimensions:', canvas.width, 'x', canvas.height);
+      // Check for drawing annotations from MockupEditor
+      // First try the per-file annotations map (persists when tab is inactive)
+      // Then fall back to legacy globals (only set when tab is active)
+      const annotationsMap = (window as any).__mockupAnnotations as Map<string, {
+        drawingPaths: Array<{ points: { x: number; y: number }[]; color: string }>;
+        drawingDataUrl: string | null;
+      }> | undefined;
+      const fileAnnotations = annotationsMap?.get(filePath);
 
-      const dataUrl = canvas.toDataURL('image/png');
+      // Prefer per-file annotations, fall back to legacy globals
+      const drawingPaths = fileAnnotations?.drawingPaths ??
+        ((window as any).__mockupDrawingPaths as Array<{ points: { x: number; y: number }[]; color: string }> | undefined);
+
+      // If there are drawing annotations, composite them onto the mockup
+      if (drawingPaths && drawingPaths.length > 0) {
+        // Create a composite canvas
+        const compositeCanvas = document.createElement('canvas');
+        compositeCanvas.width = mockupCanvas.width;
+        compositeCanvas.height = mockupCanvas.height;
+        const ctx = compositeCanvas.getContext('2d');
+
+        if (!ctx) {
+          throw new Error('Failed to get composite canvas context');
+        }
+
+        // Draw the mockup first
+        ctx.drawImage(mockupCanvas, 0, 0);
+
+        // Calculate scale factor (html2canvas uses scale: 2)
+        const scale = mockupCanvas.width / elemWidth;
+
+        // Draw the annotation paths
+        drawingPaths.forEach(path => {
+          if (path.points.length < 2) return;
+
+          ctx.strokeStyle = path.color;
+          ctx.lineWidth = 3 * scale;
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+
+          ctx.beginPath();
+          const firstPoint = path.points[0];
+          ctx.moveTo(firstPoint.x * scale, firstPoint.y * scale);
+
+          for (let i = 1; i < path.points.length; i++) {
+            const point = path.points[i];
+            ctx.lineTo(point.x * scale, point.y * scale);
+          }
+          ctx.stroke();
+        });
+
+        const dataUrl = compositeCanvas.toDataURL('image/png');
+        const base64Data = dataUrl.replace(/^data:image\/png;base64,/, '');
+
+        if (!base64Data || base64Data.length === 0) {
+          throw new Error('toDataURL produced empty base64 data for composited mockup');
+        }
+
+        return base64Data;
+      }
+
+      // No annotations - return the mockup canvas directly
+      const dataUrl = mockupCanvas.toDataURL('image/png');
       const base64Data = dataUrl.replace(/^data:image\/png;base64,/, '');
 
-      // Validate that we got actual base64 data
       if (!base64Data || base64Data.length === 0) {
         throw new Error('toDataURL produced empty base64 data for visible mockup iframe');
       }
 
-      console.log('[OffscreenEditorRenderer] Visible mockup screenshot captured:', base64Data.length, 'chars base64');
       return base64Data;
     }
 
