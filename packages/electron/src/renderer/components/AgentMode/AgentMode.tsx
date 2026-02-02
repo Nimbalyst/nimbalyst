@@ -679,11 +679,11 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
       onWorktreeArchived={handleWorktreeArchived}
     />
   ) : (
-    <div className="agent-mode-empty flex flex-col items-center justify-center h-full gap-4 text-nim-text-secondary">
+    <div className="agent-mode-empty flex flex-col items-center justify-center h-full gap-4 text-nim-muted">
       <p className="m-0 text-sm">Select a session or create a new one to get started</p>
       <button
         onClick={createNewSession}
-        className="agent-mode-new-button py-2 px-4 rounded-md border border-nim-border bg-nim-bg-secondary text-nim-text-primary cursor-pointer text-sm transition-colors hover:bg-nim-bg-active"
+        className="agent-mode-new-button py-2 px-4 rounded-md border border-nim bg-nim-secondary text-nim cursor-pointer text-sm transition-colors hover:bg-nim-active"
       >
         New Session
       </button>
