@@ -18,6 +18,7 @@ import {
   initSessionList,
 } from '../../store';
 import { defaultAgentModelAtom } from '../../store/atoms/appSettings';
+import type { SerializableDocumentContext } from '../../hooks/useDocumentContext';
 
 export interface ChatSidebarRef {
   focusInput: () => void;
@@ -26,23 +27,9 @@ export interface ChatSidebarRef {
 
 export interface ChatSidebarProps {
   workspacePath: string;
-  documentContext?: {
-    filePath?: string;
-    content?: string;
-    fileType?: string;
-  };
+  documentContext?: SerializableDocumentContext;
   /** Getter function for document context - async, reads from disk */
-  getDocumentContext?: () => Promise<{
-    filePath?: string;
-    content?: string;
-    fileType?: string;
-    textSelection?: {
-      text: string;
-      filePath: string;
-      timestamp: number;
-    };
-    textSelectionTimestamp?: number;
-  }>;
+  getDocumentContext?: () => Promise<SerializableDocumentContext>;
   onFileOpen?: (filePath: string) => Promise<void>;
   /** Whether the sidebar is collapsed */
   isCollapsed?: boolean;

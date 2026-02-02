@@ -609,7 +609,7 @@ function test6() {
           filePath: '/test/mockup.html',
           fileType: 'mockup',
           content: '<div>Content</div>',
-          mockupDrawing: true,
+          mockupDrawing: 'data:image/png;base64,iVBORw0KGgoAAAANS...',  // Data URL indicates annotation exists
         };
 
         const result = service.prepareContext(rawContext, 'session-1', 'claude', undefined);

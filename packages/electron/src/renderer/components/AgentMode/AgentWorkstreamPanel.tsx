@@ -57,7 +57,7 @@ import {
 } from '../../store/atoms/agentMode';
 import { ArchiveWorktreeDialog } from './ArchiveWorktreeDialog';
 import { useArchiveWorktreeDialog } from '../../hooks/useArchiveWorktreeDialog';
-import { detectFileType } from '../../hooks/useDocumentContext';
+import { detectFileType, type SerializableDocumentContext } from '../../hooks/useDocumentContext';
 import { getTextSelection } from '../UnifiedAI/TextSelectionIndicator';
 import { terminalListAtom, setActiveTerminal, loadTerminals } from '../../store/atoms/terminals';
 
@@ -585,7 +585,7 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
 
   // Get document context from the workstream editor tabs (for AI selection/file context)
   // This is called on-demand when sending a message to capture fresh selection state
-  const getDocumentContext = useCallback(() => {
+  const getDocumentContext = useCallback(async (): Promise<SerializableDocumentContext> => {
     const activeTab = editorTabsRef.current?.getActiveTab();
     if (!activeTab) {
       return {
@@ -605,12 +605,18 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
       ? textSelectionData
       : undefined;
 
+    // Get mockup fields if viewing a mockup
+    const mockupSelection = fileType === 'mockup' ? (window as any).__mockupSelectedElement : undefined;
+    const mockupDrawing = fileType === 'mockup' ? (window as any).__mockupDrawing : undefined;
+
     return {
       filePath: activeTab.filePath,
       content: activeTab.content,
       fileType,
       textSelection,
       textSelectionTimestamp: textSelection?.timestamp,
+      mockupSelection,
+      mockupDrawing,
     };
   }, []);
 

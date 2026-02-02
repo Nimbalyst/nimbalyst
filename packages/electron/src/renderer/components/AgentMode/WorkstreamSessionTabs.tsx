@@ -24,6 +24,7 @@ import {
 } from '../../store';
 import { convertToWorkstreamAtom } from '../../store/atoms/sessions';
 import { workstreamHasChildrenAtom } from '../../store/atoms/workstreamState';
+import type { SerializableDocumentContext } from '../../hooks/useDocumentContext';
 
 export interface WorkstreamSessionTabsProps {
   workspacePath: string;
@@ -39,17 +40,7 @@ export interface WorkstreamSessionTabsProps {
   onSessionUnarchive?: (sessionId: string) => void; // Callback to unarchive a session
   onSessionRename?: (sessionId: string, newName: string) => void; // Callback to rename a session
   /** Getter for document context from the workstream editor (for AI file/selection context) */
-  getDocumentContext?: () => {
-    filePath?: string;
-    content?: string;
-    fileType?: string;
-    textSelection?: {
-      text: string;
-      filePath: string;
-      timestamp: number;
-    };
-    textSelectionTimestamp?: number;
-  };
+  getDocumentContext?: () => Promise<SerializableDocumentContext>;
   /** When true, collapse the transcript but keep tab bar and AI input visible */
   collapseTranscript?: boolean;
 }

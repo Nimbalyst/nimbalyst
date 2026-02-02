@@ -28,6 +28,28 @@ export interface DocumentContext {
   textSelectionTimestamp?: number | null; // Timestamp when text was selected
 }
 
+/**
+ * Serializable document context for IPC calls and component props.
+ * Subset of DocumentContext with all optional fields.
+ */
+export interface SerializableDocumentContext {
+  filePath?: string;
+  content?: string;
+  fileType?: string;
+  textSelection?: {
+    text: string;
+    filePath: string;
+    timestamp: number;
+  };
+  textSelectionTimestamp?: number;
+  mockupSelection?: {
+    selector: string;
+    outerHTML: string;
+    tagName: string;
+  };
+  mockupDrawing?: string;
+}
+
 interface UseDocumentContextProps {
   activeTab: TabData | null;
   getContentRef: React.MutableRefObject<(() => string) | null>;

@@ -57,7 +57,7 @@ export interface RawDocumentContext {
     selector: string;
     outerHTML: string;
   };
-  mockupDrawing?: boolean;  // True if user drew annotations on mockup
+  mockupDrawing?: string;  // Data URL of drawing annotations (truthy if user drew annotations)
 }
 
 /**
@@ -94,7 +94,7 @@ export interface PreparedDocumentContext {
     selector: string;
     outerHTML: string;
   };
-  mockupDrawing?: boolean;
+  mockupDrawing?: string;  // Data URL of drawing annotations (truthy if user drew annotations)
 }
 
 /**

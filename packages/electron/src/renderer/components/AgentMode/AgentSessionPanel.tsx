@@ -14,6 +14,7 @@
 
 import React, { useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { SessionTranscript, SessionTranscriptRef } from '../UnifiedAI/SessionTranscript';
+import type { SerializableDocumentContext } from '../../hooks/useDocumentContext';
 
 export interface AgentSessionPanelRef {
   focusInput: () => void;
@@ -26,17 +27,7 @@ export interface AgentSessionPanelProps {
   onClearAgentSession?: () => void;
   onCreateWorktreeSession?: (worktreeId: string) => Promise<string | null>;
   /** Getter for document context from the workstream editor (for AI file/selection context) */
-  getDocumentContext?: () => {
-    filePath?: string;
-    content?: string;
-    fileType?: string;
-    textSelection?: {
-      text: string;
-      filePath: string;
-      timestamp: number;
-    };
-    textSelectionTimestamp?: number;
-  };
+  getDocumentContext?: () => Promise<SerializableDocumentContext>;
   /** When true, collapse the transcript but keep input and dialogs visible */
   collapseTranscript?: boolean;
 }

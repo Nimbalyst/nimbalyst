@@ -31,6 +31,7 @@ import { AskUserQuestionConfirmation, AskUserQuestionData } from './AskUserQuest
 import { ToolPermissionConfirmation, ToolPermissionData } from './ToolPermissionConfirmation';
 import { SlashCommandSuggestions } from './SlashCommandSuggestions';
 import type { TextSelection } from './TextSelectionIndicator';
+import type { SerializableDocumentContext } from '../../hooks/useDocumentContext';
 import { diffTreeGroupByDirectoryAtom, setDiffTreeGroupByDirectoryAtom } from '../../store/atoms/projectState';
 import {
   sessionDraftInputAtom,
@@ -104,23 +105,11 @@ export interface SessionTranscriptProps {
   onCreateWorktreeSession?: (worktreeId: string) => Promise<string | null>;
 
   // Document context (for chat mode where parent provides it)
-  documentContext?: {
-    filePath?: string;
-    content?: string;
-    fileType?: string;
-    textSelection?: TextSelection;
-    textSelectionTimestamp?: number;
-  };
+  documentContext?: SerializableDocumentContext;
 
   // On-demand getter for document context (preferred over static documentContext)
   // Async because it reads file content from disk for consistency across all editor types
-  getDocumentContext?: () => Promise<{
-    filePath?: string;
-    content?: string;
-    fileType?: string;
-    textSelection?: TextSelection;
-    textSelectionTimestamp?: number;
-  }>;
+  getDocumentContext?: () => Promise<SerializableDocumentContext>;
 }
 
 /**
@@ -128,15 +117,17 @@ export interface SessionTranscriptProps {
  * Always sends full content - backend handles diff optimization.
  */
 function serializeDocumentContext(
-  documentContext: SessionTranscriptProps['documentContext']
-): { filePath?: string; content?: string; fileType?: string; textSelection?: TextSelection; textSelectionTimestamp?: number } | undefined {
+  documentContext: SerializableDocumentContext | undefined
+): SerializableDocumentContext | undefined {
   if (!documentContext) return undefined;
   return {
     filePath: documentContext.filePath,
     content: documentContext.content,
     fileType: documentContext.fileType,
     textSelection: documentContext.textSelection,
-    textSelectionTimestamp: documentContext.textSelectionTimestamp
+    textSelectionTimestamp: documentContext.textSelectionTimestamp,
+    mockupSelection: documentContext.mockupSelection,
+    mockupDrawing: documentContext.mockupDrawing
   };
 }
 
@@ -224,9 +215,9 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     return getDocumentContext ? await getDocumentContext() : documentContext;
   }, [getDocumentContext, documentContext]);
 
-  // Get current file path for selection indicator - prefer static prop, fall back to getter
-  // This is called on render so we prefer the static prop when available
-  const currentFilePath = documentContext?.filePath ?? getDocumentContext?.()?.filePath;
+  // Get current file path for selection indicator - use static prop only
+  // (getDocumentContext is async so can't be used in render - it's called on-demand when sending messages)
+  const currentFilePath = documentContext?.filePath;
 
   // ============================================================
   // Session state via Jotai atoms - component owns its own data
