@@ -809,18 +809,18 @@ export function TrackerTable({
                 className="tracker-table-row border-b border-[var(--nim-border)] cursor-pointer transition-colors duration-100 hover:bg-[var(--nim-bg-secondary)]"
                 onClick={() => handleRowClick(item)}
               >
-                <td className="tracker-table-cell type p-[5px] text-[var(--nim-text)] align-middle w-[60px]">
-                  <span className={`type-icon type-${item.type} inline-flex items-center justify-center w-6 h-6 rounded ${
-                    item.type === 'bug' ? 'bg-[rgba(220,38,38,0.1)] text-[#dc2626]' :
-                    item.type === 'task' ? 'bg-[rgba(37,99,235,0.1)] text-[#2563eb]' :
-                    item.type === 'plan' ? 'bg-[rgba(124,58,237,0.1)] text-[#7c3aed]' :
-                    item.type === 'idea' ? 'bg-[rgba(202,138,4,0.1)] text-[#ca8a04]' :
+                <td className="tracker-table-cell type pl-2 pr-1 py-1 text-[var(--nim-text)] align-middle w-[28px]">
+                  <span className={`type-icon type-${item.type} flex items-center justify-center w-5 h-5 rounded ${
+                    item.type === 'bug' ? 'text-[#dc2626]' :
+                    item.type === 'task' ? 'text-[#2563eb]' :
+                    item.type === 'plan' ? 'text-[#7c3aed]' :
+                    item.type === 'idea' ? 'text-[#ca8a04]' :
                     'bg-[var(--nim-bg-tertiary)]'
                   }`}>
-                    <span className="material-symbols-outlined text-base">{getTypeIcon(item.type)}</span>
+                    <span className="material-symbols-outlined text-sm">{getTypeIcon(item.type)}</span>
                   </span>
                 </td>
-                <td className="tracker-table-cell title p-[5px] text-[var(--nim-text)] align-middle min-w-[200px]">
+                <td className="tracker-table-cell title pl-1 pr-2 py-1 text-[var(--nim-text)] align-middle min-w-[200px]">
                   <div className="title-info flex flex-col gap-0.5">
                     <div className="title-text font-medium text-[var(--nim-text)]">{item.title}</div>
                     {/*{item.tags && item.tags.length > 0 && (*/}

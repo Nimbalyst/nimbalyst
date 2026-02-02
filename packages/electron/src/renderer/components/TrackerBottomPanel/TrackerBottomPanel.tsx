@@ -231,9 +231,7 @@ export const TrackerBottomPanel: React.FC<BottomPanelProps> = ({
   }, [isResizing, handleMouseMove, handleMouseUp]);
 
   const handlePanelClick = (panel: TrackerBottomPanelType) => {
-    if (activePanel === panel) {
-      closePanel();
-    } else {
+    if (activePanel !== panel) {
       setActivePanel(panel as TrackerType);
     }
   };
