@@ -1,5 +1,15 @@
 #!/bin/bash
 
+# Parse command line arguments
+USE_PRODUCTION_DB=false
+while [[ "$#" -gt 0 ]]; do
+  case $1 in
+    --use-production-db) USE_PRODUCTION_DB=true ;;
+    *) echo "Unknown option: $1"; exit 1 ;;
+  esac
+  shift
+done
+
 # Use a different port for crystal-run.sh to avoid conflicts with production builds
 DEV_PORT=5274
 
@@ -439,9 +449,15 @@ fi
 # Navigate to the electron package directory
 cd packages/electron
 
-# Run the dev app with custom port and isolated user data
-echo "Starting Nimbalyst on port $DEV_PORT with isolated user data..."
-echo "Use /restart in AI chat to restart the app."
-VITE_PORT=$DEV_PORT RUN_ONE_DEV_MODE=true npm run dev:loop
+# Run the dev app with custom port
+if [ "$USE_PRODUCTION_DB" = true ]; then
+  echo "Starting Nimbalyst on port $DEV_PORT with PRODUCTION database..."
+  echo "WARNING: Changes will affect your real data!"
+  VITE_PORT=$DEV_PORT npm run dev:loop
+else
+  echo "Starting Nimbalyst on port $DEV_PORT with isolated user data..."
+  echo "Use /restart in AI chat to restart the app."
+  VITE_PORT=$DEV_PORT RUN_ONE_DEV_MODE=true npm run dev:loop
+fi
 
 echo "Nimbalyst has been launched!"
