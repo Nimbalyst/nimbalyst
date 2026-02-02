@@ -615,7 +615,7 @@ function test6() {
         const result = service.prepareContext(rawContext, 'session-1', 'claude', undefined);
 
         expect(result.userMessageAdditions.documentContextPrompt).toContain('drawn annotations');
-        expect(result.userMessageAdditions.documentContextPrompt).toContain('capture_mockup_screenshot');
+        expect(result.userMessageAdditions.documentContextPrompt).toContain('capture_editor_screenshot');
       });
     });
 

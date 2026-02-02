@@ -95,7 +95,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   private sessionApprovedPatterns: Set<string> = new Set();
 
   // Shared MCP server port (injected from electron main process)
-  // This server provides capture_mockup_screenshot tool only.
+  // This server provides capture_editor_screenshot tool only.
   // applyDiff and streamContent are NOT exposed via MCP - they're only for chat providers via IPC.
   private static mcpServerPort: number | null = null;
 
@@ -2293,7 +2293,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     // and merge with built-in Nimbalyst MCP servers
     const config: any = {};
 
-    // Include shared MCP server if it's started (provides capture_mockup_screenshot tool only)
+    // Include shared MCP server if it's started (provides capture_editor_screenshot tool only)
     // applyDiff and streamContent are NOT exposed via MCP - they're only for chat providers via IPC
     if (ClaudeCodeProvider.mcpServerPort !== null && workspacePath) {
       let mcpUrl = `http://127.0.0.1:${ClaudeCodeProvider.mcpServerPort}/mcp?workspacePath=${encodeURIComponent(workspacePath)}`;
@@ -2624,7 +2624,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       // Internal Nimbalyst MCP tools that should always be allowed without permission prompts
       const internalMcpTools = [
         'mcp__nimbalyst-session-naming__name_session',
-        'mcp__nimbalyst-mcp__capture_mockup_screenshot',
         'mcp__nimbalyst-mcp__capture_editor_screenshot',
       ];
 

@@ -88,13 +88,13 @@ import { GitCommitConfirmationWidget } from './GitCommitConfirmationWidget';
  * Keys are tool names (as they appear in message.toolCall.name)
  * Values are React components that render the custom widget
  *
- * Note: MCP tools may have prefixed names (e.g., mcp__nimbalyst__capture_mockup_screenshot)
+ * Note: MCP tools may have prefixed names (e.g., mcp__nimbalyst-mcp__capture_editor_screenshot)
  * Register both the base name and prefixed variants for full compatibility.
  */
 export const CUSTOM_TOOL_WIDGETS: CustomToolWidgetRegistry = {
-  // Mockup screenshot capture tool
-  'capture_mockup_screenshot': MockupScreenshotWidget,
-  'mcp__nimbalyst__capture_mockup_screenshot': MockupScreenshotWidget,
+  // Editor screenshot capture tool (works for mockups and all other editor types)
+  'capture_editor_screenshot': MockupScreenshotWidget,
+  'mcp__nimbalyst-mcp__capture_editor_screenshot': MockupScreenshotWidget,
 
   // AskUserQuestion tool - displays questions from Claude for user input
   'AskUserQuestion': AskUserQuestionWidget,

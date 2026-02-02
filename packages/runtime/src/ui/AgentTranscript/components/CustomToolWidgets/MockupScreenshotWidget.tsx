@@ -1,7 +1,7 @@
 /**
- * Custom widget for the capture_mockup_screenshot MCP tool
+ * Custom widget for the capture_editor_screenshot MCP tool
  *
- * Displays a preview of the captured mockup screenshot with:
+ * Displays a preview of the captured editor screenshot with:
  * - Thumbnail image preview (click to enlarge)
  * - File path information
  * - Success/error status badge

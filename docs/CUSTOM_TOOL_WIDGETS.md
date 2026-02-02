@@ -60,9 +60,9 @@ interface CustomToolWidgetProps {
 
 ### MockupScreenshotWidget
 
-Displays captured mockup screenshots with thumbnail preview and lightbox modal.
+Displays captured editor screenshots with thumbnail preview and lightbox modal. Works for mockups and all other editor types.
 
-- **Tool name**: `capture_mockup_screenshot`
+- **Tool name**: `capture_editor_screenshot`
 - **Shows**: Image thumbnail, file path, success/error status
 - **Features**: Click-to-enlarge lightbox
 
@@ -75,7 +75,7 @@ Displays captured mockup screenshots with thumbnail preview and lightbox modal.
 
 ## MCP Tool Name Handling
 
-MCP tools often have prefixed names (e.g., `mcp__nimbalyst__capture_mockup_screenshot`). The `getCustomToolWidget()` function handles this automatically by:
+MCP tools often have prefixed names (e.g., `mcp__nimbalyst-mcp__capture_editor_screenshot`). The `getCustomToolWidget()` function handles this automatically by:
 
 1. First checking for an exact match
 2. Then stripping `mcp__nimbalyst__` prefix and checking again

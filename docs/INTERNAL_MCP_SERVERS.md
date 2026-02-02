@@ -11,8 +11,7 @@ Nimbalyst runs MCP servers **inside the Electron main process** to provide AI ca
 1. **Shared MCP Server** (`httpServer.ts`) - Port varies, provides:
   - `applyDiff` - Apply code replacements to documents
   - `streamContent` - Stream content to documents
-  - `capture_mockup_screenshot` - Capture annotated mockup screenshots
-  - `capture_editor_screenshot` - Capture screenshots of any editor view (custom editors, markdown, code)
+  - `capture_editor_screenshot` - Capture screenshots of any editor view (mockups, custom editors, markdown, code)
 
 2. **Session Naming MCP Server** (`sessionNamingServer.ts`) - Port varies, provides:
   - `extension_build` - Build extension project (runs `npm run build`)

@@ -478,7 +478,7 @@ Your goal is to build a comprehensive plan through iterative refinement:
       }
 
       if (context.mockupDrawing) {
-        prompt += `\nThe user has drawn annotations on the mockup. Use the capture_mockup_screenshot tool to see their annotations.\n`;
+        prompt += `\nThe user has drawn annotations on the mockup. Use the capture_editor_screenshot tool to see their annotations.\n`;
       }
 
       // Add content or diff based on transition
