@@ -1853,6 +1853,13 @@ export const addSessionFullAtom = atom(
       uncommittedCount: session.uncommittedCount || 0,
     });
     set(sessionRegistryAtom, registry);
+
+    // Set the session model atom if provided - prevents showing default 'sonnet'
+    // before loadSessionDataAtom runs
+    if (session.model) {
+      set(sessionModelAtom(session.id), session.model);
+    }
+
     // File state is loaded lazily when FilesEditedSidebar mounts
   }
 );
