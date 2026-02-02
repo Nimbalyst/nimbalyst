@@ -80,6 +80,7 @@ export {
   sessionPendingPromptsAtom,
   sessionPendingPermissionsAtom,
   sessionPendingAskUserQuestionAtom,
+  sessionPendingExitPlanModeAtom,
   refreshPendingPromptsAtom,
   respondToPromptAtom,
   sessionPromptAdditionsAtom,

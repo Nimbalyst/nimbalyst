@@ -322,6 +322,39 @@ export const sessionPendingAskUserQuestionAtom = atomFamily((sessionId: string) 
 );
 
 /**
+ * ExitPlanMode confirmation data as expected by UI components.
+ * This matches the structure stored in exit_plan_mode_request messages.
+ */
+export interface ExitPlanModeConfirmationData {
+  requestId: string;
+  sessionId: string;
+  planSummary: string;
+  planFilePath?: string;
+  timestamp: number;
+}
+
+/**
+ * Derived atom: Get pending ExitPlanMode confirmation for a session (only one allowed).
+ * Filters prompts to only return the latest ExitPlanMode request.
+ */
+export const sessionPendingExitPlanModeAtom = atomFamily((sessionId: string) =>
+  atom<ExitPlanModeConfirmationData | null>((get) => {
+    const prompts = get(sessionPendingPromptsAtom(sessionId));
+    const exitPlanPrompt = prompts.find(p => p.data.type === 'exit_plan_mode_request');
+    if (!exitPlanPrompt) return null;
+
+    // Map PendingPrompt to ExitPlanModeConfirmationData
+    return {
+      requestId: exitPlanPrompt.promptId,
+      sessionId: exitPlanPrompt.sessionId,
+      planSummary: exitPlanPrompt.data.planSummary || '',
+      planFilePath: exitPlanPrompt.data.planFilePath,
+      timestamp: exitPlanPrompt.data.timestamp || exitPlanPrompt.createdAt,
+    };
+  })
+);
+
+/**
  * Action atom to respond to an interactive prompt.
  * Creates a response message in the database and notifies the provider.
  */
@@ -330,7 +363,7 @@ export const respondToPromptAtom = atom(
   async (get, set, params: {
     sessionId: string;
     promptId: string;
-    promptType: 'permission_request' | 'ask_user_question_request';
+    promptType: 'permission_request' | 'ask_user_question_request' | 'exit_plan_mode_request';
     response: any;
   }) => {
     const { sessionId, promptId, promptType, response } = params;
@@ -355,6 +388,8 @@ export const respondToPromptAtom = atom(
         await window.electronAPI.invoke('ai:resolveAskUserQuestion', promptId, response.answers || response, sessionId);
       } else if (promptType === 'permission_request') {
         await window.electronAPI.invoke('ai:resolveToolPermission', promptId, response);
+      } else if (promptType === 'exit_plan_mode_request') {
+        await window.electronAPI.invoke('ai:exitPlanModeConfirmResponse', promptId, sessionId, response);
       }
 
       // 3. Refresh pending prompts to remove the answered one

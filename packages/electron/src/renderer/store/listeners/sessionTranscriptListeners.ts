@@ -7,7 +7,6 @@
  * Events handled:
  * - ai:tokenUsageUpdated → updates sessionStoreAtom tokenUsage
  * - ai:error → sessionErrorAtom
- * - ai:exitPlanModeConfirm → sessionExitPlanModeConfirmAtom
  * - ai:promptAdditions → sessionPromptAdditionsAtom (dev mode)
  * - ai:queuedPromptsReceived → triggers queue refresh
  *
@@ -15,7 +14,7 @@
  * causing race conditions when switching sessions and stale closure bugs.
  *
  * Other session events (ai:message-logged, session:title-updated, ai:askUserQuestion,
- * session:started/completed) are already handled in sessionStateListeners.ts.
+ * ai:exitPlanModeConfirm, session:started/completed) are already handled in sessionStateListeners.ts.
  *
  * Call initSessionTranscriptListeners() once in AgentMode.tsx on mount.
  */
@@ -24,10 +23,8 @@ import { store } from '@nimbalyst/runtime/store';
 import { updateSessionStoreAtom, sessionStoreAtom, sessionPromptAdditionsAtom } from '../atoms/sessions';
 import {
   sessionErrorAtom,
-  sessionExitPlanModeConfirmAtom,
   sessionQueuedPromptsAtom,
 } from '../atoms/sessionTranscript';
-import type { ExitPlanModeConfirmationData } from '../../components/UnifiedAI/ExitPlanModeConfirmation';
 
 /**
  * Initialize session transcript IPC listeners.
@@ -78,17 +75,9 @@ export function initSessionTranscriptListeners(): () => void {
   );
 
   // =========================================================================
-  // ExitPlanMode Confirmation
+  // ExitPlanMode is now DB-backed (handled by sessionStateListeners.ts)
+  // No IPC listener needed here - state derived from sessionPendingPromptsAtom
   // =========================================================================
-  cleanups.push(
-    window.electronAPI.on('ai:exitPlanModeConfirm', (data: ExitPlanModeConfirmationData) => {
-      const { sessionId } = data;
-      if (!sessionId) return;
-
-      // Set the confirmation data - SessionTranscript will read it and display the dialog
-      store.set(sessionExitPlanModeConfirmAtom(sessionId), data);
-    })
-  );
 
   // =========================================================================
   // Prompt Additions (Dev Mode)
@@ -193,9 +182,9 @@ export function clearSessionError(sessionId: string): void {
 }
 
 /**
- * Clear ExitPlanMode confirmation for a session.
- * Call this after user approves/denies the plan.
+ * @deprecated No longer needed - ExitPlanMode is now DB-backed.
+ * Responses are persisted via respondToPromptAtom and cleared automatically.
  */
 export function clearSessionExitPlanModeConfirm(sessionId: string): void {
-  store.set(sessionExitPlanModeConfirmAtom(sessionId), null);
+  // No-op: DB handles state through refreshPendingPromptsAtom
 }

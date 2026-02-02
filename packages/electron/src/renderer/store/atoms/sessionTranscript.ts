@@ -25,12 +25,11 @@ export const sessionErrorAtom = atomFamily((_sessionId: string) =>
 );
 
 /**
- * Per-session ExitPlanMode confirmation data.
- * Set when ai:exitPlanModeConfirm event fires.
- * Cleared when user approves/denies/starts new session.
+ * @deprecated Use sessionPendingExitPlanModeAtom from sessions.ts instead.
+ * This atom is no longer used - ExitPlanMode is now DB-backed.
  */
 export const sessionExitPlanModeConfirmAtom = atomFamily((_sessionId: string) =>
-  atom<ExitPlanModeConfirmationData | null>(null)
+  atom<any | null>(null)
 );
 
 /**

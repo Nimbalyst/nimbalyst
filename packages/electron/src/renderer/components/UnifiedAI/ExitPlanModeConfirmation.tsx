@@ -22,6 +22,7 @@ interface ExitPlanModeConfirmationProps {
   onApprove: (requestId: string, sessionId: string) => void;
   onStartNewSession: (requestId: string, sessionId: string, planFilePath: string) => void;
   onDeny: (requestId: string, sessionId: string, feedback?: string) => void;
+  onCancel?: (requestId: string, sessionId: string) => void;
 }
 
 /**
@@ -35,7 +36,8 @@ export const ExitPlanModeConfirmation: React.FC<ExitPlanModeConfirmationProps> =
   onFileClick,
   onApprove,
   onStartNewSession,
-  onDeny
+  onDeny,
+  onCancel
 }) => {
   // For worktree sessions, we need to fetch the worktree path
   const [worktreePath, setWorktreePath] = useState<string | null>(null);
@@ -97,6 +99,12 @@ export const ExitPlanModeConfirmation: React.FC<ExitPlanModeConfirmationProps> =
     } else if (e.key === 'Escape') {
       setShowFeedbackInput(false);
       setFeedback('');
+    }
+  };
+
+  const handleCancel = () => {
+    if (onCancel) {
+      onCancel(data.requestId, data.sessionId);
     }
   };
 
@@ -209,6 +217,15 @@ export const ExitPlanModeConfirmation: React.FC<ExitPlanModeConfirmationProps> =
               </button>
             </div>
           </div>
+        )}
+        {onCancel && (
+          <button
+            className="exit-plan-mode-confirmation-button w-full px-4 py-2 rounded-md text-[13px] font-medium cursor-pointer border border-nim transition-colors duration-150 hover:bg-nim-hover active:opacity-80 bg-nim-tertiary text-nim text-left"
+            onClick={handleCancel}
+          >
+            <span className="text-nim-muted mr-2">4.</span>
+            Stop for now
+          </button>
         )}
       </div>
     </div>

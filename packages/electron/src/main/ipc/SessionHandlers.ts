@@ -968,7 +968,8 @@ export async function registerSessionHandlers() {
                    AND (hidden = FALSE OR hidden IS NULL)
                    AND content LIKE '%"status":"pending"%'
                    AND (content LIKE '%"type":"permission_request"%'
-                        OR content LIKE '%"type":"ask_user_question_request"%')
+                        OR content LIKE '%"type":"ask_user_question_request"%'
+                        OR content LIKE '%"type":"exit_plan_mode_request"%')
                  ORDER BY created_at ASC`,
                 [sessionId]
             );
@@ -983,7 +984,15 @@ export async function registerSessionHandlers() {
                         const promptId = content.requestId || content.questionId;
                         const responseType = content.type === 'permission_request'
                             ? 'permission_response'
-                            : 'ask_user_question_response';
+                            : content.type === 'ask_user_question_request'
+                            ? 'ask_user_question_response'
+                            : content.type === 'exit_plan_mode_request'
+                            ? 'exit_plan_mode_response'
+                            : null;
+
+                        if (!responseType) {
+                            continue; // Unknown type, skip
+                        }
 
                         const { rows: responseRows } = await database.query(
                             `SELECT id FROM ai_agent_messages
@@ -1022,7 +1031,7 @@ export async function registerSessionHandlers() {
     safeHandle('messages:respond-to-prompt', async (event, params: {
         sessionId: string;
         promptId: string;
-        promptType: 'permission_request' | 'ask_user_question_request';
+        promptType: 'permission_request' | 'ask_user_question_request' | 'exit_plan_mode_request';
         response: any;
         respondedBy: 'desktop' | 'mobile';
     }) => {
@@ -1042,12 +1051,22 @@ export async function registerSessionHandlers() {
                     respondedAt: timestamp,
                     respondedBy,
                 };
-            } else {
+            } else if (promptType === 'ask_user_question_request') {
                 responseContent = {
                     type: 'ask_user_question_response',
                     questionId: promptId,
                     answers: response.answers || response,
                     cancelled: response.cancelled || false,
+                    respondedAt: timestamp,
+                    respondedBy,
+                };
+            } else if (promptType === 'exit_plan_mode_request') {
+                responseContent = {
+                    type: 'exit_plan_mode_response',
+                    requestId: promptId,
+                    approved: response.approved,
+                    clearContext: response.clearContext,
+                    feedback: response.feedback,
                     respondedAt: timestamp,
                     respondedBy,
                 };

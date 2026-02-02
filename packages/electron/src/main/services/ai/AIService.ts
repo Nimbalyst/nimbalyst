@@ -3149,7 +3149,7 @@ export class AIService {
 
       // Check if this is a ClaudeCodeProvider with the resolve method
       if (typeof (provider as any).resolveExitPlanModeConfirmation === 'function') {
-        (provider as any).resolveExitPlanModeConfirmation(requestId, response);
+        (provider as any).resolveExitPlanModeConfirmation(requestId, response, sessionId, 'desktop');
 
         // Emit resolved event so the sidebar indicator updates
         const { BrowserWindow } = await import('electron');

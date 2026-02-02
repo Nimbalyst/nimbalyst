@@ -26,7 +26,7 @@ import { useDialog } from '../../contexts/DialogContext';
 import { FileGutter } from '../AIChat/FileGutter';
 import { PendingReviewBanner } from '../AIChat/PendingReviewBanner';
 import type { AIMode } from './ModeTag';
-import { ExitPlanModeConfirmation, ExitPlanModeConfirmationData } from './ExitPlanModeConfirmation';
+import { ExitPlanModeConfirmation } from './ExitPlanModeConfirmation';
 import { AskUserQuestionConfirmation, AskUserQuestionData } from './AskUserQuestionConfirmation';
 import { ToolPermissionConfirmation, ToolPermissionData } from './ToolPermissionConfirmation';
 import { SlashCommandSuggestions } from './SlashCommandSuggestions';
@@ -57,17 +57,16 @@ import {
   // DB-derived atoms for durable prompts
   sessionPendingPromptsAtom,
   sessionPendingPermissionsAtom,
+  sessionPendingExitPlanModeAtom,
   refreshPendingPromptsAtom,
   respondToPromptAtom,
   // Centralized transcript state atoms
   sessionErrorAtom,
-  sessionExitPlanModeConfirmAtom,
   sessionQueuedPromptsAtom,
   clearSessionError,
-  clearSessionExitPlanModeConfirm,
   loadInitialQueuedPrompts,
 } from '../../store';
-import { convertToWorkstreamAtom, sessionPromptAdditionsAtom } from '../../store/atoms/sessions';
+import { convertToWorkstreamAtom, sessionPromptAdditionsAtom, type ExitPlanModeConfirmationData } from '../../store/atoms/sessions';
 import { usePostHog } from 'posthog-js/react';
 import { setAgentModeSettingsAtom, showPromptAdditionsAtom, hasExternalEditorAtom, externalEditorNameAtom, openInExternalEditorAtom } from '../../store/atoms/appSettings';
 
@@ -315,8 +314,8 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     });
   }, [pendingToolPermissionsRaw, lastMessageTimestamp]);
 
-  // ExitPlanMode confirmation - centralized in atom, updated by sessionTranscriptListeners
-  const pendingExitPlanConfirmation = useAtomValue(sessionExitPlanModeConfirmAtom(sessionId));
+  // ExitPlanMode confirmation - DB-derived, updated by refreshPendingPromptsAtom
+  const pendingExitPlanConfirmation = useAtomValue(sessionPendingExitPlanModeAtom(sessionId));
 
   // Error state - centralized in atom, updated by sessionTranscriptListeners
   const sessionError = useAtomValue(sessionErrorAtom(sessionId));
@@ -440,7 +439,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
 
   // ============================================================
   // Confirmation dialogs (ExitPlanMode, AskUserQuestion, ToolPermission)
-  // ExitPlanMode IPC now handled by sessionTranscriptListeners.ts → sessionExitPlanModeConfirmAtom
+  // All prompts are DB-backed and derived from sessionPendingPromptsAtom
   // ============================================================
 
   // Register pending question in global store when it exists (for widget rendering)
@@ -969,42 +968,46 @@ Your goal is to build a comprehensive plan through iterative refinement:
   // Confirmation handlers
   const handleExitPlanModeApprove = useCallback(async (requestId: string, confirmSessionId: string) => {
     try {
-      await window.electronAPI.invoke('ai:exitPlanModeConfirmResponse', requestId, confirmSessionId, {
-        approved: true
-      });
-      clearSessionExitPlanModeConfirm(confirmSessionId);
-      setAiMode('agent');
-
-      // Track exit plan mode response
-      posthog?.capture('exit_plan_mode_response', {
-        decision: 'approved',
+      // Use the unified respondToPromptAtom which persists to DB and notifies provider
+      const success = await respondToPrompt({
+        sessionId: confirmSessionId,
+        promptId: requestId,
+        promptType: 'exit_plan_mode_request',
+        response: { approved: true },
       });
 
-      await updateSessionMetadataField(confirmSessionId, 'pendingExitPlanConfirmation', null, null, updateSessionStore);
+      if (success) {
+        setAiMode('agent');
+
+        // Track exit plan mode response
+        posthog?.capture('exit_plan_mode_response', {
+          decision: 'approved',
+        });
+      }
     } catch (error) {
       console.error('[SessionTranscript] Failed to send ExitPlanMode approval:', error);
     }
-  }, [setAiMode, posthog, updateSessionStore]);
+  }, [respondToPrompt, setAiMode, posthog]);
 
   const handleExitPlanModeDeny = useCallback(async (requestId: string, confirmSessionId: string, feedback?: string) => {
     try {
-      await window.electronAPI.invoke('ai:exitPlanModeConfirmResponse', requestId, confirmSessionId, {
-        approved: false,
-        feedback
+      // Use the unified respondToPromptAtom which persists to DB and notifies provider
+      await respondToPrompt({
+        sessionId: confirmSessionId,
+        promptId: requestId,
+        promptType: 'exit_plan_mode_request',
+        response: { approved: false, feedback },
       });
-      clearSessionExitPlanModeConfirm(confirmSessionId);
 
       // Track exit plan mode response
       posthog?.capture('exit_plan_mode_response', {
         decision: 'denied',
         has_feedback: !!feedback,
       });
-
-      await updateSessionMetadataField(confirmSessionId, 'pendingExitPlanConfirmation', null, null, updateSessionStore);
     } catch (error) {
       console.error('[SessionTranscript] Failed to send ExitPlanMode denial:', error);
     }
-  }, [posthog, updateSessionStore]);
+  }, [respondToPrompt, posthog]);
 
   // Handler for "Start new session to implement" option
   // Creates a new session with the plan file as context and sets up the implementation prompt
@@ -1013,10 +1016,18 @@ Your goal is to build a comprehensive plan through iterative refinement:
   const handleExitPlanModeStartNewSession = useCallback(async (requestId: string, confirmSessionId: string, planFilePath: string) => {
     try {
       // First approve the ExitPlanMode so Claude finishes
-      await window.electronAPI.invoke('ai:exitPlanModeConfirmResponse', requestId, confirmSessionId, {
-        approved: true
+      const success = await respondToPrompt({
+        sessionId: confirmSessionId,
+        promptId: requestId,
+        promptType: 'exit_plan_mode_request',
+        response: { approved: true },
       });
-      clearSessionExitPlanModeConfirm(confirmSessionId);
+
+      if (!success) {
+        console.error('[SessionTranscript] Failed to approve ExitPlanMode for new session');
+        return;
+      }
+
       setAiMode('agent');
 
       // Track exit plan mode response
@@ -1024,7 +1035,6 @@ Your goal is to build a comprehensive plan through iterative refinement:
         decision: 'start_new_session',
         is_worktree: !!worktreeId,
       });
-      await updateSessionMetadataField(confirmSessionId, 'pendingExitPlanConfirmation', null, null, updateSessionStore);
 
       let newSessionId: string | null = null;
 
@@ -1090,6 +1100,28 @@ Your goal is to build a comprehensive plan through iterative refinement:
       console.error('[SessionTranscript] Failed to start new session for implementation:', error);
     }
   }, [setAiMode, sessionChildren, sessionParentId, workspacePath, worktreeId, onCreateWorktreeSession, createChildSession, convertToWorkstream, sessionData?.worktreePath, posthog]);
+
+  const handleExitPlanModeCancel = useCallback(async (requestId: string, confirmSessionId: string) => {
+    try {
+      // Mark the prompt as cancelled in DB so it doesn't reappear
+      await respondToPrompt({
+        sessionId: confirmSessionId,
+        promptId: requestId,
+        promptType: 'exit_plan_mode_request',
+        response: { approved: false, cancelled: true },
+      });
+
+      // Cancel the entire agent session - this will abort the waiting ExitPlanMode request
+      await window.electronAPI.invoke('ai:cancelRequest', confirmSessionId);
+
+      // Track cancellation
+      posthog?.capture('exit_plan_mode_response', {
+        decision: 'cancelled',
+      });
+    } catch (error) {
+      console.error('[SessionTranscript] Failed to cancel ExitPlanMode:', error);
+    }
+  }, [respondToPrompt, posthog]);
 
   const handleAskUserQuestionSubmit = useCallback(async (questionId: string, confirmSessionId: string, answers: Record<string, string>) => {
     storeAskUserQuestionAnswers(answers);
@@ -1327,6 +1359,7 @@ Your goal is to build a comprehensive plan through iterative refinement:
           onApprove={handleExitPlanModeApprove}
           onStartNewSession={handleExitPlanModeStartNewSession}
           onDeny={handleExitPlanModeDeny}
+          onCancel={handleExitPlanModeCancel}
         />
       )}
 

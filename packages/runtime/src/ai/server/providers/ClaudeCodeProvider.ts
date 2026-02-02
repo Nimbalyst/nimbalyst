@@ -1980,11 +1980,38 @@ export class ClaudeCodeProvider extends BaseAIProvider {
    *   - clearContext: If true, clear the session context for a fresh start
    *   - feedback: Optional feedback message when denying (continue planning)
    */
-  public resolveExitPlanModeConfirmation(requestId: string, response: { approved: boolean; clearContext?: boolean; feedback?: string }): void {
+  public resolveExitPlanModeConfirmation(
+    requestId: string,
+    response: { approved: boolean; clearContext?: boolean; feedback?: string },
+    sessionId?: string,
+    respondedBy: 'desktop' | 'mobile' = 'desktop'
+  ): void {
     const pending = this.pendingExitPlanModeConfirmations.get(requestId);
     if (pending) {
       pending.resolve(response);
       this.pendingExitPlanModeConfirmations.delete(requestId);
+
+      // Persist the response as a message for sync and audit trail
+      if (sessionId) {
+        const responseContent = {
+          type: 'exit_plan_mode_response' as const,
+          requestId,
+          approved: response.approved,
+          clearContext: response.clearContext,
+          feedback: response.feedback,
+          respondedAt: Date.now(),
+          respondedBy,
+        };
+        this.logAgentMessage(
+          sessionId,
+          'claude-code',
+          'output',
+          JSON.stringify(responseContent),
+          { messageType: 'exit_plan_mode_response' }
+        ).catch(err => {
+          console.error('[CLAUDE-CODE] Failed to persist ExitPlanMode response:', err);
+        });
+      }
       // TODO: Debug logging - uncomment if needed
     } else {
       console.warn(`[CLAUDE-CODE] No pending ExitPlanMode confirmation found for requestId: ${requestId}`);
@@ -2990,32 +3017,23 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       // }
 
       if (toolName === 'ExitPlanMode' && this.currentMode === 'planning') {
-        // Validate planFilePath - must be a valid .md file path in plans/ directory
+        // Validate planFilePath if provided (optional - plan might not be written to file)
         const planFilePath = toolInput?.planFilePath;
 
-        // Check if planFilePath is missing or invalid
-        if (!planFilePath || typeof planFilePath !== 'string') {
-          return {
-            hookSpecificOutput: {
-              hookEventName: 'PreToolUse' as const,
-              permissionDecision: 'deny' as const,
-              permissionDecisionReason: `ExitPlanMode requires a 'planFilePath' parameter with the path to your plan file (e.g., 'plans/add-dark-mode.md'). Please call ExitPlanMode again with the correct planFilePath parameter.`
-            }
-          };
-        }
+        // If planFilePath is provided, validate it's a proper path
+        if (planFilePath && typeof planFilePath === 'string') {
+          const isValidPlanPath = planFilePath.endsWith('.md') &&
+            (planFilePath.startsWith('plans/') || planFilePath.includes('/plans/'));
 
-        // Validate it looks like a valid plan file path
-        const isValidPlanPath = planFilePath.endsWith('.md') &&
-          (planFilePath.startsWith('plans/') || planFilePath.includes('/plans/'));
-
-        if (!isValidPlanPath) {
-          return {
-            hookSpecificOutput: {
-              hookEventName: 'PreToolUse' as const,
-              permissionDecision: 'deny' as const,
-              permissionDecisionReason: `Invalid planFilePath: '${planFilePath}'. The planFilePath must be a .md file in the plans/ directory (e.g., 'plans/add-dark-mode.md'). Please call ExitPlanMode again with the correct planFilePath parameter.`
-            }
-          };
+          if (!isValidPlanPath) {
+            return {
+              hookSpecificOutput: {
+                hookEventName: 'PreToolUse' as const,
+                permissionDecision: 'deny' as const,
+                permissionDecisionReason: `Invalid planFilePath: '${planFilePath}'. If providing a planFilePath, it must be a .md file in the plans/ directory (e.g., 'plans/add-dark-mode.md'). You can also call ExitPlanMode without planFilePath if the plan wasn't saved to a file.`
+              }
+            };
+          }
         }
 
         // Generate unique request ID for this confirmation
@@ -3034,6 +3052,27 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             }, { once: true });
           }
         });
+
+        // Persist the ExitPlanMode request as a message for durable prompts
+        // This allows the confirmation to survive session switches and app restarts
+        const exitPlanModeContent = {
+          type: 'exit_plan_mode_request' as const,
+          requestId,
+          planSummary,
+          planFilePath,
+          timestamp: Date.now(),
+          status: 'pending' as const,
+        };
+
+        if (sessionId) {
+          await this.logAgentMessage(
+            sessionId,
+            'claude-code',
+            'output',
+            JSON.stringify(exitPlanModeContent),
+            { messageType: 'exit_plan_mode_request' }
+          );
+        }
 
         // Emit event to notify renderer to show confirmation UI
         this.emit('exitPlanMode:confirm', {
