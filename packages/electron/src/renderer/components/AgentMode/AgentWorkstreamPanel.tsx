@@ -426,6 +426,10 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
   // This prevents race conditions where children load before persisted activeChildId is restored
   const workstreamStatesLoaded = useAtomValue(workstreamStatesLoadedAtom);
 
+  // Track which workstreams have had their children loaded to prevent re-loading
+  // on session data updates (which would reset activeChildId and cause focus stealing)
+  const childrenLoadedRef = useRef<Set<string>>(new Set());
+
   useEffect(() => {
     if (!workstreamId || !workspacePath) return;
 
@@ -450,6 +454,13 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
       return;
     }
 
+    // Only load children once per workstream to prevent focus stealing
+    // When session data updates (e.g., new messages), we don't want to reload children
+    // because loadSessionChildrenAtom resets activeChildId which causes the active tab to change
+    if (childrenLoadedRef.current.has(workstreamId)) {
+      return;
+    }
+
     // Load child sessions for this workstream
     // This populates sessionChildrenAtom which workstreamSessionsAtom depends on
     // sessionParentId === null means this IS a root session (not a child of another session)
@@ -457,6 +468,7 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
       // This is a root session - load its children
       // console.log('[AgentWorkstreamPanel] Loading children for root session:', workstreamId);
       loadSessionChildren({ parentSessionId: workstreamId, workspacePath });
+      childrenLoadedRef.current.add(workstreamId);
     }
   }, [workstreamId, workspacePath, sessionDataLoaded, sessionParentId, workstreamStatesLoaded, loadSessionChildren]);
 
