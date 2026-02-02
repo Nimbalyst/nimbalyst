@@ -114,7 +114,7 @@ export const MockupAnnotationIndicator: React.FC<MockupAnnotationIndicatorProps>
           padding: '4px 8px',
           marginBottom: '4px',
           fontSize: '12px',
-          color: 'var(--info-color)',
+          color: 'var(--nim-text-muted)',
           display: 'flex',
           alignItems: 'center',
           gap: '4px'
