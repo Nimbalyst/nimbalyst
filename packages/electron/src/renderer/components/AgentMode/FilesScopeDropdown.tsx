@@ -9,22 +9,22 @@
  */
 
 import React, { useState, useRef, useEffect } from 'react';
-import { useAtomValue } from 'jotai';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import type { FileScopeMode } from '../../store/atoms/workstreamState';
-import { sessionTitleAtom } from '../../store/atoms/sessions';
 
 interface FilesScopeDropdownProps {
   /** Current file scope mode */
   fileScopeMode: FileScopeMode;
   /** Callback when file scope mode changes */
   onFileScopeModeChange: (mode: FileScopeMode) => void;
-  /** Available session IDs (for workstreams with multiple sessions) */
-  sessionIds?: string[];
-  /** Currently selected session ID for filtering (null = all sessions) */
-  filterSessionId: string | null;
+  /** Whether this workstream has multiple sessions */
+  hasMultipleSessions: boolean;
+  /** The currently active/open session ID */
+  activeSessionId: string | null;
+  /** Whether filtering to current session only (true) or all sessions (false/null) */
+  filterToCurrentSession: boolean;
   /** Callback when session filter changes */
-  onFilterSessionIdChange: (sessionId: string | null) => void;
+  onFilterToCurrentSessionChange: (filterToCurrent: boolean) => void;
   /** Whether to group files by directory */
   groupByDirectory: boolean;
   /** Callback when group by directory changes */
@@ -36,31 +36,6 @@ interface FilesScopeDropdownProps {
   /** Name of the worktree (if applicable) */
   worktreeName?: string;
 }
-
-/** Session option component - each instance calls its own hook */
-const SessionOption: React.FC<{
-  sessionId: string;
-  isSelected: boolean;
-  onSelect: () => void;
-}> = ({ sessionId, isSelected, onSelect }) => {
-  const title = useAtomValue(sessionTitleAtom(sessionId));
-  const displayTitle = title || `Session ${sessionId.slice(0, 8)}`;
-
-  return (
-    <label className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-[var(--nim-bg-hover)]">
-      <input
-        type="radio"
-        name="sessionFilter"
-        checked={isSelected}
-        onChange={onSelect}
-        className="cursor-pointer"
-      />
-      <span className="text-xs text-[var(--nim-text)] truncate max-w-[180px]" title={displayTitle}>
-        {displayTitle}
-      </span>
-    </label>
-  );
-};
 
 /** Label mapping for scope modes */
 const SCOPE_MODE_LABELS: Record<FileScopeMode, { title: string; description: string }> = {
@@ -83,7 +58,7 @@ function getScopeContext(
   mode: FileScopeMode,
   isWorktree: boolean,
   sessionCount: number,
-  filterSessionId: string | null,
+  filterToCurrentSession: boolean,
   worktreeName?: string
 ): string {
   if (mode === 'all-changes') {
@@ -93,8 +68,8 @@ function getScopeContext(
     return isWorktree ? 'in this Worktree' : 'in this Workspace';
   }
 
-  if (filterSessionId) {
-    return 'in this Session';
+  if (filterToCurrentSession) {
+    return 'in current Session';
   }
 
   if (sessionCount > 1) {
@@ -107,9 +82,10 @@ function getScopeContext(
 export const FilesScopeDropdown: React.FC<FilesScopeDropdownProps> = ({
   fileScopeMode,
   onFileScopeModeChange,
-  sessionIds,
-  filterSessionId,
-  onFilterSessionIdChange,
+  hasMultipleSessions,
+  activeSessionId,
+  filterToCurrentSession,
+  onFilterToCurrentSessionChange,
   groupByDirectory,
   onGroupByDirectoryChange,
   isWorktree,
@@ -149,9 +125,8 @@ export const FilesScopeDropdown: React.FC<FilesScopeDropdownProps> = ({
     return () => document.removeEventListener('keydown', handleEscape);
   }, [isOpen]);
 
-  const hasMultipleSessions = sessionIds && sessionIds.length > 1;
   const currentLabel = SCOPE_MODE_LABELS[fileScopeMode];
-  const contextSubtitle = getScopeContext(fileScopeMode, isWorktree, workstreamSessionCount, filterSessionId, worktreeName);
+  const contextSubtitle = getScopeContext(fileScopeMode, isWorktree, workstreamSessionCount, filterToCurrentSession, worktreeName);
 
   // Calculate menu position when opening
   const handleToggle = () => {
@@ -253,22 +228,26 @@ export const FilesScopeDropdown: React.FC<FilesScopeDropdownProps> = ({
                 <input
                   type="radio"
                   name="sessionFilter"
-                  checked={filterSessionId === null}
-                  onChange={() => onFilterSessionIdChange(null)}
+                  checked={!filterToCurrentSession}
+                  onChange={() => onFilterToCurrentSessionChange(false)}
                   className="cursor-pointer"
                 />
                 <span className="text-xs text-[var(--nim-text)]">
-                  All sessions ({sessionIds.length})
+                  All sessions ({workstreamSessionCount})
                 </span>
               </label>
-              {sessionIds.map((sessionId) => (
-                <SessionOption
-                  key={sessionId}
-                  sessionId={sessionId}
-                  isSelected={filterSessionId === sessionId}
-                  onSelect={() => onFilterSessionIdChange(sessionId)}
+              <label className="files-scope-dropdown__option flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-[var(--nim-bg-hover)]">
+                <input
+                  type="radio"
+                  name="sessionFilter"
+                  checked={filterToCurrentSession}
+                  onChange={() => onFilterToCurrentSessionChange(true)}
+                  className="cursor-pointer"
                 />
-              ))}
+                <span className="text-xs text-[var(--nim-text)]">
+                  Current session only
+                </span>
+              </label>
             </div>
           )}
 
