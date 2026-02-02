@@ -185,6 +185,15 @@ export const HelpContent: Record<string, HelpEntry> = {
   },
 
   // ============================================================================
+  // Agent Mode - Files Edited Sidebar
+  // ============================================================================
+
+  'files-scope-dropdown': {
+    title: 'File Scope Modes',
+    body: 'Control which files are shown. View AI edits from this session, only uncommitted changes, or all files in the workspace. In workstreams, filter by individual session or see all sessions combined.',
+  },
+
+  // ============================================================================
   // Agent Mode - Git Operations
   // ============================================================================
 

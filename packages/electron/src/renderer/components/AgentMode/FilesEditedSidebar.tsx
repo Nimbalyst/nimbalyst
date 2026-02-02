@@ -12,12 +12,13 @@
  * Optionally allows filtering by a specific child session.
  */
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { FileEditsSidebar as FileEditsSidebarComponent, MaterialSymbol } from '@nimbalyst/runtime';
 import type { FileEditSummary } from '@nimbalyst/runtime';
 import { diffTreeGroupByDirectoryAtom, setDiffTreeGroupByDirectoryAtom } from '../../store/atoms/projectState';
 import { workstreamSessionsAtom } from '../../store/atoms/sessions';
+import { useIPCListener } from '../../hooks/useIPCListener';
 import {
   hasExternalEditorAtom,
   externalEditorNameAtom,
@@ -32,7 +33,7 @@ import {
   setWorkstreamFileScopeModeAtom,
   type FileScopeMode,
 } from '../../store/atoms/workstreamState';
-import { FilesEditedOptionsDropdown } from './FilesEditedOptionsDropdown';
+import { FilesScopeDropdown } from './FilesScopeDropdown';
 import { GitOperationsPanel } from './GitOperationsPanel';
 import { TodoPanel } from './TodoPanel';
 
@@ -91,6 +92,15 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
   const workstreamSessions = useAtomValue(workstreamSessionsAtom(workstreamId));
   // Show dropdown if there are multiple sessions in the workstream
   const hasMultipleSessions = workstreamSessions.length > 1;
+
+  // Keep stable refs for values used in IPC listeners
+  // This avoids adding these to effect deps (which causes listener churn)
+  const workstreamSessionsRef = useRef(workstreamSessions);
+  const workspacePathRef = useRef(workspacePath);
+  useEffect(() => {
+    workstreamSessionsRef.current = workstreamSessions;
+    workspacePathRef.current = workspacePath;
+  }, [workstreamSessions, workspacePath]);
 
   // Group by directory state from Jotai
   const [groupByDirectory] = useAtom(diffTreeGroupByDirectoryAtom);
@@ -477,10 +487,9 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
     };
   }, [workspacePath, worktreePath, allFileEdits]);
 
-  // Fetch all uncommitted files from repo (for "all-changes" scope)
+  // Fetch all uncommitted files from repo (for "all-changes" scope and hint link counts)
   useEffect(() => {
-    // Only fetch when scope is all-changes
-    if (fileScopeMode !== 'all-changes' || !workspacePath) {
+    if (!workspacePath) {
       setAllUncommittedFiles([]);
       return;
     }
@@ -517,7 +526,7 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
       isCurrent = false;
       unsubscribe?.();
     };
-  }, [fileScopeMode, workspacePath, worktreePath]);
+  }, [workspacePath, worktreePath]);
 
   // Fetch worktree uncommitted files (for worktree sessions)
   useEffect(() => {
@@ -559,28 +568,19 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
   }, [worktreePath, worktreeId]);
 
   // Listen for file tracking updates from any session in the workstream
-  useEffect(() => {
-    if (!workstreamId || workstreamSessions.length === 0 || typeof window === 'undefined' || !window.electronAPI) {
-      return;
-    }
-
-    // Track if this effect is still current to prevent stale updates
-    let isCurrent = true;
-    // Capture workstreamSessions at effect start for consistent filtering
-    const effectWorkstreamSessions = workstreamSessions;
-
-    const handleFileUpdate = async (updatedSessionId: string) => {
-      // Check if the update is from any session in our workstream
-      if (effectWorkstreamSessions.includes(updatedSessionId)) {
+  // Uses useIPCListener for stable subscription (avoids listener churn from workstreamSessions changes)
+  useIPCListener(
+    'session-files:updated',
+    async (updatedSessionId: string) => {
+      // Check if the update is from any session in our workstream using ref
+      if (workstreamSessionsRef.current.includes(updatedSessionId)) {
         try {
-          // Re-fetch just the updated session's files
           const result = await window.electronAPI.invoke(
             'session-files:get-by-session',
             updatedSessionId,
             'edited'
           );
-          // Only update state if this effect is still current
-          if (isCurrent && result.success && result.files) {
+          if (result.success && result.files) {
             const newEdits: FileEditWithSession[] = result.files.map((f: any) => ({
               filePath: f.filePath,
               linkType: 'edited' as const,
@@ -591,29 +591,18 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
               sessionId: updatedSessionId,
             }));
 
-            // Merge with existing edits: replace edits from the updated session
             setAllFileEdits(prev => {
               const otherEdits = prev.filter(e => e.sessionId !== updatedSessionId);
               return [...otherEdits, ...newEdits];
             });
           }
         } catch (error) {
-          if (isCurrent) {
-            console.error('[FilesEditedSidebar] Failed to refresh file edits:', error);
-          }
+          console.error('[FilesEditedSidebar] Failed to refresh file edits:', error);
         }
       }
-    };
-
-    window.electronAPI.on('session-files:updated', handleFileUpdate);
-
-    return () => {
-      isCurrent = false;
-      if (window.electronAPI?.off) {
-        window.electronAPI.off('session-files:updated', handleFileUpdate);
-      }
-    };
-  }, [workstreamId, workstreamSessions]);
+    },
+    { enabled: !!workstreamId && workstreamSessions.length > 0 }
+  );
 
   // Fetch pending review files from all sessions in the workstream
   useEffect(() => {
@@ -662,53 +651,35 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
   }, [workstreamId, workspacePath, workstreamSessions]);
 
   // Listen for pending diff updates
-  useEffect(() => {
-    if (!workstreamId || !workspacePath || workstreamSessions.length === 0 || typeof window === 'undefined' || !window.electronAPI) {
-      return;
-    }
-
-    // Track if this effect is still current to prevent stale updates
-    let isCurrent = true;
-    // Capture dependencies at effect start for consistent use in async handler
-    const effectWorkspacePath = workspacePath;
-    const effectWorkstreamSessions = workstreamSessions;
-
-    const handlePendingDiffUpdate = async () => {
+  // Uses useIPCListener for stable subscription (avoids listener churn from dep changes)
+  useIPCListener(
+    'history:pending-count-changed',
+    async () => {
       try {
         const allPendingFiles = new Set<string>();
+        const sessions = workstreamSessionsRef.current;
+        const wsPath = workspacePathRef.current;
+
+        if (!wsPath || sessions.length === 0) return;
 
         await Promise.all(
-          effectWorkstreamSessions.map(async (sessionId) => {
+          sessions.map(async (sessionId) => {
             const pendingFiles: string[] = await window.electronAPI.invoke(
               'history:get-pending-files-for-session',
-              effectWorkspacePath,
+              wsPath,
               sessionId
             );
             pendingFiles.forEach(f => allPendingFiles.add(f));
           })
         );
 
-        // Only update state if this effect is still current
-        if (isCurrent) {
-          setPendingReviewFiles(allPendingFiles);
-        }
+        setPendingReviewFiles(allPendingFiles);
       } catch (error) {
-        if (isCurrent) {
-          console.error('[FilesEditedSidebar] Failed to refresh pending review files:', error);
-        }
+        console.error('[FilesEditedSidebar] Failed to refresh pending review files:', error);
       }
-    };
-
-    // Listen for pending count changes in this workspace
-    window.electronAPI.on('history:pending-count-changed', handlePendingDiffUpdate);
-
-    return () => {
-      isCurrent = false;
-      if (window.electronAPI?.off) {
-        window.electronAPI.off('history:pending-count-changed', handlePendingDiffUpdate);
-      }
-    };
-  }, [workstreamId, workspacePath, workstreamSessions]);
+    },
+    { enabled: !!workstreamId && !!workspacePath && workstreamSessions.length > 0 }
+  );
 
   // Handle "Keep All" button click - clear pending for all sessions in workstream
   const handleKeepAll = useCallback(async () => {
@@ -771,25 +742,29 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
     setFileScopeMode('session-files');
   }, [setFileScopeMode]);
 
+  const handleShowAllUncommitted = useCallback(() => {
+    // Switch to all-changes mode
+    setFileScopeMode('all-changes');
+  }, [setFileScopeMode]);
+
   return (
     <div className="files-edited-sidebar shrink-0 flex flex-col h-full bg-[var(--nim-bg-secondary)]" style={{ width }}>
-      {/* Header with Files label and controls */}
+      {/* Header with scope dropdown and controls */}
       <div className="files-edited-sidebar__header flex items-center gap-2 px-3 py-2 border-b border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] shrink-0">
-        <MaterialSymbol icon="description" size={16} />
-        <span className="files-edited-sidebar__title font-medium text-[var(--nim-text)] text-sm">
-          Files Edited
-        </span>
-        {/* Controls */}
-        <div className="files-edited-sidebar__controls ml-auto flex gap-1">
-          <FilesEditedOptionsDropdown
-            groupByDirectory={groupByDirectory}
-            onGroupByDirectoryChange={setGroupByDirectory}
-            fileScopeMode={fileScopeMode}
-            onFileScopeModeChange={setFileScopeMode}
-            sessionIds={hasMultipleSessions ? workstreamSessions : undefined}
-            filterSessionId={filterSessionId}
-            onFilterSessionIdChange={setFilterSessionId}
-          />
+        <FilesScopeDropdown
+          fileScopeMode={fileScopeMode}
+          onFileScopeModeChange={setFileScopeMode}
+          sessionIds={hasMultipleSessions ? workstreamSessions : undefined}
+          filterSessionId={filterSessionId}
+          onFilterSessionIdChange={setFilterSessionId}
+          groupByDirectory={groupByDirectory}
+          onGroupByDirectoryChange={setGroupByDirectory}
+          isWorktree={!!worktreeId}
+          workstreamSessionCount={workstreamSessions.length}
+          worktreeName={worktreePath ? worktreePath.split('/').pop() : undefined}
+        />
+        {/* Expand/Collapse controls */}
+        <div className="files-edited-sidebar__controls flex gap-1 shrink-0">
           <button
             onClick={() => {
               window.dispatchEvent(new CustomEvent('file-edits-sidebar:expand-all'));
@@ -857,7 +832,10 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
             onSelectAll={handleSelectAll}
             onBulkSelectionChange={handleBulkSelectionChange}
             totalSessionFilesCount={totalSessionFilesCount}
-            onShowSessionFiles={fileScopeMode === 'current-changes' ? handleShowSessionFiles : undefined}
+            onShowSessionFiles={handleShowSessionFiles}
+            totalUncommittedCount={allUncommittedFiles.length}
+            onShowAllUncommitted={handleShowAllUncommitted}
+            scopeMode={fileScopeMode}
           />
         </div>
       </div>

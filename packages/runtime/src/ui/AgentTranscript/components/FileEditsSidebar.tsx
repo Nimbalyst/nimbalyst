@@ -42,6 +42,12 @@ interface FileEditsSidebarProps {
   totalSessionFilesCount?: number;
   /** Callback to switch to session files view (when showing "no uncommitted changes") */
   onShowSessionFiles?: () => void;
+  /** Total count of all uncommitted files in repo (for hint link in session-files mode) */
+  totalUncommittedCount?: number;
+  /** Callback to switch to all-uncommitted view */
+  onShowAllUncommitted?: () => void;
+  /** Current scope mode - used to customize empty state messages */
+  scopeMode?: 'current-changes' | 'session-files' | 'all-changes';
 }
 
 interface ContextMenuState {
@@ -85,7 +91,10 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
   onBulkSelectionChange,
   showRootCheckbox,
   totalSessionFilesCount,
-  onShowSessionFiles
+  onShowSessionFiles,
+  totalUncommittedCount,
+  onShowAllUncommitted,
+  scopeMode = 'current-changes'
 }) => {
   // Default showRootCheckbox to true when showCheckboxes is true
   const shouldShowRootCheckbox = showRootCheckbox ?? showCheckboxes;
@@ -787,7 +796,8 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
         )}
         {editedFiles.length === 0 ? (
           <div className="file-edits-sidebar__empty p-4 text-[var(--nim-text-faint)] text-sm text-center">
-            {totalSessionFilesCount && totalSessionFilesCount > 0 ? (
+            {scopeMode === 'current-changes' && totalSessionFilesCount && totalSessionFilesCount > 0 ? (
+              // Uncommitted Session Edits mode with no uncommitted changes
               <>
                 <div>No uncommitted changes</div>
                 {onShowSessionFiles && (
@@ -795,7 +805,33 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
                     onClick={onShowSessionFiles}
                     className="mt-2 text-[var(--nim-primary)] hover:underline cursor-pointer bg-transparent border-none text-sm"
                   >
-                    Show session files ({totalSessionFilesCount})
+                    Show all session edits ({totalSessionFilesCount})
+                  </button>
+                )}
+              </>
+            ) : scopeMode === 'session-files' ? (
+              // All Session Edits mode with no files
+              <>
+                <div>No files edited in this session</div>
+                {onShowAllUncommitted && totalUncommittedCount && totalUncommittedCount > 0 && (
+                  <button
+                    onClick={onShowAllUncommitted}
+                    className="mt-2 text-[var(--nim-primary)] hover:underline cursor-pointer bg-transparent border-none text-sm"
+                  >
+                    Show all uncommitted files ({totalUncommittedCount})
+                  </button>
+                )}
+              </>
+            ) : scopeMode === 'all-changes' ? (
+              // All Uncommitted Files mode with no files
+              <>
+                <div>No uncommitted files</div>
+                {onShowSessionFiles && totalSessionFilesCount && totalSessionFilesCount > 0 && (
+                  <button
+                    onClick={onShowSessionFiles}
+                    className="mt-2 text-[var(--nim-primary)] hover:underline cursor-pointer bg-transparent border-none text-sm"
+                  >
+                    Show session edits ({totalSessionFilesCount})
                   </button>
                 )}
               </>
