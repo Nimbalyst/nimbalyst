@@ -196,6 +196,10 @@
         "to": "builtin-agents"
       },
       {
+        "from": "../runtime/dist/themes/builtin",
+        "to": "node_modules/@nimbalyst/runtime/dist/themes/builtin"
+      },
+      {
         "from": "assets",
         "to": "assets"
       },
