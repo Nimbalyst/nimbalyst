@@ -134,6 +134,15 @@ const injectRichTranscriptStyles = () => {
     .rich-transcript-cursor {
       animation: pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite;
     }
+
+    /* Scroll-ready fade-in transition to prevent flash when switching sessions */
+    .rich-transcript-vlist-wrapper {
+      opacity: 0;
+      transition: opacity 0.15s ease-out;
+    }
+    .rich-transcript-vlist-wrapper.scroll-ready {
+      opacity: 1;
+    }
   `;
   document.head.appendChild(style);
 };
@@ -524,6 +533,7 @@ export const RichTranscriptView = React.forwardRef<
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [copiedMessageIndex, setCopiedMessageIndex] = useState<number | null>(null);
   const [showSearchBar, setShowSearchBar] = useState(false);
+  const [isScrollReady, setIsScrollReady] = useState(false);
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const vlistRef = useRef<VListHandle>(null);
@@ -581,9 +591,18 @@ export const RichTranscriptView = React.forwardRef<
     }
   }), []);
 
+  // Reset scroll-ready state when session changes
+  useEffect(() => {
+    setIsScrollReady(false);
+  }, [sessionId]);
+
   // Initialize scroll to bottom when session loads
   useEffect(() => {
-    if (messages.length === 0) return;
+    if (messages.length === 0) {
+      // Empty session is ready immediately
+      setIsScrollReady(true);
+      return;
+    }
 
     // Use double RAF to ensure DOM is fully rendered before scrolling
     requestAnimationFrame(() => {
@@ -591,6 +610,10 @@ export const RichTranscriptView = React.forwardRef<
         if (vlistRef.current) {
           vlistRef.current.scrollToIndex(messages.length - 1, { align: 'end' });
         }
+        // Mark as ready after scroll - use another RAF to ensure scroll is applied
+        requestAnimationFrame(() => {
+          setIsScrollReady(true);
+        });
       });
     });
   }, [sessionId]); // Re-run when session changes
@@ -611,7 +634,12 @@ export const RichTranscriptView = React.forwardRef<
           const distanceFromBottom = scrollSize - scrollOffset - viewportSize;
           const isAtBottom = distanceFromBottom < 100; // Slightly more lenient threshold
 
-          if (isAtBottom || wasAtBottomRef.current) {
+          // During active streaming/processing, always auto-scroll to prevent the
+          // content from drifting away as new content is added. The wasAtBottomRef
+          // can incorrectly become false during rapid content updates.
+          const shouldAutoScroll = isWaitingForResponse || isAtBottom || wasAtBottomRef.current;
+
+          if (shouldAutoScroll) {
             // Account for the "Thinking..." indicator which is an extra item after messages
             const lastIndex = isWaitingForResponse ? messages.length : messages.length - 1;
             vlistRef.current.scrollToIndex(lastIndex, { align: 'end' });
@@ -1055,7 +1083,7 @@ export const RichTranscriptView = React.forwardRef<
               {renderEmptyExtra?.()}
             </div>
           ) : (
-            <div className="rich-transcript-messages flex flex-col max-w-full overflow-x-hidden h-full">
+            <div className={`rich-transcript-messages rich-transcript-vlist-wrapper flex flex-col max-w-full overflow-x-hidden h-full ${isScrollReady ? 'scroll-ready' : ''}`}>
               <VList
                   ref={vlistRef}
                   className="rich-transcript-vlist !h-full !w-full"
