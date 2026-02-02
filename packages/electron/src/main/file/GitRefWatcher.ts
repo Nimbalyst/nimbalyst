@@ -183,11 +183,11 @@ export class GitRefWatcher {
         return;
       }
 
-      logger.main.info('[GitRefWatcher] New commit detected:', {
-        workspace: path.basename(workspacePath),
-        hash: newCommitHash.slice(0, 7),
-        message: log.latest.message?.substring(0, 50),
-      });
+      // logger.main.info('[GitRefWatcher] New commit detected:', {
+      //   workspace: path.basename(workspacePath),
+      //   hash: newCommitHash.slice(0, 7),
+      //   message: log.latest.message?.substring(0, 50),
+      // });
 
       // Update our tracking
       const oldCommitHash = entry.lastCommitHash;
@@ -215,7 +215,7 @@ export class GitRefWatcher {
         }
       }
 
-      logger.main.info('[GitRefWatcher] Committed files:', committedFiles.length);
+      // logger.main.info('[GitRefWatcher] Committed files:', committedFiles.length);
 
       // Auto-approve pending reviews for committed files
       if (committedFiles.length > 0) {
@@ -288,10 +288,10 @@ export class GitRefWatcher {
         const pendingTags = await historyManager.getPendingTags(filePath);
 
         if (pendingTags.length > 0) {
-          logger.main.info('[GitRefWatcher] Auto-approving pending review:', {
-            file: path.basename(filePath),
-            tags: pendingTags.length,
-          });
+          // logger.main.info('[GitRefWatcher] Auto-approving pending review:', {
+          //   file: path.basename(filePath),
+          //   tags: pendingTags.length,
+          // });
 
           for (const tag of pendingTags) {
             await historyManager.updateTagStatus(filePath, tag.id, 'reviewed', workspacePath);
@@ -301,10 +301,10 @@ export class GitRefWatcher {
       }
 
       if (approvedCount > 0) {
-        logger.main.info('[GitRefWatcher] Auto-approved pending reviews:', {
-          workspace: path.basename(workspacePath),
-          count: approvedCount,
-        });
+        // logger.main.info('[GitRefWatcher] Auto-approved pending reviews:', {
+        //   workspace: path.basename(workspacePath),
+        //   count: approvedCount,
+        // });
 
         // Emit pending count changed event to update UI
         // The historyManager.updateTagStatus already emits this, but we emit

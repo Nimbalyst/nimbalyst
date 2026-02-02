@@ -36,14 +36,14 @@ function compressImageIfNeeded(
   const byteSizeMB = byteSize / 1024 / 1024;
   const maxSizeMB = MAX_IMAGE_SIZE_BYTES / 1024 / 1024;
 
-  console.log(`[MCP Server] Image size check: ${byteSizeMB.toFixed(3)} MB (limit: ${maxSizeMB.toFixed(3)} MB)`);
+  // console.log(`[MCP Server] Image size check: ${byteSizeMB.toFixed(3)} MB (limit: ${maxSizeMB.toFixed(3)} MB)`);
 
   if (byteSize <= MAX_IMAGE_SIZE_BYTES) {
-    console.log(`[MCP Server] Image under limit, no compression needed`);
+    // console.log(`[MCP Server] Image under limit, no compression needed`);
     return { data: base64Data, mimeType, wasCompressed: false };
   }
 
-  console.log(`[MCP Server] Image size ${byteSizeMB.toFixed(2)} MB exceeds limit of ${maxSizeMB.toFixed(2)} MB, compressing to JPEG...`);
+  // console.log(`[MCP Server] Image size ${byteSizeMB.toFixed(2)} MB exceeds limit of ${maxSizeMB.toFixed(2)} MB, compressing to JPEG...`);
 
   try {
     // Validate base64 data before attempting to decode
@@ -54,7 +54,7 @@ function compressImageIfNeeded(
 
     // Create nativeImage from base64 PNG
     const buffer = Buffer.from(base64Data, 'base64');
-    console.log(`[MCP Server] Created buffer of ${buffer.length} bytes from ${base64Data.length} chars base64`);
+    // console.log(`[MCP Server] Created buffer of ${buffer.length} bytes from ${base64Data.length} chars base64`);
 
     // Validate that we actually got a buffer with data
     if (buffer.length === 0) {
@@ -70,7 +70,7 @@ function compressImageIfNeeded(
     }
 
     const originalSize = image.getSize();
-    console.log(`[MCP Server] Image dimensions: ${originalSize.width}x${originalSize.height}`);
+    // console.log(`[MCP Server] Image dimensions: ${originalSize.width}x${originalSize.height}`);
 
     // Quality levels to try
     const qualities = [85, 70, 55, 40, 30, 20];
@@ -83,7 +83,7 @@ function compressImageIfNeeded(
       if (scale < 1.0) {
         const newWidth = Math.round(originalSize.width * scale);
         const newHeight = Math.round(originalSize.height * scale);
-        console.log(`[MCP Server] Resizing to ${scale * 100}%: ${newWidth}x${newHeight}`);
+        // console.log(`[MCP Server] Resizing to ${scale * 100}%: ${newWidth}x${newHeight}`);
         workingImage = image.resize({ width: newWidth, height: newHeight, quality: 'better' });
       }
 
@@ -92,16 +92,16 @@ function compressImageIfNeeded(
         const compressedSize = jpegBuffer.length;
         const compressedSizeMB = compressedSize / 1024 / 1024;
 
-        if (scale === 1.0) {
-          console.log(`[MCP Server] JPEG quality ${quality}: ${compressedSizeMB.toFixed(3)} MB`);
-        } else {
-          console.log(`[MCP Server] Scale ${scale * 100}%, quality ${quality}: ${compressedSizeMB.toFixed(3)} MB`);
-        }
+        // if (scale === 1.0) {
+        //   console.log(`[MCP Server] JPEG quality ${quality}: ${compressedSizeMB.toFixed(3)} MB`);
+        // } else {
+        //   console.log(`[MCP Server] Scale ${scale * 100}%, quality ${quality}: ${compressedSizeMB.toFixed(3)} MB`);
+        // }
 
         if (compressedSize <= MAX_IMAGE_SIZE_BYTES) {
           const jpegBase64 = jpegBuffer.toString('base64');
           const finalSize = workingImage.getSize();
-          console.log(`[MCP Server] SUCCESS: Compressed to ${compressedSizeMB.toFixed(3)} MB (${finalSize.width}x${finalSize.height}, quality ${quality})`);
+          // console.log(`[MCP Server] SUCCESS: Compressed to ${compressedSizeMB.toFixed(3)} MB (${finalSize.width}x${finalSize.height}, quality ${quality})`);
           return { data: jpegBase64, mimeType: 'image/jpeg', wasCompressed: true };
         }
       }
@@ -116,7 +116,7 @@ function compressImageIfNeeded(
     const smallestBuffer = smallestImage.toJPEG(lowestQuality);
     const smallestSizeMB = smallestBuffer.length / 1024 / 1024;
 
-    console.log(`[MCP Server] WARNING: Even smallest (${smallWidth}x${smallHeight}, quality ${lowestQuality}) is ${smallestSizeMB.toFixed(3)} MB, exceeds limit but using anyway`);
+    // console.log(`[MCP Server] WARNING: Even smallest (${smallWidth}x${smallHeight}, quality ${lowestQuality}) is ${smallestSizeMB.toFixed(3)} MB, exceeds limit but using anyway`);
 
     return {
       data: smallestBuffer.toString('base64'),
@@ -243,7 +243,7 @@ const extensionToolsByWorkspace = new Map<string, ExtensionToolDefinition[]>();
  */
 export function registerExtensionTools(workspacePath: string, tools: ExtensionToolDefinition[]) {
   extensionToolsByWorkspace.set(workspacePath, tools);
-  console.log(`[MCP Server] Registered ${tools.length} extension tools for workspace: ${workspacePath}`);
+  // console.log(`[MCP Server] Registered ${tools.length} extension tools for workspace: ${workspacePath}`);
   // tools.forEach(t => console.log(`[MCP Server]   - ${t.name} (${t.scope})`));
 }
 
@@ -252,7 +252,7 @@ export function registerExtensionTools(workspacePath: string, tools: ExtensionTo
  */
 export function unregisterExtensionTools(workspacePath: string) {
   extensionToolsByWorkspace.delete(workspacePath);
-  console.log(`[MCP Server] Unregistered extension tools for workspace: ${workspacePath}`);
+  // console.log(`[MCP Server] Unregistered extension tools for workspace: ${workspacePath}`);
 }
 
 /**
@@ -587,7 +587,7 @@ async function tryCreateServer(port: number): Promise<any> {
         findWindowIdForWorkspacePath(workspacePath).then(windowId => {
           if (windowId) {
             workspaceToWindowMap.set(workspacePath, windowId);
-            console.log(`[MCP Server] Registered workspace ${workspacePath} -> window ${windowId}`);
+            // console.log(`[MCP Server] Registered workspace ${workspacePath} -> window ${windowId}`);
           }
         }).catch(err => {
           console.warn(`[MCP Server] Failed to register workspace window mapping:`, err);
@@ -1085,7 +1085,7 @@ The commit message should follow these guidelines:
 
           case 'open_file': {
             const filePathArg = args?.file_path as string;
-            console.log('[MCP Server] open_file called with:', { file_path: filePathArg });
+            // console.log('[MCP Server] open_file called with:', { file_path: filePathArg });
 
             // Validate file path
             if (!filePathArg || typeof filePathArg !== 'string') {
@@ -1193,13 +1193,13 @@ The commit message should follow these guidelines:
               // Register the workspace if not already registered
               if (!workspaceToWindowMap.has(fileWorkspacePath)) {
                 workspaceToWindowMap.set(fileWorkspacePath, targetWindow.id);
-                console.log(`[MCP Server] Registered workspace ${fileWorkspacePath} -> window ${targetWindow.id}`);
+                // console.log(`[MCP Server] Registered workspace ${fileWorkspacePath} -> window ${targetWindow.id}`);
               }
 
               // Send IPC to open the file
               targetWindow.webContents.send('file:open', { filePath: filePathArg });
 
-              console.log(`[MCP Server] Opened file: ${filePathArg} in window ${targetWindow.id}`);
+              // console.log(`[MCP Server] Opened file: ${filePathArg} in window ${targetWindow.id}`);
 
               return {
                 content: [
@@ -1228,7 +1228,7 @@ The commit message should follow these guidelines:
 
           case 'open_workspace': {
             const workspacePathArg = args?.workspace_path as string;
-            console.log('[MCP Server] open_workspace called with:', { workspace_path: workspacePathArg });
+            // console.log('[MCP Server] open_workspace called with:', { workspace_path: workspacePathArg });
 
             // Validate workspace path
             if (!workspacePathArg || typeof workspacePathArg !== 'string') {
@@ -1310,7 +1310,7 @@ The commit message should follow these guidelines:
             const filePath = args?.file_path as string | undefined;
             const selector = args?.selector as string | undefined;
 
-            console.log('[MCP Server] capture_editor_screenshot called with:', { filePath, selector, workspacePath });
+            // console.log('[MCP Server] capture_editor_screenshot called with:', { filePath, selector, workspacePath });
 
             if (!filePath) {
               return {
@@ -1360,7 +1360,7 @@ The commit message should follow these guidelines:
                 };
               }
 
-              console.log(`[MCP Server] Using offscreen editor screenshot for ${filePath}`);
+              // console.log(`[MCP Server] Using offscreen editor screenshot for ${filePath}`);
 
               // Use offscreen editor system for screenshot
               // This will mount the editor offscreen if needed, capture, and unmount
@@ -1391,7 +1391,7 @@ The commit message should follow these guidelines:
                 };
               }
 
-              console.log(`[MCP Server] Captured editor screenshot for ${filePath}`);
+              // console.log(`[MCP Server] Captured editor screenshot for ${filePath}`);
 
               // Compress image if needed (reuse mockup compression logic)
               const compressed = compressImageIfNeeded(
@@ -1400,7 +1400,7 @@ The commit message should follow these guidelines:
               );
 
               const finalSizeBytes = Math.floor((compressed.data.length * 3) / 4);
-              console.log(`[MCP Server] Returning editor screenshot: ${(finalSizeBytes / 1024 / 1024).toFixed(3)} MB, mimeType: ${compressed.mimeType}, wasCompressed: ${compressed.wasCompressed}`);
+              // console.log(`[MCP Server] Returning editor screenshot: ${(finalSizeBytes / 1024 / 1024).toFixed(3)} MB, mimeType: ${compressed.mimeType}, wasCompressed: ${compressed.wasCompressed}`);
 
               return {
                 content: [
@@ -1648,7 +1648,7 @@ The commit message should follow these guidelines:
               }
             }
 
-            console.log(`[MCP Server] display_to_user: ${typedArgs.items.length} item(s)`);
+            // console.log(`[MCP Server] display_to_user: ${typedArgs.items.length} item(s)`);
 
             return {
               content: [{
@@ -1886,7 +1886,7 @@ The commit message should follow these guidelines:
               // Helper to extract file path from string or object
               const getFilePath = (f: FileToStage) => typeof f === 'string' ? f : f.path;
 
-              console.log(`[MCP Server] Waiting for git commit proposal response: ${proposalId}`);
+              // console.log(`[MCP Server] Waiting for git commit proposal response: ${proposalId}`);
               ipcMain.once(proposalId, (_event, result: {
                 action: 'committed' | 'cancelled';
                 commitHash?: string;
@@ -1894,7 +1894,7 @@ The commit message should follow these guidelines:
                 filesCommitted?: string[];
                 commitMessage?: string;
               }) => {
-                console.log(`[MCP Server] Received git commit proposal response: ${proposalId}`, result.action);
+                // console.log(`[MCP Server] Received git commit proposal response: ${proposalId}`, result.action);
                 clearTimeout(timeout);
 
                 if (result.action === 'committed') {
@@ -1947,7 +1947,7 @@ The commit message should follow these guidelines:
             }
 
             // Execute extension tool via IPC to renderer
-            console.log(`[MCP Server] Executing extension tool: ${toolName}`);
+            // console.log(`[MCP Server] Executing extension tool: ${toolName}`);
 
             // workspacePath is REQUIRED - extension tools must be routed to the correct window
             if (!workspacePath) {
@@ -2108,13 +2108,13 @@ The commit message should follow these guidelines:
                   responseText = errorParts.join('\n');
                 }
 
-                console.log(`[MCP Server] Extension tool result:`, {
-                  success,
-                  hasError,
-                  extensionId,
-                  toolName: resultToolName,
-                  result: JSON.stringify(result).substring(0, 200)
-                });
+                // console.log(`[MCP Server] Extension tool result:`, {
+                //   success,
+                //   hasError,
+                //   extensionId,
+                //   toolName: resultToolName,
+                //   result: JSON.stringify(result).substring(0, 200)
+                // });
 
                 resolve({
                   content: [

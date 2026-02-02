@@ -491,8 +491,8 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
       // Build system prompt (no longer contains document context)
       const promptBuildStart = Date.now();
-      console.log('[CLAUDE-CODE] sendMessage - documentContext keys:', documentContext ? Object.keys(documentContext) : 'undefined');
-      console.log('[CLAUDE-CODE] sendMessage - documentContext.sessionType:', (documentContext as any)?.sessionType);
+      // console.log('[CLAUDE-CODE] sendMessage - documentContext keys:', documentContext ? Object.keys(documentContext) : 'undefined');
+      // console.log('[CLAUDE-CODE] sendMessage - documentContext.sessionType:', (documentContext as any)?.sessionType);
       const systemPrompt = this.buildSystemPrompt(documentContext);
 
       // Note: Attachments (images/documents) are NOT added to the message text.
@@ -612,7 +612,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
           const extensionPlugins = await ClaudeCodeProvider.extensionPluginsLoader(workspacePath);
           if (extensionPlugins.length > 0) {
             options.plugins = extensionPlugins;
-            console.log(`[CLAUDE-CODE] Loaded ${extensionPlugins.length} extension plugin(s):`, extensionPlugins.map(p => p.path));
+            // console.log(`[CLAUDE-CODE] Loaded ${extensionPlugins.length} extension plugin(s):`, extensionPlugins.map(p => p.path));
           }
         } catch (error) {
           console.warn('[CLAUDE-CODE] Failed to load extension plugins:', error);
@@ -627,7 +627,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
           const additionalDirs = ClaudeCodeProvider.additionalDirectoriesLoader(workspacePath);
           if (additionalDirs.length > 0) {
             options.additionalDirectories = additionalDirs;
-            console.log(`[CLAUDE-CODE] Added ${additionalDirs.length} additional directory(ies):`, additionalDirs);
+            // console.log(`[CLAUDE-CODE] Added ${additionalDirs.length} additional directory(ies):`, additionalDirs);
           }
         } catch (error) {
           console.warn('[CLAUDE-CODE] Failed to load additional directories:', error);
@@ -707,15 +707,15 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       // Handle session resumption and branching
       if (sessionId) {
         const claudeSessionId = this.claudeSessionIds.get(sessionId);
-        console.log('[CLAUDE-CODE] Session resumption check:', {
-          sessionId,
-          existingClaudeSessionId: claudeSessionId,
-          branchedFromSessionId: (documentContext as any)?.branchedFromSessionId,
-          branchedFromProviderSessionId: (documentContext as any)?.branchedFromProviderSessionId,
-        });
+        // console.log('[CLAUDE-CODE] Session resumption check:', {
+        //   sessionId,
+        //   existingClaudeSessionId: claudeSessionId,
+        //   branchedFromSessionId: (documentContext as any)?.branchedFromSessionId,
+        //   branchedFromProviderSessionId: (documentContext as any)?.branchedFromProviderSessionId,
+        // });
         if (claudeSessionId) {
           options.resume = claudeSessionId;
-          console.log('[CLAUDE-CODE] Resuming existing session:', claudeSessionId);
+          // console.log('[CLAUDE-CODE] Resuming existing session:', claudeSessionId);
         } else {
           // Check if this is a branched session (forked from another session)
           const branchedFromSessionId = (documentContext as any)?.branchedFromSessionId;
@@ -724,19 +724,19 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             // Resume from source session's provider session ID and fork it
             options.resume = branchedFromProviderSessionId;
             options.forkSession = true;
-            console.log('[CLAUDE-CODE] Branching from source session:', branchedFromSessionId, 'with provider session:', branchedFromProviderSessionId);
+            // console.log('[CLAUDE-CODE] Branching from source session:', branchedFromSessionId, 'with provider session:', branchedFromProviderSessionId);
           } else if (branchedFromSessionId) {
             // Fallback: try the in-memory map (if source was used in this app session)
             const sourceClaudeSessionId = this.claudeSessionIds.get(branchedFromSessionId);
             if (sourceClaudeSessionId) {
               options.resume = sourceClaudeSessionId;
               options.forkSession = true;
-              console.log('[CLAUDE-CODE] Branching from source session (in-memory):', branchedFromSessionId);
+              // console.log('[CLAUDE-CODE] Branching from source session (in-memory):', branchedFromSessionId);
             } else {
               console.warn('[CLAUDE-CODE] Cannot branch: source provider session ID not available. branchedFromSessionId:', branchedFromSessionId);
             }
           } else {
-            console.log('[CLAUDE-CODE] Starting new session (no branch source or existing session ID)');
+            // console.log('[CLAUDE-CODE] Starting new session (no branch source or existing session ID)');
           }
         }
       }
@@ -837,14 +837,14 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         promptInput = message;
       }
 
-      console.log('[CLAUDE-CODE] Calling SDK query() - this spawns the claude process...');
+      // console.log('[CLAUDE-CODE] Calling SDK query() - this spawns the claude process...');
       const queryCallStart = Date.now();
       const queryIterator = query({
         prompt: promptInput as any,
         options
       }) as AsyncIterable<any>;
       const queryCallDuration = Date.now() - queryCallStart;
-      console.log(`[CLAUDE-CODE] SDK query() returned iterator in ${queryCallDuration}ms`);
+      // console.log(`[CLAUDE-CODE] SDK query() returned iterator in ${queryCallDuration}ms`);
       if (queryCallDuration > 5000) {
         console.warn(`[CLAUDE-CODE] SDK query() took ${queryCallDuration}ms to return iterator (>5s threshold) - possible Windows Defender/antivirus delay`);
       }
@@ -920,7 +920,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
           if (!firstChunkTime) {
             firstChunkTime = Date.now();
             const timeToFirstChunk = firstChunkTime - queryStartTime;
-            console.log(`[CLAUDE-CODE] First chunk received in ${timeToFirstChunk}ms from query start`);
+            // console.log(`[CLAUDE-CODE] First chunk received in ${timeToFirstChunk}ms from query start`);
             if (timeToFirstChunk > 10000) {
               console.warn(`[CLAUDE-CODE] Time to first chunk was ${timeToFirstChunk}ms (>10s threshold) - possible Windows Defender/antivirus delay during subprocess spawn`);
             }
@@ -2325,7 +2325,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         transport: 'sse',
         url: `http://127.0.0.1:${ClaudeCodeProvider.extensionDevServerPort}/mcp${params}`
       };
-      console.log('[CLAUDE-CODE] Extension dev MCP server configured on port', ClaudeCodeProvider.extensionDevServerPort);
+      // console.log('[CLAUDE-CODE] Extension dev MCP server configured on port', ClaudeCodeProvider.extensionDevServerPort);
     }
 
     // Load user and workspace MCP servers using the injected loader (if available)
@@ -2614,12 +2614,12 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       input: any,
       options: { signal: AbortSignal; suggestions?: any[] }
     ): Promise<{ behavior: 'allow' | 'deny'; updatedInput?: any; message?: string }> => {
-      // Log all tool permission checks
-      this.logSecurity('[canUseTool] Tool call received:', {
-        toolName,
-        workspacePath: workspacePath?.slice(-30),
-        permissionsPath: permissionsPath?.slice(-30),
-      });
+      // Log all tool permission checks (verbose - uncomment for debugging)
+      // this.logSecurity('[canUseTool] Tool call received:', {
+      //   toolName,
+      //   workspacePath: workspacePath?.slice(-30),
+      //   permissionsPath: permissionsPath?.slice(-30),
+      // });
 
       // Internal Nimbalyst MCP tools that should always be allowed without permission prompts
       const internalMcpTools = [
@@ -2628,7 +2628,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       ];
 
       if (internalMcpTools.includes(toolName)) {
-        this.logSecurity('[canUseTool] Auto-allowing internal MCP tool:', { toolName });
+        // this.logSecurity('[canUseTool] Auto-allowing internal MCP tool:', { toolName });
         return { behavior: 'allow', updatedInput: input };
       }
 
@@ -2652,7 +2652,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         // Bypass-all mode: auto-approve everything without prompting
         // This is dangerous and should only be used for testing or trusted environments
         if (trustStatus.mode === 'bypass-all') {
-          this.logSecurity('[canUseTool] Bypass-all mode, auto-approving:', { toolName });
+          // this.logSecurity('[canUseTool] Bypass-all mode, auto-approving:', { toolName });
           return { behavior: 'allow', updatedInput: input };
         }
 
@@ -3140,7 +3140,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         if (pathForTrust && ClaudeCodeProvider.trustChecker) {
           const trustStatus = ClaudeCodeProvider.trustChecker(pathForTrust);
           if (trustStatus.trusted && trustStatus.mode === 'bypass-all') {
-            this.logSecurity(`[PreToolUse] Bypass-all mode, skipping compound command check`);
+            // this.logSecurity(`[PreToolUse] Bypass-all mode, skipping compound command check`);
             return {};
           }
         }

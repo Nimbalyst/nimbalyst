@@ -216,16 +216,16 @@ export function WalkthroughProvider({
     // Skip if disabled, no state yet, already showing a walkthrough, or a dialog/overlay is open
     const hasOverlay = hasVisibleOverlay();
     if (!autoTrigger || !state || !state.enabled || activeWalkthroughId || hasActiveDialogs || hasOverlay) {
-      if (import.meta.env.DEV) {
-        console.log('[Walkthrough] Trigger check skipped:', {
-          autoTrigger,
-          hasState: !!state,
-          enabled: state?.enabled,
-          activeWalkthroughId,
-          hasActiveDialogs,
-          hasOverlay,
-        });
-      }
+      // if (import.meta.env.DEV) {
+      //   console.log('[Walkthrough] Trigger check skipped:', {
+      //     autoTrigger,
+      //     hasState: !!state,
+      //     enabled: state?.enabled,
+      //     activeWalkthroughId,
+      //     hasActiveDialogs,
+      //     hasOverlay,
+      //   });
+      // }
       return;
     }
 
@@ -247,9 +247,9 @@ export function WalkthroughProvider({
       .filter((w) => {
         // Check if should show based on state (including cooldown check)
         if (!shouldShowWalkthrough(state, w, modeForCooldown)) {
-          if (import.meta.env.DEV) {
-            console.log(`[Walkthrough] ${w.id} filtered out by shouldShowWalkthrough`);
-          }
+          // if (import.meta.env.DEV) {
+          //   console.log(`[Walkthrough] ${w.id} filtered out by shouldShowWalkthrough`);
+          // }
           return false;
         }
 
@@ -257,17 +257,17 @@ export function WalkthroughProvider({
         const screenMatch =
           w.trigger.screen === '*' || w.trigger.screen === currentMode;
         if (!screenMatch) {
-          if (import.meta.env.DEV) {
-            console.log(`[Walkthrough] ${w.id} filtered out by screen mismatch (${w.trigger.screen} vs ${currentMode})`);
-          }
+          // if (import.meta.env.DEV) {
+          //   console.log(`[Walkthrough] ${w.id} filtered out by screen mismatch (${w.trigger.screen} vs ${currentMode})`);
+          // }
           return false;
         }
 
         // Check custom condition if provided
         if (w.trigger.condition && !w.trigger.condition()) {
-          if (import.meta.env.DEV) {
-            console.log(`[Walkthrough] ${w.id} filtered out by condition`);
-          }
+          // if (import.meta.env.DEV) {
+          //   console.log(`[Walkthrough] ${w.id} filtered out by condition`);
+          // }
           return false;
         }
 
@@ -275,32 +275,32 @@ export function WalkthroughProvider({
       })
       .sort((a, b) => (b.trigger.priority ?? 0) - (a.trigger.priority ?? 0));
 
-    if (import.meta.env.DEV) {
-      console.log('[Walkthrough] Eligible walkthroughs:', eligible.map(w => w.id));
-    }
+    // if (import.meta.env.DEV) {
+    //   console.log('[Walkthrough] Eligible walkthroughs:', eligible.map(w => w.id));
+    // }
 
     if (eligible.length > 0) {
       const walkthrough = eligible[0];
       const delay = walkthrough.trigger.delay ?? 500;
 
-      if (import.meta.env.DEV) {
-        console.log(`[Walkthrough] Will trigger ${walkthrough.id} in ${delay}ms`);
-      }
+      // if (import.meta.env.DEV) {
+      //   console.log(`[Walkthrough] Will trigger ${walkthrough.id} in ${delay}ms`);
+      // }
 
       // Delay trigger to let UI settle
       triggerDelayRef.current = setTimeout(() => {
         // Re-check for overlays right before triggering (a dialog may have opened during delay)
         if (hasVisibleOverlay()) {
-          if (import.meta.env.DEV) {
-            console.log(`[Walkthrough] ${walkthrough.id} skipped - overlay appeared during delay`);
-          }
+          // if (import.meta.env.DEV) {
+          //   console.log(`[Walkthrough] ${walkthrough.id} skipped - overlay appeared during delay`);
+          // }
           return;
         }
         // Re-check condition right before triggering (UI may have changed)
         if (walkthrough.trigger.condition && !walkthrough.trigger.condition()) {
-          if (import.meta.env.DEV) {
-            console.log(`[Walkthrough] ${walkthrough.id} condition failed at trigger time, skipping`);
-          }
+          // if (import.meta.env.DEV) {
+          //   console.log(`[Walkthrough] ${walkthrough.id} condition failed at trigger time, skipping`);
+          // }
           return;
         }
         lastTriggeredModeRef.current = currentMode;
@@ -356,12 +356,12 @@ export function WalkthroughProvider({
       };
 
       (window as any).__walkthroughHelpers = helpers;
-      console.log('[Walkthrough] Dev helpers available at window.__walkthroughHelpers');
-      console.log('  - listWalkthroughs(): Show all available walkthroughs');
-      console.log('  - startWalkthrough(id): Start a specific walkthrough');
-      console.log('  - dismissWalkthrough(): Dismiss current walkthrough');
-      console.log('  - getState(): Get current walkthrough state');
-      console.log('  - resetState(): Reset all walkthrough progress');
+      // console.log('[Walkthrough] Dev helpers available at window.__walkthroughHelpers');
+      // console.log('  - listWalkthroughs(): Show all available walkthroughs');
+      // console.log('  - startWalkthrough(id): Start a specific walkthrough');
+      // console.log('  - dismissWalkthrough(): Dismiss current walkthrough');
+      // console.log('  - getState(): Get current walkthrough state');
+      // console.log('  - resetState(): Reset all walkthrough progress');
     }
 
     return () => {

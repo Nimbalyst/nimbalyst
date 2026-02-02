@@ -245,7 +245,7 @@ async function tryCreateSessionNamingServer(port: number): Promise<any> {
               // The updateSessionTitleFn performs an atomic check-and-set at the database level
               await updateSessionTitleFn!(aiSessionId, sessionName);
 
-              console.log(`[Session Naming MCP] Updated session ${aiSessionId} to: "${sessionName}"`);
+              // console.log(`[Session Naming MCP] Updated session ${aiSessionId} to: "${sessionName}"`);
 
               return {
                 content: [

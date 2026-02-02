@@ -597,7 +597,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
   // Notify all device status listeners
   function notifyDeviceStatusChange(): void {
     const devices = Array.from(connectedDevices.values());
-    console.log('[CollabV3] notifyDeviceStatusChange:', devices.length, 'devices,', deviceStatusListeners.size, 'listeners');
+    // console.log('[CollabV3] notifyDeviceStatusChange:', devices.length, 'devices,', deviceStatusListeners.size, 'listeners');
     for (const listener of deviceStatusListeners) {
       try {
         listener(devices);
@@ -2094,7 +2094,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
         return;
       }
 
-      console.log('[CollabV3] syncSessionsToIndex called with', sessionsData.length, 'sessions, ids:', sessionsData.map(s => s.id).join(', '));
+      // console.log('[CollabV3] syncSessionsToIndex called with', sessionsData.length, 'sessions, ids:', sessionsData.map(s => s.id).join(', '));
 
       // Call the helper function
       // Note: async but this method returns void for backwards compatibility
@@ -2431,10 +2431,10 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
         title,
         body,
       };
-      console.log('[CollabV3] Requesting mobile push for session:', sessionId, 'readyState:', indexWs.readyState, 'bufferedAmount:', indexWs.bufferedAmount);
+      // console.log('[CollabV3] Requesting mobile push for session:', sessionId, 'readyState:', indexWs.readyState, 'bufferedAmount:', indexWs.bufferedAmount);
       try {
         indexWs.send(JSON.stringify(msg));
-        console.log('[CollabV3] Mobile push message sent successfully');
+        // console.log('[CollabV3] Mobile push message sent successfully');
       } catch (error) {
         console.error('[CollabV3] Failed to send mobile push message:', error);
       }

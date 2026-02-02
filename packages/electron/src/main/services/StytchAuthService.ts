@@ -126,7 +126,7 @@ function saveStytchCredentials(credentials: StoredStytchCredentials): void {
   if (isSafeStorageAvailable()) {
     const encrypted = safeStorage.encryptString(jsonData);
     fs.writeFileSync(credentialsPath, encrypted);
-    logger.main.info('[StytchAuthService] Credentials saved with safeStorage encryption');
+    // logger.main.info('[StytchAuthService] Credentials saved with safeStorage encryption');
   } else {
     logger.main.warn('[StytchAuthService] safeStorage not available - saving credentials without encryption');
     fs.writeFileSync(credentialsPath, jsonData, 'utf8');
@@ -511,7 +511,7 @@ export async function refreshSession(serverUrl?: string): Promise<boolean> {
     .replace(/\/$/, '');
 
   try {
-    logger.main.info('[StytchAuthService] Refreshing session...');
+    // logger.main.info('[StytchAuthService] Refreshing session...');
 
     const response = await net.fetch(`${httpUrl}/auth/refresh`, {
       method: 'POST',
@@ -580,7 +580,7 @@ export async function refreshSession(serverUrl?: string): Promise<boolean> {
       expiresAt: expiresAtMs,
     });
 
-    logger.main.info('[StytchAuthService] Session refreshed successfully');
+    // logger.main.info('[StytchAuthService] Session refreshed successfully');
     return true;
   } catch (error) {
     logger.main.error('[StytchAuthService] Session refresh error:', error);

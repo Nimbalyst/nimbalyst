@@ -63,7 +63,7 @@ export class SessionNamingService {
             window.webContents.send('session:title-updated', { sessionId, title });
           }
 
-          console.log(`[SessionNamingService] Updated session ${sessionId} to: "${title}"`);
+          // console.log(`[SessionNamingService] Updated session ${sessionId} to: "${title}"`);
 
           // If this session belongs to a worktree, update the worktree's display name
           // (only if it hasn't been set yet - first session named wins)

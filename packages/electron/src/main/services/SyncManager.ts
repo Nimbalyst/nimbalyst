@@ -356,9 +356,9 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
         // Only refresh if enough time has passed since last refresh
         const now = Date.now();
         if (now - lastRefreshTime > MIN_REFRESH_INTERVAL) {
-          logger.main.info('[SyncManager] Refreshing JWT...');
+          // logger.main.info('[SyncManager] Refreshing JWT...');
           const refreshResult = await doRefresh(serverUrl);
-          logger.main.info('[SyncManager] Refresh result:', refreshResult);
+          // logger.main.info('[SyncManager] Refresh result:', refreshResult);
           lastRefreshTime = now;
         }
 
@@ -367,13 +367,13 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
           throw new Error('Failed to get valid JWT after refresh');
         }
 
-        // Log JWT expiry for debugging
-        try {
-          const payload = JSON.parse(atob(freshJwt.split('.')[1]));
-          logger.main.info('[SyncManager] JWT exp:', payload.exp, 'now:', Math.floor(Date.now() / 1000));
-        } catch {
-          // ignore
-        }
+        // Log JWT expiry for debugging (verbose - uncomment if needed)
+        // try {
+        //   const payload = JSON.parse(atob(freshJwt.split('.')[1]));
+        //   logger.main.info('[SyncManager] JWT exp:', payload.exp, 'now:', Math.floor(Date.now() / 1000));
+        // } catch {
+        //   // ignore
+        // }
 
         return freshJwt;
       },
@@ -476,7 +476,7 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
               // We have changes the server doesn't have
               sessionsNeedingIndexUpdate.push(localSession);
               sessionsNeedingMessageSync.push(localSession.id);
-              logger.main.info(`[SyncManager] Session ${localSession.id} needs sync: local=${localUpdatedAt} server=${serverUpdatedAt}`);
+              // logger.main.info(`[SyncManager] Session ${localSession.id} needs sync: local=${localUpdatedAt} server=${serverUpdatedAt}`);
             }
             // If server has same or newer timestamp, we're in sync
           }
@@ -507,12 +507,12 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
                 const newMessages = await getSessionMessagesForSync(session.id, sinceTimestamp);
                 session.messages = newMessages;
 
-                logger.main.info(`[SyncManager] Session ${session.id}: syncing ${newMessages.length} new messages (since ${new Date(sinceTimestamp).toISOString()})`);
+                // logger.main.info(`[SyncManager] Session ${session.id}: syncing ${newMessages.length} new messages (since ${new Date(sinceTimestamp).toISOString()})`);
               }
             }
           }
 
-          logger.main.info(`[SyncManager] Syncing ${sessionsNeedingIndexUpdate.length} sessions (${sessionsNeedingMessageSync.length} with messages)`);
+          // logger.main.info(`[SyncManager] Syncing ${sessionsNeedingIndexUpdate.length} sessions (${sessionsNeedingMessageSync.length} with messages)`);
           provider.syncSessionsToIndex(sessionsNeedingIndexUpdate, {
             syncMessages: sessionsNeedingMessageSync.length > 0,
           });

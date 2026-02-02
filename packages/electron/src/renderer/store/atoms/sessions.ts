@@ -1735,8 +1735,8 @@ export const refreshSessionListAtom = atom(
 
         // Debug: log sessions with uncommittedCount
         const withCounts = sessions.filter(s => s.uncommittedCount && s.uncommittedCount > 0);
-        console.log(`[refreshSessionListAtom] Received ${sessions.length} sessions, ${withCounts.length} have uncommittedCount:`,
-          withCounts.slice(0, 3).map(s => ({ id: s.id.substring(0, 8), title: s.title?.substring(0, 30), uncommittedCount: s.uncommittedCount })));
+        // console.log(`[refreshSessionListAtom] Received ${sessions.length} sessions, ${withCounts.length} have uncommittedCount:`,
+        //   withCounts.slice(0, 3).map(s => ({ id: s.id.substring(0, 8), title: s.title?.substring(0, 30), uncommittedCount: s.uncommittedCount })));
 
         // Populate the session registry with metadata (single source of truth)
         const registry = new Map<string, SessionMeta>();

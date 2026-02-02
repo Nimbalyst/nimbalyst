@@ -158,7 +158,7 @@ export async function registerSessionHandlers() {
                 providerSessionId: session.providerSessionId,
                 worktreeId: session.worktreeId || null
             };
-            console.log('[SessionHandlers] Creating session with payload:', JSON.stringify(createPayload));
+            // console.log('[SessionHandlers] Creating session with payload:', JSON.stringify(createPayload));
 
             await AISessionsRepository.create(createPayload);
 

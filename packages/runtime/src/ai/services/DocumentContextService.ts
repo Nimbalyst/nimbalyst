@@ -33,7 +33,7 @@ export class DocumentContextService implements IDocumentContextService {
   private persistCallback: PersistDocumentStateCallback | null = null;
 
   /** Debug logging enabled flag */
-  private debugEnabled = true;
+  private debugEnabled = false;
 
   private debug(message: string, data?: Record<string, unknown>): void {
     if (this.debugEnabled) {

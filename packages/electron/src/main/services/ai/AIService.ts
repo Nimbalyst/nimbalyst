@@ -1628,9 +1628,9 @@ export class AIService {
         attachments: attachments && attachments.length > 0 ? attachments : undefined,
         mode: documentContext?.mode,
       };
-      logger.main.info(`[AIService] Adding user message to session ${session.id}: "${message.substring(0, 50)}..." (queuedPromptId: ${queuedPromptId || 'none'}, mode: ${documentContext?.mode})`);
+      // logger.main.info(`[AIService] Adding user message to session ${session.id}: "${message.substring(0, 50)}..." (queuedPromptId: ${queuedPromptId || 'none'}, mode: ${documentContext?.mode})`);
       await this.sessionManager.addMessage(userMessage, session.id);
-      logger.main.info(`[AIService] User message added successfully to session ${session.id}`);
+      // logger.main.info(`[AIService] User message added successfully to session ${session.id}`);
 
       // Update session title if this is the first user message
       if (session.messages.length === 0 || (session.messages.length === 1 && session.messages[0].role === 'user')) {
@@ -1818,7 +1818,7 @@ export class AIService {
 
       // Listen for AskUserQuestion requests and forward to renderer
       const onAskUserQuestion = (data: { questionId: string; sessionId: string; questions: any[]; timestamp: number }) => {
-        logger.main.info('[AIService] AskUserQuestion requested:', data.questionId);
+        // logger.main.info('[AIService] AskUserQuestion requested:', data.questionId);
         safeSend(event, 'ai:askUserQuestion', data);
       };
       provider.removeAllListeners('askUserQuestion:pending');
@@ -1826,7 +1826,7 @@ export class AIService {
 
       // Listen for AskUserQuestion answers and forward to renderer to update tool call display
       const onAskUserQuestionAnswered = (data: { questionId: string; sessionId: string; questions: any[]; answers: Record<string, string>; timestamp: number }) => {
-        logger.main.info('[AIService] AskUserQuestion answered:', data.questionId);
+        // logger.main.info('[AIService] AskUserQuestion answered:', data.questionId);
         safeSend(event, 'ai:askUserQuestionAnswered', data);
       };
       provider.removeAllListeners('askUserQuestion:answered');
@@ -3170,7 +3170,7 @@ export class AIService {
     // Handle AskUserQuestion answer response from renderer
     // Used when Claude's AskUserQuestion tool needs user input
     safeHandle('claude-code:answer-question', async (event, { questionId, answers }: { questionId: string; answers: Record<string, string> }) => {
-      logger.main.info(`[AIService] AskUserQuestion answer received: questionId=${questionId}`);
+      // logger.main.info(`[AIService] AskUserQuestion answer received: questionId=${questionId}`);
 
       // Extract sessionId from questionId (format: ask-{sessionId}-{timestamp})
       const sessionIdMatch = questionId.match(/^ask-(.+)-\d+$/);
