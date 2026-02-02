@@ -52,6 +52,8 @@ interface WorktreeCommitInfo {
   author: string;
   date: Date;
   files: string[];
+  /** True if an equivalent commit (same patch content) exists on the base branch */
+  hasEquivalentOnBase?: boolean;
 }
 
 interface GitOperationsPanelProps {
@@ -131,6 +133,7 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
     const [worktreeCommits, setWorktreeCommits] = useState<WorktreeCommitInfo[]>([]);
     const [worktreeRepoRootBranch, setWorktreeRepoRootBranch] = useState<string | undefined>(undefined);
     const [worktreeCommitsBehind, setWorktreeCommitsBehind] = useState(0);
+    const [worktreeUniqueCommitsAhead, setWorktreeUniqueCommitsAhead] = useState<number | undefined>(undefined);
     const [worktreeIsMerged, setWorktreeIsMerged] = useState(false);
     const [worktreeIsRebasing, setWorktreeIsRebasing] = useState(false);
     const [worktreeIsMerging, setWorktreeIsMerging] = useState(false);
@@ -439,7 +442,7 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
       }
     }, [workspacePath]);
 
-    // Load worktree status (commits behind, isMerged)
+    // Load worktree status (commits behind, isMerged, uniqueCommitsAhead)
     const loadWorktreeStatus = useCallback(async () => {
       if (!worktreePath) return;
 
@@ -448,6 +451,7 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
         if (result?.success && result.status) {
           setWorktreeCommitsBehind(result.status.commitsBehind || 0);
           setWorktreeIsMerged(result.status.isMerged || false);
+          setWorktreeUniqueCommitsAhead(result.status.uniqueCommitsAhead);
         }
       } catch (err) {
         console.error('[GitOperationsPanel] Failed to load worktree status:', err);
@@ -1520,7 +1524,16 @@ Please proceed with this strategy.`;
                 {worktreeCommits.length > 0 && (
                   <div className="flex flex-col gap-2">
                     <div className="flex items-center justify-between text-[11px] font-semibold text-[var(--nim-text)]">
-                      <span>Commits ({worktreeCommits.length})</span>
+                      <span>
+                        Commits{' '}
+                        {worktreeUniqueCommitsAhead !== undefined && worktreeUniqueCommitsAhead !== worktreeCommits.length ? (
+                          <span title={`${worktreeUniqueCommitsAhead} unique commit${worktreeUniqueCommitsAhead !== 1 ? 's' : ''}, ${worktreeCommits.length - worktreeUniqueCommitsAhead} already on ${worktreeRepoRootBranch || 'base'}`}>
+                            ({worktreeUniqueCommitsAhead} unique / {worktreeCommits.length} total)
+                          </span>
+                        ) : (
+                          <span>({worktreeCommits.length})</span>
+                        )}
+                      </span>
                     </div>
                     {/* Squash actions - only show when commits are selected */}
                     {worktreeCommits.length > 1 && selectedCommits.size > 0 && (
@@ -1555,12 +1568,14 @@ Please proceed with this strategy.`;
                       {worktreeCommits.map((commit) => {
                         const isSelected = selectedCommits.has(commit.hash);
                         const canSelect = selectableCommits.has(commit.hash);
+                        const isEquivalent = commit.hasEquivalentOnBase;
                         return (
                           <div
                             key={commit.hash}
                             className={`flex items-center gap-2 p-2 rounded text-[11px] ${
                               isSelected ? 'bg-[var(--nim-bg-selected)] border border-[var(--nim-primary)]' : 'hover:bg-[var(--nim-bg-tertiary)]'
-                            }`}
+                            } ${isEquivalent ? 'opacity-60' : ''}`}
+                            title={isEquivalent ? `Equivalent commit exists on ${worktreeRepoRootBranch || 'base'} - will be skipped during rebase` : undefined}
                           >
                             {worktreeCommits.length > 1 && (
                               <input
@@ -1572,12 +1587,15 @@ Please proceed with this strategy.`;
                                 title={!canSelect && !isSelected ? 'Only consecutive commits can be squashed' : 'Select for squashing'}
                               />
                             )}
-                            <div className="font-[var(--nim-font-mono)] text-[var(--nim-primary)] text-[10px] font-semibold">
+                            <div className={`font-[var(--nim-font-mono)] text-[10px] font-semibold ${isEquivalent ? 'text-[var(--nim-text-muted)]' : 'text-[var(--nim-primary)]'}`}>
                               {commit.shortHash}
                             </div>
-                            <div className="flex-1 text-[var(--nim-text)] overflow-hidden text-ellipsis whitespace-nowrap">
+                            <div className={`flex-1 overflow-hidden text-ellipsis whitespace-nowrap ${isEquivalent ? 'text-[var(--nim-text-muted)]' : 'text-[var(--nim-text)]'}`}>
                               {commit.message}
                             </div>
+                            {isEquivalent && (
+                              <span className="text-[9px] text-[var(--nim-text-faint)] whitespace-nowrap">on {worktreeRepoRootBranch || 'base'}</span>
+                            )}
                           </div>
                         );
                       })}

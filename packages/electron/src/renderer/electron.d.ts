@@ -545,6 +545,7 @@ interface ElectronAPI {
       commitsAhead: number;
       commitsBehind: number;
       isMerged: boolean;
+      uniqueCommitsAhead?: number;
     };
   }>;
   worktreeGetByPath: (worktreePath: string) => Promise<{

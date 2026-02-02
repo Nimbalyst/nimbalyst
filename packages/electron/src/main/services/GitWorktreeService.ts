@@ -42,6 +42,12 @@ export interface WorktreeStatus {
   commitsAhead: number;
   commitsBehind: number;
   isMerged: boolean;
+  /**
+   * Number of commits that are truly unique to this branch (no equivalent on base).
+   * Uses git cherry to compare by patch content rather than hash.
+   * When undefined, uniqueCommitsAhead equals commitsAhead.
+   */
+  uniqueCommitsAhead?: number;
 }
 
 /**
@@ -65,6 +71,11 @@ export interface CommitInfo {
   author: string;
   date: Date;
   files: string[];
+  /**
+   * True if an equivalent commit (same patch content) exists on the base branch.
+   * These commits will be skipped during rebase.
+   */
+  hasEquivalentOnBase?: boolean;
 }
 
 /**
@@ -385,6 +396,7 @@ export class GitWorktreeService {
       let commitsAhead = 0;
       let commitsBehind = 0;
       let isMerged = false;
+      let uniqueCommitsAhead: number | undefined;
 
       try {
         // Check if branch exists in remote
@@ -398,6 +410,24 @@ export class GitWorktreeService {
         // Check if branch is merged
         const mergedBranches = await git.raw(['branch', '--merged', baseBranch]);
         isMerged = mergedBranches.includes(currentBranch);
+
+        // Use git cherry to find truly unique commits (by patch content, not hash)
+        // This handles cases where commits were rebased and have different hashes
+        // but the same content on both branches
+        if (commitsAhead > 0) {
+          try {
+            const cherryResult = await git.raw(['cherry', baseBranch, currentBranch]);
+            // Lines starting with '+' are unique, '-' means equivalent exists on base
+            const uniqueCount = cherryResult.split('\n').filter(line => line.startsWith('+')).length;
+            // Only set if different from commitsAhead (indicates duplicates exist)
+            if (uniqueCount !== commitsAhead) {
+              uniqueCommitsAhead = uniqueCount;
+            }
+          } catch (cherryError) {
+            // git cherry can fail in some edge cases, just skip unique counting
+            logger.warn('Failed to count unique commits with git cherry', { cherryError });
+          }
+        }
       } catch (error) {
         logger.warn('Failed to get ahead/behind counts', { error });
         // Continue with default values
@@ -409,6 +439,7 @@ export class GitWorktreeService {
         commitsAhead,
         commitsBehind,
         isMerged,
+        uniqueCommitsAhead,
       };
     } catch (error) {
       logger.error('Failed to get worktree status', { error, worktreePath });
@@ -1207,6 +1238,36 @@ ${newLines.map(line => '+' + line).join('\n')}`;
         }
       }
 
+      // Use git cherry to identify commits that have equivalents on the base branch
+      // These commits will be skipped during rebase
+      if (commits.length > 0) {
+        try {
+          const cherryResult = await git.raw(['cherry', baseBranch, currentBranch]);
+          // Build a set of hashes that have equivalents (lines starting with '-')
+          const equivalentHashes = new Set<string>();
+          for (const line of cherryResult.split('\n')) {
+            if (line.startsWith('-')) {
+              // Format is "- <hash>", extract the hash
+              const hash = line.substring(2).trim();
+              equivalentHashes.add(hash);
+            }
+          }
+
+          // Mark commits that have equivalents
+          if (equivalentHashes.size > 0) {
+            for (const commit of commits) {
+              if (equivalentHashes.has(commit.hash)) {
+                commit.hasEquivalentOnBase = true;
+              }
+            }
+            logger.info('Marked equivalent commits', { equivalentCount: equivalentHashes.size, totalCommits: commits.length });
+          }
+        } catch (cherryError) {
+          // git cherry can fail in some edge cases, just skip marking
+          logger.warn('Failed to check for equivalent commits with git cherry', { cherryError });
+        }
+      }
+
       logger.info('Found worktree commits', { count: commits.length });
       return commits;
     } catch (error) {
@@ -1679,74 +1740,163 @@ ${newLines.map(line => '+' + line).join('\n')}`;
       // Get the current branch
       const currentBranch = (await git.revparse(['--abbrev-ref', 'HEAD'])).trim();
 
-      // Find the merge base (common ancestor)
+      // Use git cherry to find commits that are truly unique (will actually be replayed)
+      // Commits with equivalent content on base branch will be skipped during rebase
+      const cherryResult = await git.raw(['cherry', baseBranch, currentBranch]);
+      const uniqueCommitHashes: string[] = [];
+      for (const line of cherryResult.split('\n')) {
+        if (line.startsWith('+')) {
+          // Format is "+ <hash>", extract the hash
+          uniqueCommitHashes.push(line.substring(2).trim());
+        }
+      }
+
+      // If no unique commits, no conflicts possible - rebase will be a no-op
+      if (uniqueCommitHashes.length === 0) {
+        logger.info('No unique commits to rebase, skipping conflict check');
+        return { hasConflicts: false };
+      }
+
+      // Get files modified by unique commits only, tracking which commits touch which files
+      const ourFiles = new Set<string>();
+      const commitToFiles = new Map<string, Set<string>>(); // hash -> files
+      const fileToCommits = new Map<string, Set<string>>(); // file -> hashes
+
+      for (const hash of uniqueCommitHashes) {
+        const filesInCommit = (await git.raw(['diff-tree', '--no-commit-id', '--name-only', '-r', hash])).split('\n').filter(f => f.trim());
+        commitToFiles.set(hash, new Set(filesInCommit));
+        for (const file of filesInCommit) {
+          ourFiles.add(file);
+          if (!fileToCommits.has(file)) {
+            fileToCommits.set(file, new Set());
+          }
+          fileToCommits.get(file)!.add(hash);
+        }
+      }
+
+      if (ourFiles.size === 0) {
+        return { hasConflicts: false };
+      }
+
+      // Find the merge base for comparing what's on the base branch
       const mergeBase = (await git.raw(['merge-base', baseBranch, currentBranch])).trim();
 
-      // Use git merge-tree to simulate the merge without modifying the working tree
-      // merge-tree shows what a merge would look like
+      // Get files modified on the base branch since merge base
+      const theirFiles = (await git.diff([`${mergeBase}...${baseBranch}`, '--name-only'])).split('\n').filter(f => f.trim());
+
+      // Find intersecting files (potential conflicts)
+      const conflictingFiles = [...ourFiles].filter(f => theirFiles.includes(f));
+
+      if (conflictingFiles.length === 0) {
+        return { hasConflicts: false };
+      }
+
+      // For files that overlap, check if there would be actual content conflicts
+      // using git merge-tree on just those files' content
       try {
         const mergeTreeOutput = await git.raw(['merge-tree', mergeBase, currentBranch, baseBranch]);
+        const hasConflictMarkers = mergeTreeOutput.includes('<<<<<<<');
 
-        // Check if there are conflict markers in the output
-        const hasConflicts = mergeTreeOutput.includes('<<<<<<<');
-
-        if (!hasConflicts) {
+        if (!hasConflictMarkers) {
+          // Files overlap but content can be merged cleanly
           return { hasConflicts: false };
         }
 
-        // If conflicts detected, gather more information
-        // Get files modified in both branches
-        const ourFiles = (await git.diff([`${mergeBase}...${currentBranch}`, '--name-only'])).split('\n').filter(f => f.trim());
-        const theirFiles = (await git.diff([`${mergeBase}...${baseBranch}`, '--name-only'])).split('\n').filter(f => f.trim());
-
-        // Find intersecting files (potential conflicts)
-        const conflictingFiles = ourFiles.filter(f => theirFiles.includes(f));
-
-        // Get commit history for both sides
-        const ourCommits = await git.log({ from: mergeBase, to: currentBranch });
-        const theirCommits = await git.log({ from: mergeBase, to: baseBranch });
-
-        const ourCommitMessages = ourCommits.all.map(c => c.message);
-        const theirCommitMessages = theirCommits.all.map(c => c.message);
-
-        logger.info('Rebase conflicts detected', {
-          conflictingFiles,
-          ourCommitCount: ourCommitMessages.length,
-          theirCommitCount: theirCommitMessages.length,
+        // Extract which of our unique files actually have conflicts
+        const actualConflictingFiles = conflictingFiles.filter(file => {
+          // Check if this file appears in the merge-tree output with conflict markers
+          const fileInOutput = mergeTreeOutput.includes(file);
+          return fileInOutput;
         });
+
+        if (actualConflictingFiles.length === 0) {
+          // Conflicts are in files from equivalent commits, which will be skipped
+          return { hasConflicts: false };
+        }
+
+        // Get only the commits that touch conflicting files
+        const conflictingCommitHashes = new Set<string>();
+        for (const file of actualConflictingFiles) {
+          const commits = fileToCommits.get(file);
+          if (commits) {
+            for (const hash of commits) {
+              conflictingCommitHashes.add(hash);
+            }
+          }
+        }
+
+        // Get commit messages for only the conflicting commits
+        const ourCommitMessages: string[] = [];
+        for (const hash of conflictingCommitHashes) {
+          const message = (await git.raw(['log', '-1', '--format=%s', hash])).trim();
+          ourCommitMessages.push(message);
+        }
+
+        // Get their commits that touch conflicting files
+        const theirConflictingCommitMessages: string[] = [];
+        for (const file of actualConflictingFiles) {
+          // Get commits on base branch that touched this file
+          const theirCommitsForFile = await git.log({ from: mergeBase, to: baseBranch, file });
+          for (const commit of theirCommitsForFile.all) {
+            if (!theirConflictingCommitMessages.includes(commit.message)) {
+              theirConflictingCommitMessages.push(commit.message);
+            }
+          }
+        }
+
+        logger.info('Rebase conflicts detected in unique commits', {
+          conflictingFiles: actualConflictingFiles,
+          ourConflictingCommitCount: ourCommitMessages.length,
+          theirConflictingCommitCount: theirConflictingCommitMessages.length,
+        });
+
+        return {
+          hasConflicts: true,
+          conflictingFiles: actualConflictingFiles,
+          conflictingCommits: {
+            ours: ourCommitMessages,
+            theirs: theirConflictingCommitMessages,
+          },
+        };
+      } catch (mergeTreeError) {
+        // merge-tree might not be available on older git versions
+        // Fall back to reporting file overlap as potential conflicts
+        logger.warn('merge-tree failed, falling back to file comparison', { mergeTreeError });
+
+        // Get only commits that touch conflicting files
+        const conflictingCommitHashes = new Set<string>();
+        for (const file of conflictingFiles) {
+          const commits = fileToCommits.get(file);
+          if (commits) {
+            for (const hash of commits) {
+              conflictingCommitHashes.add(hash);
+            }
+          }
+        }
+
+        const ourCommitMessages: string[] = [];
+        for (const hash of conflictingCommitHashes) {
+          const message = (await git.raw(['log', '-1', '--format=%s', hash])).trim();
+          ourCommitMessages.push(message);
+        }
+
+        // Get their commits that touch conflicting files
+        const theirConflictingCommitMessages: string[] = [];
+        for (const file of conflictingFiles) {
+          const theirCommitsForFile = await git.log({ from: mergeBase, to: baseBranch, file });
+          for (const commit of theirCommitsForFile.all) {
+            if (!theirConflictingCommitMessages.includes(commit.message)) {
+              theirConflictingCommitMessages.push(commit.message);
+            }
+          }
+        }
 
         return {
           hasConflicts: true,
           conflictingFiles,
           conflictingCommits: {
             ours: ourCommitMessages,
-            theirs: theirCommitMessages,
-          },
-        };
-      } catch (mergeTreeError) {
-        // merge-tree might not be available on older git versions
-        // Fall back to checking for file overlap
-        logger.warn('merge-tree failed, falling back to file comparison', { mergeTreeError });
-
-        const ourFiles = (await git.diff([`${mergeBase}...${currentBranch}`, '--name-only'])).split('\n').filter(f => f.trim());
-        const theirFiles = (await git.diff([`${mergeBase}...${baseBranch}`, '--name-only'])).split('\n').filter(f => f.trim());
-
-        const conflictingFiles = ourFiles.filter(f => theirFiles.includes(f));
-
-        if (conflictingFiles.length === 0) {
-          return { hasConflicts: false };
-        }
-
-        // Get commit history for both sides
-        const ourCommits = await git.log({ from: mergeBase, to: currentBranch });
-        const theirCommits = await git.log({ from: mergeBase, to: baseBranch });
-
-        return {
-          hasConflicts: true,
-          conflictingFiles,
-          conflictingCommits: {
-            ours: ourCommits.all.map(c => c.message),
-            theirs: theirCommits.all.map(c => c.message),
+            theirs: theirConflictingCommitMessages,
           },
         };
       }

@@ -81,7 +81,7 @@ export function RebaseConflictDialog({
                 <div className="merge-conflict-dialog-files p-3 rounded-lg bg-[var(--nim-bg-secondary)]">
                   <div className="merge-conflict-dialog-files-header flex items-center gap-2 mb-2.5 text-[13px] font-medium text-[var(--nim-primary)]">
                     <MaterialSymbol icon="commit" size={16} />
-                    <span>Your Commits:</span>
+                    <span>Your Conflicting Commits:</span>
                   </div>
                   <ul className="merge-conflict-dialog-files-list list-none m-0 p-0 flex flex-col gap-1.5 max-h-[150px] overflow-y-auto">
                     {ourCommits.map((commit, idx) => (
@@ -106,7 +106,7 @@ export function RebaseConflictDialog({
                 <div className="merge-conflict-dialog-files p-3 rounded-lg bg-[var(--nim-bg-secondary)]">
                   <div className="merge-conflict-dialog-files-header flex items-center gap-2 mb-2.5 text-[13px] font-medium text-[var(--nim-success)]">
                     <MaterialSymbol icon="commit" size={16} />
-                    <span>Incoming Commits:</span>
+                    <span>Incoming Conflicting Commits:</span>
                   </div>
                   <ul className="merge-conflict-dialog-files-list list-none m-0 p-0 flex flex-col gap-1.5 max-h-[150px] overflow-y-auto">
                     {theirCommits.map((commit, idx) => (

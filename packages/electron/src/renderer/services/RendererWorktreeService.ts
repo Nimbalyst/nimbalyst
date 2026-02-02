@@ -28,6 +28,12 @@ export interface WorktreeStatus {
   commitsAhead: number;
   commitsBehind: number;
   isMerged: boolean;
+  /**
+   * Number of commits that are truly unique to this branch (no equivalent on base).
+   * Uses git cherry to compare by patch content rather than hash.
+   * When undefined, uniqueCommitsAhead equals commitsAhead.
+   */
+  uniqueCommitsAhead?: number;
 }
 
 /**
