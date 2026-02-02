@@ -20,6 +20,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.31] - 2026-02-02
+
+
+### Added
+- "Copy Session ID" option to session context menu
+- Redesigned Files Edited sidebar with clearer scope modes
+
+### Changed
+- Simplified session scope filter to binary choice (This Session / All Sessions)
+- Centralized IPC listeners for file state and session list to prevent race conditions
+- Reduced verbose logging in main process
+
+### Fixed
+- Session model atom now initialized on add to prevent flash of default value
+- Restored data-session-id attributes to session components
+
 ## [0.52.30] - 2026-02-02
 
 
