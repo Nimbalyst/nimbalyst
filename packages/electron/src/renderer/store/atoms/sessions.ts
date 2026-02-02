@@ -201,6 +201,174 @@ export const sessionPromptAdditionsAtom = atomFamily((_sessionId: string) =>
 );
 
 // ============================================================
+// Durable Interactive Prompts
+// These atoms derive state from the database, making prompts
+// survive session switches and app restarts.
+// ============================================================
+
+/**
+ * Pending interactive prompt from the database.
+ * Represents either a permission_request or ask_user_question_request.
+ */
+export interface PendingPrompt {
+  id: string;
+  sessionId: string;
+  promptType: 'permission_request' | 'ask_user_question_request';
+  promptId: string;  // requestId or questionId
+  data: any;         // The full prompt content
+  createdAt: number;
+}
+
+/**
+ * Per-session pending prompts loaded from the database.
+ * This is the source of truth for all pending AI-to-user interactions.
+ */
+export const sessionPendingPromptsAtom = atomFamily((_sessionId: string) =>
+  atom<PendingPrompt[]>([])
+);
+
+/**
+ * Trigger to refresh pending prompts from the database.
+ * Increment this to cause a re-fetch.
+ */
+export const sessionPendingPromptsRefreshAtom = atomFamily((_sessionId: string) =>
+  atom<number>(0)
+);
+
+/**
+ * Action atom to refresh pending prompts for a session from the database.
+ * Call this when:
+ * - Session is loaded/selected
+ * - Notification received that a prompt was created
+ * - User responds to a prompt
+ */
+export const refreshPendingPromptsAtom = atom(
+  null,
+  async (get, set, sessionId: string) => {
+    try {
+      const result = await window.electronAPI.invoke('messages:get-pending-prompts', sessionId);
+      if (result.success && result.prompts) {
+        const pendingPrompts: PendingPrompt[] = result.prompts.map((p: any) => ({
+          id: p.id,
+          sessionId: p.sessionId,
+          promptType: p.content.type,
+          promptId: p.content.requestId || p.content.questionId,
+          data: p.content,
+          createdAt: p.createdAt,
+        }));
+        set(sessionPendingPromptsAtom(sessionId), pendingPrompts);
+
+        // Also update the legacy atoms for backward compatibility
+        const askQuestion = pendingPrompts.find(p => p.promptType === 'ask_user_question_request');
+        if (askQuestion) {
+          set(sessionPendingQuestionAtom(sessionId), {
+            questionId: askQuestion.promptId,
+            sessionId: askQuestion.sessionId,
+            questions: askQuestion.data.questions,
+            timestamp: askQuestion.data.timestamp,
+          });
+          set(sessionWaitingForQuestionAtom(sessionId), true);
+        } else {
+          set(sessionPendingQuestionAtom(sessionId), null);
+          set(sessionWaitingForQuestionAtom(sessionId), false);
+        }
+
+        // Update plan approval state
+        const planApproval = pendingPrompts.find(p =>
+          p.promptType === 'permission_request' &&
+          p.data.toolName?.includes('ExitPlanMode')
+        );
+        set(sessionWaitingForPlanApprovalAtom(sessionId), !!planApproval);
+      }
+    } catch (error) {
+      console.error('[refreshPendingPromptsAtom] Failed to refresh:', error);
+    }
+  }
+);
+
+/**
+ * ToolPermissionData as expected by UI components.
+ * This matches the structure of the data stored in permission_request messages.
+ */
+export interface ToolPermissionData {
+  requestId: string;
+  sessionId: string;
+  workspacePath: string;
+  request: any;  // PermissionRequest from claude-code
+  timestamp: number;
+}
+
+/**
+ * Derived atom: Get pending permission requests for a session.
+ * Maps PendingPrompt to ToolPermissionData for UI compatibility.
+ */
+export const sessionPendingPermissionsAtom = atomFamily((sessionId: string) =>
+  atom<ToolPermissionData[]>((get) => {
+    const prompts = get(sessionPendingPromptsAtom(sessionId));
+    return prompts
+      .filter(p => p.promptType === 'permission_request')
+      .map(p => p.data as ToolPermissionData);
+  })
+);
+
+/**
+ * Derived atom: Get pending AskUserQuestion for a session (only one allowed).
+ */
+export const sessionPendingAskUserQuestionAtom = atomFamily((sessionId: string) =>
+  atom((get) => {
+    const prompts = get(sessionPendingPromptsAtom(sessionId));
+    return prompts.find(p => p.promptType === 'ask_user_question_request') || null;
+  })
+);
+
+/**
+ * Action atom to respond to an interactive prompt.
+ * Creates a response message in the database and notifies the provider.
+ */
+export const respondToPromptAtom = atom(
+  null,
+  async (get, set, params: {
+    sessionId: string;
+    promptId: string;
+    promptType: 'permission_request' | 'ask_user_question_request';
+    response: any;
+  }) => {
+    const { sessionId, promptId, promptType, response } = params;
+
+    try {
+      // 1. Persist response to database
+      const result = await window.electronAPI.invoke('messages:respond-to-prompt', {
+        sessionId,
+        promptId,
+        promptType,
+        response,
+        respondedBy: 'desktop',
+      });
+
+      if (!result.success) {
+        console.error('[respondToPromptAtom] Failed to persist response:', result.error);
+        return false;
+      }
+
+      // 2. Notify provider directly for immediate resolution
+      if (promptType === 'ask_user_question_request') {
+        await window.electronAPI.invoke('ai:resolveAskUserQuestion', promptId, response.answers || response, sessionId);
+      } else if (promptType === 'permission_request') {
+        await window.electronAPI.invoke('ai:resolveToolPermission', promptId, response);
+      }
+
+      // 3. Refresh pending prompts to remove the answered one
+      await set(refreshPendingPromptsAtom, sessionId);
+
+      return true;
+    } catch (error) {
+      console.error('[respondToPromptAtom] Error:', error);
+      return false;
+    }
+  }
+);
+
+// ============================================================
 // Per-session draft input state
 // These atoms encapsulate input state within AISessionView,
 // eliminating the need for AgenticPanel to manage draft state.
@@ -1598,6 +1766,7 @@ export const refreshSessionListAtom = atom(
             set(sessionWaitingForQuestionAtom(s.id), true);
           }
         }
+
         set(sessionRegistryAtom, registry);
       }
     } catch (error) {
@@ -1684,6 +1853,7 @@ export const addSessionFullAtom = atom(
       uncommittedCount: session.uncommittedCount || 0,
     });
     set(sessionRegistryAtom, registry);
+    // File state is loaded lazily when FilesEditedSidebar mounts
   }
 );
 

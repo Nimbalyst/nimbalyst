@@ -938,6 +938,141 @@ export async function registerSessionHandlers() {
             return { success: false, error: String(error), counts: {} };
         }
     });
+
+    // ============================================================
+    // Interactive Prompts - Durable AI-to-User Interactions
+    // These handlers support the durable interactive prompts architecture
+    // where the database is the source of truth for pending prompts.
+    // ============================================================
+
+    /**
+     * Get all pending interactive prompts for a session.
+     * Returns prompts where status is 'pending' and no response message exists.
+     */
+    safeHandle('messages:get-pending-prompts', async (event, sessionId: string) => {
+        try {
+            const { database } = await import('../database/PGLiteDatabaseWorker');
+
+            // Query for pending prompt messages
+            // We check for messages with type containing 'request' and status 'pending'
+            const { rows } = await database.query<{
+                id: string;
+                session_id: string;
+                content: string;
+                created_at: Date;
+                metadata: any;
+            }>(
+                `SELECT id, session_id, content, created_at, metadata
+                 FROM ai_agent_messages
+                 WHERE session_id = $1
+                   AND (hidden = FALSE OR hidden IS NULL)
+                   AND content LIKE '%"status":"pending"%'
+                   AND (content LIKE '%"type":"permission_request"%'
+                        OR content LIKE '%"type":"ask_user_question_request"%')
+                 ORDER BY created_at ASC`,
+                [sessionId]
+            );
+
+            // Parse and validate the prompts
+            const pendingPrompts = [];
+            for (const row of rows) {
+                try {
+                    const content = JSON.parse(row.content);
+                    if (content.status === 'pending') {
+                        // Check if there's already a response for this prompt
+                        const promptId = content.requestId || content.questionId;
+                        const responseType = content.type === 'permission_request'
+                            ? 'permission_response'
+                            : 'ask_user_question_response';
+
+                        const { rows: responseRows } = await database.query(
+                            `SELECT id FROM ai_agent_messages
+                             WHERE session_id = $1
+                               AND content LIKE $2
+                             LIMIT 1`,
+                            [sessionId, `%"${responseType}"%"${promptId}"%`]
+                        );
+
+                        // Only include if no response exists
+                        if (responseRows.length === 0) {
+                            pendingPrompts.push({
+                                id: row.id,
+                                sessionId: row.session_id,
+                                content,
+                                createdAt: row.created_at instanceof Date ? row.created_at.getTime() : row.created_at,
+                            });
+                        }
+                    }
+                } catch {
+                    // Skip invalid JSON
+                }
+            }
+
+            return { success: true, prompts: pendingPrompts };
+        } catch (error) {
+            console.error('[SessionHandlers] Failed to get pending prompts:', error);
+            return { success: false, error: String(error), prompts: [] };
+        }
+    });
+
+    /**
+     * Respond to an interactive prompt.
+     * Creates a response message and optionally updates the request status.
+     */
+    safeHandle('messages:respond-to-prompt', async (event, params: {
+        sessionId: string;
+        promptId: string;
+        promptType: 'permission_request' | 'ask_user_question_request';
+        response: any;
+        respondedBy: 'desktop' | 'mobile';
+    }) => {
+        try {
+            const { sessionId, promptId, promptType, response, respondedBy } = params;
+            const { database } = await import('../database/PGLiteDatabaseWorker');
+            const timestamp = Date.now();
+
+            // Determine response type and content
+            let responseContent: any;
+            if (promptType === 'permission_request') {
+                responseContent = {
+                    type: 'permission_response',
+                    requestId: promptId,
+                    decision: response.decision,
+                    scope: response.scope,
+                    respondedAt: timestamp,
+                    respondedBy,
+                };
+            } else {
+                responseContent = {
+                    type: 'ask_user_question_response',
+                    questionId: promptId,
+                    answers: response.answers || response,
+                    cancelled: response.cancelled || false,
+                    respondedAt: timestamp,
+                    respondedBy,
+                };
+            }
+
+            // Insert response message
+            await database.query(
+                `INSERT INTO ai_agent_messages (session_id, source, direction, content, created_at, hidden)
+                 VALUES ($1, $2, $3, $4, $5, $6)`,
+                [
+                    sessionId,
+                    'nimbalyst',
+                    'output',
+                    JSON.stringify(responseContent),
+                    new Date(timestamp),
+                    false,
+                ]
+            );
+
+            return { success: true, responseContent };
+        } catch (error) {
+            console.error('[SessionHandlers] Failed to respond to prompt:', error);
+            return { success: false, error: String(error) };
+        }
+    });
 }
 
 export { sessionManager };

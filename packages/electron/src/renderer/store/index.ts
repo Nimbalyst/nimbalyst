@@ -76,6 +76,13 @@ export {
   sessionWaitingForQuestionAtom,
   sessionPendingQuestionAtom,
   sessionWaitingForPlanApprovalAtom,
+  // Durable interactive prompts (DB-derived)
+  sessionPendingPromptsAtom,
+  sessionPendingPermissionsAtom,
+  sessionPendingAskUserQuestionAtom,
+  refreshPendingPromptsAtom,
+  respondToPromptAtom,
+  sessionPromptAdditionsAtom,
   sessionLastReadAtom,
   sessionDraftInputAtom,
   sessionDraftAttachmentsAtom,

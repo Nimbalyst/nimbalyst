@@ -34,6 +34,7 @@ import {
   sessionWaitingForPlanApprovalAtom,
   sessionRegistryAtom,
   sessionStoreAtom,
+  refreshPendingPromptsAtom,
 } from './atoms/sessions';
 import { workstreamActiveChildAtom, workstreamStateAtom } from './atoms/workstreamState';
 import { triggerWorktreeRefreshAtom } from './atoms/gitOperations';
@@ -197,44 +198,67 @@ export function initSessionStateListeners(): () => void {
 
   /**
    * Handle AskUserQuestion events globally.
-   * This ensures the sidebar indicator shows when a session is waiting for a question answer,
-   * even if the SessionTranscript component isn't mounted (e.g., inactive tabs).
+   * Refreshes pending prompts from DB to update all relevant atoms.
+   * The DB is the source of truth - IPC is just a notification to refresh.
    */
   const handleAskUserQuestion = (data: { sessionId: string; questionId: string }) => {
     const { sessionId } = data;
     if (!sessionId) return;
-    store.set(sessionWaitingForQuestionAtom(sessionId), true);
+    // Refresh pending prompts from DB - this updates all derived atoms
+    store.set(refreshPendingPromptsAtom, sessionId);
   };
 
   /**
    * Handle AskUserQuestion answered/cancelled events globally.
-   * Clears the waiting indicator when the user answers or cancels the question.
+   * Refreshes pending prompts from DB to remove the answered question.
    */
   const handleAskUserQuestionResolved = (data: { sessionId: string }) => {
     const { sessionId } = data;
     if (!sessionId) return;
-    store.set(sessionWaitingForQuestionAtom(sessionId), false);
+    // Refresh pending prompts from DB
+    store.set(refreshPendingPromptsAtom, sessionId);
   };
 
   /**
    * Handle ExitPlanMode confirmation events globally.
-   * This ensures the sidebar indicator shows when a session is waiting for plan approval,
-   * even if the SessionTranscript component isn't mounted (e.g., inactive tabs).
+   * Refreshes pending prompts from DB to update all relevant atoms.
    */
   const handleExitPlanModeConfirm = (data: { sessionId: string; requestId: string }) => {
     const { sessionId } = data;
     if (!sessionId) return;
-    store.set(sessionWaitingForPlanApprovalAtom(sessionId), true);
+    // Refresh pending prompts from DB
+    store.set(refreshPendingPromptsAtom, sessionId);
   };
 
   /**
    * Handle ExitPlanMode response events globally.
-   * Clears the waiting indicator when the user approves or denies the plan.
+   * Refreshes pending prompts from DB to remove the approved/denied plan.
    */
   const handleExitPlanModeResolved = (data: { sessionId: string }) => {
     const { sessionId } = data;
     if (!sessionId) return;
-    store.set(sessionWaitingForPlanApprovalAtom(sessionId), false);
+    // Refresh pending prompts from DB
+    store.set(refreshPendingPromptsAtom, sessionId);
+  };
+
+  /**
+   * Handle ToolPermission events globally.
+   * Refreshes pending prompts from DB.
+   */
+  const handleToolPermission = (data: { sessionId: string; requestId: string }) => {
+    const { sessionId } = data;
+    if (!sessionId) return;
+    store.set(refreshPendingPromptsAtom, sessionId);
+  };
+
+  /**
+   * Handle ToolPermission resolved events globally.
+   * Refreshes pending prompts from DB.
+   */
+  const handleToolPermissionResolved = (data: { sessionId: string; requestId: string }) => {
+    const { sessionId } = data;
+    if (!sessionId) return;
+    store.set(refreshPendingPromptsAtom, sessionId);
   };
 
   // First, subscribe to the session state manager (IPC call to register this window)
@@ -265,7 +289,7 @@ export function initSessionStateListeners(): () => void {
   // Then, listen for state change events
   window.electronAPI.sessionState.onStateChange(handleStateChange);
 
-  // Subscribe to message logged events
+  // Subscribe to message logged events and interactive prompt events
   let cleanupMessageLogged: (() => void) | undefined;
   let cleanupTitleUpdated: (() => void) | undefined;
   let cleanupAskUserQuestion: (() => void) | undefined;
@@ -273,6 +297,8 @@ export function initSessionStateListeners(): () => void {
   let cleanupSessionCancelled: (() => void) | undefined;
   let cleanupExitPlanModeConfirm: (() => void) | undefined;
   let cleanupExitPlanModeResolved: (() => void) | undefined;
+  let cleanupToolPermission: (() => void) | undefined;
+  let cleanupToolPermissionResolved: (() => void) | undefined;
   if (window.electronAPI?.on) {
     cleanupMessageLogged = window.electronAPI.on('ai:message-logged', handleMessageLogged);
     cleanupTitleUpdated = window.electronAPI.on('session:title-updated', handleTitleUpdated);
@@ -281,6 +307,8 @@ export function initSessionStateListeners(): () => void {
     cleanupSessionCancelled = window.electronAPI.on('ai:sessionCancelled', handleAskUserQuestionResolved);
     cleanupExitPlanModeConfirm = window.electronAPI.on('ai:exitPlanModeConfirm', handleExitPlanModeConfirm);
     cleanupExitPlanModeResolved = window.electronAPI.on('ai:exitPlanModeResolved', handleExitPlanModeResolved);
+    cleanupToolPermission = window.electronAPI.on('ai:toolPermission', handleToolPermission);
+    cleanupToolPermissionResolved = window.electronAPI.on('ai:toolPermissionResolved', handleToolPermissionResolved);
   }
 
   // Return cleanup function
@@ -294,5 +322,7 @@ export function initSessionStateListeners(): () => void {
     cleanupSessionCancelled?.();
     cleanupExitPlanModeConfirm?.();
     cleanupExitPlanModeResolved?.();
+    cleanupToolPermission?.();
+    cleanupToolPermissionResolved?.();
   };
 }
