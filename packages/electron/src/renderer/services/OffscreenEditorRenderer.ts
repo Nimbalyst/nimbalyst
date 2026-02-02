@@ -8,8 +8,9 @@
 
 import React from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import type { EditorHost } from '@nimbalyst/runtime';
+import type { EditorHost, DrawingPath } from '@nimbalyst/runtime';
 import { getExtensionLoader } from '@nimbalyst/runtime';
+// Note: Window globals for mockup annotations are declared in @nimbalyst/runtime
 
 interface OffscreenEditorInstance {
   filePath: string;
@@ -350,23 +351,12 @@ class OffscreenEditorRendererImpl {
           windowHeight: elemHeight,
         });
 
-        // Validate canvas before converting to data URL
+        // Validate canvas before converting
         if (!canvas || canvas.width === 0 || canvas.height === 0) {
           throw new Error('html2canvas produced an empty canvas for offscreen mockup iframe');
         }
 
-        console.log('[OffscreenEditorRenderer] Mockup iframe canvas dimensions:', canvas.width, 'x', canvas.height);
-
-        const dataUrl = canvas.toDataURL('image/png');
-        const base64Data = dataUrl.replace(/^data:image\/png;base64,/, '');
-
-        // Validate that we got actual base64 data
-        if (!base64Data || base64Data.length === 0) {
-          throw new Error('toDataURL produced empty base64 data for offscreen mockup iframe');
-        }
-
-        console.log('[OffscreenEditorRenderer] Mockup screenshot captured:', base64Data.length, 'chars base64');
-        return base64Data;
+        return this.canvasToBase64(canvas, 'offscreen mockup iframe');
       }
 
       // For non-iframe editors, use html2canvas
@@ -387,23 +377,12 @@ class OffscreenEditorRendererImpl {
         backgroundColor: null,
       });
 
-      // Validate canvas before converting to data URL
+      // Validate canvas before converting
       if (!canvas || canvas.width === 0 || canvas.height === 0) {
         throw new Error('html2canvas produced an empty canvas for offscreen editor');
       }
 
-      console.log('[OffscreenEditorRenderer] Offscreen canvas dimensions:', canvas.width, 'x', canvas.height);
-
-      const dataUrl = canvas.toDataURL('image/png');
-      const base64Data = dataUrl.replace(/^data:image\/png;base64,/, '');
-
-      // Validate that we got actual base64 data
-      if (!base64Data || base64Data.length === 0) {
-        throw new Error('toDataURL produced empty base64 data for offscreen editor');
-      }
-
-      console.log('[OffscreenEditorRenderer] Screenshot captured:', base64Data.length, 'chars base64');
-      return base64Data;
+      return this.canvasToBase64(canvas, 'offscreen editor');
     } finally {
       // Hide again
       if (wasHidden) {
@@ -446,22 +425,28 @@ class OffscreenEditorRendererImpl {
       scale: 2, // Higher resolution for quality
     });
 
-    // Validate canvas before converting to data URL
+    // Validate canvas before converting
     if (!canvas || canvas.width === 0 || canvas.height === 0) {
-      throw new Error('html2canvas produced an empty canvas');
+      throw new Error('html2canvas produced an empty canvas for Excalidraw editor');
     }
 
-    console.log('[OffscreenEditorRenderer] Canvas dimensions:', canvas.width, 'x', canvas.height);
+    return this.canvasToBase64(canvas, 'Excalidraw editor');
+  }
 
+  /**
+   * Convert a canvas to base64 PNG data, with validation.
+   * @param canvas - The canvas to convert
+   * @param context - Description of the context for error messages
+   * @returns Base64-encoded PNG data (without data URL prefix)
+   */
+  private canvasToBase64(canvas: HTMLCanvasElement, context: string): string {
     const dataUrl = canvas.toDataURL('image/png');
     const base64Data = dataUrl.replace(/^data:image\/png;base64,/, '');
 
-    // Validate that we got actual base64 data
     if (!base64Data || base64Data.length === 0) {
-      throw new Error('toDataURL produced empty base64 data');
+      throw new Error(`toDataURL produced empty base64 data for ${context}`);
     }
 
-    console.log('[OffscreenEditorRenderer] Visible editor screenshot captured:', base64Data.length, 'chars base64');
     return base64Data;
   }
 
@@ -550,18 +535,24 @@ class OffscreenEditorRendererImpl {
       // Check for drawing annotations from MockupEditor
       // First try the per-file annotations map (persists when tab is inactive)
       // Then fall back to legacy globals (only set when tab is active)
-      const annotationsMap = (window as any).__mockupAnnotations as Map<string, {
-        drawingPaths: Array<{ points: { x: number; y: number }[]; color: string }>;
-        drawingDataUrl: string | null;
-      }> | undefined;
-      const fileAnnotations = annotationsMap?.get(filePath);
+      const fileAnnotations = window.__mockupAnnotations?.get(filePath);
 
       // Prefer per-file annotations, fall back to legacy globals
-      const drawingPaths = fileAnnotations?.drawingPaths ??
-        ((window as any).__mockupDrawingPaths as Array<{ points: { x: number; y: number }[]; color: string }> | undefined);
+      const drawingPaths: DrawingPath[] | undefined = fileAnnotations?.drawingPaths ?? window.__mockupDrawingPaths;
+
+      // Determine which canvas to convert to base64
+      let finalCanvas: HTMLCanvasElement = mockupCanvas;
 
       // If there are drawing annotations, composite them onto the mockup
       if (drawingPaths && drawingPaths.length > 0) {
+        // Calculate scale factor (html2canvas uses scale: 2)
+        const scale = mockupCanvas.width / elemWidth;
+
+        // Validate scale is a finite positive number
+        if (!Number.isFinite(scale) || scale <= 0) {
+          throw new Error(`Invalid scale factor: ${scale} (canvas width: ${mockupCanvas.width}, element width: ${elemWidth})`);
+        }
+
         // Create a composite canvas
         const compositeCanvas = document.createElement('canvas');
         compositeCanvas.width = mockupCanvas.width;
@@ -575,12 +566,10 @@ class OffscreenEditorRendererImpl {
         // Draw the mockup first
         ctx.drawImage(mockupCanvas, 0, 0);
 
-        // Calculate scale factor (html2canvas uses scale: 2)
-        const scale = mockupCanvas.width / elemWidth;
-
         // Draw the annotation paths
         drawingPaths.forEach(path => {
           if (path.points.length < 2) return;
+          if (!path.color || typeof path.color !== 'string') return;
 
           ctx.strokeStyle = path.color;
           ctx.lineWidth = 3 * scale;
@@ -598,25 +587,11 @@ class OffscreenEditorRendererImpl {
           ctx.stroke();
         });
 
-        const dataUrl = compositeCanvas.toDataURL('image/png');
-        const base64Data = dataUrl.replace(/^data:image\/png;base64,/, '');
-
-        if (!base64Data || base64Data.length === 0) {
-          throw new Error('toDataURL produced empty base64 data for composited mockup');
-        }
-
-        return base64Data;
+        finalCanvas = compositeCanvas;
       }
 
-      // No annotations - return the mockup canvas directly
-      const dataUrl = mockupCanvas.toDataURL('image/png');
-      const base64Data = dataUrl.replace(/^data:image\/png;base64,/, '');
-
-      if (!base64Data || base64Data.length === 0) {
-        throw new Error('toDataURL produced empty base64 data for visible mockup iframe');
-      }
-
-      return base64Data;
+      // Convert final canvas to base64 (single return path)
+      return this.canvasToBase64(finalCanvas, drawingPaths ? 'composited mockup' : 'mockup iframe');
     }
 
     // Fall back to capturing the container itself
@@ -634,23 +609,12 @@ class OffscreenEditorRendererImpl {
       backgroundColor: null,
     });
 
-    // Validate canvas before converting to data URL
+    // Validate canvas before converting
     if (!canvas || canvas.width === 0 || canvas.height === 0) {
       throw new Error('html2canvas produced an empty canvas for visible mockup container');
     }
 
-    console.log('[OffscreenEditorRenderer] Visible mockup container canvas dimensions:', canvas.width, 'x', canvas.height);
-
-    const dataUrl = canvas.toDataURL('image/png');
-    const base64Data = dataUrl.replace(/^data:image\/png;base64,/, '');
-
-    // Validate that we got actual base64 data
-    if (!base64Data || base64Data.length === 0) {
-      throw new Error('toDataURL produced empty base64 data for visible mockup container');
-    }
-
-    console.log('[OffscreenEditorRenderer] Visible mockup container screenshot captured:', base64Data.length, 'chars base64');
-    return base64Data;
+    return this.canvasToBase64(canvas, 'visible mockup container');
   }
 
   /**

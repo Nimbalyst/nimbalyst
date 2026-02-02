@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import type { TabData } from '../contexts/TabsContext';
 import { getTextSelection } from '../components/UnifiedAI/TextSelectionIndicator';
+import type { MockupSelection } from '@nimbalyst/runtime';
 
 export interface DocumentContext {
   filePath: string;
@@ -13,11 +14,7 @@ export interface DocumentContext {
     timestamp: number;
   };
   getLatestContent: (() => string) | undefined;
-  mockupSelection?: {
-    selector: string;
-    outerHTML: string;
-    tagName: string;
-  };
+  mockupSelection?: MockupSelection;
   mockupDrawing?: string; // Data URL of drawing annotations
   mockupAnnotationTimestamp?: number | null; // Timestamp when annotations were created
   textSelection?: {
@@ -42,11 +39,7 @@ export interface SerializableDocumentContext {
     timestamp: number;
   };
   textSelectionTimestamp?: number;
-  mockupSelection?: {
-    selector: string;
-    outerHTML: string;
-    tagName: string;
-  };
+  mockupSelection?: MockupSelection;
   mockupDrawing?: string;
 }
 
@@ -126,16 +119,17 @@ export function useDocumentContext({ activeTab, getContentRef }: UseDocumentCont
     const fileType = detectFileType(activeTab.filePath || '');
 
     // Get mockup selection, drawing, and annotation timestamp if file is a mockup
+    // These window globals are typed in @nimbalyst/runtime
     const mockupSelection = fileType === 'mockup'
-      ? (window as any).__mockupSelectedElement
+      ? window.__mockupSelectedElement
       : undefined;
 
     const mockupDrawing = fileType === 'mockup'
-      ? (window as any).__mockupDrawing
+      ? window.__mockupDrawing ?? undefined  // Convert null to undefined
       : undefined;
 
     const mockupAnnotationTimestamp = fileType === 'mockup'
-      ? (window as any).__mockupAnnotationTimestamp
+      ? window.__mockupAnnotationTimestamp
       : undefined;
 
     // Get text selection for markdown/code files

@@ -97,6 +97,14 @@ export * from './ui/icons/fileIcons';
 export * from './utils/dateUtils';
 export * from './utils/fuzzyMatch';
 export * from './utils/documentDiff';
+// Mockup types - shared across packages
+export type {
+  DrawingPath,
+  MockupSelection,
+  MockupAnnotationData,
+} from './mockup/types';
+// Import for side effects - registers globals on Window
+import './mockup/types';
 // Mockup Plugin - Node exported separately to avoid circular dependency
 export {
   MockupNode,

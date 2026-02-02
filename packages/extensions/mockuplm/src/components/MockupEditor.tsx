@@ -16,6 +16,11 @@ import { captureMockupComposite } from '../utils/screenshotUtils';
 import { renderMockupHtml } from '../utils/mockupDomUtils';
 import { MockupDiffViewer } from './MockupDiffViewer';
 
+// Import shared types for mockup annotations from runtime package
+import type { DrawingPath, MockupSelection } from '@nimbalyst/runtime';
+// Side effect import to register Window globals
+import '@nimbalyst/runtime';
+
 // Declare window extensions for electron API
 declare global {
   interface Window {
@@ -23,18 +28,6 @@ declare global {
       invoke: (channel: string, ...args: any[]) => Promise<any>;
       on: (channel: string, callback: (...args: any[]) => void) => () => void;
     };
-    __mockupFilePath?: string;
-    __mockupSelectedElement?: any;
-    __mockupDrawing?: string | null;
-    __mockupAnnotationTimestamp?: number | null;
-    __mockupDrawingPaths?: Array<{ points: { x: number; y: number }[]; color: string }>;
-    // Per-file annotation storage (keyed by file path) - persists when tab is inactive
-    __mockupAnnotations?: Map<string, {
-      drawingPaths: Array<{ points: { x: number; y: number }[]; color: string }>;
-      drawingDataUrl: string | null;
-      selectedElement: { selector: string; outerHTML: string; tagName: string } | null;
-      annotationTimestamp: number | null;
-    }>;
   }
 }
 
@@ -46,15 +39,11 @@ export const MockupEditor = forwardRef<any, EditorHostProps>(function MockupEdit
   const drawingCanvasRef = useRef<HTMLCanvasElement>(null);
   const isDrawingRef = useRef(false);
   const lastPointRef = useRef<{ x: number; y: number } | null>(null);
-  const drawingPathsRef = useRef<Array<{ points: { x: number; y: number }[]; color: string }>>([]);
+  const drawingPathsRef = useRef<DrawingPath[]>([]);
 
   // UI state that clearAllAnnotations modifies
   const [drawingDataUrl, setDrawingDataUrl] = useState<string | null>(null);
-  const [selectedElement, setSelectedElement] = useState<{
-    selector: string;
-    outerHTML: string;
-    tagName: string;
-  } | null>(null);
+  const [selectedElement, setSelectedElement] = useState<MockupSelection | null>(null);
   const [annotationTimestamp, setAnnotationTimestamp] = useState<number | null>(null);
 
   // Clear all annotations - defined before useEditorHost so it can be passed to onExternalChange
@@ -273,49 +262,17 @@ export const MockupEditor = forwardRef<any, EditorHostProps>(function MockupEdit
     };
   }, [effectiveContent, handleElementClick, diffData]);
 
-  // Expose file path to window for AI context
-  useEffect(() => {
-    if (isActive) {
-      window.__mockupFilePath = filePath;
-      const hasAnnotations = !!(drawingDataUrl || selectedElement);
-      const event = new CustomEvent('mockup-annotation-changed', {
-        detail: {
-          filePath,
-          annotationTimestamp,
-          hasAnnotations,
-          hasDrawing: !!drawingDataUrl,
-          hasSelection: !!selectedElement,
-        },
-      });
-      window.dispatchEvent(event);
-    } else {
-      delete window.__mockupFilePath;
-      const event = new CustomEvent('mockup-annotation-changed', {
-        detail: {
-          filePath: '',
-          annotationTimestamp: null,
-          hasAnnotations: false,
-          hasDrawing: false,
-          hasSelection: false,
-        },
-      });
-      window.dispatchEvent(event);
-    }
-
-    return () => {
-      delete window.__mockupFilePath;
-    };
-  }, [filePath, isActive, annotationTimestamp, drawingDataUrl, selectedElement]);
-
-  // Store annotations in per-file map so they persist when tab becomes inactive
-  // This is critical for screenshot capture which may happen when tab is not focused
+  // Store annotations in per-file map so they persist when tab becomes inactive.
+  // This is critical for screenshot capture which may happen when tab is not focused.
+  // Also handles legacy globals and event dispatch in a single consolidated effect.
   useEffect(() => {
     // Initialize the map if it doesn't exist
     if (!window.__mockupAnnotations) {
       window.__mockupAnnotations = new Map();
     }
 
-    const hasAnnotations = drawingPathsRef.current.length > 0 || !!selectedElement || !!drawingDataUrl;
+    const hasDrawingPaths = drawingPathsRef.current.length > 0;
+    const hasAnnotations = hasDrawingPaths || !!selectedElement || !!drawingDataUrl;
 
     // Store annotations if there are any (regardless of isActive)
     // This ensures annotations persist when tab becomes inactive
@@ -326,21 +283,42 @@ export const MockupEditor = forwardRef<any, EditorHostProps>(function MockupEdit
         selectedElement,
         annotationTimestamp,
       });
+    } else {
+      // Clean up Map entry when annotations are cleared (fixes orphaned entries bug)
+      window.__mockupAnnotations.delete(filePath);
     }
 
-    // Also set the legacy globals when active (for backward compatibility)
+    // Set legacy globals and file path when active (for backward compatibility)
     if (isActive) {
-      window.__mockupSelectedElement = selectedElement;
+      window.__mockupFilePath = filePath;
+      window.__mockupSelectedElement = selectedElement ?? undefined;
       window.__mockupDrawing = drawingDataUrl;
-      window.__mockupDrawingPaths = drawingPathsRef.current.length > 0
-        ? [...drawingPathsRef.current]
-        : undefined;
+      window.__mockupDrawingPaths = hasDrawingPaths ? [...drawingPathsRef.current] : undefined;
       window.__mockupAnnotationTimestamp = annotationTimestamp;
     }
 
+    // Dispatch annotation change event (consolidated - single dispatch point)
+    const event = new CustomEvent('mockup-annotation-changed', {
+      detail: isActive ? {
+        filePath,
+        annotationTimestamp,
+        hasAnnotations,
+        hasDrawing: !!drawingDataUrl,
+        hasSelection: !!selectedElement,
+      } : {
+        filePath: '',
+        annotationTimestamp: null,
+        hasAnnotations: false,
+        hasDrawing: false,
+        hasSelection: false,
+      },
+    });
+    window.dispatchEvent(event);
+
     return () => {
-      // Only clean up legacy globals, keep the per-file map entry
+      // Only clean up legacy globals when this effect re-runs or unmounts
       if (isActive) {
+        delete window.__mockupFilePath;
         delete window.__mockupSelectedElement;
         delete window.__mockupDrawing;
         delete window.__mockupDrawingPaths;
@@ -356,21 +334,6 @@ export const MockupEditor = forwardRef<any, EditorHostProps>(function MockupEdit
       window.__mockupAnnotations?.delete(filePath);
     };
   }, [filePath]);
-
-  // Dispatch annotation change events
-  useEffect(() => {
-    const hasAnnotations = !!(drawingDataUrl || selectedElement);
-    const event = new CustomEvent('mockup-annotation-changed', {
-      detail: {
-        filePath,
-        annotationTimestamp,
-        hasAnnotations,
-        hasDrawing: !!drawingDataUrl,
-        hasSelection: !!selectedElement,
-      },
-    });
-    window.dispatchEvent(event);
-  }, [filePath, annotationTimestamp, drawingDataUrl, selectedElement]);
 
   // Redraw canvas
   const redrawCanvas = useCallback(() => {
