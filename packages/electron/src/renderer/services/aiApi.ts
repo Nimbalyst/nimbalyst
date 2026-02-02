@@ -45,11 +45,11 @@ class AIApi {
         type: error.type,
         stack: error.stack
       });
-      
+
       // Emit error event so UI can handle it
       this.emit('error', error);
     });
-    
+
     // Set up IPC listeners for streaming edit events from AI service
     window.electronAPI.onAIStreamEditStart((data: any) => {
       logger.streaming.info('🚀 Stream edit started from AI service:', { sessionId: data.sessionId });
@@ -79,31 +79,31 @@ class AIApi {
       }
 
       // Stream response received - emit will handle logging
-      
+
       // Accumulate content to check for streaming markers
       if (data.partial) {
         this.accumulatedContent += data.partial;
       }
-      
+
       // Check if this is a streaming edit response
       if (!this.isStreamingEdit && !this.streamStartDetected) {
         // Check accumulated content for streaming marker
         const { isStreaming, streamConfig, cleanContent } = detectStreamingIntent(this.accumulatedContent);
         // Stream detection handled
-        
+
         if (isStreaming) {
           logger.streaming.info('🚀 STREAMING MODE ACTIVATED', streamConfig);
           this.isStreamingEdit = true;
           this.streamStartDetected = true;
           this.streamingConfig = streamConfig;
-          
+
           // Clear accumulated content and keep only clean content
           this.accumulatedContent = cleanContent;
-          
+
           // Emit streaming edit start event
           logger.streaming.info('Emitting streamEditStart event with config:', streamConfig);
           this.emit('streamEditStart', streamConfig);
-          
+
           // If there's content after the marker, process it
           // Add a small delay to allow React state to update
           if (cleanContent) {
@@ -112,7 +112,7 @@ class AIApi {
                 logger.streaming.info('Streaming was cancelled, not emitting initial content');
                 return;
               }
-              
+
               // Check if we have the end marker already
               if (cleanContent.includes('<!-- STREAM_END -->')) {
                 const contentBeforeEnd = cleanContent.split('<!-- STREAM_END -->')[0];
@@ -133,24 +133,24 @@ class AIApi {
           return;
         }
       }
-      
+
       // If we're in streaming edit mode, handle the content
       if (this.isStreamingEdit && data.partial) {
         // Add to buffer to check for split markers
         this.streamBuffer += data.partial;
-        
+
         // Check if we have a complete end marker
         if (this.streamBuffer.includes('<!-- STREAM_END -->')) {
           // Extract content before the end marker
           const endIndex = this.streamBuffer.indexOf('<!-- STREAM_END -->');
           const contentToStream = this.streamBuffer.substring(0, endIndex);
-          
+
           // Only emit if there's actual content
           if (contentToStream.trim()) {
             logger.streaming.info('Final content before end:', contentToStream.substring(0, 100));
             this.emit('streamEditContent', contentToStream);
           }
-          
+
           logger.streaming.info('🏁 STREAMING MODE ENDED');
           this.emit('streamEditEnd', {});
           this.isStreamingEdit = false;
@@ -162,14 +162,14 @@ class AIApi {
           // Check if buffer ends with partial marker that might continue
           const partialMarkers = ['<!--', '<!-- S', '<!-- ST', '<!-- STR', '<!-- STRE', '<!-- STREA', '<!-- STREAM', '<!-- STREAM_', '<!-- STREAM_E', '<!-- STREAM_EN', '<!-- STREAM_END'];
           let hasPartialMarker = false;
-          
+
           for (const marker of partialMarkers) {
             if (this.streamBuffer.endsWith(marker)) {
               hasPartialMarker = true;
               break;
             }
           }
-          
+
           // If no partial marker at the end, emit accumulated content and clear buffer
           if (!hasPartialMarker && this.streamBuffer.length > 0) {
             logger.streaming.info('Streaming content chunk:', this.streamBuffer.substring(0, 50));
@@ -180,43 +180,43 @@ class AIApi {
         }
         return;
       }
-      
+
       // Reset accumulated content when message is complete
       if (data.isComplete) {
         // If we were still in streaming mode, end it with error
         if (this.isStreamingEdit) {
           logger.streaming.warn('⚠️ Stream ended unexpectedly without STREAM_END marker');
-          
+
           // Emit any remaining buffer content
           if (this.streamBuffer.trim()) {
             this.emit('streamEditContent', this.streamBuffer);
           }
-          
+
           this.emit('streamEditEnd', { error: 'Stream ended without proper closing marker' });
           this.isStreamingEdit = false;
           this.streamingConfig = null;
           this.streamBuffer = '';
         }
-        
+
         this.accumulatedContent = '';
         this.streamStartDetected = false;
       }
-      
+
       // Normal streaming response
       if (data.isComplete) {
         if (data.content) {
-          logger.api.info('AI final response', {
-            length: data.content.length,
-            preview: previewForLog(data.content)
-          });
+          // logger.api.info('AI final response', {
+          //   length: data.content.length,
+          //   preview: previewForLog(data.content)
+          // });
         } else {
           logger.api.info('AI final response had no text content');
         }
         if (Array.isArray(data.edits) && data.edits.length > 0) {
-          logger.api.info('AI final edits summary', {
-            editCount: data.edits.length,
-            replacementCounts: data.edits.map((edit: any) => Array.isArray(edit?.replacements) ? edit.replacements.length : 0)
-          });
+          // logger.api.info('AI final edits summary', {
+          //   editCount: data.edits.length,
+          //   replacementCounts: data.edits.map((edit: any) => Array.isArray(edit?.replacements) ? edit.replacements.length : 0)
+          // });
         }
       }
       if (data.toolError) {
@@ -236,7 +236,7 @@ class AIApi {
     window.electronAPI.onAIEditRequest((edit: EditRequest) => {
       this.emit('editRequest', edit);
     });
-    
+
     // Listen for new AI applyDiff events
     window.electronAPI.onAIApplyDiff(async (data: { replacements: any[], resultChannel: string, targetFilePath?: string }) => {
       try {
@@ -363,11 +363,11 @@ class AIApi {
   async clearSession(): Promise<{ success: boolean }> {
     return window.electronAPI.aiClearSession();
   }
-  
+
   async updateSessionMessages(sessionId: string, messages: any[], workspacePath?: string): Promise<{ success: boolean; error?: string }> {
     return window.electronAPI.aiUpdateSessionMessages(sessionId, messages, workspacePath);
   }
-  
+
   async saveDraftInput(sessionId: string, draftInput: string, workspacePath?: string): Promise<{ success: boolean; error?: string }> {
     return window.electronAPI.aiSaveDraftInput(sessionId, draftInput, workspacePath);
   }
@@ -414,9 +414,9 @@ class AIApi {
       return { success: result.success, error: result.success ? undefined : 'Failed to apply edit' };
     } catch (error) {
       console.error('Failed to apply edit:', error);
-      return { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Failed to apply edit' 
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to apply edit'
       };
     }
   }
@@ -441,7 +441,7 @@ class AIApi {
 
   private emit(event: string, data: any) {
     const callbacks = this.listeners.get(event);
-    
+
     // More concise logging for streaming events
     if (event === 'streamResponse') {
       // Only log brief status for streaming, not the full content
@@ -455,7 +455,7 @@ class AIApi {
         const partialLength = data.partial?.length || 0;
         const newChars = partialLength - this.lastStreamLength;
         this.lastStreamLength = partialLength;
-        
+
         // Log every 5 chunks or every 200 new characters
         // if (this.streamChunkCount % 5 === 1 || newChars > 200) {
         //   logger.api.info(`📝 Chunk #${this.streamChunkCount}: +${newChars} chars (total: ${partialLength})`);
@@ -472,7 +472,7 @@ class AIApi {
       // Normal verbose logging for other events
       logger.api.info(`Emitting event '${event}' with ${callbacks?.size || 0} listeners`, data);
     }
-    
+
     if (callbacks) {
       callbacks.forEach(callback => {
         try {

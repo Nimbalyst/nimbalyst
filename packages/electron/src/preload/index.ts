@@ -1,6 +1,13 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import {ClaudeForWindowsInstallation} from "../main/services/CLIManager.ts";
 
+// Nimbalyst is an IDE-like application with many concurrent IPC listeners:
+// - File watching, git status, AI sessions, terminals, extensions, etc.
+// The default limit of 10 is far too low. Setting to 100 is reasonable for
+// our use case and prevents spurious "memory leak" warnings.
+// The real fix is also in place: using stable references in useEffect deps.
+ipcRenderer.setMaxListeners(100);
+
 interface ArchiveTask {
   worktreeId: string;
   worktreeName: string;

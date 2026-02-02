@@ -788,7 +788,7 @@ app.whenReady().then(async () => {
     try {
         const extensionDevService = ExtensionDevService.getInstance();
         await extensionDevService.start();
-        logger.mcp.info('Extension dev MCP server started');
+        // logger.mcp.info('Extension dev MCP server started');
     } catch (error) {
         logger.mcp.error('Failed to start extension dev MCP server:', error);
     }
