@@ -20,6 +20,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.29] - 2026-02-01
+
+
+### Added
+- Flash animation when focusing existing worktree terminal
+- Smart commit detection for worktree rebase using git cherry
+- Support for deleted and renamed files in uncommitted files list
+- Inline rename for worktrees and sessions
+- Git panel refresh on session completion and visibility
+- E2E runner agent for containerized test execution
+
+### Changed
+- Session naming improved to put descriptive part first
+- Claude Code system prompt unified for all session types
+
+### Fixed
+- Running session no longer steals tab focus in worktrees
+- Linux terminal startup error resolved (bash args reorder)
+- Checkboxes now shown for all uncommitted files in Files Edited sidebar
+- Terminal scrollback corruption in Ghostty prevented
+- Stale stash corruption in worktree rebase/merge operations prevented
+- Rebase enabled for worktrees that are behind main even when merged
+- System message additions stripped from prompt history recall
+- Microphone entitlement removed to prevent unwanted permission prompts
+- Test database cleared on each Playwright test launch
+- Walkthroughs blocked when dialogs/overlays are visible
+- Sessions auto-unarchive when new message is sent
+- Copyright year updated to 2025-2026 in about page
+
 ## [0.52.27] - 2026-02-01
 
 
