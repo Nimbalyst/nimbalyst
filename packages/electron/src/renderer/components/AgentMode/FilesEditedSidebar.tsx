@@ -12,7 +12,7 @@
  * Optionally allows filtering by a specific child session.
  */
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { FileEditsSidebar as FileEditsSidebarComponent, MaterialSymbol } from '@nimbalyst/runtime';
 import type { FileEditSummary } from '@nimbalyst/runtime';
@@ -89,7 +89,10 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
   const sessionFilesGitStatus = useAtomValue(workstreamGitStatusAtom(workstreamId));
   const pendingReviewFiles = useAtomValue(workstreamPendingReviewFilesAtom(workstreamId));
   const allUncommittedFiles = useAtomValue(workspaceUncommittedFilesAtom(workspacePath));
-  const worktreeChangedFiles = worktreeId ? useAtomValue(worktreeChangedFilesAtom(worktreeId)) : [];
+  // Always call the hook unconditionally with a stable key, use empty array if no worktreeId
+  const worktreeChangedFilesKey = worktreeId || '__no_worktree__';
+  const worktreeChangedFilesRaw = useAtomValue(worktreeChangedFilesAtom(worktreeChangedFilesKey));
+  const worktreeChangedFiles = worktreeId ? worktreeChangedFilesRaw : [];
 
   // UI state (keep in local state - this is fine)
   const [filterToCurrentSession, setFilterToCurrentSession] = useState(false);
@@ -254,7 +257,7 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
 
   // Handle worktree file staging toggle
   const handleWorktreeToggleStaged = useCallback(async (filePath: string) => {
-    if (!worktreePath) return;
+    if (!worktreePath || !worktreeId) return;
 
     try {
       // Convert to relative path if absolute
@@ -265,30 +268,25 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
       const newStaged = !file.staged;
       await window.electronAPI.invoke('worktree:stage-file', worktreePath, relativePath, newStaged);
 
-      // Update local state
-      setWorktreeChangedFiles(prev =>
-        prev.map(f => f.path === relativePath ? { ...f, staged: newStaged } : f)
-      );
+      // Refresh worktree state from backend - the atom will be updated by the IPC call
+      // which triggers a git:status-changed event, handled by central listener
     } catch (error) {
       console.error('[FilesEditedSidebar] Failed to toggle worktree file staging:', error);
     }
-  }, [worktreePath, worktreeChangedFiles, toRelativePath]);
+  }, [worktreePath, worktreeId, worktreeChangedFiles, toRelativePath]);
 
   // Handle worktree stage all / unstage all
   const handleWorktreeToggleAllStaged = useCallback(async (stage: boolean) => {
-    if (!worktreePath) return;
+    if (!worktreePath || !worktreeId) return;
 
     try {
       await window.electronAPI.invoke('worktree:stage-all', worktreePath, stage);
 
-      // Update local state
-      setWorktreeChangedFiles(prev =>
-        prev.map(f => ({ ...f, staged: stage }))
-      );
+      // Worktree state will be updated by the git:status-changed event from central listener
     } catch (error) {
       console.error('[FilesEditedSidebar] Failed to toggle all worktree file staging:', error);
     }
-  }, [worktreePath]);
+  }, [worktreePath, worktreeId]);
 
   // Handle file selection change (checkbox toggle)
   // For worktrees, this stages/unstages the file in git
@@ -332,11 +330,7 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
           await window.electronAPI.invoke('worktree:stage-file', worktreePath, relativePath, selected);
         }
       }
-      // Refresh the worktree changed files
-      const result = await window.electronAPI.invoke('worktree:get-changed-files', worktreePath);
-      if (result.success && result.files) {
-        setWorktreeChangedFiles(result.files);
-      }
+      // Worktree state will be updated by the git:status-changed event from central listener
     } else {
       // For regular sessions, use workstream state
       const currentSet = new Set(stagedFilesArr);
