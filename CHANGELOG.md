@@ -20,6 +20,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.33] - 2026-02-02
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+<!-- Changes to existing functionality go here -->
+- Expanded visual communication guidance in Claude Code prompt
+- Refactored worktree file state to use centralized IPC listener architecture
+
+### Fixed
+<!-- Bug fixes go here -->
+- Fixed crash when loading tool permission dialogs from database
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.52.32] - 2026-02-02
 
 
