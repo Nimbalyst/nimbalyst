@@ -52,6 +52,7 @@ interface WorkstreamGroupProps {
 
   // Common props
   sessions: SessionItem[];
+  sortBy?: 'updated' | 'created'; // Which field to sort child sessions by
   activeSessionId: string | null;
   onSessionSelect: (sessionId: string) => void;
   onChildSessionSelect?: (childSessionId: string, parentId: string, parentType: 'workstream' | 'worktree') => void;
@@ -92,6 +93,7 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
   onToggle,
   onSelect,
   sessions,
+  sortBy = 'updated',
   activeSessionId,
   onSessionSelect,
   onChildSessionSelect,
@@ -126,14 +128,17 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
   const [worktreeRenameValue, setWorktreeRenameValue] = useState('');
   const worktreeRenameInputRef = useRef<HTMLInputElement>(null);
 
-  // Sort sessions: pinned first, then by updatedAt
+  // Sort sessions: pinned first, then by sortBy field (respecting parent sort preference)
   const sortedSessions = React.useMemo(() => {
     return [...sessions].sort((a, b) => {
       if (a.isPinned && !b.isPinned) return -1;
       if (!a.isPinned && b.isPinned) return 1;
+      if (sortBy === 'created') {
+        return b.createdAt - a.createdAt;
+      }
       return (b.updatedAt || b.createdAt) - (a.updatedAt || a.createdAt);
     });
-  }, [sessions]);
+  }, [sessions, sortBy]);
 
   // Calculate total uncommitted count across all sessions in the workstream
   const totalUncommittedCount = React.useMemo(() => {

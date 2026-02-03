@@ -2169,6 +2169,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                             }
                           }}
                           sessions={item.sessions}
+                          sortBy={sortBy}
                           activeSessionId={activeSessionId}
                           onSessionSelect={onSessionSelect}
                           onChildSessionSelect={onChildSessionSelect}
@@ -2209,6 +2210,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                           onToggle={() => handleToggleGroup(`workstream:${session.id}`)}
                           onSelect={() => onSessionSelect(session.id)}
                           sessions={item.sessions}
+                          sortBy={sortBy}
                           activeSessionId={activeSessionId}
                           onSessionSelect={onSessionSelect}
                           onChildSessionSelect={onChildSessionSelect}
