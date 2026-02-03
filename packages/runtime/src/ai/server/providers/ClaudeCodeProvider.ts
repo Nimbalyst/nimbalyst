@@ -1360,8 +1360,20 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                 errorMessage = 'Your previous conversation session has expired and can no longer be resumed. Please send a new message to start a fresh conversation - your chat history is still visible but the AI will start with a clean context.';
               }
 
+              // Check if this is a 500/internal server error (Claude may be down)
+              const isServerError = (
+                lowerError.includes('internal server error') ||
+                lowerError.includes('500') ||
+                (typeof errorMessage === 'string' && errorMessage.includes('"type":"api_error"'))
+              );
+
               // Check if this is a Bedrock tool search incompatibility error
               const isBedrockToolError = isBedrockToolSearchError(errorMessage);
+
+              // If it's a server error, suggest checking status page
+              if (isServerError) {
+                errorMessage = `${errorMessage}\n\nClaude may be experiencing issues. Check https://status.anthropic.com for service status.`;
+              }
 
               // If it's a Bedrock tool error, provide helpful guidance
               if (isBedrockToolError) {
@@ -1392,7 +1404,8 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                 error: errorMessage,
                 ...(isAuthError && { isAuthError: true }),
                 ...(isBedrockToolError && { isBedrockToolError: true }),
-                ...(isExpiredSessionError && { isExpiredSessionError: true })
+                ...(isExpiredSessionError && { isExpiredSessionError: true }),
+                ...(isServerError && { isServerError: true })
               };
 
               // CRITICAL: Send completion and break on result errors (like "prompt too long")

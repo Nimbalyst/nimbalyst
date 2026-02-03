@@ -21,7 +21,7 @@ import type { ExitPlanModeConfirmationData } from '../../components/UnifiedAI/Ex
  * Set when ai:error event fires for this session.
  */
 export const sessionErrorAtom = atomFamily((_sessionId: string) =>
-  atom<{ message: string; isBedrockToolError?: boolean } | null>(null)
+  atom<{ message: string; isBedrockToolError?: boolean; isServerError?: boolean } | null>(null)
 );
 
 /**

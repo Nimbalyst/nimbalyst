@@ -65,12 +65,13 @@ export function initSessionTranscriptListeners(): () => void {
       sessionId: string;
       message: string;
       isBedrockToolError?: boolean;
+      isServerError?: boolean;
     }) => {
-      const { sessionId, message, isBedrockToolError } = data;
+      const { sessionId, message, isBedrockToolError, isServerError } = data;
       if (!sessionId) return;
 
       // Set the error in the atom - SessionTranscript will read it and display
-      store.set(sessionErrorAtom(sessionId), { message, isBedrockToolError });
+      store.set(sessionErrorAtom(sessionId), { message, isBedrockToolError, isServerError });
     })
   );
 

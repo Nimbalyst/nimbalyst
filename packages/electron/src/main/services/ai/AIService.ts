@@ -2345,12 +2345,14 @@ export class AIService {
               // Detect Bedrock tool search error even if runtime didn't flag it
               const errorMsg = chunk.error || 'Unknown error occurred';
               const isBedrockToolError = chunk.isBedrockToolError || isBedrockToolSearchError(errorMsg);
+              const isServerError = chunk.isServerError || false;
 
               safeSend(event, 'ai:error', {
                 sessionId: session.id,
                 message: errorMsg,
                 isAuthError: chunk.isAuthError || false,
-                isBedrockToolError
+                isBedrockToolError,
+                isServerError
               });
               break;
 

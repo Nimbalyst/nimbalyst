@@ -273,6 +273,7 @@ export interface StreamChunk {
   error?: string;
   isAuthError?: boolean; // True when error is an authentication failure (SDK first-class detection)
   isBedrockToolError?: boolean; // True when error is a Bedrock tool search error
+  isServerError?: boolean; // True when error is a 500/internal server error (Claude may be down)
   isComplete?: boolean;
   config?: any; // For stream_edit_start
   usage?: {
