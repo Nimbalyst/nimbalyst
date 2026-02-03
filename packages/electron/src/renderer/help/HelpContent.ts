@@ -203,7 +203,7 @@ export const HelpContent: Record<string, HelpEntry> = {
   },
   'git-operations-commit-with-ai-button': {
     title: 'AI-Assisted Commit',
-    body: 'Have the AI analyze your changes and propose a commit message. The AI will review staged files and create a descriptive commit message based on the changes.',
+    body: 'Have the AI analyze your changes and propose a set of files and a commit message for you to edit and approve.',
   },
 
   // ============================================================================
