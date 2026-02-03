@@ -904,6 +904,7 @@ The application includes a walkthrough guide system for feature discovery and co
 - **AGENT\_PERMISSIONS.md**: Agent tool permission system and approval flow
 - **ANALYTICS\_GUIDE.md**: How to add PostHog analytics events
 - **DIALOGS.md**: How to add new dialogs using the DialogProvider system
+- **IPC\_GUIDE.md**: IPC patterns and best practices for main/renderer communication
 - **JOTAI.md**: Jotai state architecture patterns (derived atoms, avoiding divergence). **Read this when working with Jotai atoms or debugging state divergence issues.**
 - **POSTHOG\_EVENTS.md**: Canonical reference for all analytics events
 - **POSTHOG\_MCP\_INTEGRATION.md**: PostHog MCP integration architecture
