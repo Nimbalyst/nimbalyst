@@ -20,6 +20,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.32] - 2026-02-02
+
+
+### Changed
+- ExitPlanMode migrated to durable DB-backed prompts
+- Interactive prompts (git commit proposals) now persist across app restarts
+
+### Fixed
+- Transcript no longer flashes when switching sessions
+- Transcript auto-scroll now uses per-session state to prevent scroll position bleeding between sessions
+
 ## [0.52.31] - 2026-02-02
 
 
