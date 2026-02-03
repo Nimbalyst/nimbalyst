@@ -251,6 +251,12 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
   const [initError, setInitError] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
 
+  // Use a ref for onExit to avoid effect re-runs when parent passes new callback references
+  const onExitRef = useRef(onExit);
+  useEffect(() => {
+    onExitRef.current = onExit;
+  }, [onExit]);
+
   // Handle context menu
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -271,7 +277,9 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
   }, [sessionId]);
 
   // Handle terminal restart after exit
-  const handleRestart = useCallback(async () => {
+  // Use a ref to store the restart function to avoid effect re-runs
+  const handleRestartRef = useRef<() => Promise<void>>();
+  handleRestartRef.current = async () => {
     hasExitedRef.current = false; // Reset ref for callbacks
     setHasExited(false);
     setExitCode(null);
@@ -286,11 +294,41 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
       console.error('[TerminalPanel] Failed to restart terminal:', error);
       setInitError(error instanceof Error ? error.message : 'Failed to restart terminal');
     }
-  }, [terminalId, workspacePath]);
+  };
 
-  // Initialize terminal
+  // Stable callback that delegates to the ref
+  const handleRestart = useCallback(() => {
+    return handleRestartRef.current?.() ?? Promise.resolve();
+  }, []);
+
+  // Track if terminal has been initialized (separate from isInitialized state)
+  // This ref persists across renders and prevents re-initialization on tab switches
+  const hasInitializedRef = useRef(false);
+
+  // Track whether this terminal should initialize. Set to true when the terminal
+  // first becomes active, and stays true forever after. This allows us to:
+  // 1. Defer initialization until the terminal is visible (so we get valid dimensions)
+  // 2. Keep the terminal alive when switching tabs (no dispose/recreate cycle)
+  const [shouldInit, setShouldInit] = useState(isActive);
+
+  // When isActive becomes true for the first time, enable initialization
   useEffect(() => {
-    if (!isActive || !terminalRef.current) return;
+    if (isActive && !shouldInit) {
+      setShouldInit(true);
+    }
+  }, [isActive, shouldInit]);
+
+  // Initialize terminal - runs once per terminalId when shouldInit becomes true
+  // After initialization, the terminal stays alive in the background when switching tabs
+  useEffect(() => {
+    // Only initialize once shouldInit is true (terminal has been activated at least once)
+    if (!shouldInit) return;
+
+    // Only initialize once the DOM ref is available
+    if (!terminalRef.current) return;
+
+    // Skip if already initialized for this terminal
+    if (hasInitializedRef.current) return;
 
     disposedRef.current = false;
     let disposed = false;
@@ -493,7 +531,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
 
               setHasExited(true);
               setExitCode(data.exitCode);
-              onExit?.(data.exitCode);
+              onExitRef.current?.(data.exitCode);
             }
           });
 
@@ -527,6 +565,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
           resizeObserver.observe(terminalRef.current);
 
           setIsInitialized(true);
+          hasInitializedRef.current = true;
         }
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -540,6 +579,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
     return () => {
       disposed = true;
       disposedRef.current = true;
+      hasInitializedRef.current = false;
       resizeObserver?.disconnect();
       unsubscribeOutput?.();
       unsubscribeExited?.();
@@ -549,9 +589,15 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
       terminalInstanceRef.current = null;
       fitAddonRef.current = null;
     };
+  // Note: shouldInit triggers this effect when the terminal first becomes active.
+  // After initialization, shouldInit stays true, so the terminal persists in the background.
+  // Note: isActive is NOT in deps - we don't want to dispose/recreate terminal on tab switches.
   // Note: hasExited is NOT in deps - we use hasExitedRef instead to avoid
   // effect re-runs when terminal exits (which would dispose and recreate it)
-  }, [terminalId, workspacePath, isActive, handleRestart, onExit]);
+  // Note: onExit and handleRestart are NOT in deps - we use refs for both to avoid
+  // effect re-runs when callbacks change
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [terminalId, workspacePath, shouldInit]);
 
   // Focus terminal when becoming active
   useEffect(() => {
