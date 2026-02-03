@@ -41,6 +41,7 @@ import {
   sessionStoreAtom,
   pushNavigationEntryAtom,
   isRestoringNavigationAtom,
+  markSessionReadAtom,
 } from '../../store';
 import { errorNotificationService } from '../../services/ErrorNotificationService';
 import { initWorkstreamState, loadWorkstreamStates, workstreamStateAtom, workstreamActiveChildAtom, setWorkstreamActiveChildAtom, setWorktreeActiveSessionAtom } from '../../store/atoms/workstreamState';
@@ -557,11 +558,12 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
         workspacePath,
       });
 
-      // Set the clicked child as active
+      // Set the clicked child as active and mark as read
       store.set(setWorkstreamActiveChildAtom, {
         workstreamId: parentId,
         childId: childSessionId,
       });
+      store.set(markSessionReadAtom, childSessionId);
 
       // Select the parent workstream
       setSelectedWorkstream({
