@@ -798,7 +798,7 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
           <div className="file-edits-sidebar__empty p-4 text-[var(--nim-text-faint)] text-sm text-center">
             {scopeMode === 'current-changes' && totalSessionFilesCount && totalSessionFilesCount > 0 ? (
               // Uncommitted Session Edits mode with no uncommitted changes
-              <>
+              <div className="flex flex-col items-center">
                 <div>No uncommitted changes</div>
                 {onShowSessionFiles && (
                   <button
@@ -816,7 +816,7 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
                     Show all uncommitted files ({totalUncommittedCount})
                   </button>
                 )}
-              </>
+              </div>
             ) : scopeMode === 'current-changes' ? (
               // Uncommitted Session Edits mode with no session files at all
               <>
