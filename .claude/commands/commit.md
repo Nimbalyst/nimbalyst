@@ -13,8 +13,8 @@ Prepare a git commit following these steps:
   - Use bullet points (dash prefix) only if there are multiple distinct changes
   - Keep each line under 72 characters
   - No emojis
-4. Stage relevant files with `git add`
-5. Run the `developer_git_commit_proposal` command to propose the commit to the user and let them commit
+4. Run the `developer_git_commit_proposal` tool to propose the commit to the user
+  - Do NOT run `git add` - the widget handles staging when the user confirms
 
 **Commit Message Guidelines:**
 - Lead with the problem solved or capability added, not the technique used
