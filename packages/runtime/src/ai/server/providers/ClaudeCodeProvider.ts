@@ -947,8 +947,14 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             // }
 
             if (chunk.session_id && sessionId) {
-              // Store the claude session ID
+              // Store the claude session ID in memory
               this.claudeSessionIds.set(sessionId, chunk.session_id);
+              // Emit event to persist immediately - don't wait for completion
+              // This ensures session can be resumed even if interrupted/cancelled
+              this.emit('session:providerSessionReceived', {
+                sessionId,
+                providerSessionId: chunk.session_id
+              });
             }
 
             if (chunk.type === 'assistant' && chunk.message) {
@@ -1419,6 +1425,12 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             // Store session_id if present
             if (chunk.session_id && sessionId) {
               this.claudeSessionIds.set(sessionId, chunk.session_id);
+              // Emit event to persist immediately - don't wait for completion
+              // This ensures session can be resumed even if interrupted/cancelled
+              this.emit('session:providerSessionReceived', {
+                sessionId,
+                providerSessionId: chunk.session_id
+              });
             }
 
             // System messages like 'init' are informational - don't display to user

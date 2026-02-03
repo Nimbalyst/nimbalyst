@@ -1887,6 +1887,18 @@ export class AIService {
       provider.removeAllListeners('session:providerSessionExpired');
       provider.on('session:providerSessionExpired', onProviderSessionExpired);
 
+      // Listen for provider session ID received and persist immediately
+      // This ensures session can be resumed even if interrupted/cancelled
+      const onProviderSessionReceived = async (data: { sessionId: string; providerSessionId: string }) => {
+        try {
+          await this.sessionManager.updateProviderSessionData(data.sessionId, data.providerSessionId);
+        } catch (error) {
+          logger.main.error('[AIService] Failed to persist providerSessionId:', error);
+        }
+      };
+      provider.removeAllListeners('session:providerSessionReceived');
+      provider.on('session:providerSessionReceived', onProviderSessionReceived);
+
       // Track user @ mentions in the message
       try {
         await sessionFileTracker.trackUserMessage(
@@ -2529,7 +2541,9 @@ export class AIService {
                 await this.sessionManager.addMessage(assistantMessage, session.id);
               }
 
-              // Update provider session data if available
+              // Update provider session data if available (redundant safety net)
+              // NOTE: providerSessionId is now saved immediately when received via session:providerSessionReceived event
+              // This completion-time save is kept as a fallback in case the early save was missed
               if (provider.getProviderSessionData) {
                 const providerData = provider.getProviderSessionData(session.id);
                 if (providerData?.claudeSessionId) {
