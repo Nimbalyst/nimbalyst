@@ -46,7 +46,7 @@ export const HelpContent: Record<string, HelpEntry> = {
   },
   'file-tree-new-folder-button': {
     title: 'New Folder',
-    body: 'Create a new folder in the selected directory.',
+    body: 'Create a new folder in the selected folder.',
   },
 
   // ============================================================================
@@ -166,10 +166,6 @@ export const HelpContent: Record<string, HelpEntry> = {
   'agent-input': {
     title: 'AI Input',
     body: 'Type your message or paste images and files. The AI has full context of your project.',
-  },
-  'agent-mode-toggle': {
-    title: 'Agent vs Chat Mode',
-    body: 'Agent mode can edit files and run commands. Chat mode is for conversation only.',
   },
   'plan-mode-toggle': {
     title: 'Plan vs Agent Mode',
