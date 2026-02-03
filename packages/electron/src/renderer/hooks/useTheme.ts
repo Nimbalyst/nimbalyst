@@ -134,6 +134,107 @@ export function initializeTheme(): void {
 }
 
 /**
+ * Derive missing colors from the theme's base colors.
+ * This ensures tables, code blocks, etc. match the theme's color scheme
+ * even if the theme author didn't explicitly specify these colors.
+ */
+function deriveColorsFromTheme(
+  themeColors: Partial<ExtendedThemeColors>,
+  baseColors: ExtendedThemeColors
+): ExtendedThemeColors {
+  const derived: Partial<ExtendedThemeColors> = {};
+
+  // Table colors: derive from theme's background colors if not specified
+  if (!themeColors['table-header'] && themeColors['bg-secondary']) {
+    derived['table-header'] = themeColors['bg-secondary'];
+  }
+  if (!themeColors['table-cell'] && themeColors['bg']) {
+    derived['table-cell'] = themeColors['bg'];
+  }
+  if (!themeColors['table-stripe'] && themeColors['bg-tertiary']) {
+    derived['table-stripe'] = themeColors['bg-tertiary'];
+  }
+  if (!themeColors['table-border'] && themeColors['border']) {
+    derived['table-border'] = themeColors['border'];
+  }
+
+  // Code block colors: derive from theme's background if not specified
+  if (!themeColors['code-bg'] && themeColors['bg-secondary']) {
+    derived['code-bg'] = themeColors['bg-secondary'];
+  }
+  if (!themeColors['code-text'] && themeColors['text']) {
+    derived['code-text'] = themeColors['text'];
+  }
+  if (!themeColors['code-border'] && themeColors['border']) {
+    derived['code-border'] = themeColors['border'];
+  }
+  if (!themeColors['code-gutter'] && themeColors['bg-tertiary']) {
+    derived['code-gutter'] = themeColors['bg-tertiary'];
+  }
+
+  // Toolbar colors: derive from theme's background if not specified
+  if (!themeColors['toolbar-bg'] && themeColors['bg']) {
+    derived['toolbar-bg'] = themeColors['bg'];
+  }
+  if (!themeColors['toolbar-border'] && themeColors['border']) {
+    derived['toolbar-border'] = themeColors['border'];
+  }
+  if (!themeColors['toolbar-hover'] && themeColors['bg-hover']) {
+    derived['toolbar-hover'] = themeColors['bg-hover'];
+  }
+
+  // Scrollbar colors: derive from theme's colors if not specified
+  if (!themeColors['scrollbar-thumb'] && themeColors['text-faint']) {
+    derived['scrollbar-thumb'] = themeColors['text-faint'];
+  }
+  if (!themeColors['scrollbar-thumb-hover'] && themeColors['text-muted']) {
+    derived['scrollbar-thumb-hover'] = themeColors['text-muted'];
+  }
+
+  // Quote colors: derive from theme's text colors if not specified
+  if (!themeColors['quote-text'] && themeColors['text-muted']) {
+    derived['quote-text'] = themeColors['text-muted'];
+  }
+  if (!themeColors['quote-border'] && themeColors['border']) {
+    derived['quote-border'] = themeColors['border'];
+  }
+
+  // Terminal colors: derive from theme's colors if not specified
+  if (!themeColors['terminal-bg'] && themeColors['bg-secondary']) {
+    derived['terminal-bg'] = themeColors['bg-secondary'];
+  }
+  if (!themeColors['terminal-fg'] && themeColors['text']) {
+    derived['terminal-fg'] = themeColors['text'];
+  }
+  if (!themeColors['terminal-cursor'] && themeColors['primary']) {
+    derived['terminal-cursor'] = themeColors['primary'];
+  }
+  if (!themeColors['terminal-cursor-accent'] && (themeColors['terminal-bg'] || themeColors['bg-secondary'])) {
+    derived['terminal-cursor-accent'] = themeColors['terminal-bg'] || themeColors['bg-secondary'];
+  }
+  if (!themeColors['terminal-selection'] && themeColors['bg-selected']) {
+    derived['terminal-selection'] = themeColors['bg-selected'];
+  }
+
+  // Terminal ANSI colors: derive from status colors if not specified
+  if (!themeColors['terminal-ansi-red'] && themeColors['error']) {
+    derived['terminal-ansi-red'] = themeColors['error'];
+  }
+  if (!themeColors['terminal-ansi-green'] && themeColors['success']) {
+    derived['terminal-ansi-green'] = themeColors['success'];
+  }
+  if (!themeColors['terminal-ansi-yellow'] && themeColors['warning']) {
+    derived['terminal-ansi-yellow'] = themeColors['warning'];
+  }
+  if (!themeColors['terminal-ansi-blue'] && themeColors['info']) {
+    derived['terminal-ansi-blue'] = themeColors['info'];
+  }
+
+  // Merge: base colors < derived colors < explicit theme colors
+  return { ...baseColors, ...derived, ...themeColors } as ExtendedThemeColors;
+}
+
+/**
  * Apply theme to DOM (classList and data-theme attribute).
  * For custom themes, also applies CSS variables.
  */
@@ -191,17 +292,14 @@ async function applyThemeToDOM(theme: ThemeId): Promise<void> {
       root.classList.add(baseClass);
       root.setAttribute('data-theme', resolvedTheme);
 
-      // Get base colors for fallbacks
+      // Get base colors and derive missing colors from theme's base colors
       const baseColors = getBaseThemeColors(isDark);
+      const mergedColors = deriveColorsFromTheme(themeData.colors, baseColors);
 
       // Apply theme colors as CSS variables
       for (const [key, cssVar] of Object.entries(CSS_VAR_MAP)) {
         const colorKey = key as keyof ExtendedThemeColors;
-        const themeColor = themeData.colors[colorKey];
-        const baseColor = baseColors[colorKey];
-
-        // Use theme color if provided, otherwise base color
-        const value = themeColor || baseColor;
+        const value = mergedColors[colorKey];
         if (value) {
           root.style.setProperty(cssVar, value);
         }
