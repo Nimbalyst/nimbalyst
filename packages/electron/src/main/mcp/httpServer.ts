@@ -190,10 +190,10 @@ async function findWindowIdForWorkspacePath(workspacePath: string): Promise<numb
 
   // Query the database to check if this is a worktree path
   try {
-    const { getDatabase, ensureDbReady } = await import('../database/initialize');
+    const { getDatabase } = await import('../database/initialize');
     const { createWorktreeStore } = await import('../services/WorktreeStore');
     const db = getDatabase();
-    const worktreeStore = createWorktreeStore(db, ensureDbReady);
+    const worktreeStore = createWorktreeStore(db);
     const worktree = await worktreeStore.getByPath(workspacePath);
 
     if (worktree) {

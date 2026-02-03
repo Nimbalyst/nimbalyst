@@ -1294,8 +1294,6 @@ Please proceed with this strategy.`;
                         loadWorktreeCommits(),
                         loadWorktreeStatus(),
                       ]);
-                      // Trigger git status change event to refresh uncommitted files in FilesEditedSidebar
-                      window.electronAPI?.emit?.('git:status-changed', { workspacePath: worktreePath || workspacePath });
                     }}
                     className="flex items-center gap-1 px-2 py-1 text-[10px] text-[var(--nim-primary)] hover:bg-[var(--nim-bg-hover)] rounded transition-colors"
                     title="Refresh worktree status and uncommitted files"

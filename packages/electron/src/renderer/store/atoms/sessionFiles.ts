@@ -17,7 +17,7 @@ import { workstreamSessionsAtom } from './sessions';
 export interface FileEditWithSession {
   filePath: string;
   linkType: 'edited';
-  operation?: string;
+  operation?: 'create' | 'edit' | 'delete' | 'rename';
   linesAdded?: number;
   linesRemoved?: number;
   timestamp: string;
@@ -62,7 +62,7 @@ export const sessionGitStatusAtom = atomFamily((sessionId: string) =>
  * Updated by: history:pending-count-changed IPC event
  */
 export const sessionPendingReviewFilesAtom = atomFamily((sessionId: string) =>
-  atom<Set<string>>(new Set())
+  atom<Set<string>>(new Set<string>())
 );
 
 // ============================================================================
