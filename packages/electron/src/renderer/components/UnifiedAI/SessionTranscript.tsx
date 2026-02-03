@@ -1308,7 +1308,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
             onOpenInExternalEditor={hasExternalEditor ? handleOpenInExternalEditor : undefined}
             externalEditorName={externalEditorName}
             onCompact={handleCompact}
-            promptAdditions={promptAdditions}
+            promptAdditions={showPromptAdditions ? promptAdditions : null}
           />
         </div>
       )}
