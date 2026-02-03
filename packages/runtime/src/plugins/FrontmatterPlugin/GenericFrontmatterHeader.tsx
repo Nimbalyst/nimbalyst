@@ -17,6 +17,7 @@ import { MaterialSymbol } from '../../ui/icons/MaterialSymbol';
 
 export const GenericFrontmatterHeader: React.FC<DocumentHeaderComponentProps> = ({
   getContent,
+  contentVersion,
   onContentChange,
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -24,7 +25,7 @@ export const GenericFrontmatterHeader: React.FC<DocumentHeaderComponentProps> = 
   const [parseError, setParseError] = useState<string | null>(null);
   const [hasFrontmatter, setHasFrontmatter] = useState(false);
 
-  // Parse frontmatter on mount
+  // Parse frontmatter on mount and when content changes externally
   useEffect(() => {
     const content = getContent();
     const parseResult = extractFrontmatterWithError(content);
@@ -32,8 +33,7 @@ export const GenericFrontmatterHeader: React.FC<DocumentHeaderComponentProps> = 
     setParseError(parseResult.success ? null : (parseResult.error || null));
     const fields = parseResult.data ? parseFields(parseResult.data) : [];
     setLocalFields(fields);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [getContent, contentVersion]);
 
   const handleFieldChange = useCallback(
     (fieldKey: string, newValue: unknown) => {

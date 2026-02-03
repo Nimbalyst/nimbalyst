@@ -12,6 +12,8 @@ export interface DocumentHeaderComponentProps {
   fileName: string;
   /** Get fresh content from the editor. Call this when you need the current content. */
   getContent: () => string;
+  /** Version counter that increments when content changes. Use as a dependency to re-read content. */
+  contentVersion: number;
   onContentChange?: (newContent: string) => void;
   editor?: any; // Lexical editor instance
 }

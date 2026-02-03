@@ -201,6 +201,16 @@ export const PLAYWRIGHT_TEST_SELECTORS = {
   gitOperationsCommitWithAiButton: '[data-testid="git-operations-commit-with-ai-button"]',
   gitOperationsCommitButton: '[data-testid="git-operations-commit-button"]',
   gitOperationsCommitMessage: '[data-testid="git-operations-commit-message"]',
+
+  // Document Header / Tracker
+  documentHeaderContainer: '.document-header-container',
+  statusBar: '.status-bar',
+  statusBarHeader: '.status-bar-header',
+  statusBarField: '.status-bar-field',
+  sliderNumberInput: '.slider-number-input',
+  customSelect: '.custom-select',
+  customSelectTrigger: '.custom-select-trigger',
+  customSelectValue: '.custom-select-value',
 };
 
 /**

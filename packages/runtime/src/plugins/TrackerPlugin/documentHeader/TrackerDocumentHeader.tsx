@@ -19,27 +19,36 @@ export const TrackerDocumentHeader: React.FC<DocumentHeaderComponentProps> = ({
   filePath,
   fileName,
   getContent,
+  contentVersion,
   onContentChange,
   editor,
 }) => {
-  const [trackerData, setTrackerData] = useState<{ type: string; data: Record<string, any> } | null>(null);
   const [dataModel, setDataModel] = useState<TrackerDataModel | null>(null);
+  const [trackerType, setTrackerType] = useState<string | null>(null);
 
-  // Detect tracker from frontmatter on mount
-  useEffect(() => {
+  // Get fresh tracker data when contentVersion changes
+  const trackerData = useMemo(() => {
     const content = getContent();
-    const detected = detectTrackerFromFrontmatter(content);
-    setTrackerData(detected);
+    return detectTrackerFromFrontmatter(content);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [getContent, contentVersion]);
 
-    if (detected) {
-      // Load data model for tracker type
+  // Load data model when tracker type changes (or on mount)
+  useEffect(() => {
+    const currentType = trackerData?.type ?? null;
+
+    // Only reload model if type changed
+    if (currentType === trackerType) return;
+    setTrackerType(currentType);
+
+    if (currentType) {
       const loadModel = async () => {
         try {
           const loader = ModelLoader.getInstance();
-          const model = await loader.getModel(detected.type);
+          const model = await loader.getModel(currentType);
           setDataModel(model);
         } catch (error) {
-          console.error(`[TrackerDocumentHeader] Failed to load model for type "${detected.type}":`, error);
+          console.error(`[TrackerDocumentHeader] Failed to load model for type "${currentType}":`, error);
           setDataModel(null);
         }
       };
@@ -47,9 +56,7 @@ export const TrackerDocumentHeader: React.FC<DocumentHeaderComponentProps> = ({
     } else {
       setDataModel(null);
     }
-    // Only run on mount - we don't need to re-detect when content changes
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [trackerData?.type, trackerType]);
 
   // Handle field changes - get fresh content at the moment of change
   const handleChange = useCallback((updates: Record<string, any>) => {

@@ -16,6 +16,8 @@ interface DocumentHeaderContainerProps {
   fileName: string;
   /** Callback to get current content from the editor. Called on mount and when providers need fresh content. */
   getContent: () => string;
+  /** Version counter that increments when content changes externally (e.g., file watcher, AI edit). */
+  contentVersion?: number;
   onContentChange?: (newContent: string) => void;
   editor?: any;
 }
@@ -24,11 +26,14 @@ export const DocumentHeaderContainer: React.FC<DocumentHeaderContainerProps> = (
   filePath,
   fileName,
   getContent,
+  contentVersion = 0,
   onContentChange,
   editor,
 }) => {
   // Track content only for provider matching - components get fresh content via getContent
   const [contentForMatching, setContentForMatching] = React.useState(() => getContent());
+  // Local version counter that combines parent's contentVersion with our own updates
+  const [localVersion, setLocalVersion] = React.useState(0);
 
   // Re-query content after a short delay to handle the case where the editor
   // hasn't provided its getContent function yet on first render.
@@ -36,12 +41,31 @@ export const DocumentHeaderContainer: React.FC<DocumentHeaderContainerProps> = (
     const timer = setTimeout(() => {
       const newContent = getContent();
       if (newContent) {
-        setContentForMatching(prev => prev !== newContent ? newContent : prev);
+        setContentForMatching(prev => {
+          if (prev !== newContent) {
+            // Content changed - increment local version so children re-read
+            setLocalVersion(v => v + 1);
+            return newContent;
+          }
+          return prev;
+        });
       }
     }, 50);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Update content for matching when parent version changes (external content update)
+  React.useEffect(() => {
+    if (contentVersion > 0) {
+      const newContent = getContent();
+      setContentForMatching(newContent);
+      setLocalVersion(v => v + 1);
+    }
+  }, [contentVersion, getContent]);
+
+  // Effective version combines parent and local
+  const effectiveVersion = contentVersion + localVersion;
 
   // Get matching providers based on content structure (frontmatter detection)
   const providers = useMemo(() => {
@@ -66,6 +90,7 @@ export const DocumentHeaderContainer: React.FC<DocumentHeaderContainerProps> = (
     filePath,
     fileName,
     getContent,
+    contentVersion: effectiveVersion,
     onContentChange,
     editor,
   };

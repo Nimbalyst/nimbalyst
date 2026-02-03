@@ -1068,6 +1068,8 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                 initialContentRef.current = oldContent;
                 isDirtyRef.current = false;
                 onDirtyChange?.(false);
+                // Signal content changed so document headers re-read
+                setReloadVersion(v => v + 1);
               } finally {
                 isApplyingDiffRef.current = false;
               }
@@ -1133,6 +1135,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                   // This prevents false-positive autosaves from WYSIWYG rendering differences
                   isDirtyRef.current = false;
                   onDirtyChange?.(false);
+
+                  // Signal content changed so document headers re-read
+                  setReloadVersion(v => v + 1);
                 } else {
                   // Code files: Use Monaco's built-in diff editor
                   if (editorRef.current && editorRef.current.showDiff) {
@@ -1141,6 +1146,8 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                     setShowMonacoDiffBar(true);
                     // Fetch session info for the diff approval bar
                     fetchDiffSessionInfo(tagInfo.sessionId, pendingTags[0].createdAt?.getTime?.() || Date.now());
+                    // Signal content changed so document headers re-read
+                    setReloadVersion(v => v + 1);
                   }
                 }
               } catch (error) {
@@ -1218,6 +1225,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                   // This prevents false-positive autosaves from WYSIWYG rendering differences
                   isDirtyRef.current = false;
                   onDirtyChange?.(false);
+
+                  // Signal content changed so document headers re-read
+                  setReloadVersion(v => v + 1);
                 }
               } catch (error) {
                 logger.ui.error(`[TabEditor] Failed to apply AI diff:`, error);
@@ -1318,6 +1328,8 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                   editorRef.current.setContent(newContent);
                 }
               }
+              // Signal that content was reloaded externally so document headers can re-read
+              setReloadVersion(v => v + 1);
             } catch (error) {
               logger.ui.error(`[TabEditor] Failed to update editor content:`, error);
             }
@@ -2462,6 +2474,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                         filePath={filePath}
                         fileName={fileName}
                         getContent={getDocumentHeaderContent}
+                        contentVersion={reloadVersion}
                         onContentChange={handleDocumentHeaderContentChange}
                         editor={editorRef.current}
                       />
