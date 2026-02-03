@@ -213,24 +213,41 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
         return filtered;
 
       case 'all-changes': {
-        // Merge session files with all uncommitted files from repo
+        // Merge session files with all uncommitted files
+        // For worktrees, use worktree changed files; for regular sessions, use workspace uncommitted files
         const sessionFilePaths = new Set(filtered.map(f => f.filePath));
-        // Add uncommitted files that aren't already in session files
-        const additionalFiles: FileEditWithSession[] = allUncommittedFiles
-          .filter(filePath => !sessionFilePaths.has(filePath))
-          .map(filePath => ({
-            filePath,
-            linkType: 'edited' as const,
-            timestamp: new Date().toISOString(),
-            sessionId: '', // Not from a session
-          }));
+        let additionalFiles: FileEditWithSession[];
+
+        if (worktreeId && worktreePath) {
+          // For worktrees: add worktree changed files that aren't already in session files
+          // Note: worktreeChangedFiles may be empty, that's OK - we just show session files
+          additionalFiles = worktreeChangedFiles
+            .map(f => `${worktreePath}/${f.path}`) // Convert relative to absolute
+            .filter(filePath => !sessionFilePaths.has(filePath))
+            .map(filePath => ({
+              filePath,
+              linkType: 'edited' as const,
+              timestamp: new Date().toISOString(),
+              sessionId: '', // Not from a session
+            }));
+        } else {
+          // For regular sessions: add uncommitted files from workspace that aren't in session files
+          additionalFiles = allUncommittedFiles
+            .filter(filePath => !sessionFilePaths.has(filePath))
+            .map(filePath => ({
+              filePath,
+              linkType: 'edited' as const,
+              timestamp: new Date().toISOString(),
+              sessionId: '', // Not from a session
+            }));
+        }
         return [...filtered, ...additionalFiles];
       }
 
       default:
         return filtered;
     }
-  }, [allFileEdits, filterToCurrentSession, activeSessionId, fileScopeMode, isFileUncommitted, allUncommittedFiles]);
+  }, [allFileEdits, filterToCurrentSession, activeSessionId, fileScopeMode, isFileUncommitted, allUncommittedFiles, worktreeId, worktreePath, worktreeChangedFiles]);
 
   // Memoize editedFiles array for GitOperationsPanel to prevent unnecessary re-renders
   const editedFilePaths = useMemo(() => {
@@ -515,7 +532,7 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
             onBulkSelectionChange={handleBulkSelectionChange}
             totalSessionFilesCount={totalSessionFilesCount}
             onShowSessionFiles={handleShowSessionFiles}
-            totalUncommittedCount={allUncommittedFiles.length}
+            totalUncommittedCount={worktreeId ? worktreeChangedFiles.length : allUncommittedFiles.length}
             onShowAllUncommitted={handleShowAllUncommitted}
             scopeMode={fileScopeMode}
           />
