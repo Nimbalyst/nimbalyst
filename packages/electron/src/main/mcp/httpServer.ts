@@ -1134,19 +1134,21 @@ The commit message should follow these guidelines:
 
               // Helper to check if a file is within a workspace (including worktree relationships)
               const fileInWorkspace = (filePath: string, wsPath: string): boolean => {
-                // Direct match
-                if (filePath.startsWith(wsPath + '/') || filePath === wsPath) {
+                // Direct match - use path.sep for cross-platform compatibility
+                if (filePath.startsWith(wsPath + path.sep) || filePath === wsPath) {
                   return true;
                 }
                 // If workspace is a worktree, check if file is in the parent project
                 if (isWorktreePath(wsPath)) {
                   const projectPath = resolveProjectPath(wsPath);
-                  if (filePath.startsWith(projectPath + '/') || filePath === projectPath) {
+                  if (filePath.startsWith(projectPath + path.sep) || filePath === projectPath) {
                     return true;
                   }
                 }
                 // If file path looks like it's in a worktree of this workspace
-                const worktreePattern = new RegExp(`^${wsPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}_worktrees/`);
+                // Use escaped path.sep in regex for cross-platform compatibility
+                const escapedSep = path.sep.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const worktreePattern = new RegExp(`^${wsPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}_worktrees${escapedSep}`);
                 if (worktreePattern.test(filePath)) {
                   return true;
                 }
@@ -1348,22 +1350,24 @@ The commit message should follow these guidelines:
               let fileWorkspacePath: string | undefined;
 
               // Helper to check if a file is within a workspace (including worktree relationships)
-              const fileInWorkspace = (filePath: string, wsPath: string): boolean => {
-                // Direct match
-                if (filePath.startsWith(wsPath + '/') || filePath === wsPath) {
+              const fileInWorkspace = (fp: string, wsPath: string): boolean => {
+                // Direct match - use path.sep for cross-platform compatibility
+                if (fp.startsWith(wsPath + path.sep) || fp === wsPath) {
                   return true;
                 }
                 // If workspace is a worktree, check if file is in the parent project
                 if (isWorktreePath(wsPath)) {
                   const projectPath = resolveProjectPath(wsPath);
-                  if (filePath.startsWith(projectPath + '/') || filePath === projectPath) {
+                  if (fp.startsWith(projectPath + path.sep) || fp === projectPath) {
                     return true;
                   }
                 }
                 // If file path looks like it's in a worktree of this workspace
                 // e.g., workspace is /foo/bar, file is /foo/bar_worktrees/branch/file.txt
-                const worktreePattern = new RegExp(`^${wsPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}_worktrees/`);
-                if (worktreePattern.test(filePath)) {
+                // Use escaped path.sep in regex for cross-platform compatibility
+                const escapedSep = path.sep.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const worktreePattern = new RegExp(`^${wsPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}_worktrees${escapedSep}`);
+                if (worktreePattern.test(fp)) {
                   return true;
                 }
                 return false;
