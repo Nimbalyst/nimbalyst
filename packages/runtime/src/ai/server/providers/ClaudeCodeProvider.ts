@@ -158,6 +158,11 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     options?: { targetSizeBytes?: number }
   ) => Promise<{ buffer: Buffer; mimeType: string; wasCompressed: boolean }>) | null = null;
 
+  // Extension file types loader (injected from electron main process)
+  // Returns file extensions that have custom editors registered via extensions
+  // Used in planning mode to allow editing extension-registered file types (e.g., .mockup.html)
+  private static extensionFileTypesLoader: (() => Set<string>) | null = null;
+
   static readonly DEFAULT_MODEL = 'claude-code:sonnet';
 
   /**
@@ -270,6 +275,15 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     workspacePath: string
   ) => { trusted: boolean; mode: 'ask' | 'allow-all' | 'bypass-all' | null }) | null): void {
     ClaudeCodeProvider.trustChecker = checker;
+  }
+
+  /**
+   * Set the extension file types loader function (called from electron main process)
+   * Returns file extensions that have custom editors registered via extensions.
+   * Used in planning mode to allow editing extension-registered file types.
+   */
+  public static setExtensionFileTypesLoader(loader: (() => Set<string>) | null): void {
+    ClaudeCodeProvider.extensionFileTypesLoader = loader;
   }
 
   /**
@@ -3400,18 +3414,26 @@ export class ClaudeCodeProvider extends BaseAIProvider {
           }
         }
 
-        // PLANNING MODE VALIDATION: Restrict file edits to markdown files only
+        // PLANNING MODE VALIDATION: Restrict file edits to markdown and extension-registered file types
         if (this.currentMode === 'planning') {
+          // Get extension-registered file types (e.g., .mockup.html, .excalidraw, .datamodel)
+          const extensionFileTypes = ClaudeCodeProvider.extensionFileTypesLoader?.() ?? new Set<string>();
+
           for (const filePath of filePaths) {
-            if (!filePath.endsWith('.md')) {
+            // Check if file has extension-registered file type
+            const hasExtensionEditor = Array.from(extensionFileTypes).some(ext =>
+              filePath.toLowerCase().endsWith(ext.toLowerCase())
+            );
+
+            if (!filePath.endsWith('.md') && !hasExtensionEditor) {
               console.error(`[CLAUDE-CODE] Planning mode validation FAILED: ${toolName} on ${filePath}`);
               return {
                 hookSpecificOutput: {
                   hookEventName: 'PreToolUse' as const,
                   permissionDecision: 'deny' as const,
-                  permissionDecisionReason: `Planning mode restricts file operations to markdown files only. ` +
+                  permissionDecisionReason: `Planning mode restricts file operations to markdown and extension-registered file types. ` +
                     `Cannot use ${toolName} on '${filePath}'. ` +
-                    `Please only edit .md files in the nimbalyst-local/plans/ directory.`
+                    `Allowed: .md files or extension types (${Array.from(extensionFileTypes).join(', ') || 'none registered'}).`
                 }
               };
             }

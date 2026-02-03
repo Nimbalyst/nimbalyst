@@ -69,6 +69,7 @@ import { initVoiceModeSettingsHandler } from './services/voice/VoiceModeSettings
 import { registerWalkthroughHandlers } from './ipc/WalkthroughHandlers';
 import { registerDataModelHandlers } from './ipc/DataModelHandlers';
 import { registerExtensionHandlers, getClaudePluginPaths, initializeExtensionFileTypes } from './ipc/ExtensionHandlers';
+import { getRegisteredExtensions } from './extensions/RegisteredFileTypes';
 import { ClaudeCodeProvider } from '@nimbalyst/runtime/ai/server';
 import { logger, overrideConsole } from './utils/logger';
 import { startPerformanceMonitoring, stopPerformanceMonitoring } from './utils/performanceMonitor';
@@ -728,6 +729,10 @@ app.whenReady().then(async () => {
         wasCompressed: result.wasCompressed
       };
     });
+
+    // Inject extension file types loader
+    // Allows planning mode to permit editing extension-registered file types
+    ClaudeCodeProvider.setExtensionFileTypesLoader(getRegisteredExtensions);
 
     registerMockupHandlers();
     registerDataModelHandlers();
