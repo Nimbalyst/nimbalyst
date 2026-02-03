@@ -2,6 +2,54 @@
 
 This document explains how to create and maintain walkthrough guides and help content in Nimbalyst. The system provides contextual tooltips and multi-step guides to help users discover features.
 
+## Current Walkthrough Inventory
+
+| ID | Name | Steps | Screen | Priority | Trigger Condition |
+| --- | --- | --- | --- | --- | --- |
+| `agent-welcome-intro` | Agent Mode Welcome | 1 | agent | 50 | Session history is empty (first-time users) |
+| `navigation-intro` | Navigation Introduction | 2 | any | 5 | Always available |
+| `session-quick-open-intro` | Session Quick Open | 1 | agent | 12 | Session search button is visible |
+| `diff-mode-intro` | Reviewing AI Changes | 2 | files | 15 | Diff approval bar is visible |
+| `git-commit-mode-intro` | Git Commit Modes | 1 | agent | 15 | Commit mode toggle is visible (has changes) |
+| `attach-files-intro` | Attach Files | 1 | agent | 18 | AI input is visible |
+| `ai-sessions-button` | AI Sessions Button | 1 | files | 20 | AI sessions button visible, not in diff mode |
+| `model-picker-intro` | Model Selection | 1 | agent | 20 | Model picker is visible |
+| `files-scope-intro` | File Scope Modes | 1 | agent | 20 | Files scope dropdown is visible |
+| `plan-mode-intro` | Plan Mode | 1 | agent | 22 | Mode toggle is visible |
+| `context-window-intro` | Context Window | 1 | any | 25 | Context indicator is visible |
+| `layout-controls-intro` | Layout Controls | 1 | agent | 35 | Layout controls visible with Files button enabled |
+| `file-tree-tools` | File Tree Tools | 2 | files | 5 | Filter button is visible |
+
+## When Walkthroughs Appear
+
+Walkthroughs are designed to be helpful without being intrusive. Here's how the system decides when to show them:
+
+### Priority System
+
+When multiple walkthroughs are eligible at the same time, only the **highest priority** one is shown. Priority is represented by a number - **higher numbers mean higher priority**.
+
+For example, if a user enters Agent Mode for the first time with an empty session history:
+- `agent-welcome-intro` (priority 50) would show first
+- `navigation-intro` (priority 5) would wait
+
+### Display Rules
+
+1. **One at a time**: Only one walkthrough shows at a time. When you complete or dismiss it, another may appear if eligible.
+
+2. **5-minute cooldown per mode**: After showing a walkthrough in Files Mode or Agent Mode, the system waits 5 minutes before showing another in that same mode. This prevents overwhelming users with back-to-back guides.
+
+3. **Target must be visible**: Each walkthrough's target UI element must be present and visible on screen. For example, the "Diff Mode" walkthrough only appears when the diff approval bar is showing.
+
+4. **No dialogs or overlays**: Walkthroughs pause when any modal dialog, toast, or overlay is visible.
+
+5. **Once per user**: Each walkthrough shows only once. After a user completes or dismisses it, it won't appear again (unless they reset walkthroughs in Settings).
+
+6. **Version updates**: If a walkthrough's `version` number is incremented, users who saw the old version will see the new one.
+
+### Delay Before Showing
+
+Each walkthrough has a delay (500ms to 3000ms) before appearing. This gives the UI time to settle after navigation and ensures the target element is fully rendered.
+
 ## Architecture Overview
 
 The help system has two main components:
@@ -304,19 +352,6 @@ Walkthroughs automatically track PostHog events:
 2. **Use descriptive IDs**: `file-tree-filter-button` not `btn-1`.
 3. **Keep IDs consistent**: Once added, don't change them (breaks walkthroughs).
 
-## Current Inventory
-
-### Implemented Walkthroughs
-
-| ID | Name | Steps | Screen |
-| --- | --- | --- | --- |
-| `agent-mode-intro` | Agent Mode Introduction | 1 | agent |
-| `ai-sessions-button` | AI Sessions Button | 1 | files |
-| `context-window-intro` | Context Window | 1 | agent |
-| `diff-mode-intro` | Reviewing AI Changes | 2 | files |
-| `file-tree-tools` | File Tree Tools | 2 | files |
-| `model-picker-intro` | Model Selection | 1 | agent |
-
 ### Help Content Registry
 
 See `HelpContent.ts` for the full list. Current categories:
@@ -335,10 +370,11 @@ See `HelpContent.ts` for the full list. Current categories:
 - **Settings**: project/global tabs, walkthrough settings
 - **Project Manager**: open, recent projects
 
-### Planned Walkthroughs (Tier 2+)
+## Planned Walkthroughs
+
+These walkthroughs are planned for future implementation:
 
 - `document-history` - Recovering previous versions
-- `session-management` - Finding and resuming sessions
 - `voice-mode-intro` - Using voice input
 - `permissions-intro` - Agent tool permissions
 - `keyboard-shortcuts` - Productivity shortcuts

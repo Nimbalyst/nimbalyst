@@ -100,16 +100,22 @@ export const walkthroughs: WalkthroughDefinition[] = [
 
 ### 6. Update Documentation
 
-Update `docs/WALKTHROUGHS.md` to add the new walkthrough to the inventory table:
+**IMPORTANT**: Keep the walkthrough inventory up to date in `docs/WALKTHROUGHS.md`.
 
-```markdown
-### Implemented Walkthroughs
+Update the inventory table near the top of the file with the new walkthrough:
 
-| ID | Name | Steps | Screen |
-| --- | --- | --- | --- |
+| ID | Name | Steps | Screen | Priority | Trigger Condition |
+| --- | --- | --- | --- | --- | --- |
 | ... existing entries ... |
-| `my-feature-intro` | My Feature Introduction | 2 | agent |
-```
+| `my-feature-intro` | My Feature Introduction | 2 | agent | 10 | Feature button is visible |
+
+The inventory table is the single source of truth for all walkthroughs. It includes:
+- **ID**: The unique identifier used in code
+- **Name**: Human-readable name for analytics/menus
+- **Steps**: Number of steps in the walkthrough
+- **Screen**: Which mode triggers it (files, agent, or any)
+- **Priority**: Higher number = higher priority (shows first when multiple are eligible)
+- **Trigger Condition**: Plain-English description of when it appears
 
 ### 7. Test the Walkthrough
 
