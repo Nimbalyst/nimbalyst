@@ -2042,6 +2042,8 @@ export const addSessionFullAtom = atom(
         messages: [],
         createdAt: session.createdAt,
         updatedAt: session.updatedAt,
+        worktreeId: session.worktreeId || null,
+        parentSessionId: session.parentSessionId || null,
       } as SessionData);
     }
 
