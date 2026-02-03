@@ -16,8 +16,10 @@
 
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { usePostHog } from 'posthog-js/react';
+import { useAtomValue } from 'jotai';
 import { MaterialSymbol } from '../../../..';
 import type { CustomToolWidgetProps } from './index';
+import { sessionPendingGitCommitProposalAtom, clearPendingGitCommitProposal } from '../../../../store';
 
 // ============================================================
 // File Status Types
@@ -50,101 +52,11 @@ function getFilePath(file: FileInput): string {
 }
 
 // ============================================================
-// Pending Proposals Store
+// Pending Proposals - Using Jotai atoms (DB-backed in Electron)
 // ============================================================
-// Store pending proposals sent via IPC. The widget looks up its proposal
-// by matching the arguments (filesToStage, commitMessage).
-
-interface PendingProposal {
-  proposalId: string;
-  workspacePath: string;
-  sessionId: string;  // Required: proposals must be scoped to a specific session
-  filesToStage: string[];  // Always normalized to paths only
-  commitMessage: string;
-  reasoning?: string;
-  timestamp: number;
-}
-
-// Input type for registerPendingProposal - can have objects or strings
-interface PendingProposalInput {
-  proposalId: string;
-  workspacePath: string;
-  sessionId: string;  // Required: proposals must be scoped to a specific session
-  filesToStage: (string | { path: string; status?: string })[];
-  commitMessage: string;
-  reasoning?: string;
-  timestamp: number;
-}
-
-const pendingProposals = new Map<string, PendingProposal>();
-
-// Track proposals that have been responded to (cancelled or committed)
-// This persists in memory to handle the timing gap between response and tool result
-// Maps proposal key to the response type ('committed' | 'cancelled')
-const respondedProposals = new Map<string, { type: 'committed' | 'cancelled'; commitHash?: string }>();
-
-/**
- * Generate a key for matching proposals based on content and session.
- * Including sessionId ensures proposals from different sessions don't collide.
- */
-function generateProposalKey(sessionId: string, filesToStage: string[], commitMessage: string): string {
-  const filesKey = [...filesToStage].sort().join('|');
-  return `${sessionId}::${filesKey}::${commitMessage.trim().slice(0, 100)}`;
-}
-
-/**
- * Register a pending proposal from IPC.
- * Called by the renderer when it receives mcp:gitCommitProposal.
- * Normalizes filesToStage to string paths for consistent key matching.
- */
-export function registerPendingProposal(input: PendingProposalInput): void {
-  // Normalize filesToStage to string paths
-  const normalizedFiles = input.filesToStage.map(f =>
-    typeof f === 'string' ? f : f.path
-  );
-
-  const proposal: PendingProposal = {
-    ...input,
-    filesToStage: normalizedFiles,
-  };
-
-  const key = generateProposalKey(proposal.sessionId, proposal.filesToStage, proposal.commitMessage);
-  pendingProposals.set(key, proposal);
-  console.log('[GitCommitWidget] Registered pending proposal:', proposal.proposalId, 'sessionId:', proposal.sessionId, 'key:', key);
-}
-
-/**
- * Remove a pending proposal after it's been acted upon.
- * Also marks the key as responded with the response type to handle component re-renders.
- */
-export function removePendingProposal(
-  sessionId: string,
-  filesToStage: string[],
-  commitMessage: string,
-  responseType: 'committed' | 'cancelled' = 'cancelled',
-  commitHash?: string
-): void {
-  const key = generateProposalKey(sessionId, filesToStage, commitMessage);
-  pendingProposals.delete(key);
-  respondedProposals.set(key, { type: responseType, commitHash });
-  console.log('[GitCommitWidget] Removed pending proposal and marked as responded:', key, responseType);
-}
-
-/**
- * Get the response for a proposal that has already been responded to.
- */
-function getProposalResponse(sessionId: string, filesToStage: string[], commitMessage: string): { type: 'committed' | 'cancelled'; commitHash?: string } | undefined {
-  const key = generateProposalKey(sessionId, filesToStage, commitMessage);
-  return respondedProposals.get(key);
-}
-
-/**
- * Get pending proposal matching the given arguments.
- */
-function getPendingProposal(sessionId: string, filesToStage: string[], commitMessage: string): PendingProposal | undefined {
-  const key = generateProposalKey(sessionId, filesToStage, commitMessage);
-  return pendingProposals.get(key);
-}
+// The widget reads pending proposal from sessionPendingGitCommitProposalAtom.
+// In Electron, this atom is synced from the DB by SessionTranscript.
+// In Capacitor, this atom is populated directly by the IPC handler.
 
 // ============================================================
 // Directory Tree Types and Helpers
@@ -342,47 +254,24 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
     return null;
   }, [isCompleted, toolResult]);
 
-  // Look up pending proposal to get the proposalId for sending response
-  // Re-check on every render to detect when proposal is removed
-  // Uses sessionId to ensure we only match proposals from THIS session
-  const pendingProposal = getPendingProposal(sessionId, initialFilesToStage, initialCommitMessage);
+  // Read pending proposal from atom (synced from DB in Electron)
+  const pendingProposal = useAtomValue(sessionPendingGitCommitProposalAtom(sessionId));
 
-  // Check if we've already responded to this proposal (persists in module-level Map)
-  const previousResponse = getProposalResponse(sessionId, initialFilesToStage, initialCommitMessage);
-  const alreadyResponded = !!previousResponse;
+  // Check if the proposal from the atom matches this tool call
+  // The atom contains ONE pending proposal per session, but we need to verify it matches THIS tool call
+  const proposalMatchesToolCall = useMemo(() => {
+    if (!pendingProposal) return false;
+    // Match by comparing files and commit message
+    // Use getFilePath to normalize both arrays to strings (filesToStage may contain objects)
+    const proposalFiles = pendingProposal.filesToStage.map(getFilePath).sort();
+    const toolCallFiles = [...initialFilesToStage].sort();
+    const filesMatch = proposalFiles.length === toolCallFiles.length &&
+      proposalFiles.every((f, i) => f === toolCallFiles[i]);
+    const messageMatch = pendingProposal.commitMessage.trim() === initialCommitMessage.trim();
+    return filesMatch && messageMatch;
+  }, [pendingProposal, initialFilesToStage, initialCommitMessage]);
 
-  // Track whether we're waiting for the pending proposal to be registered
-  // This handles the race condition where the widget renders before the IPC message arrives
-  const [waitingForProposal, setWaitingForProposal] = useState(!pendingProposal && !isCompleted && !alreadyResponded);
-
-  // Effect to check for pending proposal registration
-  useEffect(() => {
-    if (pendingProposal || isCompleted || alreadyResponded) {
-      setWaitingForProposal(false);
-      return;
-    }
-
-    // Poll for pending proposal registration (IPC message may arrive shortly after render)
-    const checkInterval = setInterval(() => {
-      const proposal = getPendingProposal(sessionId, initialFilesToStage, initialCommitMessage);
-      const response = getProposalResponse(sessionId, initialFilesToStage, initialCommitMessage);
-      if (proposal || response) {
-        setWaitingForProposal(false);
-        clearInterval(checkInterval);
-      }
-    }, 50); // Check every 50ms
-
-    // Stop waiting after 2 seconds - if no proposal by then, it's genuinely completed
-    const timeout = setTimeout(() => {
-      setWaitingForProposal(false);
-      clearInterval(checkInterval);
-    }, 2000);
-
-    return () => {
-      clearInterval(checkInterval);
-      clearTimeout(timeout);
-    };
-  }, [sessionId, pendingProposal, isCompleted, alreadyResponded, initialFilesToStage, initialCommitMessage]);
+  const matchingProposal = proposalMatchesToolCall ? pendingProposal : null;
 
   // Local state for editing
   const [filesToStage, setFilesToStage] = useState<Set<string>>(new Set(initialFilesToStage));
@@ -606,7 +495,7 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
   };
 
   const handleConfirm = useCallback(async () => {
-    if (filesToStage.size === 0 || !commitMessage.trim() || !commitWorkspacePath) {
+    if (filesToStage.size === 0 || !commitMessage.trim() || !commitWorkspacePath || !matchingProposal) {
       return;
     }
 
@@ -632,24 +521,23 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
           success: result.success,
         });
 
-        // Send the result back to httpServer to complete the MCP tool call
-        if (pendingProposal && window.electronAPI.sendMcpGitCommitProposalResult) {
-          console.log('[GitCommitWidget] Sending result back to httpServer:', pendingProposal.proposalId, result.success ? 'committed' : 'cancelled');
-          window.electronAPI.sendMcpGitCommitProposalResult(pendingProposal.proposalId, {
-            action: result.success ? 'committed' : 'cancelled',
-            commitHash: result.commitHash,
-            error: result.error,
-            filesCommitted: result.success ? Array.from(filesToStage) : undefined,
-            commitMessage: result.success ? commitMessage : undefined,
-          });
-          // Remove from pending with response type (now session-scoped)
-          removePendingProposal(
+        // Send response via unified IPC channel
+        if (window.electronAPI?.invoke) {
+          await window.electronAPI.invoke('messages:respond-to-prompt', {
             sessionId,
-            initialFilesToStage,
-            initialCommitMessage,
-            result.success ? 'committed' : 'cancelled',
-            result.commitHash
-          );
+            promptId: matchingProposal.proposalId,
+            promptType: 'git_commit_proposal_request' as const,
+            response: {
+              action: result.success ? 'committed' : 'cancelled',
+              commitHash: result.commitHash,
+              error: result.error,
+              filesCommitted: result.success ? Array.from(filesToStage) : undefined,
+              commitMessage: result.success ? commitMessage : undefined,
+            },
+            respondedBy: 'desktop' as const,
+          });
+          // Clear the pending proposal from the atom
+          clearPendingGitCommitProposal(sessionId);
         }
       }
     } catch (error) {
@@ -659,21 +547,27 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
       };
       setLocalResult(errorResult);
 
-      // Send error result back
-      if (pendingProposal && window.electronAPI?.sendMcpGitCommitProposalResult) {
-        window.electronAPI.sendMcpGitCommitProposalResult(pendingProposal.proposalId, {
-          action: 'cancelled',
-          error: errorResult.error,
+      // Send error result back via unified IPC
+      if (matchingProposal && window.electronAPI?.invoke) {
+        await window.electronAPI.invoke('messages:respond-to-prompt', {
+          sessionId,
+          promptId: matchingProposal.proposalId,
+          promptType: 'git_commit_proposal_request' as const,
+          response: {
+            action: 'cancelled',
+            error: errorResult.error,
+          },
+          respondedBy: 'desktop' as const,
         });
-        removePendingProposal(sessionId, initialFilesToStage, initialCommitMessage, 'cancelled');
+        clearPendingGitCommitProposal(sessionId);
       }
     } finally {
       setIsCommitting(false);
     }
-  }, [sessionId, commitWorkspacePath, filesToStage, commitMessage, pendingProposal, initialFilesToStage, initialCommitMessage, posthog]);
+  }, [sessionId, commitWorkspacePath, filesToStage, commitMessage, matchingProposal, posthog]);
 
   const handleCancel = useCallback(() => {
-    if (hasResponded) return; // Prevent double-response
+    if (hasResponded || !matchingProposal) return; // Prevent double-response
 
     setLocalResult({ success: false, error: 'Cancelled' });
     setHasResponded(true);
@@ -685,52 +579,34 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
       file_count: fileCountBucket,
     });
 
-    // Send cancel result back to httpServer
-    if (pendingProposal && window.electronAPI?.sendMcpGitCommitProposalResult) {
-      window.electronAPI.sendMcpGitCommitProposalResult(pendingProposal.proposalId, {
-        action: 'cancelled',
+    // Send cancel response via unified IPC
+    if (window.electronAPI?.invoke) {
+      window.electronAPI.invoke('messages:respond-to-prompt', {
+        sessionId,
+        promptId: matchingProposal.proposalId,
+        promptType: 'git_commit_proposal_request' as const,
+        response: {
+          action: 'cancelled',
+        },
+        respondedBy: 'desktop' as const,
+      }).then(() => {
+        clearPendingGitCommitProposal(sessionId);
+      }).catch(err => {
+        console.error('[GitCommitWidget] Failed to send cancel response:', err);
       });
-      removePendingProposal(sessionId, initialFilesToStage, initialCommitMessage, 'cancelled');
     }
-  }, [sessionId, pendingProposal, initialFilesToStage, initialCommitMessage, hasResponded, filesToStage.size, posthog]);
+  }, [sessionId, matchingProposal, hasResponded, filesToStage.size, posthog]);
 
   if (!commitWorkspacePath) {
     return null;
   }
 
-  // If we're waiting for the pending proposal to be registered, show a loading state
-  // This MUST come before other checks to handle the race condition where widget renders
-  // before the IPC message arrives to register the proposal
-  if (waitingForProposal) {
-    return (
-      <div className="git-commit-widget rounded-lg bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] overflow-hidden">
-        <div className="git-commit-widget__header flex items-center gap-2 p-2 border-b border-[var(--nim-border)] bg-[var(--nim-bg-secondary)]">
-          <MaterialSymbol icon="commit" size={16} className="text-[var(--nim-primary)]" />
-          <span className="text-sm font-semibold text-[var(--nim-text)] flex-1">Commit Proposal</span>
-          <span className="text-xs font-medium text-[var(--nim-text-muted)] py-1 px-2">Loading...</span>
-        </div>
-      </div>
-    );
-  }
+  // No loading state needed - atom is reactive and updates when DB changes
 
   // Show completed/cancelled state (or if we've responded but waiting for tool result)
-  if (displayResult || hasResponded || alreadyResponded) {
-    // If we've responded but no displayResult yet, use the stored response type
-    // This handles the case where we committed/cancelled but tool result hasn't come back yet
-    let effectiveResult = displayResult;
-    if (!effectiveResult && (hasResponded || alreadyResponded)) {
-      // Use the stored response from previousResponse if available
-      if (previousResponse) {
-        effectiveResult = {
-          success: previousResponse.type === 'committed',
-          commitHash: previousResponse.commitHash,
-          error: previousResponse.type === 'cancelled' ? 'Cancelled' : undefined,
-        };
-      } else {
-        // Fallback for hasResponded (localResult should be set, but just in case)
-        effectiveResult = { success: false, error: 'Cancelled' };
-      }
-    }
+  if (displayResult || hasResponded) {
+    // If we've responded but no displayResult yet, use localResult
+    const effectiveResult = displayResult || localResult;
     if (!effectiveResult) {
       return null;
     }
@@ -807,21 +683,10 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
     );
   }
 
-  // If there's no pending proposal and no result, the tool result wasn't persisted properly
-  // or hasn't been loaded yet. Don't show the interactive UI (user can't respond anyway).
-  // This matches AskUserQuestionWidget behavior which returns null when not completed.
-  if (!pendingProposal) {
-    // Return a minimal "completed" state since the user already responded
-    // (we just can't tell if it was committed or cancelled)
-    return (
-      <div className="git-commit-widget rounded-lg bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] overflow-hidden opacity-70">
-        <div className="git-commit-widget__header flex items-center gap-2 p-2 border-b border-[var(--nim-border)] bg-[var(--nim-bg-secondary)]">
-          <MaterialSymbol icon="commit" size={16} className="text-[var(--nim-text-muted)]" />
-          <span className="text-sm font-semibold text-[var(--nim-text)] flex-1">Commit Proposal</span>
-          <span className="text-xs font-medium text-[var(--nim-text-muted)] py-1 px-2">Completed</span>
-        </div>
-      </div>
-    );
+  // If there's no matching pending proposal and no result, don't show interactive UI
+  // This matches AskUserQuestionWidget behavior - return null when not ready
+  if (!matchingProposal) {
+    return null;
   }
 
   // Show interactive UI for pending proposals

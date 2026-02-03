@@ -569,27 +569,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.send('mcp:updateDocumentState', state),
   clearMcpDocumentState: () => ipcRenderer.invoke('mcp:clearDocumentState'),
 
-  // Git commit proposal IPC (waits for user confirmation)
-  onMcpGitCommitProposal: (callback: (data: {
-    proposalId: string;
-    workspacePath: string;
-    filesToStage: string[];
-    commitMessage: string;
-    reasoning?: string;
-  }) => void) => {
-    const handler = (_event: any, data: any) => callback(data);
-    ipcRenderer.on('mcp:gitCommitProposal', handler);
-    return () => ipcRenderer.removeListener('mcp:gitCommitProposal', handler);
-  },
-  sendMcpGitCommitProposalResult: (proposalId: string, result: {
-    action: 'committed' | 'cancelled';
-    commitHash?: string;
-    error?: string;
-    filesCommitted?: string[];
-    commitMessage?: string;
-  }) => {
-    ipcRenderer.send(proposalId, result);
-  },
+  // Git commit proposal IPC removed - now uses unified messages:respond-to-prompt channel
+  // Proposals are persisted to DB and read via sessionPendingGitCommitProposalAtom
 
   // Extension tool registration for MCP
   registerExtensionTools: (workspacePath: string, tools: any[]) =>

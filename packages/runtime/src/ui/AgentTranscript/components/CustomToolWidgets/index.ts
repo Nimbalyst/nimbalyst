@@ -45,7 +45,7 @@ export { MockupScreenshotWidget } from './MockupScreenshotWidget';
 export { AskUserQuestionWidget, storeAskUserQuestionAnswers, registerPendingQuestion, unregisterPendingQuestion } from './AskUserQuestionWidget';
 export { VisualDisplayWidget } from './VisualDisplayWidget';
 export { BashWidget } from './BashWidget';
-export { GitCommitConfirmationWidget, registerPendingProposal as registerPendingGitCommitProposal } from './GitCommitConfirmationWidget';
+export { GitCommitConfirmationWidget } from './GitCommitConfirmationWidget';
 
 /**
  * Props passed to custom tool widgets

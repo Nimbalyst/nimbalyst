@@ -65,3 +65,12 @@ export {
   cleanupSessionPendingQuestion,
   type PendingQuestionData,
 } from './atoms/pendingQuestions';
+
+// Git commit proposal atoms
+export {
+  sessionPendingGitCommitProposalAtom,
+  setSessionGitCommitProposalAtom,
+  sessionHasPendingGitCommitProposal,
+  clearPendingGitCommitProposal,
+  type GitCommitProposalData,
+} from './atoms/gitCommitProposals';

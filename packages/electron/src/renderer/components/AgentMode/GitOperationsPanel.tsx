@@ -16,18 +16,14 @@ import {
   gitStatusAtom,
   gitCommitsAtom,
   isCommittingAtom,
-  pendingProposalForWorkstreamAtom,
-  removePendingGitCommitProposalAtom,
   worktreeRefreshCounterAtom,
 } from '../../store/atoms/gitOperations';
 import {
   workstreamStagedFilesAtom,
   workstreamCommitMessageAtom,
-  workstreamActiveProposalIdAtom,
   workstreamChildrenAtom,
   setWorkstreamStagedFilesAtom,
   setWorkstreamCommitMessageAtom,
-  setWorkstreamActiveProposalIdAtom,
   clearWorkstreamGitStateAtom,
 } from '../../store/atoms/workstreamState';
 import { RebaseConflictDialog } from './RebaseConflictDialog';
@@ -90,8 +86,6 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
     const setStagedFilesAction = useSetAtom(setWorkstreamStagedFilesAtom);
     const commitMessage = useAtomValue(workstreamCommitMessageAtom(workstreamId));
     const setCommitMessageAction = useSetAtom(setWorkstreamCommitMessageAtom);
-    const activeProposalId = useAtomValue(workstreamActiveProposalIdAtom(workstreamId));
-    const setActiveProposalIdAction = useSetAtom(setWorkstreamActiveProposalIdAtom);
     const clearGitState = useSetAtom(clearWorkstreamGitStateAtom);
 
     // Helper functions to wrap atom actions with workstreamId
@@ -102,10 +96,6 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
     const setCommitMessage = useCallback((message: string) => {
       setCommitMessageAction({ workstreamId, message });
     }, [workstreamId, setCommitMessageAction]);
-
-    const setActiveProposalId = useCallback((proposalId: string | null) => {
-      setActiveProposalIdAction({ workstreamId, proposalId });
-    }, [workstreamId, setActiveProposalIdAction]);
 
     const stageAll = useCallback((files: string[]) => {
       setStagedFilesAction({ workstreamId, files });
@@ -120,8 +110,7 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
 
     // Pending AI commit proposal - when AI proposes a commit via git_commit_proposal
     // Use workstreamId + childSessionIds to scope proposals to this specific workstream
-    const pendingProposal = useAtomValue(pendingProposalForWorkstreamAtom({ workstreamId, childSessionIds }));
-    const removePendingProposal = useSetAtom(removePendingGitCommitProposalAtom);
+    // AI commit proposals now handled by GitCommitConfirmationWidget
 
     const [isExpanded, setIsExpanded] = useState(true);
     const [showHistory, setShowHistory] = useState(false);
@@ -169,35 +158,8 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
       worktreeId ? worktreeRefreshCounterAtom(worktreeId) : worktreeRefreshCounterAtom('')
     );
 
-    // When AI proposes a commit, populate the UI (but stay in current mode)
-    // Uses activeProposalId (persisted in Jotai) for deduplication instead of a ref,
-    // because refs reset on unmount when switching between workstreams.
-    useEffect(() => {
-      if (!pendingProposal) return;
-
-      // Skip if this proposal was already processed
-      if (activeProposalId === pendingProposal.proposalId) return;
-
-      // Store the proposal ID so we can send response when user commits
-      setActiveProposalId(pendingProposal.proposalId);
-
-      // Populate commit message
-      setCommitMessage(pendingProposal.commitMessage);
-
-      // Stage the proposed files
-      setStagedFiles(new Set(pendingProposal.filesToStage));
-
-      // Expand the panel if collapsed
-      setIsExpanded(true);
-    }, [pendingProposal, activeProposalId, setCommitMessage, setStagedFiles, setActiveProposalId]);
-
-    // When pending proposal disappears but we still have activeProposalId,
-    // it means the commit was completed via the transcript widget - clear our state
-    useEffect(() => {
-      if (!pendingProposal && activeProposalId) {
-        clearGitState(workstreamId);
-      }
-    }, [pendingProposal, activeProposalId, clearGitState, workstreamId]);
+    // AI commit proposals are now handled entirely by GitCommitConfirmationWidget in the transcript
+    // GitOperationsPanel is for manual git operations only
 
     // Clear git state when there are no more uncommitted changes
     // This is the authoritative cleanup - if nothing to commit, reset the UI
@@ -292,18 +254,7 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
           )) as { success: boolean; commitHash?: string; error?: string };
 
           if (result.success) {
-            // If this was an AI-proposed commit, send response back to the MCP tool
-            if (activeProposalId) {
-              window.electronAPI.sendMcpGitCommitProposalResult(activeProposalId, {
-                action: 'committed',
-                commitHash: result.commitHash,
-                filesCommitted: filesToCommit,
-                commitMessage: commitMessage,
-              });
-              removePendingProposal(activeProposalId);
-            }
-
-            // Clear all git state (commit message, staged files, active proposal ID)
+            // Clear all git state (commit message, staged files)
             clearGitState(workstreamId);
             // Refresh git status and commits
             const [newStatus, newCommits] = await Promise.all([
@@ -314,28 +265,12 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
             setGitCommits(newCommits as any);
           } else {
             console.error('[GitOperationsPanel] Commit failed:', result.error);
-            // If this was an AI-proposed commit, send error response
-            if (activeProposalId) {
-              window.electronAPI.sendMcpGitCommitProposalResult(activeProposalId, {
-                action: 'cancelled',
-                error: result.error,
-              });
-              removePendingProposal(activeProposalId);
-            }
             // Clear git state even on failure so user can retry
             clearGitState(workstreamId);
           }
         }
       } catch (error) {
         console.error('[GitOperationsPanel] Commit failed:', error);
-        // If this was an AI-proposed commit, send error response
-        if (activeProposalId) {
-          window.electronAPI.sendMcpGitCommitProposalResult(activeProposalId, {
-            action: 'cancelled',
-            error: error instanceof Error ? error.message : 'Unknown error',
-          });
-          removePendingProposal(activeProposalId);
-        }
         // Clear git state even on failure so user can retry
         clearGitState(workstreamId);
       } finally {
@@ -350,8 +285,6 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
       clearGitState,
       setGitStatus,
       setGitCommits,
-      activeProposalId,
-      removePendingProposal,
     ]);
 
     // Handle smart commit (AI-assisted)
@@ -1322,63 +1255,21 @@ Please proceed with this strategy.`;
                   </div>
                 )}
 
-                {/* Smart commit workflow */}
+                {/* Smart commit workflow - AI proposes commit in transcript */}
                 {commitMode === 'smart' && (
                   <div className="flex flex-col gap-2" data-testid="git-operations-smart-mode">
-                    {activeProposalId ? (
-                      <>
-                        {/* AI Proposal indicator with dismiss button */}
-                        <div className="flex items-center gap-1.5 p-1.5 bg-[rgba(139,92,246,0.1)] border border-[rgba(139,92,246,0.3)] rounded text-[10px] text-[var(--nim-text-muted)]">
-                          <MaterialSymbol icon="auto_awesome" size={14} className="text-[rgb(139,92,246)]" />
-                          <span className="flex-1">AI proposed commit - review and edit</span>
-                          <button
-                            onClick={() => {
-                              window.electronAPI.sendMcpGitCommitProposalResult(activeProposalId, {
-                                action: 'cancelled',
-                                error: 'User dismissed the commit',
-                              });
-                              removePendingProposal(activeProposalId);
-                              clearGitState(workstreamId);
-                            }}
-                            className="text-[var(--nim-text-faint)] hover:text-[var(--nim-text)] cursor-pointer"
-                            title="Dismiss AI proposal"
-                          >
-                            <MaterialSymbol icon="close" size={14} />
-                          </button>
-                        </div>
-                        <textarea
-                          className="w-full p-2 border border-[var(--nim-border)] rounded bg-[var(--nim-bg)] text-[var(--nim-text)] text-[11px] font-[var(--nim-font-mono)] resize-y focus:outline-none focus:border-[var(--nim-primary)]"
-                          value={commitMessage}
-                          onChange={(e) => setCommitMessage(e.target.value)}
-                          placeholder="Enter commit message..."
-                          rows={3}
-                          data-testid="git-operations-commit-message"
-                        />
-                        <button
-                          className="w-full p-2 border-none rounded bg-[var(--nim-primary)] text-white text-xs font-semibold cursor-pointer flex items-center justify-center gap-1.5 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
-                          onClick={handleManualCommit}
-                          disabled={isCommitting || !commitMessage?.trim() || stagedFiles.size === 0}
-                          data-testid="git-operations-commit-button"
-                        >
-                          {isCommitting ? 'Committing...' : `Commit (${stagedFiles.size})`}
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <p className="text-xs text-[var(--nim-text-muted)] m-0 leading-normal">
-                          Let AI analyze your changes and propose a commit message.
-                        </p>
-                        <button
-                          className="w-full p-2 border-none rounded text-white text-xs font-semibold cursor-pointer flex items-center justify-center gap-1.5 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed bg-gradient-to-br from-[var(--nim-primary)] to-[var(--nim-primary-hover)]"
-                          onClick={handleSmartCommit}
-                          disabled={!hasChanges}
-                          data-testid="git-operations-commit-with-ai-button"
-                        >
-                          <MaterialSymbol icon="auto_awesome" size={16} />
-                          Commit with AI
-                        </button>
-                      </>
-                    )}
+                    <p className="text-xs text-[var(--nim-text-muted)] m-0 leading-normal">
+                      Let AI analyze your changes and propose a commit message.
+                    </p>
+                    <button
+                      className="w-full p-2 border-none rounded text-white text-xs font-semibold cursor-pointer flex items-center justify-center gap-1.5 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed bg-gradient-to-br from-[var(--nim-primary)] to-[var(--nim-primary-hover)]"
+                      onClick={handleSmartCommit}
+                      disabled={!hasChanges}
+                      data-testid="git-operations-commit-with-ai-button"
+                    >
+                      <MaterialSymbol icon="auto_awesome" size={16} />
+                      Commit with AI
+                    </button>
                   </div>
                 )}
               </div>

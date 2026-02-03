@@ -252,7 +252,7 @@ export const refreshPendingPromptsAtom = atom(
           id: p.id,
           sessionId: p.sessionId,
           promptType: p.content.type,
-          promptId: p.content.requestId || p.content.questionId,
+          promptId: p.content.requestId || p.content.questionId || p.content.proposalId,
           data: p.content,
           createdAt: p.createdAt,
         }));
@@ -350,6 +350,31 @@ export const sessionPendingExitPlanModeAtom = atomFamily((sessionId: string) =>
       planSummary: exitPlanPrompt.data.planSummary || '',
       planFilePath: exitPlanPrompt.data.planFilePath,
       timestamp: exitPlanPrompt.data.timestamp || exitPlanPrompt.createdAt,
+    };
+  })
+);
+
+// Import GitCommitProposalData from runtime (single source of truth)
+import type { GitCommitProposalData } from '@nimbalyst/runtime/store';
+
+/**
+ * Derived atom: Get pending GitCommitProposal for a session (only one allowed).
+ * Filters prompts to only return the latest git commit proposal.
+ */
+export const sessionPendingGitCommitProposalAtom = atomFamily((sessionId: string) =>
+  atom<GitCommitProposalData | null>((get) => {
+    const prompts = get(sessionPendingPromptsAtom(sessionId));
+    const gitCommitPrompt = prompts.find(p => p.data.type === 'git_commit_proposal');
+    if (!gitCommitPrompt) return null;
+
+    // Map PendingPrompt to GitCommitProposalData
+    return {
+      proposalId: gitCommitPrompt.promptId,
+      workspacePath: gitCommitPrompt.data.workspacePath || '',
+      filesToStage: gitCommitPrompt.data.filesToStage || [],
+      commitMessage: gitCommitPrompt.data.commitMessage || '',
+      reasoning: gitCommitPrompt.data.reasoning,
+      timestamp: gitCommitPrompt.data.timestamp || gitCommitPrompt.createdAt,
     };
   })
 );

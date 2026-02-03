@@ -15,7 +15,6 @@ import { aiApi } from '../services/aiApi';
 import { getSoundPlayer } from '../services/SoundPlayer';
 import { getFileName } from '../utils/pathUtils';
 import type { ContentMode } from '../types/WindowModeTypes';
-import { addPendingGitCommitProposalAtom } from '../store/atoms/gitOperations';
 import { dialogRef } from '../contexts/DialogContext';
 import { DIALOG_IDS } from '../dialogs';
 import type { AgentCommandPaletteData } from '../dialogs';
@@ -751,49 +750,9 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
       }));
     }
 
-    // Git commit proposal handler - registers pending proposals for the widget and Jotai atom
-    if ((window.electronAPI as any).onMcpGitCommitProposal) {
-      cleanupFns.push((window.electronAPI as any).onMcpGitCommitProposal((data: {
-        proposalId: string;
-        workspacePath: string;
-        sessionId: string;  // Required for proper session scoping
-        filesToStage: (string | { path: string; status?: string })[];
-        commitMessage: string;
-        reasoning?: string;
-      }) => {
-        console.log('[MCP] Git commit proposal received:', data.proposalId, 'sessionId:', data.sessionId);
-
-        // Normalize filesToStage to string paths
-        const normalizedFiles = data.filesToStage.map(f =>
-          typeof f === 'string' ? f : f.path
-        );
-
-        const timestamp = Date.now();
-
-        // Register in runtime's local Map (for GitCommitConfirmationWidget in transcript)
-        import('@nimbalyst/runtime').then(({ registerPendingGitCommitProposal }) => {
-          if (registerPendingGitCommitProposal) {
-            registerPendingGitCommitProposal({
-              ...data,
-              timestamp,
-            });
-          }
-        }).catch(err => {
-          console.error('[MCP] Failed to register git commit proposal in runtime:', err);
-        });
-
-        // Also register in Jotai atom (for GitOperationsPanel)
-        store.set(addPendingGitCommitProposalAtom, {
-          proposalId: data.proposalId,
-          workspacePath: data.workspacePath,
-          sessionId: data.sessionId,
-          filesToStage: normalizedFiles,
-          commitMessage: data.commitMessage,
-          reasoning: data.reasoning,
-          timestamp,
-        });
-      }));
-    }
+    // Git commit proposal IPC listener removed - now uses DB-backed durable prompts
+    // The proposal is persisted to DB by httpServer.ts MCP handler
+    // Widget reads from sessionPendingGitCommitProposalAtom (derived from DB)
 
     // AI Tool handlers for document manipulation
     // Note: onAIApplyDiff is handled by aiApi.ts to avoid duplicate applications

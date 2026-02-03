@@ -18,7 +18,7 @@ import React, { useCallback, useRef, useImperativeHandle, forwardRef, useEffect,
 import { useAtom, useSetAtom, useAtomValue } from 'jotai';
 import { store } from '@nimbalyst/runtime/store';
 import { AgentTranscriptPanel, TodoItem, storeAskUserQuestionAnswers } from '@nimbalyst/runtime';
-import { registerPendingQuestion, clearPendingQuestionForSession } from '@nimbalyst/runtime/store';
+import { registerPendingQuestion, clearPendingQuestionForSession, setSessionGitCommitProposalAtom } from '@nimbalyst/runtime/store';
 import type { SessionData, ChatAttachment } from '@nimbalyst/runtime/ai/server/types';
 import { AIInput, AIInputRef } from './AIInput';
 import { PromptQueueList } from './PromptQueueList';
@@ -58,6 +58,7 @@ import {
   sessionPendingPromptsAtom,
   sessionPendingPermissionsAtom,
   sessionPendingExitPlanModeAtom,
+  sessionPendingGitCommitProposalAtom,
   refreshPendingPromptsAtom,
   respondToPromptAtom,
   // Centralized transcript state atoms
@@ -317,6 +318,9 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   // ExitPlanMode confirmation - DB-derived, updated by refreshPendingPromptsAtom
   const pendingExitPlanConfirmation = useAtomValue(sessionPendingExitPlanModeAtom(sessionId));
 
+  // GitCommitProposal - DB-derived, updated by refreshPendingPromptsAtom
+  const pendingGitCommitProposalElectron = useAtomValue(sessionPendingGitCommitProposalAtom(sessionId));
+
   // Error state - centralized in atom, updated by sessionTranscriptListeners
   const sessionError = useAtomValue(sessionErrorAtom(sessionId));
 
@@ -356,6 +360,15 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
       lastSentModeRef.current = aiMode;
     }
   }, [sessionData, messages.length, aiMode]);
+
+  // Sync git commit proposal from electron atom (DB-backed) to runtime atom
+  // This makes the proposal available to GitCommitConfirmationWidget in runtime package
+  useEffect(() => {
+    store.set(setSessionGitCommitProposalAtom, {
+      sessionId,
+      proposal: pendingGitCommitProposalElectron,
+    });
+  }, [sessionId, pendingGitCommitProposalElectron]);
 
   // ============================================================
   // Auto-focus input when session data loads

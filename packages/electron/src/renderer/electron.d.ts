@@ -249,21 +249,7 @@ interface ElectronAPI {
   updateMcpDocumentState: (state: any) => void;
   clearMcpDocumentState: () => Promise<void>;
 
-  // Git commit proposal IPC (waits for user confirmation)
-  onMcpGitCommitProposal: (callback: (data: {
-    proposalId: string;
-    workspacePath: string;
-    filesToStage: string[];
-    commitMessage: string;
-    reasoning?: string;
-  }) => void) => () => void;
-  sendMcpGitCommitProposalResult: (proposalId: string, result: {
-    action: 'committed' | 'cancelled';
-    commitHash?: string;
-    error?: string;
-    filesCommitted?: string[];
-    commitMessage?: string;
-  }) => void;
+  // Git commit proposal IPC removed - now uses unified messages:respond-to-prompt channel
 
   // Extension tool registration for MCP
   registerExtensionTools: (workspacePath: string, tools: any[]) => void;

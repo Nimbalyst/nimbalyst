@@ -329,12 +329,8 @@ export const workstreamCommitMessageAtom = atomFamily((id: string) =>
   atom((get) => get(workstreamStateAtom(id)).commitMessage)
 );
 
-/**
- * Active AI proposal ID in a workstream (when AI proposed a commit).
- */
-export const workstreamActiveProposalIdAtom = atomFamily((id: string) =>
-  atom((get) => get(workstreamStateAtom(id)).activeProposalId)
-);
+// activeProposalId atoms removed - git commit proposals now use DB-backed durable prompts
+// See sessionPendingGitCommitProposalAtom in sessions.ts
 
 /**
  * File scope mode for the Files Edited sidebar in a workstream.
@@ -552,16 +548,6 @@ export const setWorkstreamCommitMessageAtom = atom(
   null,
   (get, set, { workstreamId, message }: { workstreamId: string; message: string }) => {
     set(workstreamStateAtom(workstreamId), { commitMessage: message });
-  }
-);
-
-/**
- * Set active proposal ID for a workstream.
- */
-export const setWorkstreamActiveProposalIdAtom = atom(
-  null,
-  (get, set, { workstreamId, proposalId }: { workstreamId: string; proposalId: string | null }) => {
-    set(workstreamStateAtom(workstreamId), { activeProposalId: proposalId });
   }
 );
 

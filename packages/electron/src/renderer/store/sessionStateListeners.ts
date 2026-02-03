@@ -261,6 +261,16 @@ export function initSessionStateListeners(): () => void {
     store.set(refreshPendingPromptsAtom, sessionId);
   };
 
+  /**
+   * Handle GitCommitProposal events globally.
+   * Refreshes pending prompts from DB to update all relevant atoms.
+   */
+  const handleGitCommitProposal = (data: { sessionId: string; proposalId: string }) => {
+    const { sessionId } = data;
+    if (!sessionId) return;
+    store.set(refreshPendingPromptsAtom, sessionId);
+  };
+
   // First, subscribe to the session state manager (IPC call to register this window)
   window.electronAPI.sessionState.subscribe()
     .then((result: any) => {
@@ -299,6 +309,7 @@ export function initSessionStateListeners(): () => void {
   let cleanupExitPlanModeResolved: (() => void) | undefined;
   let cleanupToolPermission: (() => void) | undefined;
   let cleanupToolPermissionResolved: (() => void) | undefined;
+  let cleanupGitCommitProposal: (() => void) | undefined;
   if (window.electronAPI?.on) {
     cleanupMessageLogged = window.electronAPI.on('ai:message-logged', handleMessageLogged);
     cleanupTitleUpdated = window.electronAPI.on('session:title-updated', handleTitleUpdated);
@@ -309,6 +320,7 @@ export function initSessionStateListeners(): () => void {
     cleanupExitPlanModeResolved = window.electronAPI.on('ai:exitPlanModeResolved', handleExitPlanModeResolved);
     cleanupToolPermission = window.electronAPI.on('ai:toolPermission', handleToolPermission);
     cleanupToolPermissionResolved = window.electronAPI.on('ai:toolPermissionResolved', handleToolPermissionResolved);
+    cleanupGitCommitProposal = window.electronAPI.on('ai:gitCommitProposal', handleGitCommitProposal);
   }
 
   // Return cleanup function
@@ -324,5 +336,6 @@ export function initSessionStateListeners(): () => void {
     cleanupExitPlanModeResolved?.();
     cleanupToolPermission?.();
     cleanupToolPermissionResolved?.();
+    cleanupGitCommitProposal?.();
   };
 }

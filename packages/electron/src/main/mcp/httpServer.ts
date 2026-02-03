@@ -13,7 +13,7 @@ import { existsSync } from 'fs';
 import path, { isAbsolute } from 'path';
 import { isVoiceModeActive, sendToVoiceAgent, getActiveVoiceSessionId, stopVoiceSession } from '../services/voice/VoiceModeService';
 import { findWindowByWorkspace } from '../window/WindowManager';
-import { SessionFilesRepository } from '@nimbalyst/runtime';
+import { SessionFilesRepository, AgentMessagesRepository } from '@nimbalyst/runtime';
 
 /**
  * Compress a base64 image to JPEG if it exceeds 0.28 MB.
@@ -1864,6 +1864,40 @@ The commit message should follow these guidelines:
             // Generate a unique proposal ID
             const proposalId = `git-commit-proposal-${Date.now()}-${Math.random().toString(36).substring(7)}`;
 
+            // Persist the proposal to database for durability
+            const targetSessionId = sessionId || 'unknown';
+
+            try {
+              const now = new Date();
+              await AgentMessagesRepository.create({
+                sessionId: targetSessionId,
+                source: 'mcp',
+                direction: 'output',
+                content: JSON.stringify({
+                  type: 'git_commit_proposal',
+                  proposalId,
+                  filesToStage: proposalArgs.filesToStage,
+                  commitMessage: proposalArgs.commitMessage,
+                  reasoning: proposalArgs.reasoning,
+                  workspacePath,
+                  timestamp: now.getTime(),
+                  status: 'pending',
+                }),
+                hidden: false,
+                createdAt: now,
+              });
+              // Notify renderer to refresh pending prompts
+              if (commitWindow) {
+                commitWindow.webContents.send('ai:gitCommitProposal', {
+                  sessionId: targetSessionId,
+                  proposalId,
+                });
+              }
+            } catch (error) {
+              console.error('[MCP Server] Failed to persist git commit proposal:', error);
+              // Continue anyway - worst case is no durability
+            }
+
             // Wait for user confirmation (with a longer timeout since user interaction is involved)
             const GIT_COMMIT_TIMEOUT_MS = 300000; // 5 minutes
 
@@ -1887,7 +1921,8 @@ The commit message should follow these guidelines:
               const getFilePath = (f: FileToStage) => typeof f === 'string' ? f : f.path;
 
               // console.log(`[MCP Server] Waiting for git commit proposal response: ${proposalId}`);
-              ipcMain.once(proposalId, (_event, result: {
+              // Listen for response via unified handler (SessionHandlers persists to DB)
+              ipcMain.once(proposalId, async (_event, result: {
                 action: 'committed' | 'cancelled';
                 commitHash?: string;
                 error?: string;

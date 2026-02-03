@@ -1874,6 +1874,19 @@ export class AIService {
       provider.removeAllListeners('promptAdditions');
       provider.on('promptAdditions', onPromptAdditions);
 
+      // Listen for expired session events and clear the providerSessionId from database
+      // This ensures subsequent messages start fresh even after app restart
+      const onProviderSessionExpired = async (data: { sessionId: string }) => {
+        logger.main.info(`[AIService] Provider session expired for ${data.sessionId}, clearing providerSessionId from database`);
+        try {
+          await this.sessionManager.updateProviderSessionData(data.sessionId, undefined);
+        } catch (error) {
+          logger.main.error('[AIService] Failed to clear expired providerSessionId:', error);
+        }
+      };
+      provider.removeAllListeners('session:providerSessionExpired');
+      provider.on('session:providerSessionExpired', onProviderSessionExpired);
+
       // Track user @ mentions in the message
       try {
         await sessionFileTracker.trackUserMessage(

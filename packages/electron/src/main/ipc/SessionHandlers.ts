@@ -969,7 +969,8 @@ export async function registerSessionHandlers() {
                    AND content LIKE '%"status":"pending"%'
                    AND (content LIKE '%"type":"permission_request"%'
                         OR content LIKE '%"type":"ask_user_question_request"%'
-                        OR content LIKE '%"type":"exit_plan_mode_request"%')
+                        OR content LIKE '%"type":"exit_plan_mode_request"%'
+                        OR content LIKE '%"type":"git_commit_proposal"%')
                  ORDER BY created_at ASC`,
                 [sessionId]
             );
@@ -981,13 +982,15 @@ export async function registerSessionHandlers() {
                     const content = JSON.parse(row.content);
                     if (content.status === 'pending') {
                         // Check if there's already a response for this prompt
-                        const promptId = content.requestId || content.questionId;
+                        const promptId = content.requestId || content.questionId || content.proposalId;
                         const responseType = content.type === 'permission_request'
                             ? 'permission_response'
                             : content.type === 'ask_user_question_request'
                             ? 'ask_user_question_response'
                             : content.type === 'exit_plan_mode_request'
                             ? 'exit_plan_mode_response'
+                            : content.type === 'git_commit_proposal'
+                            ? 'git_commit_proposal_response'
                             : null;
 
                         if (!responseType) {
@@ -1031,7 +1034,7 @@ export async function registerSessionHandlers() {
     safeHandle('messages:respond-to-prompt', async (event, params: {
         sessionId: string;
         promptId: string;
-        promptType: 'permission_request' | 'ask_user_question_request' | 'exit_plan_mode_request';
+        promptType: 'permission_request' | 'ask_user_question_request' | 'exit_plan_mode_request' | 'git_commit_proposal_request';
         response: any;
         respondedBy: 'desktop' | 'mobile';
     }) => {
@@ -1070,6 +1073,18 @@ export async function registerSessionHandlers() {
                     respondedAt: timestamp,
                     respondedBy,
                 };
+            } else if (promptType === 'git_commit_proposal_request') {
+                responseContent = {
+                    type: 'git_commit_proposal_response',
+                    proposalId: promptId,
+                    action: response.action,
+                    commitHash: response.commitHash,
+                    error: response.error,
+                    filesCommitted: response.filesCommitted,
+                    commitMessage: response.commitMessage,
+                    respondedAt: timestamp,
+                    respondedBy,
+                };
             }
 
             // Insert response message
@@ -1085,6 +1100,12 @@ export async function registerSessionHandlers() {
                     false,
                 ]
             );
+
+            // For git_commit_proposal, also emit to httpServer's legacy listener
+            if (promptType === 'git_commit_proposal_request') {
+                const { ipcMain } = await import('electron');
+                ipcMain.emit(promptId, null, response);
+            }
 
             return { success: true, responseContent };
         } catch (error) {

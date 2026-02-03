@@ -1334,6 +1334,26 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                 lowerError.includes('401')
               );
 
+              // Check if this is an expired/missing session error
+              // This happens when trying to resume an old session that Claude Code SDK has purged
+              const isExpiredSessionError = (
+                lowerError.includes('no conversation found') ||
+                lowerError.includes('session not found') ||
+                lowerError.includes('conversation not found')
+              );
+
+              // If it's an expired session error, clear the stored session ID and provide guidance
+              if (isExpiredSessionError && sessionId) {
+                console.log(`[CLAUDE-CODE] Detected expired session error for session ${sessionId}, clearing providerSessionId`);
+                // Clear the in-memory session ID mapping
+                this.claudeSessionIds.delete(sessionId);
+                // Emit event to clear the persisted providerSessionId in the database
+                // This ensures the next message starts fresh even after app restart
+                this.emit('session:providerSessionExpired', { sessionId });
+                // Provide user-friendly error message
+                errorMessage = 'Your previous conversation session has expired and can no longer be resumed. Please send a new message to start a fresh conversation - your chat history is still visible but the AI will start with a clean context.';
+              }
+
               // Check if this is a Bedrock tool search incompatibility error
               const isBedrockToolError = isBedrockToolSearchError(errorMessage);
 
@@ -1357,14 +1377,16 @@ export class ClaudeCodeProvider extends BaseAIProvider {
               }
 
               // Log error to database (as 'output' since errors are provider responses)
-              this.logError(sessionId, 'claude-code', new Error(errorMessage), 'result_chunk', isAuthError ? 'authentication_error' : isBedrockToolError ? 'bedrock_tool_error' : 'api_error', hideMessages);
+              const errorType = isAuthError ? 'authentication_error' : isBedrockToolError ? 'bedrock_tool_error' : isExpiredSessionError ? 'expired_session_error' : 'api_error';
+              this.logError(sessionId, 'claude-code', new Error(errorMessage), 'result_chunk', errorType, hideMessages);
 
-              // Yield error to UI with isAuthError flag if applicable
+              // Yield error to UI with appropriate flags
               yield {
                 type: 'error',
                 error: errorMessage,
                 ...(isAuthError && { isAuthError: true }),
-                ...(isBedrockToolError && { isBedrockToolError: true })
+                ...(isBedrockToolError && { isBedrockToolError: true }),
+                ...(isExpiredSessionError && { isExpiredSessionError: true })
               };
 
               // CRITICAL: Send completion and break on result errors (like "prompt too long")
