@@ -2278,6 +2278,25 @@ ${newLines.map(line => '+' + line).join('\n')}`;
         // A file is staged if its index status is not ' ' (space) or '?' (untracked)
         const staged = file.index !== ' ' && file.index !== '?';
 
+        // For untracked entries (? in working_dir), check if it's a directory
+        // git status shows untracked directories as a single entry, not individual files
+        if (file.working_dir === '?') {
+          const absolutePath = path.join(worktreePath, file.path);
+          try {
+            const stats = fs.statSync(absolutePath);
+            if (stats.isDirectory()) {
+              // Expand directory to get all files inside
+              const filesInDir = this.getAllFilesInDirectory(absolutePath, worktreePath);
+              for (const filePath of filesInDir) {
+                changedFiles.push({ path: filePath, status: 'added', staged: false });
+              }
+              continue; // Skip adding the directory itself
+            }
+          } catch {
+            // If stat fails (file doesn't exist), just add the path as-is
+          }
+        }
+
         changedFiles.push({ path: file.path, status, staged });
       }
 
@@ -2287,6 +2306,41 @@ ${newLines.map(line => '+' + line).join('\n')}`;
       logger.error('Failed to get changed files', { error, worktreePath });
       throw new Error(`Failed to get changed files: ${error instanceof Error ? error.message : String(error)}`);
     }
+  }
+
+  /**
+   * Recursively get all files within a directory.
+   * Used to expand untracked directories into individual file paths.
+   *
+   * @param dirPath Absolute path to the directory
+   * @param basePath Base path to make paths relative to
+   * @returns Array of relative file paths within the directory
+   */
+  private getAllFilesInDirectory(dirPath: string, basePath: string): string[] {
+    const files: string[] = [];
+
+    try {
+      const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+
+      for (const entry of entries) {
+        const fullPath = path.join(dirPath, entry.name);
+
+        if (entry.isDirectory()) {
+          // Recursively get files from subdirectories
+          files.push(...this.getAllFilesInDirectory(fullPath, basePath));
+        } else if (entry.isFile()) {
+          // Return relative path from base
+          const relativePath = path.relative(basePath, fullPath);
+          // Use forward slashes for consistency with git
+          files.push(relativePath.replace(/\\/g, '/'));
+        }
+      }
+    } catch (error) {
+      // If we can't read the directory, skip it
+      logger.error('Error reading directory:', { dirPath, error });
+    }
+
+    return files;
   }
 
   /**

@@ -1,5 +1,5 @@
 import { execSync } from 'child_process';
-import { existsSync } from 'fs';
+import { existsSync, readdirSync, statSync } from 'fs';
 import { join, resolve } from 'path';
 import { isGitAvailable } from '../utils/gitUtils';
 
@@ -64,7 +64,30 @@ export class GitStatusService {
       const result: GitStatusResult = {};
       for (const filePath of filePaths) {
         const normalizedPath = this.normalizePath(filePath);
-        result[filePath] = statusMap.get(normalizedPath) || {
+        let status = statusMap.get(normalizedPath);
+
+        // If file not found directly, check if it's inside an untracked directory
+        // git status --porcelain shows untracked directories as a single entry (e.g., "?? plans/")
+        // so files inside won't be listed individually
+        if (!status) {
+          // Walk up the path to see if any parent directory is untracked
+          const pathParts = normalizedPath.split('/');
+          for (let i = pathParts.length - 1; i > 0; i--) {
+            const parentPath = pathParts.slice(0, i).join('/');
+            const parentStatus = statusMap.get(parentPath);
+            if (parentStatus && parentStatus.status === 'untracked') {
+              // File is inside an untracked directory, so it's also untracked
+              status = {
+                filePath,
+                status: 'untracked',
+                gitStatusCode: '??'
+              };
+              break;
+            }
+          }
+        }
+
+        result[filePath] = status || {
           filePath,
           status: 'unchanged'
         };
@@ -174,7 +197,7 @@ export class GitStatusService {
   }
 
   /**
-   * Normalize file path (remove leading ./, handle quotes, etc.)
+   * Normalize file path (remove leading ./, handle quotes, trailing slashes, etc.)
    */
   private normalizePath(filePath: string): string {
     // Remove quotes that git adds for paths with spaces
@@ -183,6 +206,11 @@ export class GitStatusService {
     // Remove leading ./
     if (normalized.startsWith('./')) {
       normalized = normalized.substring(2);
+    }
+
+    // Remove trailing slash (git shows untracked directories with trailing slash)
+    if (normalized.endsWith('/')) {
+      normalized = normalized.slice(0, -1);
     }
 
     return normalized;
@@ -259,6 +287,31 @@ export class GitStatusService {
             fileStatus.status === 'deleted') {
           // Convert to absolute path (git returns paths relative to workspace)
           const absolutePath = resolve(workspacePath, relativePath);
+
+          // For untracked entries, check if it's a directory
+          // git status --porcelain shows untracked directories with trailing slash (e.g., "?? newdir/")
+          // or they may appear without trailing slash but be a directory
+          if (fileStatus.status === 'untracked') {
+            try {
+              const stats = statSync(absolutePath);
+              if (stats.isDirectory()) {
+                // Expand directory to get all files inside
+                const filesInDir = this.getAllFilesInDirectory(absolutePath);
+                for (const filePath of filesInDir) {
+                  uncommittedFiles.push(filePath);
+                  cacheResult[filePath] = {
+                    filePath,
+                    status: 'untracked',
+                    gitStatusCode: '??'
+                  };
+                }
+                continue; // Skip adding the directory itself
+              }
+            } catch {
+              // If stat fails (file doesn't exist), just add the path as-is
+            }
+          }
+
           uncommittedFiles.push(absolutePath);
 
           // Cache with absolute path as key
@@ -558,6 +611,28 @@ export class GitStatusService {
         // Only include changed files (not unchanged)
         if (fileStatus.status !== 'unchanged') {
           const absolutePath = resolve(workspacePath, relativePath);
+
+          // For untracked entries, check if it's a directory and expand it
+          if (fileStatus.status === 'untracked') {
+            try {
+              const stats = statSync(absolutePath);
+              if (stats.isDirectory()) {
+                // Expand directory to get all files inside
+                const filesInDir = this.getAllFilesInDirectory(absolutePath);
+                for (const filePath of filesInDir) {
+                  result[filePath] = {
+                    filePath,
+                    status: 'untracked',
+                    gitStatusCode: '??'
+                  };
+                }
+                continue; // Skip adding the directory itself
+              }
+            } catch {
+              // If stat fails (file doesn't exist), just add the path as-is
+            }
+          }
+
           result[absolutePath] = {
             ...fileStatus,
             filePath: absolutePath
@@ -629,5 +704,36 @@ export class GitStatusService {
       // Clear entire cache
       this.cache.clear();
     }
+  }
+
+  /**
+   * Recursively get all files within a directory.
+   * Used to expand untracked directories into individual file paths.
+   *
+   * @param dirPath Absolute path to the directory
+   * @returns Array of absolute file paths within the directory
+   */
+  private getAllFilesInDirectory(dirPath: string): string[] {
+    const files: string[] = [];
+
+    try {
+      const entries = readdirSync(dirPath, { withFileTypes: true });
+
+      for (const entry of entries) {
+        const fullPath = join(dirPath, entry.name);
+
+        if (entry.isDirectory()) {
+          // Recursively get files from subdirectories
+          files.push(...this.getAllFilesInDirectory(fullPath));
+        } else if (entry.isFile()) {
+          files.push(fullPath);
+        }
+      }
+    } catch (error) {
+      // If we can't read the directory, skip it
+      console.error('[GitStatusService] Error reading directory:', dirPath, error);
+    }
+
+    return files;
   }
 }

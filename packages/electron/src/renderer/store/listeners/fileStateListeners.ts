@@ -22,6 +22,7 @@ import {
   type FileEditWithSession,
 } from '../atoms/sessionFiles';
 import { workstreamStagedFilesAtom, setWorkstreamStagedFilesAtom } from '../atoms/workstreamState';
+import { getRelativeWorkspacePath } from '../../../shared/pathUtils';
 
 /**
  * Track which workspace path is currently open.
@@ -198,11 +199,24 @@ export function initFileStateListeners(workspacePath: string): () => void {
 
   cleanups.push(
     window.electronAPI.on('git:status-changed', async (data: { workspacePath: string }) => {
-      // Only handle events for the current workspace
-      if (data.workspacePath !== currentWorkspacePath) return;
+      console.log('[fileStateListeners] git:status-changed received', {
+        receivedPath: data.workspacePath,
+        currentWorkspacePath,
+        match: data.workspacePath === currentWorkspacePath,
+        worktreePathRegistry: Array.from(worktreePathRegistry.entries())
+      });
+
+      // Check if event is for current workspace OR any registered worktree
+      const isCurrentWorkspace = data.workspacePath === currentWorkspacePath;
+      const isRegisteredWorktree = Array.from(worktreePathRegistry.values()).includes(data.workspacePath);
+
+      if (!isCurrentWorkspace && !isRegisteredWorktree) {
+        console.log('[fileStateListeners] Ignoring git:status-changed for unrelated workspace');
+        return;
+      }
 
       try {
-        // 1. Refresh all uncommitted files for the workspace
+        // 1. Refresh all uncommitted files for the workspace/worktree
         const uncommittedResult = await window.electronAPI.invoke(
           'git:get-uncommitted-files',
           data.workspacePath
@@ -223,9 +237,16 @@ export function initFileStateListeners(workspacePath: string): () => void {
           await pruneCommittedFilesFromStaging(sessionId, data.workspacePath);
         }
 
-        // 4. Refresh worktree changed files for all worktrees
+        // 4. Refresh worktree changed files for worktrees matching this path
+        const matchingWorktrees = Array.from(worktreePathRegistry.entries())
+          .filter(([, worktreePath]) => worktreePath === data.workspacePath);
+
+        console.log('[fileStateListeners] Refreshing worktree changed files', {
+          matchingWorktrees: matchingWorktrees.map(([id, path]) => ({ id, path }))
+        });
+
         await Promise.all(
-          Array.from(worktreePathRegistry.entries()).map(([worktreeId, worktreePath]) =>
+          matchingWorktrees.map(([worktreeId, worktreePath]) =>
             refreshWorktreeChangedFiles(worktreeId, worktreePath)
           )
         );
@@ -280,12 +301,10 @@ async function refreshSessionGitStatus(sessionId: string): Promise<void> {
   if (edits.length === 0) return;
 
   try {
-    // Get relative paths
+    // Get relative paths using proper path boundary checking
     const filePaths = edits.map(f => {
-      if (f.filePath.startsWith(workspacePath)) {
-        return f.filePath.slice(workspacePath.length + 1);
-      }
-      return f.filePath;
+      const relativePath = getRelativeWorkspacePath(f.filePath, workspacePath);
+      return relativePath !== null ? relativePath : f.filePath;
     });
 
     const result = await window.electronAPI.invoke('git:get-file-status', workspacePath, filePaths);
@@ -306,12 +325,10 @@ async function pruneCommittedFilesFromStaging(sessionId: string, workspacePath: 
   if (stagedFiles.length === 0) return;
 
   try {
-    // Get relative paths for checking
+    // Get relative paths for checking using proper path boundary checking
     const relativePaths = stagedFiles.map(fp => {
-      if (fp.startsWith(workspacePath)) {
-        return fp.slice(workspacePath.length + 1);
-      }
-      return fp;
+      const relativePath = getRelativeWorkspacePath(fp, workspacePath);
+      return relativePath !== null ? relativePath : fp;
     });
 
     const result = await window.electronAPI.invoke('git:get-file-status', workspacePath, relativePaths);
@@ -319,9 +336,7 @@ async function pruneCommittedFilesFromStaging(sessionId: string, workspacePath: 
     if (result.success && result.status) {
       // Filter out files that are now committed (unchanged)
       const stillUncommitted = stagedFiles.filter(fp => {
-        const relativePath = fp.startsWith(workspacePath)
-          ? fp.slice(workspacePath.length + 1)
-          : fp;
+        const relativePath = getRelativeWorkspacePath(fp, workspacePath) ?? fp;
         const status = result.status[relativePath];
         return status && status.status !== 'unchanged';
       });
