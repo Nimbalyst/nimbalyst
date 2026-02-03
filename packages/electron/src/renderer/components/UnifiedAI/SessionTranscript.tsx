@@ -259,6 +259,21 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   const [draftInput, setDraftInput] = useAtom(sessionDraftInputAtom(sessionId));
   const [draftAttachments, setDraftAttachments] = useAtom(sessionDraftAttachmentsAtom(sessionId));
 
+  // Debounced persistence of draft input to database
+  // This ensures drafts survive app restarts
+  useEffect(() => {
+    // Don't persist empty drafts or undefined workspacePath
+    if (!workspacePath) return;
+
+    const timeoutId = setTimeout(() => {
+      // Only persist if there's actual content (or we need to clear a previously saved draft)
+      window.electronAPI.invoke('ai:saveDraftInput', sessionId, draftInput, workspacePath)
+        .catch(err => console.error('[SessionTranscript] Failed to persist draft input:', err));
+    }, 1000); // 1 second debounce
+
+    return () => clearTimeout(timeoutId);
+  }, [sessionId, draftInput, workspacePath]);
+
   // Prompt history navigation via Jotai atoms
   const navigateHistory = useSetAtom(navigateSessionHistoryAtom);
   const resetHistory = useSetAtom(resetSessionHistoryAtom);

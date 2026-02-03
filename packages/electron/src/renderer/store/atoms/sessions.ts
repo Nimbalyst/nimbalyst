@@ -668,17 +668,13 @@ export const updateSessionStoreAtom = atom(
     const { sessionId, updates } = update;
 
     // 1. Update full session data if loaded
+    // Note: Derived atoms (sessionModeAtom, sessionModelAtom, sessionArchivedAtom) automatically sync
     const current = get(sessionStoreAtom(sessionId));
     if (current) {
       set(sessionStoreAtom(sessionId), { ...current, ...updates });
     }
 
-    // 2. Update per-session atomFamily atoms for reactive updates
-    if (updates.isArchived !== undefined) {
-      set(sessionArchivedAtom(sessionId), updates.isArchived);
-    }
-
-    // 3. Always update registry with metadata fields
+    // 2. Always update registry with metadata fields
     const registry = new Map(get(sessionRegistryAtom));
     const meta = registry.get(sessionId);
     if (meta) {
@@ -762,9 +758,19 @@ export const sessionModelAtom = atomFamily((sessionId: string) =>
 
 /**
  * Per-session archived state.
+ * This is a read-write derived atom that reads from sessionStoreAtom and writes through it.
+ * This ensures the archived state stays in sync with session data during reloads.
  */
-export const sessionArchivedAtom = atomFamily((_sessionId: string) =>
-  atom<boolean>(false)
+export const sessionArchivedAtom = atomFamily((sessionId: string) =>
+  atom(
+    (get) => get(sessionStoreAtom(sessionId))?.isArchived || false,
+    (get, set, isArchived: boolean) => {
+      const current = get(sessionStoreAtom(sessionId));
+      if (current) {
+        set(sessionStoreAtom(sessionId), { ...current, isArchived });
+      }
+    }
+  )
 );
 
 /**
@@ -1493,17 +1499,14 @@ export const loadSessionDataAtom = atom(
     try {
       const sessionData = await window.electronAPI.aiLoadSession(sessionId, workspacePath);
       if (sessionData) {
-        set(sessionStoreAtom(sessionId), sessionData);
-        set(sessionModeAtom(sessionId), sessionData.mode || 'agent');
-        // Use model from session data - it should always be set by the backend
-        // If somehow missing, log a warning (indicates a bug in session creation)
+        // Validate model field (for debugging)
         const model = sessionData.model;
         if (!model || !model.includes(':')) {
           console.warn(`[sessions] Session ${sessionId} has invalid model "${model}" - this indicates a bug in session creation`);
         }
-        // Always set whatever we have - the UI will show "Select Model" if invalid
-        set(sessionModelAtom(sessionId), model || '');
-        set(sessionArchivedAtom(sessionId), sessionData.isArchived || false);
+
+        // Set sessionStoreAtom - derived atoms (mode, model, archived) will automatically sync
+        set(sessionStoreAtom(sessionId), sessionData);
 
         // Initialize draft input if session has saved draft
         if (sessionData.draftInput) {
@@ -1643,8 +1646,7 @@ export const reloadSessionDataAtom = atom(
         // Final check before updating state - ensure we weren't superseded
         if (!thisReload.aborted) {
           set(sessionStoreAtom(sessionId), sessionData);
-          set(sessionArchivedAtom(sessionId), sessionData.isArchived || false);
-          // Note: sessionModeAtom and sessionModelAtom are derived from sessionStoreAtom,
+          // Note: sessionModeAtom, sessionModelAtom, and sessionArchivedAtom are derived from sessionStoreAtom,
           // so they automatically stay in sync when sessionStoreAtom is updated
         }
       }

@@ -410,6 +410,32 @@ Extensions receive `EditorHost` and must:
 
 ### Jotai Atom Patterns
 
+**See [JOTAI.md](./docs/JOTAI.md) for comprehensive documentation on Jotai patterns.**
+
+#### Key Principle: Derived Atoms for Session State
+
+Session-related atoms that represent data stored in `sessionStoreAtom` (mode, model, title, etc.) MUST be **derived atoms** that read from `sessionStoreAtom`, not independent atoms with their own storage. This prevents state divergence during session reloads.
+
+```typescript
+// BAD: Independent atom that can diverge
+export const sessionModeAtom = atomFamily((_sessionId: string) =>
+  atom<AIMode>('agent')  // Has its own storage - can get out of sync!
+);
+
+// GOOD: Derived read-write atom
+export const sessionModeAtom = atomFamily((sessionId: string) =>
+  atom(
+    (get) => get(sessionStoreAtom(sessionId))?.mode || 'agent',
+    (get, set, newMode: AIMode) => {
+      const current = get(sessionStoreAtom(sessionId));
+      if (current) {
+        set(sessionStoreAtom(sessionId), { ...current, mode: newMode });
+      }
+    }
+  )
+);
+```
+
 #### Atom Families for Session-Keyed State
 
 Use **atom families** (from `jotai/utils`) for per-session or per-entity state. This prevents the "lifting state up" anti-pattern and allows isolated updates.
@@ -878,6 +904,7 @@ The application includes a walkthrough guide system for feature discovery and co
 - **AGENT\_PERMISSIONS.md**: Agent tool permission system and approval flow
 - **ANALYTICS\_GUIDE.md**: How to add PostHog analytics events
 - **DIALOGS.md**: How to add new dialogs using the DialogProvider system
+- **JOTAI.md**: Jotai state architecture patterns (derived atoms, avoiding divergence)
 - **POSTHOG\_EVENTS.md**: Canonical reference for all analytics events
 - **POSTHOG\_MCP\_INTEGRATION.md**: PostHog MCP integration architecture
 - **PLAYWRIGHT.md**: E2E testing patterns and best practices
