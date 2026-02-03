@@ -11,6 +11,7 @@ import { addWorkspaceRecentFile } from '../utils/store';
 import { logger } from '../utils/logger';
 import { homedir } from 'os';
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
+import { isPathInWorkspace, getRelativeWorkspacePath } from '../utils/workspaceDetection';
 
 // Helper function to get file type from extension
 function getFileType(filePath: string): string {
@@ -170,13 +171,15 @@ export function registerFileHandlers() {
                 // console.log('[SAVE] Workspace mode:', workspacePath, 'documentService exists:', !!documentService);
                 if (documentService) {
                     // Only refresh if file is actually in the workspace (not in a worktree)
-                    if (filePath.startsWith(workspacePath)) {
+                    // Use proper path boundary checking to avoid matching snake_worktrees when workspace is snake
+                    const relativeFilePath = getRelativeWorkspacePath(filePath, workspacePath);
+                    if (relativeFilePath !== null) {
                         // Add a small delay to ensure file is fully written before reading
                         setTimeout(async () => {
                             try {
                                 await documentService.refreshFileMetadata(filePath);
                                 // Also refresh tracker items for this file
-                                const relativePath = filePath.substring(workspacePath.length + 1);
+                                const relativePath = relativeFilePath;
                                 // console.log('[SAVE] Updating tracker items for:', relativePath);
                                 await (documentService as any).updateTrackerItemsCache(relativePath);
                                 // console.log('[SAVE] Tracker items update completed');

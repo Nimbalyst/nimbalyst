@@ -178,7 +178,7 @@ export class MockupPlatformServiceImpl implements MockupPlatformService {
   /**
    * List all mockup files in the workspace.
    * Attempts to determine the correct workspace path by checking:
-   * 1. The current document path (to infer worktree workspace)
+   * 1. The current document path (to infer worktree workspace - PRIORITY)
    * 2. __workspacePath global
    * 3. Falls back to window's workspace path
    */
@@ -189,23 +189,31 @@ export class MockupPlatformServiceImpl implements MockupPlatformService {
     }
 
     try {
-      // Try to infer workspace from current document path
+      // First try to infer workspace from current document path
       // This handles the worktree case: if editing a file in a worktree,
       // the document path will be like /project_worktrees/branch-name/file.md
+      // PRIORITY: Always check document path first, as __workspacePath might be
+      // the main project path even when editing in a worktree
       const documentPath = (window as any).__currentDocumentPath;
       let workspacePath = (window as any).__workspacePath;
 
-      // If we have a document path that looks like it's in a worktree, use that as context
-      if (documentPath && !workspacePath) {
+      console.log('[MockupPlatformService] listMockupFiles called:', {
+        documentPath,
+        initialWorkspacePath: workspacePath,
+      });
+
+      if (documentPath) {
         // Check if document is in a _worktrees/ directory
-        const worktreeMatch = documentPath.match(/^(.+_worktrees\/[^/]+)/);
+        const worktreeMatch = documentPath.match(/^(.+_worktrees[\\/][^\\/]+)/);
         if (worktreeMatch) {
           workspacePath = worktreeMatch[1];
           console.log('[MockupPlatformService] Inferred worktree workspace from document path:', workspacePath);
         }
       }
 
+      console.log('[MockupPlatformService] Final workspace path for listing:', workspacePath);
       const result = await electronAPI.invoke('mockup:list-mockups', workspacePath ? { workspacePath } : undefined);
+      console.log('[MockupPlatformService] Result:', result?.length || 0, 'mockups');
       return result || [];
     } catch (error) {
       console.error('[MockupPlatformService] Failed to list mockup files:', error);

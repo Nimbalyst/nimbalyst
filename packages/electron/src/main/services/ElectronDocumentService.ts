@@ -18,6 +18,7 @@ import { extractFrontmatter, extractCommonFields } from '../utils/frontmatterRea
 import { VIRTUAL_DOCS, isVirtualPath } from '@nimbalyst/runtime';
 import { database } from '../database/PGLiteDatabaseWorker';
 import { shouldExcludeDir } from '../utils/fileFilters';
+import { isPathInWorkspace, getRelativeWorkspacePath } from '../utils/workspaceDetection';
 
 export class ElectronDocumentService implements DocumentService {
   private workspacePath: string;
@@ -636,9 +637,9 @@ export class ElectronDocumentService implements DocumentService {
     await this.ensureInitialized();
 
     // Convert to relative path if absolute
-    const relativePath = filePath.startsWith(this.workspacePath)
-      ? filePath.substring(this.workspacePath.length + 1)
-      : filePath;
+    // Use proper path boundary checking to avoid matching snake_worktrees when workspace is snake
+    const relativeFromWorkspace = getRelativeWorkspacePath(filePath, this.workspacePath);
+    const relativePath = relativeFromWorkspace !== null ? relativeFromWorkspace : filePath;
 
     // Only process markdown files
     if (!relativePath.endsWith('.md')) {

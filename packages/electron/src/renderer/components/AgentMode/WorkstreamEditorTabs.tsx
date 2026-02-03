@@ -285,6 +285,17 @@ const WorkstreamEditorTabsInner = forwardRef<WorkstreamEditorTabsRef, Workstream
       };
     }, [workstreamId]);
 
+    // Expose current document path and workspace path to window for plugins (e.g., MockupPlatformService)
+    // This mirrors what EditorMode does, but for workstream editor tabs
+    // basePath can be either workspacePath (main project) or worktreePath (for worktree sessions)
+    useEffect(() => {
+      const activeFilePath = activeTabId ? tabs.find(t => t.id === activeTabId)?.filePath || null : null;
+      (window as any).__currentDocumentPath = activeFilePath;
+      (window as any).__workspacePath = basePath;
+      // Also set the legacy property for compatibility
+      (window as any).workspacePath = basePath;
+    }, [activeTabId, tabs, basePath]);
+
     // Expose methods via ref
     useImperativeHandle(
       ref,
