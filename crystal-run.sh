@@ -337,31 +337,40 @@ else
   fi
 fi
 
-# Check extensions (packages/extensions/pdf-viewer)
-if [ "$WORKTREE_MODE" = "true" ]; then
-  if package_has_worktree_changes "packages/extensions/pdf-viewer"; then
-    # Has local changes, need to check if rebuild required
-    if needs_rebuild "packages/extensions/pdf-viewer"; then
-      build_extensions=true
-      build_extensions_reason=" (local changes)"
-    fi
-  elif main_repo_has_dist "packages/extensions/pdf-viewer"; then
-    # No local changes and main repo has dist - copy it
-    if [ ! -d "packages/extensions/pdf-viewer/dist" ]; then
+# Check extensions - iterate through all extension directories
+EXTENSION_DIRS=$(find packages/extensions -maxdepth 1 -type d -not -name extensions | sort)
+for ext_dir in $EXTENSION_DIRS; do
+  # Skip if no package.json or no build script
+  if [ ! -f "$ext_dir/package.json" ]; then
+    continue
+  fi
+  if ! grep -q '"build"' "$ext_dir/package.json" 2>/dev/null; then
+    continue
+  fi
+
+  if [ "$WORKTREE_MODE" = "true" ]; then
+    if package_has_worktree_changes "$ext_dir"; then
+      if needs_rebuild "$ext_dir"; then
+        build_extensions=true
+        build_extensions_reason=" (local changes in $(basename $ext_dir))"
+        break
+      fi
+    elif main_repo_has_dist "$ext_dir" && [ ! -d "$ext_dir/dist" ]; then
+      # No local changes and main repo has dist - will copy
       copy_extensions_from_main=true
+    elif ! main_repo_has_dist "$ext_dir"; then
+      if needs_rebuild "$ext_dir"; then
+        build_extensions=true
+        break
+      fi
     fi
   else
-    # No local changes but main repo doesn't have dist - need to build
-    if needs_rebuild "packages/extensions/pdf-viewer"; then
+    if needs_rebuild "$ext_dir"; then
       build_extensions=true
+      break
     fi
   fi
-else
-  # Not in worktree, use standard rebuild check
-  if needs_rebuild "packages/extensions/pdf-viewer"; then
-    build_extensions=true
-  fi
-fi
+done
 
 # Print build plan
 echo ""
@@ -435,15 +444,37 @@ elif [ "$build_extension_sdk" = true ]; then
   save_build_hash "packages/extension-sdk"
 fi
 
-# Handle extensions
-if [ "$copy_extensions_from_main" = true ]; then
-  copy_dist_from_main_repo "packages/extensions/pdf-viewer"
-elif [ "$build_extensions" = true ]; then
+# Handle extensions - build all extensions with a build script
+if [ "$build_extensions" = true ]; then
   echo "Building extensions..."
-  cd packages/extensions/pdf-viewer
-  npm run build
-  cd ../../..
-  save_build_hash "packages/extensions/pdf-viewer"
+  for ext_dir in $EXTENSION_DIRS; do
+    # Skip if no package.json or no build script
+    if [ ! -f "$ext_dir/package.json" ]; then
+      continue
+    fi
+    if ! grep -q '"build"' "$ext_dir/package.json" 2>/dev/null; then
+      continue
+    fi
+
+    ext_name=$(basename "$ext_dir")
+    if needs_rebuild "$ext_dir"; then
+      echo "  Building $ext_name..."
+      (cd "$ext_dir" && npm run build)
+      save_build_hash "$ext_dir"
+    else
+      echo "  $ext_name: skip (up-to-date)"
+    fi
+  done
+elif [ "$copy_extensions_from_main" = true ]; then
+  echo "Copying extensions from main repo..."
+  for ext_dir in $EXTENSION_DIRS; do
+    if [ ! -f "$ext_dir/package.json" ]; then
+      continue
+    fi
+    if main_repo_has_dist "$ext_dir" && [ ! -d "$ext_dir/dist" ]; then
+      copy_dist_from_main_repo "$ext_dir"
+    fi
+  done
 fi
 
 # Navigate to the electron package directory
