@@ -174,6 +174,20 @@ export const worktreeChangedFilesAtom = atomFamily((worktreeId: string) =>
   atom<WorktreeChangedFile[]>([])
 );
 
+/**
+ * Worktree git status (ahead/behind counts).
+ * Updated by: git:status-changed IPC event via centralized listener.
+ */
+export interface WorktreeGitStatus {
+  ahead: number;
+  behind: number;
+  hasUncommittedChanges: boolean;
+}
+
+export const worktreeGitStatusAtom = atomFamily((worktreeId: string) =>
+  atom<WorktreeGitStatus | null>(null)
+);
+
 // ============================================================================
 // Action Atoms
 // ============================================================================

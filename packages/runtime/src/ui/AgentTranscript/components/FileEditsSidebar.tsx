@@ -558,7 +558,6 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
     // Handler to toggle file selection without triggering file click
     const handleCheckboxClick = (e: React.MouseEvent) => {
       e.stopPropagation();
-      console.log('[FileEditsSidebar] handleCheckboxClick', { filePath, isSelected, newSelected: !isSelected, hasOnSelectionChange: !!onSelectionChange });
       onSelectionChange?.(filePath, !isSelected);
     };
 

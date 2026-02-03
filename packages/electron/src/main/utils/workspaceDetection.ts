@@ -94,6 +94,47 @@ export function isWorktreePath(workspacePath: string): boolean {
 }
 
 /**
+ * Check if a file is within a workspace, including worktree relationships.
+ * This handles three cases:
+ * 1. Direct match - file is inside the workspace path
+ * 2. Worktree parent - if workspace is a worktree, checks if file is in the parent project
+ * 3. Worktree child - if file is in a worktree of the workspace
+ *
+ * @param filePath - The file path to check
+ * @param workspacePath - The workspace path to check against
+ * @returns true if the file is within the workspace or a related worktree
+ */
+export function isFileInWorkspaceOrWorktree(filePath: string, workspacePath: string): boolean {
+  if (!filePath || !workspacePath) {
+    return false;
+  }
+
+  // Direct match - use path.sep for cross-platform compatibility
+  if (filePath.startsWith(workspacePath + path.sep) || filePath === workspacePath) {
+    return true;
+  }
+
+  // If workspace is a worktree, check if file is in the parent project
+  if (isWorktreePath(workspacePath)) {
+    const projectPath = resolveProjectPath(workspacePath);
+    if (filePath.startsWith(projectPath + path.sep) || filePath === projectPath) {
+      return true;
+    }
+  }
+
+  // If file path looks like it's in a worktree of this workspace
+  // e.g., workspace is /foo/bar, file is /foo/bar_worktrees/branch/file.txt
+  // Use escaped path.sep in regex for cross-platform compatibility
+  const escapedSep = path.sep.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const worktreePattern = new RegExp(`^${workspacePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}_worktrees${escapedSep}`);
+  if (worktreePattern.test(filePath)) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
  * Detects which known workspace (if any) contains the given file path.
  * Checks recent workspaces and returns the workspace path if the file
  * is located within any known workspace directory.

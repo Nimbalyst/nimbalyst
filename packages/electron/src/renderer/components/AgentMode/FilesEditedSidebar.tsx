@@ -277,26 +277,21 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
 
   // Handle worktree file staging toggle
   const handleWorktreeToggleStaged = useCallback(async (filePath: string) => {
-    console.log('[FilesEditedSidebar] handleWorktreeToggleStaged called', { filePath, worktreePath, worktreeId });
     if (!worktreePath || !worktreeId) {
-      console.log('[FilesEditedSidebar] Early return: no worktreePath or worktreeId');
       return;
     }
 
     try {
       // Convert to relative path if absolute
       const relativePath = toRelativePath(filePath);
-      console.log('[FilesEditedSidebar] Looking for file', { relativePath, worktreeChangedFilesCount: worktreeChangedFiles.length, worktreeChangedFiles: worktreeChangedFiles.map(f => f.path) });
       const file = worktreeChangedFiles.find(f => f.path === relativePath);
       if (!file) {
-        console.log('[FilesEditedSidebar] File not found in worktreeChangedFiles, staging directly');
         // File not in worktreeChangedFiles (e.g., from "All Uncommitted Files"), stage it directly
         await window.electronAPI.invoke('worktree:stage-file', worktreePath, relativePath, true);
         return;
       }
 
       const newStaged = !file.staged;
-      console.log('[FilesEditedSidebar] Toggling staged status', { relativePath, newStaged });
       await window.electronAPI.invoke('worktree:stage-file', worktreePath, relativePath, newStaged);
 
       // Refresh worktree state from backend - the atom will be updated by the IPC call
@@ -323,7 +318,6 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
   // For worktrees, this stages/unstages the file in git
   // For regular sessions, this updates the workstream staged files state
   const handleSelectionChange = useCallback((filePath: string, selected: boolean) => {
-    console.log('[FilesEditedSidebar] handleSelectionChange called', { filePath, selected, worktreeId, worktreePath });
     if (worktreeId && worktreePath) {
       // For worktrees, use git staging
       handleWorktreeToggleStaged(filePath);

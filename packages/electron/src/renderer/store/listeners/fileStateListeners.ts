@@ -19,6 +19,7 @@ import {
   sessionPendingReviewFilesAtom,
   workspaceUncommittedFilesAtom,
   worktreeChangedFilesAtom,
+  worktreeGitStatusAtom,
   type FileEditWithSession,
 } from '../atoms/sessionFiles';
 import { workstreamStagedFilesAtom, setWorkstreamStagedFilesAtom } from '../atoms/workstreamState';
@@ -132,7 +133,18 @@ export async function loadInitialSessionFileState(sessionId: string, workspacePa
  */
 export async function loadInitialWorktreeState(worktreeId: string, worktreePath: string): Promise<void> {
   registerWorktreePath(worktreeId, worktreePath);
-  await refreshWorktreeChangedFiles(worktreeId, worktreePath);
+  await Promise.all([
+    refreshWorktreeChangedFiles(worktreeId, worktreePath),
+    refreshWorktreeGitStatus(worktreeId, worktreePath),
+  ]);
+
+  // Start watching the worktree for git changes (commits, staging)
+  // This enables real-time updates when files are added/modified via command line
+  try {
+    await window.electronAPI.invoke('worktree:start-watching', worktreePath);
+  } catch (error) {
+    console.error('[fileStateListeners] Failed to start watching worktree:', worktreePath, error);
+  }
 }
 
 /**
@@ -199,19 +211,11 @@ export function initFileStateListeners(workspacePath: string): () => void {
 
   cleanups.push(
     window.electronAPI.on('git:status-changed', async (data: { workspacePath: string }) => {
-      console.log('[fileStateListeners] git:status-changed received', {
-        receivedPath: data.workspacePath,
-        currentWorkspacePath,
-        match: data.workspacePath === currentWorkspacePath,
-        worktreePathRegistry: Array.from(worktreePathRegistry.entries())
-      });
-
       // Check if event is for current workspace OR any registered worktree
       const isCurrentWorkspace = data.workspacePath === currentWorkspacePath;
       const isRegisteredWorktree = Array.from(worktreePathRegistry.values()).includes(data.workspacePath);
 
       if (!isCurrentWorkspace && !isRegisteredWorktree) {
-        console.log('[fileStateListeners] Ignoring git:status-changed for unrelated workspace');
         return;
       }
 
@@ -237,18 +241,15 @@ export function initFileStateListeners(workspacePath: string): () => void {
           await pruneCommittedFilesFromStaging(sessionId, data.workspacePath);
         }
 
-        // 4. Refresh worktree changed files for worktrees matching this path
+        // 4. Refresh worktree changed files and git status for worktrees matching this path
         const matchingWorktrees = Array.from(worktreePathRegistry.entries())
           .filter(([, worktreePath]) => worktreePath === data.workspacePath);
 
-        console.log('[fileStateListeners] Refreshing worktree changed files', {
-          matchingWorktrees: matchingWorktrees.map(([id, path]) => ({ id, path }))
-        });
-
         await Promise.all(
-          matchingWorktrees.map(([worktreeId, worktreePath]) =>
-            refreshWorktreeChangedFiles(worktreeId, worktreePath)
-          )
+          matchingWorktrees.flatMap(([worktreeId, worktreePath]) => [
+            refreshWorktreeChangedFiles(worktreeId, worktreePath),
+            refreshWorktreeGitStatus(worktreeId, worktreePath),
+          ])
         );
       } catch (error) {
         console.error('[fileStateListeners] Failed to handle git:status-changed:', error);
@@ -370,5 +371,37 @@ async function refreshWorktreeChangedFiles(worktreeId: string, worktreePath: str
     }
   } catch (error) {
     console.error('[fileStateListeners] Failed to refresh worktree changes:', worktreeId, error);
+  }
+}
+
+/**
+ * Worktree git status response from IPC.
+ */
+interface WorktreeStatusResponse {
+  success: boolean;
+  status?: {
+    ahead?: number;
+    behind?: number;
+    commitsAhead?: number;
+    commitsBehind?: number;
+    hasUncommittedChanges?: boolean;
+  };
+}
+
+/**
+ * Refresh worktree git status (ahead/behind counts).
+ */
+async function refreshWorktreeGitStatus(worktreeId: string, worktreePath: string): Promise<void> {
+  try {
+    const result: WorktreeStatusResponse = await window.electronAPI.invoke('worktree:get-status', worktreePath);
+    if (result.success && result.status) {
+      store.set(worktreeGitStatusAtom(worktreeId), {
+        ahead: result.status.ahead ?? result.status.commitsAhead ?? 0,
+        behind: result.status.behind ?? result.status.commitsBehind ?? 0,
+        hasUncommittedChanges: result.status.hasUncommittedChanges ?? false,
+      });
+    }
+  } catch (error) {
+    console.error('[fileStateListeners] Failed to refresh worktree git status:', worktreeId, error);
   }
 }

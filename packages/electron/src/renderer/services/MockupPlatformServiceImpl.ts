@@ -197,23 +197,15 @@ export class MockupPlatformServiceImpl implements MockupPlatformService {
       const documentPath = (window as any).__currentDocumentPath;
       let workspacePath = (window as any).__workspacePath;
 
-      console.log('[MockupPlatformService] listMockupFiles called:', {
-        documentPath,
-        initialWorkspacePath: workspacePath,
-      });
-
       if (documentPath) {
         // Check if document is in a _worktrees/ directory
         const worktreeMatch = documentPath.match(/^(.+_worktrees[\\/][^\\/]+)/);
         if (worktreeMatch) {
           workspacePath = worktreeMatch[1];
-          console.log('[MockupPlatformService] Inferred worktree workspace from document path:', workspacePath);
         }
       }
 
-      console.log('[MockupPlatformService] Final workspace path for listing:', workspacePath);
       const result = await electronAPI.invoke('mockup:list-mockups', workspacePath ? { workspacePath } : undefined);
-      console.log('[MockupPlatformService] Result:', result?.length || 0, 'mockups');
       return result || [];
     } catch (error) {
       console.error('[MockupPlatformService] Failed to list mockup files:', error);
