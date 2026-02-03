@@ -70,6 +70,7 @@ import {
 import { convertToWorkstreamAtom, sessionPromptAdditionsAtom, type ExitPlanModeConfirmationData } from '../../store/atoms/sessions';
 import { usePostHog } from 'posthog-js/react';
 import { setAgentModeSettingsAtom, showPromptAdditionsAtom, hasExternalEditorAtom, externalEditorNameAtom, openInExternalEditorAtom } from '../../store/atoms/appSettings';
+import { buildPlanModeInstructions, PLAN_MODE_DEACTIVATION } from '@nimbalyst/runtime/ai/services/planModePrompts';
 
 interface Todo {
   status: 'pending' | 'in_progress' | 'completed';
@@ -401,6 +402,23 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     if (!sessionError) return;
 
     const handleError = async () => {
+      // For server errors (500, internal server error - Claude may be down)
+      if (sessionError.isServerError) {
+        await confirm({
+          title: 'Service Error',
+          message: [
+            'Claude appears to be experiencing issues.',
+            '',
+            'This could be a temporary service disruption.',
+            'Check the status page for more information:',
+            '',
+            'https://status.anthropic.com'
+          ].join('\n'),
+          confirmLabel: 'OK',
+          cancelLabel: ''
+        });
+      }
+
       // For tool search errors (common with alternative AI providers like Bedrock)
       if (sessionError.isBedrockToolError) {
         const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
@@ -730,75 +748,13 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     // If in planning mode, append plan mode instructions with full details
     // Wrapped in NIMBALYST_SYSTEM_MESSAGE to hide from UI but still send to AI
     if (includePlanModeInstructions) {
-      message = `${message}
-
-<NIMBALYST_SYSTEM_MESSAGE>
-<PLAN_MODE_ACTIVATED>
-You are in PLANNING MODE ONLY.
-
-You MUST NOT:
-- Make any code edits (except to the plan file)
-- Run any non-readonly tools
-- Execute any commands
-- Make any changes to the system
-
-You MUST:
-- Explore the codebase using Read, Glob, Grep tools
-- Ask questions using AskUserQuestion to clarify requirements
-- Write and iteratively update a plan file in the plans/ directory
-- Call ExitPlanMode when ready for approval
-
-## Plan File
-
-You must create a plan file in the plans/ directory. Choose a descriptive kebab-case name based on the task, for example:
-- plans/add-dark-mode.md
-- plans/refactor-auth-system.md
-- plans/fix-login-timeout-bug.md
-
-The plan file is your working document. Create it early in your planning process and update it iteratively as you learn more.
-
-### Required YAML Frontmatter
-
-Every plan file MUST include YAML frontmatter with metadata for tracking:
-
-\`\`\`yaml
----
-planStatus:
-  planId: plan-[unique-identifier]
-  title: [Plan Title]
-  status: draft
-  planType: [feature|bug-fix|refactor|system-design|research|initiative|improvement]
-  priority: medium
-  owner: [username]
-  stakeholders: []
-  tags: []
-  created: "YYYY-MM-DD"
-  updated: "YYYY-MM-DDTHH:MM:SS.sssZ"
-  progress: 0
----
-\`\`\`
-
-## Iterative Planning Workflow
-
-Your goal is to build a comprehensive plan through iterative refinement:
-
-1. Create your plan file in plans/ with a descriptive name
-2. Explore the codebase using Read, Glob, and Grep tools
-3. Interview the user using AskUserQuestion to clarify requirements
-4. Write to the plan file iteratively as you learn more
-5. End your turn by either using AskUserQuestion or calling ExitPlanMode when ready
-</PLAN_MODE_ACTIVATED>
-</NIMBALYST_SYSTEM_MESSAGE>`;
+      message = `${message}\n\n${buildPlanModeInstructions()}`;
     }
 
     // If switching to agent mode, append plan mode deactivation message
     // Wrapped in NIMBALYST_SYSTEM_MESSAGE to hide from UI but still send to AI
     if (includePlanModeDeactivation) {
-      message = `${message}
-
-<NIMBALYST_SYSTEM_MESSAGE>
-<PLAN_MODE_DEACTIVATED>The planning restrictions no longer apply.</PLAN_MODE_DEACTIVATED>
-</NIMBALYST_SYSTEM_MESSAGE>`;
+      message = `${message}\n\n<NIMBALYST_SYSTEM_MESSAGE>\n${PLAN_MODE_DEACTIVATION}\n</NIMBALYST_SYSTEM_MESSAGE>`;
     }
 
     setDraftInput('');

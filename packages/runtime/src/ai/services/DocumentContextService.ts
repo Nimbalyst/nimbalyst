@@ -10,6 +10,7 @@
 
 import { hashContent, computeDiff } from '../../utils/documentDiff';
 import type { AIProviderType } from '../server/types';
+import { buildPlanModeInstructions, PLAN_MODE_DEACTIVATION } from './planModePrompts';
 import type {
   IDocumentContextService,
   RawDocumentContext,
@@ -322,11 +323,11 @@ export class DocumentContextService implements IDocumentContextService {
     const additions: UserMessageAdditions = {};
 
     if (modeTransition?.enteringPlanMode) {
-      additions.planModeInstructions = this.getPlanModeInstructions(modeTransition.planFilePath);
+      additions.planModeInstructions = buildPlanModeInstructions(modeTransition.planFilePath);
     }
 
     if (modeTransition?.exitingPlanMode) {
-      additions.planModeDeactivation = '<PLAN_MODE_DEACTIVATED>The planning restrictions no longer apply.</PLAN_MODE_DEACTIVATED>';
+      additions.planModeDeactivation = PLAN_MODE_DEACTIVATION;
     }
 
     // Build document context prompt (file path, cursor, selection, content/diff, transitions)
@@ -345,71 +346,6 @@ export class DocumentContextService implements IDocumentContextService {
     }
 
     return additions;
-  }
-
-  /**
-   * Get the plan mode instructions to add to the user message.
-   *
-   * Logic extracted from SessionTranscript.tsx (lines 835-891).
-   */
-  private getPlanModeInstructions(planFilePath?: string): string {
-    return `<NIMBALYST_SYSTEM_MESSAGE>
-<PLAN_MODE_ACTIVATED>
-You are in PLANNING MODE ONLY.
-
-You MUST NOT:
-- Make any code edits (except to the plan file)
-- Run any non-readonly tools
-- Execute any commands
-- Make any changes to the system
-
-You MUST:
-- Explore the codebase using Read, Glob, Grep tools
-- Ask questions using AskUserQuestion to clarify requirements
-- Write and iteratively update a plan file in the plans/ directory
-- Call ExitPlanMode when ready for approval
-
-## Plan File
-
-You must create a plan file in the plans/ directory. Choose a descriptive kebab-case name based on the task, for example:
-- plans/add-dark-mode.md
-- plans/refactor-auth-system.md
-- plans/fix-login-timeout-bug.md
-
-The plan file is your working document. Create it early in your planning process and update it iteratively as you learn more.
-
-### Required YAML Frontmatter
-
-Every plan file MUST include YAML frontmatter with metadata for tracking:
-
-\`\`\`yaml
----
-planStatus:
-  planId: plan-[unique-identifier]
-  title: [Plan Title]
-  status: draft
-  planType: [feature|bug-fix|refactor|system-design|research|initiative|improvement]
-  priority: medium
-  owner: [username]
-  stakeholders: []
-  tags: []
-  created: "YYYY-MM-DD"
-  updated: "YYYY-MM-DDTHH:MM:SS.sssZ"
-  progress: 0
----
-\`\`\`
-
-## Iterative Planning Workflow
-
-Your goal is to build a comprehensive plan through iterative refinement:
-
-1. Create your plan file in plans/ with a descriptive name
-2. Explore the codebase using Read, Glob, and Grep tools
-3. Interview the user using AskUserQuestion to clarify requirements
-4. Write to the plan file iteratively as you learn more
-5. End your turn by either using AskUserQuestion or calling ExitPlanMode when ready
-</PLAN_MODE_ACTIVATED>
-</NIMBALYST_SYSTEM_MESSAGE>`;
   }
 
   /**
