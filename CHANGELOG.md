@@ -20,6 +20,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.35] - 2026-02-03
+
+
+### Added
+- HelpTooltip system for contextual UI help with hover tooltips
+- Status indicator on workstream/worktree parent headers showing active sessions
+- Plan status check integrated into prepare-commit command
+- Claude 500 error detection with link to Anthropic status page
+- Allow editing extension-registered file types in planning mode
+- Persist file scope mode at workspace level
+- Added status values, plan types, and best practices to plan mode prompt
+
+### Changed
+- Migrated crystal-dark theme to file-based theming system
+- Extracted plan mode prompts to shared module for reuse
+- Consolidated getAllFilesInDirectory into shared utility
+- Code cleanup and DRY improvements for worktree support
+
+### Fixed
+- Cross-platform path compatibility in httpServer.ts
+- Worktree path handling for mockups and document service
+- Properly count and display files in untracked directories
+- Scope 'all uncommitted files' to worktree when in worktree session
+- Include worktreeId in sessionStoreAtom when adding sessions
+- Path resolution now worktree-aware throughout the codebase
+- Remove premature git staging from commit command
+- Derive missing theme colors from base colors for custom themes
+- Clear unread indicator when selecting child session in SessionHistory
+- TypeScript type errors in electron package
+- Document header updates when file is externally modified
+- Prevent document header from losing content on field changes
+- Prevent tracker panel empty state flash during loading
+- Rename postcss.config.js to .mjs to eliminate module type warning
+- Convert sessionArchivedAtom to derived atom, restore draft persistence
+- Stack empty state links vertically in Files Edited sidebar
+- Prevent session mode/model atoms from diverging during reloads
+- Use user's default model when creating child sessions
+- Respect sort order for sub-sessions in workstreams and worktrees
+- Build all extensions in crystal-run.sh
+- Terminal cursor position corruption when switching tabs
+- Handle system/auto theme and Claude plugin-only extensions
+- Persist Claude SDK session ID immediately on init
+
+### Removed
+- Removed unused agent-mode-toggle help content
+
 ## [0.52.33] - 2026-02-02
 
 
