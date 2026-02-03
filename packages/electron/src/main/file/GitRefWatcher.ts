@@ -1,5 +1,6 @@
 import chokidar, { FSWatcher } from 'chokidar';
 import * as path from 'path';
+import * as fs from 'fs';
 import simpleGit, { SimpleGit } from 'simple-git';
 import { BrowserWindow } from 'electron';
 import { logger } from '../utils/logger';
@@ -11,6 +12,45 @@ interface WatcherEntry {
   lastCommitHash: string;
   currentBranch: string;
   git: SimpleGit;
+}
+
+/**
+ * Resolve the actual git directory for a workspace.
+ * In regular repos, this is workspacePath/.git
+ * In worktrees, .git is a file containing "gitdir: /path/to/actual/git/dir"
+ *
+ * @param workspacePath - The workspace path to check
+ * @returns The path to the actual git directory, or null if not a git repo
+ */
+async function resolveGitDir(workspacePath: string): Promise<string | null> {
+  const gitPath = path.join(workspacePath, '.git');
+
+  try {
+    const stat = await fs.promises.stat(gitPath);
+
+    if (stat.isDirectory()) {
+      // Regular git repository
+      return gitPath;
+    }
+
+    if (stat.isFile()) {
+      // Worktree - .git is a file containing the gitdir path
+      const content = await fs.promises.readFile(gitPath, 'utf-8');
+      const match = content.match(/^gitdir:\s*(.+)$/m);
+      if (match) {
+        const gitDir = match[1].trim();
+        // The gitdir path may be relative or absolute
+        if (path.isAbsolute(gitDir)) {
+          return gitDir;
+        }
+        return path.resolve(workspacePath, gitDir);
+      }
+    }
+  } catch {
+    // Not a git repository or file doesn't exist
+  }
+
+  return null;
 }
 
 /**
@@ -40,13 +80,10 @@ export class GitRefWatcher {
     }
 
     try {
-      const gitDir = path.join(workspacePath, '.git');
+      // Resolve the actual git directory (handles worktrees where .git is a file)
+      const gitDir = await resolveGitDir(workspacePath);
 
-      // Verify .git directory exists
-      const fs = await import('fs/promises');
-      try {
-        await fs.access(gitDir);
-      } catch {
+      if (!gitDir) {
         // Not a git repository
         return;
       }
@@ -66,8 +103,9 @@ export class GitRefWatcher {
       const log = await git.log({ maxCount: 1 });
       const lastCommitHash = log.latest?.hash || '';
 
-      // Watch .git/refs/heads/<current-branch> for commit detection
-      const branchRefPath = path.join(workspacePath, '.git/refs/heads', currentBranch);
+      // Watch refs/heads/<current-branch> for commit detection
+      // Use the resolved gitDir for the actual ref file location
+      const branchRefPath = path.join(gitDir, 'refs/heads', currentBranch);
       const refWatcher = chokidar.watch(branchRefPath, {
         ignoreInitial: true,
         persistent: true,
@@ -91,8 +129,9 @@ export class GitRefWatcher {
         logger.main.error('[GitRefWatcher] Ref watcher error:', error);
       });
 
-      // Watch .git/index for staging changes
-      const indexPath = path.join(workspacePath, '.git/index');
+      // Watch index for staging changes
+      // Use the resolved gitDir for the actual index file location
+      const indexPath = path.join(gitDir, 'index');
       const indexWatcher = chokidar.watch(indexPath, {
         ignoreInitial: true,
         persistent: true,
@@ -122,6 +161,7 @@ export class GitRefWatcher {
       logger.main.info('[GitRefWatcher] Started watching:', {
         workspace: path.basename(workspacePath),
         branch: currentBranch,
+        gitDir: gitDir !== path.join(workspacePath, '.git') ? gitDir : undefined, // Log if using worktree gitdir
       });
     } catch (error) {
       logger.main.error('[GitRefWatcher] Failed to start watching:', error);

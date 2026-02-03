@@ -177,6 +177,10 @@ export class MockupPlatformServiceImpl implements MockupPlatformService {
 
   /**
    * List all mockup files in the workspace.
+   * Attempts to determine the correct workspace path by checking:
+   * 1. The current document path (to infer worktree workspace)
+   * 2. __workspacePath global
+   * 3. Falls back to window's workspace path
    */
   async listMockupFiles(): Promise<MockupFileInfo[]> {
     const electronAPI = (window as any).electronAPI;
@@ -185,7 +189,23 @@ export class MockupPlatformServiceImpl implements MockupPlatformService {
     }
 
     try {
-      const result = await electronAPI.invoke('mockup:list-mockups');
+      // Try to infer workspace from current document path
+      // This handles the worktree case: if editing a file in a worktree,
+      // the document path will be like /project_worktrees/branch-name/file.md
+      const documentPath = (window as any).__currentDocumentPath;
+      let workspacePath = (window as any).__workspacePath;
+
+      // If we have a document path that looks like it's in a worktree, use that as context
+      if (documentPath && !workspacePath) {
+        // Check if document is in a _worktrees/ directory
+        const worktreeMatch = documentPath.match(/^(.+_worktrees\/[^/]+)/);
+        if (worktreeMatch) {
+          workspacePath = worktreeMatch[1];
+          console.log('[MockupPlatformService] Inferred worktree workspace from document path:', workspacePath);
+        }
+      }
+
+      const result = await electronAPI.invoke('mockup:list-mockups', workspacePath ? { workspacePath } : undefined);
       return result || [];
     } catch (error) {
       console.error('[MockupPlatformService] Failed to list mockup files:', error);

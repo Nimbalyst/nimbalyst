@@ -81,16 +81,23 @@ export function registerOffscreenEditorHandlers(): void {
   // Capture screenshot from offscreen editor
   safeHandle(
     'offscreen-editor:capture-screenshot',
-    async (_event, payload: { filePath: string; workspacePath?: string; selector?: string }) => {
+    async (_event, payload: { filePath: string; workspacePath: string; selector?: string }) => {
       logger.main.info(`[OffscreenEditorHandlers] Screenshot request: ${payload.filePath}`);
 
-      try {
-        // Determine workspace path
-        const workspacePath = payload.workspacePath || require('path').dirname(payload.filePath);
+      // Validate required workspace path - never fall back to path.dirname
+      // as that produces incorrect results for files in subdirectories
+      if (!payload.workspacePath) {
+        logger.main.error('[OffscreenEditorHandlers] Screenshot failed: workspacePath is required');
+        return {
+          success: false,
+          error: 'workspacePath is required for screenshot capture',
+        };
+      }
 
+      try {
         const imageBuffer = await manager.captureScreenshot(
           payload.filePath,
-          workspacePath,
+          payload.workspacePath,
           payload.selector
         );
 

@@ -280,9 +280,11 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
   const currentFileName = currentFileInfo.fileName;
 
   // Expose current document path and workspace path to window for image paste/rendering
+  // __workspacePath is used by MockupPlatformServiceImpl and DataModelPlatformServiceImpl
   useEffect(() => {
     (window as any).__currentDocumentPath = currentFilePath;
     (window as any).workspacePath = workspacePath;
+    (window as any).__workspacePath = workspacePath;
   }, [currentFilePath, workspacePath]);
 
   // Update MCP document state for custom editors (non-markdown files)

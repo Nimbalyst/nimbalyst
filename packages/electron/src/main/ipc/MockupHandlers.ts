@@ -34,13 +34,25 @@ export function registerMockupHandlers(): void {
   // Capture mockup screenshot and save to file
   safeHandle(
     'mockup:capture-and-save-screenshot',
-    async (_event, mockupPath: string, outputPath: string) => {
+    async (event, mockupPath: string, outputPath: string) => {
       logger.main.info(`[MockupHandlers] Capturing screenshot: ${mockupPath} -> ${outputPath}`);
 
       try {
-        // Get the workspace path from the mockup path
-        // We assume the workspace is a parent directory
-        const workspacePath = path.dirname(mockupPath);
+        // Get the workspace path from the sender window
+        const senderWindow = BrowserWindow.fromWebContents(event.sender);
+        let workspacePath: string | null = null;
+
+        if (senderWindow) {
+          const windowId = getWindowId(senderWindow);
+          if (windowId !== null) {
+            const state = windowStates.get(windowId);
+            workspacePath = state?.workspacePath || null;
+          }
+        }
+
+        if (!workspacePath) {
+          throw new Error('Could not determine workspace path for screenshot capture');
+        }
 
         // Use the offscreen editor manager to capture screenshot
         const offscreenManager = OffscreenEditorManager.getInstance();
@@ -90,21 +102,31 @@ export function registerMockupHandlers(): void {
   });
 
   // List all mockup files in the workspace
-  safeHandle('mockup:list-mockups', async (event) => {
+  // Note: If you need to list mockups for a worktree session, pass the worktree path explicitly
+  // via the payload. Otherwise this uses the window's workspace path (which is the main project).
+  safeHandle('mockup:list-mockups', async (event, payload?: { workspacePath?: string }) => {
     try {
-      // Get the workspace path from the sender window
-      const senderWindow = BrowserWindow.fromWebContents(event.sender);
-      if (!senderWindow) {
-        return [];
-      }
+      let workspacePath: string | null = null;
 
-      // Get workspace path from window state
-      const windowId = getWindowId(senderWindow);
-      if (windowId === null) {
-        return [];
+      // If explicit workspace path provided (e.g., for worktree sessions), use it
+      if (payload?.workspacePath) {
+        workspacePath = payload.workspacePath;
+        logger.main.info(`[MockupHandlers] Using explicit workspace path: ${workspacePath}`);
+      } else {
+        // Fall back to window's workspace path
+        const senderWindow = BrowserWindow.fromWebContents(event.sender);
+        if (!senderWindow) {
+          return [];
+        }
+
+        const windowId = getWindowId(senderWindow);
+        if (windowId === null) {
+          return [];
+        }
+        const state = windowStates.get(windowId);
+        workspacePath = state?.workspacePath || null;
+        logger.main.info(`[MockupHandlers] Using window workspace path: ${workspacePath}`);
       }
-      const state = windowStates.get(windowId);
-      const workspacePath = state?.workspacePath;
 
       if (!workspacePath) {
         return [];

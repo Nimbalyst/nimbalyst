@@ -11,6 +11,7 @@ import { getFolderContents } from '../utils/FileTree';
 import { getTitleBarColors } from '../theme/ThemeManager';
 import { ElectronDocumentService, setupDocumentServiceHandlers } from '../services/ElectronDocumentService';
 import { ElectronFileSystemService } from '../services/ElectronFileSystemService';
+import { isWorktreePath, resolveProjectPath } from '../utils/workspaceDetection';
 import { setFileSystemService, clearFileSystemService } from '@nimbalyst/runtime';
 import { navigationHistoryService } from '../services/NavigationHistoryService';
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
@@ -661,16 +662,43 @@ export function findWindowByFilePath(filePath: string): BrowserWindow | null {
  * - Use event.sender for: Immediate IPC responses during the same call
  * - Window IDs should only be used as a fallback when workspace path is unavailable
  *
+ * This function is worktree-aware: if the given path is a worktree path, it will also
+ * check for windows registered under the parent project path, and vice versa.
+ *
  * @param workspacePath The absolute path to the workspace directory
  * @returns The BrowserWindow for that workspace, or null if not found
  */
 export function findWindowByWorkspace(workspacePath: string): BrowserWindow | null {
+    // First try exact match
     for (const [windowId, window] of windows) {
         const state = windowStates.get(windowId);
         if (state?.workspacePath === workspacePath) {
             return window;
         }
     }
+
+    // If the given path is a worktree, try to find window by parent project path
+    if (isWorktreePath(workspacePath)) {
+        const projectPath = resolveProjectPath(workspacePath);
+        for (const [windowId, window] of windows) {
+            const state = windowStates.get(windowId);
+            if (state?.workspacePath === projectPath) {
+                return window;
+            }
+        }
+    }
+
+    // If the given path is a project path, check if any window is a worktree of that project
+    for (const [windowId, window] of windows) {
+        const state = windowStates.get(windowId);
+        if (state?.workspacePath && isWorktreePath(state.workspacePath)) {
+            const windowProjectPath = resolveProjectPath(state.workspacePath);
+            if (windowProjectPath === workspacePath) {
+                return window;
+            }
+        }
+    }
+
     return null;
 }
 

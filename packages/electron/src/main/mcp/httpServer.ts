@@ -14,6 +14,7 @@ import path, { isAbsolute } from 'path';
 import { isVoiceModeActive, sendToVoiceAgent, getActiveVoiceSessionId, stopVoiceSession } from '../services/voice/VoiceModeService';
 import { findWindowByWorkspace } from '../window/WindowManager';
 import { SessionFilesRepository, AgentMessagesRepository } from '@nimbalyst/runtime';
+import { isWorktreePath, resolveProjectPath } from '../utils/workspaceDetection';
 
 /**
  * Compress a base64 image to JPEG if it exceeds 0.28 MB.
@@ -1128,11 +1129,33 @@ The commit message should follow these guidelines:
 
             try {
               // Find which workspace contains this file
+              // This is worktree-aware: checks both direct path matching and worktree/project relationships
               let fileWorkspacePath: string | undefined;
+
+              // Helper to check if a file is within a workspace (including worktree relationships)
+              const fileInWorkspace = (filePath: string, wsPath: string): boolean => {
+                // Direct match
+                if (filePath.startsWith(wsPath + '/') || filePath === wsPath) {
+                  return true;
+                }
+                // If workspace is a worktree, check if file is in the parent project
+                if (isWorktreePath(wsPath)) {
+                  const projectPath = resolveProjectPath(wsPath);
+                  if (filePath.startsWith(projectPath + '/') || filePath === projectPath) {
+                    return true;
+                  }
+                }
+                // If file path looks like it's in a worktree of this workspace
+                const worktreePattern = new RegExp(`^${wsPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}_worktrees/`);
+                if (worktreePattern.test(filePath)) {
+                  return true;
+                }
+                return false;
+              };
 
               // Check registered workspaces first
               for (const wsPath of workspaceToWindowMap.keys()) {
-                if (filePathArg.startsWith(wsPath + '/') || filePathArg === wsPath) {
+                if (fileInWorkspace(filePathArg, wsPath)) {
                   if (!fileWorkspacePath || wsPath.length > fileWorkspacePath.length) {
                     fileWorkspacePath = wsPath;
                   }
@@ -1143,7 +1166,7 @@ The commit message should follow these guidelines:
               if (!fileWorkspacePath) {
                 for (const state of documentStateBySession.values()) {
                   const wsPath = state.workspacePath;
-                  if (wsPath && (filePathArg.startsWith(wsPath + '/') || filePathArg === wsPath)) {
+                  if (wsPath && fileInWorkspace(filePathArg, wsPath)) {
                     if (!fileWorkspacePath || wsPath.length > fileWorkspacePath.length) {
                       fileWorkspacePath = wsPath;
                     }
@@ -1321,9 +1344,33 @@ The commit message should follow these guidelines:
 
             try {
               // Find which workspace contains this file path
+              // This is worktree-aware: checks both direct path matching and worktree/project relationships
               let fileWorkspacePath: string | undefined;
-              for (const wsPath of workspaceToWindowMap.keys()) {
+
+              // Helper to check if a file is within a workspace (including worktree relationships)
+              const fileInWorkspace = (filePath: string, wsPath: string): boolean => {
+                // Direct match
                 if (filePath.startsWith(wsPath + '/') || filePath === wsPath) {
+                  return true;
+                }
+                // If workspace is a worktree, check if file is in the parent project
+                if (isWorktreePath(wsPath)) {
+                  const projectPath = resolveProjectPath(wsPath);
+                  if (filePath.startsWith(projectPath + '/') || filePath === projectPath) {
+                    return true;
+                  }
+                }
+                // If file path looks like it's in a worktree of this workspace
+                // e.g., workspace is /foo/bar, file is /foo/bar_worktrees/branch/file.txt
+                const worktreePattern = new RegExp(`^${wsPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}_worktrees/`);
+                if (worktreePattern.test(filePath)) {
+                  return true;
+                }
+                return false;
+              };
+
+              for (const wsPath of workspaceToWindowMap.keys()) {
+                if (fileInWorkspace(filePath, wsPath)) {
                   if (!fileWorkspacePath || wsPath.length > fileWorkspacePath.length) {
                     fileWorkspacePath = wsPath;
                   }
@@ -1334,7 +1381,7 @@ The commit message should follow these guidelines:
               if (!fileWorkspacePath) {
                 for (const state of documentStateBySession.values()) {
                   const wsPath = state.workspacePath;
-                  if (wsPath && (filePath.startsWith(wsPath + '/') || filePath === wsPath)) {
+                  if (wsPath && fileInWorkspace(filePath, wsPath)) {
                     if (!fileWorkspacePath || wsPath.length > fileWorkspacePath.length) {
                       fileWorkspacePath = wsPath;
                     }
