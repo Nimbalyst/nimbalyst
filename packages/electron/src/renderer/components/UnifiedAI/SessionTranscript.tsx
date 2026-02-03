@@ -279,7 +279,9 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   const resetHistory = useSetAtom(resetSessionHistoryAtom);
 
   // Show prompt additions setting (dev mode only)
-  const showPromptAdditions = useAtomValue(showPromptAdditionsAtom);
+  const showPromptAdditionsSetting = useAtomValue(showPromptAdditionsAtom);
+  const isDevelopment = import.meta.env.DEV;
+  const showPromptAdditions = isDevelopment && showPromptAdditionsSetting;
 
   // File action atoms
   const hasExternalEditor = useAtomValue(hasExternalEditorAtom);
