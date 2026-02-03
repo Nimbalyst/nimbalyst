@@ -436,7 +436,7 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
     // Load session data if not already loaded
     // sessionDataLoaded is null when no data has been fetched yet
     if (sessionDataLoaded === null) {
-      console.log('[AgentWorkstreamPanel] Session data not loaded, fetching for:', workstreamId);
+      // console.log('[AgentWorkstreamPanel] Session data not loaded, fetching for:', workstreamId);
       loadSessionData({ sessionId: workstreamId, workspacePath });
     }
   }, [workstreamId, workspacePath, sessionDataLoaded, loadSessionData]);
@@ -445,12 +445,12 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
     // Wait for both session data AND workstream states to be loaded before loading children
     // This ensures persisted activeChildId is available when loadSessionChildrenAtom runs
     if (!workstreamId || !workspacePath || sessionDataLoaded === null || !workstreamStatesLoaded) {
-      console.log('[AgentWorkstreamPanel] Children effect - waiting for:', {
-        workstreamId: !!workstreamId,
-        workspacePath: !!workspacePath,
-        sessionDataLoaded: sessionDataLoaded !== null,
-        workstreamStatesLoaded,
-      });
+      // console.log('[AgentWorkstreamPanel] Children effect - waiting for:', {
+      //   workstreamId: !!workstreamId,
+      //   workspacePath: !!workspacePath,
+      //   sessionDataLoaded: sessionDataLoaded !== null,
+      //   workstreamStatesLoaded,
+      // });
       return;
     }
 

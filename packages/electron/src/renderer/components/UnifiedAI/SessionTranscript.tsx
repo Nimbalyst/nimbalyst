@@ -399,7 +399,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     // Use setTimeout to ensure the DOM is ready after render
     // (RAF can be cancelled by rapid re-renders before it executes)
     setTimeout(() => {
-      console.log('[SessionTranscript] Auto-focusing input, inputRef:', inputRef.current);
+      // console.log('[SessionTranscript] Auto-focusing input, inputRef:', inputRef.current);
       inputRef.current?.focus();
     }, 0);
   }, [sessionData]);
