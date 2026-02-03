@@ -20,6 +20,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.37] - 2026-02-03
+
+
+### Changed
+- Reduced verbose logging in CustomTrackerLoader and agentMode atoms
+
+### Fixed
+- Build rexical before runtime in CI workflow to fix build dependency order
+- Include package-lock.json in version control
+
 ## [0.52.36] - 2026-02-03
 
 

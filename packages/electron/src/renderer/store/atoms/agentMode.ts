@@ -148,9 +148,9 @@ function schedulePersist(workspacePath: string, layout: AgentModeLayout): void {
     try {
       // Persist directly - runtime shape matches persisted shape
       const state = { agenticCodingWindowState: layout };
-      console.log('[agentMode] Persisting layout:', JSON.stringify(state, null, 2));
+      // console.log('[agentMode] Persisting layout:', JSON.stringify(state, null, 2));
       const result = await window.electronAPI.invoke('workspace:update-state', workspacePath, state);
-      console.log('[agentMode] Persist result:', result);
+      // console.log('[agentMode] Persist result:', result);
     } catch (err) {
       console.error('[agentMode] Failed to persist layout:', err);
     }
