@@ -712,9 +712,19 @@ export const sessionLoadingAtom = atomFamily((_sessionId: string) =>
 
 /**
  * Per-session AI mode (plan vs agent).
+ * This is a read-write derived atom that reads from sessionStoreAtom and writes through it.
+ * This ensures the mode stays in sync with session data during reloads.
  */
-export const sessionModeAtom = atomFamily((_sessionId: string) =>
-  atom<AIMode>('agent')
+export const sessionModeAtom = atomFamily((sessionId: string) =>
+  atom(
+    (get) => get(sessionStoreAtom(sessionId))?.mode || 'agent',
+    (get, set, newMode: AIMode) => {
+      const current = get(sessionStoreAtom(sessionId));
+      if (current) {
+        set(sessionStoreAtom(sessionId), { ...current, mode: newMode });
+      }
+    }
+  )
 );
 
 /**
@@ -735,9 +745,19 @@ export const sessionWorktreeIdAtom = atomFamily((sessionId: string) =>
 
 /**
  * Per-session current model ID.
+ * This is a read-write derived atom that reads from sessionStoreAtom and writes through it.
+ * This ensures the model stays in sync with session data during reloads.
  */
-export const sessionModelAtom = atomFamily((_sessionId: string) =>
-  atom<string>('claude-code:sonnet')
+export const sessionModelAtom = atomFamily((sessionId: string) =>
+  atom(
+    (get) => get(sessionStoreAtom(sessionId))?.model || 'claude-code:sonnet',
+    (get, set, newModel: string) => {
+      const current = get(sessionStoreAtom(sessionId));
+      if (current) {
+        set(sessionStoreAtom(sessionId), { ...current, model: newModel });
+      }
+    }
+  )
 );
 
 /**
@@ -1076,11 +1096,20 @@ export const createChildSessionAtom = atom(
         // Set parent ID for the new child
         set(sessionParentIdAtom(result.sessionId), parentSessionId);
 
-        // Set the session model atom if provided - prevents showing default 'sonnet'
-        // before loadSessionDataAtom runs
-        if (model) {
-          set(sessionModelAtom(result.sessionId), model);
-        }
+        // Initialize sessionStoreAtom with minimal data so derived atoms (mode, model) work
+        // This prevents showing default values before loadSessionDataAtom runs
+        set(sessionStoreAtom(result.sessionId), {
+          id: result.sessionId,
+          title: 'New Session',
+          provider: provider || 'claude-code',
+          model: model || 'claude-code:sonnet',
+          mode: 'agent',
+          messages: [],
+          parentSessionId,
+          worktreeId: worktreeId || undefined,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        } as SessionData);
 
         // Make it the active child (both atoms need to be updated) and mark as read
         set(sessionActiveChildAtom(parentSessionId), result.sessionId);
@@ -1364,11 +1393,20 @@ export const convertToWorkstreamAtom = atom(
       if (siblingResult.success && siblingResult.sessionId) {
         children.push(siblingResult.sessionId);
         set(sessionParentIdAtom(siblingResult.sessionId), parentSessionId);
-        // Set the session model atom for the sibling - prevents showing default 'sonnet'
-        // before loadSessionDataAtom runs
-        if (model) {
-          set(sessionModelAtom(siblingResult.sessionId), model);
-        }
+        // Initialize sessionStoreAtom for the sibling so derived atoms (mode, model) work
+        // This prevents showing default values before loadSessionDataAtom runs
+        set(sessionStoreAtom(siblingResult.sessionId), {
+          id: siblingResult.sessionId,
+          title: 'New Session',
+          provider: sessionData.provider || 'claude-code',
+          model: model || sessionData.model || 'claude-code:sonnet',
+          mode: 'agent',
+          messages: [],
+          parentSessionId,
+          worktreeId: sessionData.worktreeId || undefined,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        } as SessionData);
       }
       set(sessionChildrenAtom(parentSessionId), children);
 
@@ -1606,6 +1644,8 @@ export const reloadSessionDataAtom = atom(
         if (!thisReload.aborted) {
           set(sessionStoreAtom(sessionId), sessionData);
           set(sessionArchivedAtom(sessionId), sessionData.isArchived || false);
+          // Note: sessionModeAtom and sessionModelAtom are derived from sessionStoreAtom,
+          // so they automatically stay in sync when sessionStoreAtom is updated
         }
       }
     } catch (error) {
@@ -1987,10 +2027,20 @@ export const addSessionFullAtom = atom(
     });
     set(sessionRegistryAtom, registry);
 
-    // Set the session model atom if provided - prevents showing default 'sonnet'
-    // before loadSessionDataAtom runs
-    if (session.model) {
-      set(sessionModelAtom(session.id), session.model);
+    // Initialize sessionStoreAtom with minimal data so derived atoms (mode, model) work
+    // This prevents showing default values before loadSessionDataAtom runs
+    const existingStore = get(sessionStoreAtom(session.id));
+    if (!existingStore) {
+      set(sessionStoreAtom(session.id), {
+        id: session.id,
+        title: session.title || session.name || 'Untitled Session',
+        provider: session.provider || 'claude-code',
+        model: session.model || 'claude-code:sonnet',
+        mode: 'agent',
+        messages: [],
+        createdAt: session.createdAt,
+        updatedAt: session.updatedAt,
+      } as SessionData);
     }
 
     // File state is loaded lazily when FilesEditedSidebar mounts
