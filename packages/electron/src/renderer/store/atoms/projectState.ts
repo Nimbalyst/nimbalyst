@@ -114,7 +114,7 @@ const defaultProjectState: ProjectState = {
     groupByDirectory: false,
   },
   agentMode: {
-    fileScopeMode: 'current-changes', // Default to showing uncommitted session edits
+    fileScopeMode: 'session-files', // Default to showing all session edits
   },
   lastOpenedFile: null,
   recentFiles: [],

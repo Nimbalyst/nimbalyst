@@ -20,6 +20,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.36] - 2026-02-03
+
+
+### Changed
+- Default file scope mode now shows all session edits instead of just the current session
+
+### Fixed
+- Built-in themes now included in CI packaged builds
+
 ## [0.52.35] - 2026-02-03
 
 
