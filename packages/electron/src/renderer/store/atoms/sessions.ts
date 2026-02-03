@@ -301,13 +301,71 @@ export interface ToolPermissionData {
 /**
  * Derived atom: Get pending permission requests for a session.
  * Maps PendingPrompt to ToolPermissionData for UI compatibility.
+ *
+ * The database stores PermissionRequestContent (flat structure) but the UI component
+ * expects ToolPermissionData with a nested `request` object containing `actionsNeedingApproval`.
+ * This atom transforms between the two formats.
  */
 export const sessionPendingPermissionsAtom = atomFamily((sessionId: string) =>
   atom<ToolPermissionData[]>((get) => {
     const prompts = get(sessionPendingPromptsAtom(sessionId));
     return prompts
       .filter(p => p.promptType === 'permission_request')
-      .map(p => p.data as ToolPermissionData);
+      .map(p => {
+        const data = p.data;
+
+        // If data already has the nested `request` structure (legacy in-memory format), use it directly
+        if (data.request && data.request.actionsNeedingApproval) {
+          return data as ToolPermissionData;
+        }
+
+        // Transform flat PermissionRequestContent to nested ToolPermissionData format
+        // The flat format is what gets persisted to the database
+        const flatData = data as {
+          type: string;
+          requestId: string;
+          toolName: string;
+          rawCommand: string;
+          pattern: string;
+          patternDisplayName: string;
+          isDestructive: boolean;
+          warnings: string[];
+          timestamp: number;
+          status: string;
+          workspacePath?: string;
+        };
+
+        return {
+          requestId: flatData.requestId,
+          sessionId: p.sessionId,
+          workspacePath: flatData.workspacePath || '',
+          timestamp: flatData.timestamp,
+          request: {
+            id: flatData.requestId,
+            toolName: flatData.toolName,
+            rawCommand: flatData.rawCommand,
+            actionsNeedingApproval: [{
+              action: {
+                pattern: flatData.pattern,
+                displayName: flatData.patternDisplayName,
+                command: flatData.rawCommand,
+                isDestructive: flatData.isDestructive,
+                referencedPaths: [],
+                hasRedirection: false,
+              },
+              decision: 'ask' as const,
+              reason: 'Tool requires user approval',
+              isDestructive: flatData.isDestructive,
+              isRisky: flatData.toolName === 'Bash',
+              warnings: flatData.warnings || [],
+              outsidePaths: [],
+              sensitivePaths: [],
+            }],
+            hasDestructiveActions: flatData.isDestructive,
+            createdAt: flatData.timestamp,
+          },
+        } as ToolPermissionData;
+      });
   })
 );
 
