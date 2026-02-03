@@ -50,7 +50,6 @@ export const TrackerBottomPanel: React.FC<BottomPanelProps> = ({
   // Local state
   const [isResizing, setIsResizing] = useState(false);
   const [quickAddType, setQuickAddType] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const posthog = usePostHog();
 
   // Get available tracker types from registry
@@ -100,8 +99,6 @@ export const TrackerBottomPanel: React.FC<BottomPanelProps> = ({
         const items = await documentService.listTrackerItems();
         if (!mounted) return;
 
-        setIsLoading(false);
-
         const counts: ItemCounts = {};
         trackerTypes.forEach(tracker => {
           const inlineCount = items.filter((i: any) => {
@@ -117,7 +114,7 @@ export const TrackerBottomPanel: React.FC<BottomPanelProps> = ({
           const metadata = await documentService.listDocumentMetadata();
 
           trackerTypes.forEach(tracker => {
-            if (!tracker.modes.fullDocument) return;
+            if (!tracker.modes?.fullDocument) return;
 
             const frontmatterKey = `${tracker.type}Status`;
             const fullDocCount = metadata.filter((doc: any) => {
@@ -138,9 +135,6 @@ export const TrackerBottomPanel: React.FC<BottomPanelProps> = ({
         setItemCounts(counts);
       } catch (error) {
         console.error('[TrackerBottomPanel] Failed to load item counts:', error);
-        if (mounted) {
-          setIsLoading(false);
-        }
       }
     }
 
@@ -374,11 +368,6 @@ export const TrackerBottomPanel: React.FC<BottomPanelProps> = ({
                   workspacePath={workspacePath}
                   onClose={() => toggleSettings()}
                 />
-              ) : isLoading ? (
-                <div className="flex flex-col items-center justify-center h-full gap-3 text-[var(--nim-text-muted)]">
-                  <div className="w-6 h-6 border-2 border-[var(--nim-border)] border-t-[var(--nim-primary)] rounded-full animate-spin" />
-                  <span className="text-sm">Loading tracker items...</span>
-                </div>
               ) : activePanel ? (
                 <TrackerTable
                   key={refreshKey}

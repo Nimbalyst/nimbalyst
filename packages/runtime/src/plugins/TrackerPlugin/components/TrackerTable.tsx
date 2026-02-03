@@ -247,22 +247,28 @@ export function TrackerTable({
     let unsubscribeMetadata: (() => void) | null = null;
     let isSubscribed = true;
 
+    let retryTimeout: ReturnType<typeof setTimeout> | null = null;
+
     async function loadItems() {
       try {
         // console.log('[TrackerTable] loadItems called, typeFilter:', typeFilter);
         const documentService = (window as any).documentService;
 
         if (!documentService) {
-          console.log('[TrackerTable] Document service not available yet');
-          setError('Document service not available');
-          setLoading(false);
+          console.log('[TrackerTable] Document service not available yet, retrying...');
+          // Retry after a short delay - don't set loading to false
+          if (isSubscribed) {
+            retryTimeout = setTimeout(loadItems, 500);
+          }
           return;
         }
 
         if (!documentService.listTrackerItems) {
-          console.log('[TrackerTable] listTrackerItems not available');
-          setError('Tracker items not supported');
-          setLoading(false);
+          console.log('[TrackerTable] listTrackerItems not available, retrying...');
+          // Retry after a short delay - don't set loading to false
+          if (isSubscribed) {
+            retryTimeout = setTimeout(loadItems, 500);
+          }
           return;
         }
 
@@ -378,6 +384,9 @@ export function TrackerTable({
 
     return () => {
       isSubscribed = false;
+      if (retryTimeout) {
+        clearTimeout(retryTimeout);
+      }
       if (unsubscribeTracker) {
         unsubscribeTracker();
       }
@@ -530,7 +539,8 @@ export function TrackerTable({
       : <span className="sort-indicator active opacity-100 text-[var(--nim-primary)] text-sm">&#8593;</span>;
   };
 
-  if (loading) {
+  // Only show full-page loading spinner if we have no items yet
+  if (loading && items.length === 0) {
     return (
       <div className="tracker-table-loading flex flex-col items-center justify-center py-[60px] px-5 text-[var(--nim-text-muted)] text-center gap-3">
         <div className="spinner w-8 h-8 border-[3px] border-[var(--nim-border)] border-t-[var(--nim-primary)] rounded-full animate-spin"></div>
@@ -742,7 +752,13 @@ export function TrackerTable({
           {sortedItems.length === 0 ? (
             <tr>
               <td colSpan={7} className="tracker-table-empty-cell !p-0 !border-none">
-                {activeTypeFilter !== 'all' ? (
+                {loading ? (
+                  // Still loading - show loading indicator instead of empty state
+                  <div className="tracker-table-loading flex items-center justify-center gap-3 py-6 px-6 text-[var(--nim-text-muted)]">
+                    <div className="w-5 h-5 border-2 border-[var(--nim-border)] border-t-[var(--nim-primary)] rounded-full animate-spin"></div>
+                    <span className="text-sm">Loading...</span>
+                  </div>
+                ) : activeTypeFilter !== 'all' ? (
                   // Type-specific educational empty state - horizontal layout
                   (() => {
                     const typeInfo = getTypeDescription(activeTypeFilter as TrackerItemType);
