@@ -59,6 +59,21 @@ export interface DiffTreeState {
 }
 
 /**
+ * File scope mode for the Files Edited sidebar in agent mode.
+ * - current-changes: Show only files with uncommitted git changes (default)
+ * - session-files: Show all files touched in this session/workstream
+ * - all-changes: Show all uncommitted files in the repository
+ */
+export type AgentFileScopeMode = 'current-changes' | 'session-files' | 'all-changes';
+
+/**
+ * Agent mode settings for the Files Edited sidebar.
+ */
+export interface AgentModeSettings {
+  fileScopeMode: AgentFileScopeMode;
+}
+
+/**
  * Complete project state for persistence.
  */
 export interface ProjectState {
@@ -67,6 +82,7 @@ export interface ProjectState {
   layout: PanelLayout;
   fileTree: FileTreeState;
   diffTree: DiffTreeState;
+  agentMode: AgentModeSettings;
   lastOpenedFile: string | null;
   recentFiles: string[];
 }
@@ -96,6 +112,9 @@ const defaultProjectState: ProjectState = {
   },
   diffTree: {
     groupByDirectory: false,
+  },
+  agentMode: {
+    fileScopeMode: 'current-changes', // Default to showing uncommitted session edits
   },
   lastOpenedFile: null,
   recentFiles: [],
@@ -204,6 +223,14 @@ export const recentFilesAtom = atom((get) => get(projectStateAtom).recentFiles);
  */
 export const diffTreeGroupByDirectoryAtom = atom(
   (get) => get(projectStateAtom).diffTree.groupByDirectory
+);
+
+/**
+ * Agent mode file scope mode setting.
+ * Workspace-level setting that persists across all sessions.
+ */
+export const agentFileScopeModeAtom = atom(
+  (get) => get(projectStateAtom).agentMode.fileScopeMode
 );
 
 // === Setter atoms (update slice + trigger persist) ===
@@ -340,6 +367,31 @@ export const setDiffTreeGroupByDirectoryAtom = atom(
 );
 
 /**
+ * Set agent file scope mode.
+ * Also persists to workspace state via IPC.
+ */
+export const setAgentFileScopeModeAtom = atom(
+  null,
+  (get, set, payload: { fileScopeMode: AgentFileScopeMode; workspacePath: string }) => {
+    const { fileScopeMode, workspacePath } = payload;
+    const state = get(projectStateAtom);
+    const newState = {
+      ...state,
+      agentMode: { ...state.agentMode, fileScopeMode },
+    };
+    set(projectStateAtom, newState);
+    // Persist to workspace state via IPC
+    if (workspacePath && typeof window !== 'undefined' && window.electronAPI) {
+      window.electronAPI.invoke('workspace:update-state', workspacePath, {
+        agentFileScopeMode: fileScopeMode,
+      }).catch((err: unknown) => {
+        console.error('[projectState] Failed to persist agentFileScopeMode:', err);
+      });
+    }
+  }
+);
+
+/**
  * Add a file to recent files.
  */
 export const addRecentFileAtom = atom(null, (get, set, filePath: string) => {
@@ -402,6 +454,7 @@ export const loadProjectStateAtom = atom(
       layout: { ...defaultProjectState.layout, ...state.layout },
       fileTree: { ...defaultProjectState.fileTree, ...state.fileTree },
       diffTree: { ...defaultProjectState.diffTree, ...state.diffTree },
+      agentMode: { ...defaultProjectState.agentMode, ...state.agentMode },
       contexts: { ...defaultProjectState.contexts, ...state.contexts },
     };
     set(projectStateAtom, merged);

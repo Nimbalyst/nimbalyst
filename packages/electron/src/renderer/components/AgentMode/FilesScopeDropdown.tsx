@@ -10,13 +10,13 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { MaterialSymbol } from '@nimbalyst/runtime';
-import type { FileScopeMode } from '../../store/atoms/workstreamState';
+import type { AgentFileScopeMode } from '../../store/atoms/projectState';
 
 interface FilesScopeDropdownProps {
   /** Current file scope mode */
-  fileScopeMode: FileScopeMode;
+  fileScopeMode: AgentFileScopeMode;
   /** Callback when file scope mode changes */
-  onFileScopeModeChange: (mode: FileScopeMode) => void;
+  onFileScopeModeChange: (mode: AgentFileScopeMode) => void;
   /** Whether this workstream has multiple sessions */
   hasMultipleSessions: boolean;
   /** The currently active/open session ID */
@@ -38,7 +38,7 @@ interface FilesScopeDropdownProps {
 }
 
 /** Label mapping for scope modes */
-const SCOPE_MODE_LABELS: Record<FileScopeMode, { title: string; description: string }> = {
+const SCOPE_MODE_LABELS: Record<AgentFileScopeMode, { title: string; description: string }> = {
   'current-changes': {
     title: 'Uncommitted Session Edits',
     description: 'Files edited by AI with uncommitted changes'
@@ -55,7 +55,7 @@ const SCOPE_MODE_LABELS: Record<FileScopeMode, { title: string; description: str
 
 /** Get context subtitle based on current state */
 function getScopeContext(
-  mode: FileScopeMode,
+  mode: AgentFileScopeMode,
   isWorktree: boolean,
   sessionCount: number,
   filterToCurrentSession: boolean,
@@ -183,7 +183,7 @@ export const FilesScopeDropdown: React.FC<FilesScopeDropdownProps> = ({
             <div className="files-scope-dropdown__section-header text-[10px] font-semibold text-[var(--nim-text-faint)] uppercase tracking-wide mb-1.5">
               Show Files
             </div>
-            {(Object.entries(SCOPE_MODE_LABELS) as [FileScopeMode, { title: string; description: string }][]).map(
+            {(Object.entries(SCOPE_MODE_LABELS) as [AgentFileScopeMode, { title: string; description: string }][]).map(
               ([mode, { title, description }]) => {
                 // Customize description for all-changes mode when in a worktree
                 const displayDescription = mode === 'all-changes' && isWorktree && worktreeName

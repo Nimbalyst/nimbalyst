@@ -16,7 +16,13 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { FileEditsSidebar as FileEditsSidebarComponent, MaterialSymbol } from '@nimbalyst/runtime';
 import type { FileEditSummary } from '@nimbalyst/runtime';
-import { diffTreeGroupByDirectoryAtom, setDiffTreeGroupByDirectoryAtom } from '../../store/atoms/projectState';
+import {
+  diffTreeGroupByDirectoryAtom,
+  setDiffTreeGroupByDirectoryAtom,
+  agentFileScopeModeAtom,
+  setAgentFileScopeModeAtom,
+  type AgentFileScopeMode,
+} from '../../store/atoms/projectState';
 import { workstreamSessionsAtom } from '../../store/atoms/sessions';
 import {
   hasExternalEditorAtom,
@@ -28,9 +34,6 @@ import {
 import {
   workstreamStagedFilesAtom,
   setWorkstreamStagedFilesAtom,
-  workstreamFileScopeModeAtom,
-  setWorkstreamFileScopeModeAtom,
-  type FileScopeMode,
 } from '../../store/atoms/workstreamState';
 import {
   sessionFileEditsAtom,
@@ -132,9 +135,9 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
   const stagedFiles = useMemo(() => new Set(stagedFilesArr), [stagedFilesArr]);
   const setStagedFilesAction = useSetAtom(setWorkstreamStagedFilesAtom);
 
-  // File scope mode for filtering what files to show
-  const fileScopeMode = useAtomValue(workstreamFileScopeModeAtom(workstreamId));
-  const setFileScopeModeAction = useSetAtom(setWorkstreamFileScopeModeAtom);
+  // File scope mode for filtering what files to show (workspace-level setting)
+  const fileScopeMode = useAtomValue(agentFileScopeModeAtom);
+  const setFileScopeModeAction = useSetAtom(setAgentFileScopeModeAtom);
 
   // File action atoms
   const hasExternalEditor = useAtomValue(hasExternalEditorAtom);
@@ -149,9 +152,9 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
     }
   }, [workspacePath, setDiffTreeGroupByDirectory]);
 
-  const setFileScopeMode = useCallback((mode: FileScopeMode) => {
-    setFileScopeModeAction({ workstreamId, mode });
-  }, [workstreamId, setFileScopeModeAction]);
+  const setFileScopeMode = useCallback((mode: AgentFileScopeMode) => {
+    setFileScopeModeAction({ fileScopeMode: mode, workspacePath });
+  }, [workspacePath, setFileScopeModeAction]);
 
   // Helper to check if a file has uncommitted git changes
   const isFileUncommitted = useCallback((filePath: string): boolean => {

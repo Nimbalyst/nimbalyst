@@ -93,7 +93,7 @@ import {
 import { setStorageBackend } from '@nimbalyst/runtime';
 import { store } from '@nimbalyst/runtime/store';
 import { extensionPanelAIContextAtom } from './store/atoms/extensionPanels';
-import { setDiffTreeGroupByDirectoryAtom } from './store/atoms/projectState';
+import { setDiffTreeGroupByDirectoryAtom, setAgentFileScopeModeAtom } from './store/atoms/projectState';
 import { toggleSessionHistoryCollapsedAtom } from './store/atoms/agentMode';
 import { setDeveloperFeatureSettingsAtom } from './store/atoms/appSettings';
 import {
@@ -313,6 +313,7 @@ export default function App() {
 
   // Diff tree grouping state - setter for hydration from workspace state
   const setDiffTreeGroupByDirectory = useSetAtom(setDiffTreeGroupByDirectoryAtom);
+  const setAgentFileScopeMode = useSetAtom(setAgentFileScopeModeAtom);
 
   // Check if a fullscreen extension panel is active (hides other content modes)
   const activeFullscreenPanel = activeExtensionPanel ? getPanelById(activeExtensionPanel) : null;
@@ -398,11 +399,15 @@ export default function App() {
         if (state?.diffTreeGroupByDirectory !== undefined) {
           setDiffTreeGroupByDirectory({ groupByDirectory: state.diffTreeGroupByDirectory, workspacePath });
         }
+        // Hydrate agent file scope mode into Jotai atom
+        if (state?.agentFileScopeMode !== undefined) {
+          setAgentFileScopeMode({ fileScopeMode: state.agentFileScopeMode, workspacePath });
+        }
       })
       .catch(error => {
         console.error('[App] Failed to load workspace state:', error);
       });
-  }, [workspacePath, setDiffTreeGroupByDirectory]);
+  }, [workspacePath, setDiffTreeGroupByDirectory, setAgentFileScopeMode]);
 
   // Save active mode when it changes
   useEffect(() => {

@@ -277,6 +277,14 @@ export type { OnboardingConfig } from '../../shared/types/workspace';
  * The IPC handlers in WorkspaceHandlers.ts route get/save operations to the correct field
  * based on the window's mode (workspace vs agentic-coding).
  */
+/**
+ * File scope mode for the Files Edited sidebar in agent mode.
+ * - current-changes: Show only files with uncommitted git changes (default)
+ * - session-files: Show all files touched in this session/workstream
+ * - all-changes: Show all uncommitted files in the repository
+ */
+export type AgentFileScopeMode = 'current-changes' | 'session-files' | 'all-changes';
+
 export interface WorkspaceState {
   workspacePath: string;
   windowState?: SessionWindow;
@@ -313,6 +321,8 @@ export interface WorkspaceState {
   diffTreeGroupByDirectory?: boolean;
   // Workstream state (per-workstream UI state for agent mode)
   workstreamStates?: Record<string, unknown>;
+  // Agent mode file scope mode (shared across all sessions in workspace)
+  agentFileScopeMode?: AgentFileScopeMode;
   lastUpdated: number;
 }
 
@@ -823,6 +833,18 @@ export function getDiffTreeGroupByDirectory(workspacePath: string): boolean {
 export function saveDiffTreeGroupByDirectory(workspacePath: string, groupByDirectory: boolean): void {
   updateWorkspaceState(workspacePath, workspace => {
     workspace.diffTreeGroupByDirectory = groupByDirectory;
+  });
+}
+
+// Agent File Scope Mode Management
+export function getAgentFileScopeMode(workspacePath: string): AgentFileScopeMode {
+  // Default to 'current-changes' (Uncommitted Session Edits)
+  return getWorkspaceState(workspacePath).agentFileScopeMode ?? 'current-changes';
+}
+
+export function saveAgentFileScopeMode(workspacePath: string, mode: AgentFileScopeMode): void {
+  updateWorkspaceState(workspacePath, workspace => {
+    workspace.agentFileScopeMode = mode;
   });
 }
 
