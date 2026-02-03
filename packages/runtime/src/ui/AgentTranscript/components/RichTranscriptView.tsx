@@ -13,6 +13,7 @@ import { EditToolResultCard } from './EditToolResultCard';
 import { TranscriptSearchBar } from './TranscriptSearchBar';
 import { formatToolDisplayName } from '../utils/toolNameFormatter';
 import { getCustomToolWidget } from './CustomToolWidgets';
+import { setSessionIsAtBottom, getSessionIsAtBottom } from '../../../store/atoms/transcriptScroll';
 
 // Inject RichTranscriptView styles once (for animations, scrollbar, and complex selectors)
 const injectRichTranscriptStyles = () => {
@@ -538,7 +539,6 @@ export const RichTranscriptView = React.forwardRef<
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const vlistRef = useRef<VListHandle>(null);
   const messageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
-  const wasAtBottomRef = useRef(true);
 
   const settings = propsSettings || defaultSettings;
 
@@ -553,6 +553,7 @@ export const RichTranscriptView = React.forwardRef<
     }
     return false;
   }, [messages, sessionStatus, isProcessing]);
+
 
   // Compute effective target index for prompt additions display
   // Use the stored messageIndex if valid, otherwise find the last user message
@@ -620,35 +621,33 @@ export const RichTranscriptView = React.forwardRef<
 
   // Auto-scroll to bottom when messages change (if user was at bottom)
   useEffect(() => {
+    // Read scroll state from atom - this is stable across renders
+    const wasAtBottom = getSessionIsAtBottom(sessionId);
+
     // Use double RAF to ensure DOM is fully rendered before scrolling
-    // This matches the session load effect and prevents wasAtBottomRef from being
-    // incorrectly set to false during content height changes
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         if (vlistRef.current) {
-          // Re-check if we're at bottom after layout settles
-          // This handles cases where wasAtBottomRef was incorrectly set during content updates
           const scrollSize = vlistRef.current.scrollSize;
           const viewportSize = vlistRef.current.viewportSize;
           const scrollOffset = vlistRef.current.scrollOffset;
           const distanceFromBottom = scrollSize - scrollOffset - viewportSize;
-          const isAtBottom = distanceFromBottom < 100; // Slightly more lenient threshold
+          const isCurrentlyAtBottom = distanceFromBottom < 100;
 
-          // During active streaming/processing, always auto-scroll to prevent the
-          // content from drifting away as new content is added. The wasAtBottomRef
-          // can incorrectly become false during rapid content updates.
-          const shouldAutoScroll = isWaitingForResponse || isAtBottom || wasAtBottomRef.current;
+          // Auto-scroll if user was at bottom (from atom state) or is currently at bottom
+          const shouldAutoScroll = wasAtBottom || isCurrentlyAtBottom;
 
           if (shouldAutoScroll) {
             // Account for the "Thinking..." indicator which is an extra item after messages
             const lastIndex = isWaitingForResponse ? messages.length : messages.length - 1;
             vlistRef.current.scrollToIndex(lastIndex, { align: 'end' });
-            wasAtBottomRef.current = true; // Reset the ref since we scrolled to bottom
+            // Update atom to reflect we're now at bottom
+            setSessionIsAtBottom(sessionId, true);
           }
         }
       });
     });
-  }, [messages, isWaitingForResponse]);
+  }, [messages, isWaitingForResponse, sessionId]);
 
 
   // Listen for routed search events from the menu system
@@ -1089,12 +1088,14 @@ export const RichTranscriptView = React.forwardRef<
                   className="rich-transcript-vlist !h-full !w-full"
                   style={{ height: '100%' }}
                   onScroll={(offset) => {
-                    // Track if we're at the bottom for auto-scroll
+                    // Track if we're at the bottom for auto-scroll using per-session atom
                     if (vlistRef.current) {
                       const scrollSize = vlistRef.current.scrollSize;
                       const viewportSize = vlistRef.current.viewportSize;
                       const distanceFromBottom = scrollSize - offset - viewportSize;
-                      wasAtBottomRef.current = distanceFromBottom < 50;
+                      const isAtBottom = distanceFromBottom < 50;
+                      // Update the per-session atom - this persists across component remounts
+                      setSessionIsAtBottom(sessionId, isAtBottom);
                       setShowScrollButton(distanceFromBottom > viewportSize);
                     }
                   }}
