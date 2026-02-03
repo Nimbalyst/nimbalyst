@@ -10,7 +10,8 @@ import React from 'react';
 export interface DocumentHeaderComponentProps {
   filePath: string;
   fileName: string;
-  content: string;
+  /** Get fresh content from the editor. Call this when you need the current content. */
+  getContent: () => string;
   onContentChange?: (newContent: string) => void;
   editor?: any; // Lexical editor instance
 }

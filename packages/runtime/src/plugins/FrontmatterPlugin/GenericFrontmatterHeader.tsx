@@ -5,7 +5,7 @@
  * by specialized providers (like TrackerDocumentHeader).
  */
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import type { DocumentHeaderComponentProps } from '../TrackerPlugin/documentHeader/DocumentHeaderRegistry';
 import {
   extractFrontmatterWithError,
@@ -16,32 +16,35 @@ import {
 import { MaterialSymbol } from '../../ui/icons/MaterialSymbol';
 
 export const GenericFrontmatterHeader: React.FC<DocumentHeaderComponentProps> = ({
-  content,
+  getContent,
   onContentChange,
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [localFields, setLocalFields] = useState<InferredField[]>([]);
+  const [parseError, setParseError] = useState<string | null>(null);
+  const [hasFrontmatter, setHasFrontmatter] = useState(false);
 
-  // Parse frontmatter into fields (with error handling)
-  const parseResult = useMemo(() => extractFrontmatterWithError(content), [content]);
-  const fields = useMemo(
-    () => (parseResult.data ? parseFields(parseResult.data) : []),
-    [parseResult.data]
-  );
-
-  // Sync local state with parsed fields
+  // Parse frontmatter on mount
   useEffect(() => {
+    const content = getContent();
+    const parseResult = extractFrontmatterWithError(content);
+    setHasFrontmatter(parseResult.hasFrontmatter);
+    setParseError(parseResult.success ? null : (parseResult.error || null));
+    const fields = parseResult.data ? parseFields(parseResult.data) : [];
     setLocalFields(fields);
-  }, [fields]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleFieldChange = useCallback(
     (fieldKey: string, newValue: unknown) => {
       if (!onContentChange) return;
 
-      const updatedContent = updateFieldInFrontmatter(content, fieldKey, newValue);
+      // Get fresh content and update
+      const currentContent = getContent();
+      const updatedContent = updateFieldInFrontmatter(currentContent, fieldKey, newValue);
       onContentChange(updatedContent);
     },
-    [content, onContentChange]
+    [getContent, onContentChange]
   );
 
   const renderTagsField = useCallback(
@@ -273,14 +276,14 @@ export const GenericFrontmatterHeader: React.FC<DocumentHeaderComponentProps> = 
   );
 
   // Show error banner if frontmatter exists but failed to parse
-  if (parseResult.hasFrontmatter && !parseResult.success) {
+  if (hasFrontmatter && parseError) {
     return (
       <div className="frontmatter-header frontmatter-header-error bg-[var(--nim-bg-secondary)] p-3 shadow-sm relative z-[1]">
         <div className="frontmatter-error-banner flex items-start gap-3 px-3 py-2 bg-red-500/10 border border-red-500/30 rounded-md text-[var(--nim-text)]">
           <MaterialSymbol icon="error" size={20} className="text-red-500 shrink-0" />
           <div className="frontmatter-error-content flex flex-col gap-1 min-w-0">
             <span className="frontmatter-error-title font-semibold text-[13px] text-red-500">Invalid Frontmatter</span>
-            <span className="frontmatter-error-message text-xs text-[var(--nim-text-muted)] font-mono whitespace-pre-wrap break-words">{parseResult.error}</span>
+            <span className="frontmatter-error-message text-xs text-[var(--nim-text-muted)] font-mono whitespace-pre-wrap break-words">{parseError}</span>
           </div>
         </div>
       </div>

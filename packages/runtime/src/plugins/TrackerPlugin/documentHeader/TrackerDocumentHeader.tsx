@@ -18,15 +18,16 @@ import type { DocumentHeaderComponentProps } from './DocumentHeaderRegistry';
 export const TrackerDocumentHeader: React.FC<DocumentHeaderComponentProps> = ({
   filePath,
   fileName,
-  content,
+  getContent,
   onContentChange,
   editor,
 }) => {
   const [trackerData, setTrackerData] = useState<{ type: string; data: Record<string, any> } | null>(null);
   const [dataModel, setDataModel] = useState<TrackerDataModel | null>(null);
 
-  // Detect tracker from frontmatter
+  // Detect tracker from frontmatter on mount
   useEffect(() => {
+    const content = getContent();
     const detected = detectTrackerFromFrontmatter(content);
     setTrackerData(detected);
 
@@ -46,16 +47,19 @@ export const TrackerDocumentHeader: React.FC<DocumentHeaderComponentProps> = ({
     } else {
       setDataModel(null);
     }
-  }, [content]);
+    // Only run on mount - we don't need to re-detect when content changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  // Handle field changes
+  // Handle field changes - get fresh content at the moment of change
   const handleChange = useCallback((updates: Record<string, any>) => {
     if (!trackerData || !onContentChange) return;
 
-    // Update content with new frontmatter
-    const updatedContent = updateTrackerInFrontmatter(content, trackerData.type, updates);
+    // Get fresh content and update with new frontmatter
+    const currentContent = getContent();
+    const updatedContent = updateTrackerInFrontmatter(currentContent, trackerData.type, updates);
     onContentChange(updatedContent);
-  }, [content, trackerData, onContentChange]);
+  }, [getContent, trackerData, onContentChange]);
 
   // Don't render if no tracker data or no data model
   if (!trackerData || !dataModel) {

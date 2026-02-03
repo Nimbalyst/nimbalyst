@@ -27,36 +27,26 @@ export const DocumentHeaderContainer: React.FC<DocumentHeaderContainerProps> = (
   onContentChange,
   editor,
 }) => {
-  // Get current content from the editor
-  // We get fresh content on mount and when providers need it
-  const [content, setLocalContent] = React.useState(() => getContent());
-
-  // Update content when getContent reference changes (editor content changed externally)
-  // This is primarily for initial render - the content prop changes rarely
-  React.useEffect(() => {
-    const newContent = getContent();
-    setLocalContent(newContent);
-  }, [getContent]);
+  // Track content only for provider matching - components get fresh content via getContent
+  const [contentForMatching, setContentForMatching] = React.useState(() => getContent());
 
   // Re-query content after a short delay to handle the case where the editor
   // hasn't provided its getContent function yet on first render.
-  // This is needed because getContent is a stable callback that reads from a ref,
-  // and the ref may not be set when DocumentHeaderContainer first mounts.
   React.useEffect(() => {
     const timer = setTimeout(() => {
       const newContent = getContent();
       if (newContent) {
-        setLocalContent(prev => prev !== newContent ? newContent : prev);
+        setContentForMatching(prev => prev !== newContent ? newContent : prev);
       }
     }, 50);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Get matching providers
+  // Get matching providers based on content structure (frontmatter detection)
   const providers = useMemo(() => {
-    return DocumentHeaderRegistry.getProviders(content);
-  }, [content]);
+    return DocumentHeaderRegistry.getProviders(contentForMatching);
+  }, [contentForMatching]);
 
   // Expose onContentChange handler globally for commands to access
   useEffect(() => {
@@ -75,7 +65,7 @@ export const DocumentHeaderContainer: React.FC<DocumentHeaderContainerProps> = (
   const componentProps: DocumentHeaderComponentProps = {
     filePath,
     fileName,
-    content,
+    getContent,
     onContentChange,
     editor,
   };
