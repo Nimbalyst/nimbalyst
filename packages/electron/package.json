@@ -225,10 +225,6 @@
           "**/src/**"
         ]
       },
-      {
-        "from": "../../node_modules/@nimbalyst/runtime/dist/themes",
-        "to": "node_modules/@nimbalyst/runtime/dist/themes"
-      }
     ],
     "afterSign": "build/afterSign.js",
     "afterPack": "build/afterPack.js",
