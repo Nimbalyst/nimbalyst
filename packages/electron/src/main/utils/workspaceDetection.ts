@@ -4,6 +4,20 @@ import { app } from 'electron';
 import { getRecentItems } from './store';
 
 /**
+ * NOTE: isPathInWorkspace and getRelativeWorkspacePath have similar implementations
+ * in shared/pathUtils.ts. The duplication exists because:
+ *
+ * - This file (workspaceDetection.ts): Uses Node.js path.normalize() and path.sep
+ *   for platform-native path handling in the main process.
+ *
+ * - shared/pathUtils.ts: Uses forward slashes universally for cross-process
+ *   compatibility (renderer process doesn't have path.sep).
+ *
+ * Both implementations have the same logic but different path normalization.
+ * Use workspaceDetection.ts for main process, shared/pathUtils.ts for renderer.
+ */
+
+/**
  * Check if a file path is inside a workspace directory.
  * This properly handles path boundaries to avoid false positives like
  * '/foo/bar_worktrees/...' being considered inside '/foo/bar'.

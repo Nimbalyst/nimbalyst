@@ -34,6 +34,7 @@ import { ArchiveWorktreeDialog } from './ArchiveWorktreeDialog';
 import { SquashCommitModal } from './SquashCommitModal';
 import { BadGitStateDialog } from './BadGitStateDialog';
 import { HelpTooltip } from '../../help';
+import { refreshWorktreeChangedFiles } from '../../store/listeners/fileStateListeners';
 
 // Types for worktree mode (copied from DiffModeView)
 interface WorktreeChangedFile {
@@ -1288,12 +1289,20 @@ Please proceed with this strategy.`;
                   <span className="text-[11px] font-semibold text-[var(--nim-text)]">Commit & Sync</span>
                   <button
                     onClick={async () => {
-                      // Refresh worktree data
-                      await Promise.all([
-                        loadWorktreeChangedFiles(),
-                        loadWorktreeCommits(),
-                        loadWorktreeStatus(),
-                      ]);
+                      try {
+                        // Refresh worktree data (local state for GitOperationsPanel)
+                        await Promise.all([
+                          loadWorktreeChangedFiles(),
+                          loadWorktreeCommits(),
+                          loadWorktreeStatus(),
+                        ]);
+                        // Also refresh the central atom so FilesEditedSidebar updates
+                        if (worktreeId && worktreePath) {
+                          await refreshWorktreeChangedFiles(worktreeId, worktreePath);
+                        }
+                      } catch (error) {
+                        console.error('[GitOperationsPanel] Failed to refresh worktree data:', error);
+                      }
                     }}
                     className="flex items-center gap-1 px-2 py-1 text-[10px] text-[var(--nim-primary)] hover:bg-[var(--nim-bg-hover)] rounded transition-colors"
                     title="Refresh worktree status and uncommitted files"

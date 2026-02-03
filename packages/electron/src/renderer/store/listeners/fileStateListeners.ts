@@ -362,12 +362,15 @@ async function pruneCommittedFilesFromStaging(sessionId: string, workspacePath: 
 
 /**
  * Refresh worktree changed files.
+ * Exported so components can trigger a refresh (e.g., refresh button in GitOperationsPanel).
  */
-async function refreshWorktreeChangedFiles(worktreeId: string, worktreePath: string): Promise<void> {
+export async function refreshWorktreeChangedFiles(worktreeId: string, worktreePath: string): Promise<void> {
   try {
     const result = await window.electronAPI.invoke('worktree:get-changed-files', worktreePath);
     if (result.success && result.files) {
       store.set(worktreeChangedFilesAtom(worktreeId), result.files);
+    } else if (!result.success) {
+      console.error('[fileStateListeners] Failed to get worktree changed files:', worktreeId, result.error);
     }
   } catch (error) {
     console.error('[fileStateListeners] Failed to refresh worktree changes:', worktreeId, error);

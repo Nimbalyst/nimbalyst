@@ -16,6 +16,7 @@ import { AnalyticsService } from '../services/analytics/AnalyticsService';
 import { getTerminalSessionManager } from '../services/TerminalSessionManager';
 import { getTerminalsByWorktreeId, deleteTerminalInstance } from '../utils/terminalStore';
 import type { WorktreeCreateResult } from '../../shared/ipc/types';
+import { gitRefWatcher } from '../file/GitRefWatcher';
 
 const logger = log.scope('WorktreeHandlers');
 
@@ -1283,6 +1284,32 @@ export function registerWorktreeHandlers(): void {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to stage/unstage all files',
+      };
+    }
+  });
+
+  /**
+   * Start watching a worktree for git changes
+   * This enables real-time git status updates for files added/modified via command line
+   *
+   * @param worktreePath - Path to the worktree directory
+   */
+  ipcMain.handle('worktree:start-watching', async (_event, worktreePath: string) => {
+    try {
+      if (!worktreePath) {
+        throw new Error('worktreePath is required');
+      }
+
+      logger.info('Starting git ref watcher for worktree', { worktreePath });
+
+      await gitRefWatcher.start(worktreePath);
+
+      return { success: true };
+    } catch (error) {
+      logger.error('Failed to start watching worktree:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to start watching worktree',
       };
     }
   });

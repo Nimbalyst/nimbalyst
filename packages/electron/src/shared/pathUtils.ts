@@ -1,6 +1,19 @@
 /**
  * Path utilities shared between main and renderer processes.
  * These functions work in both Node.js and browser environments.
+ *
+ * NOTE: Similar functions exist in main/utils/workspaceDetection.ts but use
+ * Node.js path module with path.sep for platform-specific behavior.
+ * This file uses forward slashes universally for cross-process compatibility
+ * (renderer process doesn't have access to Node's path module with sep).
+ *
+ * Use this file for:
+ * - Renderer process code
+ * - Code that needs to work in both main and renderer
+ *
+ * Use workspaceDetection.ts for:
+ * - Main process code that needs platform-native path handling
+ * - File system operations that require path.sep
  */
 
 /**

@@ -1,7 +1,8 @@
 import { execSync } from 'child_process';
-import { existsSync, readdirSync, statSync } from 'fs';
+import { existsSync, statSync } from 'fs';
 import { join, resolve } from 'path';
 import { isGitAvailable } from '../utils/gitUtils';
+import { getAllFilesInDirectory } from '../utils/fileUtils';
 
 export interface FileGitStatus {
   filePath: string;
@@ -295,8 +296,8 @@ export class GitStatusService {
             try {
               const stats = statSync(absolutePath);
               if (stats.isDirectory()) {
-                // Expand directory to get all files inside
-                const filesInDir = this.getAllFilesInDirectory(absolutePath);
+                // Expand directory to get all files inside (returns absolute paths)
+                const filesInDir = getAllFilesInDirectory(absolutePath);
                 for (const filePath of filesInDir) {
                   uncommittedFiles.push(filePath);
                   cacheResult[filePath] = {
@@ -617,8 +618,8 @@ export class GitStatusService {
             try {
               const stats = statSync(absolutePath);
               if (stats.isDirectory()) {
-                // Expand directory to get all files inside
-                const filesInDir = this.getAllFilesInDirectory(absolutePath);
+                // Expand directory to get all files inside (returns absolute paths)
+                const filesInDir = getAllFilesInDirectory(absolutePath);
                 for (const filePath of filesInDir) {
                   result[filePath] = {
                     filePath,
@@ -706,34 +707,4 @@ export class GitStatusService {
     }
   }
 
-  /**
-   * Recursively get all files within a directory.
-   * Used to expand untracked directories into individual file paths.
-   *
-   * @param dirPath Absolute path to the directory
-   * @returns Array of absolute file paths within the directory
-   */
-  private getAllFilesInDirectory(dirPath: string): string[] {
-    const files: string[] = [];
-
-    try {
-      const entries = readdirSync(dirPath, { withFileTypes: true });
-
-      for (const entry of entries) {
-        const fullPath = join(dirPath, entry.name);
-
-        if (entry.isDirectory()) {
-          // Recursively get files from subdirectories
-          files.push(...this.getAllFilesInDirectory(fullPath));
-        } else if (entry.isFile()) {
-          files.push(fullPath);
-        }
-      }
-    } catch (error) {
-      // If we can't read the directory, skip it
-      console.error('[GitStatusService] Error reading directory:', dirPath, error);
-    }
-
-    return files;
-  }
 }

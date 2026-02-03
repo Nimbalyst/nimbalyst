@@ -143,20 +143,13 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
     );
   };
 
-  // Helper function to strip the final <NIMBALYST_SYSTEM_MESSAGE> tag from content
-  // This removes only the LAST occurrence, so if user types it in their message it won't break
+  // Helper function to strip all <NIMBALYST_SYSTEM_MESSAGE> blocks from content
+  // Uses regex to handle multiline content and any whitespace before the tags
   const stripSystemMessage = (content: string): string => {
-    // Find the last occurrence of <NIMBALYST_SYSTEM_MESSAGE>
-    const lastIndex = content.lastIndexOf('<NIMBALYST_SYSTEM_MESSAGE>');
-    if (lastIndex === -1) return content;
-
-    // Find the closing tag after this occurrence
-    const closingTag = '</NIMBALYST_SYSTEM_MESSAGE>';
-    const closingIndex = content.indexOf(closingTag, lastIndex);
-    if (closingIndex === -1) return content;
-
-    // Remove the system message block
-    return content.substring(0, lastIndex) + content.substring(closingIndex + closingTag.length);
+    // Remove all <NIMBALYST_SYSTEM_MESSAGE>...</NIMBALYST_SYSTEM_MESSAGE> blocks
+    // Including any whitespace before the tag (e.g., newlines)
+    // [\s\S]*? matches any character including newlines (non-greedy)
+    return content.replace(/\s*<NIMBALYST_SYSTEM_MESSAGE>[\s\S]*?<\/NIMBALYST_SYSTEM_MESSAGE>/g, '').trim();
   };
 
   // Render text content
