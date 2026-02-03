@@ -29,6 +29,7 @@ MAIN_WORKTREE=$(git worktree list | head -1 | awk '{print $1}'); CURRENT_DIR=$(g
   - Sub-agent 4: Type Safety and DRY Violations analysis
   - Sub-agent 5: Potential Bugs and Cleanup analysis
   - Sub-agent 6: Analytics Events and CLAUDE.md Documentation analysis
+  - Sub-agent 7: Jotai Patterns Compliance analysis (see docs/JOTAI.md for patterns)
 
    Each sub-agent should receive the diff content and return findings for its specific area. Wait for all sub-agents to complete, then synthesize their findings into the final report.
 
@@ -140,6 +141,25 @@ If analytics should be added, suggest specific events following the naming conve
 
 [Note "Not needed for this change" if analytics are not applicable, or list suggested events]
 
+### Jotai Patterns Compliance
+[Evaluate whether Jotai atom usage follows the patterns documented in docs/JOTAI.md:]
+
+**Check for these issues:**
+- **Independent atoms for session state**: Session-related atoms (mode, model, title, etc.) MUST be derived atoms that read from `sessionStoreAtom`, not independent atoms with their own storage
+- **Async atoms causing Suspense**: Derived atoms that combine other atoms MUST be synchronous - no `async` keyword or `await import()` inside atom definitions
+- **Dynamic imports in atoms**: NEVER use dynamic imports inside atoms - use static imports at the top of the file
+- **Component-level IPC subscriptions**: Components should read from atoms, NOT subscribe to IPC events directly (see Centralized IPC Listener Architecture)
+- **Lifting state up anti-pattern**: Editor content should NOT be stored in parent components - editors own their state
+- **Missing atom families**: Per-session or per-entity state should use atomFamily, not plain atoms with maps/objects
+
+**Good patterns to verify:**
+- Atom families for session-keyed state
+- Derived read-write atoms for session metadata
+- Centralized IPC listeners updating atoms
+- Synchronous derived atoms for combining state
+
+[Note "No Jotai changes" if no atom code was modified, "Patterns followed correctly" if compliant, or list specific violations]
+
 ### CLAUDE.md Documentation
 [Evaluate whether CLAUDE.md should be updated to document new patterns, conventions, or workflows introduced by this change.]
 
@@ -196,6 +216,7 @@ If analytics should be added, suggest specific events following the naming conve
 | DRY Violations | ✅ None Found / ⚠️ See Below | [Count if any] |
 | Potential Bugs | ✅ None Found / ⚠️ See Below | [Count if any] |
 | Junk/Cleanup | ✅ Clean / ⚠️ See Below | [Items if any] |
+| Jotai Patterns | ✅ No Changes / ✅ Compliant / ⚠️ Violations | [See docs/JOTAI.md] |
 | Analytics Events | ✅ Not Needed / ✅ Already Added / ⚠️ Should Add | [See docs/ANALYTICS_GUIDE.md] |
 | CLAUDE.md Updates | ✅ Not Needed / ⚠️ Should Update | [See criteria below] |
 
