@@ -1,13 +1,53 @@
-import React, { useState, useCallback, useEffect, useRef, memo } from 'react';
+import React, { useState, useCallback, useEffect, useRef, memo, useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import { MaterialSymbol, ProviderIcon } from '@nimbalyst/runtime';
-import { sessionProcessingAtom, sessionUnreadAtom, sessionPendingPromptAtom } from '../../store';
+import { sessionProcessingAtom, sessionUnreadAtom, sessionPendingPromptAtom, groupSessionStatusAtom } from '../../store';
 import { getRelativeTimeString } from '../../utils/dateFormatting';
 
 /**
  * Unified component for rendering expandable session groups in the session history.
  * Supports both workstreams (sessions with children) and worktrees (git worktrees with sessions).
  */
+
+/**
+ * Status indicator for workstream/worktree group headers.
+ * Shows processing/pending/unread status aggregated across all child sessions.
+ * Displays when the tree is collapsed so users can see status at a glance.
+ */
+const WorkstreamGroupStatusIndicator: React.FC<{ sessionIds: string[] }> = memo(({ sessionIds }) => {
+  // Create a stable key for the atom family by sorting and serializing session IDs
+  const sessionIdsKey = useMemo(() => JSON.stringify([...sessionIds].sort()), [sessionIds]);
+
+  // Subscribe to the aggregated status atom - this properly reacts to state changes
+  const { hasProcessing, hasPendingPrompt, hasUnread } = useAtomValue(groupSessionStatusAtom(sessionIdsKey));
+
+  // Priority: processing > pending prompt > unread (same as GroupCardStatus)
+  if (hasProcessing) {
+    return (
+      <div className="workstream-group-status-indicator processing flex items-center justify-center text-[var(--nim-primary)]" title="Processing">
+        <MaterialSymbol icon="progress_activity" size={12} className="animate-spin" />
+      </div>
+    );
+  }
+
+  if (hasPendingPrompt) {
+    return (
+      <div className="workstream-group-status-indicator pending flex items-center justify-center text-[var(--nim-warning)] animate-pulse" title="Waiting for your response">
+        <MaterialSymbol icon="help" size={12} />
+      </div>
+    );
+  }
+
+  if (hasUnread) {
+    return (
+      <div className="workstream-group-status-indicator unread flex items-center justify-center text-[var(--nim-primary)]" title="Unread response">
+        <MaterialSymbol icon="circle" size={6} fill />
+      </div>
+    );
+  }
+
+  return null;
+});
 
 interface SessionItem {
   id: string;
@@ -375,6 +415,10 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
               )}
               {displayIsArchived && !isRenamingWorktree && (
                 <span className="workstream-group-badge archived text-[0.5625rem] px-1.5 py-[0.0625rem] rounded-[0.625rem] font-medium bg-[rgba(156,163,175,0.15)] text-[var(--nim-text-faint)]">archived</span>
+              )}
+              {/* Status indicator for child sessions (processing/pending/unread) */}
+              {!isRenamingWorktree && (
+                <WorkstreamGroupStatusIndicator sessionIds={sessions.map(s => s.id)} />
               )}
             </div>
             <div className="workstream-group-row-secondary flex items-center gap-1.5 flex-wrap">
