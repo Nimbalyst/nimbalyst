@@ -49,7 +49,7 @@ planStatus:
   planId: plan-[unique-identifier]
   title: [Plan Title]
   status: draft
-  planType: [feature|bug-fix|refactor|system-design|research|initiative|improvement]
+  planType: feature
   priority: medium
   owner: [username]
   stakeholders: []
@@ -59,6 +59,26 @@ planStatus:
   progress: 0
 ---
 \`\`\`
+
+### Status Values
+
+- \`draft\`: Initial planning phase
+- \`ready-for-development\`: Approved and ready to start
+- \`in-development\`: Currently being worked on
+- \`in-review\`: Implementation complete, pending review
+- \`completed\`: Successfully completed
+- \`rejected\`: Plan has been rejected or cancelled
+- \`blocked\`: Progress blocked by dependencies
+
+### Plan Types
+
+- \`feature\`: New feature development
+- \`bug-fix\`: Bug fix or issue resolution
+- \`refactor\`: Code refactoring/improvement
+- \`system-design\`: Architecture/design work
+- \`research\`: Research/investigation task
+- \`initiative\`: Large multi-feature effort
+- \`improvement\`: Enhancement to existing feature
 
 ## Iterative Planning Workflow
 
@@ -98,6 +118,14 @@ With optional size:
 \`\`\`markdown
 ![Description](screenshot.png){mockup:path/to/mockup.mockup.html}{800x600}
 \`\`\`
+
+## Best Practices
+
+- Keep plans focused on a single objective
+- Update progress regularly as work proceeds
+- Use tags to categorize related plans
+- Add stakeholders who need visibility
+- Set realistic due dates when applicable
 </PLAN_MODE_ACTIVATED>
 </NIMBALYST_SYSTEM_MESSAGE>`;
 }
