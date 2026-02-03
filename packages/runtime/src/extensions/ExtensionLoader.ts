@@ -108,12 +108,18 @@ function validateManifest(
   }
 
   // Check if extension only contributes a Claude plugin (no runtime code)
+  // All other contribution types require runtime JavaScript code
   const contributions = m.contributions as Record<string, unknown> | undefined;
   const onlyClaudePlugin = contributions?.claudePlugin &&
     !contributions?.customEditors &&
     !contributions?.aiTools &&
     !contributions?.slashCommands &&
     !contributions?.nodes &&
+    !contributions?.transformers &&
+    !contributions?.hostComponents &&
+    !contributions?.panels &&
+    !contributions?.settingsPanel &&
+    !contributions?.newFileMenu &&
     !contributions?.configuration;
 
   // Main is required unless the extension only contributes a Claude plugin
@@ -527,20 +533,47 @@ export class ExtensionLoader {
 
     const platformService = getExtensionPlatformService();
 
+    // Check if extension only contributes a Claude plugin (no runtime code)
+    // All other contribution types require runtime JavaScript code
+    const contributions = manifest.contributions;
+    const isClaudePluginOnly = contributions?.claudePlugin &&
+      !contributions?.customEditors &&
+      !contributions?.aiTools &&
+      !contributions?.slashCommands &&
+      !contributions?.nodes &&
+      !contributions?.transformers &&
+      !contributions?.hostComponents &&
+      !contributions?.panels &&
+      !contributions?.settingsPanel &&
+      !contributions?.newFileMenu &&
+      !contributions?.configuration &&
+      !manifest.main;
+
     try {
-      // Load the main module
-      const mainPath = platformService.resolvePath(extensionPath, manifest.main);
-      const exists = await platformService.fileExists(mainPath);
+      let module: ExtensionModule;
 
-      if (!exists) {
-        return {
-          success: false,
-          error: `Main module not found at ${mainPath}`,
-          manifestPath: extensionPath,
-        };
+      if (isClaudePluginOnly) {
+        // Claude plugin-only extensions don't have runtime code
+        // Create a stub module for them
+        console.info(
+          `[ExtensionLoader] Extension ${manifest.id} is Claude plugin-only, skipping module load`
+        );
+        module = {};
+      } else {
+        // Load the main module
+        const mainPath = platformService.resolvePath(extensionPath, manifest.main);
+        const exists = await platformService.fileExists(mainPath);
+
+        if (!exists) {
+          return {
+            success: false,
+            error: `Main module not found at ${mainPath}`,
+            manifestPath: extensionPath,
+          };
+        }
+
+        module = await platformService.loadModule(mainPath);
       }
-
-      const module = await platformService.loadModule(mainPath);
 
       // Load and inject styles if specified
       let disposeStyles: (() => void) | undefined;

@@ -140,13 +140,24 @@ export function initializeTheme(): void {
 async function applyThemeToDOM(theme: ThemeId): Promise<void> {
   const root = document.documentElement;
 
+  // Resolve 'system' and 'auto' to actual theme based on OS preference
+  // These are special values that follow the OS dark/light mode setting
+  // Note: The ThemeId type doesn't include these, but they can be stored in preferences
+  let resolvedTheme: string = theme;
+  const themeStr = theme as string;
+  if (themeStr === 'system' || themeStr === 'auto') {
+    // Use matchMedia to check OS preference in the renderer
+    const prefersDark = window.matchMedia?.('(prefers-color-scheme: dark)')?.matches ?? false;
+    resolvedTheme = prefersDark ? 'dark' : 'light';
+  }
+
   // Determine if this is a built-in theme
   const builtInThemes = ['light', 'dark', 'crystal-dark'];
-  const isBuiltIn = builtInThemes.includes(theme);
+  const isBuiltIn = builtInThemes.includes(resolvedTheme);
 
   // Set appropriate class for dark mode detection (used by Tailwind, icon filters, etc.)
   let isDark = false;
-  if (theme === 'dark' || theme === 'crystal-dark') {
+  if (resolvedTheme === 'dark' || resolvedTheme === 'crystal-dark') {
     isDark = true;
   }
 
@@ -158,7 +169,7 @@ async function applyThemeToDOM(theme: ThemeId): Promise<void> {
     const targetClass = isDark ? 'dark-theme' : 'light-theme';
     root.classList.remove('dark-theme', 'light-theme', 'crystal-dark-theme');
     root.classList.add(targetClass);
-    root.setAttribute('data-theme', theme);
+    root.setAttribute('data-theme', resolvedTheme);
 
     // Apply colors as inline styles (single source of truth)
     for (const [key, cssVar] of Object.entries(CSS_VAR_MAP)) {
@@ -171,14 +182,14 @@ async function applyThemeToDOM(theme: ThemeId): Promise<void> {
   } else {
     // Custom theme - fetch and apply colors
     try {
-      const themeData = await window.electronAPI.invoke('theme:get', theme);
+      const themeData = await window.electronAPI.invoke('theme:get', resolvedTheme);
       isDark = themeData.isDark;
 
       // Set base class based on isDark (for Tailwind dark mode, icon filters, etc.)
       const baseClass = isDark ? 'dark-theme' : 'light-theme';
       root.classList.remove('dark-theme', 'light-theme', 'crystal-dark-theme');
       root.classList.add(baseClass);
-      root.setAttribute('data-theme', theme);
+      root.setAttribute('data-theme', resolvedTheme);
 
       // Get base colors for fallbacks
       const baseColors = getBaseThemeColors(isDark);
@@ -196,9 +207,9 @@ async function applyThemeToDOM(theme: ThemeId): Promise<void> {
         }
       }
 
-      console.info(`[useTheme] Applied custom theme: ${themeData.name} (${theme})`);
+      console.info(`[useTheme] Applied custom theme: ${themeData.name} (${resolvedTheme})`);
     } catch (error) {
-      console.error('[useTheme] Failed to load theme:', theme, error);
+      console.error('[useTheme] Failed to load theme:', resolvedTheme, error);
       // Fallback to light theme
       root.classList.remove('dark-theme', 'light-theme', 'crystal-dark-theme');
       root.classList.add('light-theme');
@@ -228,8 +239,16 @@ function clearCustomThemeVariables(): void {
 
 /**
  * Get the effective base theme for a theme ID.
+ * Handles 'system' and 'auto' by checking OS preference.
  */
 function getEffectiveBaseTheme(themeId: string): ConfigTheme {
+  // Handle 'system' and 'auto' by checking OS preference
+  const themeStr = themeId as string;
+  if (themeStr === 'system' || themeStr === 'auto') {
+    const prefersDark = window.matchMedia?.('(prefers-color-scheme: dark)')?.matches ?? false;
+    return prefersDark ? 'dark' : 'light';
+  }
+
   // All standalone themes are either light or dark based
   const darkThemes = ['dark', 'crystal-dark', 'solarized-dark', 'monokai'];
 
