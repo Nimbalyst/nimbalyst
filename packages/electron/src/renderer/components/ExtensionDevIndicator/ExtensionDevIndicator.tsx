@@ -3,6 +3,7 @@ import { useAtomValue } from 'jotai';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import { ExtensionErrorConsole } from './ExtensionErrorConsole';
 import { extensionDevToolsEnabledAtom } from '../../store/atoms/appSettings';
+import { HelpTooltip } from '../../help';
 
 /**
  * Format a timestamp as a relative time string (e.g., "5m ago", "2h ago")
@@ -262,18 +263,20 @@ export const ExtensionDevIndicator: React.FC<ExtensionDevIndicatorProps> = ({
         }}
       />
     <div className="extension-dev-indicator-container relative">
-      <button
-        ref={buttonRef}
-        className="extension-dev-indicator nav-button relative w-9 h-9 flex items-center justify-center bg-transparent border-none rounded-md cursor-pointer transition-all duration-150 p-0 hover:bg-nim-tertiary active:scale-95 focus-visible:outline-2 focus-visible:outline-[var(--nim-primary)] focus-visible:outline-offset-2 text-nim-muted hover:text-nim"
-        onClick={() => setMenuOpen(!menuOpen)}
-        title="Extension Development Mode"
-        aria-label="Extension Development Mode"
-        aria-expanded={menuOpen}
-        aria-haspopup="menu"
-      >
-        <MaterialSymbol icon="developer_mode" size={20} />
-        <span className="extension-dev-indicator-dot absolute bottom-1 right-1 w-2 h-2 rounded-full border-2 border-[var(--nim-bg-secondary)] bg-purple-500" />
-      </button>
+      <HelpTooltip testId="gutter-extension-dev-button">
+        <button
+          ref={buttonRef}
+          className="extension-dev-indicator nav-button relative w-9 h-9 flex items-center justify-center bg-transparent border-none rounded-md cursor-pointer transition-all duration-150 p-0 hover:bg-nim-tertiary active:scale-95 focus-visible:outline-2 focus-visible:outline-[var(--nim-primary)] focus-visible:outline-offset-2 text-nim-muted hover:text-nim"
+          onClick={() => setMenuOpen(!menuOpen)}
+          aria-label="Extension Development Mode"
+          aria-expanded={menuOpen}
+          aria-haspopup="menu"
+          data-testid="gutter-extension-dev-button"
+        >
+          <MaterialSymbol icon="developer_mode" size={20} />
+          <span className="extension-dev-indicator-dot absolute bottom-1 right-1 w-2 h-2 rounded-full border-2 border-[var(--nim-bg-secondary)] bg-purple-500" />
+        </button>
+      </HelpTooltip>
 
       {menuOpen && (
         <div

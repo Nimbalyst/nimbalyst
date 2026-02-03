@@ -33,6 +33,7 @@ import { UntrackedFilesConflictDialog } from './UntrackedFilesConflictDialog';
 import { ArchiveWorktreeDialog } from './ArchiveWorktreeDialog';
 import { SquashCommitModal } from './SquashCommitModal';
 import { BadGitStateDialog } from './BadGitStateDialog';
+import { HelpTooltip } from '../../help';
 
 // Types for worktree mode (copied from DiffModeView)
 interface WorktreeChangedFile {
@@ -1211,28 +1212,30 @@ Please proceed with this strategy.`;
             {!worktreeId && (
               <div className="flex flex-col gap-2 pt-3">
                 {/* Commit mode toggle and header */}
-                <div className="flex items-center justify-between" data-testid="git-commit-mode-toggle">
+                <div className="flex items-center justify-between">
                   <span className="text-[11px] font-semibold text-[var(--nim-text)]">Commit</span>
-                  <div className="flex rounded-[3px] overflow-hidden border border-[var(--nim-border)]">
-                    <button
-                      className={`px-1.5 py-0.5 border-none bg-transparent text-[var(--nim-text-muted)] text-[10px] font-medium cursor-pointer transition-all duration-150 border-r border-[var(--nim-border)] ${
-                        commitMode === 'manual' ? 'bg-[var(--nim-bg-tertiary)] text-[var(--nim-text)]' : 'hover:bg-[var(--nim-bg-tertiary)] hover:opacity-60'
-                      }`}
-                      onClick={() => setCommitMode('manual')}
-                      title="Manual commit message"
-                    >
-                      Manual
-                    </button>
-                    <button
-                      className={`px-1.5 py-0.5 border-none bg-transparent text-[var(--nim-text-muted)] text-[10px] font-medium cursor-pointer transition-all duration-150 ${
-                        commitMode === 'smart' ? 'bg-[var(--nim-bg-tertiary)] text-[var(--nim-text)]' : 'hover:bg-[var(--nim-bg-tertiary)] hover:opacity-60'
-                      }`}
-                      onClick={() => setCommitMode('smart')}
-                      title="AI-assisted commit"
-                    >
-                      Smart
-                    </button>
-                  </div>
+                  <HelpTooltip testId="git-commit-mode-toggle">
+                    <div className="flex rounded-[3px] overflow-hidden border border-[var(--nim-border)]" data-testid="git-commit-mode-toggle">
+                      <button
+                        className={`px-1.5 py-0.5 border-none bg-transparent text-[var(--nim-text-muted)] text-[10px] font-medium cursor-pointer transition-all duration-150 border-r border-[var(--nim-border)] ${
+                          commitMode === 'manual' ? 'bg-[var(--nim-bg-tertiary)] text-[var(--nim-text)]' : 'hover:bg-[var(--nim-bg-tertiary)] hover:opacity-60'
+                        }`}
+                        onClick={() => setCommitMode('manual')}
+                        aria-label="Manual commit message"
+                      >
+                        Manual
+                      </button>
+                      <button
+                        className={`px-1.5 py-0.5 border-none bg-transparent text-[var(--nim-text-muted)] text-[10px] font-medium cursor-pointer transition-all duration-150 ${
+                          commitMode === 'smart' ? 'bg-[var(--nim-bg-tertiary)] text-[var(--nim-text)]' : 'hover:bg-[var(--nim-bg-tertiary)] hover:opacity-60'
+                        }`}
+                        onClick={() => setCommitMode('smart')}
+                        aria-label="AI-assisted commit"
+                      >
+                        Smart
+                      </button>
+                    </div>
+                  </HelpTooltip>
                 </div>
 
                 {/* Manual commit workflow */}
@@ -1261,15 +1264,17 @@ Please proceed with this strategy.`;
                     <p className="text-xs text-[var(--nim-text-muted)] m-0 leading-normal">
                       Let AI analyze your changes and propose a commit message.
                     </p>
-                    <button
-                      className="w-full p-2 border-none rounded text-white text-xs font-semibold cursor-pointer flex items-center justify-center gap-1.5 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed bg-gradient-to-br from-[var(--nim-primary)] to-[var(--nim-primary-hover)]"
-                      onClick={handleSmartCommit}
-                      disabled={!hasChanges}
-                      data-testid="git-operations-commit-with-ai-button"
-                    >
-                      <MaterialSymbol icon="auto_awesome" size={16} />
-                      Commit with AI
-                    </button>
+                    <HelpTooltip testId="git-operations-commit-with-ai-button">
+                      <button
+                        className="w-full p-2 border-none rounded text-white text-xs font-semibold cursor-pointer flex items-center justify-center gap-1.5 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed bg-gradient-to-br from-[var(--nim-primary)] to-[var(--nim-primary-hover)]"
+                        onClick={handleSmartCommit}
+                        disabled={!hasChanges}
+                        data-testid="git-operations-commit-with-ai-button"
+                      >
+                        <MaterialSymbol icon="auto_awesome" size={16} />
+                        Commit with AI
+                      </button>
+                    </HelpTooltip>
                   </div>
                 )}
               </div>

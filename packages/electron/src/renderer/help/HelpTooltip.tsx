@@ -5,10 +5,63 @@
  * Shows title, description, and keyboard shortcut (if available).
  */
 
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { getHelpContent, type HelpEntry } from './HelpContent';
 import { getShortcutDisplay } from '../../shared/KeyboardShortcuts';
+
+/**
+ * Parse basic markdown in help text.
+ * Supports: **bold**, line breaks (paragraphs), and bullet lists (- or *).
+ * Same implementation as WalkthroughCallout for consistency.
+ */
+function parseMarkdownBody(text: string): React.ReactNode {
+  // Split into paragraphs by double newlines
+  const paragraphs = text.split(/\n\n+/);
+
+  return paragraphs.map((paragraph, pIndex) => {
+    const trimmed = paragraph.trim();
+    if (!trimmed) return null;
+
+    // Check if this paragraph is a bullet list
+    const lines = trimmed.split('\n');
+    const isBulletList = lines.every((line) => /^[-*]\s/.test(line.trim()));
+
+    if (isBulletList) {
+      return (
+        <ul key={pIndex} className="help-tooltip-list list-disc pl-4 my-1.5 space-y-0.5">
+          {lines.map((line, lIndex) => (
+            <li key={lIndex}>{parseBoldText(line.replace(/^[-*]\s*/, '').trim())}</li>
+          ))}
+        </ul>
+      );
+    }
+
+    // Regular paragraph - parse bold and render
+    return (
+      <p key={pIndex} className="help-tooltip-paragraph my-1.5 first:mt-0 last:mb-0">
+        {parseBoldText(trimmed.replace(/\n/g, ' '))}
+      </p>
+    );
+  });
+}
+
+/**
+ * Parse **bold** text within a string.
+ */
+function parseBoldText(text: string): React.ReactNode {
+  const parts = text.split(/(\*\*[^*]+\*\*)/);
+  return parts.map((part, index) => {
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return (
+        <strong key={index} className="font-semibold text-[var(--nim-text)]">
+          {part.slice(2, -2)}
+        </strong>
+      );
+    }
+    return part;
+  });
+}
 
 interface HelpTooltipProps {
   /** The data-testid to look up help content for */
@@ -30,6 +83,7 @@ interface TooltipPosition {
 }
 
 const TOOLTIP_MARGIN = 8;
+const CLICK_COOLDOWN_MS = 5000; // Don't show tooltip for 5 seconds after clicking
 
 function calculatePosition(
   targetRect: DOMRect,
@@ -106,11 +160,15 @@ export function HelpTooltip({
   const targetRef = useRef<HTMLElement | null>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastClickTimeRef = useRef<number>(0);
 
   const helpContent = getHelpContent(testId);
 
   const showTooltip = useCallback(() => {
     if (disabled || !helpContent || !targetRef.current) return;
+
+    // Don't show if we're in the cooldown period after a click
+    if (Date.now() - lastClickTimeRef.current < CLICK_COOLDOWN_MS) return;
 
     const rect = targetRef.current.getBoundingClientRect();
     // Estimate tooltip size (will be refined after render)
@@ -164,6 +222,12 @@ export function HelpTooltip({
     };
   }, []);
 
+  // Parse markdown body
+  const renderedBody = useMemo(
+    () => (helpContent ? parseMarkdownBody(helpContent.body) : null),
+    [helpContent]
+  );
+
   // If no help content, just render children without tooltip
   if (!helpContent) {
     return children;
@@ -188,6 +252,12 @@ export function HelpTooltip({
     onMouseLeave: (e: React.MouseEvent) => {
       handleMouseLeave();
       children.props.onMouseLeave?.(e);
+    },
+    onMouseDown: (e: React.MouseEvent) => {
+      // Hide tooltip immediately on click and start cooldown
+      lastClickTimeRef.current = Date.now();
+      hideTooltip();
+      children.props.onMouseDown?.(e);
     },
     onFocus: (e: React.FocusEvent) => {
       handleMouseEnter();
@@ -219,7 +289,7 @@ export function HelpTooltip({
                 </kbd>
               )}
             </div>
-            <div className="help-tooltip-body text-xs leading-normal text-[var(--nim-text-muted)]">{helpContent.body}</div>
+            <div className="help-tooltip-body text-xs leading-normal text-[var(--nim-text-muted)]">{renderedBody}</div>
           </div>,
           document.body
         )}

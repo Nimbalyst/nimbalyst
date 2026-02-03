@@ -808,6 +808,27 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
                     Show all session edits ({totalSessionFilesCount})
                   </button>
                 )}
+                {onShowAllUncommitted && totalUncommittedCount && totalUncommittedCount > 0 && (
+                  <button
+                    onClick={onShowAllUncommitted}
+                    className="mt-2 text-[var(--nim-primary)] hover:underline cursor-pointer bg-transparent border-none text-sm"
+                  >
+                    Show all uncommitted files ({totalUncommittedCount})
+                  </button>
+                )}
+              </>
+            ) : scopeMode === 'current-changes' ? (
+              // Uncommitted Session Edits mode with no session files at all
+              <>
+                <div>No files edited yet</div>
+                {onShowAllUncommitted && totalUncommittedCount && totalUncommittedCount > 0 && (
+                  <button
+                    onClick={onShowAllUncommitted}
+                    className="mt-2 text-[var(--nim-primary)] hover:underline cursor-pointer bg-transparent border-none text-sm"
+                  >
+                    Show all uncommitted files ({totalUncommittedCount})
+                  </button>
+                )}
               </>
             ) : scopeMode === 'session-files' ? (
               // All Session Edits mode with no files

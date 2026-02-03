@@ -147,7 +147,7 @@ export function ModelSelector({
         ref={buttonRef}
         className="model-selector-button flex items-center gap-1 px-2 py-[3px] rounded-xl text-[11px] font-medium cursor-pointer transition-all duration-200 outline-none whitespace-nowrap max-w-[200px] bg-[var(--nim-bg-secondary)] text-[var(--nim-text-muted)] border border-[var(--nim-border)] hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-primary)]"
         onClick={() => setIsOpen(!isOpen)}
-        title={`Current model: ${getCurrentModelName()}`}
+        aria-label={`Current model: ${getCurrentModelName()}`}
         data-testid="model-picker"
       >
         <span className="model-selector-label overflow-hidden text-ellipsis">{getCurrentModelName()}</span>

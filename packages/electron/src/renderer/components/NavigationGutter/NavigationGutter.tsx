@@ -9,6 +9,7 @@ import { SyncStatusButton } from '../SyncStatusButton/SyncStatusButton';
 import { TrustIndicator } from '../TrustIndicator';
 import { ExtensionDevIndicator } from '../ExtensionDevIndicator';
 import { useExtensionGutterButtons } from '../../extensions/panels/usePanels';
+import { HelpTooltip } from '../../help';
 import { terminalFeatureAvailableAtom } from '../../store/atoms/appSettings';
 import {
   activeTrackerTypeAtom,
@@ -177,76 +178,81 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
     <div className="navigation-gutter w-12 h-screen bg-nim-secondary border-r border-nim flex flex-col items-center py-2 shrink-0">
       {/* Content Mode Switcher - Top Group (Files) */}
       <div className="nav-section nav-content-modes flex flex-col items-center gap-1 w-full px-1.5 py-1">
-        {contentModeButtonsTop.map((button) => (
-          <button
-            key={button.id}
-            className={`nav-button relative w-9 h-9 flex items-center justify-center border-none rounded-md cursor-pointer transition-all duration-150 p-0 active:scale-95 focus-visible:outline-2 focus-visible:outline-[var(--nim-primary)] focus-visible:outline-offset-2 ${contentMode === button.contentMode && !activeExtensionPanel ? 'active bg-nim-primary text-white hover:bg-nim-primary-hover' : 'bg-transparent text-nim-muted hover:bg-nim-tertiary hover:text-nim'}`}
-            onClick={() => {
-              // Clear any active fullscreen extension panel when switching to a content mode
-              onExtensionPanelChange?.(null);
-              if (contentMode === button.contentMode && !activeExtensionPanel) {
-                // Already on this mode - toggle collapse
-                if (button.contentMode === 'files') {
-                  onToggleFilesCollapsed?.();
-                }
-              } else {
-                // Switch modes
-                handleButtonClick(button);
-              }
-            }}
-            title={button.label}
-            aria-label={button.label}
-            aria-pressed={contentMode === button.contentMode && !activeExtensionPanel}
-            data-mode={button.contentMode || button.id}
-            data-testid={`${button.id}-mode-button`}
-          >
-            <MaterialSymbol
-              icon={button.icon}
-              size={20}
-              fill={contentMode === button.contentMode && !activeExtensionPanel}
-            />
-            {button.badge !== undefined && button.badge > 0 && (
-              <span className="nav-badge absolute top-0.5 right-0.5 min-w-4 h-4 px-1 bg-nim-error text-white rounded-full text-[10px] font-semibold flex items-center justify-center leading-none pointer-events-none">{button.badge}</span>
-            )}
-          </button>
-        ))}
+        {contentModeButtonsTop.map((button) => {
+          const testId = `${button.id}-mode-button`;
+          return (
+            <HelpTooltip key={button.id} testId={testId}>
+              <button
+                className={`nav-button relative w-9 h-9 flex items-center justify-center border-none rounded-md cursor-pointer transition-all duration-150 p-0 active:scale-95 focus-visible:outline-2 focus-visible:outline-[var(--nim-primary)] focus-visible:outline-offset-2 ${contentMode === button.contentMode && !activeExtensionPanel ? 'active bg-nim-primary text-white hover:bg-nim-primary-hover' : 'bg-transparent text-nim-muted hover:bg-nim-tertiary hover:text-nim'}`}
+                onClick={() => {
+                  // Clear any active fullscreen extension panel when switching to a content mode
+                  onExtensionPanelChange?.(null);
+                  if (contentMode === button.contentMode && !activeExtensionPanel) {
+                    // Already on this mode - toggle collapse
+                    if (button.contentMode === 'files') {
+                      onToggleFilesCollapsed?.();
+                    }
+                  } else {
+                    // Switch modes
+                    handleButtonClick(button);
+                  }
+                }}
+                aria-label={button.label}
+                aria-pressed={contentMode === button.contentMode && !activeExtensionPanel}
+                data-mode={button.contentMode || button.id}
+                data-testid={testId}
+              >
+                <MaterialSymbol
+                  icon={button.icon}
+                  size={20}
+                  fill={contentMode === button.contentMode && !activeExtensionPanel}
+                />
+                {button.badge !== undefined && button.badge > 0 && (
+                  <span className="nav-badge absolute top-0.5 right-0.5 min-w-4 h-4 px-1 bg-nim-error text-white rounded-full text-[10px] font-semibold flex items-center justify-center leading-none pointer-events-none">{button.badge}</span>
+                )}
+              </button>
+            </HelpTooltip>
+          );
+        })}
       </div>
 
       {/* Content Mode Switcher - Agent Group (Agent) */}
       <div className="nav-section nav-content-modes flex flex-col items-center gap-1 w-full px-1.5 py-1">
-        {contentModeButtonsAgent.map((button) => (
-          <button
-            key={button.id}
-            className={`nav-button relative w-9 h-9 flex items-center justify-center border-none rounded-md cursor-pointer transition-all duration-150 p-0 active:scale-95 focus-visible:outline-2 focus-visible:outline-[var(--nim-primary)] focus-visible:outline-offset-2 ${contentMode === button.contentMode && !activeExtensionPanel ? 'active bg-nim-primary text-white hover:bg-nim-primary-hover' : 'bg-transparent text-nim-muted hover:bg-nim-tertiary hover:text-nim'}`}
-            onClick={() => {
-              // Clear any active fullscreen extension panel when switching to a content mode
-              onExtensionPanelChange?.(null);
-              if (contentMode === button.contentMode && !activeExtensionPanel) {
-                // Already on this mode - toggle collapse
-                if (button.contentMode === 'agent') {
-                  onToggleAgentCollapsed?.();
-                }
-              } else {
-                // Switch modes
-                handleButtonClick(button);
-              }
-            }}
-            title={button.label}
-            aria-label={button.label}
-            aria-pressed={contentMode === button.contentMode && !activeExtensionPanel}
-            data-mode={button.contentMode || button.id}
-            data-testid={`${button.id}-mode-button`}
-          >
-            <MaterialSymbol
-              icon={button.icon}
-              size={20}
-              fill={contentMode === button.contentMode && !activeExtensionPanel}
-            />
-            {button.badge !== undefined && button.badge > 0 && (
-              <span className="nav-badge absolute top-0.5 right-0.5 min-w-4 h-4 px-1 bg-nim-error text-white rounded-full text-[10px] font-semibold flex items-center justify-center leading-none pointer-events-none">{button.badge}</span>
-            )}
-          </button>
-        ))}
+        {contentModeButtonsAgent.map((button) => {
+          const testId = `${button.id}-mode-button`;
+          return (
+            <HelpTooltip key={button.id} testId={testId}>
+              <button
+                className={`nav-button relative w-9 h-9 flex items-center justify-center border-none rounded-md cursor-pointer transition-all duration-150 p-0 active:scale-95 focus-visible:outline-2 focus-visible:outline-[var(--nim-primary)] focus-visible:outline-offset-2 ${contentMode === button.contentMode && !activeExtensionPanel ? 'active bg-nim-primary text-white hover:bg-nim-primary-hover' : 'bg-transparent text-nim-muted hover:bg-nim-tertiary hover:text-nim'}`}
+                onClick={() => {
+                  // Clear any active fullscreen extension panel when switching to a content mode
+                  onExtensionPanelChange?.(null);
+                  if (contentMode === button.contentMode && !activeExtensionPanel) {
+                    // Already on this mode - toggle collapse
+                    if (button.contentMode === 'agent') {
+                      onToggleAgentCollapsed?.();
+                    }
+                  } else {
+                    // Switch modes
+                    handleButtonClick(button);
+                  }
+                }}
+                aria-pressed={contentMode === button.contentMode && !activeExtensionPanel}
+                data-mode={button.contentMode || button.id}
+                data-testid={testId}
+              >
+                <MaterialSymbol
+                  icon={button.icon}
+                  size={20}
+                  fill={contentMode === button.contentMode && !activeExtensionPanel}
+                />
+                {button.badge !== undefined && button.badge > 0 && (
+                  <span className="nav-badge absolute top-0.5 right-0.5 min-w-4 h-4 px-1 bg-nim-error text-white rounded-full text-[10px] font-semibold flex items-center justify-center leading-none pointer-events-none">{button.badge}</span>
+                )}
+              </button>
+            </HelpTooltip>
+          );
+        })}
       </div>
 
       {/* Fullscreen Extension Panels - appear below Agent as additional modes */}
@@ -343,17 +349,18 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
           const isActive = button.id === 'terminal'
             ? terminalPanelVisible
             : button.id === 'tracker' && activeTrackerType !== null;
+          const testId = `${button.id}-panel-button`;
           return (
-            <button
-              key={button.id}
-              className={`nav-button relative w-9 h-9 flex items-center justify-center border-none rounded-md cursor-pointer transition-all duration-150 p-0 active:scale-95 focus-visible:outline-2 focus-visible:outline-[var(--nim-primary)] focus-visible:outline-offset-2 ${isActive ? 'active bg-nim-primary text-white hover:bg-nim-primary-hover' : 'bg-transparent text-nim-muted hover:bg-nim-tertiary hover:text-nim'}`}
-              onClick={() => handleButtonClick(button)}
-              title={button.label}
-              aria-label={button.label}
-              data-testid={`${button.id}-panel-button`}
-            >
-              <MaterialSymbol icon={button.icon} size={20} fill={isActive} />
-            </button>
+            <HelpTooltip key={button.id} testId={testId}>
+              <button
+                className={`nav-button relative w-9 h-9 flex items-center justify-center border-none rounded-md cursor-pointer transition-all duration-150 p-0 active:scale-95 focus-visible:outline-2 focus-visible:outline-[var(--nim-primary)] focus-visible:outline-offset-2 ${isActive ? 'active bg-nim-primary text-white hover:bg-nim-primary-hover' : 'bg-transparent text-nim-muted hover:bg-nim-tertiary hover:text-nim'}`}
+                onClick={() => handleButtonClick(button)}
+                aria-label={button.label}
+                data-testid={testId}
+              >
+                <MaterialSymbol icon={button.icon} size={20} fill={isActive} />
+              </button>
+            </HelpTooltip>
           );
         })}
       </div>
@@ -364,9 +371,7 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
       <div className="nav-section nav-settings flex flex-col items-center gap-1 w-full px-1.5 py-1 mt-auto pt-2 border-t border-nim">
 
         {/* Extension Dev Indicator - Shows when extension dev tools are enabled */}
-        <ExtensionDevIndicator
-          onOpenSettings={onOpenSettings}
-        />
+        <ExtensionDevIndicator onOpenSettings={onOpenSettings} />
 
         {/* Trust Indicator - Shows agent trust status */}
         <TrustIndicator
@@ -386,32 +391,36 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
           <ThemeToggleButton />
         </div>
 
-        <button
-          className="nimbalyst-feedback-button nav-button relative w-9 h-9 flex items-center justify-center bg-transparent border-none rounded-md text-nim-muted cursor-pointer transition-all duration-150 p-0 hover:bg-nim-tertiary hover:text-nim active:scale-95 focus-visible:outline-2 focus-visible:outline-[var(--nim-primary)] focus-visible:outline-offset-2"
-          onClick={() => {
-            console.log('[NavigationGutter] Feedback button clicked');
-            onOpenFeedback?.();
-          }}
-          title={feedbackButton.label}
-          aria-label={feedbackButton.label}
-        >
-          <MaterialSymbol
-            icon={feedbackButton.icon}
-            size={20}
-          />
-        </button>
+        <HelpTooltip testId="gutter-feedback-button">
+          <button
+            className="nimbalyst-feedback-button nav-button relative w-9 h-9 flex items-center justify-center bg-transparent border-none rounded-md text-nim-muted cursor-pointer transition-all duration-150 p-0 hover:bg-nim-tertiary hover:text-nim active:scale-95 focus-visible:outline-2 focus-visible:outline-[var(--nim-primary)] focus-visible:outline-offset-2"
+            onClick={() => {
+              console.log('[NavigationGutter] Feedback button clicked');
+              onOpenFeedback?.();
+            }}
+            aria-label={feedbackButton.label}
+            data-testid="gutter-feedback-button"
+          >
+            <MaterialSymbol
+              icon={feedbackButton.icon}
+              size={20}
+            />
+          </button>
+        </HelpTooltip>
 
-        <button
-          className="nav-button relative w-9 h-9 flex items-center justify-center bg-transparent border-none rounded-md text-nim-muted cursor-pointer transition-all duration-150 p-0 hover:bg-nim-tertiary hover:text-nim active:scale-95 focus-visible:outline-2 focus-visible:outline-[var(--nim-primary)] focus-visible:outline-offset-2"
-          onClick={() => handleButtonClick(settingsButton)}
-          title={settingsButton.label}
-          aria-label={settingsButton.label}
-        >
-          <MaterialSymbol
-            icon={settingsButton.icon}
-            size={20}
-          />
-        </button>
+        <HelpTooltip testId="gutter-settings-button">
+          <button
+            className="nav-button relative w-9 h-9 flex items-center justify-center bg-transparent border-none rounded-md text-nim-muted cursor-pointer transition-all duration-150 p-0 hover:bg-nim-tertiary hover:text-nim active:scale-95 focus-visible:outline-2 focus-visible:outline-[var(--nim-primary)] focus-visible:outline-offset-2"
+            onClick={() => handleButtonClick(settingsButton)}
+            aria-label={settingsButton.label}
+            data-testid="gutter-settings-button"
+          >
+            <MaterialSymbol
+              icon={settingsButton.icon}
+              size={20}
+            />
+          </button>
+        </HelpTooltip>
       </div>
     </div>
   );

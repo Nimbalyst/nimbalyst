@@ -3,6 +3,7 @@ import { MaterialSymbol } from '@nimbalyst/runtime';
 import {
   getAllAvailableThemesAsync,
 } from '../../hooks/useTheme';
+import { HelpTooltip } from '../../help';
 
 type BuiltInTheme = 'light' | 'dark' | 'crystal-dark';
 
@@ -119,17 +120,19 @@ export const ThemeToggleButton: React.FC<ThemeToggleButtonProps> = ({ className 
 
   return (
     <div className="relative">
-      <button
-        ref={buttonRef}
-        className={`theme-toggle-button nav-button relative w-9 h-9 flex items-center justify-center bg-transparent border-none rounded-md text-nim-muted cursor-pointer transition-all duration-150 p-0 hover:bg-nim-tertiary hover:text-nim active:scale-95 focus-visible:outline-2 focus-visible:outline-[var(--nim-primary)] focus-visible:outline-offset-2 ${className}`}
-        onClick={() => setIsMenuOpen(!isMenuOpen)}
-        title="Change theme"
-        aria-label="Change theme"
-        aria-expanded={isMenuOpen}
-        aria-haspopup="menu"
-      >
-        <MaterialSymbol icon="palette" size={20} />
-      </button>
+      <HelpTooltip testId="gutter-theme-button">
+        <button
+          ref={buttonRef}
+          className={`theme-toggle-button nav-button relative w-9 h-9 flex items-center justify-center bg-transparent border-none rounded-md text-nim-muted cursor-pointer transition-all duration-150 p-0 hover:bg-nim-tertiary hover:text-nim active:scale-95 focus-visible:outline-2 focus-visible:outline-[var(--nim-primary)] focus-visible:outline-offset-2 ${className}`}
+          onClick={() => setIsMenuOpen(!isMenuOpen)}
+          aria-label="Change theme"
+          aria-expanded={isMenuOpen}
+          aria-haspopup="menu"
+          data-testid="gutter-theme-button"
+        >
+          <MaterialSymbol icon="palette" size={20} />
+        </button>
+      </HelpTooltip>
 
       {isMenuOpen && (
         <div

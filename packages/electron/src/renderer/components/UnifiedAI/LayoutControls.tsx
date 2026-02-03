@@ -9,6 +9,7 @@
 
 import React from 'react';
 import type { SessionLayoutMode } from '../../store';
+import { HelpTooltip } from '../../help';
 
 // Custom SVG icons for layout modes
 // Each shows a panel with a divider line indicating where the split is
@@ -45,36 +46,38 @@ interface LayoutControlsProps {
 
 export function LayoutControls({ mode, hasTabs, onModeChange }: LayoutControlsProps) {
   return (
-    <div className="layout-controls flex items-center gap-0.5 p-1 bg-nim-tertiary rounded-md" data-testid="layout-controls">
-      <button
-        className={`layout-control-btn with-label flex items-center justify-center gap-1 w-auto h-6 px-2 py-0 border-none rounded cursor-pointer transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed ${mode === 'editor' ? 'active bg-nim-primary text-white hover:bg-nim-primary-hover' : 'bg-transparent text-nim-muted hover:enabled:bg-nim-hover hover:enabled:text-nim'}`}
-        onClick={() => onModeChange('editor')}
-        title="Maximize editor"
-        disabled={!hasTabs}
-        data-testid="layout-maximize-editor"
-      >
-        <span className="layout-label text-[11px] font-medium uppercase tracking-[0.02em]">Files</span>
-        <EditorMaxIcon />
-      </button>
-      <button
-        className={`layout-control-btn flex items-center justify-center w-7 h-6 p-0 border-none rounded cursor-pointer transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed ${mode === 'split' ? 'active bg-nim-primary text-white hover:bg-nim-primary-hover' : 'bg-transparent text-nim-muted hover:enabled:bg-nim-hover hover:enabled:text-nim'}`}
-        onClick={() => onModeChange('split')}
-        title="Split view"
-        disabled={!hasTabs}
-        data-testid="layout-split-view"
-      >
-        <SplitViewIcon />
-      </button>
-      <button
-        className={`layout-control-btn with-label flex items-center justify-center gap-1 w-auto h-6 px-2 py-0 border-none rounded cursor-pointer transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed ${mode === 'transcript' ? 'active bg-nim-primary text-white hover:bg-nim-primary-hover' : 'bg-transparent text-nim-muted hover:enabled:bg-nim-hover hover:enabled:text-nim'}`}
-        onClick={() => onModeChange('transcript')}
-        title="Maximize transcript"
-        data-testid="layout-maximize-transcript"
-      >
-        <TranscriptMaxIcon />
-        <span className="layout-label text-[11px] font-medium uppercase tracking-[0.02em]">Agent</span>
-      </button>
-    </div>
+    <HelpTooltip testId="layout-controls">
+      <div className="layout-controls flex items-center gap-0.5 p-1 bg-nim-tertiary rounded-md" data-testid="layout-controls">
+        <button
+          className={`layout-control-btn with-label flex items-center justify-center gap-1 w-auto h-6 px-2 py-0 border-none rounded cursor-pointer transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed ${mode === 'editor' ? 'active bg-nim-primary text-white hover:bg-nim-primary-hover' : 'bg-transparent text-nim-muted hover:enabled:bg-nim-hover hover:enabled:text-nim'}`}
+          onClick={() => onModeChange('editor')}
+          aria-label="Maximize editor"
+          disabled={!hasTabs}
+          data-testid="layout-maximize-editor"
+        >
+          <span className="layout-label text-[11px] font-medium uppercase tracking-[0.02em]">Files</span>
+          <EditorMaxIcon />
+        </button>
+        <button
+          className={`layout-control-btn flex items-center justify-center w-7 h-6 p-0 border-none rounded cursor-pointer transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed ${mode === 'split' ? 'active bg-nim-primary text-white hover:bg-nim-primary-hover' : 'bg-transparent text-nim-muted hover:enabled:bg-nim-hover hover:enabled:text-nim'}`}
+          onClick={() => onModeChange('split')}
+          aria-label="Split view"
+          disabled={!hasTabs}
+          data-testid="layout-split-view"
+        >
+          <SplitViewIcon />
+        </button>
+        <button
+          className={`layout-control-btn with-label flex items-center justify-center gap-1 w-auto h-6 px-2 py-0 border-none rounded cursor-pointer transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed ${mode === 'transcript' ? 'active bg-nim-primary text-white hover:bg-nim-primary-hover' : 'bg-transparent text-nim-muted hover:enabled:bg-nim-hover hover:enabled:text-nim'}`}
+          onClick={() => onModeChange('transcript')}
+          aria-label="Maximize transcript"
+          data-testid="layout-maximize-transcript"
+        >
+          <TranscriptMaxIcon />
+          <span className="layout-label text-[11px] font-medium uppercase tracking-[0.02em]">Agent</span>
+        </button>
+      </div>
+    </HelpTooltip>
   );
 }
 

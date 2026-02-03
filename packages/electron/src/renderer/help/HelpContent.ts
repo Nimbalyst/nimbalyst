@@ -130,9 +130,9 @@ export const HelpContent: Record<string, HelpEntry> = {
 
 **Files**: Show only the file editor tabs. Available when you open an edited file in an AI Session.
 
-**Split**: Show both transcript and editor stacked vertically. Drag the divider to adjust.,
+**Split**: Show both transcript and editor stacked vertically. Drag the divider to adjust.
 
-**Agent**: Show only the conversation transcript.`
+**Agent**: Show only the conversation transcript.`,
   },
 
   // ============================================================================
@@ -201,6 +201,10 @@ export const HelpContent: Record<string, HelpEntry> = {
     title: 'Commit Modes',
     body: 'Choose how to commit your changes. Manual lets you write your own message. Smart uses AI to analyze changes and propose a commit message.',
   },
+  'git-operations-commit-with-ai-button': {
+    title: 'AI-Assisted Commit',
+    body: 'Have the AI analyze your changes and propose a commit message. The AI will review staged files and create a descriptive commit message based on the changes.',
+  },
 
   // ============================================================================
   // Agent Mode - Model & Context
@@ -245,14 +249,35 @@ export const HelpContent: Record<string, HelpEntry> = {
     title: 'Agent Permissions',
     body: 'Configure which tools the AI agent can use. Control file access, command execution, and more.',
   },
+  'gutter-sync-button': {
+    title: 'Session Sync',
+    body: 'Check sync status for this project and manage sync settings.',
+  },
+  'gutter-extension-dev-button': {
+    title: 'Extension Dev Mode',
+    body: 'Open extension development tools, logs, and rebuild options.',
+  },
   'gutter-theme-button': {
     title: 'Theme',
     body: 'Switch between light and dark themes.',
+  },
+  'gutter-feedback-button': {
+    title: 'Send Feedback',
+    body: 'Share feedback or report issues with the team.',
   },
   'gutter-settings-button': {
     title: 'Settings',
     body: 'Open application settings. Configure AI providers, shortcuts, and preferences.',
     shortcut: KeyboardShortcuts.window.aiModels,
+  },
+  'terminal-panel-button': {
+    title: 'Terminal',
+    body: 'Toggle the terminal panel for running commands.',
+    shortcut: KeyboardShortcuts.view.toggleTerminalPanel,
+  },
+  'tracker-panel-button': {
+    title: 'Trackers',
+    body: 'Open the tracker panel to capture tasks, ideas, and notes.',
   },
 
   // ============================================================================

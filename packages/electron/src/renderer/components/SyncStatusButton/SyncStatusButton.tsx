@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { MaterialSymbol } from '@nimbalyst/runtime';
+import { HelpTooltip } from '../../help';
 
 export interface SyncConfig {
   enabled: boolean;
@@ -240,20 +241,22 @@ export const SyncStatusButton: React.FC<SyncStatusButtonProps> = ({ workspacePat
 
   return (
     <div className="sync-status-button-container relative">
-      <button
-        ref={buttonRef}
-        className={`sync-status-button nav-button relative w-9 h-9 flex items-center justify-center bg-transparent border-none rounded-md cursor-pointer transition-all duration-150 p-0 hover:bg-nim-tertiary active:scale-95 focus-visible:outline-2 focus-visible:outline-[var(--nim-primary)] focus-visible:outline-offset-2 ${getButtonColorClass()}`}
-        onClick={() => setMenuOpen(!menuOpen)}
-        title={getStatusLabel()}
-        aria-label={getStatusLabel()}
-        aria-expanded={menuOpen}
-        aria-haspopup="menu"
-      >
-        <MaterialSymbol icon={getStatusIcon()} size={20} />
-        <span
-          className={`sync-indicator absolute bottom-1 right-1 w-1.5 h-1.5 rounded-full border border-[var(--nim-bg-secondary)] ${getIndicatorColorClass()}`}
-        />
-      </button>
+      <HelpTooltip testId="gutter-sync-button">
+        <button
+          ref={buttonRef}
+          className={`sync-status-button nav-button relative w-9 h-9 flex items-center justify-center bg-transparent border-none rounded-md cursor-pointer transition-all duration-150 p-0 hover:bg-nim-tertiary active:scale-95 focus-visible:outline-2 focus-visible:outline-[var(--nim-primary)] focus-visible:outline-offset-2 ${getButtonColorClass()}`}
+          onClick={() => setMenuOpen(!menuOpen)}
+          aria-label={getStatusLabel()}
+          aria-expanded={menuOpen}
+          aria-haspopup="menu"
+          data-testid="gutter-sync-button"
+        >
+          <MaterialSymbol icon={getStatusIcon()} size={20} />
+          <span
+            className={`sync-indicator absolute bottom-1 right-1 w-1.5 h-1.5 rounded-full border border-[var(--nim-bg-secondary)] ${getIndicatorColorClass()}`}
+          />
+        </button>
+      </HelpTooltip>
 
       {menuOpen && (
         <div

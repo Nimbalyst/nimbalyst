@@ -473,7 +473,7 @@ export function VoiceModeButton({ sessionId, workspacePath, onVoiceActiveChange 
           (isVoiceActive || isConnecting || error) ? 'text-white opacity-100' : 'text-nim-muted opacity-70 hover:opacity-100'
         }`}
         style={{ backgroundColor: getButtonColor() }}
-        title={getButtonTitle()}
+        aria-label={getButtonTitle()}
       >
         <MaterialSymbol
           icon={getButtonIcon()}

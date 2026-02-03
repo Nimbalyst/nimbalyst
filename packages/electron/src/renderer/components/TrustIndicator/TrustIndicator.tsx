@@ -13,6 +13,7 @@ import {
   workspacePermissionsAtomFamily,
   loadWorkspacePermissions,
 } from '../../store/atoms/appSettings';
+import { HelpTooltip } from '../../help';
 
 export interface TrustStatus {
   trustedAt?: number;
@@ -277,20 +278,22 @@ export const TrustIndicator: React.FC<TrustIndicatorProps> = ({
 
   return (
     <div className="trust-indicator-container relative">
-      <button
-        ref={buttonRef}
-        className={`trust-indicator nav-button relative w-9 h-9 flex items-center justify-center bg-transparent border-none rounded-md cursor-pointer transition-all duration-150 p-0 hover:bg-nim-tertiary active:scale-95 focus-visible:outline-2 focus-visible:outline-[var(--nim-primary)] focus-visible:outline-offset-2 ${getStatusClass()} ${getIndicatorColorClass()}`}
-        onClick={() => setMenuOpen(!menuOpen)}
-        title={getStatusLabel()}
-        aria-label={getStatusLabel()}
-        aria-expanded={menuOpen}
-        aria-haspopup="menu"
-      >
-        <MaterialSymbol icon={getStatusIcon()} size={20} />
-        <span
-          className={`trust-indicator-dot absolute bottom-1 right-1 w-2 h-2 rounded-full border-2 border-[var(--nim-bg-secondary)] ${getStatusClass()} ${getDotColorClass()}`}
-        />
-      </button>
+      <HelpTooltip testId="gutter-permissions-button">
+        <button
+          ref={buttonRef}
+          className={`trust-indicator nav-button relative w-9 h-9 flex items-center justify-center bg-transparent border-none rounded-md cursor-pointer transition-all duration-150 p-0 hover:bg-nim-tertiary active:scale-95 focus-visible:outline-2 focus-visible:outline-[var(--nim-primary)] focus-visible:outline-offset-2 ${getStatusClass()} ${getIndicatorColorClass()}`}
+          onClick={() => setMenuOpen(!menuOpen)}
+          aria-label={getStatusLabel()}
+          aria-expanded={menuOpen}
+          aria-haspopup="menu"
+          data-testid="gutter-permissions-button"
+        >
+          <MaterialSymbol icon={getStatusIcon()} size={20} />
+          <span
+            className={`trust-indicator-dot absolute bottom-1 right-1 w-2 h-2 rounded-full border-2 border-[var(--nim-bg-secondary)] ${getStatusClass()} ${getDotColorClass()}`}
+          />
+        </button>
+      </HelpTooltip>
 
       {menuOpen && (
         <div
