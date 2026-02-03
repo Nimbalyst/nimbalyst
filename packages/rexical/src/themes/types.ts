@@ -7,8 +7,10 @@
 
 /**
  * Built-in theme identifiers.
+ * Only 'light' and 'dark' are true built-in themes with hardcoded colors.
+ * Other themes (crystal-dark, solarized-light, etc.) are loaded from files.
  */
-export type BuiltInThemeId = 'light' | 'dark' | 'crystal-dark';
+export type BuiltInThemeId = 'light' | 'dark';
 
 /**
  * Theme identifier.
@@ -189,7 +191,7 @@ export interface ThemeChangeEvent {
  * Type guard to check if a theme ID is a built-in theme.
  */
 export function isBuiltInTheme(id: ThemeId): id is BuiltInThemeId {
-  return id === 'light' || id === 'dark' || id === 'crystal-dark';
+  return id === 'light' || id === 'dark';
 }
 
 /**

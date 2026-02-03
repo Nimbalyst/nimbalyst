@@ -37,15 +37,26 @@ import 'prismjs/themes/prism.css'; // Light theme (default)
 import './prism-dark.css'; // Dark theme overrides
 
 // Theme mapping for automatic light/dark switching
-export const THEME_MAPPING = {
+// Maps known themes to Prism themes, with fallback based on isDark
+export const THEME_MAPPING: Record<string, string> = {
     light: 'github-light',
     dark: 'dark-plus',
     'crystal-dark': 'material-theme-darker',
-} as const;
+};
+
+/** Get the code highlighting theme for a given app theme */
+export function getCodeTheme(theme: string, isDark: boolean): string {
+  // If we have an explicit mapping, use it
+  if (THEME_MAPPING[theme]) {
+    return THEME_MAPPING[theme];
+  }
+  // Otherwise, fall back based on whether it's a dark theme
+  return isDark ? 'dark-plus' : 'github-light';
+}
 
 export default function CodeHighlightPlugin(): null {
   const [editor] = useLexicalComposerContext();
-  const { theme } = useTheme();
+  const { theme, isDark } = useTheme();
 
   useEffect(() => {
     // Register standard code highlighting
@@ -55,7 +66,7 @@ export default function CodeHighlightPlugin(): null {
 
   // Handle theme updates for code nodes
   useEffect(() => {
-    const targetTheme = THEME_MAPPING[theme];
+    const targetTheme = getCodeTheme(theme, isDark);
 
     // Update all existing code nodes
     editor.update(() => {

@@ -11,8 +11,8 @@
 import type { JSX, ReactNode } from 'react';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 
-export type Theme = 'light' | 'dark' | 'crystal-dark';
-export type ThemeConfig = 'light' | 'dark' | 'crystal-dark' | 'auto';
+export type Theme = 'light' | 'dark' | (string & {});
+export type ThemeConfig = 'light' | 'dark' | 'auto' | (string & {});
 
 /**
  * Get the current theme from the DOM's data-theme attribute.

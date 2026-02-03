@@ -30,7 +30,7 @@ import type { DataModelStoreApi } from '../store';
 
 interface DataModelCanvasProps {
   store: DataModelStoreApi;
-  theme: 'light' | 'dark' | 'crystal-dark';
+  theme: string;
   /** When true, hides interactive controls (minimap, zoom, background) for cleaner screenshots */
   screenshotMode?: boolean;
 }

@@ -98,7 +98,7 @@ export interface EditorHost {
   readonly fileName: string;
 
   /** Current theme */
-  readonly theme: 'light' | 'dark' | 'crystal-dark';
+  readonly theme: string;
 
   /** Whether this editor's tab is active */
   readonly isActive: boolean;
@@ -321,7 +321,7 @@ export interface CustomEditorProps {
   initialContent: string;
 
   /** Current theme */
-  theme: 'light' | 'dark' | 'crystal-dark';
+  theme: string;
 
   /** Whether this editor tab is currently active/focused */
   isActive: boolean;

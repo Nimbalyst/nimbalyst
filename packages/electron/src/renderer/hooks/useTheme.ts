@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import type { ConfigTheme } from 'rexical';
 import { themeIdAtom, setThemeAtom, store, type ThemeId } from '@nimbalyst/runtime/store';
-import { getBaseThemeColors, getTheme as getThemeFromRexical, type ExtendedThemeColors } from 'rexical';
+import { getBaseThemeColors, type ExtendedThemeColors } from 'rexical';
 
 /**
  * Map of ExtendedThemeColors keys to CSS variable names.
@@ -252,23 +252,18 @@ async function applyThemeToDOM(theme: ThemeId): Promise<void> {
     resolvedTheme = prefersDark ? 'dark' : 'light';
   }
 
-  // Determine if this is a built-in theme
-  const builtInThemes = ['light', 'dark', 'crystal-dark'];
-  const isBuiltIn = builtInThemes.includes(resolvedTheme);
-
-  // Set appropriate class for dark mode detection (used by Tailwind, icon filters, etc.)
-  let isDark = false;
-  if (resolvedTheme === 'dark' || resolvedTheme === 'crystal-dark') {
-    isDark = true;
-  }
+  // Only 'light' and 'dark' are true built-in themes with hardcoded colors.
+  // All other themes (including crystal-dark) are loaded from theme files.
+  const isBuiltIn = resolvedTheme === 'light' || resolvedTheme === 'dark';
 
   if (isBuiltIn) {
-    // Built-in themes: use getBaseThemeColors to get full color definitions
+    // Built-in themes: use hardcoded color definitions
+    const isDark = resolvedTheme === 'dark';
     const colors = getBaseThemeColors(isDark);
 
     // Set class and data-theme
     const targetClass = isDark ? 'dark-theme' : 'light-theme';
-    root.classList.remove('dark-theme', 'light-theme', 'crystal-dark-theme');
+    root.classList.remove('dark-theme', 'light-theme');
     root.classList.add(targetClass);
     root.setAttribute('data-theme', resolvedTheme);
 
@@ -281,14 +276,14 @@ async function applyThemeToDOM(theme: ThemeId): Promise<void> {
       }
     }
   } else {
-    // Custom theme - fetch and apply colors
+    // File-based theme (crystal-dark, solarized-light, etc.) - fetch and apply colors
     try {
       const themeData = await window.electronAPI.invoke('theme:get', resolvedTheme);
-      isDark = themeData.isDark;
+      const isDark = themeData.isDark;
 
       // Set base class based on isDark (for Tailwind dark mode, icon filters, etc.)
       const baseClass = isDark ? 'dark-theme' : 'light-theme';
-      root.classList.remove('dark-theme', 'light-theme', 'crystal-dark-theme');
+      root.classList.remove('dark-theme', 'light-theme');
       root.classList.add(baseClass);
       root.setAttribute('data-theme', resolvedTheme);
 
@@ -305,11 +300,11 @@ async function applyThemeToDOM(theme: ThemeId): Promise<void> {
         }
       }
 
-      console.info(`[useTheme] Applied custom theme: ${themeData.name} (${resolvedTheme})`);
+      console.info(`[useTheme] Applied theme: ${themeData.name} (${resolvedTheme})`);
     } catch (error) {
       console.error('[useTheme] Failed to load theme:', resolvedTheme, error);
       // Fallback to light theme
-      root.classList.remove('dark-theme', 'light-theme', 'crystal-dark-theme');
+      root.classList.remove('dark-theme', 'light-theme');
       root.classList.add('light-theme');
       root.setAttribute('data-theme', 'light');
       // Apply light theme colors
@@ -338,19 +333,22 @@ function clearCustomThemeVariables(): void {
 /**
  * Get the effective base theme for a theme ID.
  * Handles 'system' and 'auto' by checking OS preference.
+ * For file-based themes, we determine dark/light from the theme metadata.
  */
 function getEffectiveBaseTheme(themeId: string): ConfigTheme {
   // Handle 'system' and 'auto' by checking OS preference
-  const themeStr = themeId as string;
-  if (themeStr === 'system' || themeStr === 'auto') {
+  if (themeId === 'system' || themeId === 'auto') {
     const prefersDark = window.matchMedia?.('(prefers-color-scheme: dark)')?.matches ?? false;
     return prefersDark ? 'dark' : 'light';
   }
 
-  // All standalone themes are either light or dark based
-  const darkThemes = ['dark', 'crystal-dark', 'solarized-dark', 'monokai'];
+  // Built-in themes
+  if (themeId === 'light') return 'light';
+  if (themeId === 'dark') return 'dark';
 
-  if (darkThemes.includes(themeId)) {
+  // For file-based themes, we need to check if they're dark or light.
+  // Common dark theme IDs contain 'dark' in their name.
+  if (themeId.includes('dark')) {
     return 'dark';
   }
 
@@ -369,8 +367,8 @@ function getEffectiveBaseTheme(themeId: string): ConfigTheme {
  * Theme changes from menu are handled by initializeTheme() which runs once.
  *
  * Returns:
- * - theme: The effective theme for components that only understand 'light'|'dark'|'crystal-dark'
- * - themeId: The raw theme ID (may be an extension theme like 'sample-themes:solarized-light')
+ * - theme: The effective base theme ('light' or 'dark') for components that need it
+ * - themeId: The raw theme ID (e.g., 'crystal-dark', 'solarized-light')
  * - setTheme: Function to change the theme
  */
 export function useTheme() {
@@ -429,7 +427,6 @@ export async function getAllAvailableThemesAsync(): Promise<Array<{
     return [
       { id: 'light', name: 'Light', isDark: false },
       { id: 'dark', name: 'Dark', isDark: true },
-      { id: 'crystal-dark', name: 'Crystal Dark', isDark: true },
     ];
   }
 }

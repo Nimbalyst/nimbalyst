@@ -202,7 +202,7 @@ export interface PanelGutterButtonProps {
   /**
    * Current application theme.
    */
-  theme: 'light' | 'dark' | 'crystal-dark';
+  theme: string;
 }
 
 /**
@@ -229,7 +229,7 @@ export interface PanelHost {
   /**
    * Current application theme.
    */
-  readonly theme: 'light' | 'dark' | 'crystal-dark';
+  readonly theme: string;
 
   /**
    * Absolute path to current workspace.
@@ -242,7 +242,7 @@ export interface PanelHost {
    * @param callback Called with new theme when it changes
    * @returns Unsubscribe function
    */
-  onThemeChanged(callback: (theme: 'light' | 'dark' | 'crystal-dark') => void): () => void;
+  onThemeChanged(callback: (theme: string) => void): () => void;
 
   // ============ NAVIGATION ============
 
@@ -537,5 +537,5 @@ export interface SettingsPanelProps {
   /**
    * Current application theme.
    */
-  theme: 'light' | 'dark' | 'crystal-dark';
+  theme: string;
 }

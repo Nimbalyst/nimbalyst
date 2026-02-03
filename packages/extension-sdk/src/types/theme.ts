@@ -112,7 +112,7 @@ export interface Theme {
  * Where the theme came from.
  */
 export type ThemeSource =
-  | { type: 'builtin' }                      // Built-in theme (light, dark, crystal-dark)
+  | { type: 'builtin' }                      // Built-in theme (light, dark)
   | { type: 'user'; installPath: string }    // User-installed theme
   | { type: 'extension'; extensionId: string }; // Theme from extension (deprecated)
 

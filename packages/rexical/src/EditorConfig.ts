@@ -11,7 +11,7 @@ import type { NodeKey } from 'lexical';
  * @deprecated Theme is now controlled at app level via CSS variables.
  * This type is kept for backwards compatibility.
  */
-export type Theme = 'light' | 'dark' | 'crystal-dark' | 'auto';
+export type Theme = 'light' | 'dark' | 'auto' | (string & {});
 
 
 /**

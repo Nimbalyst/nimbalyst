@@ -87,11 +87,11 @@ export function PanelContainer({
 }: PanelContainerProps): JSX.Element {
   // Get the resolved theme (extension themes are resolved to 'light' or 'dark')
   const { theme } = useTheme();
-  const [themeListeners] = useState(() => new Set<(theme: 'light' | 'dark' | 'crystal-dark') => void>());
+  const [themeListeners] = useState(() => new Set<(theme: string) => void>());
   const setExtensionPanelAIContext = useSetAtom(setExtensionPanelAIContextAtom);
 
   // Resolve theme to effective value (never 'auto' at runtime)
-  const resolvedTheme = (theme === 'auto' ? 'light' : theme) as 'light' | 'dark' | 'crystal-dark';
+  const resolvedTheme = (theme === 'auto' ? 'light' : theme) as string;
 
   // Notify theme listeners when theme changes
   useEffect(() => {
@@ -101,7 +101,7 @@ export function PanelContainer({
   }, [resolvedTheme, themeListeners]);
 
   // Create stable theme subscription function
-  const onThemeChange = useCallback((callback: (theme: 'light' | 'dark' | 'crystal-dark') => void) => {
+  const onThemeChange = useCallback((callback: (theme: string) => void) => {
     themeListeners.add(callback);
     return () => {
       themeListeners.delete(callback);

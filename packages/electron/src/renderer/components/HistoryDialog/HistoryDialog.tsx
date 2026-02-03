@@ -15,7 +15,7 @@ interface HistoryDialogProps {
   onClose: () => void;
   filePath: string | null;
   onRestore?: (content: string) => void;
-  theme?: 'light' | 'dark' | 'crystal-dark';
+  theme?: string;
   workspacePath?: string;
   onOpenSessionInChat?: (sessionId: string) => void;
 }

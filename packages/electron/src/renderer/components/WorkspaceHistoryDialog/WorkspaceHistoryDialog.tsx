@@ -19,7 +19,7 @@ interface WorkspaceHistoryDialogProps {
   onClose: () => void;
   workspacePath: string;
   onFileRestored?: () => void;
-  theme?: 'light' | 'dark' | 'crystal-dark';
+  theme?: string;
 }
 
 export function WorkspaceHistoryDialog({

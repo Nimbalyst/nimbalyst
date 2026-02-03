@@ -15,10 +15,10 @@ export interface EditorHostOptions {
   fileName: string;
 
   /** Get current theme value */
-  getTheme: () => 'light' | 'dark' | 'crystal-dark';
+  getTheme: () => string;
 
   /** Subscribe to theme changes */
-  subscribeToThemeChanges: (callback: (theme: 'light' | 'dark' | 'crystal-dark') => void) => () => void;
+  subscribeToThemeChanges: (callback: (theme: string) => void) => () => void;
 
   /** Whether this editor's tab is active */
   isActive: boolean;
@@ -112,7 +112,7 @@ export function createEditorHost(options: EditorHostOptions): EditorHost {
     workspaceId: options.workspaceId,
 
     // ============ THEME CHANGES ============
-    onThemeChanged(callback: (theme: 'light' | 'dark' | 'crystal-dark') => void): () => void {
+    onThemeChanged(callback: (theme: string) => void): () => void {
       return options.subscribeToThemeChanges(callback);
     },
 

@@ -5,7 +5,7 @@ import {
 } from '../../hooks/useTheme';
 import { HelpTooltip } from '../../help';
 
-type BuiltInTheme = 'light' | 'dark' | 'crystal-dark';
+type BuiltInTheme = 'light' | 'dark';
 
 interface ThemeToggleButtonProps {
   className?: string;

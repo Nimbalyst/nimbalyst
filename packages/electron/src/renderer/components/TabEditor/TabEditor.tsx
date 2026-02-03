@@ -282,7 +282,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   const diffClearedCallbackRef = useRef<(() => void) | null>(null); // For EditorHost diff cleared subscription
   const editorHostSaveRequestCallbackRef = useRef<(() => void | Promise<void>) | null>(null); // For EditorHost save request subscription
   const sourceModeChangedCallbackRef = useRef<((isSourceMode: boolean) => void) | null>(null); // For EditorHost source mode subscription
-  const themeChangeCallbackRef = useRef<((theme: 'light' | 'dark' | 'crystal-dark') => void) | null>(null); // For EditorHost theme change subscription
+  const themeChangeCallbackRef = useRef<((theme: string) => void) | null>(null); // For EditorHost theme change subscription
 
   // State for extension-contributed menu items
   const [extensionMenuItems, setExtensionMenuItems] = useState<Array<{ label: string; icon?: string; onClick: () => void }>>([]);
@@ -349,7 +349,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   // Notify custom editors of theme changes (themeRef is updated synchronously above)
   useEffect(() => {
     if (themeChangeCallbackRef.current) {
-      themeChangeCallbackRef.current(theme as 'light' | 'dark' | 'crystal-dark');
+      themeChangeCallbackRef.current(theme);
     }
   }, [theme]);
   useEffect(() => { isActiveRef.current = isActive; }, [isActive]);
@@ -2010,9 +2010,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       filePath,
       fileName,
       // Theme access via function - reads from ref so always current
-      getTheme: () => themeRef.current as 'light' | 'dark' | 'crystal-dark',
+      getTheme: () => themeRef.current,
       // Subscribe to theme changes
-      subscribeToThemeChanges: (callback: (t: 'light' | 'dark' | 'crystal-dark') => void): (() => void) => {
+      subscribeToThemeChanges: (callback: (t: string) => void): (() => void) => {
         themeChangeCallbackRef.current = callback;
         return () => {
           themeChangeCallbackRef.current = null;

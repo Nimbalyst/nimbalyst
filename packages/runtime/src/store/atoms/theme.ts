@@ -15,8 +15,10 @@ import { atom } from 'jotai';
 
 /**
  * Available theme identifiers.
+ * Only 'light' and 'dark' are true built-in themes.
+ * Other themes (crystal-dark, solarized-light, etc.) are loaded from files.
  */
-export type ThemeId = 'light' | 'dark' | 'crystal-dark';
+export type ThemeId = 'light' | 'dark' | (string & {});
 
 /**
  * Theme color values for use in components.
@@ -47,10 +49,11 @@ export interface Theme {
 }
 
 /**
- * Default themes.
- * These can be extended with custom themes in the future.
+ * Built-in themes (light and dark only).
+ * Other themes (crystal-dark, solarized-light, etc.) are loaded from files
+ * and use CSS variables for styling.
  */
-const themes: Record<ThemeId, Theme> = {
+const themes: Record<string, Theme> = {
   light: {
     id: 'light',
     name: 'Light',
@@ -85,23 +88,6 @@ const themes: Record<ThemeId, Theme> = {
       syntaxVariable: '#9cdcfe',
     },
   },
-  'crystal-dark': {
-    id: 'crystal-dark',
-    name: 'Crystal Dark',
-    isDark: true,
-    colors: {
-      background: '#0d1117',
-      foreground: '#c9d1d9',
-      accent: '#58a6ff',
-      border: '#30363d',
-      editorBackground: '#0d1117',
-      editorForeground: '#c9d1d9',
-      syntaxKeyword: '#ff7b72',
-      syntaxString: '#a5d6ff',
-      syntaxComment: '#8b949e',
-      syntaxVariable: '#ffa657',
-    },
-  },
 };
 
 /**
@@ -113,11 +99,16 @@ export const themeIdAtom = atom<ThemeId>('dark');
 /**
  * Derived: full theme object.
  * Use this when you need more than just the theme ID.
- * Falls back to dark theme if the ID is not found (e.g., extension theme).
+ * For file-based themes not in the themes map, returns the appropriate
+ * base theme (dark for themes with 'dark' in their name, light otherwise).
  */
 export const themeAtom = atom((get) => {
   const id = get(themeIdAtom);
-  return themes[id] ?? themes['dark'];
+  if (themes[id]) {
+    return themes[id];
+  }
+  // For file-based themes, use dark or light base based on theme name
+  return id.includes('dark') ? themes['dark'] : themes['light'];
 });
 
 /**

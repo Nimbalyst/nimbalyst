@@ -27,7 +27,7 @@ interface DiffPreviewEditorProps {
   onNavigationStateChange?: (state: DiffNavigationState) => void;
   onNavigatePrevious?: () => void;
   onNavigateNext?: () => void;
-  theme?: 'light' | 'dark' | 'crystal-dark';
+  theme?: string;
 }
 
 export function DiffPreviewEditor({

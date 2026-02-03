@@ -154,7 +154,7 @@ class OffscreenEditorRendererImpl {
     // File change subscribers
     const fileChangeCallbacks: Array<(content: string) => void> = [];
     const saveRequestCallbacks: Array<() => void> = [];
-    const themeChangeCallbacks: Array<(theme: 'light' | 'dark' | 'crystal-dark') => void> = [];
+    const themeChangeCallbacks: Array<(theme: string) => void> = [];
 
     // Dirty state
     let isDirty = false;
@@ -219,7 +219,7 @@ class OffscreenEditorRendererImpl {
         console.log('[OffscreenEditorRenderer] openHistory not implemented for offscreen editors');
       },
 
-      onThemeChanged(callback: (theme: 'light' | 'dark' | 'crystal-dark') => void): () => void {
+      onThemeChanged(callback: (theme: string) => void): () => void {
         themeChangeCallbacks.push(callback);
         return () => {
           const index = themeChangeCallbacks.indexOf(callback);

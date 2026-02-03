@@ -421,7 +421,7 @@ export interface PanelExport {
  */
 export interface SettingsPanelProps {
   storage: ExtensionStorage;
-  theme: 'light' | 'dark' | 'crystal-dark';
+  theme: string;
 }
 
 // Note: CustomEditorComponentProps has been replaced by EditorHostProps from './editorHost'
@@ -803,7 +803,7 @@ export interface PanelHostProps {
 export interface PanelGutterButtonProps {
   isActive: boolean;
   onActivate: () => void;
-  theme: 'light' | 'dark' | 'crystal-dark';
+  theme: string;
 }
 
 /**
@@ -812,12 +812,12 @@ export interface PanelGutterButtonProps {
 export interface PanelHost {
   readonly panelId: string;
   readonly extensionId: string;
-  readonly theme: 'light' | 'dark' | 'crystal-dark';
+  readonly theme: string;
   readonly workspacePath: string;
   readonly isSettingsOpen: boolean;
   readonly ai?: PanelAIContext;
 
-  onThemeChanged(callback: (theme: 'light' | 'dark' | 'crystal-dark') => void): () => void;
+  onThemeChanged(callback: (theme: string) => void): () => void;
   openFile(path: string): void;
   openPanel(panelId: string): void;
   close(): void;

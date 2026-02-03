@@ -14,7 +14,7 @@ import type { PanelHost, PanelAIContext, ExtensionStorage } from '@nimbalyst/run
 export interface PanelHostOptions {
   panelId: string;
   extensionId: string;
-  theme: 'light' | 'dark' | 'crystal-dark';
+  theme: string;
   workspacePath: string;
   aiSupported: boolean;
   storage: ExtensionStorage;
@@ -23,7 +23,7 @@ export interface PanelHostOptions {
   onOpenFile: (path: string) => void;
   onOpenPanel: (panelId: string) => void;
   onClose: () => void;
-  onThemeChange: (callback: (theme: 'light' | 'dark' | 'crystal-dark') => void) => () => void;
+  onThemeChange: (callback: (theme: string) => void) => () => void;
 }
 
 // ============================================================================
@@ -82,9 +82,9 @@ class PanelHostImpl implements PanelHost {
   readonly ai?: PanelAIContext;
   readonly storage: ExtensionStorage;
 
-  private _theme: 'light' | 'dark' | 'crystal-dark';
+  private _theme: string;
   private _isSettingsOpen = false;
-  private themeListeners = new Set<(theme: 'light' | 'dark' | 'crystal-dark') => void>();
+  private themeListeners = new Set<(theme: string) => void>();
 
   private onOpenFile: (path: string) => void;
   private onOpenPanel: (panelId: string) => void;
@@ -114,7 +114,7 @@ class PanelHostImpl implements PanelHost {
     }
   }
 
-  get theme(): 'light' | 'dark' | 'crystal-dark' {
+  get theme(): string {
     return this._theme;
   }
 
@@ -122,7 +122,7 @@ class PanelHostImpl implements PanelHost {
     return this._isSettingsOpen;
   }
 
-  onThemeChanged(callback: (theme: 'light' | 'dark' | 'crystal-dark') => void): () => void {
+  onThemeChanged(callback: (theme: string) => void): () => void {
     this.themeListeners.add(callback);
     return () => {
       this.themeListeners.delete(callback);
@@ -157,7 +157,7 @@ class PanelHostImpl implements PanelHost {
     this.themeListeners.clear();
   }
 
-  private notifyThemeChange(theme: 'light' | 'dark' | 'crystal-dark'): void {
+  private notifyThemeChange(theme: string): void {
     for (const listener of this.themeListeners) {
       try {
         listener(theme);

@@ -75,7 +75,7 @@ export interface EditorHost {
   readonly fileName: string;
 
   /** Current theme */
-  readonly theme: 'light' | 'dark' | 'crystal-dark';
+  readonly theme: string;
 
   /** Whether this editor's tab is active */
   readonly isActive: boolean;
@@ -90,7 +90,7 @@ export interface EditorHost {
    * @param callback Called with new theme when it changes
    * @returns Unsubscribe function
    */
-  onThemeChanged(callback: (theme: 'light' | 'dark' | 'crystal-dark') => void): () => void;
+  onThemeChanged(callback: (theme: string) => void): () => void;
 
   /** Workspace identifier (if in a workspace) */
   readonly workspaceId?: string;

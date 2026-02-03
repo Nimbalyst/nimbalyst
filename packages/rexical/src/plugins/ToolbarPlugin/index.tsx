@@ -131,7 +131,7 @@ import {
   formatParagraph,
   formatQuote,
 } from './utils';
-import { THEME_MAPPING } from "../CodeHighlightPlugin";
+import { getCodeTheme } from "../CodeHighlightPlugin";
 
 const rootTypeToRootName = {
   root: 'Root',
@@ -542,7 +542,7 @@ export default function ToolbarPlugin({
   const [isEditable, setIsEditable] = useState(() => editor.isEditable());
   const {toolbarState, updateToolbarState} = useToolbarState();
 
-  const {theme} = useTheme();
+  const {theme, isDark} = useTheme();
   const { toggleSetting } = useRuntimeSettings();
 
 
@@ -843,7 +843,7 @@ export default function ToolbarPlugin({
       } else {
         const markdown = $convertToEnhancedMarkdownString(transformers);
         const codeNode = $createCodeNode('markdown');
-        codeNode.setTheme(THEME_MAPPING[theme]);
+        codeNode.setTheme(getCodeTheme(theme, isDark));
         codeNode.append($createTextNode(markdown));
         root.clear().append(codeNode);
         if (markdown.length === 0) {

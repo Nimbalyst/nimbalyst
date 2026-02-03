@@ -6,7 +6,7 @@ interface MonacoDiffViewerProps {
   oldContent: string;
   newContent: string;
   filePath: string;
-  theme?: 'light' | 'dark' | 'crystal-dark';
+  theme?: string;
 }
 
 export function MonacoDiffViewer({

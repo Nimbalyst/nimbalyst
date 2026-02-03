@@ -3,29 +3,22 @@ import { getTheme, getThemeIsDark } from '../utils/store';
 
 /**
  * Determine if the current theme is dark.
- * For custom themes, uses the stored isDark value.
- * For built-in themes, uses hardcoded values.
+ * Only 'light' and 'dark' are true built-in themes.
+ * For file-based themes, uses the stored isDark value from theme metadata.
  */
 function isCurrentThemeDark(currentTheme: string): boolean {
-    // Built-in dark themes
-    const darkThemes = ['dark', 'crystal-dark', 'solarized-dark', 'monokai'];
-    if (darkThemes.includes(currentTheme)) {
-        return true;
-    }
-
-    // Built-in light themes
-    const lightThemes = ['light', 'solarized-light'];
-    if (lightThemes.includes(currentTheme)) {
-        return false;
-    }
+    // Built-in themes
+    if (currentTheme === 'light') return false;
+    if (currentTheme === 'dark') return true;
 
     // System theme - check OS preference
     if (currentTheme === 'system') {
         return nativeTheme.shouldUseDarkColors;
     }
 
-    // For any other themes (future custom themes), use stored isDark value
-    return getThemeIsDark() ?? false;
+    // For file-based themes (crystal-dark, solarized-light, etc.), use stored isDark value
+    // The isDark value is stored when the theme is selected
+    return getThemeIsDark() ?? currentTheme.includes('dark');
 }
 
 // Function to update native theme
@@ -56,25 +49,16 @@ export function updateWindowTitleBars() {
     // Do NOT touch nativeTheme.themeSource here to avoid triggering
     // nativeTheme 'updated' recursively. Only adjust window visuals.
 
-    // Define title bar colors for each theme
+    // Title bar colors for light and dark modes
+    // For file-based themes, we use generic light/dark colors
     const titleBarColors = {
         dark: { color: '#1a1a1a', symbolColor: '#ffffff' },
-        crystalDark: { color: '#1F2837', symbolColor: '#F3F4F6' },
         light: { color: '#ffffff', symbolColor: '#374151' }
     };
 
-    // Select appropriate colors based on theme
-    // IMPORTANT: Background colors MUST match CSS theme files exactly to prevent flash
-    let titleBarColor = titleBarColors.light;
-    let backgroundColor = '#ffffff'; // Matches --nim-bg in light theme
-
-    if (currentTheme === 'crystal-dark') {
-        titleBarColor = titleBarColors.crystalDark;
-        backgroundColor = '#0f172a'; // Matches --nim-bg in crystal-dark theme
-    } else if (isDarkTheme) {
-        titleBarColor = titleBarColors.dark;
-        backgroundColor = '#2d2d2d'; // Matches --nim-bg in dark theme
-    }
+    // Select appropriate colors based on whether theme is dark or light
+    const titleBarColor = isDarkTheme ? titleBarColors.dark : titleBarColors.light;
+    const backgroundColor = isDarkTheme ? '#1a1a1a' : '#ffffff';
 
     // Update all windows
     BrowserWindow.getAllWindows().forEach(window => {
@@ -98,35 +82,20 @@ export function updateWindowTitleBars() {
 
 // Get title bar colors for current theme
 export function getTitleBarColors() {
-    const currentTheme = getTheme();
-    const isDarkTheme = isCurrentThemeDark(currentTheme);
+    const isDarkTheme = isCurrentThemeDark(getTheme());
 
     const titleBarColors = {
         dark: { color: '#1a1a1a', symbolColor: '#ffffff' },
-        crystalDark: { color: '#1F2837', symbolColor: '#F3F4F6' },
         light: { color: '#ffffff', symbolColor: '#374151' }
     };
 
-    if (currentTheme === 'crystal-dark') {
-        return titleBarColors.crystalDark;
-    } else if (isDarkTheme) {
-        return titleBarColors.dark;
-    } else {
-        return titleBarColors.light;
-    }
+    return isDarkTheme ? titleBarColors.dark : titleBarColors.light;
 }
 
 // Get background color for current theme
-// IMPORTANT: These colors MUST match the CSS theme files exactly to prevent flash
+// Note: For file-based themes, the actual --nim-bg may differ from this initial color.
+// This is used for the window background before the renderer loads.
 export function getBackgroundColor() {
-    const currentTheme = getTheme();
-    const isDarkTheme = isCurrentThemeDark(currentTheme);
-
-    if (currentTheme === 'crystal-dark') {
-        return '#0f172a'; // Matches --nim-bg in crystal-dark theme
-    } else if (isDarkTheme) {
-        return '#2d2d2d'; // Matches --nim-bg in dark theme
-    } else {
-        return '#ffffff'; // Matches --nim-bg in light theme
-    }
+    const isDarkTheme = isCurrentThemeDark(getTheme());
+    return isDarkTheme ? '#1a1a1a' : '#ffffff';
 }

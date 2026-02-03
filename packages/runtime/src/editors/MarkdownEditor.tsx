@@ -23,7 +23,7 @@ export interface MarkdownEditorConfig {
    * @deprecated Theme is now controlled at app level via CSS variables.
    * This prop is ignored. Theme is read from document root's data-theme attribute.
    */
-  theme?: 'light' | 'dark' | 'crystal-dark' | 'auto';
+  theme?: string;
 
   /** Whether the editor is read-only */
   editable?: boolean;
