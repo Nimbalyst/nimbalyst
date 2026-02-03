@@ -34,7 +34,7 @@ export async function loadCustomTrackers(workspacePath: string): Promise<void> {
         if (result && result.success) {
           const model = parseTrackerYAML(result.content);
           globalRegistry.register(model);
-          log.info(`[CustomTrackers] Registered: ${model.type} (${model.displayName})`);
+          // log.info(`[CustomTrackers] Registered: ${model.type} (${model.displayName})`);
         }
       } catch (error) {
         // File doesn't exist, skip silently
@@ -58,7 +58,7 @@ export async function loadCustomTrackers(workspacePath: string): Promise<void> {
           if (result && result.success && result.content) {
             const model = parseTrackerYAML(result.content);
             globalRegistry.register(model);
-            log.info(`[CustomTrackers] Registered: ${model.type} (${model.displayName})`);
+            // log.info(`[CustomTrackers] Registered: ${model.type} (${model.displayName})`);
           }
         } catch (error) {
           log.error(`[CustomTrackers] Failed to load ${file.name}:`, error);
