@@ -1039,12 +1039,13 @@ export const setActiveChildSessionAtom = atom(
  */
 export const createChildSessionAtom = atom(
   null,
-  async (get, set, { parentSessionId, workspacePath, provider }: {
+  async (get, set, { parentSessionId, workspacePath, provider, model }: {
     parentSessionId: string;
     workspacePath: string;
     provider?: string;
+    model?: string;
   }) => {
-    console.log(`[sessions:createChildSessionAtom] Creating child for parent ${parentSessionId}`);
+    console.log(`[sessions:createChildSessionAtom] Creating child for parent ${parentSessionId} with model: ${model}`);
     if (!parentSessionId || !workspacePath || !window.electronAPI) {
       console.error(`[sessions:createChildSessionAtom] Missing required params: parentSessionId=${parentSessionId}, workspacePath=${workspacePath}, electronAPI=${!!window.electronAPI}`);
       return null;
@@ -1056,12 +1057,13 @@ export const createChildSessionAtom = atom(
       const worktreeId = parentData?.worktreeId;
       console.log(`[sessions:createChildSessionAtom] Parent data: worktreeId=${worktreeId}, hasMessages=${!!parentData?.messages?.length}`);
 
-      console.log(`[sessions:createChildSessionAtom] Invoking sessions:create-child IPC...`);
+      console.log(`[sessions:createChildSessionAtom] Invoking sessions:create-child IPC with model: ${model}...`);
       const result = await window.electronAPI.invoke('sessions:create-child', {
         parentSessionId,
         workspacePath,
         worktreeId,
         provider: provider || 'claude-code',
+        model,  // Pass user's default model preference
       });
       console.log(`[sessions:createChildSessionAtom] IPC result:`, result);
 
@@ -1073,6 +1075,12 @@ export const createChildSessionAtom = atom(
 
         // Set parent ID for the new child
         set(sessionParentIdAtom(result.sessionId), parentSessionId);
+
+        // Set the session model atom if provided - prevents showing default 'sonnet'
+        // before loadSessionDataAtom runs
+        if (model) {
+          set(sessionModelAtom(result.sessionId), model);
+        }
 
         // Make it the active child (both atoms need to be updated) and mark as read
         set(sessionActiveChildAtom(parentSessionId), result.sessionId);
@@ -1221,9 +1229,10 @@ export const reparentSessionAtom = atom(
  */
 export const convertToWorkstreamAtom = atom(
   null,
-  async (get, set, { sessionId, workspacePath }: {
+  async (get, set, { sessionId, workspacePath, model }: {
     sessionId: string;
     workspacePath: string;
+    model?: string;
   }) => {
     if (!sessionId || !workspacePath || !window.electronAPI) {
       return null;
@@ -1316,6 +1325,7 @@ export const convertToWorkstreamAtom = atom(
           workspacePath,
           worktreeId: sessionData.worktreeId,
           provider: sessionData.provider || 'claude-code',
+          model,  // Pass user's default model preference
         });
       } catch (error) {
         // Sibling creation failed - rollback: remove parentSessionId from original, delete parent
@@ -1354,6 +1364,11 @@ export const convertToWorkstreamAtom = atom(
       if (siblingResult.success && siblingResult.sessionId) {
         children.push(siblingResult.sessionId);
         set(sessionParentIdAtom(siblingResult.sessionId), parentSessionId);
+        // Set the session model atom for the sibling - prevents showing default 'sonnet'
+        // before loadSessionDataAtom runs
+        if (model) {
+          set(sessionModelAtom(siblingResult.sessionId), model);
+        }
       }
       set(sessionChildrenAtom(parentSessionId), children);
 

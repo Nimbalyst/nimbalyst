@@ -69,7 +69,7 @@ import {
 } from '../../store';
 import { convertToWorkstreamAtom, sessionPromptAdditionsAtom, type ExitPlanModeConfirmationData } from '../../store/atoms/sessions';
 import { usePostHog } from 'posthog-js/react';
-import { setAgentModeSettingsAtom, showPromptAdditionsAtom, hasExternalEditorAtom, externalEditorNameAtom, openInExternalEditorAtom } from '../../store/atoms/appSettings';
+import { setAgentModeSettingsAtom, showPromptAdditionsAtom, hasExternalEditorAtom, externalEditorNameAtom, openInExternalEditorAtom, defaultAgentModelAtom } from '../../store/atoms/appSettings';
 import { buildPlanModeInstructions, PLAN_MODE_DEACTIVATION } from '@nimbalyst/runtime/ai/services/planModePrompts';
 
 interface Todo {
@@ -250,6 +250,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   const convertToWorkstream = useSetAtom(convertToWorkstreamAtom);
   const sessionChildren = useAtomValue(sessionChildrenAtom(sessionId));
   const sessionParentId = useAtomValue(sessionParentIdAtom(sessionId));
+  const defaultModel = useAtomValue(defaultAgentModelAtom);
 
   // Still need full sessionData for certain operations (updating, checking loaded state)
   const sessionData = useAtomValue(sessionStoreAtom(sessionId));
@@ -1026,12 +1027,14 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
             parentSessionId: parentId,
             workspacePath: workspacePath || '',
             provider: 'claude-code',
+            model: defaultModel,
           });
         } else {
           // Single session - convert to workstream first, which creates a sibling session
           const result = await convertToWorkstream({
             sessionId: confirmSessionId,
             workspacePath: workspacePath || '',
+            model: defaultModel,
           });
           if (result?.siblingId) {
             newSessionId = result.siblingId;

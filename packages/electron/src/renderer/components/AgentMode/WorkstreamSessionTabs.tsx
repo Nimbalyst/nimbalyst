@@ -22,6 +22,7 @@ import {
   sessionUnreadAtom,
   createChildSessionAtom,
 } from '../../store';
+import { defaultAgentModelAtom } from '../../store/atoms/appSettings';
 import { convertToWorkstreamAtom } from '../../store/atoms/sessions';
 import { workstreamHasChildrenAtom } from '../../store/atoms/workstreamState';
 import type { SerializableDocumentContext } from '../../hooks/useDocumentContext';
@@ -277,6 +278,7 @@ export const WorkstreamSessionTabs: React.FC<WorkstreamSessionTabsProps> = React
   const hasChildren = useAtomValue(workstreamHasChildrenAtom(workstreamId));
   const createChildSession = useSetAtom(createChildSessionAtom);
   const convertToWorkstream = useSetAtom(convertToWorkstreamAtom);
+  const defaultModel = useAtomValue(defaultAgentModelAtom);
 
   // Handle creating a new child session
   const handleNewSession = useCallback(async () => {
@@ -288,19 +290,21 @@ export const WorkstreamSessionTabs: React.FC<WorkstreamSessionTabsProps> = React
 
     // Regular workstream logic
     if (hasChildren) {
-      // Already a workstream - just create a child
+      // Already a workstream - just create a child with user's default model
       await createChildSession({
         parentSessionId: workstreamId,
         workspacePath,
+        model: defaultModel,
       });
     } else {
       // Single session - convert to workstream first
       await convertToWorkstream({
         sessionId: workstreamId,
         workspacePath,
+        model: defaultModel,
       });
     }
-  }, [workstreamId, workspacePath, hasChildren, worktreeId, onAddSessionToWorktree, createChildSession, convertToWorkstream]);
+  }, [workstreamId, workspacePath, hasChildren, worktreeId, onAddSessionToWorktree, createChildSession, convertToWorkstream, defaultModel]);
 
   if (!activeSessionId) {
     return (
