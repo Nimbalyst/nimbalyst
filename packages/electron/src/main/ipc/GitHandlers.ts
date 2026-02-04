@@ -124,21 +124,46 @@ export function registerGitHandlers(): void {
 
       try {
         const git: SimpleGit = simpleGit(workspacePath);
+        log.info(`[git:commit] Starting commit in ${workspacePath} with ${filesToStage?.length || 0} files`);
 
         // Stage files
         if (filesToStage && filesToStage.length > 0) {
+          log.info(`[git:commit] Staging files: ${filesToStage.join(', ')}`);
           await git.add(filesToStage);
+
+          // Verify files were staged
+          const status = await git.status();
+          const stagedFiles = [...status.staged, ...status.created];
+          log.info(`[git:commit] After staging - staged: ${stagedFiles.length}, created: ${status.created.length}`);
+          if (stagedFiles.length === 0) {
+            log.warn(`[git:commit] No files were staged despite add() succeeding`);
+            return {
+              success: false,
+              error: 'No files were staged. The files may not exist or have no changes.',
+            };
+          }
         }
 
         // Commit
         const result = await git.commit(message);
+        log.info(`[git:commit] Commit result: hash=${result.commit || 'empty'}, changes=${result.summary?.changes || 0}`);
 
+        // simple-git returns empty commit hash if nothing was committed
+        if (!result.commit) {
+          log.warn(`[git:commit] Commit returned empty hash - nothing was committed`);
+          return {
+            success: false,
+            error: 'No changes were committed. Files may not have been staged correctly.',
+          };
+        }
+
+        log.info(`[git:commit] Successfully committed: ${result.commit}`);
         return {
           success: true,
           commitHash: result.commit,
         };
       } catch (error) {
-        log.error('Failed to commit:', error);
+        log.error('[git:commit] Failed to commit:', error);
         return {
           success: false,
           error: error instanceof Error ? error.message : String(error),

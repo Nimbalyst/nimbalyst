@@ -15,6 +15,7 @@ import { store } from '../store.js';
 
 export interface GitCommitProposalData {
   proposalId: string;
+  toolUseId?: string;  // Claude's tool_use ID for matching with widget's toolCall.id
   workspacePath: string;
   filesToStage: Array<string | { path: string; status: 'added' | 'modified' | 'deleted' }>;
   commitMessage: string;

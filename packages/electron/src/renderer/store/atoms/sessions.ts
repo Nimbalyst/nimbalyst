@@ -428,6 +428,7 @@ export const sessionPendingGitCommitProposalAtom = atomFamily((sessionId: string
     // Map PendingPrompt to GitCommitProposalData
     return {
       proposalId: gitCommitPrompt.promptId,
+      toolUseId: gitCommitPrompt.data.toolUseId,  // Claude's tool_use ID for matching
       workspacePath: gitCommitPrompt.data.workspacePath || '',
       filesToStage: gitCommitPrompt.data.filesToStage || [],
       commitMessage: gitCommitPrompt.data.commitMessage || '',

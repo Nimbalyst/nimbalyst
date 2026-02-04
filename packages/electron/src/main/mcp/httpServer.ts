@@ -895,6 +895,10 @@ The commit message should follow these guidelines:
       // Tool execution handler
       server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const { name, arguments: args } = request.params;
+        // Log _meta to understand what IDs are available for proposal matching
+        if (request.params._meta) {
+          console.log(`[MCP Server] Tool called: ${name}, _meta:`, JSON.stringify(request.params._meta));
+        }
         // console.log(`[MCP Server] Tool called: ${name}`, args);
 
         // Strip MCP server prefix if present (Claude Code sends tools as mcp__nimbalyst__toolName)
@@ -1866,8 +1870,10 @@ The commit message should follow these guidelines:
               };
             }
 
-            // Generate a unique proposal ID
-            const proposalId = `git-commit-proposal-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+            // Use Claude's tool_use ID as the proposal ID for proper matching
+            // This ID is passed via _meta by Claude Code SDK
+            const toolUseId = (request.params._meta as any)?.['claudecode/toolUseId'];
+            const proposalId = toolUseId || `git-commit-proposal-${Date.now()}-${Math.random().toString(36).substring(7)}`;
 
             // Persist the proposal to database for durability
             const targetSessionId = sessionId || 'unknown';
@@ -1881,6 +1887,7 @@ The commit message should follow these guidelines:
                 content: JSON.stringify({
                   type: 'git_commit_proposal',
                   proposalId,
+                  toolUseId,  // Store for matching with widget's toolCall.id
                   filesToStage: proposalArgs.filesToStage,
                   commitMessage: proposalArgs.commitMessage,
                   reasoning: proposalArgs.reasoning,
@@ -1892,11 +1899,14 @@ The commit message should follow these guidelines:
                 createdAt: now,
               });
               // Notify renderer to refresh pending prompts
+              console.log(`[MCP Server] Persisted git commit proposal: ${proposalId}, notifying renderer for session: ${targetSessionId}`);
               if (commitWindow) {
                 commitWindow.webContents.send('ai:gitCommitProposal', {
                   sessionId: targetSessionId,
                   proposalId,
                 });
+              } else {
+                console.warn('[MCP Server] No commitWindow found to send IPC event');
               }
             } catch (error) {
               console.error('[MCP Server] Failed to persist git commit proposal:', error);
@@ -1955,16 +1965,28 @@ The commit message should follow these guidelines:
                 // console.log(`[MCP Server] Received git commit proposal response: ${proposalId}`, result.action);
                 clearTimeout(timeout);
 
-                if (result.action === 'committed') {
+                if (result.action === 'committed' && result.commitHash) {
+                  // Only report success if we have a valid commit hash
                   const filesCount = result.filesCommitted?.length || proposalArgs.filesToStage!.map(getFilePath).length;
                   resolve({
                     content: [
                       {
                         type: 'text',
-                        text: `User confirmed and committed ${filesCount} file(s).\nCommit hash: ${result.commitHash || 'unknown'}\nCommit message: ${result.commitMessage || proposalArgs.commitMessage}`
+                        text: `User confirmed and committed ${filesCount} file(s).\nCommit hash: ${result.commitHash}\nCommit message: ${result.commitMessage || proposalArgs.commitMessage}`
                       }
                     ],
                     isError: false
+                  });
+                } else if (result.action === 'committed' && !result.commitHash) {
+                  // Widget reported committed but no hash - something went wrong
+                  resolve({
+                    content: [
+                      {
+                        type: 'text',
+                        text: `Commit failed: No commit hash returned. The files may not have been staged correctly.`
+                      }
+                    ],
+                    isError: true
                   });
                 } else {
                   resolve({

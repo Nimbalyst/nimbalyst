@@ -16,10 +16,8 @@
 
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { usePostHog } from 'posthog-js/react';
-import { useAtomValue } from 'jotai';
 import { MaterialSymbol } from '../../../..';
 import type { CustomToolWidgetProps } from './index';
-import { sessionPendingGitCommitProposalAtom, clearPendingGitCommitProposal } from '../../../../store';
 
 // ============================================================
 // File Status Types
@@ -254,37 +252,12 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
     return null;
   }, [isCompleted, toolResult]);
 
-  // Read pending proposal from atom (synced from DB in Electron)
-  const pendingProposal = useAtomValue(sessionPendingGitCommitProposalAtom(sessionId));
+  // The proposalId is simply the tool call ID - no need for a separate atom
+  // The MCP server uses toolUseId (which equals toolCall.id) as the proposalId
+  const proposalId = toolCall.id;
 
-  // Check if the proposal from the atom matches this tool call by content
-  // We match by files and commit message since the proposalId is generated server-side
-  // and doesn't match the tool call ID from Claude
-  const matchingProposal = useMemo(() => {
-    // If tool already has a result, don't match - this widget instance is done
-    if (isCompleted) return null;
-    if (!pendingProposal) return null;
-
-    // Match by comparing files and commit message
-    const proposalFiles = pendingProposal.filesToStage.map(getFilePath).sort();
-    const toolCallFiles = [...initialFilesToStage].sort();
-    const filesMatch = proposalFiles.length === toolCallFiles.length &&
-      proposalFiles.every((f, i) => f === toolCallFiles[i]);
-    const messageMatch = pendingProposal.commitMessage.trim() === initialCommitMessage.trim();
-
-    if (!filesMatch || !messageMatch) {
-      console.log('[GitCommitWidget] No match:', {
-        filesMatch,
-        messageMatch,
-        proposalFiles,
-        toolCallFiles,
-        proposalMsg: pendingProposal.commitMessage.trim().slice(0, 50),
-        toolCallMsg: initialCommitMessage.trim().slice(0, 50),
-      });
-    }
-
-    return filesMatch && messageMatch ? pendingProposal : null;
-  }, [pendingProposal, initialFilesToStage, initialCommitMessage, isCompleted]);
+  // Widget is interactive if the tool hasn't completed yet
+  const isPending = !isCompleted;
 
   // Local state for editing
   const [filesToStage, setFilesToStage] = useState<Set<string>>(new Set(initialFilesToStage));
@@ -508,7 +481,7 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
   };
 
   const handleConfirm = useCallback(async () => {
-    if (filesToStage.size === 0 || !commitMessage.trim() || !commitWorkspacePath || !matchingProposal) {
+    if (filesToStage.size === 0 || !commitMessage.trim() || !commitWorkspacePath || !isPending) {
       return;
     }
 
@@ -535,10 +508,11 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
         });
 
         // Send response via unified IPC channel
+        // Use toolCall.id as proposalId - MCP server uses the same ID
         if (window.electronAPI?.invoke) {
           await window.electronAPI.invoke('messages:respond-to-prompt', {
             sessionId,
-            promptId: matchingProposal.proposalId,
+            promptId: proposalId,
             promptType: 'git_commit_proposal_request' as const,
             response: {
               action: result.success ? 'committed' : 'cancelled',
@@ -549,8 +523,6 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
             },
             respondedBy: 'desktop' as const,
           });
-          // Clear the pending proposal from the atom
-          clearPendingGitCommitProposal(sessionId);
         }
       }
     } catch (error) {
@@ -561,10 +533,10 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
       setLocalResult(errorResult);
 
       // Send error result back via unified IPC
-      if (matchingProposal && window.electronAPI?.invoke) {
+      if (window.electronAPI?.invoke) {
         await window.electronAPI.invoke('messages:respond-to-prompt', {
           sessionId,
-          promptId: matchingProposal.proposalId,
+          promptId: proposalId,
           promptType: 'git_commit_proposal_request' as const,
           response: {
             action: 'cancelled',
@@ -572,15 +544,14 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
           },
           respondedBy: 'desktop' as const,
         });
-        clearPendingGitCommitProposal(sessionId);
       }
     } finally {
       setIsCommitting(false);
     }
-  }, [sessionId, commitWorkspacePath, filesToStage, commitMessage, matchingProposal, posthog]);
+  }, [sessionId, commitWorkspacePath, filesToStage, commitMessage, isPending, proposalId, posthog]);
 
   const handleCancel = useCallback(() => {
-    if (hasResponded || !matchingProposal) return; // Prevent double-response
+    if (hasResponded || !isPending) return; // Prevent double-response
 
     setLocalResult({ success: false, error: 'Cancelled' });
     setHasResponded(true);
@@ -596,19 +567,17 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
     if (window.electronAPI?.invoke) {
       window.electronAPI.invoke('messages:respond-to-prompt', {
         sessionId,
-        promptId: matchingProposal.proposalId,
+        promptId: proposalId,
         promptType: 'git_commit_proposal_request' as const,
         response: {
           action: 'cancelled',
         },
         respondedBy: 'desktop' as const,
-      }).then(() => {
-        clearPendingGitCommitProposal(sessionId);
       }).catch(err => {
         console.error('[GitCommitWidget] Failed to send cancel response:', err);
       });
     }
-  }, [sessionId, matchingProposal, hasResponded, filesToStage.size, posthog]);
+  }, [sessionId, proposalId, hasResponded, isPending, filesToStage.size, posthog]);
 
   if (!commitWorkspacePath) {
     return null;
@@ -696,9 +665,8 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
     );
   }
 
-  // If there's no matching pending proposal and no result, don't show interactive UI
-  // This matches AskUserQuestionWidget behavior - return null when not ready
-  if (!matchingProposal) {
+  // If tool is not pending (has a result) but we didn't handle it above, something is wrong
+  if (!isPending) {
     return null;
   }
 
