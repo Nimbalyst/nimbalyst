@@ -1792,115 +1792,50 @@ ${newLines.map(line => '+' + line).join('\n')}`;
         return { hasConflicts: false };
       }
 
-      // For files that overlap, check if there would be actual content conflicts
-      // using git merge-tree on just those files' content
-      try {
-        const mergeTreeOutput = await git.raw(['merge-tree', mergeBase, currentBranch, baseBranch]);
-        const hasConflictMarkers = mergeTreeOutput.includes('<<<<<<<');
-
-        if (!hasConflictMarkers) {
-          // Files overlap but content can be merged cleanly
-          return { hasConflicts: false };
-        }
-
-        // Extract which of our unique files actually have conflicts
-        const actualConflictingFiles = conflictingFiles.filter(file => {
-          // Check if this file appears in the merge-tree output with conflict markers
-          const fileInOutput = mergeTreeOutput.includes(file);
-          return fileInOutput;
-        });
-
-        if (actualConflictingFiles.length === 0) {
-          // Conflicts are in files from equivalent commits, which will be skipped
-          return { hasConflicts: false };
-        }
-
-        // Get only the commits that touch conflicting files
-        const conflictingCommitHashes = new Set<string>();
-        for (const file of actualConflictingFiles) {
-          const commits = fileToCommits.get(file);
-          if (commits) {
-            for (const hash of commits) {
-              conflictingCommitHashes.add(hash);
-            }
+      // File-level conflict detection: if ANY file was modified on both branches,
+      // treat it as a conflict. This is conservative but safe — the user can delegate
+      // to AI to resolve the rebase if needed.
+      const conflictingCommitHashes = new Set<string>();
+      for (const file of conflictingFiles) {
+        const commits = fileToCommits.get(file);
+        if (commits) {
+          for (const hash of commits) {
+            conflictingCommitHashes.add(hash);
           }
         }
-
-        // Get commit messages for only the conflicting commits
-        const ourCommitMessages: string[] = [];
-        for (const hash of conflictingCommitHashes) {
-          const message = (await git.raw(['log', '-1', '--format=%s', hash])).trim();
-          ourCommitMessages.push(message);
-        }
-
-        // Get their commits that touch conflicting files
-        const theirConflictingCommitMessages: string[] = [];
-        for (const file of actualConflictingFiles) {
-          // Get commits on base branch that touched this file
-          const theirCommitsForFile = await git.log({ from: mergeBase, to: baseBranch, file });
-          for (const commit of theirCommitsForFile.all) {
-            if (!theirConflictingCommitMessages.includes(commit.message)) {
-              theirConflictingCommitMessages.push(commit.message);
-            }
-          }
-        }
-
-        logger.info('Rebase conflicts detected in unique commits', {
-          conflictingFiles: actualConflictingFiles,
-          ourConflictingCommitCount: ourCommitMessages.length,
-          theirConflictingCommitCount: theirConflictingCommitMessages.length,
-        });
-
-        return {
-          hasConflicts: true,
-          conflictingFiles: actualConflictingFiles,
-          conflictingCommits: {
-            ours: ourCommitMessages,
-            theirs: theirConflictingCommitMessages,
-          },
-        };
-      } catch (mergeTreeError) {
-        // merge-tree might not be available on older git versions
-        // Fall back to reporting file overlap as potential conflicts
-        logger.warn('merge-tree failed, falling back to file comparison', { mergeTreeError });
-
-        // Get only commits that touch conflicting files
-        const conflictingCommitHashes = new Set<string>();
-        for (const file of conflictingFiles) {
-          const commits = fileToCommits.get(file);
-          if (commits) {
-            for (const hash of commits) {
-              conflictingCommitHashes.add(hash);
-            }
-          }
-        }
-
-        const ourCommitMessages: string[] = [];
-        for (const hash of conflictingCommitHashes) {
-          const message = (await git.raw(['log', '-1', '--format=%s', hash])).trim();
-          ourCommitMessages.push(message);
-        }
-
-        // Get their commits that touch conflicting files
-        const theirConflictingCommitMessages: string[] = [];
-        for (const file of conflictingFiles) {
-          const theirCommitsForFile = await git.log({ from: mergeBase, to: baseBranch, file });
-          for (const commit of theirCommitsForFile.all) {
-            if (!theirConflictingCommitMessages.includes(commit.message)) {
-              theirConflictingCommitMessages.push(commit.message);
-            }
-          }
-        }
-
-        return {
-          hasConflicts: true,
-          conflictingFiles,
-          conflictingCommits: {
-            ours: ourCommitMessages,
-            theirs: theirConflictingCommitMessages,
-          },
-        };
       }
+
+      const ourCommitMessages: string[] = [];
+      for (const hash of conflictingCommitHashes) {
+        const message = (await git.raw(['log', '-1', '--format=%s', hash])).trim();
+        ourCommitMessages.push(message);
+      }
+
+      // Get their commits that touch conflicting files
+      const theirConflictingCommitMessages: string[] = [];
+      for (const file of conflictingFiles) {
+        const theirCommitsForFile = await git.log({ from: mergeBase, to: baseBranch, file });
+        for (const commit of theirCommitsForFile.all) {
+          if (!theirConflictingCommitMessages.includes(commit.message)) {
+            theirConflictingCommitMessages.push(commit.message);
+          }
+        }
+      }
+
+      logger.info('Rebase blocked due to file-level overlap', {
+        conflictingFiles,
+        ourConflictingCommitCount: ourCommitMessages.length,
+        theirConflictingCommitCount: theirConflictingCommitMessages.length,
+      });
+
+      return {
+        hasConflicts: true,
+        conflictingFiles,
+        conflictingCommits: {
+          ours: ourCommitMessages,
+          theirs: theirConflictingCommitMessages,
+        },
+      };
     } catch (error) {
       logger.error('Failed to check for rebase conflicts', { error, worktreePath, baseBranch });
       // On error, assume no conflicts to allow the rebase to proceed (it will handle conflicts itself)
