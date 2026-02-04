@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 // Helper function to apply theme
 const applyTheme = () => {
@@ -73,6 +73,13 @@ interface WorkspaceStats {
   recentFiles: string[];
 }
 
+interface ContextMenuState {
+  visible: boolean;
+  x: number;
+  y: number;
+  workspace: WorkspaceInfo | null;
+}
+
 export const WorkspaceManager: React.FC = () => {
   const [workspaces, setWorkspaces] = useState<WorkspaceInfo[]>([]);
   const [selectedWorkspace, setSelectedWorkspace] = useState<WorkspaceInfo | null>(null);
@@ -80,6 +87,48 @@ export const WorkspaceManager: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
+
+  // Context menu state
+  const [contextMenu, setContextMenu] = useState<ContextMenuState>({
+    visible: false,
+    x: 0,
+    y: 0,
+    workspace: null,
+  });
+
+  // Rename dialog state
+  const [renameDialog, setRenameDialog] = useState<{
+    visible: boolean;
+    workspace: WorkspaceInfo | null;
+    newName: string;
+    error: string | null;
+    stats?: WorkspaceStats | null;
+  }>({
+    visible: false,
+    workspace: null,
+    newName: '',
+    error: null,
+  });
+
+  // Confirmation dialog state (for move operations)
+  const [confirmDialog, setConfirmDialog] = useState<{
+    visible: boolean;
+    type: 'move' | 'rename';
+    workspace: WorkspaceInfo | null;
+    destinationPath?: string;
+    newName?: string;
+    stats?: WorkspaceStats | null;
+  }>({
+    visible: false,
+    type: 'move',
+    workspace: null,
+  });
+
+  // Operation state
+  const [operationInProgress, setOperationInProgress] = useState(false);
+  const [operationError, setOperationError] = useState<string | null>(null);
+
+  const renameInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     loadWorkspaces();
@@ -101,6 +150,25 @@ export const WorkspaceManager: React.FC = () => {
       setSelectedWorkspace(null);
     }
   }, [searchQuery]);
+
+  // Close context menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = () => {
+      if (contextMenu.visible) {
+        setContextMenu(prev => ({ ...prev, visible: false }));
+      }
+    };
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [contextMenu.visible]);
+
+  // Focus rename input when dialog opens
+  useEffect(() => {
+    if (renameDialog.visible && renameInputRef.current) {
+      renameInputRef.current.focus();
+      renameInputRef.current.select();
+    }
+  }, [renameDialog.visible]);
 
   // Score and filter workspaces based on search query
   // Higher score = better match, prioritizing name matches over path matches
@@ -192,14 +260,197 @@ export const WorkspaceManager: React.FC = () => {
     }
   };
 
-  const handleRemoveFromRecent = async () => {
-    if (!selectedWorkspace) return;
+  const handleRemoveFromRecent = async (workspace?: WorkspaceInfo) => {
+    const target = workspace || selectedWorkspace;
+    if (!target) return;
 
     try {
-      await window.electronAPI.workspaceManager.removeRecent(selectedWorkspace.path);
+      await window.electronAPI.workspaceManager.removeRecent(target.path);
       await loadWorkspaces();
+      if (selectedWorkspace?.path === target.path) {
+        setSelectedWorkspace(null);
+      }
     } catch (error) {
       console.error('Failed to remove from recent:', error);
+    }
+  };
+
+  // Context menu handlers
+  const handleContextMenu = (e: React.MouseEvent, workspace: WorkspaceInfo) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({
+      visible: true,
+      x: e.clientX,
+      y: e.clientY,
+      workspace,
+    });
+  };
+
+  const handleContextMenuAction = async (action: 'open' | 'rename' | 'move' | 'remove') => {
+    const workspace = contextMenu.workspace;
+    setContextMenu(prev => ({ ...prev, visible: false }));
+
+    if (!workspace) return;
+
+    switch (action) {
+      case 'open':
+        await window.electronAPI.workspaceManager.openWorkspace(workspace.path);
+        break;
+
+      case 'rename':
+        // Check if can move first
+        const canMoveResult = await window.electronAPI.projectMigration.canMove(workspace.path);
+        if (!canMoveResult.canMove) {
+          setOperationError(canMoveResult.reason || 'Cannot rename project');
+          return;
+        }
+        // Get workspace stats for the rename dialog
+        let renameStats: WorkspaceStats | null = null;
+        try {
+          renameStats = await window.electronAPI.workspaceManager.getWorkspaceStats(workspace.path);
+        } catch (e) {
+          // Stats are optional, continue without them
+        }
+        setRenameDialog({
+          visible: true,
+          workspace,
+          newName: workspace.name,
+          error: null,
+          stats: renameStats,
+        });
+        break;
+
+      case 'move':
+        await handleMoveProject(workspace);
+        break;
+
+      case 'remove':
+        await handleRemoveFromRecent(workspace);
+        break;
+    }
+  };
+
+  const handleMoveProject = async (workspace: WorkspaceInfo) => {
+    // Check if can move first
+    const canMoveResult = await window.electronAPI.projectMigration.canMove(workspace.path);
+    if (!canMoveResult.canMove) {
+      setOperationError(canMoveResult.reason || 'Cannot move project');
+      return;
+    }
+
+    // Open directory picker
+    const result = await window.electronAPI.workspaceManager.openFolderDialog();
+    if (!result.success || !result.path) return;
+
+    // Construct the new path (destination + current project name)
+    const projectName = workspace.name;
+    const newPath = `${result.path}/${projectName}`;
+
+    // Get workspace stats for the confirmation dialog
+    let stats: WorkspaceStats | null = null;
+    try {
+      stats = await window.electronAPI.workspaceManager.getWorkspaceStats(workspace.path);
+    } catch (e) {
+      // Stats are optional, continue without them
+    }
+
+    // Show confirmation dialog
+    setConfirmDialog({
+      visible: true,
+      type: 'move',
+      workspace,
+      destinationPath: newPath,
+      stats,
+    });
+  };
+
+  const executeMoveProject = async () => {
+    if (!confirmDialog.workspace || !confirmDialog.destinationPath) return;
+
+    const workspace = confirmDialog.workspace;
+    const newPath = confirmDialog.destinationPath;
+
+    setConfirmDialog(prev => ({ ...prev, visible: false }));
+    setOperationInProgress(true);
+    setOperationError(null);
+
+    try {
+      const moveResult = await window.electronAPI.projectMigration.move(workspace.path, newPath);
+      if (moveResult.success) {
+        await loadWorkspaces();
+        // Update selected workspace if it was the one that moved
+        if (selectedWorkspace?.path === workspace.path && moveResult.newPath) {
+          const updatedWorkspaces = await window.electronAPI.workspaceManager.getRecentWorkspaces();
+          const movedWorkspace = updatedWorkspaces.find((w: WorkspaceInfo) => w.path === moveResult.newPath);
+          if (movedWorkspace) {
+            setSelectedWorkspace(movedWorkspace);
+          }
+        }
+      } else {
+        setOperationError(moveResult.error || 'Failed to move project');
+      }
+    } catch (error: any) {
+      setOperationError(error.message || 'Failed to move project');
+    } finally {
+      setOperationInProgress(false);
+    }
+  };
+
+  const handleRenameSubmit = async () => {
+    if (!renameDialog.workspace || !renameDialog.newName.trim()) return;
+
+    const newName = renameDialog.newName.trim();
+
+    // Validate name
+    if (newName === renameDialog.workspace.name) {
+      setRenameDialog(prev => ({ ...prev, visible: false }));
+      return;
+    }
+
+    // Check for invalid characters
+    const invalidChars = /[<>:"/\\|?*\x00-\x1f]/;
+    if (invalidChars.test(newName)) {
+      setRenameDialog(prev => ({
+        ...prev,
+        error: 'Name contains invalid characters',
+      }));
+      return;
+    }
+
+    setOperationInProgress(true);
+    setRenameDialog(prev => ({ ...prev, error: null }));
+
+    try {
+      const result = await window.electronAPI.projectMigration.rename(
+        renameDialog.workspace.path,
+        newName
+      );
+
+      if (result.success) {
+        setRenameDialog({ visible: false, workspace: null, newName: '', error: null, stats: null });
+        await loadWorkspaces();
+        // Update selected workspace if it was the one that was renamed
+        if (selectedWorkspace?.path === renameDialog.workspace.path && result.newPath) {
+          const updatedWorkspaces = await window.electronAPI.workspaceManager.getRecentWorkspaces();
+          const renamedWorkspace = updatedWorkspaces.find((w: WorkspaceInfo) => w.path === result.newPath);
+          if (renamedWorkspace) {
+            setSelectedWorkspace(renamedWorkspace);
+          }
+        }
+      } else {
+        setRenameDialog(prev => ({
+          ...prev,
+          error: result.error || 'Failed to rename project',
+        }));
+      }
+    } catch (error: any) {
+      setRenameDialog(prev => ({
+        ...prev,
+        error: error.message || 'Failed to rename project',
+      }));
+    } finally {
+      setOperationInProgress(false);
     }
   };
 
@@ -363,6 +614,7 @@ export const WorkspaceManager: React.FC = () => {
                   setHighlightedIndex(index);
                 }}
                 onDoubleClick={handleOpenWorkspace}
+                onContextMenu={(e) => handleContextMenu(e, workspace)}
               >
                 <div className={`workspace-icon shrink-0 flex items-center justify-center text-[var(--nim-text-muted)] ${selectedWorkspace?.path === workspace.path ? '!text-[var(--nim-primary)]' : ''}`}>
                   <span className="material-symbols-outlined text-[20px]" style={{ fontVariationSettings: "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20" }}>folder</span>
@@ -395,7 +647,7 @@ export const WorkspaceManager: React.FC = () => {
                 <button className="btn nim-btn-primary" onClick={handleOpenWorkspace}>
                   Open Project
                 </button>
-                <button className="btn nim-btn-secondary !text-[var(--nim-error)] !border-[var(--nim-error-subtle)] hover:!bg-[var(--nim-error-subtle)]" onClick={handleRemoveFromRecent}>
+                <button className="btn nim-btn-secondary !text-[var(--nim-error)] !border-[var(--nim-error-subtle)] hover:!bg-[var(--nim-error-subtle)]" onClick={() => handleRemoveFromRecent()}>
                   Remove from Recent
                 </button>
               </div>
@@ -477,6 +729,181 @@ export const WorkspaceManager: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Context Menu */}
+      {contextMenu.visible && (
+        <div
+          className="fixed bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-md shadow-lg py-1 min-w-[160px] z-[2000]"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            className="w-full px-3 py-1.5 text-left text-[13px] text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)] flex items-center gap-2"
+            onClick={() => handleContextMenuAction('open')}
+          >
+            <span className="material-symbols-outlined text-[16px]" style={{ fontVariationSettings: "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20" }}>folder_open</span>
+            Open Project
+          </button>
+          <div className="border-t border-[var(--nim-border)] my-1" />
+          <button
+            className="w-full px-3 py-1.5 text-left text-[13px] text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)] flex items-center gap-2"
+            onClick={() => handleContextMenuAction('rename')}
+          >
+            <span className="material-symbols-outlined text-[16px]" style={{ fontVariationSettings: "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20" }}>edit</span>
+            Rename...
+          </button>
+          <button
+            className="w-full px-3 py-1.5 text-left text-[13px] text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)] flex items-center gap-2"
+            onClick={() => handleContextMenuAction('move')}
+          >
+            <span className="material-symbols-outlined text-[16px]" style={{ fontVariationSettings: "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20" }}>drive_file_move</span>
+            Move to...
+          </button>
+          <div className="border-t border-[var(--nim-border)] my-1" />
+          <button
+            className="w-full px-3 py-1.5 text-left text-[13px] text-[var(--nim-error)] hover:bg-[var(--nim-bg-hover)] flex items-center gap-2"
+            onClick={() => handleContextMenuAction('remove')}
+          >
+            <span className="material-symbols-outlined text-[16px]" style={{ fontVariationSettings: "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20" }}>close</span>
+            Remove from Recent
+          </button>
+        </div>
+      )}
+
+      {/* Rename Dialog */}
+      {renameDialog.visible && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[3000]">
+          <div className="bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-lg shadow-xl p-5 w-[450px]">
+            <h2 className="text-lg font-semibold text-[var(--nim-text)] m-0 mb-3">Rename Project</h2>
+
+            {/* Warning banner */}
+            <div className="bg-[var(--nim-warning)]/10 border border-[var(--nim-warning)]/30 rounded-md p-3 mb-4 flex gap-2">
+              <span className="material-symbols-outlined text-[18px] text-[var(--nim-warning)] shrink-0 mt-0.5" style={{ fontVariationSettings: "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20" }}>warning</span>
+              <div className="text-[12px] text-[var(--nim-text-muted)]">
+                <p className="m-0 mb-1 font-medium text-[var(--nim-text)]">This will rename the project folder on disk</p>
+                <p className="m-0">All AI session history, file history, and settings will be migrated. This may take a while for large projects.</p>
+                {renameDialog.stats && (
+                  <p className="m-0 mt-1 text-[var(--nim-text-faint)]">
+                    Project size: {renameDialog.stats.fileCount.toLocaleString()} files, {formatSize(renameDialog.stats.totalSize)}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-[13px] text-[var(--nim-text-muted)] mb-1">New name</label>
+              <input
+                ref={renameInputRef}
+                type="text"
+                className="nim-input w-full"
+                value={renameDialog.newName}
+                onChange={(e) => setRenameDialog(prev => ({ ...prev, newName: e.target.value, error: null }))}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !operationInProgress) {
+                    handleRenameSubmit();
+                  } else if (e.key === 'Escape') {
+                    setRenameDialog({ visible: false, workspace: null, newName: '', error: null, stats: null });
+                  }
+                }}
+                disabled={operationInProgress}
+              />
+              {renameDialog.error && (
+                <p className="text-[12px] text-[var(--nim-error)] mt-1 m-0">{renameDialog.error}</p>
+              )}
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                className="btn nim-btn-secondary"
+                onClick={() => setRenameDialog({ visible: false, workspace: null, newName: '', error: null })}
+                disabled={operationInProgress}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn nim-btn-primary"
+                onClick={handleRenameSubmit}
+                disabled={operationInProgress || !renameDialog.newName.trim()}
+              >
+                {operationInProgress ? 'Renaming...' : 'Rename'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Move Confirmation Dialog */}
+      {confirmDialog.visible && confirmDialog.type === 'move' && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[3000]">
+          <div className="bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-lg shadow-xl p-5 w-[500px]">
+            <h2 className="text-lg font-semibold text-[var(--nim-text)] m-0 mb-3">Move Project</h2>
+
+            {/* Warning banner */}
+            <div className="bg-[var(--nim-warning)]/10 border border-[var(--nim-warning)]/30 rounded-md p-3 mb-4 flex gap-2">
+              <span className="material-symbols-outlined text-[18px] text-[var(--nim-warning)] shrink-0 mt-0.5" style={{ fontVariationSettings: "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20" }}>warning</span>
+              <div className="text-[12px] text-[var(--nim-text-muted)]">
+                <p className="m-0 mb-1 font-medium text-[var(--nim-text)]">This will move the entire project folder</p>
+                <p className="m-0">All project files will be copied to the new location, and all AI session history, file history, and settings will be migrated. This may take a while for large projects.</p>
+              </div>
+            </div>
+
+            <div className="mb-4 space-y-2">
+              <div>
+                <label className="block text-[12px] text-[var(--nim-text-muted)] mb-0.5">From</label>
+                <div className="text-[13px] text-[var(--nim-text)] bg-[var(--nim-bg-secondary)] px-3 py-2 rounded border border-[var(--nim-border)] font-mono overflow-hidden text-ellipsis">{confirmDialog.workspace?.path}</div>
+              </div>
+              <div>
+                <label className="block text-[12px] text-[var(--nim-text-muted)] mb-0.5">To</label>
+                <div className="text-[13px] text-[var(--nim-text)] bg-[var(--nim-bg-secondary)] px-3 py-2 rounded border border-[var(--nim-border)] font-mono overflow-hidden text-ellipsis">{confirmDialog.destinationPath}</div>
+              </div>
+              {confirmDialog.stats && (
+                <div className="flex gap-4 pt-2 text-[12px] text-[var(--nim-text-muted)]">
+                  <span>{confirmDialog.stats.fileCount.toLocaleString()} files</span>
+                  <span>{formatSize(confirmDialog.stats.totalSize)}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button
+                className="btn nim-btn-secondary"
+                onClick={() => setConfirmDialog(prev => ({ ...prev, visible: false }))}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn nim-btn-primary"
+                onClick={executeMoveProject}
+              >
+                Move Project
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Operation Error Toast */}
+      {operationError && (
+        <div className="fixed bottom-4 right-4 bg-[var(--nim-error)] text-white px-4 py-3 rounded-lg shadow-lg z-[3000] flex items-center gap-3 max-w-[400px]">
+          <span className="material-symbols-outlined text-[20px]" style={{ fontVariationSettings: "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20" }}>error</span>
+          <span className="text-[13px] flex-1">{operationError}</span>
+          <button
+            className="text-white/80 hover:text-white"
+            onClick={() => setOperationError(null)}
+          >
+            <span className="material-symbols-outlined text-[18px]" style={{ fontVariationSettings: "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20" }}>close</span>
+          </button>
+        </div>
+      )}
+
+      {/* Loading Overlay */}
+      {operationInProgress && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-[4000]">
+          <div className="bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-lg shadow-xl p-6 flex items-center gap-3">
+            <div className="spinner w-5 h-5 border-2 border-[var(--nim-border)] border-t-[var(--nim-primary)] rounded-full animate-spin"></div>
+            <span className="text-[14px] text-[var(--nim-text)]">Moving project...</span>
+          </div>
+        </div>
+      )}
 
       <style>{`
         @keyframes float {

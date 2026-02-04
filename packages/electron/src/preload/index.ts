@@ -628,6 +628,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     removeRecent: (workspacePath: string) => ipcRenderer.invoke('workspace-manager:remove-recent', workspacePath),
   },
 
+  // Project Migration (move/rename)
+  projectMigration: {
+    canMove: (oldPath: string) => ipcRenderer.invoke('project:can-move', oldPath) as Promise<{ canMove: boolean; reason?: string }>,
+    move: (oldPath: string, newPath: string) => ipcRenderer.invoke('project:move', oldPath, newPath) as Promise<{ success: boolean; error?: string; newPath?: string }>,
+    rename: (oldPath: string, newName: string) => ipcRenderer.invoke('project:rename', oldPath, newName) as Promise<{ success: boolean; error?: string; newPath?: string }>,
+  },
+
 
   // Document Service
   documentService: {

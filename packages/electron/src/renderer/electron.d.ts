@@ -291,6 +291,13 @@ interface ElectronAPI {
     removeRecent: (workspacePath: string) => Promise<{ success: boolean }>;
   };
 
+  // Project Migration (move/rename)
+  projectMigration: {
+    canMove: (oldPath: string) => Promise<{ canMove: boolean; reason?: string }>;
+    move: (oldPath: string, newPath: string) => Promise<{ success: boolean; error?: string; newPath?: string }>;
+    rename: (oldPath: string, newName: string) => Promise<{ success: boolean; error?: string; newPath?: string }>;
+  };
+
   // Document Service
   documentService: {
     list: () => Promise<any[]>;
