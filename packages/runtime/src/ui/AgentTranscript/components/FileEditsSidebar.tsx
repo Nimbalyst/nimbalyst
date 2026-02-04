@@ -860,10 +860,25 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
               'No files edited yet'
             )}
           </div>
-        ) : groupByDirectory ? (
-          renderDirectoryNode(buildDirectoryTree(editedFiles))
         ) : (
-          editedFiles.map(file => renderFile(file))
+          <>
+            {groupByDirectory ? (
+              renderDirectoryNode(buildDirectoryTree(editedFiles))
+            ) : (
+              editedFiles.map(file => renderFile(file))
+            )}
+            {/* Show link to all uncommitted files when in session-files mode and there are additional uncommitted files */}
+            {scopeMode === 'session-files' && onShowAllUncommitted && totalUncommittedCount && totalUncommittedCount > editedFiles.length && (
+              <div className="file-edits-sidebar__uncommitted-hint px-2 py-3 text-center">
+                <button
+                  onClick={onShowAllUncommitted}
+                  className="text-[var(--nim-primary)] hover:underline cursor-pointer bg-transparent border-none text-sm"
+                >
+                  Show all uncommitted files ({totalUncommittedCount})
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
       {renderContextMenu()}
