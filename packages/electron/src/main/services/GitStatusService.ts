@@ -218,14 +218,15 @@ export class GitStatusService {
   }
 
   /**
-   * Create empty result (all files as unchanged)
+   * Create empty result for non-git repos (all files as untracked).
+   * This ensures checkboxes are shown for files in non-git directories.
    */
   private createEmptyResult(filePaths: string[]): GitStatusResult {
     const result: GitStatusResult = {};
     for (const filePath of filePaths) {
       result[filePath] = {
         filePath,
-        status: 'unchanged'
+        status: 'untracked'
       };
     }
     return result;
