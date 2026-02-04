@@ -15,7 +15,7 @@
  */
 
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { StravuEditor, type EditorConfig } from 'rexical';
+import { StravuEditor, type EditorConfig, type ConfigTheme } from 'rexical';
 import type { EditorHost } from '../extensions/editorHost';
 
 export interface MarkdownEditorConfig {
@@ -204,7 +204,7 @@ export function MarkdownEditor({
   // that reads from a ref, so it won't trigger re-computation when the ref changes.
   const editorConfig = useMemo(
     (): EditorConfig => ({
-      theme: config.theme ?? host.theme,
+      theme: (config.theme ?? host.theme) as ConfigTheme,
       editable: config.editable,
       showToolbar: config.showToolbar,
       showTreeView: config.showTreeView,

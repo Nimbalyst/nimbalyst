@@ -2,8 +2,17 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { MaterialSymbol } from '../../icons/MaterialSymbol';
 import type { Message } from '../../../ai/server/types';
 
-// Check if CSS Custom Highlight API is supported
-const supportsHighlightAPI = typeof CSS !== 'undefined' && 'highlights' in CSS;
+// Augment the HighlightRegistry interface to add Map-like methods
+// (TypeScript's lib.dom.d.ts has the interface but not the full Map extension without DOM.Iterable)
+declare global {
+  interface HighlightRegistry {
+    set(name: string, highlight: Highlight): this;
+    delete(name: string): boolean;
+    get(name: string): Highlight | undefined;
+    has(name: string): boolean;
+    clear(): void;
+  }
+}
 
 // Inject search highlight styles once
 const injectHighlightStyles = () => {
@@ -116,10 +125,8 @@ export const TranscriptSearchBar: React.FC<TranscriptSearchBarProps> = ({
 
   // Clear highlights using CSS Custom Highlight API
   const clearHighlights = useCallback(() => {
-    if (supportsHighlightAPI) {
-      CSS.highlights.delete('transcript-search');
-      CSS.highlights.delete('transcript-search-current');
-    }
+    CSS.highlights.delete('transcript-search');
+    CSS.highlights.delete('transcript-search-current');
   }, []);
 
   // Clear state when component becomes hidden
@@ -185,7 +192,6 @@ export const TranscriptSearchBar: React.FC<TranscriptSearchBarProps> = ({
   // Update highlights using CSS Custom Highlight API
   const updateHighlights = useCallback(() => {
     if (!containerRef.current || !searchQuery || matches.length === 0) return;
-    if (!supportsHighlightAPI) return;
 
     // Clear existing highlights
     CSS.highlights.delete('transcript-search');
@@ -284,13 +290,13 @@ export const TranscriptSearchBar: React.FC<TranscriptSearchBarProps> = ({
       }, 50);
       return () => clearTimeout(timeoutId);
     }
+    return undefined;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isVisible, searchQuery, matches, currentIndex]);
 
   // Watch for scroll and DOM changes to update highlights
   useEffect(() => {
     if (!isVisible || !searchQuery || !containerRef.current || matches.length === 0) return;
-    if (!supportsHighlightAPI) return;
 
     let rafId: number | null = null;
 
@@ -340,10 +346,8 @@ export const TranscriptSearchBar: React.FC<TranscriptSearchBarProps> = ({
   // Cleanup highlights on unmount
   useEffect(() => {
     return () => {
-      if (supportsHighlightAPI) {
-        CSS.highlights.delete('transcript-search');
-        CSS.highlights.delete('transcript-search-current');
-      }
+      CSS.highlights.delete('transcript-search');
+      CSS.highlights.delete('transcript-search-current');
     };
   }, []);
 
