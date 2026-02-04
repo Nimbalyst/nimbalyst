@@ -20,6 +20,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.39] - 2026-02-03
+
+
+### Added
+- OS notifications when AI sessions are blocked waiting for user input
+
+### Changed
+- Reduced verbose logging output
+
+### Fixed
+- Git commit widget only triggers on explicit "smart commit" requests
+
 ## [0.52.38] - 2026-02-03
 
 
