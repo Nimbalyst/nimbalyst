@@ -71,6 +71,7 @@ import { convertToWorkstreamAtom, sessionPromptAdditionsAtom, type ExitPlanModeC
 import { usePostHog } from 'posthog-js/react';
 import { setAgentModeSettingsAtom, showPromptAdditionsAtom, hasExternalEditorAtom, externalEditorNameAtom, openInExternalEditorAtom, defaultAgentModelAtom } from '../../store/atoms/appSettings';
 import { buildPlanModeInstructions, PLAN_MODE_DEACTIVATION } from '@nimbalyst/runtime/ai/services/planModePrompts';
+import { resolvePlanFilePath } from '../../utils/pathUtils';
 
 interface Todo {
   status: 'pending' | 'in_progress' | 'completed';
@@ -1059,15 +1060,15 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
         }
       }
 
-      if (newSessionId) {
-        // Construct absolute plan path
+      if (newSessionId && planFilePath) {
+        // Set up implementation prompt for the new session
         const basePath = sessionData?.worktreePath || workspacePath;
-        const absolutePlanPath = planFilePath.startsWith('/')
-          ? planFilePath
-          : `${basePath}/${planFilePath}`;
+        const absolutePlanPath = resolvePlanFilePath(planFilePath, basePath);
+        if (!absolutePlanPath) {
+          console.warn('[SessionTranscript] Could not resolve plan file path:', planFilePath);
+          return;
+        }
 
-        // Save the draft input as an instruction to implement the plan
-        // This matches Claude Code's ExitPlanMode flow - reference the plan file for context
         const implementationPrompt = `Implement the plan at ${absolutePlanPath}. Start with updating your todo list if applicable.`;
 
         // 1. Update the atom directly for immediate display when the new session mounts
@@ -1088,7 +1089,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     } catch (error) {
       console.error('[SessionTranscript] Failed to start new session for implementation:', error);
     }
-  }, [setAiMode, sessionChildren, sessionParentId, workspacePath, worktreeId, onCreateWorktreeSession, createChildSession, convertToWorkstream, sessionData?.worktreePath, posthog]);
+  }, [respondToPrompt, setAiMode, sessionChildren, sessionParentId, workspacePath, worktreeId, onCreateWorktreeSession, createChildSession, convertToWorkstream, sessionData?.worktreePath, posthog, defaultModel]);
 
   const handleExitPlanModeCancel = useCallback(async (requestId: string, confirmSessionId: string) => {
     try {

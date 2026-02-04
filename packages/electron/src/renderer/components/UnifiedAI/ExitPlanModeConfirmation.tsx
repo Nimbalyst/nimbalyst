@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { resolvePlanFilePath } from '../../utils/pathUtils';
 
 export interface ExitPlanModeConfirmationData {
   requestId: string;
@@ -70,12 +71,10 @@ export const ExitPlanModeConfirmation: React.FC<ExitPlanModeConfirmationProps> =
   }, [showFeedbackInput]);
 
   const handleStartNewSession = () => {
-    if (data.planFilePath) {
-      onStartNewSession(data.requestId, data.sessionId, data.planFilePath);
-    } else {
-      // Fallback to simple approve if no plan file
-      onApprove(data.requestId, data.sessionId);
-    }
+    // Always call onStartNewSession to create a new session
+    // If planFilePath is not provided, pass empty string - the handler will still create
+    // a new session but without the "implement plan" prompt
+    onStartNewSession(data.requestId, data.sessionId, data.planFilePath || '');
   };
 
   const handleApprove = () => {
@@ -113,13 +112,8 @@ export const ExitPlanModeConfirmation: React.FC<ExitPlanModeConfirmationProps> =
 
     // Use worktree path if available, otherwise workspace path
     const basePath = worktreePath || workspacePath;
-    if (!basePath) return;
-
-    // Construct absolute path from base + relative plan file path
-    // The planFilePath from the agent is relative (e.g., "plans/add-dark-mode.md")
-    const absolutePath = data.planFilePath.startsWith('/')
-      ? data.planFilePath
-      : `${basePath}/${data.planFilePath}`;
+    const absolutePath = resolvePlanFilePath(data.planFilePath, basePath);
+    if (!absolutePath) return;
 
     // Use the same file click handler as the files edited sidebar
     onFileClick(absolutePath);

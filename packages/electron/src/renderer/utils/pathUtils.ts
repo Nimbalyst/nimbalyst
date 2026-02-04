@@ -68,5 +68,24 @@ export function joinPath(...paths: string[]): string {
   return join(...paths);
 }
 
+/**
+ * Resolve a plan file path to an absolute path.
+ * Handles cross-platform path separators and both relative and absolute paths.
+ * @param planFilePath - The plan file path (relative like "plans/feature.md" or absolute)
+ * @param basePath - The base path (workspace or worktree path) for resolving relative paths
+ * @returns Absolute path to the plan file, or null if inputs are invalid
+ */
+export function resolvePlanFilePath(planFilePath: string | undefined, basePath: string | undefined): string | null {
+  if (!planFilePath || !basePath) return null;
+
+  // Normalize path separators for cross-platform compatibility
+  const normalizedPath = normalize(planFilePath);
+
+  // Check for absolute path (Unix: starts with /, Windows: starts with drive letter like C:)
+  const isAbsolute = normalizedPath.startsWith('/') || /^[A-Za-z]:/.test(normalizedPath);
+
+  return isAbsolute ? normalizedPath : join(basePath, normalizedPath);
+}
+
 // Re-export pathe functions for direct use if needed
 export { basename, dirname, join, relative, normalize } from 'pathe';

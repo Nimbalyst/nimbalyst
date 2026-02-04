@@ -3071,30 +3071,36 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       const toolName = input.tool_name;
       const toolInput = input.tool_input;
 
-
       // EXITPLANMODE CONFIRMATION: Intercept ExitPlanMode tool calls in planning mode
-      // TODO: Debug logging - uncomment if needed for ExitPlanMode troubleshooting
-      // if (toolName === 'ExitPlanMode') {
-      // }
-
       if (toolName === 'ExitPlanMode' && this.currentMode === 'planning') {
-        // Validate planFilePath if provided (optional - plan might not be written to file)
+        // Require planFilePath - the user needs to know which plan file to implement
         const planFilePath = toolInput?.planFilePath;
 
-        // If planFilePath is provided, validate it's a proper path
-        if (planFilePath && typeof planFilePath === 'string') {
-          const isValidPlanPath = planFilePath.endsWith('.md') &&
-            (planFilePath.startsWith('plans/') || planFilePath.includes('/plans/'));
+        if (!planFilePath || typeof planFilePath !== 'string') {
+          return {
+            hookSpecificOutput: {
+              hookEventName: 'PreToolUse' as const,
+              permissionDecision: 'deny' as const,
+              permissionDecisionReason: `Missing required planFilePath parameter. You must provide the path to the plan file you created (e.g., planFilePath: "plans/my-feature.md"). This is required so the implementation session knows which plan to implement.`
+            }
+          };
+        }
 
-          if (!isValidPlanPath) {
-            return {
-              hookSpecificOutput: {
-                hookEventName: 'PreToolUse' as const,
-                permissionDecision: 'deny' as const,
-                permissionDecisionReason: `Invalid planFilePath: '${planFilePath}'. If providing a planFilePath, it must be a .md file in the plans/ directory (e.g., 'plans/add-dark-mode.md'). You can also call ExitPlanMode without planFilePath if the plan wasn't saved to a file.`
-              }
-            };
-          }
+        // Normalize path separators for cross-platform compatibility (Windows uses backslashes)
+        const normalizedPath = planFilePath.replace(/\\/g, '/');
+
+        // Validate it's a proper path
+        const isValidPlanPath = normalizedPath.endsWith('.md') &&
+          (normalizedPath.startsWith('plans/') || normalizedPath.includes('/plans/'));
+
+        if (!isValidPlanPath) {
+          return {
+            hookSpecificOutput: {
+              hookEventName: 'PreToolUse' as const,
+              permissionDecision: 'deny' as const,
+              permissionDecisionReason: `Invalid planFilePath: '${planFilePath}'. The planFilePath must be a .md file in the plans/ directory (e.g., 'plans/add-dark-mode.md').`
+            }
+          };
         }
 
         // Generate unique request ID for this confirmation

@@ -28,7 +28,7 @@ You MUST:
 - Explore the codebase using Read, Glob, Grep tools
 - Ask questions using AskUserQuestion to clarify requirements
 - Write and iteratively update a plan file in the plans/ directory
-- Call ExitPlanMode when ready for approval
+- Call ExitPlanMode with planFilePath parameter when ready for approval (e.g., ExitPlanMode with planFilePath: "plans/my-feature.md")
 
 ## Plan File
 
@@ -88,7 +88,7 @@ Your goal is to build a comprehensive plan through iterative refinement:
 2. Explore the codebase using Read, Glob, and Grep tools
 3. Interview the user using AskUserQuestion to clarify requirements
 4. Write to the plan file iteratively as you learn more
-5. End your turn by either using AskUserQuestion or calling ExitPlanMode when ready
+5. End your turn by either using AskUserQuestion or calling ExitPlanMode with planFilePath when ready
 
 ## Visual Mockups
 
