@@ -7,8 +7,13 @@
 
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
+import { atom, useSetAtom } from 'jotai';
+import { store } from '@nimbalyst/runtime/store';
 import { getHelpContent, type HelpEntry } from './HelpContent';
 import { getShortcutDisplay } from '../../shared/KeyboardShortcuts';
+
+// Atom to track when window last regained focus - shared across all HelpTooltip instances
+export const lastWindowFocusTimeAtom = atom(0);
 
 /**
  * Parse basic markdown in help text.
@@ -84,6 +89,7 @@ interface TooltipPosition {
 
 const TOOLTIP_MARGIN = 8;
 const CLICK_COOLDOWN_MS = 5000; // Don't show tooltip for 5 seconds after clicking
+const WINDOW_FOCUS_COOLDOWN_MS = 1000; // Don't show tooltip for 1s after window regains focus (must be > tooltip delay)
 
 function calculatePosition(
   targetRect: DOMRect,
@@ -162,14 +168,38 @@ export function HelpTooltip({
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastClickTimeRef = useRef<number>(0);
 
+  const setLastWindowFocusTime = useSetAtom(lastWindowFocusTimeAtom);
+
   const helpContent = getHelpContent(testId);
 
   const showTooltip = useCallback(() => {
+    // Read current value from store at callback time, not stale closure value
+    const lastWindowFocusTime = store.get(lastWindowFocusTimeAtom);
+
+    console.log('[HelpTooltip] showTooltip called', {
+      testId,
+      disabled,
+      hasHelpContent: !!helpContent,
+      hasTargetRef: !!targetRef.current,
+      visibilityState: document.visibilityState,
+      timeSinceClick: Date.now() - lastClickTimeRef.current,
+      timeSinceWindowFocus: Date.now() - lastWindowFocusTime,
+    });
+
     if (disabled || !helpContent || !targetRef.current) return;
+
+    // Don't show if window is not visible (user tabbed away)
+    if (document.visibilityState !== 'visible') return;
 
     // Don't show if we're in the cooldown period after a click
     if (Date.now() - lastClickTimeRef.current < CLICK_COOLDOWN_MS) return;
 
+    // Don't show if we're in the cooldown period after window regained focus
+    // This prevents tooltips from appearing on elements that had focus when the user tabbed away
+    // Uses store.get() to read CURRENT atom value, not stale closure from render time
+    if (Date.now() - lastWindowFocusTime < WINDOW_FOCUS_COOLDOWN_MS) return;
+
+    console.log('[HelpTooltip] showing tooltip for', testId);
     const rect = targetRef.current.getBoundingClientRect();
     // Estimate tooltip size (will be refined after render)
     const estimatedWidth = 280;
@@ -177,7 +207,7 @@ export function HelpTooltip({
     const pos = calculatePosition(rect, estimatedWidth, estimatedHeight, placement);
     setPosition(pos);
     setIsVisible(true);
-  }, [disabled, helpContent, placement]);
+  }, [disabled, helpContent, placement, testId]);
 
   const hideTooltip = useCallback(() => {
     if (timeoutRef.current) {
@@ -188,11 +218,12 @@ export function HelpTooltip({
   }, []);
 
   const handleMouseEnter = useCallback(() => {
+    console.log('[HelpTooltip] handleMouseEnter', testId);
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
     }
     timeoutRef.current = setTimeout(showTooltip, delay);
-  }, [delay, showTooltip]);
+  }, [delay, showTooltip, testId]);
 
   const handleMouseLeave = useCallback(() => {
     hideTooltip();
@@ -212,6 +243,39 @@ export function HelpTooltip({
       setPosition(pos);
     }
   }, [isVisible, placement]);
+
+  // Hide tooltip when window loses focus or page becomes hidden (e.g., user tabs away from app)
+  // and track when window regains focus to prevent tooltips from appearing
+  // on elements that retained focus while the window was inactive
+  useEffect(() => {
+    const handleWindowBlur = () => {
+      console.log('[HelpTooltip] window blur', testId);
+      hideTooltip();
+    };
+    const handleWindowFocus = () => {
+      console.log('[HelpTooltip] window focus', testId);
+      // Set cooldown so focus events on previously-focused elements don't trigger tooltips
+      // Uses shared Jotai atom so ALL tooltip instances see this update immediately
+      setLastWindowFocusTime(Date.now());
+    };
+    const handleVisibilityChange = () => {
+      console.log('[HelpTooltip] visibilitychange', testId, document.visibilityState);
+      if (document.visibilityState === 'hidden') {
+        hideTooltip();
+      } else if (document.visibilityState === 'visible') {
+        // Set cooldown when page becomes visible again
+        setLastWindowFocusTime(Date.now());
+      }
+    };
+    window.addEventListener('blur', handleWindowBlur);
+    window.addEventListener('focus', handleWindowFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      window.removeEventListener('blur', handleWindowBlur);
+      window.removeEventListener('focus', handleWindowFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [hideTooltip, setLastWindowFocusTime, testId]);
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -260,6 +324,7 @@ export function HelpTooltip({
       children.props.onMouseDown?.(e);
     },
     onFocus: (e: React.FocusEvent) => {
+      console.log('[HelpTooltip] onFocus', testId);
       handleMouseEnter();
       children.props.onFocus?.(e);
     },
