@@ -20,6 +20,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.40] - 2026-02-04
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- ExitPlanMode now requires planFilePath parameter with cross-platform path support
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.52.39] - 2026-02-03
 
 
