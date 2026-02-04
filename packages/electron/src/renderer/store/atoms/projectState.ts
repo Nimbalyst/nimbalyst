@@ -111,7 +111,7 @@ const defaultProjectState: ProjectState = {
     activeFilter: null,
   },
   diffTree: {
-    groupByDirectory: false,
+    groupByDirectory: true,
   },
   agentMode: {
     fileScopeMode: 'session-files', // Default to showing all session edits
