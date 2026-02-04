@@ -836,7 +836,6 @@ export const RichTranscriptView = React.forwardRef<
     const isExpanded = expandedTools.has(toolId);
     const isSubAgent = tool.isSubAgent && tool.name === 'Task';
     const hasChildren = tool.childToolCalls && tool.childToolCalls.length > 0;
-
     // Check for custom widget first
     const CustomWidget = tool.name ? getCustomToolWidget(tool.name) : undefined;
     if (CustomWidget) {
@@ -1022,8 +1021,14 @@ export const RichTranscriptView = React.forwardRef<
       {/* Search Bar */}
       <TranscriptSearchBar
         isVisible={showSearchBar}
+        messages={messages}
         containerRef={scrollContainerRef}
         onClose={() => setShowSearchBar(false)}
+        onScrollToMessage={(index) => {
+          if (vlistRef.current) {
+            vlistRef.current.scrollToIndex(index, { align: 'center' });
+          }
+        }}
       />
 
       {/* Settings Panel */}
@@ -1150,6 +1155,7 @@ export const RichTranscriptView = React.forwardRef<
                     return (
                       <div
                         key={`${sessionId}-${index}`}
+                        data-message-index={index}
                         ref={(el) => {
                           if (el) messageRefs.current.set(index, el);
                         }}

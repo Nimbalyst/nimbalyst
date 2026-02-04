@@ -1,5 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { MaterialSymbol } from '../../icons/MaterialSymbol';
+import type { Message } from '../../../ai/server/types';
+
+// Check if CSS Custom Highlight API is supported
+const supportsHighlightAPI = typeof CSS !== 'undefined' && 'highlights' in CSS;
 
 // Inject search highlight styles once
 const injectHighlightStyles = () => {
@@ -9,69 +13,61 @@ const injectHighlightStyles = () => {
   const style = document.createElement('style');
   style.id = styleId;
   style.textContent = `
-    .transcript-search-highlight {
-      background-color: color-mix(in srgb, var(--warning-color, #fbbf24) 30%, transparent);
-      color: var(--nim-text);
-      border-radius: 0.125rem;
-      padding: 0 0.125rem;
+    /* CSS Custom Highlight API styles */
+    ::highlight(transcript-search) {
+      background-color: color-mix(in srgb, var(--warning-color, #fbbf24) 35%, transparent);
     }
-    .transcript-search-highlight-current {
+    ::highlight(transcript-search-current) {
       background-color: var(--warning-color, #fbbf24);
-      color: var(--nim-bg);
-      font-weight: 500;
-    }
-    .transcript-search-message-has-matches {
-      outline: 1px solid color-mix(in srgb, var(--warning-color, #fbbf24) 25%, transparent);
-      outline-offset: -1px;
-    }
-    .transcript-search-message-current {
-      outline: 2px solid color-mix(in srgb, var(--warning-color, #fbbf24) 50%, transparent);
-      outline-offset: -2px;
-      background-color: color-mix(in srgb, var(--warning-color, #fbbf24) 5%, transparent) !important;
     }
   `;
   document.head.appendChild(style);
 };
 
- /**
+/**
  * TranscriptSearchBar - Find-in-page search UI for agent transcript messages.
  *
- * Provides browser-style text search with highlighting, case sensitivity toggle,
- * and keyboard navigation (Enter/Shift+Enter, Cmd+G/Cmd+Shift+G, Escape).
+ * Uses the CSS Custom Highlight API for highlighting, which is specifically designed
+ * for "find-on-page over virtualized documents" (per MDN). This API:
+ * - Doesn't modify the DOM structure
+ * - Works efficiently with virtualized lists
+ * - Automatically handles elements being added/removed from DOM
  *
  * Features:
- * - Walks DOM tree to find all text matches across transcript messages
- * - Highlights matches with visual indicators (yellow for all, orange for current)
- * - Scrolls nested containers and main view to bring current match into view
+ * - Searches message content data to find all matches
+ * - Works with virtualized lists (VList) where most messages aren't in DOM
+ * - Uses CSS Custom Highlight API for efficient text highlighting
+ * - Scrolls to message containing current match
  * - Supports case-sensitive and case-insensitive search modes
- * - Cleans up all highlights when search bar is closed
  */
 
 interface SearchMatch {
-  node: Node;
+  messageIndex: number;
   offset: number;
   length: number;
-  element: HTMLElement; // The message container element
 }
 
 interface TranscriptSearchBarProps {
   isVisible: boolean;
+  messages: Message[];
   containerRef: React.RefObject<HTMLDivElement>;
   onClose: () => void;
+  onScrollToMessage: (index: number) => void;
 }
 
 export const TranscriptSearchBar: React.FC<TranscriptSearchBarProps> = ({
   isVisible,
+  messages,
   containerRef,
   onClose,
+  onScrollToMessage,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [currentIndex, setCurrentIndex] = useState(0);
   const [matches, setMatches] = useState<SearchMatch[]>([]);
   const [caseSensitive, setCaseSensitive] = useState(false);
+  const [highlightedMessageIndices, setHighlightedMessageIndices] = useState<Set<number>>(new Set());
   const inputRef = useRef<HTMLInputElement>(null);
-  const highlightClassName = 'transcript-search-highlight';
-  const currentHighlightClassName = 'transcript-search-highlight-current';
 
   // Inject highlight styles on mount
   useEffect(() => {
@@ -81,14 +77,18 @@ export const TranscriptSearchBar: React.FC<TranscriptSearchBarProps> = ({
   // Navigate to next match
   const goToNextMatch = useCallback(() => {
     if (matches.length === 0) return;
-    setCurrentIndex((prev) => (prev + 1) % matches.length);
-  }, [matches.length]);
+    const nextIndex = (currentIndex + 1) % matches.length;
+    setCurrentIndex(nextIndex);
+    onScrollToMessage(matches[nextIndex].messageIndex);
+  }, [matches, currentIndex, onScrollToMessage]);
 
   // Navigate to previous match
   const goToPrevMatch = useCallback(() => {
     if (matches.length === 0) return;
-    setCurrentIndex((prev) => (prev - 1 + matches.length) % matches.length);
-  }, [matches.length]);
+    const prevIndex = (currentIndex - 1 + matches.length) % matches.length;
+    setCurrentIndex(prevIndex);
+    onScrollToMessage(matches[prevIndex].messageIndex);
+  }, [matches, currentIndex, onScrollToMessage]);
 
   // Focus input when search bar becomes visible
   useEffect(() => {
@@ -114,239 +114,238 @@ export const TranscriptSearchBar: React.FC<TranscriptSearchBarProps> = ({
     };
   }, [isVisible, goToNextMatch, goToPrevMatch]);
 
-  // Clear highlights when component unmounts or becomes hidden
+  // Clear highlights using CSS Custom Highlight API
+  const clearHighlights = useCallback(() => {
+    if (supportsHighlightAPI) {
+      CSS.highlights.delete('transcript-search');
+      CSS.highlights.delete('transcript-search-current');
+    }
+  }, []);
+
+  // Clear state when component becomes hidden
   useEffect(() => {
     if (!isVisible) {
       clearHighlights();
       setSearchQuery('');
       setMatches([]);
       setCurrentIndex(0);
+      setHighlightedMessageIndices(new Set());
     }
-  }, [isVisible]);
+  }, [isVisible, clearHighlights]);
 
-  // Clear existing highlights
-  const clearHighlights = useCallback(() => {
-    if (!containerRef.current) return;
-
-    // Remove highlight spans
-    const highlightedElements = containerRef.current.querySelectorAll(
-      `.${highlightClassName}, .${currentHighlightClassName}`
-    );
-    highlightedElements.forEach((element) => {
-      const parent = element.parentNode;
-      if (parent) {
-        const textNode = document.createTextNode(element.textContent || '');
-        parent.replaceChild(textNode, element);
-        parent.normalize();
-      }
-    });
-
-    // Remove message container highlight classes
-    const messageElements = containerRef.current.querySelectorAll(
-      '.transcript-search-message-has-matches, .transcript-search-message-current'
-    );
-    messageElements.forEach((element) => {
-      element.classList.remove('transcript-search-message-has-matches');
-      element.classList.remove('transcript-search-message-current');
-    });
-  }, [containerRef]);
-
-  // Search for matches in the transcript
+  // Search for matches in message data (not DOM)
   const performSearch = useCallback(
     (query: string) => {
-      clearHighlights();
-
-      if (!query || !containerRef.current) {
+      if (!query) {
+        clearHighlights();
         setMatches([]);
         setCurrentIndex(0);
+        setHighlightedMessageIndices(new Set());
         return;
       }
 
       const newMatches: SearchMatch[] = [];
+      const messageIndicesWithMatches = new Set<number>();
       const searchRegex = new RegExp(
         query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
         caseSensitive ? 'g' : 'gi'
       );
 
-      // Walk through all text nodes in the container
+      // Search through user and assistant messages only (skip tool messages for now)
+      messages.forEach((message, messageIndex) => {
+        // Skip tool messages - their content is in collapsed UI elements
+        if (message.role === 'tool') return;
+
+        const content = message.content || '';
+        let match: RegExpExecArray | null;
+
+        searchRegex.lastIndex = 0;
+        while ((match = searchRegex.exec(content))) {
+          newMatches.push({
+            messageIndex,
+            offset: match.index,
+            length: match[0].length,
+          });
+          messageIndicesWithMatches.add(messageIndex);
+        }
+      });
+
+      setMatches(newMatches);
+      setHighlightedMessageIndices(messageIndicesWithMatches);
+      setCurrentIndex(newMatches.length > 0 ? 0 : -1);
+
+      // Scroll to first match
+      if (newMatches.length > 0) {
+        onScrollToMessage(newMatches[0].messageIndex);
+      }
+    },
+    [messages, caseSensitive, clearHighlights, onScrollToMessage]
+  );
+
+  // Update highlights using CSS Custom Highlight API
+  const updateHighlights = useCallback(() => {
+    if (!containerRef.current || !searchQuery || matches.length === 0) return;
+    if (!supportsHighlightAPI) return;
+
+    // Clear existing highlights
+    CSS.highlights.delete('transcript-search');
+    CSS.highlights.delete('transcript-search-current');
+    const allRanges: Range[] = [];
+    const currentRanges: Range[] = [];
+
+    // Track which match index we're on globally
+    let globalMatchCounter = 0;
+
+    // Find all rendered message elements and create Range objects for highlights
+    const messageElements = containerRef.current.querySelectorAll('.rich-transcript-message');
+
+    messageElements.forEach((messageElement) => {
+      const key = messageElement.getAttribute('data-message-index');
+      if (!key) return;
+
+      const messageIndex = parseInt(key, 10);
+      if (isNaN(messageIndex) || !highlightedMessageIndices.has(messageIndex)) return;
+
+      // Find the message content area (not the header with timestamp, sender, etc.)
+      const contentElement = messageElement.querySelector('.rich-transcript-message-content') || messageElement;
+
+      // Find text matches within this element
+      const searchRegex = new RegExp(
+        searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+        caseSensitive ? 'g' : 'gi'
+      );
+
+      // Walk text nodes in the message content only
       const walker = document.createTreeWalker(
-        containerRef.current,
+        contentElement,
         NodeFilter.SHOW_TEXT,
         null
       );
 
-      let node: Node | null;
-      while ((node = walker.nextNode())) {
-        const text = node.textContent || '';
+      let textNode: Node | null;
+
+      while ((textNode = walker.nextNode())) {
+        const text = textNode.textContent || '';
+        if (text.length === 0) continue;
+
         let match: RegExpExecArray | null;
-
         searchRegex.lastIndex = 0;
+
         while ((match = searchRegex.exec(text))) {
-          const matchOffset = match.index;
-          const matchLength = match[0].length;
+          try {
+            const range = document.createRange();
+            range.setStart(textNode, match.index);
+            range.setEnd(textNode, match.index + match[0].length);
 
-          // Get the parent element for scrolling
-          let element = node.parentElement;
-          while (element && element !== containerRef.current) {
-            if (element.classList.contains('rich-transcript-message')) {
-              break;
+            const isCurrentMatchHighlight = globalMatchCounter === currentIndex;
+
+            if (isCurrentMatchHighlight) {
+              currentRanges.push(range);
+            } else {
+              allRanges.push(range);
             }
-            element = element.parentElement;
-          }
 
-          if (element) {
-            newMatches.push({
-              node,
-              offset: matchOffset,
-              length: matchLength,
-              element,
-            });
+            globalMatchCounter++;
+          } catch {
+            // Range creation can fail if offsets are invalid
           }
         }
       }
+    });
 
-      setMatches(newMatches);
-      setCurrentIndex(newMatches.length > 0 ? 0 : -1);
-
-      // Highlight all matches
-      if (newMatches.length > 0) {
-        highlightMatches(newMatches, 0);
-      }
-    },
-    [containerRef, caseSensitive, clearHighlights]
-  );
-
-  // Update which match is current (without rebuilding all highlights)
-  const updateCurrentMatch = useCallback(
-    (matchList: SearchMatch[], currentIdx: number) => {
-      if (!containerRef.current) return;
-
-      // Remove current match highlighting from all elements
-      const currentHighlights = containerRef.current.querySelectorAll(
-        `.${currentHighlightClassName}`
-      );
-      currentHighlights.forEach((el) => {
-        el.classList.remove(currentHighlightClassName);
-      });
-
-      // Remove message current class
-      const currentMessages = containerRef.current.querySelectorAll(
-        '.transcript-search-message-current'
-      );
-      currentMessages.forEach((el) => {
-        el.classList.remove('transcript-search-message-current');
-      });
-
-      // Add current highlight to the new current match
-      if (currentIdx >= 0 && currentIdx < matchList.length) {
-        const allHighlights = containerRef.current.querySelectorAll(
-          `.${highlightClassName}`
-        );
-        if (allHighlights[currentIdx]) {
-          allHighlights[currentIdx].classList.add(currentHighlightClassName);
-
-          const currentMatch = matchList[currentIdx];
-          currentMatch.element.classList.add('transcript-search-message-current');
-
-          // Scroll nested containers
-          const currentHighlight = allHighlights[currentIdx] as HTMLElement;
-          let parent = currentHighlight.parentElement;
-          while (parent && parent !== containerRef.current) {
-            const hasScroll =
-              parent.scrollHeight > parent.clientHeight ||
-              parent.scrollWidth > parent.clientWidth;
-            const overflowY = window.getComputedStyle(parent).overflowY;
-            const isScrollable =
-              hasScroll && (overflowY === 'auto' || overflowY === 'scroll');
-
-            if (isScrollable) {
-              const parentRect = parent.getBoundingClientRect();
-              const highlightRect = currentHighlight.getBoundingClientRect();
-              const relativeTop = highlightRect.top - parentRect.top;
-              const relativeBottom = highlightRect.bottom - parentRect.bottom;
-
-              if (relativeTop < 0) {
-                parent.scrollTop += relativeTop - 20;
-              } else if (relativeBottom > 0) {
-                parent.scrollTop += relativeBottom + 20;
-              }
-            }
-
-            parent = parent.parentElement;
-          }
-
-          // Scroll main container
-          currentMatch.element.scrollIntoView({
-            behavior: 'smooth',
-            block: 'center',
-          });
-        }
-      }
-    },
-    [containerRef]
-  );
-
-  // Highlight all matches (called when search query changes)
-  const highlightMatches = useCallback(
-    (matchList: SearchMatch[], currentIdx: number) => {
-      clearHighlights();
-
-      // Track which message elements have matches
-      const messageElementsWithMatches = new Set<HTMLElement>();
-
-      matchList.forEach((match, index) => {
-        const { node, offset, length, element } = match;
-        const text = node.textContent || '';
-        const parent = node.parentNode;
-
-        if (!parent) return;
-
-        // Add this message element to the set
-        messageElementsWithMatches.add(element);
-
-        // Create text nodes and highlight span
-        const before = document.createTextNode(text.substring(0, offset));
-        const matchText = text.substring(offset, offset + length);
-        const after = document.createTextNode(text.substring(offset + length));
-
-        const highlight = document.createElement('span');
-        highlight.className = highlightClassName;
-        highlight.textContent = matchText;
-
-        // Replace the text node with the highlighted version
-        const fragment = document.createDocumentFragment();
-        if (before.textContent) fragment.appendChild(before);
-        fragment.appendChild(highlight);
-        if (after.textContent) fragment.appendChild(after);
-
-        parent.replaceChild(fragment, node);
-
-        // Update the match reference to point to the new highlight element
-        match.node = highlight.firstChild || node;
-      });
-
-      // Add highlight class to message containers that have matches
-      messageElementsWithMatches.forEach((element) => {
-        element.classList.add('transcript-search-message-has-matches');
-      });
-
-      // Now update which one is current
-      updateCurrentMatch(matchList, currentIdx);
-    },
-    [clearHighlights, updateCurrentMatch]
-  );
-
-  // Update which match is current when index changes (without rebuilding highlights)
-  useEffect(() => {
-    if (matches.length > 0 && currentIndex >= 0) {
-      updateCurrentMatch(matches, currentIndex);
+    // Register the highlights with the CSS Custom Highlight API
+    if (allRanges.length > 0) {
+      const highlight = new Highlight(...allRanges);
+      CSS.highlights.set('transcript-search', highlight);
     }
-  }, [currentIndex, matches, updateCurrentMatch]);
 
-  // Perform search when query or case sensitivity changes
+    if (currentRanges.length > 0) {
+      const currentHighlight = new Highlight(...currentRanges);
+      CSS.highlights.set('transcript-search-current', currentHighlight);
+    }
+  }, [containerRef, searchQuery, matches, currentIndex, highlightedMessageIndices, caseSensitive]);
+
+  // Perform search when query or case sensitivity changes (debounced)
+  // Note: we intentionally exclude performSearch from deps to avoid re-running on every render
   useEffect(() => {
-    performSearch(searchQuery);
-  }, [searchQuery, caseSensitive, performSearch]);
+    const timeoutId = setTimeout(() => {
+      performSearch(searchQuery);
+    }, 100);
+    return () => clearTimeout(timeoutId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery, caseSensitive]);
+
+  // Update highlights when matches or currentIndex changes
+  // Note: we intentionally exclude updateHighlights from deps to avoid infinite loops
+  useEffect(() => {
+    if (isVisible && searchQuery && matches.length > 0) {
+      const timeoutId = setTimeout(() => {
+        updateHighlights();
+      }, 50);
+      return () => clearTimeout(timeoutId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isVisible, searchQuery, matches, currentIndex]);
+
+  // Watch for scroll and DOM changes to update highlights
+  useEffect(() => {
+    if (!isVisible || !searchQuery || !containerRef.current || matches.length === 0) return;
+    if (!supportsHighlightAPI) return;
+
+    let rafId: number | null = null;
+
+    // Throttled update using requestAnimationFrame
+    const throttledUpdate = () => {
+      if (rafId) return;
+      rafId = requestAnimationFrame(() => {
+        updateHighlights();
+        rafId = null;
+      });
+    };
+
+    // Update highlights on scroll (VList re-renders elements when scrolling)
+    const scrollContainer = containerRef.current.querySelector('.rich-transcript-vlist') || containerRef.current;
+    scrollContainer.addEventListener('scroll', throttledUpdate, { passive: true });
+
+    // Watch for VList rendering new message elements (not scroll button or other UI changes)
+    const vlistInner = scrollContainer.firstElementChild;
+    if (!vlistInner) return;
+
+    const observer = new MutationObserver((mutations) => {
+      // Only update if message elements were added/removed, not other UI elements
+      const hasMessageChange = mutations.some(mutation => {
+        return Array.from(mutation.addedNodes).some(node =>
+          node instanceof HTMLElement && node.classList?.contains('rich-transcript-message')
+        ) || Array.from(mutation.removedNodes).some(node =>
+          node instanceof HTMLElement && node.classList?.contains('rich-transcript-message')
+        );
+      });
+      if (hasMessageChange) {
+        throttledUpdate();
+      }
+    });
+
+    observer.observe(vlistInner, {
+      childList: true,
+    });
+
+    return () => {
+      scrollContainer.removeEventListener('scroll', throttledUpdate);
+      observer.disconnect();
+      if (rafId) cancelAnimationFrame(rafId);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isVisible, searchQuery, matches.length]);
+
+  // Cleanup highlights on unmount
+  useEffect(() => {
+    return () => {
+      if (supportsHighlightAPI) {
+        CSS.highlights.delete('transcript-search');
+        CSS.highlights.delete('transcript-search-current');
+      }
+    };
+  }, []);
 
   // Handle keyboard shortcuts
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
