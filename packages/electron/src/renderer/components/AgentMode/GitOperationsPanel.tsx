@@ -163,6 +163,56 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
     // AI commit proposals are now handled entirely by GitCommitConfirmationWidget in the transcript
     // GitOperationsPanel is for manual git operations only
 
+    // Helper function to create an AI session with a draft message and open it
+    // Used by all conflict resolution handlers to avoid code duplication
+    const createSessionWithDraft = useCallback(async (
+      draftMessage: string,
+      errorContext: string
+    ): Promise<void> => {
+      // Create the session in the MAIN REPO workspace (so it appears in session list)
+      // but associate it with the worktree via worktreeId
+      const sessionResult = await window.electronAPI.aiCreateSession(
+        'claude-code',
+        undefined, // documentContext
+        workspacePath, // workspacePath (main repo - so session appears in main session list)
+        undefined, // modelId (use default)
+        'coding', // sessionType
+        worktreeId ?? undefined  // worktreeId (associate with the worktree)
+      );
+
+      if (sessionResult?.id) {
+        const newSessionId = sessionResult.id as string;
+
+        // Load the session data first (use workspacePath since session was created in main repo workspace)
+        const sessionData = await window.electronAPI.aiLoadSession(newSessionId, workspacePath);
+
+        if (sessionData) {
+          // Save the draft input so it appears in the text box but isn't sent yet
+          await window.electronAPI.aiSaveDraftInput(
+            newSessionId,
+            draftMessage,
+            workspacePath
+          );
+
+          // Dispatch a custom event to notify the AgenticPanel to open this session
+          window.dispatchEvent(new CustomEvent('open-ai-session', {
+            detail: {
+              sessionId: newSessionId,
+              workspacePath: workspacePath,
+              draftInput: draftMessage
+            }
+          }));
+        }
+      }
+    }, [workspacePath, worktreeId]);
+
+    // Helper to extract worktree name from path (cross-platform compatible)
+    const getWorktreeNameFromPath = useCallback((path: string | null | undefined): string => {
+      if (!path) return 'unknown';
+      // Handle both Unix (/) and Windows (\) path separators
+      return path.split(/[\\/]/).pop() || 'unknown';
+    }, []);
+
     // Clear git state when there are no more uncommitted changes
     // This is the authoritative cleanup - if nothing to commit, reset the UI
     useEffect(() => {
@@ -612,8 +662,6 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
     const handleResolveBadGitStateWithAgent = useCallback(async () => {
       if (!badGitStateError) return;
 
-      console.log('[GitOperationsPanel] Resolving bad git state with agent', { badGitStateError, worktreePath });
-
       // Close the dialog
       setBadGitStateError(null);
 
@@ -642,19 +690,15 @@ ${conflictFilesList}
 
 Please help me resolve this git issue.`;
 
-        // Send message to Claude Agent
-        const result = await window.electronAPI.invoke('ai:send-message', sessionId, draftMessage);
-        console.log('[GitOperationsPanel] Sent bad git state resolution request to agent', { result });
+        await createSessionWithDraft(draftMessage, 'bad git state resolution');
       } catch (err) {
         console.error('[GitOperationsPanel] Failed to send bad git state resolution request:', err);
       }
-    }, [badGitStateError, sessionId, worktreePath, workspacePath]);
+    }, [badGitStateError, worktreePath, workspacePath, createSessionWithDraft]);
 
     // Resolve rebase conflicts with Claude Agent (using Crystal's prompt pattern)
     const handleResolveRebaseConflictsWithAgent = useCallback(async () => {
       if (!rebaseConflictData || rebaseConflictData.files.length === 0) return;
-
-      console.log('[GitOperationsPanel] Resolving rebase conflicts with agent', { rebaseConflictData, worktreePath });
 
       // Close the dialog
       setRebaseConflictData(null);
@@ -662,7 +706,7 @@ Please help me resolve this git issue.`;
       try {
         // Get the base branch from repo root and worktree info
         const baseBranch = worktreeRepoRootBranch || 'main';
-        const wtName = worktreePath?.split('/').pop() || 'unknown';
+        const wtName = getWorktreeNameFromPath(worktreePath);
         const worktreeBranch = `worktree/${wtName}`;
 
         // Create a detailed prompt with specific instructions
@@ -699,60 +743,15 @@ ${rebaseConflictData.commits.theirs && rebaseConflictData.commits.theirs.length 
 
 Make sure to preserve the intent of both the worktree changes and the incoming changes from ${baseBranch}.`;
 
-        console.log('[GitOperationsPanel] Creating AI session in main repo workspace...');
-        // Create the session in the MAIN REPO workspace (so it appears in main session list)
-        // but associate it with the worktree via worktreeId (so Claude runs in worktree directory)
-        const sessionResult = await window.electronAPI.aiCreateSession(
-          'claude-code',
-          undefined, // documentContext
-          workspacePath, // workspacePath (main repo - so session appears in main session list)
-          undefined, // modelId (use default)
-          'coding', // sessionType
-          worktreeId ?? undefined  // worktreeId (associate with the worktree - Claude will run in worktree directory)
-        );
-
-        console.log('[GitOperationsPanel] Session result:', sessionResult);
-
-        if (sessionResult?.id) {
-          const rebaseSessionId = sessionResult.id;
-
-          // Load the session data first (use workspacePath since session was created in main repo workspace)
-          console.log('[GitOperationsPanel] Loading session...', rebaseSessionId);
-          const sessionData = await window.electronAPI.aiLoadSession(rebaseSessionId, workspacePath);
-          console.log('[GitOperationsPanel] Session data:', sessionData);
-
-          if (sessionData) {
-            // Save the draft input so it appears in the text box but isn't sent yet
-            console.log('[GitOperationsPanel] Saving draft input...');
-            await window.electronAPI.aiSaveDraftInput(
-              rebaseSessionId,
-              draftMessage,
-              workspacePath
-            );
-
-            // Dispatch a custom event to notify the AgenticPanel to open this session
-            // Use workspacePath since that's where the session was created
-            console.log('[GitOperationsPanel] Dispatching event...');
-            window.dispatchEvent(new CustomEvent('open-ai-session', {
-              detail: {
-                sessionId: rebaseSessionId,
-                workspacePath: workspacePath,
-                draftInput: draftMessage
-              }
-            }));
-            console.log('[GitOperationsPanel] Event dispatched successfully');
-          }
-        }
+        await createSessionWithDraft(draftMessage, 'rebase conflict resolution');
       } catch (err) {
         console.error('[GitOperationsPanel] Failed to create agent session for rebase conflict resolution:', err);
       }
-    }, [workspacePath, worktreePath, worktreeId, worktreeRepoRootBranch, rebaseConflictData]);
+    }, [worktreePath, worktreeRepoRootBranch, rebaseConflictData, getWorktreeNameFromPath, createSessionWithDraft]);
 
     // Resolve untracked files conflict with Claude Agent
     const handleResolveUntrackedFilesWithAgent = useCallback(async () => {
       if (!untrackedFilesConflict || untrackedFilesConflict.length === 0) return;
-
-      console.log('[GitOperationsPanel] Resolving untracked files conflict with agent', { untrackedFilesConflict, worktreePath });
 
       // Close the dialog
       setUntrackedFilesConflict(null);
@@ -760,7 +759,7 @@ Make sure to preserve the intent of both the worktree changes and the incoming c
       try {
         // Get the base branch from repo root and worktree info
         const baseBranch = worktreeRepoRootBranch || 'main';
-        const wtName = worktreePath?.split('/').pop() || 'unknown';
+        const wtName = getWorktreeNameFromPath(worktreePath);
         const worktreeBranch = `worktree/${wtName}`;
 
         // Create a detailed prompt with specific instructions
@@ -788,64 +787,22 @@ ${untrackedFilesList}
 
 Please analyze these files and recommend the best approach before taking action.`;
 
-        console.log('[GitOperationsPanel] Creating AI session for untracked files resolution...');
-        const sessionResult = await window.electronAPI.aiCreateSession(
-          'claude-code',
-          undefined, // documentContext
-          workspacePath, // workspacePath (main repo - so session appears in main session list)
-          undefined, // modelId (use default)
-          'coding', // sessionType
-          worktreeId ?? undefined  // worktreeId (associate with the worktree - Claude will run in worktree directory)
-        );
-
-        console.log('[GitOperationsPanel] Session result:', sessionResult);
-
-        if (sessionResult?.id) {
-          const sessionId = sessionResult.id;
-
-          // Load the session data first
-          console.log('[GitOperationsPanel] Loading session...', sessionId);
-          const sessionData = await window.electronAPI.aiLoadSession(sessionId, workspacePath);
-          console.log('[GitOperationsPanel] Session data:', sessionData);
-
-          if (sessionData) {
-            // Save the draft input so it appears in the text box but isn't sent yet
-            console.log('[GitOperationsPanel] Saving draft input...');
-            await window.electronAPI.aiSaveDraftInput(
-              sessionId,
-              draftMessage,
-              workspacePath
-            );
-
-            // Dispatch a custom event to notify the AgenticPanel to open this session
-            console.log('[GitOperationsPanel] Dispatching event...');
-            window.dispatchEvent(new CustomEvent('open-ai-session', {
-              detail: {
-                sessionId: sessionId,
-                workspacePath: workspacePath,
-                draftInput: draftMessage
-              }
-            }));
-            console.log('[GitOperationsPanel] Event dispatched successfully');
-          }
-        }
+        await createSessionWithDraft(draftMessage, 'untracked files resolution');
       } catch (err) {
         console.error('[GitOperationsPanel] Failed to create agent session for untracked files resolution:', err);
       }
-    }, [workspacePath, worktreePath, worktreeId, worktreeRepoRootBranch, untrackedFilesConflict]);
+    }, [worktreePath, worktreeRepoRootBranch, untrackedFilesConflict, getWorktreeNameFromPath, createSessionWithDraft]);
 
     // Resolve merge conflicts with Claude Agent
     const handleResolveConflictsWithAgent = useCallback(async () => {
       if (!mergeConflictFiles || mergeConflictFiles.length === 0) return;
-
-      console.log('[GitOperationsPanel] Resolving conflicts with agent', { mergeConflictFiles, workspacePath });
 
       // Close the dialog
       setMergeConflictFiles(null);
 
       try {
         // Get the worktree branch name from the path
-        const wtName = worktreePath?.split('/').pop() || 'unknown';
+        const wtName = getWorktreeNameFromPath(worktreePath);
         const worktreeBranch = `worktree/${wtName}`;
         const mainBranch = worktreeRepoRootBranch || 'main';
 
@@ -910,55 +867,11 @@ Should show the files as modified (uncommitted). The working directory should ha
 
 Please proceed with this strategy.`;
 
-        console.log('[GitOperationsPanel] Creating AI session in main repo workspace...');
-        // Create the session in the MAIN REPO workspace (so it appears in session list)
-        // but associate it with the worktree via worktreeId
-        const sessionResult = await window.electronAPI.aiCreateSession(
-          'claude-code',
-          undefined, // documentContext
-          workspacePath, // workspacePath (main repo - so session appears in main session list)
-          undefined, // modelId (use default)
-          'coding', // sessionType
-          worktreeId ?? undefined  // worktreeId (associate with the worktree)
-        );
-
-        console.log('[GitOperationsPanel] Session result:', sessionResult);
-
-        // The session result uses 'id' not 'sessionId'
-        if (sessionResult?.id) {
-          const newSessionId = sessionResult.id;
-
-          // Load the session data first (use workspacePath since session was created in main repo workspace)
-          console.log('[GitOperationsPanel] Loading session...', newSessionId);
-          const sessionData = await window.electronAPI.aiLoadSession(newSessionId, workspacePath);
-          console.log('[GitOperationsPanel] Session data:', sessionData);
-
-          if (sessionData) {
-            // Save the draft input so it appears in the text box but isn't sent yet
-            console.log('[GitOperationsPanel] Saving draft input...');
-            await window.electronAPI.aiSaveDraftInput(
-              newSessionId,
-              draftMessage,
-              workspacePath
-            );
-
-            // Dispatch a custom event to notify the AgenticPanel to open this session
-            // Use workspacePath since that's where the session was created
-            console.log('[GitOperationsPanel] Dispatching event...');
-            window.dispatchEvent(new CustomEvent('open-ai-session', {
-              detail: {
-                sessionId: newSessionId,
-                workspacePath: workspacePath,
-                draftInput: draftMessage
-              }
-            }));
-            console.log('[GitOperationsPanel] Event dispatched successfully');
-          }
-        }
+        await createSessionWithDraft(draftMessage, 'merge conflict resolution');
       } catch (err) {
         console.error('[GitOperationsPanel] Failed to create agent session for conflict resolution:', err);
       }
-    }, [workspacePath, worktreePath, worktreeId, worktreeRepoRootBranch, mergeConflictFiles]);
+    }, [worktreePath, worktreeRepoRootBranch, mergeConflictFiles, getWorktreeNameFromPath, createSessionWithDraft]);
 
     // Handle archive worktree
     const handleArchiveWorktree = useCallback(async () => {
