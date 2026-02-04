@@ -10,6 +10,8 @@ import {
   setOSNotificationsEnabled,
   isNotifyWhenFocusedEnabled,
   setNotifyWhenFocusedEnabled,
+  isSessionBlockedNotificationsEnabled,
+  setSessionBlockedNotificationsEnabled,
 } from '../utils/store';
 import { safeHandle } from '../utils/ipcRegistry';
 
@@ -93,6 +95,27 @@ export function registerNotificationHandlers(): void {
       return { success: true };
     } catch (error) {
       logger.main.error('[NotificationHandlers] Error setting notify-when-focused status:', error);
+      return { success: false, error: String(error) };
+    }
+  });
+
+  // Get session blocked notifications enabled status
+  safeHandle('notifications:get-blocked-enabled', async () => {
+    try {
+      return isSessionBlockedNotificationsEnabled();
+    } catch (error) {
+      logger.main.error('[NotificationHandlers] Error getting session-blocked-notifications status:', error);
+      return true; // Default to true
+    }
+  });
+
+  // Set session blocked notifications enabled status
+  safeHandle('notifications:set-blocked-enabled', async (_event, enabled: boolean) => {
+    try {
+      setSessionBlockedNotificationsEnabled(enabled);
+      return { success: true };
+    } catch (error) {
+      logger.main.error('[NotificationHandlers] Error setting session-blocked-notifications status:', error);
       return { success: false, error: String(error) };
     }
   });

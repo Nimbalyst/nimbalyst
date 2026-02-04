@@ -162,6 +162,31 @@ export function NotificationsPanel() {
           </div>
         )}
       </div>
+
+      <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
+        <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">Session Blocked Notifications</h4>
+        <p className="text-sm leading-relaxed text-[var(--nim-text-muted)] mb-4">
+          Show system notifications when an AI session needs your input.
+        </p>
+
+        <div className="setting-item py-3">
+          <label className="setting-label flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={settings.sessionBlockedNotificationsEnabled}
+              onChange={(e) => updateSettings({ sessionBlockedNotificationsEnabled: e.target.checked })}
+              className="setting-checkbox w-4 h-4 mt-0.5 cursor-pointer shrink-0 accent-[var(--nim-primary)]"
+            />
+            <div className="setting-text flex flex-col gap-0.5">
+              <span className="setting-name text-sm font-medium text-[var(--nim-text)]">Notify When Session Needs Attention</span>
+              <span className="setting-description text-xs leading-relaxed text-[var(--nim-text-muted)]">
+                Show a notification when an AI session is waiting for your input, such as permission approvals,
+                questions, plan reviews, or commit proposals.
+              </span>
+            </div>
+          </label>
+        </div>
+      </div>
     </div>
   );
 }

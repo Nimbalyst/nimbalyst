@@ -29,6 +29,7 @@ import {
   sessionListWorkspaceAtom,
   updateSessionStoreAtom,
   selectedWorkstreamAtom,
+  setSelectedWorkstreamAtom,
   sessionUnreadAtom,
   sessionWaitingForQuestionAtom,
   sessionWaitingForPlanApprovalAtom,
@@ -233,12 +234,21 @@ export function initSessionStateListeners(): () => void {
   /**
    * Handle ExitPlanMode response events globally.
    * Refreshes pending prompts from DB to remove the approved/denied plan.
+   * Also updates the session mode to 'agent' if the plan was approved.
    */
-  const handleExitPlanModeResolved = (data: { sessionId: string }) => {
-    const { sessionId } = data;
+  const handleExitPlanModeResolved = (data: { sessionId: string; approved?: boolean }) => {
+    const { sessionId, approved } = data;
     if (!sessionId) return;
     // Refresh pending prompts from DB
     store.set(refreshPendingPromptsAtom, sessionId);
+
+    // If approved, update the session mode atom to 'agent' to sync with database
+    if (approved) {
+      store.set(updateSessionStoreAtom, {
+        sessionId,
+        updates: { mode: 'agent' },
+      });
+    }
   };
 
   /**
@@ -269,6 +279,27 @@ export function initSessionStateListeners(): () => void {
     const { sessionId } = data;
     if (!sessionId) return;
     store.set(refreshPendingPromptsAtom, sessionId);
+  };
+
+  /**
+   * Handle notification click events.
+   * Switches to the session that was clicked in the OS notification.
+   */
+  const handleNotificationClicked = (data: { sessionId: string }) => {
+    const { sessionId } = data;
+    if (!sessionId) return;
+
+    const workspacePath = store.get(sessionListWorkspaceAtom);
+    if (!workspacePath) {
+      console.warn('[sessionStateListeners] No workspace path available for notification click');
+      return;
+    }
+
+    // Switch to the session
+    store.set(setSelectedWorkstreamAtom, {
+      workspacePath,
+      selection: { type: 'session', id: sessionId },
+    });
   };
 
   // First, subscribe to the session state manager (IPC call to register this window)
@@ -310,6 +341,7 @@ export function initSessionStateListeners(): () => void {
   let cleanupToolPermission: (() => void) | undefined;
   let cleanupToolPermissionResolved: (() => void) | undefined;
   let cleanupGitCommitProposal: (() => void) | undefined;
+  let cleanupNotificationClicked: (() => void) | undefined;
   if (window.electronAPI?.on) {
     cleanupMessageLogged = window.electronAPI.on('ai:message-logged', handleMessageLogged);
     cleanupTitleUpdated = window.electronAPI.on('session:title-updated', handleTitleUpdated);
@@ -321,6 +353,7 @@ export function initSessionStateListeners(): () => void {
     cleanupToolPermission = window.electronAPI.on('ai:toolPermission', handleToolPermission);
     cleanupToolPermissionResolved = window.electronAPI.on('ai:toolPermissionResolved', handleToolPermissionResolved);
     cleanupGitCommitProposal = window.electronAPI.on('ai:gitCommitProposal', handleGitCommitProposal);
+    cleanupNotificationClicked = window.electronAPI.on('notification-clicked', handleNotificationClicked);
   }
 
   // Return cleanup function
@@ -337,5 +370,6 @@ export function initSessionStateListeners(): () => void {
     cleanupToolPermission?.();
     cleanupToolPermissionResolved?.();
     cleanupGitCommitProposal?.();
+    cleanupNotificationClicked?.();
   };
 }

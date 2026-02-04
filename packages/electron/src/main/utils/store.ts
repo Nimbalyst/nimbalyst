@@ -939,6 +939,15 @@ export function setNotifyWhenFocusedEnabled(enabled: boolean): void {
   getAppStore().set('notifyWhenFocused', enabled);
 }
 
+// Session Blocked Notifications - notify when session needs user input
+export function isSessionBlockedNotificationsEnabled(): boolean {
+  return getAppStore().get('sessionBlockedNotificationsEnabled', true);
+}
+
+export function setSessionBlockedNotificationsEnabled(enabled: boolean): void {
+  getAppStore().set('sessionBlockedNotificationsEnabled', enabled);
+}
+
 // Release Channel Settings
 export function getReleaseChannel(): ReleaseChannel {
   // Allow env override for testing (set via NIMBALYST_RELEASE_CHANNEL=alpha)

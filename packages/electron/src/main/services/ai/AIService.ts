@@ -1812,6 +1812,15 @@ export class AIService {
       const onExitPlanModeConfirm = (data: { requestId: string; sessionId: string; planSummary: string; timestamp: number }) => {
         logger.main.info('[AIService] ExitPlanMode confirmation requested:', data.requestId);
         safeSend(event, 'ai:exitPlanModeConfirm', data);
+
+        // Show OS notification if app is backgrounded
+        const sessionTitle = session.title || 'AI Session';
+        notificationService.showBlockedNotification(
+          data.sessionId,
+          sessionTitle,
+          'plan_approval',
+          effectiveWorkspacePath
+        );
       };
       provider.removeAllListeners('exitPlanMode:confirm');
       provider.on('exitPlanMode:confirm', onExitPlanModeConfirm);
@@ -1820,6 +1829,15 @@ export class AIService {
       const onAskUserQuestion = (data: { questionId: string; sessionId: string; questions: any[]; timestamp: number }) => {
         // logger.main.info('[AIService] AskUserQuestion requested:', data.questionId);
         safeSend(event, 'ai:askUserQuestion', data);
+
+        // Show OS notification if app is backgrounded
+        const sessionTitle = session.title || 'AI Session';
+        notificationService.showBlockedNotification(
+          data.sessionId,
+          sessionTitle,
+          'question',
+          effectiveWorkspacePath
+        );
       };
       provider.removeAllListeners('askUserQuestion:pending');
       provider.on('askUserQuestion:pending', onAskUserQuestion);
@@ -1838,13 +1856,13 @@ export class AIService {
         safeSend(event, 'ai:toolPermission', data);
 
         // Show OS notification if app is backgrounded
-        const toolName = data.request?.toolName || 'Agent';
-        notificationService.showNotification({
-          title: 'Permission Required',
-          body: `${toolName} needs your approval to continue`,
-          sessionId: data.sessionId,
-          workspacePath: data.workspacePath,
-        });
+        const sessionTitle = session.title || 'AI Session';
+        notificationService.showBlockedNotification(
+          data.sessionId,
+          sessionTitle,
+          'permission',
+          data.workspacePath
+        );
 
         // Play permission request sound
         const soundService = SoundNotificationService.getInstance();
@@ -3180,12 +3198,19 @@ export class AIService {
       if (typeof (provider as any).resolveExitPlanModeConfirmation === 'function') {
         (provider as any).resolveExitPlanModeConfirmation(requestId, response, sessionId, 'desktop');
 
-        // Emit resolved event so the sidebar indicator updates
+        // If approved, update the session mode to 'agent' in the database
+        // This ensures the mode persists across session switches and app restarts
+        if (response.approved) {
+          await AISessionsRepository.updateMetadata(sessionId, { mode: 'agent' });
+          logger.main.info(`[AIService] Session ${sessionId} mode updated to 'agent' after ExitPlanMode approval`);
+        }
+
+        // Emit resolved event so the sidebar indicator updates and UI syncs mode change
         const { BrowserWindow } = await import('electron');
         const windows = BrowserWindow.getAllWindows().filter(w => !w.isDestroyed());
         for (const win of windows) {
           if (!win.webContents.isDestroyed()) {
-            win.webContents.send('ai:exitPlanModeResolved', { sessionId });
+            win.webContents.send('ai:exitPlanModeResolved', { sessionId, approved: response.approved });
           }
         }
 

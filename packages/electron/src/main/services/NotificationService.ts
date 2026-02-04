@@ -9,7 +9,7 @@ import { Notification, BrowserWindow, app, systemPreferences, ipcMain } from 'el
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { logger } from '../utils/logger';
-import { isOSNotificationsEnabled, isNotifyWhenFocusedEnabled } from '../utils/store';
+import { isOSNotificationsEnabled, isNotifyWhenFocusedEnabled, isSessionBlockedNotificationsEnabled } from '../utils/store';
 import { findWindowByWorkspace } from '../window/WindowManager';
 
 const execAsync = promisify(exec);
@@ -22,6 +22,11 @@ export interface NotificationOptions {
   workspacePath: string;  // REQUIRED: stable identifier for routing
   provider?: string;
 }
+
+/**
+ * Types of blocking interactions that can trigger notifications.
+ */
+export type BlockingType = 'permission' | 'question' | 'plan_approval' | 'git_commit';
 
 class NotificationService {
   private activeNotifications: Map<string, Notification> = new Map();
@@ -297,6 +302,66 @@ class NotificationService {
       return text;
     }
     return text.substring(0, maxLength - 3) + '...';
+  }
+
+  /**
+   * Get notification title for a blocking type.
+   */
+  private getBlockedTitle(blockingType: BlockingType): string {
+    switch (blockingType) {
+      case 'permission':
+        return 'Permission Required';
+      case 'question':
+        return 'Question Waiting';
+      case 'plan_approval':
+        return 'Plan Ready for Review';
+      case 'git_commit':
+        return 'Commit Ready';
+      default:
+        return 'Session Needs Attention';
+    }
+  }
+
+  /**
+   * Get notification body for a blocking type.
+   */
+  private getBlockedBody(blockingType: BlockingType, sessionName: string): string {
+    switch (blockingType) {
+      case 'permission':
+        return `"${sessionName}" needs approval`;
+      case 'question':
+        return `"${sessionName}" has a question`;
+      case 'plan_approval':
+        return `"${sessionName}" plan is ready`;
+      case 'git_commit':
+        return `"${sessionName}" has a commit proposal`;
+      default:
+        return `"${sessionName}" needs your input`;
+    }
+  }
+
+  /**
+   * Show an OS notification when a session becomes blocked.
+   * Uses the session blocked notifications setting.
+   */
+  async showBlockedNotification(
+    sessionId: string,
+    sessionName: string,
+    blockingType: BlockingType,
+    workspacePath: string
+  ): Promise<void> {
+    // Check if session blocked notifications are enabled
+    if (!isSessionBlockedNotificationsEnabled()) {
+      return;
+    }
+
+    // Use the standard showNotification method with appropriate title/body
+    await this.showNotification({
+      title: this.getBlockedTitle(blockingType),
+      body: this.getBlockedBody(blockingType, sessionName),
+      sessionId,
+      workspacePath,
+    });
   }
 }
 

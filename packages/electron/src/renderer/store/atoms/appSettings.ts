@@ -214,6 +214,8 @@ export interface NotificationSettings {
   osNotificationsEnabled: boolean;
   /** Show OS notifications even when app is focused, unless viewing that session */
   notifyWhenFocused: boolean;
+  /** Show OS notifications when a session needs user input (permission, question, etc.) */
+  sessionBlockedNotificationsEnabled: boolean;
 }
 
 /**
@@ -224,6 +226,7 @@ const defaultNotificationSettings: NotificationSettings = {
   completionSoundType: 'chime',
   osNotificationsEnabled: false,
   notifyWhenFocused: false,
+  sessionBlockedNotificationsEnabled: true,
 };
 
 /**
@@ -253,6 +256,7 @@ function scheduleNotificationPersist(settings: NotificationSettings): void {
       await window.electronAPI.invoke('completion-sound:set-type', settings.completionSoundType);
       await window.electronAPI.invoke('notifications:set-enabled', settings.osNotificationsEnabled);
       await window.electronAPI.invoke('notifications:set-notify-when-focused', settings.notifyWhenFocused);
+      await window.electronAPI.invoke('notifications:set-blocked-enabled', settings.sessionBlockedNotificationsEnabled);
     }
   }, NOTIFICATION_PERSIST_DEBOUNCE_MS);
 }
@@ -287,6 +291,13 @@ export const notifyWhenFocusedAtom = atom(
   (get) => get(notificationSettingsAtom).notifyWhenFocused
 );
 
+/**
+ * Session blocked notifications enabled state.
+ */
+export const sessionBlockedNotificationsEnabledAtom = atom(
+  (get) => get(notificationSettingsAtom).sessionBlockedNotificationsEnabled
+);
+
 // === Setter atoms ===
 
 /**
@@ -313,11 +324,12 @@ export async function initNotificationSettings(): Promise<NotificationSettings> 
   }
 
   try {
-    const [soundEnabled, soundType, osNotifEnabled, notifyFocused] = await Promise.all([
+    const [soundEnabled, soundType, osNotifEnabled, notifyFocused, blockedEnabled] = await Promise.all([
       window.electronAPI.invoke('completion-sound:is-enabled'),
       window.electronAPI.invoke('completion-sound:get-type'),
       window.electronAPI.invoke('notifications:get-enabled'),
       window.electronAPI.invoke('notifications:get-notify-when-focused'),
+      window.electronAPI.invoke('notifications:get-blocked-enabled'),
     ]);
 
     return {
@@ -325,6 +337,7 @@ export async function initNotificationSettings(): Promise<NotificationSettings> 
       completionSoundType: soundType ?? 'chime',
       osNotificationsEnabled: osNotifEnabled ?? false,
       notifyWhenFocused: notifyFocused ?? false,
+      sessionBlockedNotificationsEnabled: blockedEnabled ?? true,
     };
   } catch (error) {
     console.error('[appSettings] Failed to load notification settings:', error);

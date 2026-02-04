@@ -13,7 +13,8 @@ import { existsSync } from 'fs';
 import path, { isAbsolute } from 'path';
 import { isVoiceModeActive, sendToVoiceAgent, getActiveVoiceSessionId, stopVoiceSession } from '../services/voice/VoiceModeService';
 import { findWindowByWorkspace } from '../window/WindowManager';
-import { SessionFilesRepository, AgentMessagesRepository } from '@nimbalyst/runtime';
+import { SessionFilesRepository, AgentMessagesRepository, AISessionsRepository } from '@nimbalyst/runtime';
+import { notificationService } from '../services/NotificationService';
 import { isFileInWorkspaceOrWorktree } from '../utils/workspaceDetection';
 
 /**
@@ -1901,6 +1902,24 @@ The commit message should follow these guidelines:
               console.error('[MCP Server] Failed to persist git commit proposal:', error);
               // Continue anyway - worst case is no durability
             }
+
+            // Show OS notification if app is backgrounded
+            // Get session title for notification body
+            let sessionTitle = 'AI Session';
+            try {
+              const session = await AISessionsRepository.get(targetSessionId);
+              if (session?.title) {
+                sessionTitle = session.title;
+              }
+            } catch {
+              // Ignore - use default title
+            }
+            notificationService.showBlockedNotification(
+              targetSessionId,
+              sessionTitle,
+              'git_commit',
+              workspacePath
+            );
 
             // Wait for user confirmation (with a longer timeout since user interaction is involved)
             const GIT_COMMIT_TIMEOUT_MS = 300000; // 5 minutes
