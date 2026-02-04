@@ -1427,14 +1427,12 @@ ${newLines.map(line => '+' + line).join('\n')}`;
         };
       }
 
-      // Check for uncommitted changes in worktree
-      const worktreeStatus = await worktreeGit.status();
-      if (!worktreeStatus.isClean()) {
-        return {
-          success: false,
-          message: 'Cannot merge: uncommitted changes in worktree. Please commit or discard changes first.',
-        };
-      }
+      // Note: We allow merging even if the worktree has uncommitted changes.
+      // The merge happens in the main repo (checking out base branch and merging the worktree branch),
+      // so the worktree's uncommitted changes are completely unaffected.
+      // We capture the worktree status before merging and verify it's preserved after.
+      const worktreeStatusBefore = await worktreeGit.status();
+      const worktreeUncommittedCountBefore = worktreeStatusBefore.files.length;
 
       // Check for uncommitted changes in main repo
       const statusStartTime = Date.now();
@@ -1667,9 +1665,35 @@ ${newLines.map(line => '+' + line).join('\n')}`;
               stashWarning: true, // Flag for UI to show prominent alert
             };
           }
+          // Verify worktree uncommitted changes are preserved
+          const worktreeStatusAfterStash = await worktreeGit.status();
+          if (worktreeStatusAfterStash.files.length !== worktreeUncommittedCountBefore) {
+            logger.error('Worktree uncommitted changes were unexpectedly modified after merge', {
+              before: worktreeUncommittedCountBefore,
+              after: worktreeStatusAfterStash.files.length,
+            });
+            return {
+              success: false,
+              message: 'Internal error: worktree uncommitted changes were modified during merge. Please check your worktree status.',
+            };
+          }
+
           return {
             success: true,
             message: `Successfully merged ${worktreeBranch} into ${baseBranch}. Auto-stashed changes have been restored.`,
+          };
+        }
+
+        // Verify worktree uncommitted changes are preserved
+        const worktreeStatusAfter = await worktreeGit.status();
+        if (worktreeStatusAfter.files.length !== worktreeUncommittedCountBefore) {
+          logger.error('Worktree uncommitted changes were unexpectedly modified after merge', {
+            before: worktreeUncommittedCountBefore,
+            after: worktreeStatusAfter.files.length,
+          });
+          return {
+            success: false,
+            message: 'Internal error: worktree uncommitted changes were modified during merge. Please check your worktree status.',
           };
         }
 

@@ -26,6 +26,7 @@ import {
   setWorkstreamCommitMessageAtom,
   clearWorkstreamGitStateAtom,
 } from '../../store/atoms/workstreamState';
+import { worktreeChangedFilesAtom } from '../../store/atoms/sessionFiles';
 import { RebaseConflictDialog } from './RebaseConflictDialog';
 import { MergeConflictDialog } from './MergeConflictDialog';
 import { MergeConfirmDialog } from './MergeConfirmDialog';
@@ -121,7 +122,10 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
     // ============================================================
     // Worktree Mode State (copied from DiffModeView)
     // ============================================================
-    const [worktreeChangedFiles, setWorktreeChangedFiles] = useState<WorktreeChangedFile[]>([]);
+    // Read worktree changed files from central atom (updated by fileStateListeners)
+    const worktreeChangedFilesKey = worktreeId || '__no_worktree__';
+    const worktreeChangedFilesRaw = useAtomValue(worktreeChangedFilesAtom(worktreeChangedFilesKey));
+    const worktreeChangedFiles = worktreeId ? worktreeChangedFilesRaw : [];
     const [worktreeCommits, setWorktreeCommits] = useState<WorktreeCommitInfo[]>([]);
     const [worktreeRepoRootBranch, setWorktreeRepoRootBranch] = useState<string | undefined>(undefined);
     const [worktreeCommitsBehind, setWorktreeCommitsBehind] = useState(0);
@@ -377,24 +381,11 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
     // Worktree Mode Callbacks (copied from DiffModeView)
     // ============================================================
 
-    // Load changed files from the worktree
+    // Refresh worktree changed files via central listener (updates the atom)
     const loadWorktreeChangedFiles = useCallback(async () => {
-      if (!worktreePath) return;
-
-      try {
-        const result = await window.electronAPI.invoke('worktree:get-changed-files', worktreePath);
-        if (result?.success && Array.isArray(result.files)) {
-          const files: WorktreeChangedFile[] = result.files.map((f: { path: string; status: string }) => ({
-            path: f.path,
-            status: f.status as 'added' | 'modified' | 'deleted',
-            staged: true, // Default all to staged
-          }));
-          setWorktreeChangedFiles(files);
-        }
-      } catch (err) {
-        console.error('[GitOperationsPanel] Failed to load worktree changed files:', err);
-      }
-    }, [worktreePath]);
+      if (!worktreeId || !worktreePath) return;
+      await refreshWorktreeChangedFiles(worktreeId, worktreePath);
+    }, [worktreeId, worktreePath]);
 
     // Load commits from worktree
     const loadWorktreeCommits = useCallback(async () => {
@@ -486,6 +477,9 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
       }
     }, [worktreePath]);
 
+    // Note: git:status-changed events are handled by the central listener in fileStateListeners.ts
+    // which updates worktreeChangedFilesAtom. We read from that atom above.
+
     // ============================================================
     // Visibility-based refresh for worktrees
     // ============================================================
@@ -546,21 +540,9 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
       }
     }, [worktreeId, worktreeRefreshCounter, isVisible, worktreePath, loadWorktreeChangedFiles, loadWorktreeCommits, loadWorktreeStatus]);
 
-    // Toggle worktree file staged state
-    const handleWorktreeToggleStaged = useCallback((filePath: string) => {
-      setWorktreeChangedFiles(prev =>
-        prev.map(f =>
-          f.path === filePath ? { ...f, staged: !f.staged } : f
-        )
-      );
-    }, []);
-
-    // Toggle all worktree files staged state
-    const handleWorktreeToggleAllStaged = useCallback((staged: boolean) => {
-      setWorktreeChangedFiles(prev =>
-        prev.map(f => ({ ...f, staged }))
-      );
-    }, []);
+    // Note: File staging is handled in FilesEditedSidebar via worktree:stage-file IPC.
+    // The central listener in fileStateListeners.ts updates worktreeChangedFilesAtom
+    // when git:status-changed fires after staging operations.
 
     // Commit worktree changes
     const handleWorktreeCommit = useCallback(async () => {
@@ -597,8 +579,14 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
         if (result?.success) {
           // Reload files, commits, and status
           await Promise.all([loadWorktreeChangedFiles(), loadWorktreeCommits(), loadWorktreeStatus()]);
-          // Show archive dialog after successful merge
-          setShowArchiveDialog(true);
+          // Check if there are uncommitted changes - if so, don't show archive dialog
+          // (user might accidentally archive and lose their uncommitted work)
+          const statusResult = await window.electronAPI.worktreeGetStatus(worktreePath);
+          if (statusResult.success && statusResult.status?.hasUncommittedChanges) {
+            // Don't show archive dialog - user has uncommitted changes
+          } else {
+            setShowArchiveDialog(true);
+          }
         } else {
           // Check if this is a merge conflict error (detected before merge started)
           if ((result?.message === 'merge-conflict-detected' || result?.message === 'merge-conflict-in-main') && result?.conflictedFiles) {
@@ -1079,7 +1067,7 @@ Please proceed with this strategy.`;
     const worktreeHasCommits = worktreeCommits.length > 0;
     const worktreeHasUncommittedChanges = worktreeChangedFiles.length > 0;
     const worktreeCanCommit = worktreeStagedCount > 0 && worktreeCommitMessage.trim().length > 0 && !worktreeIsCommitting;
-    const worktreeCanMerge = worktreeHasCommits && !worktreeHasUncommittedChanges && !worktreeIsMerging && !worktreeIsMerged && worktreeCommitsBehind === 0;
+    const worktreeCanMerge = worktreeHasCommits && !worktreeIsMerging && !worktreeIsMerged && worktreeCommitsBehind === 0;
     const worktreeCanRebase = worktreeCommitsBehind > 0 && !worktreeIsRebasing;
 
     // Debug: Log current state values on each render
@@ -1315,11 +1303,9 @@ Please proceed with this strategy.`;
                         ? 'Already merged to base branch'
                         : worktreeCommitsBehind > 0
                           ? `Rebase first to bring in ${worktreeCommitsBehind} commit${worktreeCommitsBehind === 1 ? '' : 's'} from ${worktreeRepoRootBranch || 'base branch'}`
-                          : worktreeHasUncommittedChanges
-                            ? 'Commit all changes before merging'
-                            : !worktreeHasCommits
-                              ? 'No commits to merge'
-                              : `Merge commits into ${worktreeRepoRootBranch || 'base branch'}`
+                          : !worktreeHasCommits
+                            ? 'No commits to merge'
+                            : `Merge commits into ${worktreeRepoRootBranch || 'base branch'}`
                     }
                   >
                     {worktreeIsMerging ? (
