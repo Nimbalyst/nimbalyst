@@ -24,9 +24,10 @@ Download the latest version for your platform:
 
 | Platform | Download | Requirements |
 | --- | --- | --- |
-| macOS | [Download .dmg](https://github.com/nimbalyst/nimbalyst/releases/latest/download/Nimbalyst-macOS.dmg) | macOS 10.15+ |
-| Windows | [Download .exe](https://github.com/nimbalyst/nimbalyst/releases/latest/download/Nimbalyst-Setup.exe) | Windows 10+ |
-| Linux | [Download AppImage ](https://github.com/nimbalyst/nimbalyst/releases/latest/download/Nimbalyst-Linux.AppImage) | Linux |
+| macOS Apple Silicon | [Download .dmg](https://github.com/Nimbalyst/nimbalyst-code/releases/latest/download/Nimbalyst-macOS-arm64.dmg) | macOS Apple Silicon 10.15+ |
+| macOS Intel| [Download .dmg](href="https://github.com/Nimbalyst/nimbalyst-code/releases/latest/download/Nimbalyst-macOS-x64.dmg) | macOS Apple Silicon 10.15+ |
+| Windows | [Download .exe](https://github.com/Nimbalyst/nimbalyst-code/releases/latest/download/Nimbalyst-Windows.exe) | Windows 10+ |
+| Linux | [Download AppImage ](https://github.com/Nimbalyst/nimbalyst-code/releases/latest/download/Nimbalyst-Linux.AppImage) | Linux |
 
 ## Getting Started
 
