@@ -164,8 +164,13 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
     // AI commit proposals are now handled entirely by GitCommitConfirmationWidget in the transcript
     // GitOperationsPanel is for manual git operations only
 
-    // Helper function to create an AI session with a draft message and open it
-    // Used by all conflict resolution handlers to avoid code duplication
+    // Helper function to create an AI session with a draft message and open it.
+    // Used by all conflict resolution handlers to avoid code duplication.
+    //
+    // Pattern: Create session, then dispatch 'open-ai-session' event with draftInput.
+    // The event handler in App.tsx uses setSessionDraftInputAtom to:
+    // 1. Set the Jotai atom for immediate display when session mounts
+    // 2. Persist to database for durability
     const createSessionWithDraft = useCallback(async (
       draftMessage: string
     ): Promise<void> => {
@@ -197,14 +202,8 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
         return;
       }
 
-      // Save the draft input so it appears in the text box but isn't sent yet
-      await window.electronAPI.aiSaveDraftInput(
-        newSessionId,
-        draftMessage,
-        workspacePath
-      );
-
-      // Dispatch a custom event to notify the AgenticPanel to open this session
+      // Dispatch event to navigate to the session with draft input.
+      // The handler in App.tsx will set the Jotai atom and persist to DB.
       window.dispatchEvent(new CustomEvent('open-ai-session', {
         detail: {
           sessionId: newSessionId,

@@ -510,6 +510,10 @@ Components subscribe directly to atoms - no props needed. Panels are self-contai
 
 **Preserve abstraction boundaries**: Parent components (like SettingsView) should NOT know the internal state of child panels. If a parent has `useState` for 15 different settings domains, that's a sign of broken abstraction. Each panel owns its domain and subscribes to its own atoms.
 
+#### Setting Session Draft Input with Initial Prompts
+
+When creating a session with an initial prompt, use `setSessionDraftInputAtom` to set the Jotai atom AND persist to DB in one call. This ensures the prompt displays immediately when the session mounts.
+
 ### Shared UI Patterns
 
 These patterns apply across all packages (electron, capacitor, runtime) that contain UI code.

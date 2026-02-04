@@ -60,6 +60,8 @@ import {
   // Session state
   sessionModeAtom,
   selectedWorkstreamAtom,
+  // Session draft utilities
+  setSessionDraftInputAtom,
 } from './store';
 import { TrackerBottomPanel } from './components/TrackerBottomPanel/TrackerBottomPanel.tsx';
 import { TerminalBottomPanel } from './components/TerminalBottomPanel';
@@ -993,7 +995,18 @@ export default function App() {
   // Listen for open-ai-session events (from rebase/merge conflict resolution)
   useEffect(() => {
     const handleOpenAiSession = async (event: CustomEvent<{ sessionId: string; workspacePath: string; draftInput?: string }>) => {
-      const { sessionId } = event.detail;
+      const { sessionId, workspacePath: eventWorkspacePath, draftInput } = event.detail;
+
+      // Set the draft input BEFORE navigating so it's ready when the session mounts
+      // This is the canonical pattern for creating sessions with initial prompts
+      if (draftInput) {
+        store.set(setSessionDraftInputAtom, {
+          sessionId,
+          draftInput,
+          workspacePath: eventWorkspacePath,
+          persist: true,
+        });
+      }
 
       // Switch to agent mode if needed
       if (activeMode !== 'agent') {

@@ -509,6 +509,45 @@ export const sessionDraftAttachmentsAtom = atomFamily((_sessionId: string) =>
   atom<ChatAttachment[]>([])
 );
 
+/**
+ * Set draft input for a session.
+ *
+ * This is the canonical way to set a session's initial prompt when creating
+ * or navigating to a session. It:
+ * 1. Sets the Jotai atom for immediate display when the session mounts
+ * 2. Optionally persists to the database for durability
+ *
+ * IMPORTANT: Always use this instead of manually setting sessionDraftInputAtom
+ * when you need the draft to persist and display correctly.
+ *
+ * @example
+ * // After creating a new session, set its draft prompt:
+ * store.set(setSessionDraftInputAtom, {
+ *   sessionId: newSessionId,
+ *   draftInput: 'Your prompt here',
+ *   workspacePath,
+ *   persist: true, // Saves to database
+ * });
+ */
+export const setSessionDraftInputAtom = atom(
+  null,
+  async (_get, set, { sessionId, draftInput, workspacePath, persist = true }: {
+    sessionId: string;
+    draftInput: string;
+    workspacePath?: string;
+    persist?: boolean;
+  }) => {
+    // 1. Set the atom for immediate display
+    set(sessionDraftInputAtom(sessionId), draftInput);
+
+    // 2. Persist to database if requested and workspacePath is provided
+    if (persist && workspacePath && window.electronAPI) {
+      window.electronAPI.invoke('ai:saveDraftInput', sessionId, draftInput, workspacePath)
+        .catch((err: Error) => console.error('[setSessionDraftInputAtom] Failed to persist draft input:', err));
+    }
+  }
+);
+
 // ============================================================
 // Per-session prompt history navigation
 // Allows arrow key navigation through previous user prompts.

@@ -36,6 +36,7 @@ import type { SerializableDocumentContext } from '../../hooks/useDocumentContext
 import { diffTreeGroupByDirectoryAtom, setDiffTreeGroupByDirectoryAtom } from '../../store/atoms/projectState';
 import {
   sessionDraftInputAtom,
+  setSessionDraftInputAtom,
   sessionDraftAttachmentsAtom,
   sessionStoreAtom,
   sessionMessagesAtom,
@@ -1077,12 +1078,13 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
 
         const implementationPrompt = `Implement the plan at ${absolutePlanPath}. Start with updating your todo list if applicable.`;
 
-        // 1. Update the atom directly for immediate display when the new session mounts
-        store.set(sessionDraftInputAtom(newSessionId), implementationPrompt);
-
-        // 2. Persist to database for durability (async, no need to await)
-        window.electronAPI.invoke('ai:saveDraftInput', newSessionId, implementationPrompt, workspacePath)
-          .catch(err => console.error('[SessionTranscript] Failed to persist draft input:', err));
+        // Use the canonical utility to set draft input (sets atom + persists to DB)
+        store.set(setSessionDraftInputAtom, {
+          sessionId: newSessionId,
+          draftInput: implementationPrompt,
+          workspacePath,
+          persist: true,
+        });
 
         console.log('[SessionTranscript] Created new session for implementation:', newSessionId, 'with prompt:', implementationPrompt);
 

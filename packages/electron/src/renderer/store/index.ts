@@ -87,6 +87,7 @@ export {
   sessionPromptAdditionsAtom,
   sessionLastReadAtom,
   sessionDraftInputAtom,
+  setSessionDraftInputAtom,
   sessionDraftAttachmentsAtom,
   sessionHistoryIndexAtom,
   sessionTempInputAtom,
