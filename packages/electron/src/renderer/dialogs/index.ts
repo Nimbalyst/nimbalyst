@@ -29,6 +29,7 @@ export {
   registerDataDialogs,
   type ProjectSelectionData,
   type ErrorDialogData,
+  type ConfirmDialogData,
   type SessionImportData,
 } from './dataDialogs';
 export {
