@@ -107,6 +107,8 @@ let pendingFilePath: string | null = null;
 let pendingWorkspacePath: string | null = null;
 // Track pending filter to apply
 let pendingFilter: string | null = null;
+// Track pending file to open within workspace (--file flag, requires --workspace)
+let pendingCliFilePath: string | null = null;
 
 // Session save interval
 let sessionSaveInterval: NodeJS.Timeout | null = null;
@@ -423,6 +425,9 @@ function parseCommandLineArgs() {
         if (arg === '--workspace' && i + 1 < args.length) {
             pendingWorkspacePath = args[i + 1];
             logger.main.info(`✓ Workspace path from CLI: ${pendingWorkspacePath}`);
+        } else if (arg === '--file' && i + 1 < args.length) {
+            pendingCliFilePath = args[i + 1];
+            logger.main.info(`✓ File path from CLI (--file): ${pendingCliFilePath}`);
         } else if (arg === '--filter' && i + 1 < args.length) {
             pendingFilter = args[i + 1];
             logger.main.info(`✓ Filter from CLI: ${pendingFilter}`);
@@ -439,7 +444,13 @@ function parseCommandLineArgs() {
         }
     }
 
-    logger.main.info(`FINAL: pendingFilePath=${pendingFilePath}, pendingWorkspacePath=${pendingWorkspacePath}, pendingFilter=${pendingFilter}`);
+    // Validate --file requires --workspace
+    if (pendingCliFilePath && !pendingWorkspacePath) {
+        logger.main.warn('--file flag requires --workspace to be specified. Ignoring --file.');
+        pendingCliFilePath = null;
+    }
+
+    logger.main.info(`FINAL: pendingFilePath=${pendingFilePath}, pendingWorkspacePath=${pendingWorkspacePath}, pendingFilter=${pendingFilter}, pendingCliFilePath=${pendingCliFilePath}`);
 }
 
 
@@ -863,8 +874,10 @@ app.whenReady().then(async () => {
         // Handle workspace path from CLI
         const workspacePath = pendingWorkspacePath;
         const filterToApply = pendingFilter;
+        const fileToOpen = pendingCliFilePath;
         pendingWorkspacePath = null;
         pendingFilter = null;
+        pendingCliFilePath = null;
 
         // Track workspace opened from CLI
         try {
@@ -955,6 +968,14 @@ app.whenReady().then(async () => {
             window.show();
             // Notify renderer to ensure workspace UI syncs with the selected path
             window.webContents.send('open-workspace-from-cli', workspacePath);
+
+            // If --file was specified, open the file after workspace UI initializes
+            if (fileToOpen) {
+                // Give the renderer time to initialize workspace mode, then load the file
+                setTimeout(() => {
+                    loadFileIntoWindow(window, fileToOpen);
+                }, 200);
+            }
         });
     } else if (!sessionRestored && !pendingFilePath) {
         // No session to restore and no file to open - show Workspace Manager
