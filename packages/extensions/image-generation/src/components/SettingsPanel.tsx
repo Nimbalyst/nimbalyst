@@ -7,35 +7,44 @@
 
 import { useState, useEffect } from 'react';
 import type { SettingsPanelProps } from '@nimbalyst/runtime';
+import { AVAILABLE_MODELS, DEFAULT_MODEL, type GeminiImageModel } from '../types';
 
-// Storage key for the Google AI API key (must match ImageProjectEditor)
+// Storage keys (must match ImageProjectEditor)
 const GOOGLE_AI_KEY_STORAGE_KEY = 'google_ai_api_key';
+const SELECTED_MODEL_STORAGE_KEY = 'selected_model';
 
 export function ImageGenerationSettings({ storage, theme }: SettingsPanelProps) {
   const isDark = theme === 'dark' || theme === 'crystal-dark';
   const [apiKey, setApiKey] = useState('');
   const [hasStoredKey, setHasStoredKey] = useState(false);
+  const [selectedModel, setSelectedModel] = useState<GeminiImageModel>(DEFAULT_MODEL);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // Load existing API key on mount
+  // Load existing settings on mount
   useEffect(() => {
-    const loadApiKey = async () => {
+    const loadSettings = async () => {
       try {
+        // Load API key
         const storedKey = await storage.getSecret(GOOGLE_AI_KEY_STORAGE_KEY);
         if (storedKey) {
-          // Show masked version
           setApiKey('');
           setHasStoredKey(true);
         }
+
+        // Load selected model
+        const storedModel = await storage.get(SELECTED_MODEL_STORAGE_KEY);
+        if (storedModel && typeof storedModel === 'string') {
+          setSelectedModel(storedModel as GeminiImageModel);
+        }
       } catch (error) {
-        console.error('[ImageGenSettings] Failed to load API key:', error);
+        console.error('[ImageGenSettings] Failed to load settings:', error);
       } finally {
         setIsLoading(false);
       }
     };
-    loadApiKey();
+    loadSettings();
   }, [storage]);
 
   const handleSave = async () => {
@@ -74,6 +83,17 @@ export function ImageGenerationSettings({ storage, theme }: SettingsPanelProps) 
       setMessage({ type: 'error', text: 'Failed to remove API key' });
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleModelChange = async (model: GeminiImageModel) => {
+    setSelectedModel(model);
+    try {
+      await storage.set(SELECTED_MODEL_STORAGE_KEY, model);
+      setMessage({ type: 'success', text: 'Model preference saved' });
+    } catch (error) {
+      console.error('[ImageGenSettings] Failed to save model:', error);
+      setMessage({ type: 'error', text: 'Failed to save model preference' });
     }
   };
 
@@ -148,12 +168,58 @@ export function ImageGenerationSettings({ storage, theme }: SettingsPanelProps) 
         </div>
       )}
 
+      {/* Model Selection */}
+      <div className="mt-6 pt-4 border-t border-nim">
+        <h3 className="m-0 mb-2 text-base font-semibold">
+          Model
+        </h3>
+        <p className="m-0 mb-4 text-[13px] text-nim-muted leading-normal">
+          Select which Google AI model to use for image generation.
+          Model availability depends on your API access level.
+        </p>
+
+        <div className="flex flex-col gap-2">
+          {AVAILABLE_MODELS.map((model) => (
+            <label
+              key={model.id}
+              className={`flex items-start gap-3 p-3 rounded-md border cursor-pointer transition-colors ${
+                selectedModel === model.id
+                  ? 'border-nim-primary bg-[rgba(59,130,246,0.1)]'
+                  : 'border-nim bg-nim-secondary hover:bg-nim-hover'
+              }`}
+            >
+              <input
+                type="radio"
+                name="model"
+                value={model.id}
+                checked={selectedModel === model.id}
+                onChange={() => handleModelChange(model.id)}
+                className="mt-1"
+              />
+              <div className="flex-1">
+                <div className="text-sm font-medium text-nim">
+                  {model.label}
+                  {!model.supportsConversation && (
+                    <span className="ml-2 text-[11px] px-1.5 py-0.5 rounded bg-nim-tertiary text-nim-muted">
+                      Single-shot only
+                    </span>
+                  )}
+                </div>
+                <div className="text-[12px] text-nim-muted mt-0.5">
+                  {model.description}
+                </div>
+              </div>
+            </label>
+          ))}
+        </div>
+      </div>
+
       <div className="mt-6 pt-4 border-t border-nim">
         <h4 className="m-0 mb-2 text-sm font-medium">
           About Image Generation
         </h4>
         <p className="m-0 text-[13px] text-nim-muted leading-normal">
-          This extension uses Google's Imagen 4 model to generate images from text prompts.
+          This extension uses Google's Gemini and Imagen models to generate images from text prompts.
           Create architecture diagrams, UI wireframes, illustrations, and more directly in Nimbalyst.
         </p>
       </div>

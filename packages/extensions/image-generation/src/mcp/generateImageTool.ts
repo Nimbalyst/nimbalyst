@@ -2,6 +2,8 @@
  * Generate Image AI Tool
  *
  * MCP tool that allows the coding agent to generate images.
+ * Supports session-based iterative refinement - subsequent calls with the same
+ * project file will build on previous generations in the conversation.
  */
 
 import { getEditorAPI } from '../editorRegistry';
@@ -22,7 +24,15 @@ Use this tool when the user asks you to create or generate:
 - Any visual content
 
 The image will be added to the active image generation project (.imgproj file).
-If no project is open, you should first create one.`,
+If no project is open, you should first create one.
+
+**Session-based refinement**: Each project maintains a conversation session. Subsequent
+calls will use the previous images as context, allowing you to iteratively refine:
+- First call: "Create a microservices architecture diagram"
+- Second call: "Make the boxes rounder and add colors"
+- Third call: "Add labels to each service"
+
+The model will see previous images and build upon them.`,
   scope: 'global' as const, // Available even when no .imgproj file is open
   parameters: {
     type: 'object' as const,
@@ -30,7 +40,7 @@ If no project is open, you should first create one.`,
       prompt: {
         type: 'string' as const,
         description:
-          'Detailed description of the image to generate. Be specific about layout, elements, style, and any text that should appear.',
+          'Detailed description of the image to generate, or a refinement instruction if building on previous images. Be specific about layout, elements, style, and any text that should appear.',
       },
       style: {
         type: 'string' as const,
@@ -49,7 +59,7 @@ If no project is open, you should first create one.`,
       },
       variations: {
         type: 'number' as const,
-        description: 'Number of variations to generate (1-4, default: 3)',
+        description: 'Number of variations to generate (1-4, default: 3). Note: When refining a previous image, only 1 variation is generated.',
       },
       projectFile: {
         type: 'string' as const,

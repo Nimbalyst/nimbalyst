@@ -1,15 +1,17 @@
 /**
  * Gallery Component
  *
- * Displays a scrollable list of image generations grouped by prompt.
+ * Displays a chat-style conversation with user prompts and AI responses.
+ * AI responses may include generated images, text, or both.
  */
 
-import React, { useState, useEffect } from 'react';
-import type { Generation, GeneratedImage } from '../types';
+import React, { useState, useEffect, useRef } from 'react';
+import type { Generation, GeneratedImage, SessionMessage } from '../types';
 import { STYLE_PRESETS } from '../types';
 
 interface GalleryProps {
-  generations: Generation[];
+  /** Session messages in chronological order */
+  messages: SessionMessage[];
   imagesBasePath: string;
   onEditPrompt: (generation: Generation) => void;
   theme: 'light' | 'dark';
@@ -20,9 +22,20 @@ interface ExpandedImage {
   generation: Generation;
 }
 
-export function Gallery({ generations, imagesBasePath, onEditPrompt, theme }: GalleryProps) {
+export function Gallery({ messages, imagesBasePath, onEditPrompt, theme }: GalleryProps) {
   const isDark = theme === 'dark';
   const [expandedImage, setExpandedImage] = useState<ExpandedImage | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to bottom when new messages arrive
+  useEffect(() => {
+    // Use requestAnimationFrame to ensure DOM has updated
+    requestAnimationFrame(() => {
+      if (scrollRef.current) {
+        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      }
+    });
+  }, [messages.length]);
 
   // Handle Escape key to close lightbox
   useEffect(() => {
@@ -77,15 +90,15 @@ export function Gallery({ generations, imagesBasePath, onEditPrompt, theme }: Ga
     return aspectMap[generation.aspectRatio] || '1024 x 1024';
   };
 
-  if (generations.length === 0) {
+  if (messages.length === 0) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center text-nim-muted text-center p-10">
         <div className="text-[64px] mb-4 opacity-30">&#127912;</div>
         <div className="text-base font-medium text-nim mb-2">
-          No images yet
+          Start a conversation
         </div>
         <div className="text-[13px] max-w-[300px] leading-normal">
-          Enter a prompt below to generate your first image
+          Enter a prompt below to generate your first image, or ask a question about image creation
         </div>
       </div>
     );
@@ -156,95 +169,106 @@ export function Gallery({ generations, imagesBasePath, onEditPrompt, theme }: Ga
   };
 
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto p-5 relative">
+    <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto p-5 relative">
       <Lightbox />
-      {generations.map((generation) => (
-        <div key={generation.id} className="mb-8">
-          {/* Generation header */}
-          <div className="flex items-start gap-3 mb-4 px-4 py-3 bg-nim-secondary rounded-lg">
-            <div className="flex-1 min-w-0">
-              <div className="flex items-start gap-3">
-                <div className="flex-1 text-[13px] text-nim leading-normal">
-                  {generation.prompt}
-                </div>
-                <button
-                  onClick={() => onEditPrompt(generation)}
-                  className="px-2.5 py-1.5 bg-transparent border border-nim rounded text-nim-muted text-xs cursor-pointer flex items-center gap-1.5 shrink-0"
-                >
-                  <span>&#9998;</span>
-                  Edit & Retry
-                </button>
-              </div>
-              <div className="flex items-center gap-3 mt-2 text-[11px] text-nim-faint">
-                <span
-                  className={`inline-block px-2 py-0.5 ${isDark ? 'bg-blue-400/20' : 'bg-blue-500/10'} text-nim-link rounded text-[11px] font-medium`}
-                >
-                  {getStyleLabel(generation.style)}
-                </span>
-                <span>{getDimensions(generation)}</span>
-                <span>{formatTimestamp(generation.timestamp)}</span>
-              </div>
-            </div>
-          </div>
 
-          {/* Generated images grid */}
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-4">
-            {generation.results.length > 0 ? (
-              generation.results.map((result, index) => (
-                <div
-                  key={`${generation.id}-${index}`}
-                  className="relative aspect-square bg-nim-secondary rounded-lg overflow-hidden cursor-pointer border-2 border-transparent hover:border-nim transition-colors duration-150"
-                  onClick={() => setExpandedImage({ image: result, generation })}
-                >
-                  {/* Image or placeholder */}
-                  <img
-                    src={`file://${imagesBasePath}/${result.file}`}
-                    alt={`Generated image ${index + 1}`}
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      // Replace with placeholder on error
-                      e.currentTarget.style.display = 'none';
-                      e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                    }}
-                  />
-                  <div className="hidden w-full h-full items-center justify-center bg-nim-tertiary">
-                    <div className="text-center text-nim-muted">
-                      <div className="text-[40px] mb-2 opacity-50">&#128247;</div>
-                      <div className="text-[11px]">{result.file}</div>
-                    </div>
-                  </div>
-
-                  {/* Hover overlay with actions */}
-                  <div className="image-overlay absolute bottom-0 left-0 right-0 p-2.5 bg-gradient-to-t from-black/80 to-transparent opacity-0 transition-opacity duration-150">
-                    <div className="flex gap-1.5 justify-end">
-                      <button
-                        title="Download"
-                        className="w-7 h-7 flex items-center justify-center bg-white/15 border-none rounded text-white cursor-pointer text-[13px]"
-                      >
-                        &#8595;
-                      </button>
-                      <button
-                        title="Copy to clipboard"
-                        className="w-7 h-7 flex items-center justify-center bg-white/15 border-none rounded text-white cursor-pointer text-[13px]"
-                      >
-                        &#128203;
-                      </button>
-                    </div>
-                  </div>
+      {/* Chat-style message list */}
+      <div className="flex flex-col gap-4">
+        {messages.map((msg) => (
+          <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+            {msg.role === 'user' ? (
+              // User message - right aligned
+              <div className="max-w-[80%] px-4 py-3 bg-nim-primary text-white rounded-2xl rounded-br-sm">
+                <div className="text-[13px] leading-normal whitespace-pre-wrap">
+                  {msg.content}
                 </div>
-              ))
+                <div className="text-[10px] opacity-70 mt-1 text-right">
+                  {formatTimestamp(msg.timestamp)}
+                </div>
+              </div>
             ) : (
-              // Placeholder for pending generation
-              <div className="relative aspect-square bg-nim-secondary rounded-lg flex items-center justify-center">
-                <div className="text-center text-nim-muted">
-                  <div className="text-[40px] mb-2 opacity-50">&#8987;</div>
-                  <div className="text-[11px]">Pending</div>
-                </div>
+              // Assistant message - left aligned
+              <div className="max-w-[90%] flex flex-col gap-3">
+                {/* Text description if present */}
+                {msg.description && (
+                  <div className="px-4 py-3 bg-nim-secondary rounded-2xl rounded-bl-sm">
+                    <div className="text-[13px] text-nim leading-normal whitespace-pre-wrap">
+                      {msg.description}
+                    </div>
+                  </div>
+                )}
+
+                {/* Generated images if present */}
+                {msg.generation && msg.generation.results.length > 0 && (
+                  <div className="flex flex-col gap-2">
+                    <div className="flex flex-row flex-wrap gap-3">
+                      {msg.generation.results.map((result, index) => (
+                        <div
+                          key={`${msg.generation!.id}-${index}`}
+                          className="relative w-[200px] h-[200px] bg-nim-secondary rounded-lg overflow-hidden cursor-pointer border-2 border-transparent hover:border-nim transition-colors duration-150 shrink-0"
+                          onClick={() => setExpandedImage({ image: result, generation: msg.generation! })}
+                        >
+                          <img
+                            src={`file://${imagesBasePath}/${result.file}`}
+                            alt={`Generated image ${index + 1}`}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none';
+                              e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                            }}
+                          />
+                          <div className="hidden w-full h-full items-center justify-center bg-nim-tertiary">
+                            <div className="text-center text-nim-muted">
+                              <div className="text-[40px] mb-2 opacity-50">&#128247;</div>
+                              <div className="text-[11px]">{result.file}</div>
+                            </div>
+                          </div>
+
+                          {/* Hover overlay */}
+                          <div className="image-overlay absolute bottom-0 left-0 right-0 p-2.5 bg-gradient-to-t from-black/80 to-transparent opacity-0 transition-opacity duration-150">
+                            <div className="flex gap-1.5 justify-end">
+                              <button
+                                title="Download"
+                                className="w-7 h-7 flex items-center justify-center bg-white/15 border-none rounded text-white cursor-pointer text-[13px]"
+                              >
+                                &#8595;
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {/* Generation metadata */}
+                    <div className="flex items-center gap-3 text-[10px] text-nim-faint px-1">
+                      <span
+                        className={`inline-block px-2 py-0.5 ${isDark ? 'bg-blue-400/20' : 'bg-blue-500/10'} text-nim-link rounded font-medium`}
+                      >
+                        {getStyleLabel(msg.generation.style)}
+                      </span>
+                      <span>{getDimensions(msg.generation)}</span>
+                      <span>{formatTimestamp(msg.timestamp)}</span>
+                      <button
+                        onClick={() => onEditPrompt(msg.generation!)}
+                        className="ml-auto px-2 py-1 bg-transparent border border-nim rounded text-nim-muted cursor-pointer flex items-center gap-1"
+                      >
+                        <span>&#9998;</span>
+                        Edit
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Show timestamp for text-only responses */}
+                {msg.description && !msg.generation && (
+                  <div className="text-[10px] text-nim-faint px-1">
+                    {formatTimestamp(msg.timestamp)}
+                  </div>
+                )}
               </div>
             )}
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
 
       {/* CSS for hover effects */}
       <style>{`

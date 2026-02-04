@@ -1,20 +1,71 @@
 /**
  * Image Project Editor
  *
- * Custom editor for .imgproj files that provides a gallery view of generated images
- * with a bottom bar for creating new generations.
+ * Custom editor for .imgproj files that provides a session-based conversational
+ * interface for iteratively refining generated images.
+ *
+ * File format: v1 (legacy flat list) or v2 (session-based conversations)
+ * v1 projects are automatically migrated to v2 on save.
  */
 
 import { useEffect, useRef, useCallback, useState, forwardRef } from 'react';
 import type { EditorHostProps } from '@nimbalyst/runtime';
-import type { ImageProject, Generation, ImageStyle, AspectRatio, GeneratedImage } from '../types';
+import type {
+  ImageProject,
+  ImageProjectV2,
+  ImageSession,
+  SessionMessage,
+  Generation,
+  ImageStyle,
+  AspectRatio,
+  GeneratedImage,
+  ConversationMessage,
+} from '../types';
+import {
+  isProjectV1,
+  isProjectV2,
+  migrateProjectV1ToV2,
+  createEmptyProjectV2,
+} from '../types';
 import { Gallery } from './Gallery';
 import { BottomBar } from './BottomBar';
 import { registerEditor, unregisterEditor } from '../editorRegistry';
 import { nanoBananaProvider } from '../providers/nanoBanana';
 
-// Storage key for the Google AI API key
+import { DEFAULT_MODEL, type GeminiImageModel } from '../types';
+
+// Storage keys (must match SettingsPanel)
 const GOOGLE_AI_KEY_STORAGE_KEY = 'google_ai_api_key';
+const SELECTED_MODEL_STORAGE_KEY = 'selected_model';
+
+/**
+ * Load an image file and return its base64 data
+ */
+async function loadImageAsBase64(imagePath: string): Promise<string> {
+  const electronAPI = (window as any).electronAPI;
+  if (!electronAPI) {
+    throw new Error('electronAPI not available');
+  }
+
+  // Read the file as base64
+  const content = await electronAPI.invoke('extensions:read-file', imagePath);
+  // The file is binary, we need to read it differently
+  // For now, we'll use a fetch approach
+  const response = await fetch(`file://${imagePath}`);
+  const blob = await response.blob();
+
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64 = reader.result as string;
+      // Remove the data URL prefix (e.g., "data:image/png;base64,")
+      const base64Data = base64.split(',')[1];
+      resolve(base64Data);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
 
 /**
  * API Key Missing Banner
@@ -39,8 +90,11 @@ export const ImageProjectEditor = forwardRef<unknown, EditorHostProps>(
     const [isLoading, setIsLoading] = useState(true);
     const [loadError, setLoadError] = useState<Error | null>(null);
 
-    // Project state
-    const [project, setProject] = useState<ImageProject | null>(null);
+    // Project state - always stored as v2 internally
+    const [project, setProject] = useState<ImageProjectV2 | null>(null);
+
+    // Currently active session
+    const [activeSession, setActiveSession] = useState<ImageSession | null>(null);
 
     // Generation in progress
     const [isGenerating, setIsGenerating] = useState(false);
@@ -55,10 +109,11 @@ export const ImageProjectEditor = forwardRef<unknown, EditorHostProps>(
     // Track if initial load has completed
     const hasLoadedRef = useRef(false);
 
-    // Load API key from extension storage on mount
+    // Load API key and model from extension storage on mount
     useEffect(() => {
-      const loadApiKey = async () => {
+      const loadSettings = async () => {
         try {
+          // Load API key
           const apiKey = await host.storage.getSecret(GOOGLE_AI_KEY_STORAGE_KEY);
           if (apiKey) {
             nanoBananaProvider.setApiKey(apiKey);
@@ -67,26 +122,48 @@ export const ImageProjectEditor = forwardRef<unknown, EditorHostProps>(
           } else {
             console.log('[ImageGen] No API key configured');
           }
+
+          // Load selected model
+          const storedModel = await host.storage.get(SELECTED_MODEL_STORAGE_KEY);
+          if (storedModel && typeof storedModel === 'string') {
+            nanoBananaProvider.setModel(storedModel as GeminiImageModel);
+            console.log('[ImageGen] Model loaded from storage:', storedModel);
+          } else {
+            nanoBananaProvider.setModel(DEFAULT_MODEL);
+            console.log('[ImageGen] Using default model:', DEFAULT_MODEL);
+          }
         } catch (error) {
-          console.error('[ImageGen] Failed to load API key:', error);
+          console.error('[ImageGen] Failed to load settings:', error);
         }
       };
-      loadApiKey();
+      loadSettings();
     }, [host.storage]);
 
-    // Create a default empty project
-    const createEmptyProject = (): ImageProject => ({
-      version: 1,
-      name: 'New Image Project',
-      created: new Date().toISOString(),
-      provider: 'nano-banana',
-      generations: [],
-      settings: {
-        defaultStyle: 'sketch',
-        variationsPerPrompt: 3,
-        defaultAspectRatio: '1:1',
-      },
-    });
+    /**
+     * Parse loaded content and migrate to v2 if needed
+     */
+    const parseAndMigrateProject = (content: string): ImageProjectV2 => {
+      if (!content || content.trim() === '') {
+        return createEmptyProjectV2('New Image Project');
+      }
+
+      const parsed = JSON.parse(content) as ImageProject;
+
+      // Migrate v1 to v2
+      if (isProjectV1(parsed)) {
+        console.log('[ImageGen] Migrating v1 project to v2 format');
+        return migrateProjectV1ToV2(parsed);
+      }
+
+      // Already v2
+      if (isProjectV2(parsed)) {
+        return parsed;
+      }
+
+      // Unknown format, create new
+      console.warn('[ImageGen] Unknown project format, creating new');
+      return createEmptyProjectV2('New Image Project');
+    };
 
     // Load content on mount
     useEffect(() => {
@@ -101,23 +178,21 @@ export const ImageProjectEditor = forwardRef<unknown, EditorHostProps>(
 
           hasLoadedRef.current = true;
 
-          let data: ImageProject;
-          if (content) {
-            try {
-              data = JSON.parse(content);
-              // Ensure created timestamp is set
-              if (!data.created) {
-                data.created = new Date().toISOString();
-              }
-            } catch (error) {
-              console.error('[ImageGen] Failed to parse file:', error);
-              data = createEmptyProject();
-            }
-          } else {
-            data = createEmptyProject();
+          let data: ImageProjectV2;
+          try {
+            data = parseAndMigrateProject(content);
+          } catch (error) {
+            console.error('[ImageGen] Failed to parse file:', error);
+            data = createEmptyProjectV2('New Image Project');
           }
 
           setProject(data);
+
+          // Set active session
+          const activeSessionId = data.activeSessionId || data.sessions[0]?.id;
+          const session = data.sessions.find((s) => s.id === activeSessionId) || data.sessions[0];
+          setActiveSession(session || null);
+
           lastKnownDiskContentRef.current = content || '';
           setIsLoading(false);
         })
@@ -145,14 +220,26 @@ export const ImageProjectEditor = forwardRef<unknown, EditorHostProps>(
         console.log('[ImageGen] External file change detected, reloading');
 
         try {
-          const data: ImageProject = JSON.parse(newContent);
+          const data = parseAndMigrateProject(newContent);
           setProject(data);
+
+          // Update active session if it still exists
+          if (activeSession) {
+            const updatedSession = data.sessions.find((s) => s.id === activeSession.id);
+            if (updatedSession) {
+              setActiveSession(updatedSession);
+            } else {
+              // Active session was deleted, select first
+              setActiveSession(data.sessions[0] || null);
+            }
+          }
+
           lastKnownDiskContentRef.current = newContent;
         } catch (error) {
           console.error('[ImageGen] Failed to parse reloaded content:', error);
         }
       });
-    }, [host]);
+    }, [host, activeSession]);
 
     // Subscribe to save requests from host
     useEffect(() => {
@@ -176,7 +263,7 @@ export const ImageProjectEditor = forwardRef<unknown, EditorHostProps>(
 
     // Update project and mark dirty
     const updateProject = useCallback(
-      (updater: (prev: ImageProject) => ImageProject) => {
+      (updater: (prev: ImageProjectV2) => ImageProjectV2) => {
         setProject((prev) => {
           if (!prev) return prev;
           const updated = updater(prev);
@@ -185,6 +272,67 @@ export const ImageProjectEditor = forwardRef<unknown, EditorHostProps>(
         });
       },
       [host]
+    );
+
+    // Update active session and sync to project
+    const updateActiveSession = useCallback(
+      (updater: (prev: ImageSession) => ImageSession) => {
+        if (!activeSession) return;
+
+        const updated = updater(activeSession);
+        setActiveSession(updated);
+
+        // Also update in project
+        updateProject((prev) => ({
+          ...prev,
+          sessions: prev.sessions.map((s) => (s.id === updated.id ? updated : s)),
+        }));
+      },
+      [activeSession, updateProject]
+    );
+
+    // Create a new session
+    const createNewSession = useCallback(
+      (name?: string) => {
+        const now = new Date().toISOString();
+        const newSession: ImageSession = {
+          id: `session-${Date.now()}`,
+          name: name || 'New Session',
+          created: now,
+          updated: now,
+          messages: [],
+          settings: {
+            style: project?.settings.defaultStyle || 'sketch',
+            aspectRatio: project?.settings.defaultAspectRatio || '1:1',
+          },
+        };
+
+        updateProject((prev) => ({
+          ...prev,
+          sessions: [...prev.sessions, newSession],
+          activeSessionId: newSession.id,
+        }));
+
+        setActiveSession(newSession);
+        return newSession;
+      },
+      [project, updateProject]
+    );
+
+    // Switch to a different session
+    const switchSession = useCallback(
+      (sessionId: string) => {
+        if (!project) return;
+        const session = project.sessions.find((s) => s.id === sessionId);
+        if (session) {
+          setActiveSession(session);
+          updateProject((prev) => ({
+            ...prev,
+            activeSessionId: sessionId,
+          }));
+        }
+      },
+      [project, updateProject]
     );
 
     // Get the images folder path
@@ -210,7 +358,62 @@ export const ImageProjectEditor = forwardRef<unknown, EditorHostProps>(
       [getImagesFolderPath]
     );
 
-    // Handle generation request
+    /**
+     * Build conversation history from session messages for API call
+     * Loads images from disk and converts to base64
+     */
+    const buildConversationHistory = useCallback(
+      async (session: ImageSession): Promise<ConversationMessage[]> => {
+        const history: ConversationMessage[] = [];
+        const imagesFolder = getImagesFolderPath();
+
+        for (const msg of session.messages) {
+          if (msg.role === 'user' && msg.content) {
+            history.push({
+              role: 'user',
+              text: msg.content,
+            });
+          } else if (msg.role === 'assistant') {
+            // For assistant messages, include image if available, otherwise text
+            if (msg.generation && msg.generation.results.length > 0) {
+              // Load the first image as base64 for context
+              const firstImage = msg.generation.results[0];
+              try {
+                const base64Data = await loadImageAsBase64(`${imagesFolder}/${firstImage.file}`);
+                history.push({
+                  role: 'model',
+                  imageBase64: base64Data,
+                  imageMimeType: 'image/png',
+                  thoughtSignature: msg.thoughtSignature,
+                });
+              } catch (error) {
+                console.warn('[ImageGen] Failed to load image for history:', error);
+                // Fall back to text description
+                if (msg.description) {
+                  history.push({
+                    role: 'model',
+                    text: msg.description,
+                    thoughtSignature: msg.thoughtSignature,
+                  });
+                }
+              }
+            } else if (msg.description) {
+              // Text-only response (no image generated)
+              history.push({
+                role: 'model',
+                text: msg.description,
+                thoughtSignature: msg.thoughtSignature,
+              });
+            }
+          }
+        }
+
+        return history;
+      },
+      [getImagesFolderPath]
+    );
+
+    // Handle generation request (session-aware)
     const handleGenerate = useCallback(
       async (
         prompt: string,
@@ -218,7 +421,7 @@ export const ImageProjectEditor = forwardRef<unknown, EditorHostProps>(
         aspectRatio: AspectRatio,
         variations: number
       ) => {
-        if (!project || isGenerating) return;
+        if (!project || !activeSession || isGenerating) return;
 
         // Check if API key is configured
         if (!nanoBananaProvider.isConfigured()) {
@@ -232,26 +435,33 @@ export const ImageProjectEditor = forwardRef<unknown, EditorHostProps>(
         setGenerationError(null);
 
         try {
+          const now = new Date().toISOString();
           console.log('[ImageGen] Starting generation:', { prompt, style, aspectRatio, variations });
 
-          // Call the actual image generation API
+          // Build conversation history if this is not the first message
+          let conversationHistory: ConversationMessage[] | undefined;
+          if (activeSession.messages.length > 0) {
+            console.log('[ImageGen] Building conversation history from', activeSession.messages.length, 'messages');
+            conversationHistory = await buildConversationHistory(activeSession);
+          }
+
+          // Call the image generation API
           const result = await nanoBananaProvider.generateImage({
             prompt,
             style,
             aspectRatio,
-            numVariations: variations,
+            numVariations: conversationHistory ? 1 : variations, // Only 1 for multi-turn
+            conversationHistory,
           });
 
-          console.log('[ImageGen] Generation result:', result.images.length, 'images');
+          console.log('[ImageGen] Result:', result.images.length, 'images, description:', result.description?.slice(0, 50));
 
           // Save images to disk and strip the base64 data
           const savedImages: GeneratedImage[] = [];
           for (const image of result.images) {
-            // Access the temporary _base64Data field
             const imageWithData = image as GeneratedImage & { _base64Data?: string };
             if (imageWithData._base64Data) {
               await saveImageToDisk(image.file, imageWithData._base64Data);
-              // Create clean image object without base64 data
               savedImages.push({
                 file: image.file,
                 seed: image.seed,
@@ -261,24 +471,45 @@ export const ImageProjectEditor = forwardRef<unknown, EditorHostProps>(
             }
           }
 
-          // Create the generation entry
-          const generation: Generation = {
-            id: `gen-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            prompt,
-            style,
-            aspectRatio,
-            parameters: {},
-            timestamp: new Date().toISOString(),
-            results: savedImages,
+          // Create user message
+          const userMessage: SessionMessage = {
+            id: `msg-user-${Date.now()}`,
+            role: 'user',
+            timestamp: now,
+            content: prompt,
           };
 
-          // Add the generation to the project (at the beginning for newest-first)
-          updateProject((prev) => ({
+          // Create assistant message
+          // May have images, text only, or both
+          const assistantMessage: SessionMessage = {
+            id: `msg-assistant-${Date.now()}`,
+            role: 'assistant',
+            timestamp: now,
+            description: result.description,
+            thoughtSignature: result.thoughtSignature,
+          };
+
+          // Only include generation if there are images
+          if (savedImages.length > 0) {
+            assistantMessage.generation = {
+              id: `gen-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              prompt,
+              style,
+              aspectRatio,
+              parameters: {},
+              timestamp: now,
+              results: savedImages,
+            };
+          }
+
+          // Add messages to session
+          updateActiveSession((prev) => ({
             ...prev,
-            generations: [generation, ...prev.generations],
+            updated: now,
+            messages: [...prev.messages, userMessage, assistantMessage],
           }));
 
-          console.log('[ImageGen] Generation complete, added', savedImages.length, 'images');
+          console.log('[ImageGen] Complete:', savedImages.length, 'images,', result.description ? 'with text' : 'no text');
         } catch (error) {
           console.error('[ImageGen] Generation failed:', error);
           setGenerationError(error instanceof Error ? error.message : 'Generation failed');
@@ -286,7 +517,7 @@ export const ImageProjectEditor = forwardRef<unknown, EditorHostProps>(
           setIsGenerating(false);
         }
       },
-      [project, isGenerating, updateProject, saveImageToDisk]
+      [project, activeSession, isGenerating, updateActiveSession, saveImageToDisk, buildConversationHistory]
     );
 
     // Handle edit & retry from gallery
@@ -341,6 +572,9 @@ export const ImageProjectEditor = forwardRef<unknown, EditorHostProps>(
       return null;
     }
 
+    // Get messages for the active session (for Gallery)
+    const sessionMessages = activeSession?.messages || [];
+
     return (
       <div
         className="image-project-editor w-full h-full flex flex-col overflow-hidden"
@@ -364,15 +598,39 @@ export const ImageProjectEditor = forwardRef<unknown, EditorHostProps>(
           </div>
         )}
 
+        {/* Session header with session selector */}
+        {project.sessions.length > 1 && (
+          <div className="flex items-center gap-2 px-4 py-2 bg-nim-secondary border-b border-nim text-sm">
+            <span className="text-nim-muted">Session:</span>
+            <select
+              value={activeSession?.id || ''}
+              onChange={(e) => switchSession(e.target.value)}
+              className="bg-nim border border-nim rounded px-2 py-1 text-nim text-sm"
+            >
+              {project.sessions.map((session) => (
+                <option key={session.id} value={session.id}>
+                  {session.name || 'Untitled Session'}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={() => createNewSession()}
+              className="ml-2 px-2 py-1 bg-nim-hover border border-nim rounded text-nim text-xs cursor-pointer"
+            >
+              + New Session
+            </button>
+          </div>
+        )}
+
         <Gallery
-          generations={project.generations}
+          messages={sessionMessages}
           imagesBasePath={filePath.replace('.imgproj', '.imgproj.images')}
           onEditPrompt={handleEditPrompt}
           theme={theme}
         />
         <BottomBar
-          defaultStyle={project.settings.defaultStyle}
-          defaultAspectRatio={project.settings.defaultAspectRatio || '1:1'}
+          defaultStyle={activeSession?.settings.style || project.settings.defaultStyle}
+          defaultAspectRatio={activeSession?.settings.aspectRatio || project.settings.defaultAspectRatio || '1:1'}
           defaultVariations={project.settings.variationsPerPrompt}
           isGenerating={isGenerating}
           onGenerate={handleGenerate}

@@ -62,22 +62,223 @@ export interface ProjectSettings {
   defaultAspectRatio?: AspectRatio;
 }
 
+// ============================================================================
+// Session-Based Architecture (v2)
+// ============================================================================
+
 /**
- * The .imgproj file format
+ * A message in the image generation conversation
  */
-export interface ImageProject {
-  /** File format version */
-  version: number;
+export interface SessionMessage {
+  /** Unique identifier for this message */
+  id: string;
+  /** Role: user for prompts, assistant for generations */
+  role: 'user' | 'assistant';
+  /** When this message was created */
+  timestamp: string;
+
+  // User messages have text content
+  /** The user's prompt or refinement request */
+  content?: string;
+
+  // Assistant messages have generation results
+  /** The generation result (for assistant messages) */
+  generation?: Generation;
+
+  /** Description of what was done (for assistant messages) */
+  description?: string;
+
+  /** Thought signature for context preservation (from Gemini API) */
+  thoughtSignature?: string;
+}
+
+/**
+ * Session-level settings
+ */
+export interface SessionSettings {
+  /** Style preset for this session */
+  style: ImageStyle;
+  /** Aspect ratio for this session */
+  aspectRatio: AspectRatio;
+}
+
+/**
+ * A conversation session for iterative image refinement
+ */
+export interface ImageSession {
+  /** Unique identifier for this session */
+  id: string;
+  /** User-provided name (e.g., "Logo Design v2") */
+  name?: string;
+  /** When the session was created */
+  created: string;
+  /** When the session was last updated */
+  updated: string;
+  /** Conversation messages in chronological order */
+  messages: SessionMessage[];
+  /** Session-level settings */
+  settings: SessionSettings;
+}
+
+/**
+ * The .imgproj file format (v2 with sessions)
+ */
+export interface ImageProjectV2 {
+  /** File format version - must be 2 */
+  version: 2;
   /** Project name */
   name: string;
   /** Creation timestamp */
   created: string;
-  /** Provider ID (e.g., "nano-banana") */
+  /** Provider ID (e.g., "gemini") */
+  provider: string;
+  /** Conversation sessions */
+  sessions: ImageSession[];
+  /** Currently active session ID */
+  activeSessionId?: string;
+  /** Project-level default settings */
+  settings: ProjectSettings;
+}
+
+/**
+ * The .imgproj file format (v1 - legacy, single-shot generations)
+ */
+export interface ImageProjectV1 {
+  /** File format version - must be 1 */
+  version: 1;
+  /** Project name */
+  name: string;
+  /** Creation timestamp */
+  created: string;
+  /** Provider ID */
   provider: string;
   /** Array of generations in reverse chronological order (newest first) */
   generations: Generation[];
   /** Project settings */
   settings: ProjectSettings;
+}
+
+/**
+ * Union type for any version of ImageProject
+ */
+export type ImageProject = ImageProjectV1 | ImageProjectV2;
+
+/**
+ * Type guard for v2 projects
+ */
+export function isProjectV2(project: ImageProject): project is ImageProjectV2 {
+  return project.version === 2;
+}
+
+/**
+ * Type guard for v1 projects
+ */
+export function isProjectV1(project: ImageProject): project is ImageProjectV1 {
+  return project.version === 1;
+}
+
+/**
+ * Convert a v1 project to v2 format
+ * Creates a single session from all existing generations
+ */
+export function migrateProjectV1ToV2(v1: ImageProjectV1): ImageProjectV2 {
+  const sessionId = `session-${Date.now()}`;
+  const now = new Date().toISOString();
+
+  // v1 generations are stored newest-first, so reverse for chronological order
+  const chronologicalGenerations = [...v1.generations].reverse();
+
+  // Convert each generation to a pair of messages (user prompt + assistant response)
+  const messages: SessionMessage[] = [];
+  for (const gen of chronologicalGenerations) {
+    // User message with the prompt
+    messages.push({
+      id: `msg-user-${gen.id}`,
+      role: 'user',
+      timestamp: gen.timestamp,
+      content: gen.prompt,
+    });
+
+    // Assistant message with the generation result
+    messages.push({
+      id: `msg-assistant-${gen.id}`,
+      role: 'assistant',
+      timestamp: gen.timestamp,
+      generation: gen,
+    });
+  }
+
+  return {
+    version: 2,
+    name: v1.name,
+    created: v1.created,
+    provider: v1.provider,
+    sessions: [
+      {
+        id: sessionId,
+        name: 'Imported Session',
+        created: v1.created,
+        updated: now,
+        messages,
+        settings: {
+          style: v1.settings.defaultStyle,
+          aspectRatio: v1.settings.defaultAspectRatio || '1:1',
+        },
+      },
+    ],
+    activeSessionId: sessionId,
+    settings: v1.settings,
+  };
+}
+
+/**
+ * Create a new empty v2 project
+ */
+export function createEmptyProjectV2(name: string): ImageProjectV2 {
+  const now = new Date().toISOString();
+  const sessionId = `session-${Date.now()}`;
+
+  return {
+    version: 2,
+    name,
+    created: now,
+    provider: 'gemini',
+    sessions: [
+      {
+        id: sessionId,
+        name: 'New Session',
+        created: now,
+        updated: now,
+        messages: [],
+        settings: {
+          style: 'sketch',
+          aspectRatio: '1:1',
+        },
+      },
+    ],
+    activeSessionId: sessionId,
+    settings: {
+      defaultStyle: 'sketch',
+      variationsPerPrompt: 3,
+      defaultAspectRatio: '1:1',
+    },
+  };
+}
+
+/**
+ * A message in the conversation history for multi-turn generation
+ */
+export interface ConversationMessage {
+  /** Role of the message sender */
+  role: 'user' | 'model';
+  /** Text content (for user messages or model descriptions) */
+  text?: string;
+  /** Image data as base64 (for model responses with images) */
+  imageBase64?: string;
+  /** MIME type of the image */
+  imageMimeType?: string;
+  /** Thought signature for context preservation */
+  thoughtSignature?: string;
 }
 
 /**
@@ -96,6 +297,10 @@ export interface GenerationRequest {
   seed?: number;
   /** Provider-specific options */
   providerOptions?: Record<string, unknown>;
+
+  // Multi-turn conversation support
+  /** Previous conversation history for iterative refinement */
+  conversationHistory?: ConversationMessage[];
 }
 
 /**
@@ -113,6 +318,10 @@ export interface GenerationResult {
     /** Generation timestamp */
     timestamp: string;
   };
+  /** Thought signature for context preservation in multi-turn conversations */
+  thoughtSignature?: string;
+  /** Text description from the model (if any) */
+  description?: string;
 }
 
 /**
@@ -129,6 +338,8 @@ export interface ProviderCapabilities {
   maxImagesPerRequest: number;
   /** Supported aspect ratios */
   supportedAspectRatios: AspectRatio[];
+  /** Whether the provider supports multi-turn conversations for iterative refinement */
+  supportsConversation: boolean;
 }
 
 /**
@@ -218,3 +429,48 @@ export const ASPECT_RATIOS: AspectRatioOption[] = [
   { id: '4:3', label: '4:3 Standard', width: 1024, height: 768 },
   { id: '3:4', label: '3:4 Portrait', width: 768, height: 1024 },
 ];
+
+// ============================================================================
+// Model Configuration
+// ============================================================================
+
+/**
+ * Available Gemini models for image generation
+ */
+export type GeminiImageModel =
+  | 'gemini-2.5-flash-image'
+  | 'gemini-3-pro-image-preview';
+
+/**
+ * Model configuration
+ */
+export interface ModelOption {
+  id: GeminiImageModel;
+  label: string;
+  description: string;
+  supportsConversation: boolean;
+}
+
+/**
+ * Available models for image generation
+ * See: https://ai.google.dev/gemini-api/docs/models
+ */
+export const AVAILABLE_MODELS: ModelOption[] = [
+  {
+    id: 'gemini-2.5-flash-image',
+    label: 'Gemini 2.5 Flash',
+    description: 'Fast image generation, optimized for speed and efficiency',
+    supportsConversation: true,
+  },
+  {
+    id: 'gemini-3-pro-image-preview',
+    label: 'Gemini 3 Pro',
+    description: 'Highest quality, supports 2K/4K output, advanced reasoning',
+    supportsConversation: true,
+  },
+];
+
+/**
+ * Default model for new projects
+ */
+export const DEFAULT_MODEL: GeminiImageModel = 'gemini-2.5-flash-image';
