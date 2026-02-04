@@ -20,6 +20,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.38] - 2026-02-03
+
+
+### Added
+- Model picker for image generation with Gemini 2.5 Flash and Gemini 3 Pro options
+
+### Changed
+- Default to group-by-directory view in Files Edited sidebar
+
+### Fixed
+- Prevent duplicate git commit widgets from showing as active
+- Prevent HelpTooltip from appearing when returning to app window
+- Hide prompt additions feature in packaged builds
+- Show commit checkboxes for files in non-git directories
+- Show uncommitted files link when session has edits
+- Add run-name to CI workflow to distinguish from release runs
+
 ## [0.52.37] - 2026-02-03
 
 
