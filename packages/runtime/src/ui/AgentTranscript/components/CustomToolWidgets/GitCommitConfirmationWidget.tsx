@@ -257,21 +257,34 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
   // Read pending proposal from atom (synced from DB in Electron)
   const pendingProposal = useAtomValue(sessionPendingGitCommitProposalAtom(sessionId));
 
-  // Check if the proposal from the atom matches this tool call
-  // The atom contains ONE pending proposal per session, but we need to verify it matches THIS tool call
-  const proposalMatchesToolCall = useMemo(() => {
-    if (!pendingProposal) return false;
+  // Check if the proposal from the atom matches this tool call by content
+  // We match by files and commit message since the proposalId is generated server-side
+  // and doesn't match the tool call ID from Claude
+  const matchingProposal = useMemo(() => {
+    // If tool already has a result, don't match - this widget instance is done
+    if (isCompleted) return null;
+    if (!pendingProposal) return null;
+
     // Match by comparing files and commit message
-    // Use getFilePath to normalize both arrays to strings (filesToStage may contain objects)
     const proposalFiles = pendingProposal.filesToStage.map(getFilePath).sort();
     const toolCallFiles = [...initialFilesToStage].sort();
     const filesMatch = proposalFiles.length === toolCallFiles.length &&
       proposalFiles.every((f, i) => f === toolCallFiles[i]);
     const messageMatch = pendingProposal.commitMessage.trim() === initialCommitMessage.trim();
-    return filesMatch && messageMatch;
-  }, [pendingProposal, initialFilesToStage, initialCommitMessage]);
 
-  const matchingProposal = proposalMatchesToolCall ? pendingProposal : null;
+    if (!filesMatch || !messageMatch) {
+      console.log('[GitCommitWidget] No match:', {
+        filesMatch,
+        messageMatch,
+        proposalFiles,
+        toolCallFiles,
+        proposalMsg: pendingProposal.commitMessage.trim().slice(0, 50),
+        toolCallMsg: initialCommitMessage.trim().slice(0, 50),
+      });
+    }
+
+    return filesMatch && messageMatch ? pendingProposal : null;
+  }, [pendingProposal, initialFilesToStage, initialCommitMessage, isCompleted]);
 
   // Local state for editing
   const [filesToStage, setFilesToStage] = useState<Set<string>>(new Set(initialFilesToStage));
