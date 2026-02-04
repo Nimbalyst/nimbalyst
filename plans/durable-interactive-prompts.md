@@ -10,11 +10,11 @@ planStatus:
   tags:
     - architecture
     - ai-ux
-    - persistence
     - interactive
+    - cross-platform
   created: "2025-02-01"
-  updated: "2026-02-04T22:00:00.000Z"
-  progress: 85
+  updated: "2026-02-05T03:30:00.000Z"
+  progress: 40
   startDate: "2026-02-02"
 ---
 # Durable Interactive Prompts Architecture
@@ -558,79 +558,127 @@ This ID is:
 
 ### Implementation Status
 
-**Completed (2026-02-04):**
-- [x] MCP server extracts `claudecode/toolUseId` from `request.params._meta`
-- [x] GitCommitProposal stores `toolUseId` in DB message
-- [x] `GitCommitProposalData` type includes `toolUseId?: string`
-- [x] Widget matches by `toolUseId` ONLY - no fallback (fallback matching is dangerous)
+## Key Insight: Widgets Render from Tool Call Data (2026-02-04)
+
+The original plan was overly complex. We were trying to:
+1. Persist prompts to DB on the MCP server side
+2. Send IPC events to notify renderer
+3. Have atoms sync from DB
+4. Have widgets read from atoms and match by toolUseId
+
+**The simpler solution:** Widgets render directly from `toolCall` data in the transcript.
+
+### Why This Works
+
+When Claude calls an MCP tool (like `developer_git_commit_proposal`), the tool call message contains:
+- `toolCall.id` - Claude's unique tool_use ID (e.g., `toolu_01ABC...`)
+- `toolCall.input` - All the prompt data (files, message, reasoning, etc.)
+- `toolCall.result` - Undefined while pending, filled when resolved
+
+The widget receives this via `CustomToolWidgetProps` and can:
+1. Check if `toolCall.result` is empty → show interactive UI
+2. Use `toolCall.input` for all display data
+3. Use `toolCall.id` as the proposalId for responding
+
+**No atoms, no IPC events, no DB sync needed!**
+
+### GitCommitConfirmationWidget Implementation
+
+```typescript
+// Widget props from transcript
+const { toolCall, sessionId, workspacePath } = props;
+
+// All data comes from the tool call itself
+const { filesToStage, commitMessage, reasoning } = toolCall.input;
+const proposalId = toolCall.id;  // Claude's tool_use ID
+const isPending = !toolCall.result;  // No result = pending
+
+// Show interactive UI when pending
+if (isPending) {
+  return <InteractiveCommitUI
+    files={filesToStage}
+    message={commitMessage}
+    onCommit={() => {
+      // Execute git commit
+      const result = await electronAPI.invoke('git:commit', ...);
+      // Send response to MCP server using toolCall.id
+      await electronAPI.invoke('messages:respond-to-prompt', {
+        sessionId,
+        promptId: proposalId,  // Same as toolCall.id
+        promptType: 'git_commit_proposal_request',
+        response: { action: 'committed', commitHash: result.commitHash },
+      });
+    }}
+  />;
+}
+
+// Show result when completed
+return <CompletedCommitUI result={toolCall.result} />;
+```
+
+### Completed (2026-02-04)
+
+- [x] GitCommitConfirmationWidget renders from `toolCall.input` directly
+- [x] Uses `toolCall.id` as proposalId (no atom matching needed)
+- [x] Shows interactive UI when `!toolCall.result`
+- [x] Removed all atom dependencies from widget
+- [x] Removed electron `sessionPendingGitCommitProposalAtom`
+- [x] Removed runtime git commit proposal atoms (kept type only)
+- [x] Removed sync effect from SessionTranscript
 
 **Files changed:**
-- `packages/electron/src/main/mcp/httpServer.ts` - Extract and store toolUseId
-- `packages/electron/src/renderer/store/atoms/sessions.ts` - Pass toolUseId through
-- `packages/runtime/src/store/atoms/gitCommitProposals.ts` - Add to interface
-- `packages/runtime/src/ui/AgentTranscript/components/CustomToolWidgets/GitCommitConfirmationWidget.tsx` - Match by ID
+- `packages/runtime/src/ui/AgentTranscript/components/CustomToolWidgets/GitCommitConfirmationWidget.tsx` - Render from tool call
+- `packages/electron/src/renderer/store/atoms/sessions.ts` - Removed atom
+- `packages/runtime/src/store/atoms/gitCommitProposals.ts` - Removed atoms, kept type
+- `packages/electron/src/renderer/components/UnifiedAI/SessionTranscript.tsx` - Removed sync effect
 
-## Phase 8: Unified Interactive Prompt System
+## Unified Model: Render from Tool Call Data
 
 ### Goal
 
-Create a unified system where ALL interactive prompts (current and future):
-1. Use `toolUseId` for matching (when available)
-2. Work on both Electron and Capacitor
-3. Survive app restarts
-4. Are testable without real Claude sessions
+ALL interactive prompts (current and future) should:
+1. **Render from tool call data** - `toolCall.input` has everything
+2. **Use `toolCall.id` as promptId** - Guaranteed unique per call
+3. **Check `toolCall.result` for state** - Empty = pending, filled = completed
+4. **Work on Electron and Capacitor** - No platform-specific atoms
 
 ### Current Interactive Prompt Types
 
-| Type | Has toolUseId | Widget Location | Matching Strategy |
-|------|---------------|-----------------|-------------------|
-| AskUserQuestion | Yes (MCP tool) | runtime | Needs migration to toolUseId |
-| ExitPlanMode | Yes (MCP tool) | electron | Needs migration to toolUseId |
-| ToolPermission | Yes (MCP tool) | electron | Needs migration to toolUseId |
-| GitCommitProposal | Yes (MCP tool) | runtime | Done - uses toolUseId |
+| Type | Widget Location | Status |
+|------|-----------------|--------|
+| GitCommitProposal | runtime | **Done** - renders from tool call |
+| AskUserQuestion | runtime | Needs migration |
+| ExitPlanMode | electron | Needs migration |
+| ToolPermission | electron | Needs migration |
 
-### Unified Architecture
+### Migration Pattern
+
+For each prompt type:
+
+1. **Remove atom dependency** - Widget should not read from any atom
+2. **Get data from `toolCall.input`** - All prompt data is there
+3. **Use `toolCall.id` as promptId** - For sending response
+4. **Check `!toolCall.result` for pending** - Not atom state
 
 ```typescript
-// Unified prompt data stored in database
-interface InteractivePromptContent {
-  type: 'interactive_prompt';
-  promptType: 'ask_user_question' | 'exit_plan_mode' | 'tool_permission' | 'git_commit_proposal';
+// BEFORE (atom-based, broken)
+const pendingQuestion = useAtomValue(sessionPendingQuestionAtom(sessionId));
+const matchingQuestion = pendingQuestion?.toolUseId === toolCall.id ? pendingQuestion : null;
+if (!matchingQuestion) return null;
 
-  // PRIMARY KEY for matching - Claude's tool_use ID
-  toolUseId: string;  // "toolu_01ABC..." - REQUIRED for new prompts
-
-  // Legacy ID for backward compatibility
-  promptId: string;   // Can be same as toolUseId or legacy format
-
-  status: 'pending' | 'resolved' | 'cancelled';
-
-  // Prompt-specific data
-  data: AskUserQuestionData | ExitPlanModeData | ToolPermissionData | GitCommitProposalData;
-
-  // Response (filled when resolved)
-  response?: InteractivePromptResponse;
-}
-
-// Widget matching logic (same for all prompt types)
-// NO FALLBACK - toolUseId matching only. Content-based matching is dangerous.
-function matchPromptToToolCall(
-  pendingPrompt: InteractivePromptContent | null,
-  toolCall: { id?: string }
-): boolean {
-  if (!pendingPrompt || !toolCall.id || !pendingPrompt.toolUseId) {
-    return false;
-  }
-  return pendingPrompt.toolUseId === toolCall.id;
-}
+// AFTER (tool call-based, works)
+const { questions } = toolCall.input;
+const isPending = !toolCall.result;
+if (!isPending) return <CompletedUI />;
+return <InteractiveUI questions={questions} />;
 ```
 
 ### Capacitor Support
 
-The same architecture works for Capacitor because:
-1. **Database is synced** - Pending prompts replicate via existing sync
-2. **toolUseId is stable** - Same ID on desktop and mobile
-3. **Response persists to DB** - Mobile can respond, desktop sees it
+This architecture naturally works on Capacitor because:
+1. **Tool call data is in the transcript** - Already synced
+2. **No platform-specific atoms** - Widget code is in runtime package
+3. **Response via IPC** - Same `messages:respond-to-prompt` channel
 
 ```
 ┌──────────────────┐     Sync      ┌──────────────────┐
@@ -638,159 +686,124 @@ The same architecture works for Capacitor because:
 │  (Electron)      │              │  (Capacitor)     │
 └──────────────────┘              └──────────────────┘
          │                                 │
-         │ Query/Write                     │ Query/Write
+         │  Tool call in                   │  Tool call in
+         │  transcript (synced)            │  transcript (synced)
          ▼                                 ▼
-┌─────────────────────────────────────────────────────┐
-│              Database (PGLite / Synced)             │
-│  ai_agent_messages with toolUseId                   │
-└─────────────────────────────────────────────────────┘
+┌──────────────────┐              ┌──────────────────┐
+│  Widget renders  │              │  Widget renders  │
+│  from toolCall   │              │  from toolCall   │
+│  data directly   │              │  data directly   │
+└──────────────────┘              └──────────────────┘
 ```
 
-### Testing Without Real Claude Sessions
+### Testing
 
-**Problem:** We can't invoke real Claude sessions in tests, but we need to test:
-1. Prompt persistence
-2. Widget matching
-3. Response handling
-4. Cross-device sync
+Since widgets render from tool call data, testing is simple:
+1. Create mock tool call message with test data
+2. Render widget with that tool call
+3. Verify UI shows correctly
+4. Simulate user interaction
+5. Verify response IPC is called with correct data
 
-**Solution:** Mock the MCP layer and inject prompts directly into the database.
+No need to mock atoms, IPC listeners, or DB queries.
 
 ```typescript
-// Test helper: Create a pending prompt as if Claude called the tool
-async function createMockPendingPrompt(
-  sessionId: string,
-  promptType: 'ask_user_question' | 'git_commit_proposal' | ...,
-  toolUseId: string,
-  data: any
-): Promise<void> {
-  await AgentMessagesRepository.create({
-    sessionId,
-    source: 'mcp',
-    direction: 'output',
-    content: JSON.stringify({
-      type: promptType,
-      toolUseId,
-      proposalId: toolUseId,
-      ...data,
-      status: 'pending',
-      timestamp: Date.now(),
-    }),
-    hidden: false,
-    createdAt: new Date(),
-  });
+// Test helper: Create a mock tool call for widget testing
+function createMockToolCall(toolUseId: string, input: any, result?: string) {
+  return {
+    id: toolUseId,
+    name: 'developer_git_commit_proposal',
+    input,
+    result,  // undefined for pending, string for completed
+  };
 }
 
-// Test helper: Create a tool call message as if Claude sent it
-async function createMockToolCallMessage(
-  sessionId: string,
-  toolName: string,
-  toolUseId: string,
-  args: any
-): Promise<void> {
-  await AgentMessagesRepository.create({
-    sessionId,
-    source: 'claude',
-    direction: 'output',
-    content: JSON.stringify({
-      type: 'assistant',
-      message: {
-        content: [{
-          type: 'tool_use',
-          id: toolUseId,
-          name: toolName,
-          input: args,
-        }]
-      }
-    }),
-    hidden: false,
-    createdAt: new Date(),
-  });
-}
-
-// Example test
-describe('GitCommitProposal durability', () => {
-  it('survives app restart', async () => {
-    const sessionId = 'test-session';
-    const toolUseId = 'toolu_test123';
-
-    // 1. Create pending prompt (simulates MCP server)
-    await createMockPendingPrompt(sessionId, 'git_commit_proposal', toolUseId, {
+// Example test - widget renders from tool call data
+describe('GitCommitConfirmationWidget', () => {
+  it('shows interactive UI when tool is pending', () => {
+    const toolCall = createMockToolCall('toolu_test123', {
       filesToStage: ['file.ts'],
       commitMessage: 'test commit',
-    });
+      reasoning: 'test reasoning',
+    });  // No result = pending
 
-    // 2. Create tool call message (simulates Claude's response)
-    await createMockToolCallMessage(sessionId, 'developer_git_commit_proposal', toolUseId, {
-      filesToStage: ['file.ts'],
-      commitMessage: 'test commit',
-    });
+    const { getByText } = render(
+      <GitCommitConfirmationWidget
+        toolCall={toolCall}
+        sessionId="test-session"
+        workspacePath="/test/path"
+      />
+    );
 
-    // 3. Simulate "restart" by clearing in-memory state
-    clearAllAtoms();
-
-    // 4. Reload session - pending prompt should be restored
-    await store.set(refreshPendingPromptsAtom, sessionId);
-    const pendingPrompt = store.get(sessionPendingGitCommitProposalAtom(sessionId));
-
-    expect(pendingPrompt).not.toBeNull();
-    expect(pendingPrompt?.toolUseId).toBe(toolUseId);
+    // Should show interactive UI
+    expect(getByText('Commit Proposal')).toBeInTheDocument();
+    expect(getByText('test commit')).toBeInTheDocument();
   });
 
-  it('matches widget to correct tool call by toolUseId', async () => {
-    const sessionId = 'test-session';
-    const toolUseId1 = 'toolu_first';
-    const toolUseId2 = 'toolu_second';
+  it('shows completed state when tool has result', () => {
+    const toolCall = createMockToolCall('toolu_test123', {
+      filesToStage: ['file.ts'],
+      commitMessage: 'test commit',
+    }, 'User confirmed and committed 1 file(s). Commit hash: abc123');
 
-    // Create two tool calls with same content but different IDs
-    await createMockPendingPrompt(sessionId, 'git_commit_proposal', toolUseId2, {
-      filesToStage: ['same-file.ts'],
-      commitMessage: 'same message',
-    });
-
-    // Widget for first tool call should NOT match
-    const match1 = matchPromptToToolCall(
-      store.get(sessionPendingGitCommitProposalAtom(sessionId)),
-      { id: toolUseId1 }
+    const { getByText } = render(
+      <GitCommitConfirmationWidget toolCall={toolCall} sessionId="test" workspacePath="/test" />
     );
-    expect(match1).toBe(false);
 
-    // Widget for second tool call SHOULD match
-    const match2 = matchPromptToToolCall(
-      store.get(sessionPendingGitCommitProposalAtom(sessionId)),
-      { id: toolUseId2 }
-    );
-    expect(match2).toBe(true);
+    // Should show completed state
+    expect(getByText('Changes Committed')).toBeInTheDocument();
+  });
+
+  it('handles multiple tool calls with same content correctly', () => {
+    // Each tool call has unique ID, so no confusion
+    const toolCall1 = createMockToolCall('toolu_first', { commitMessage: 'same' });
+    const toolCall2 = createMockToolCall('toolu_second', { commitMessage: 'same' });
+
+    // Widget 1 uses toolu_first as proposalId
+    // Widget 2 uses toolu_second as proposalId
+    // No conflict - they're different widgets with different IDs
   });
 });
 ```
 
-### Migration Tasks
+## Remaining Migration Tasks
 
-#### Phase 8a: Standardize toolUseId Extraction
-- [ ] Create helper function `extractToolUseId(request)` in MCP server
-- [ ] Update ALL MCP tool handlers to extract and store toolUseId
-- [ ] Add toolUseId to all prompt type interfaces
+### Migrate Other Prompt Types to Tool Call Rendering
 
-#### Phase 8b: Migrate Existing Prompts to toolUseId Matching
-- [ ] AskUserQuestion - update widget to match by toolUseId
-- [ ] ExitPlanMode - update confirmation dialog to match by toolUseId
-- [ ] ToolPermission - update permission dialog to match by toolUseId
+Each prompt type widget should be updated to render from `toolCall` data:
 
-#### Phase 8c: Create Test Infrastructure
-- [ ] Add `createMockPendingPrompt` test helper
-- [ ] Add `createMockToolCallMessage` test helper
-- [ ] Add `matchPromptToToolCall` utility function
-- [ ] Write unit tests for each prompt type
+#### AskUserQuestion Widget
+- [ ] Remove atom dependency (`sessionPendingQuestionAtom`)
+- [ ] Get questions from `toolCall.input.questions`
+- [ ] Use `toolCall.id` as questionId for response
+- [ ] Check `!toolCall.result` for pending state
 
-#### Phase 8d: E2E Tests for Durability
-- [ ] Test: Pending prompt survives session switch
-- [ ] Test: Pending prompt survives app restart
-- [ ] Test: Response persists and is found on resume
-- [ ] Test: Multiple pending prompts handled correctly
-- [ ] Test: Cancel and re-call same tool works correctly
+#### ExitPlanMode Confirmation
+- [ ] Remove atom dependency
+- [ ] Get plan data from `toolCall.input`
+- [ ] Use `toolCall.id` for response
+- [ ] Render from tool call state
 
-#### Phase 8e: Capacitor Integration
-- [ ] Verify sync includes toolUseId field
-- [ ] Test mobile can respond to desktop-created prompts
-- [ ] Test desktop sees mobile responses after sync
+#### ToolPermission Dialog
+- [ ] Remove atom dependency
+- [ ] Get permission data from `toolCall.input`
+- [ ] Use `toolCall.id` for response
+- [ ] Render from tool call state
+
+### Clean Up Legacy Code
+- [ ] Remove `sessionPendingQuestionAtom` (once widget migrated)
+- [ ] Remove `sessionPendingPermissionsAtom` (once widget migrated)
+- [ ] Remove `sessionPendingExitPlanModeAtom` (once widget migrated)
+- [ ] Remove IPC event handlers for prompt notifications
+- [ ] Remove `refreshPendingPromptsAtom` (no longer needed)
+
+### Testing
+- [ ] Unit tests for each widget with mock tool calls
+- [ ] E2E test: Pending prompt shows after page refresh
+- [ ] E2E test: Cancel and re-call same tool works
+
+### Capacitor Integration
+- [ ] Verify transcript sync includes tool call messages
+- [ ] Implement `messages:respond-to-prompt` IPC on Capacitor
+- [ ] Test mobile can respond to pending prompts
+- [ ] Test response syncs back to desktop

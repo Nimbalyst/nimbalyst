@@ -750,9 +750,9 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
       }));
     }
 
-    // Git commit proposal IPC listener removed - now uses DB-backed durable prompts
-    // The proposal is persisted to DB by httpServer.ts MCP handler
-    // Widget reads from sessionPendingGitCommitProposalAtom (derived from DB)
+    // Git commit proposal - widget renders directly from tool call data
+    // No IPC listener or atom sync needed
+    // See packages/runtime/src/ui/AgentTranscript/components/CustomToolWidgets/GitCommitConfirmationWidget.tsx
 
     // AI Tool handlers for document manipulation
     // Note: onAIApplyDiff is handled by aiApi.ts to avoid duplicate applications

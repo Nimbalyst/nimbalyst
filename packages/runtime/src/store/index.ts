@@ -66,11 +66,5 @@ export {
   type PendingQuestionData,
 } from './atoms/pendingQuestions';
 
-// Git commit proposal atoms
-export {
-  sessionPendingGitCommitProposalAtom,
-  setSessionGitCommitProposalAtom,
-  sessionHasPendingGitCommitProposal,
-  clearPendingGitCommitProposal,
-  type GitCommitProposalData,
-} from './atoms/gitCommitProposals';
+// Git commit proposal types (widget uses tool call data directly, no atoms needed)
+export { type GitCommitProposalData } from './atoms/gitCommitProposals';

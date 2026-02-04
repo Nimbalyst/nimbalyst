@@ -569,8 +569,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.send('mcp:updateDocumentState', state),
   clearMcpDocumentState: () => ipcRenderer.invoke('mcp:clearDocumentState'),
 
-  // Git commit proposal IPC removed - now uses unified messages:respond-to-prompt channel
-  // Proposals are persisted to DB and read via sessionPendingGitCommitProposalAtom
+  // Git commit proposal - widget renders directly from tool call data
+  // Response sent via messages:respond-to-prompt channel
 
   // Extension tool registration for MCP
   registerExtensionTools: (workspacePath: string, tools: any[]) =>

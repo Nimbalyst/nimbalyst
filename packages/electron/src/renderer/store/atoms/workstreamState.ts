@@ -329,8 +329,8 @@ export const workstreamCommitMessageAtom = atomFamily((id: string) =>
   atom((get) => get(workstreamStateAtom(id)).commitMessage)
 );
 
-// activeProposalId atoms removed - git commit proposals now use DB-backed durable prompts
-// See sessionPendingGitCommitProposalAtom in sessions.ts
+// activeProposalId atoms removed - git commit proposals handled by widget
+// Widget renders directly from tool call data, no atoms needed
 
 /**
  * File scope mode for the Files Edited sidebar in a workstream.

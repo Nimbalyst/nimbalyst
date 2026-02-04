@@ -1,21 +1,17 @@
 /**
- * Git Commit Proposal Atoms
+ * Git Commit Proposal Types
  *
- * Stores pending git commit proposals for the GitCommitConfirmationWidget.
- * This is a cross-platform atom that works in both Electron and Capacitor.
+ * Type definitions for git commit proposals used by GitCommitConfirmationWidget.
  *
- * In Electron, this is populated by the DB-backed sessionPendingGitCommitProposalAtom
- * via a sync effect in the SessionTranscript component.
+ * Note: The widget no longer uses atoms - it renders directly from tool call data.
+ * The proposalId is simply toolCall.id, and the proposal data comes from toolCall.input.
+ *
+ * These types are kept for reference and potential future use in other parts of the codebase.
  */
-
-import { atom } from 'jotai';
-import { atomFamily } from 'jotai/utils';
-// Import directly from store.ts to avoid circular dependency with index.ts
-import { store } from '../store.js';
 
 export interface GitCommitProposalData {
   proposalId: string;
-  toolUseId?: string;  // Claude's tool_use ID for matching with widget's toolCall.id
+  toolUseId?: string;  // Claude's tool_use ID (same as toolCall.id)
   workspacePath: string;
   filesToStage: Array<string | { path: string; status: 'added' | 'modified' | 'deleted' }>;
   commitMessage: string;
@@ -23,36 +19,5 @@ export interface GitCommitProposalData {
   timestamp: number;
 }
 
-/**
- * Atom family tracking pending git commit proposals by session ID.
- * Returns the proposal data if one exists for the session, null otherwise.
- */
-export const sessionPendingGitCommitProposalAtom = atomFamily((sessionId: string) =>
-  atom<GitCommitProposalData | null>(null)
-);
-
-/**
- * Set atom for updating a session's pending git commit proposal.
- * Pass null to clear.
- */
-export const setSessionGitCommitProposalAtom = atom(
-  null,
-  (get, set, update: { sessionId: string; proposal: GitCommitProposalData | null }) => {
-    set(sessionPendingGitCommitProposalAtom(update.sessionId), update.proposal);
-  }
-);
-
-/**
- * Check if a session has a pending git commit proposal.
- */
-export function sessionHasPendingGitCommitProposal(sessionId: string): boolean {
-  const proposal = store.get(sessionPendingGitCommitProposalAtom(sessionId));
-  return proposal !== null;
-}
-
-/**
- * Clear pending git commit proposal for a session.
- */
-export function clearPendingGitCommitProposal(sessionId: string): void {
-  store.set(sessionPendingGitCommitProposalAtom(sessionId), null);
-}
+// Note: Atoms and helper functions removed - widget uses tool call data directly
+// See packages/runtime/src/ui/AgentTranscript/components/CustomToolWidgets/GitCommitConfirmationWidget.tsx

@@ -94,8 +94,9 @@ export const clearStagingAtom = atom(null, (get, set) => {
   set(stagedFilesAtom, new Set());
 });
 
-// Git commit proposals are now handled by DB-backed durable prompts
-// See sessionPendingGitCommitProposalAtom in sessions.ts (electron) and gitCommitProposals.ts (runtime)
+// Git commit proposals are handled by GitCommitConfirmationWidget
+// Widget renders directly from tool call data - no atoms needed
+// See packages/runtime/src/ui/AgentTranscript/components/CustomToolWidgets/GitCommitConfirmationWidget.tsx
 
 // ============================================================
 // Git Panel Refresh Triggers
