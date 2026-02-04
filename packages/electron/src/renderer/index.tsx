@@ -33,6 +33,10 @@ import {
   externalEditorSettingsAtom,
   initExternalEditorSettings,
 } from './store/atoms/appSettings';
+import {
+  claudeUsageIndicatorEnabledAtom,
+  initClaudeUsageIndicatorSetting,
+} from './store/atoms/claudeUsageAtoms';
 
 // console.log('[RENDERER] Imports complete at', new Date().toISOString());
 
@@ -104,6 +108,9 @@ await Promise.all([
   }),
   initExternalEditorSettings().then((settings) => {
     store.set(externalEditorSettingsAtom, settings);
+  }),
+  initClaudeUsageIndicatorSetting().then((enabled) => {
+    store.set(claudeUsageIndicatorEnabledAtom, enabled);
   }),
 ]).catch(() => {
   // Ignore errors - settings will use defaults

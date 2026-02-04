@@ -1,10 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { ProviderConfig, Model } from '../../Settings/SettingsView';
 // Import the actual SDK package.json to get the exact installed version
 // @ts-ignore - importing json
 import sdkPackageJson from '@anthropic-ai/claude-agent-sdk/package.json';
 import {ClaudeForWindowsInstallation} from "../../../../main/services/CLIManager.ts";
 import {usePostHog} from "posthog-js/react";
+import {
+  claudeUsageIndicatorEnabledAtom,
+  setClaudeUsageIndicatorEnabledAtom,
+} from '../../../store/atoms/claudeUsageAtoms';
 
 // Built-in SDK version (dynamically from the SDK's package.json)
 const BUNDLED_SDK_VERSION = sdkPackageJson.version || 'unknown';
@@ -64,8 +69,15 @@ export function ClaudeCodePanel({
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState('');
 
+  // Usage indicator setting
+  const usageIndicatorEnabled = useAtomValue(claudeUsageIndicatorEnabledAtom);
+  const setUsageIndicatorEnabled = useSetAtom(setClaudeUsageIndicatorEnabledAtom);
+
   // Detect Windows platform using navigator.platform (client-side, no IPC needed)
   const isWindowsPlatform = navigator.platform === 'Win32';
+
+  // Detect macOS platform (usage indicator only available on macOS)
+  const isMacOS = navigator.platform.toLowerCase().includes('mac');
 
   // Load environment variables
   const loadEnvVars = useCallback(async () => {
@@ -187,6 +199,27 @@ export function ClaudeCodePanel({
           <span className="provider-toggle-slider absolute cursor-pointer inset-0 rounded-full transition-all bg-[var(--nim-bg-tertiary)] before:absolute before:content-[''] before:h-5 before:w-5 before:left-0.5 before:bottom-0.5 before:rounded-full before:transition-all before:bg-white before:shadow-sm peer-checked:bg-[var(--nim-primary)] peer-checked:before:translate-x-5"></span>
         </label>
       </div>
+
+      {/* Usage Indicator Toggle - macOS only */}
+      {isMacOS && (
+        <div className="provider-enable flex items-center justify-between gap-4 py-4 mb-4 border-b border-[var(--nim-border)]">
+          <div>
+            <span className="provider-enable-label text-sm font-medium text-[var(--nim-text)]">Show Usage Indicator</span>
+            <p className="text-xs text-[var(--nim-text-muted)] mt-1">
+              Display API usage limits in the navigation gutter
+            </p>
+          </div>
+          <label className="provider-toggle relative inline-block w-11 h-6 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={usageIndicatorEnabled}
+              onChange={(e) => setUsageIndicatorEnabled(e.target.checked)}
+              className="opacity-0 w-0 h-0 absolute"
+            />
+            <span className="provider-toggle-slider absolute cursor-pointer inset-0 rounded-full transition-all bg-[var(--nim-bg-tertiary)] before:absolute before:content-[''] before:h-5 before:w-5 before:left-0.5 before:bottom-0.5 before:rounded-full before:transition-all before:bg-white before:shadow-sm peer-checked:bg-[var(--nim-primary)] peer-checked:before:translate-x-5"></span>
+          </label>
+        </div>
+      )}
 
       { isWindowsPlatform && isCheckingClaudeWindowsStatus && (
         <div className="installation-status p-4 rounded-lg bg-[rgba(245,158,11,0.05)] border border-[rgba(245,158,11,0.2)]">
