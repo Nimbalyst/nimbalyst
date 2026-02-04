@@ -191,7 +191,7 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
         return;
       }
 
-      const newSessionId = sessionResult.id as string;
+      const newSessionId = sessionResult.id;
 
       // Load the session data first (use workspacePath since session was created in main repo workspace)
       const sessionData = await window.electronAPI.aiLoadSession(newSessionId, workspacePath);

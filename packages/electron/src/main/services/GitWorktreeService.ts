@@ -1805,10 +1805,12 @@ ${newLines.map(line => '+' + line).join('\n')}`;
         }
       }
 
-      const ourCommitMessages: string[] = [];
-      for (const hash of conflictingCommitHashes) {
-        const message = (await git.raw(['log', '-1', '--format=%s', hash])).trim();
-        ourCommitMessages.push(message);
+      // Batch fetch all commit messages in a single git command to avoid N+1 performance issue
+      const hashArray = Array.from(conflictingCommitHashes);
+      let ourCommitMessages: string[] = [];
+      if (hashArray.length > 0) {
+        const messagesOutput = await git.raw(['log', '--format=%s', '--no-walk', ...hashArray]);
+        ourCommitMessages = messagesOutput.trim().split('\n').filter(Boolean);
       }
 
       // Get their commits that touch conflicting files
