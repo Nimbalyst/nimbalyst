@@ -3445,6 +3445,7 @@ export class AIService {
       const showToolCalls = this.getSettingsStore().get('showToolCalls', false) as boolean;
       const aiDebugLogging = this.getSettingsStore().get('aiDebugLogging', false) as boolean;
       const showPromptAdditions = this.getSettingsStore().get('showPromptAdditions', false) as boolean;
+      const showUsageIndicator = this.getSettingsStore().get('showUsageIndicator', false) as boolean;
 
       return {
         defaultProvider: this.getSettingsStore().get('defaultProvider', 'claude-code'),
@@ -3452,7 +3453,8 @@ export class AIService {
         providerSettings,
         showToolCalls,
         aiDebugLogging,
-        showPromptAdditions
+        showPromptAdditions,
+        showUsageIndicator,
       };
     });
 
@@ -3509,6 +3511,10 @@ export class AIService {
 
       if (settings.showPromptAdditions !== undefined) {
         this.getSettingsStore().set('showPromptAdditions', settings.showPromptAdditions);
+      }
+
+      if (settings.showUsageIndicator !== undefined) {
+        this.getSettingsStore().set('showUsageIndicator', settings.showUsageIndicator);
       }
 
       return { success: true };
