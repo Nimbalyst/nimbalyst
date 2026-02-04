@@ -35,6 +35,7 @@ import { SquashCommitModal } from './SquashCommitModal';
 import { BadGitStateDialog } from './BadGitStateDialog';
 import { HelpTooltip } from '../../help';
 import { refreshWorktreeChangedFiles } from '../../store/listeners/fileStateListeners';
+import { getWorktreeNameFromPath } from '../../utils/pathUtils';
 
 // Types for worktree mode (copied from DiffModeView)
 interface WorktreeChangedFile {
@@ -212,13 +213,6 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
         }
       }));
     }, [workspacePath, worktreeId]);
-
-    // Helper to extract worktree name from path (cross-platform compatible)
-    const getWorktreeNameFromPath = useCallback((path: string | null | undefined): string => {
-      if (!path) return 'unknown';
-      // Handle both Unix (/) and Windows (\) path separators
-      return path.split(/[\\/]/).pop() || 'unknown';
-    }, []);
 
     // Clear git state when there are no more uncommitted changes
     // This is the authoritative cleanup - if nothing to commit, reset the UI
@@ -754,7 +748,7 @@ Make sure to preserve the intent of both the worktree changes and the incoming c
       } catch (err) {
         console.error('[GitOperationsPanel] Failed to create agent session for rebase conflict resolution:', err);
       }
-    }, [worktreePath, worktreeRepoRootBranch, rebaseConflictData, getWorktreeNameFromPath, createSessionWithDraft]);
+    }, [worktreePath, worktreeRepoRootBranch, rebaseConflictData, createSessionWithDraft]);
 
     // Resolve untracked files conflict with Claude Agent
     const handleResolveUntrackedFilesWithAgent = useCallback(async () => {
@@ -798,7 +792,7 @@ Please analyze these files and recommend the best approach before taking action.
       } catch (err) {
         console.error('[GitOperationsPanel] Failed to create agent session for untracked files resolution:', err);
       }
-    }, [worktreePath, worktreeRepoRootBranch, untrackedFilesConflict, getWorktreeNameFromPath, createSessionWithDraft]);
+    }, [worktreePath, worktreeRepoRootBranch, untrackedFilesConflict, createSessionWithDraft]);
 
     // Resolve merge conflicts with Claude Agent
     const handleResolveConflictsWithAgent = useCallback(async () => {
@@ -878,7 +872,7 @@ Please proceed with this strategy.`;
       } catch (err) {
         console.error('[GitOperationsPanel] Failed to create agent session for conflict resolution:', err);
       }
-    }, [worktreePath, worktreeRepoRootBranch, mergeConflictFiles, getWorktreeNameFromPath, createSessionWithDraft]);
+    }, [worktreePath, worktreeRepoRootBranch, mergeConflictFiles, createSessionWithDraft]);
 
     // Handle archive worktree
     const handleArchiveWorktree = useCallback(async () => {

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { MaterialSymbol } from '@nimbalyst/runtime';
+import { getWorktreeNameFromPath } from '../../utils/pathUtils';
 
 interface BadGitStateDialogProps {
   worktreePath: string;
@@ -34,7 +35,7 @@ export function BadGitStateDialog({
     dialogRef.current?.focus();
   }, []);
 
-  const worktreeName = worktreePath.split('/').pop() || 'worktree';
+  const worktreeName = getWorktreeNameFromPath(worktreePath, 'worktree');
 
   return (
     <div className="merge-conflict-dialog-overlay nim-overlay" onClick={onCancel}>

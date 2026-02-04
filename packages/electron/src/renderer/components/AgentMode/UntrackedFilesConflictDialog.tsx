@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { MaterialSymbol } from '@nimbalyst/runtime';
+import { getWorktreeNameFromPath } from '../../utils/pathUtils';
 
 interface UntrackedFilesConflictDialogProps {
   worktreePath: string;
@@ -32,7 +33,7 @@ export function UntrackedFilesConflictDialog({
     dialogRef.current?.focus();
   }, []);
 
-  const worktreeName = worktreePath.split('/').pop() || 'worktree';
+  const worktreeName = getWorktreeNameFromPath(worktreePath, 'worktree');
 
   return (
     <div className="merge-conflict-dialog-overlay nim-overlay" onClick={onCancel}>

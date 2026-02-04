@@ -17,6 +17,7 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState, useImperativeHandle, type KeyboardEvent } from 'react';
+import { getWorktreeNameFromPath } from '../../utils/pathUtils';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { ProviderIcon, MaterialSymbol } from '@nimbalyst/runtime';
 import { WorkstreamEditorTabs, type WorkstreamEditorTabsRef } from './WorkstreamEditorTabs';
@@ -629,7 +630,7 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
     if (!sessionWorktreeId || !worktreePath) return;
     await showArchiveDialog({
       worktreeId: sessionWorktreeId,
-      worktreeName: worktreePath.split('/').pop() || 'worktree',
+      worktreeName: getWorktreeNameFromPath(worktreePath, 'worktree'),
       worktreePath,
     });
   }, [sessionWorktreeId, worktreePath, showArchiveDialog]);
@@ -664,7 +665,7 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
       const result = await window.electronAPI.terminal.create(workspacePath, {
         cwd: worktreePath,
         worktreeId: sessionWorktreeId,
-        title: `Terminal (${worktreePath.split('/').pop()})`,
+        title: `Terminal (${getWorktreeNameFromPath(worktreePath)})`,
         source: 'worktree',
       });
 
@@ -689,7 +690,7 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
       const result = await window.electronAPI.terminal.create(workspacePath, {
         cwd: worktreePath,
         worktreeId: sessionWorktreeId,
-        title: `Terminal (${worktreePath.split('/').pop()})`,
+        title: `Terminal (${getWorktreeNameFromPath(worktreePath)})`,
         source: 'worktree',
       });
 

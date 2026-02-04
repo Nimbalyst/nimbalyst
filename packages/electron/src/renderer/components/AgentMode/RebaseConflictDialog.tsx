@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { MaterialSymbol } from '@nimbalyst/runtime';
+import { getWorktreeNameFromPath } from '../../utils/pathUtils';
 
 interface RebaseConflictDialogProps {
   worktreePath: string;
@@ -34,7 +35,7 @@ export function RebaseConflictDialog({
     dialogRef.current?.focus();
   }, []);
 
-  const worktreeName = worktreePath.split('/').pop() || 'worktree';
+  const worktreeName = getWorktreeNameFromPath(worktreePath, 'worktree');
 
   // Limit commits to show (max 5 each)
   const ourCommits = conflictingCommits?.ours?.slice(0, 5) || [];

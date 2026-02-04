@@ -87,5 +87,19 @@ export function resolvePlanFilePath(planFilePath: string | undefined, basePath: 
   return isAbsolute ? normalizedPath : join(basePath, normalizedPath);
 }
 
+/**
+ * Extract the worktree or directory name from a path (cross-platform)
+ * Handles both Unix (/) and Windows (\) path separators.
+ * Useful when you need the final path segment from a worktree path or any directory path.
+ * @param path - Full path (can be null or undefined)
+ * @param defaultValue - Default value if path is empty or invalid (defaults to 'unknown')
+ * @returns The final path segment, or the default value if path is empty
+ */
+export function getWorktreeNameFromPath(path: string | null | undefined, defaultValue = 'unknown'): string {
+  if (!path) return defaultValue;
+  // Handle both Unix (/) and Windows (\) path separators
+  return path.split(/[\\/]/).pop() || defaultValue;
+}
+
 // Re-export pathe functions for direct use if needed
 export { basename, dirname, join, relative, normalize } from 'pathe';

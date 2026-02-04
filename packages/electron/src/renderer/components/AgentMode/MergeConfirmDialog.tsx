@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { MaterialSymbol } from '@nimbalyst/runtime';
+import { getWorktreeNameFromPath } from '../../utils/pathUtils';
 
 interface MergeConfirmDialogProps {
   worktreePath: string;
@@ -10,11 +11,11 @@ interface MergeConfirmDialogProps {
 }
 
 function getWorktreeName(worktreePath: string): string {
-  return worktreePath.split('/').pop() || 'worktree';
+  return getWorktreeNameFromPath(worktreePath, 'worktree');
 }
 
 function getProjectName(workspacePath: string): string {
-  return workspacePath.split('/').pop() || 'main';
+  return getWorktreeNameFromPath(workspacePath, 'main');
 }
 
 export function MergeConfirmDialog({

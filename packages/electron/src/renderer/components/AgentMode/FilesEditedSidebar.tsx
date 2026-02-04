@@ -13,6 +13,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { getWorktreeNameFromPath } from '../../utils/pathUtils';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { FileEditsSidebar as FileEditsSidebarComponent, MaterialSymbol } from '@nimbalyst/runtime';
 import type { FileEditSummary } from '@nimbalyst/runtime';
@@ -466,7 +467,7 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
           onGroupByDirectoryChange={setGroupByDirectory}
           isWorktree={!!worktreeId}
           workstreamSessionCount={workstreamSessions.length}
-          worktreeName={worktreePath ? worktreePath.split('/').pop() : undefined}
+          worktreeName={worktreePath ? getWorktreeNameFromPath(worktreePath) : undefined}
         />
         {/* Expand/Collapse controls */}
         <div className="files-edited-sidebar__controls flex gap-1 shrink-0">
