@@ -166,8 +166,7 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
     // Helper function to create an AI session with a draft message and open it
     // Used by all conflict resolution handlers to avoid code duplication
     const createSessionWithDraft = useCallback(async (
-      draftMessage: string,
-      errorContext: string
+      draftMessage: string
     ): Promise<void> => {
       // Create the session in the MAIN REPO workspace (so it appears in session list)
       // but associate it with the worktree via worktreeId
@@ -180,30 +179,38 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
         worktreeId ?? undefined  // worktreeId (associate with the worktree)
       );
 
-      if (sessionResult?.id) {
-        const newSessionId = sessionResult.id as string;
-
-        // Load the session data first (use workspacePath since session was created in main repo workspace)
-        const sessionData = await window.electronAPI.aiLoadSession(newSessionId, workspacePath);
-
-        if (sessionData) {
-          // Save the draft input so it appears in the text box but isn't sent yet
-          await window.electronAPI.aiSaveDraftInput(
-            newSessionId,
-            draftMessage,
-            workspacePath
-          );
-
-          // Dispatch a custom event to notify the AgenticPanel to open this session
-          window.dispatchEvent(new CustomEvent('open-ai-session', {
-            detail: {
-              sessionId: newSessionId,
-              workspacePath: workspacePath,
-              draftInput: draftMessage
-            }
-          }));
-        }
+      if (!sessionResult?.id) {
+        console.error('[GitOperationsPanel] Failed to create AI session: no session ID returned');
+        alert('Failed to create AI session. Please try again.');
+        return;
       }
+
+      const newSessionId = sessionResult.id as string;
+
+      // Load the session data first (use workspacePath since session was created in main repo workspace)
+      const sessionData = await window.electronAPI.aiLoadSession(newSessionId, workspacePath);
+
+      if (!sessionData) {
+        console.error('[GitOperationsPanel] Failed to load AI session:', newSessionId);
+        alert('Failed to load AI session. Please check the session list.');
+        return;
+      }
+
+      // Save the draft input so it appears in the text box but isn't sent yet
+      await window.electronAPI.aiSaveDraftInput(
+        newSessionId,
+        draftMessage,
+        workspacePath
+      );
+
+      // Dispatch a custom event to notify the AgenticPanel to open this session
+      window.dispatchEvent(new CustomEvent('open-ai-session', {
+        detail: {
+          sessionId: newSessionId,
+          workspacePath: workspacePath,
+          draftInput: draftMessage
+        }
+      }));
     }, [workspacePath, worktreeId]);
 
     // Helper to extract worktree name from path (cross-platform compatible)
@@ -690,7 +697,7 @@ ${conflictFilesList}
 
 Please help me resolve this git issue.`;
 
-        await createSessionWithDraft(draftMessage, 'bad git state resolution');
+        await createSessionWithDraft(draftMessage);
       } catch (err) {
         console.error('[GitOperationsPanel] Failed to send bad git state resolution request:', err);
       }
@@ -743,7 +750,7 @@ ${rebaseConflictData.commits.theirs && rebaseConflictData.commits.theirs.length 
 
 Make sure to preserve the intent of both the worktree changes and the incoming changes from ${baseBranch}.`;
 
-        await createSessionWithDraft(draftMessage, 'rebase conflict resolution');
+        await createSessionWithDraft(draftMessage);
       } catch (err) {
         console.error('[GitOperationsPanel] Failed to create agent session for rebase conflict resolution:', err);
       }
@@ -787,7 +794,7 @@ ${untrackedFilesList}
 
 Please analyze these files and recommend the best approach before taking action.`;
 
-        await createSessionWithDraft(draftMessage, 'untracked files resolution');
+        await createSessionWithDraft(draftMessage);
       } catch (err) {
         console.error('[GitOperationsPanel] Failed to create agent session for untracked files resolution:', err);
       }
@@ -867,7 +874,7 @@ Should show the files as modified (uncommitted). The working directory should ha
 
 Please proceed with this strategy.`;
 
-        await createSessionWithDraft(draftMessage, 'merge conflict resolution');
+        await createSessionWithDraft(draftMessage);
       } catch (err) {
         console.error('[GitOperationsPanel] Failed to create agent session for conflict resolution:', err);
       }
