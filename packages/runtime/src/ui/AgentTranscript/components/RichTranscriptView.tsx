@@ -650,7 +650,7 @@ export const RichTranscriptView = React.forwardRef<
   }, [messages, isWaitingForResponse, sessionId]);
 
 
-  // Listen for routed search events from the menu system
+  // Listen for routed search events from AgentWorkstreamPanel
   // Only respond if this session is the active one
   useEffect(() => {
     const handleFind = (e: Event) => {
@@ -674,14 +674,14 @@ export const RichTranscriptView = React.forwardRef<
       }
     };
 
-    window.addEventListener('menu:find', handleFind);
-    window.addEventListener('menu:find-next', handleFindNext);
-    window.addEventListener('menu:find-previous', handleFindPrevious);
+    window.addEventListener('transcript:find', handleFind);
+    window.addEventListener('transcript:find-next', handleFindNext);
+    window.addEventListener('transcript:find-previous', handleFindPrevious);
 
     return () => {
-      window.removeEventListener('menu:find', handleFind);
-      window.removeEventListener('menu:find-next', handleFindNext);
-      window.removeEventListener('menu:find-previous', handleFindPrevious);
+      window.removeEventListener('transcript:find', handleFind);
+      window.removeEventListener('transcript:find-next', handleFindNext);
+      window.removeEventListener('transcript:find-previous', handleFindPrevious);
     };
   }, [sessionId, showSearchBar]);
 
@@ -1235,7 +1235,7 @@ export const RichTranscriptView = React.forwardRef<
                             onCompact={onCompact}
                           />
                         </div>
-                        {/* Prompt additions debug display - show after the last user message */}
+                        {/* Prompt additions debug display - disabled until feature is fixed
                         {isUser && promptAdditions && index === promptAdditionsTargetIndex && (
                           <PromptAdditionsInline
                             systemPromptAddition={promptAdditions.systemPromptAddition}
@@ -1244,6 +1244,7 @@ export const RichTranscriptView = React.forwardRef<
                             timestamp={promptAdditions.timestamp}
                           />
                         )}
+                        */}
                       </div>
                     );
                   })}
