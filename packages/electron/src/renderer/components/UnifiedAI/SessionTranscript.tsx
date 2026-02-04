@@ -24,6 +24,7 @@ import { AIInput, AIInputRef } from './AIInput';
 import { PromptQueueList } from './PromptQueueList';
 import { useDialog } from '../../contexts/DialogContext';
 import { FileGutter } from '../AIChat/FileGutter';
+import { recordClaudeActivity } from '../../store/listeners/claudeUsageListeners';
 import { PendingReviewBanner } from '../AIChat/PendingReviewBanner';
 import type { AIMode } from './ModeTag';
 import { ExitPlanModeConfirmation } from './ExitPlanModeConfirmation';
@@ -811,6 +812,11 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
       };
 
       await window.electronAPI.invoke('ai:sendMessage', message, docContext, sessionId, workspacePath);
+
+      // Record activity for Claude usage tracking (wake up polling if sleeping)
+      if (provider?.startsWith('claude')) {
+        recordClaudeActivity();
+      }
     } catch (error) {
       console.error('[SessionTranscript] Failed to send message:', error);
       // Show error in transcript so user knows what went wrong

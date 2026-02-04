@@ -68,6 +68,8 @@ import { initVoiceModeService } from './services/voice/VoiceModeService';
 import { initVoiceModeSettingsHandler } from './services/voice/VoiceModeSettingsHandler';
 import { registerWalkthroughHandlers } from './ipc/WalkthroughHandlers';
 import { registerDataModelHandlers } from './ipc/DataModelHandlers';
+import { registerClaudeUsageHandlers } from './ipc/ClaudeUsageHandlers';
+import { claudeUsageService } from './services/ClaudeUsageService';
 import { registerExtensionHandlers, getClaudePluginPaths, initializeExtensionFileTypes } from './ipc/ExtensionHandlers';
 import { getRegisteredExtensions } from './extensions/RegisteredFileTypes';
 import { ClaudeCodeProvider } from '@nimbalyst/runtime/ai/server';
@@ -618,6 +620,8 @@ app.whenReady().then(async () => {
     initializeClaudeCodeSessionHandlers();  // Initialize Claude Code session import
     registerAnalyticsHandlers();
     registerNotificationHandlers();
+    registerClaudeUsageHandlers();
+    claudeUsageService.initialize();
     registerPermissionHandlers();
     registerGitStatusHandlers();
     registerGitHandlers();

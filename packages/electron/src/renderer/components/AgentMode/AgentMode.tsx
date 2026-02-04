@@ -49,6 +49,7 @@ import { initSessionStateListeners } from '../../store/sessionStateListeners';
 import { initFileStateListeners } from '../../store/listeners/fileStateListeners';
 import { initSessionListListeners } from '../../store/listeners/sessionListListeners';
 import { initSessionTranscriptListeners } from '../../store/listeners/sessionTranscriptListeners';
+import { initClaudeUsageListeners } from '../../store/listeners/claudeUsageListeners';
 import type { WorktreeCreateResult, SessionCreateResult } from '../../../shared/ipc/types';
 
 export interface AgentModeRef {
@@ -153,6 +154,12 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
   // Initialize session transcript listeners (global, runs once)
   useEffect(() => {
     const cleanup = initSessionTranscriptListeners();
+    return cleanup;
+  }, []);
+
+  // Initialize Claude usage listeners (global, runs once)
+  useEffect(() => {
+    const cleanup = initClaudeUsageListeners();
     return cleanup;
   }, []);
 

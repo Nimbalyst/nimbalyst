@@ -8,6 +8,7 @@ import { ThemeToggleButton } from '../ThemeToggleButton/ThemeToggleButton';
 import { SyncStatusButton } from '../SyncStatusButton/SyncStatusButton';
 import { TrustIndicator } from '../TrustIndicator';
 import { ExtensionDevIndicator } from '../ExtensionDevIndicator';
+import { ClaudeUsageIndicator } from '../ClaudeUsageIndicator';
 import { useExtensionGutterButtons } from '../../extensions/panels/usePanels';
 import { HelpTooltip } from '../../help';
 import { terminalFeatureAvailableAtom } from '../../store/atoms/appSettings';
@@ -369,6 +370,9 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
 
       {/* Settings (bottom) */}
       <div className="nav-section nav-settings flex flex-col items-center gap-1 w-full px-1.5 py-1 mt-auto pt-2 border-t border-nim">
+
+        {/* Claude Usage Indicator - Shows API usage limits */}
+        <ClaudeUsageIndicator />
 
         {/* Extension Dev Indicator - Shows when extension dev tools are enabled */}
         <ExtensionDevIndicator onOpenSettings={onOpenSettings} />
