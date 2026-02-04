@@ -1,11 +1,19 @@
 ---
 name: git-commit
-description: Create git commits using Nimbalyst's interactive commit proposal widget. Use when the user asks to commit changes, create a commit, or save their work to git.
+description: Create git commits using Nimbalyst's interactive commit proposal widget. ONLY use when the user explicitly clicks "Commit with AI" button or asks for "smart commit". For regular commit requests, use standard git commands instead.
 ---
 
 # Git Commit Workflow in Nimbalyst
 
-When committing changes in Nimbalyst, use the interactive commit proposal widget instead of running git commands directly. This provides a better user experience where users can review and adjust the proposed commit before confirming.
+This skill is for the "Commit with AI" feature which provides an interactive commit proposal widget.
+
+**IMPORTANT: Only use this when:**
+- The user clicks the "Commit with AI" button (you'll see a message asking you to use developer_git_commit_proposal)
+- The user explicitly asks for "smart commit" or "commit with AI"
+
+**Do NOT use this for:**
+- Generic commit requests like "commit this", "commit the changes", "make a commit"
+- For those, use standard git commands: `git add` and `git commit`
 
 ## Required Steps
 

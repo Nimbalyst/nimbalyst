@@ -11,9 +11,16 @@ import type { CommitProposal } from '../types';
  */
 export const gitCommitProposalTool = {
   name: 'git_commit_proposal',
-  description: `Propose files and commit message for a git commit.
+  description: `Propose files and commit message for a git commit using an interactive widget.
 
-IMPORTANT: Before calling this tool, you MUST:
+IMPORTANT: Only use this tool when:
+- The user clicks the "Commit with AI" button (you'll receive an explicit message asking you to use this tool)
+- The user explicitly asks for "smart commit" or "commit with AI"
+
+Do NOT use this tool for generic commit requests like "commit this" or "make a commit".
+For those, use standard git commands (git add, git commit) instead.
+
+When using this tool, you MUST first:
 1. Call get_session_edited_files to get ALL files edited in this session
 2. Cross-reference with git status to find which session files have uncommitted changes
 3. Include ALL session-edited files that have changes - do not cherry-pick a subset
