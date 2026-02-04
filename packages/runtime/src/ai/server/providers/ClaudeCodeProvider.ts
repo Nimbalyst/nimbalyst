@@ -28,7 +28,7 @@ import path from 'path';
 import fs from 'fs';
 import { app } from 'electron';
 import { buildClaudeCodeSystemPrompt } from '../../prompt';
-import { setupClaudeCodeEnvironment, getClaudeCodeExecutableOptions } from '../../../electron/claudeCodeEnvironment';
+import { setupClaudeCodeEnvironment, getClaudeCodeExecutableOptions, getClaudeCodeSpawnFunction } from '../../../electron/claudeCodeEnvironment';
 import { SessionManager } from '../SessionManager';
 import { parseBashForFileOps, hasShellChainingOperators, splitOnShellOperators } from './bashUtils';
 
@@ -700,20 +700,15 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         const packagedEnv = setupClaudeCodeEnvironment();
         Object.assign(env, packagedEnv);
 
-        // Set executable options
+        // Set executable options (macOS uses wrapper to hide dock icon)
         const executableOptions = getClaudeCodeExecutableOptions();
         Object.assign(options, executableOptions);
 
-        //   platform: process.platform,
-        //   HOME: env.HOME || env.USERPROFILE,
-        //   USER: env.USER || env.USERNAME,
-        //   SHELL: env.SHELL,
-        //   PATH: env.PATH?.substring(0, 100) + '...',
-        //   NODE_PATH: env.NODE_PATH,
-        //   ELECTRON_RUN_AS_NODE: env.ELECTRON_RUN_AS_NODE,
-        //   executable: options.executable,
-        //   cwd: workspacePath
-        // });
+        // Set custom spawn function (Windows uses windowsHide to hide console)
+        const spawnFunction = getClaudeCodeSpawnFunction();
+        if (spawnFunction) {
+          (options as any).spawnClaudeCodeProcess = spawnFunction;
+        }
       }
 
       options.env = env;

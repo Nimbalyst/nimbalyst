@@ -31,9 +31,11 @@ export async function initializeDatabase(): Promise<SessionStore> {
 
   try {
     // Get database path
-    const userDataPath = process.env.PLAYWRIGHT === '1'
-      ? path.join(app.getPath('temp'), 'nimbalyst-test-db')
-      : app.getPath('userData');
+    // NIMBALYST_USER_DATA_PATH: custom path (for manual testing of packaged builds)
+    // PLAYWRIGHT=1: use temp directory (for automated tests)
+    const userDataPath = process.env.NIMBALYST_USER_DATA_PATH
+      || (process.env.PLAYWRIGHT === '1' ? path.join(app.getPath('temp'), 'nimbalyst-test-db') : null)
+      || app.getPath('userData');
     const dbPath = path.join(userDataPath, 'pglite-db');
 
     // Initialize backup service

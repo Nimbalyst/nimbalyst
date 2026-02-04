@@ -2,6 +2,18 @@ import { app } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
+import { spawn, ChildProcess } from 'child_process';
+
+/**
+ * Options passed to the spawn function by the Claude Agent SDK.
+ */
+interface ClaudeSpawnOptions {
+  command: string;
+  args: string[];
+  cwd?: string;
+  env: { [envVar: string]: string | undefined };
+  signal: AbortSignal;
+}
 
 /**
  * Setup environment for Claude Agent SDK in packaged builds
@@ -103,13 +115,71 @@ export function setupClaudeCodeEnvironment(): NodeJS.ProcessEnv {
  * Get SDK options for packaged builds
  * Sets the executable to use Electron as Node with background processing flags
  */
-export function getClaudeCodeExecutableOptions(): { executable: string; executableArgs: string[] } | {} {
+export function getClaudeCodeExecutableOptions(): { executable: string; executableArgs: string[]; pathToClaudeCodeExecutable?: string } | {} {
   if (!app.isPackaged) {
     return {};
+  }
+
+  // On macOS, use the standalone Bun-compiled binary to avoid dock icon
+  // The binary is a standalone executable with no app bundle, so macOS won't show a dock icon
+  if (process.platform === 'darwin') {
+    const helperBinaryPath = path.join(
+      process.resourcesPath,
+      'claude-helper-bin',
+      'claude-helper'
+    );
+
+    // Check if the standalone binary exists
+    if (fs.existsSync(helperBinaryPath)) {
+      // Use pathToClaudeCodeExecutable to point directly to the CLI binary
+      // This tells the SDK to use this binary instead of spawning via node/bun
+      return {
+        pathToClaudeCodeExecutable: helperBinaryPath
+      };
+    }
+
+    // Fallback to wrapper app if binary doesn't exist
+    const wrapperPath = path.join(
+      process.resourcesPath,
+      'claude-helper.app',
+      'Contents',
+      'MacOS',
+      'claude-helper'
+    );
+    return {
+      executable: wrapperPath,
+      executableArgs: []
+    };
   }
 
   return {
     executable: process.execPath,
     executableArgs: []
   };
+}
+
+/**
+ * Get a custom spawn function for the Claude Agent SDK.
+ * - On Windows: Uses windowsHide to prevent console window
+ * - On macOS/Linux: Uses default spawn (macOS uses wrapper via executable option)
+ */
+export function getClaudeCodeSpawnFunction(): ((options: ClaudeSpawnOptions) => ChildProcess) | undefined {
+  if (!app.isPackaged) {
+    return undefined;
+  }
+
+  // On Windows, use windowsHide to prevent console window from appearing
+  if (process.platform === 'win32') {
+    return (options: ClaudeSpawnOptions): ChildProcess => {
+      return spawn(options.command, options.args, {
+        cwd: options.cwd,
+        env: options.env as NodeJS.ProcessEnv,
+        stdio: ['pipe', 'pipe', 'pipe'],
+        windowsHide: true
+      });
+    };
+  }
+
+  // On macOS/Linux, use default spawn (macOS wrapper handles dock icon)
+  return undefined;
 }

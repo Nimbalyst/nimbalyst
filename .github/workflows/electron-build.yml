@@ -117,6 +117,13 @@ jobs:
           cd packages/extensions/csv-spreadsheet
           npm run build
 
+      # Install Bun for building Claude helper binary (macOS only)
+      - name: Install Bun
+        if: startsWith(matrix.os, 'macos')
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
       # macOS specific setup
       - name: Import macOS certificates
         if: startsWith(matrix.os, 'macos')
