@@ -255,6 +255,17 @@ The `known_error` event uses an `errorId` property to identify specific error co
 | `tool_permission_responded` | `AISessionView.tsx:536` | User responds to tool permission dialog | `decision` (allow/deny)<br/>`scope` (once/session/always/always-all)<br/>`toolCategory` (bash/webfetch/mcp/file/other) | (pending release as of d00c15df) |  |
 | `trust_dialog_saved` | `ProjectTrustToast.tsx:151` | User saves trust choice in dialog | `permissionMode` (ask/allow-all/bypass-all)<br/>`isChangingMode` | (pending release as of d00c15df) |  |
 
+### Auto-Update
+
+| Event Name | File(s) | Trigger | Properties | First Added (Public) | Significant Changes |
+| --- | --- | --- | --- | --- | --- |
+| `update_toast_shown` | `autoUpdater.ts` | Update available toast displayed to user | `release_channel` (stable/alpha)<br/>`new_version` | (pending release) |  |
+| `update_toast_action` | `UpdateToast.tsx` | User clicks button on update toast | `action` (download_clicked/release_notes_clicked/remind_later_clicked)<br/>`new_version` | (pending release) |  |
+| `update_download_started` | `autoUpdater.ts` | User initiates update download | `release_channel` (stable/alpha)<br/>`new_version` | (pending release) |  |
+| `update_download_completed` | `autoUpdater.ts` | Update download finishes successfully | `release_channel` (stable/alpha)<br/>`new_version`<br/>`duration_category` (fast/medium/slow) | (pending release) |  |
+| `update_install_initiated` | `autoUpdater.ts` | User clicks relaunch to install update | `new_version` | (pending release) |  |
+| `update_error` | `autoUpdater.ts` | Error during update check, download, or install | `stage` (check/download/install)<br/>`error_type` (network/permission/disk_space/signature/unknown)<br/>`release_channel` (stable/alpha) | (pending release) |  |
+
 ### Special System Events
 
 | Event Name | File(s) | Trigger | Properties | First Added (Public) | Significant Changes |
@@ -293,8 +304,8 @@ Events from the iOS companion app. These events share the same PostHog project a
 
 ## Event Summary Statistics
 
-- **Total Events**: 87 unique event names
-- **Main Process Events**: 45 (via AnalyticsService)
+- **Total Events**: 93 unique event names
+- **Main Process Events**: 51 (via AnalyticsService)
 - **Renderer Process Events**: 35 (via usePostHog hook)
 - **Mobile Events**: 7 (via Capacitor AnalyticsService)
 - **File Operations**: 7 events
@@ -308,6 +319,7 @@ Events from the iOS companion app. These events share the same PostHog project a
 - **Onboarding**: 8 events
 - **Surveys & Feedback**: 3 events
 - **Permissions**: 4 events
+- **Auto-Update**: 6 events
 - **Voice Mode**: 3 events
 - **System/Infrastructure**: 11 events
 

@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import { usePostHog } from 'posthog-js/react';
 import { UpdateAvailableToast } from './UpdateAvailableToast';
 import { ReleaseNotesDialog } from './ReleaseNotesDialog';
 import { DownloadProgressToast } from './DownloadProgressToast';
@@ -25,6 +26,7 @@ export function UpdateToast(): React.ReactElement | null {
   const [currentVersion, setCurrentVersion] = useState<string>('');
   const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>('');
+  const posthog = usePostHog();
 
   // Check for reminder suppression
   const checkReminderSuppression = useCallback(async (version: string): Promise<boolean> => {
@@ -130,17 +132,29 @@ export function UpdateToast(): React.ReactElement | null {
   // Action handlers
   const handleUpdateNow = useCallback(() => {
     console.log('[UpdateToast] Update now clicked');
+    posthog?.capture('update_toast_action', {
+      action: 'download_clicked',
+      new_version: updateInfo?.version || 'unknown'
+    });
     setState('downloading');
     window.electronAPI.send('update-toast:download');
-  }, []);
+  }, [posthog, updateInfo?.version]);
 
   const handleViewReleaseNotes = useCallback(() => {
     console.log('[UpdateToast] View release notes clicked');
+    posthog?.capture('update_toast_action', {
+      action: 'release_notes_clicked',
+      new_version: updateInfo?.version || 'unknown'
+    });
     setState('viewing-notes');
-  }, []);
+  }, [posthog, updateInfo?.version]);
 
   const handleRemindLater = useCallback(async () => {
     console.log('[UpdateToast] Remind later clicked');
+    posthog?.capture('update_toast_action', {
+      action: 'remind_later_clicked',
+      new_version: updateInfo?.version || 'unknown'
+    });
     if (updateInfo) {
       try {
         await window.electronAPI.invoke('update:set-reminder-suppression', updateInfo.version);
@@ -150,7 +164,7 @@ export function UpdateToast(): React.ReactElement | null {
     }
     setState('idle');
     setUpdateInfo(null);
-  }, [updateInfo]);
+  }, [posthog, updateInfo]);
 
   const handleDismiss = useCallback(() => {
     console.log('[UpdateToast] Dismiss clicked');

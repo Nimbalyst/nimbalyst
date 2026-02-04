@@ -3,9 +3,39 @@ import { app, BrowserWindow, dialog } from 'electron';
 import log from 'electron-log/main';
 import { getReleaseChannel, store } from '../utils/store';
 import { safeHandle, safeOn } from '../utils/ipcRegistry';
+import { AnalyticsService } from './analytics/AnalyticsService';
 
 // Reminder suppression duration: 24 hours
 const REMINDER_SUPPRESSION_DURATION_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Categorize download duration for analytics
+ */
+function getDurationCategory(durationMs: number): string {
+  if (durationMs < 30000) return 'fast';       // < 30 seconds
+  if (durationMs < 120000) return 'medium';    // 30s - 2 minutes
+  return 'slow';                                // > 2 minutes
+}
+
+/**
+ * Classify update errors for analytics
+ */
+function classifyUpdateError(error: Error): string {
+  const message = error.message.toLowerCase();
+  if (message.includes('network') || message.includes('enotfound') || message.includes('timeout') || message.includes('econnrefused')) {
+    return 'network';
+  }
+  if (message.includes('permission') || message.includes('eacces')) {
+    return 'permission';
+  }
+  if (message.includes('disk') || message.includes('space') || message.includes('enospc')) {
+    return 'disk_space';
+  }
+  if (message.includes('signature') || message.includes('verify')) {
+    return 'signature';
+  }
+  return 'unknown';
+}
 
 export class AutoUpdaterService {
   private updateCheckInterval: NodeJS.Timeout | null = null;
@@ -13,6 +43,7 @@ export class AutoUpdaterService {
   private isManualCheck = false; // Track if this is a user-initiated check (for showing up-to-date toast)
   private static isUpdating = false;
   private pendingUpdateInfo: { version: string; releaseNotes?: string; releaseDate?: string } | null = null;
+  private downloadStartTime: number | null = null; // Track download start time for duration analytics
 
   constructor() {
     // Configure electron-updater logger
@@ -111,6 +142,12 @@ export class AutoUpdaterService {
         isManualCheck: this.isManualCheck
       });
 
+      // Track update toast shown
+      AnalyticsService.getInstance().sendEvent('update_toast_shown', {
+        release_channel: channel,
+        new_version: info.version
+      });
+
       this.sendToAllWindows('update-available', info);
     });
 
@@ -129,6 +166,16 @@ export class AutoUpdaterService {
       log.error('Update error:', err);
       this.isCheckingForUpdate = false;
       this.isManualCheck = false; // Reset manual check flag
+
+      // Track update error - determine stage based on context
+      // If downloadStartTime is set, we were downloading; otherwise it was a check error
+      const stage = this.downloadStartTime ? 'download' : 'check';
+      AnalyticsService.getInstance().sendEvent('update_error', {
+        stage,
+        error_type: classifyUpdateError(err),
+        release_channel: getReleaseChannel()
+      });
+      this.downloadStartTime = null;
 
       // Send error to frontmost window via toast system
       this.sendToFrontmostWindow('update-toast:error', {
@@ -157,6 +204,15 @@ export class AutoUpdaterService {
 
     autoUpdater.on('update-downloaded', (info) => {
       log.info('Update downloaded:', info);
+
+      // Track download completed with duration
+      const downloadDuration = this.downloadStartTime ? Date.now() - this.downloadStartTime : 0;
+      AnalyticsService.getInstance().sendEvent('update_download_completed', {
+        release_channel: getReleaseChannel(),
+        new_version: info.version,
+        duration_category: getDurationCategory(downloadDuration)
+      });
+      this.downloadStartTime = null;
 
       // Send ready notification to frontmost window via toast system
       this.sendToFrontmostWindow('update-toast:show-ready', {
@@ -266,6 +322,14 @@ export class AutoUpdaterService {
     safeOn('update-toast:download', async () => {
       try {
         log.info('Update toast: Starting download...');
+
+        // Track download started (user action tracking is done in renderer)
+        this.downloadStartTime = Date.now();
+        AnalyticsService.getInstance().sendEvent('update_download_started', {
+          release_channel: getReleaseChannel(),
+          new_version: this.pendingUpdateInfo?.version || 'unknown'
+        });
+
         // In test mode, skip the actual download (tests will manually trigger progress)
         if (process.env.NODE_ENV !== 'test' && process.env.PLAYWRIGHT !== '1') {
           // Re-check for the latest version before downloading in case a newer update
@@ -276,6 +340,14 @@ export class AutoUpdaterService {
         }
       } catch (error) {
         log.error('Failed to download update from toast:', error);
+
+        // Track download error
+        AnalyticsService.getInstance().sendEvent('update_error', {
+          stage: 'download',
+          error_type: classifyUpdateError(error instanceof Error ? error : new Error(String(error))),
+          release_channel: getReleaseChannel()
+        });
+
         this.sendToFrontmostWindow('update-toast:error', {
           message: error instanceof Error ? error.message : 'Unknown error'
         });
@@ -284,6 +356,12 @@ export class AutoUpdaterService {
 
     safeOn('update-toast:install', () => {
       log.info('Update toast: Installing update...');
+
+      // Track install initiated
+      AnalyticsService.getInstance().sendEvent('update_install_initiated', {
+        new_version: this.pendingUpdateInfo?.version || 'unknown'
+      });
+
       setImmediate(() => {
         try {
           // Set flag to bypass quit prevention
@@ -295,6 +373,14 @@ export class AutoUpdaterService {
           autoUpdater.quitAndInstall(false, true);
         } catch (error) {
           log.error('Failed to quit and install:', error);
+
+          // Track install error
+          AnalyticsService.getInstance().sendEvent('update_error', {
+            stage: 'install',
+            error_type: classifyUpdateError(error instanceof Error ? error : new Error(String(error))),
+            release_channel: getReleaseChannel()
+          });
+
           // Fallback to force quit
           AutoUpdaterService.isUpdating = true;
           app.removeAllListeners('before-quit');
@@ -333,6 +419,7 @@ export class AutoUpdaterService {
       store.set('updateDismissedVersion', version);
       store.set('updateDismissedAt', Date.now());
       log.info(`Update reminder suppressed for version ${version}`);
+      // User action tracking is done in renderer
       return { success: true };
     });
   }
