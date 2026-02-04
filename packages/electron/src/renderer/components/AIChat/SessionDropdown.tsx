@@ -202,7 +202,7 @@ export function SessionDropdown({
                         <div className="session-name-row flex items-center gap-1.5">
                           <SessionStatusIndicator sessionId={session.id} />
                           <span className="session-name overflow-hidden text-ellipsis whitespace-nowrap">{formatSessionName(session)}</span>
-                          {session.provider && (
+                          {session.provider && session.provider !== 'claude-code' && (
                             <span className={`session-provider-badge provider-${session.provider} inline-flex items-center px-1 py-px rounded text-[9px] font-semibold uppercase tracking-wide shrink-0`}>
                               {getProviderLabel(session.provider)}
                             </span>
