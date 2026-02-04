@@ -18,13 +18,18 @@ export const contextWindowIntro: WalkthroughDefinition = {
   trigger: {
     // Show in any mode - the context indicator appears in both
     screen: '*',
-    // Only show when the context indicator is actually visible (not in a hidden panel)
+    // Only show when the context indicator is visible AND has context window data (from /context)
     condition: () => {
-      // Find ALL context indicators and check if ANY is visible
+      // Find ALL context indicators and check if ANY is visible with context data
       const indicators = document.querySelectorAll('[data-testid="context-indicator"]');
       for (const indicator of indicators) {
         if (isTargetValid(indicator as HTMLElement)) {
-          return true;
+          // Check if the indicator shows context window data (contains %)
+          // This means /context has successfully run, not just token counting
+          const usageText = indicator.querySelector('.usage-text');
+          if (usageText && usageText.textContent?.includes('%')) {
+            return true;
+          }
         }
       }
       return false;
