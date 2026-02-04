@@ -176,15 +176,15 @@ export function HelpTooltip({
     // Read current value from store at callback time, not stale closure value
     const lastWindowFocusTime = store.get(lastWindowFocusTimeAtom);
 
-    console.log('[HelpTooltip] showTooltip called', {
-      testId,
-      disabled,
-      hasHelpContent: !!helpContent,
-      hasTargetRef: !!targetRef.current,
-      visibilityState: document.visibilityState,
-      timeSinceClick: Date.now() - lastClickTimeRef.current,
-      timeSinceWindowFocus: Date.now() - lastWindowFocusTime,
-    });
+    // console.log('[HelpTooltip] showTooltip called', {
+    //   testId,
+    //   disabled,
+    //   hasHelpContent: !!helpContent,
+    //   hasTargetRef: !!targetRef.current,
+    //   visibilityState: document.visibilityState,
+    //   timeSinceClick: Date.now() - lastClickTimeRef.current,
+    //   timeSinceWindowFocus: Date.now() - lastWindowFocusTime,
+    // });
 
     if (disabled || !helpContent || !targetRef.current) return;
 
@@ -199,7 +199,7 @@ export function HelpTooltip({
     // Uses store.get() to read CURRENT atom value, not stale closure from render time
     if (Date.now() - lastWindowFocusTime < WINDOW_FOCUS_COOLDOWN_MS) return;
 
-    console.log('[HelpTooltip] showing tooltip for', testId);
+    // console.log('[HelpTooltip] showing tooltip for', testId);
     const rect = targetRef.current.getBoundingClientRect();
     // Estimate tooltip size (will be refined after render)
     const estimatedWidth = 280;
@@ -218,7 +218,7 @@ export function HelpTooltip({
   }, []);
 
   const handleMouseEnter = useCallback(() => {
-    console.log('[HelpTooltip] handleMouseEnter', testId);
+    // console.log('[HelpTooltip] handleMouseEnter', testId);
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
     }
@@ -249,17 +249,17 @@ export function HelpTooltip({
   // on elements that retained focus while the window was inactive
   useEffect(() => {
     const handleWindowBlur = () => {
-      console.log('[HelpTooltip] window blur', testId);
+      // console.log('[HelpTooltip] window blur', testId);
       hideTooltip();
     };
     const handleWindowFocus = () => {
-      console.log('[HelpTooltip] window focus', testId);
+      // console.log('[HelpTooltip] window focus', testId);
       // Set cooldown so focus events on previously-focused elements don't trigger tooltips
       // Uses shared Jotai atom so ALL tooltip instances see this update immediately
       setLastWindowFocusTime(Date.now());
     };
     const handleVisibilityChange = () => {
-      console.log('[HelpTooltip] visibilitychange', testId, document.visibilityState);
+      // console.log('[HelpTooltip] visibilitychange', testId, document.visibilityState);
       if (document.visibilityState === 'hidden') {
         hideTooltip();
       } else if (document.visibilityState === 'visible') {
@@ -324,7 +324,7 @@ export function HelpTooltip({
       children.props.onMouseDown?.(e);
     },
     onFocus: (e: React.FocusEvent) => {
-      console.log('[HelpTooltip] onFocus', testId);
+      // console.log('[HelpTooltip] onFocus', testId);
       handleMouseEnter();
       children.props.onFocus?.(e);
     },
