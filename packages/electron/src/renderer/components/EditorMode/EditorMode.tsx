@@ -39,6 +39,7 @@ export interface EditorModeRef {
     nextTab: () => void;
     previousTab: () => void;
     findTabByPath: (filePath: string) => any | undefined;
+    updateTab: (tabId: string, updates: Record<string, any>) => void;
     tabs: any[];
     activeTabId: string | null;
   };
@@ -600,6 +601,10 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
       findTabByPath: (filePath: string) => {
         const currentTabs = tabsRef.current;
         return currentTabs?.findTabByPath(filePath);
+      },
+      updateTab: (tabId: string, updates: Partial<TabData>) => {
+        const currentTabs = tabsRef.current;
+        currentTabs?.updateTab(tabId, updates);
       },
       nextTab: () => {
         const currentTabs = tabsRef.current;

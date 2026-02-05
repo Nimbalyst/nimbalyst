@@ -353,6 +353,22 @@ const TabContentComponent: React.FC<TabContentProps> = ({
         const hasEditor = tabInstancesRef.current.has(tab.id);
         const isLoading = loadingRef.current.has(tab.id);
 
+        // Handle file rename/move: if tab filePath changed, recreate the editor
+        if (hasEditor) {
+          const instance = tabInstancesRef.current.get(tab.id);
+          if (instance && instance.tabData.filePath !== tab.filePath) {
+            console.log(`[TabContent] Tab ${tab.id} file path changed: ${instance.tabData.filePath} -> ${tab.filePath}, recreating editor`);
+            // Clean up old dirty atom
+            const oldEditorKey = makeEditorKey(instance.tabData.filePath);
+            store.set(editorDirtyAtom(oldEditorKey), false);
+            // Get current content before destroying
+            const getContentFn = getContentFunctionsRef.current.get(tab.id);
+            const currentContent = getContentFn ? getContentFn() : instance.content;
+            removeTabEditor(tab.id);
+            createTabEditor(tab, currentContent);
+          }
+        }
+
         if (isActiveTab && !hasEditor && !isLoading) {
           // Active tab needs an editor - create placeholder while loading
           createPlaceholder(tab.id);
