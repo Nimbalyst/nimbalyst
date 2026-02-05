@@ -708,6 +708,7 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
       onAddSessionToWorktree={addSessionToWorktree}
       onCreateWorktreeSession={createWorktreeSession}
       onWorktreeArchived={handleWorktreeArchived}
+      isGitRepo={isGitRepo}
     />
   ) : (
     <div className="agent-mode-empty flex flex-col items-center justify-center h-full gap-4 text-nim-muted">

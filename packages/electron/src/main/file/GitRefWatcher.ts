@@ -76,6 +76,7 @@ export class GitRefWatcher {
   async start(workspacePath: string): Promise<void> {
     // Already watching this workspace
     if (this.watchers.has(workspacePath)) {
+      logger.main.debug('[GitRefWatcher] Already watching workspace:', path.basename(workspacePath));
       return;
     }
 
@@ -85,6 +86,7 @@ export class GitRefWatcher {
 
       if (!gitDir) {
         // Not a git repository
+        logger.main.debug('[GitRefWatcher] Not a git repository:', path.basename(workspacePath));
         return;
       }
 
@@ -117,11 +119,19 @@ export class GitRefWatcher {
       });
 
       refWatcher.on('change', async () => {
+        logger.main.info('[GitRefWatcher] Ref file changed:', {
+          workspace: path.basename(workspacePath),
+          branch: currentBranch,
+        });
         await this.handleRefChange(workspacePath);
       });
 
       refWatcher.on('add', async () => {
         // Handle case where ref file is recreated (e.g., after branch switch)
+        logger.main.info('[GitRefWatcher] Ref file added:', {
+          workspace: path.basename(workspacePath),
+          branch: currentBranch,
+        });
         await this.handleRefChange(workspacePath);
       });
 
@@ -223,11 +233,11 @@ export class GitRefWatcher {
         return;
       }
 
-      // logger.main.info('[GitRefWatcher] New commit detected:', {
-      //   workspace: path.basename(workspacePath),
-      //   hash: newCommitHash.slice(0, 7),
-      //   message: log.latest.message?.substring(0, 50),
-      // });
+      logger.main.info('[GitRefWatcher] New commit detected:', {
+        workspace: path.basename(workspacePath),
+        hash: newCommitHash.slice(0, 7),
+        message: log.latest.message?.substring(0, 50),
+      });
 
       // Update our tracking
       const oldCommitHash = entry.lastCommitHash;
@@ -323,15 +333,28 @@ export class GitRefWatcher {
     try {
       const { historyManager } = await import('../HistoryManager');
 
+      logger.main.info('[GitRefWatcher] Auto-approving pending reviews for committed files:', {
+        workspace: path.basename(workspacePath),
+        fileCount: committedFiles.length,
+        files: committedFiles.map(f => path.basename(f)),
+      });
+
       let approvedCount = 0;
       for (const filePath of committedFiles) {
         const pendingTags = await historyManager.getPendingTags(filePath);
 
+        logger.main.debug('[GitRefWatcher] Checking file for pending tags:', {
+          file: path.basename(filePath),
+          fullPath: filePath,
+          pendingTagCount: pendingTags.length,
+        });
+
         if (pendingTags.length > 0) {
-          // logger.main.info('[GitRefWatcher] Auto-approving pending review:', {
-          //   file: path.basename(filePath),
-          //   tags: pendingTags.length,
-          // });
+          logger.main.info('[GitRefWatcher] Auto-approving pending review:', {
+            file: path.basename(filePath),
+            tags: pendingTags.length,
+            tagIds: pendingTags.map(t => t.id),
+          });
 
           for (const tag of pendingTags) {
             await historyManager.updateTagStatus(filePath, tag.id, 'reviewed', workspacePath);
@@ -341,10 +364,10 @@ export class GitRefWatcher {
       }
 
       if (approvedCount > 0) {
-        // logger.main.info('[GitRefWatcher] Auto-approved pending reviews:', {
-        //   workspace: path.basename(workspacePath),
-        //   count: approvedCount,
-        // });
+        logger.main.info('[GitRefWatcher] Auto-approved pending reviews:', {
+          workspace: path.basename(workspacePath),
+          count: approvedCount,
+        });
 
         // Emit pending count changed event to update UI
         // The historyManager.updateTagStatus already emits this, but we emit
@@ -354,6 +377,8 @@ export class GitRefWatcher {
           workspacePath,
           count,
         });
+      } else {
+        logger.main.info('[GitRefWatcher] No pending reviews found for committed files');
       }
     } catch (error) {
       logger.main.error('[GitRefWatcher] Error auto-approving pending reviews:', error);

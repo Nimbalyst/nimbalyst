@@ -68,6 +68,8 @@ interface FilesEditedSidebarProps {
   worktreePath?: string | null;
   /** Callback when worktree is archived */
   onWorktreeArchived?: () => void;
+  /** Whether the workspace is a git repository */
+  isGitRepo?: boolean;
 }
 
 
@@ -81,6 +83,7 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
   worktreeId,
   worktreePath,
   onWorktreeArchived,
+  isGitRepo = false,
 }) => {
   // Get all session IDs in this workstream (must be declared before useEffects that use it)
   const workstreamSessions = useAtomValue(workstreamSessionsAtom(workstreamId));
@@ -496,8 +499,8 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
         </div>
       </div>
 
-      {/* Keep All button - show when there are pending files */}
-      {pendingReviewFiles.size > 0 && (
+      {/* Keep All button - show when there are pending files (only in non-git repos) */}
+      {!isGitRepo && pendingReviewFiles.size > 0 && (
         <div className="files-edited-sidebar__keep-all-banner flex items-center justify-between px-3 py-2 bg-[color-mix(in_srgb,var(--nim-warning)_10%,var(--nim-bg))] border-b border-[color-mix(in_srgb,var(--nim-warning)_30%,transparent)] shrink-0">
           <div className="files-edited-sidebar__keep-all-info flex items-center gap-2">
             <MaterialSymbol icon="rate_review" size={16} className="files-edited-sidebar__keep-all-icon text-[var(--nim-warning)]" />

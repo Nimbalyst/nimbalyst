@@ -75,6 +75,8 @@ export interface AgentWorkstreamPanelProps {
   onCreateWorktreeSession?: (worktreeId: string) => Promise<string | null>;
   /** Callback when a worktree is archived */
   onWorktreeArchived?: () => void;
+  /** Whether the workspace is a git repository */
+  isGitRepo?: boolean;
 }
 
 /**
@@ -361,6 +363,7 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
   onAddSessionToWorktree,
   onCreateWorktreeSession,
   onWorktreeArchived,
+  isGitRepo = false,
 }, ref) => {
   // Ref to the workstream editor tabs for opening files
   const editorTabsRef = useRef<WorkstreamEditorTabsRef>(null);
@@ -969,6 +972,7 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
           worktreeId={sessionWorktreeId}
           worktreePath={worktreePath}
           onWorktreeArchived={onWorktreeArchived}
+          isGitRepo={isGitRepo}
         />
       )}
 

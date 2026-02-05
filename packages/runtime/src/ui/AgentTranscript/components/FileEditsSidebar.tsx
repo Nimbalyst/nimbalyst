@@ -611,6 +611,13 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
             {isDeleted && (
               <span className="text-[0.6875rem] text-[var(--nim-text-muted)] shrink-0">(deleted)</span>
             )}
+            {/* Yellow dot indicator for files pending review */}
+            {hasPendingReview && (
+              <span
+                className="file-edits-sidebar__pending-dot w-1 h-1 rounded-full bg-[#fbbf24] shrink-0 ml-1"
+                title="Pending review - changes not yet committed"
+              />
+            )}
           </div>
         </div>
       </button>
