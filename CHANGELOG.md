@@ -20,6 +20,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.50] - 2026-02-05
+
+
+### Added
+- Diff/Full view toggle in history dialog
+- Pending-review dot indicator replaces Keep All banner in git repos
+- Claude Usage indicator enabled by default with disable button
+- Include executing state for mobile sync in session metadata
+- Interactive prompts generalized for Capacitor mobile app
+
+### Changed
+- Centralized git operation locking to prevent concurrent state corruption
+
+### Fixed
+- File rename now updates open tabs correctly
+- Prevent autosave from recreating deleted or renamed files
+- Git commit proposal now commits only selected files
+- Verify staged files match selection before committing
+- Stop Ctrl+ shortcuts from intercepting terminal input on macOS
+- Resolve ExitPlanMode SDK promise when approved from mobile
+- Remove window.focus() calls that steal foreground on startup
+- Increase minimum width of files scope dropdown
+- Files scope dropdown click-outside behavior
+- Destructure getClaudeCodeExecutableOptions correctly in check-login handler
+
 ## [0.52.49] - 2026-02-05
 
 
