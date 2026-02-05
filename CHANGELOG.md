@@ -20,6 +20,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.49] - 2026-02-05
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- Restore code accidentally reverted by refactoring commit (Bun signature stripping, session pin transfer, ExitPlanMode null check)
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.52.48] - 2026-02-05
 
 
