@@ -126,8 +126,18 @@ export function registerGitHandlers(): void {
         const git: SimpleGit = simpleGit(workspacePath);
         log.info(`[git:commit] Starting commit in ${workspacePath} with ${filesToStage?.length || 0} files`);
 
+        // Track originally staged files so we can restore them after commit
+        const initialStatus = await git.status();
+        const originallyStaged = new Set([...initialStatus.staged, ...initialStatus.created]);
+        log.info(`[git:commit] Originally staged files: ${originallyStaged.size}`);
+
         // Stage files
         if (filesToStage && filesToStage.length > 0) {
+          // First, unstage all files to ensure we only commit what the user selected
+          // This prevents previously-staged files from being included in the commit
+          log.info(`[git:commit] Resetting staging area before staging selected files`);
+          await git.reset(['HEAD']);
+
           log.info(`[git:commit] Staging files: ${filesToStage.join(', ')}`);
           await git.add(filesToStage);
 
@@ -137,6 +147,10 @@ export function registerGitHandlers(): void {
           log.info(`[git:commit] After staging - staged: ${stagedFiles.length}, created: ${status.created.length}`);
           if (stagedFiles.length === 0) {
             log.warn(`[git:commit] No files were staged despite add() succeeding`);
+            // Restore originally staged files before returning
+            if (originallyStaged.size > 0) {
+              await git.add(Array.from(originallyStaged));
+            }
             return {
               success: false,
               error: 'No files were staged. The files may not exist or have no changes.',
@@ -151,10 +165,22 @@ export function registerGitHandlers(): void {
         // simple-git returns empty commit hash if nothing was committed
         if (!result.commit) {
           log.warn(`[git:commit] Commit returned empty hash - nothing was committed`);
+          // Restore originally staged files before returning
+          if (originallyStaged.size > 0) {
+            await git.add(Array.from(originallyStaged));
+          }
           return {
             success: false,
             error: 'No changes were committed. Files may not have been staged correctly.',
           };
+        }
+
+        // Restore originally staged files that weren't part of this commit
+        const filesToStageSet = new Set(filesToStage || []);
+        const filesToRestage = Array.from(originallyStaged).filter(f => !filesToStageSet.has(f));
+        if (filesToRestage.length > 0) {
+          log.info(`[git:commit] Restoring ${filesToRestage.length} originally staged files`);
+          await git.add(filesToRestage);
         }
 
         log.info(`[git:commit] Successfully committed: ${result.commit}`);
