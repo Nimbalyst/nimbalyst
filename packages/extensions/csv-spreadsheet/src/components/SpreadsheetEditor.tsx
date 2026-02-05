@@ -1234,43 +1234,45 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
     const items: ContextMenuItem[] = [];
     const gridOps = gridOpsRef.current;
 
-    const isCurrentlyHeader = rowIndex < headerRowCount;
-    const isTopRowOrAdjacentToHeader = rowIndex === 0 || rowIndex === headerRowCount;
+    // TODO: Header row pinning is disabled because users can't select across the pinned/unpinned boundary
+    // which creates a confusing UX. Re-enable once RevoGrid supports cross-boundary selection.
+    // const isCurrentlyHeader = rowIndex < headerRowCount;
+    // const isTopRowOrAdjacentToHeader = rowIndex === 0 || rowIndex === headerRowCount;
 
-    // Helper to update both grid data and metadata
-    const setHeaderCount = async (count: number) => {
-      await gridOps?.updateHeaderRowCount(count);
-      spreadsheetMeta.setHeaderRowCount(count);
-    };
+    // // Helper to update both grid data and metadata
+    // const setHeaderCount = async (count: number) => {
+    //   await gridOps?.updateHeaderRowCount(count);
+    //   spreadsheetMeta.setHeaderRowCount(count);
+    // };
 
-    if (isCurrentlyHeader) {
-      if (rowIndex === headerRowCount - 1) {
-        items.push({
-          label: 'Remove Header Row',
-          action: () => setHeaderCount(headerRowCount - 1),
-        });
-      }
-      if (headerRowCount > 1) {
-        items.push({
-          label: 'Remove All Header Rows',
-          action: () => setHeaderCount(0),
-        });
-      }
-    } else {
-      if (isTopRowOrAdjacentToHeader) {
-        items.push({
-          label: 'Set as Header Row',
-          action: () => setHeaderCount(rowIndex + 1),
-        });
-      } else {
-        items.push({
-          label: `Set Rows 1-${rowIndex + 1} as Headers`,
-          action: () => setHeaderCount(rowIndex + 1),
-        });
-      }
-    }
+    // if (isCurrentlyHeader) {
+    //   if (rowIndex === headerRowCount - 1) {
+    //     items.push({
+    //       label: 'Remove Header Row',
+    //       action: () => setHeaderCount(headerRowCount - 1),
+    //     });
+    //   }
+    //   if (headerRowCount > 1) {
+    //     items.push({
+    //       label: 'Remove All Header Rows',
+    //       action: () => setHeaderCount(0),
+    //     });
+    //   }
+    // } else {
+    //   if (isTopRowOrAdjacentToHeader) {
+    //     items.push({
+    //       label: 'Set as Header Row',
+    //       action: () => setHeaderCount(rowIndex + 1),
+    //     });
+    //   } else {
+    //     items.push({
+    //       label: `Set Rows 1-${rowIndex + 1} as Headers`,
+    //       action: () => setHeaderCount(rowIndex + 1),
+    //     });
+    //   }
+    // }
 
-    items.push({ label: '', action: () => {}, separator: true });
+    // items.push({ label: '', action: () => {}, separator: true });
 
     items.push({
       label: 'Insert Row Above',
@@ -1336,34 +1338,36 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
       { label: '', action: () => {}, separator: true },
     ];
 
-    if (isCurrentlyFrozen) {
-      if (colIndex === currentFrozenCount - 1) {
-        items.push({
-          label: 'Unfreeze Column',
-          action: () => spreadsheetMeta.setFrozenColumnCount(currentFrozenCount - 1),
-        });
-      }
-      if (currentFrozenCount > 1) {
-        items.push({
-          label: 'Unfreeze All Columns',
-          action: () => spreadsheetMeta.setFrozenColumnCount(0),
-        });
-      }
-    } else {
-      if (isAtFrozenBoundary) {
-        items.push({
-          label: 'Freeze Column',
-          action: () => spreadsheetMeta.setFrozenColumnCount(colIndex + 1),
-        });
-      } else {
-        items.push({
-          label: `Freeze Columns A-${colLetter}`,
-          action: () => spreadsheetMeta.setFrozenColumnCount(colIndex + 1),
-        });
-      }
-    }
+    // TODO: Column freeze is disabled because users can't select across the frozen/unfrozen boundary
+    // which creates a confusing UX. Re-enable once RevoGrid supports cross-boundary selection.
+    // if (isCurrentlyFrozen) {
+    //   if (colIndex === currentFrozenCount - 1) {
+    //     items.push({
+    //       label: 'Unfreeze Column',
+    //       action: () => spreadsheetMeta.setFrozenColumnCount(currentFrozenCount - 1),
+    //     });
+    //   }
+    //   if (currentFrozenCount > 1) {
+    //     items.push({
+    //       label: 'Unfreeze All Columns',
+    //       action: () => spreadsheetMeta.setFrozenColumnCount(0),
+    //     });
+    //   }
+    // } else {
+    //   if (isAtFrozenBoundary) {
+    //     items.push({
+    //       label: 'Freeze Column',
+    //       action: () => spreadsheetMeta.setFrozenColumnCount(colIndex + 1),
+    //     });
+    //   } else {
+    //     items.push({
+    //       label: `Freeze Columns A-${colLetter}`,
+    //       action: () => spreadsheetMeta.setFrozenColumnCount(colIndex + 1),
+    //     });
+    //   }
+    // }
 
-    items.push({ label: '', action: () => {}, separator: true });
+    // items.push({ label: '', action: () => {}, separator: true });
 
     items.push({
       label: 'Insert Column Left',
