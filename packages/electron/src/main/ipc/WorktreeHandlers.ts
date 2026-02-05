@@ -17,6 +17,7 @@ import { getTerminalSessionManager } from '../services/TerminalSessionManager';
 import { getTerminalsByWorktreeId, deleteTerminalInstance } from '../utils/terminalStore';
 import type { WorktreeCreateResult } from '../../shared/ipc/types';
 import { gitRefWatcher } from '../file/GitRefWatcher';
+import { gitOperationLock } from '../services/GitOperationLock';
 
 const logger = log.scope('WorktreeHandlers');
 
@@ -1229,21 +1230,24 @@ export function registerWorktreeHandlers(): void {
         throw new Error('filePath is required');
       }
 
-      logger.info('Staging/unstaging file', { worktreePath, filePath, stage });
+      // Use centralized lock to prevent concurrent staging/commit operations
+      return await gitOperationLock.withLock(worktreePath, 'worktree:stage-file', async () => {
+        logger.info('Staging/unstaging file', { worktreePath, filePath, stage });
 
-      const simpleGit = (await import('simple-git')).default;
-      const git = simpleGit(worktreePath);
+        const simpleGit = (await import('simple-git')).default;
+        const git = simpleGit(worktreePath);
 
-      if (stage) {
-        await git.add(filePath);
-      } else {
-        await git.reset(['--', filePath]);
-      }
+        if (stage) {
+          await git.add(filePath);
+        } else {
+          await git.reset(['--', filePath]);
+        }
 
-      // Emit git status changed event so UI updates
-      emitGitStatusChanged(worktreePath);
+        // Emit git status changed event so UI updates
+        emitGitStatusChanged(worktreePath);
 
-      return { success: true };
+        return { success: true };
+      });
     } catch (error) {
       logger.error('Failed to stage/unstage file:', error);
       return {
@@ -1264,21 +1268,24 @@ export function registerWorktreeHandlers(): void {
         throw new Error('worktreePath is required');
       }
 
-      logger.info('Staging/unstaging all files', { worktreePath, stage });
+      // Use centralized lock to prevent concurrent staging/commit operations
+      return await gitOperationLock.withLock(worktreePath, 'worktree:stage-all', async () => {
+        logger.info('Staging/unstaging all files', { worktreePath, stage });
 
-      const simpleGit = (await import('simple-git')).default;
-      const git = simpleGit(worktreePath);
+        const simpleGit = (await import('simple-git')).default;
+        const git = simpleGit(worktreePath);
 
-      if (stage) {
-        await git.add('-A');
-      } else {
-        await git.reset();
-      }
+        if (stage) {
+          await git.add('-A');
+        } else {
+          await git.reset();
+        }
 
-      // Emit git status changed event so UI updates
-      emitGitStatusChanged(worktreePath);
+        // Emit git status changed event so UI updates
+        emitGitStatusChanged(worktreePath);
 
-      return { success: true };
+        return { success: true };
+      });
     } catch (error) {
       logger.error('Failed to stage/unstage all files:', error);
       return {

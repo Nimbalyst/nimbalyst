@@ -18,6 +18,7 @@ import * as fs from 'fs';
 import { ulid } from 'ulid';
 import log from 'electron-log/main';
 import { getAllFilesInDirectory } from '../utils/fileUtils';
+import { gitOperationLock } from './GitOperationLock';
 
 const logger = log.scope('GitWorktreeService');
 
@@ -126,57 +127,6 @@ export interface GitState {
  */
 export class GitWorktreeService {
   /**
-   * Per-repository operation locks to prevent concurrent destructive git operations
-   * Maps repository path to a promise that resolves when the current operation completes
-   */
-  private operationLocks: Map<string, Promise<void>> = new Map();
-
-  /**
-   * Execute an operation with a lock on the repository.
-   * Prevents concurrent execution of operations like merge, rebase, and squash
-   * that could corrupt git state if run simultaneously.
-   *
-   * @param repoPath - Path to the repository to lock
-   * @param operationName - Name of the operation (for logging)
-   * @param operation - The async operation to execute
-   * @returns The result of the operation
-   */
-  private async withLock<T>(repoPath: string, operationName: string, operation: () => Promise<T>): Promise<T> {
-    // Wait for any existing operation to complete
-    const existingLock = this.operationLocks.get(repoPath);
-    if (existingLock) {
-      logger.info('Waiting for existing operation to complete', { repoPath, operationName });
-      try {
-        await existingLock;
-      } catch {
-        // Ignore errors from previous operation - we still want to proceed
-      }
-    }
-
-    // Create a new lock promise
-    let releaseLock: () => void;
-    const lockPromise = new Promise<void>((resolve) => {
-      releaseLock = resolve;
-    });
-
-    this.operationLocks.set(repoPath, lockPromise);
-    logger.info('Acquired operation lock', { repoPath, operationName });
-
-    try {
-      const result = await operation();
-      return result;
-    } finally {
-      // Release the lock
-      releaseLock!();
-      // Clean up the map entry if it's still our lock
-      if (this.operationLocks.get(repoPath) === lockPromise) {
-        this.operationLocks.delete(repoPath);
-      }
-      logger.info('Released operation lock', { repoPath, operationName });
-    }
-  }
-
-  /**
    * Validate that a worktree is in a healthy state.
    *
    * Checks:
@@ -274,6 +224,16 @@ export class GitWorktreeService {
       throw new Error('workspacePath is required');
     }
 
+    // Use centralized lock to prevent concurrent worktree operations
+    return gitOperationLock.withLock(workspacePath, 'createWorktree', () =>
+      this.createWorktreeImpl(workspacePath, options)
+    );
+  }
+
+  /**
+   * Internal implementation of createWorktree (called within lock)
+   */
+  private async createWorktreeImpl(workspacePath: string, options: CreateWorktreeOptions): Promise<Worktree> {
     logger.info('Creating worktree', { workspacePath, options });
 
     // Ensure this is a git repository
@@ -463,6 +423,16 @@ export class GitWorktreeService {
       throw new Error('workspacePath is required');
     }
 
+    // Use centralized lock on workspace to prevent concurrent worktree operations
+    return gitOperationLock.withLock(workspacePath, 'deleteWorktree', () =>
+      this.deleteWorktreeImpl(worktreePath, workspacePath)
+    );
+  }
+
+  /**
+   * Internal implementation of deleteWorktree (called within lock)
+   */
+  private async deleteWorktreeImpl(worktreePath: string, workspacePath: string): Promise<void> {
     logger.info('Deleting worktree', { worktreePath, workspacePath });
 
     const git: SimpleGit = simpleGit(workspacePath);
@@ -1293,6 +1263,16 @@ ${newLines.map(line => '+' + line).join('\n')}`;
       throw new Error('message is required');
     }
 
+    // Use centralized lock to prevent concurrent commit/staging operations
+    return gitOperationLock.withLock(worktreePath, 'commitChanges', () =>
+      this.commitChangesImpl(worktreePath, message, files)
+    );
+  }
+
+  /**
+   * Internal implementation of commitChanges (called within lock)
+   */
+  private async commitChangesImpl(worktreePath: string, message: string, files?: string[]): Promise<CommitInfo> {
     logger.info('Committing changes', { worktreePath, message, fileCount: files?.length });
 
     const git: SimpleGit = simpleGit(worktreePath);
@@ -1378,8 +1358,8 @@ ${newLines.map(line => '+' + line).join('\n')}`;
       throw new Error('mainRepoPath is required');
     }
 
-    // Use lock to prevent concurrent merge/rebase/squash operations
-    return this.withLock(mainRepoPath, 'mergeToMain', () => this.mergeToMainImpl(worktreePath, mainRepoPath));
+    // Use centralized lock to prevent concurrent merge/rebase/squash operations
+    return gitOperationLock.withLock(mainRepoPath, 'mergeToMain', () => this.mergeToMainImpl(worktreePath, mainRepoPath));
   }
 
   /**
@@ -1896,7 +1876,7 @@ ${newLines.map(line => '+' + line).join('\n')}`;
     }
 
     // Use lock to prevent concurrent merge/rebase/squash operations
-    return this.withLock(worktreePath, 'rebaseFromBase', () => this.rebaseFromBaseImpl(worktreePath, baseBranch));
+    return gitOperationLock.withLock(worktreePath, 'rebaseFromBase', () => this.rebaseFromBaseImpl(worktreePath, baseBranch));
   }
 
   /**
@@ -2345,7 +2325,7 @@ ${newLines.map(line => '+' + line).join('\n')}`;
     }
 
     // Use lock to prevent concurrent merge/rebase/squash operations
-    return this.withLock(worktreePath, 'squashCommits', () => this.squashCommitsImpl(worktreePath, commitHashes, message));
+    return gitOperationLock.withLock(worktreePath, 'squashCommits', () => this.squashCommitsImpl(worktreePath, commitHashes, message));
   }
 
   /**

@@ -7,6 +7,7 @@
 import { ipcMain } from 'electron';
 import simpleGit, { SimpleGit } from 'simple-git';
 import log from 'electron-log/main';
+import { gitOperationLock } from '../services/GitOperationLock';
 
 interface GitStatusResult {
   branch: string;
@@ -122,102 +123,105 @@ export function registerGitHandlers(): void {
         throw new Error('message is required');
       }
 
-      try {
-        const git: SimpleGit = simpleGit(workspacePath);
-        log.info(`[git:commit] Starting commit in ${workspacePath} with ${filesToStage?.length || 0} files`);
+      // Use centralized lock to prevent concurrent commit/staging operations
+      return gitOperationLock.withLock(workspacePath, 'git:commit', async () => {
+        try {
+          const git: SimpleGit = simpleGit(workspacePath);
+          log.info(`[git:commit] Starting commit in ${workspacePath} with ${filesToStage?.length || 0} files`);
 
-        // Track originally staged files so we can restore them after commit
-        const initialStatus = await git.status();
-        const originallyStaged = new Set([...initialStatus.staged, ...initialStatus.created]);
-        log.info(`[git:commit] Originally staged files: ${originallyStaged.size}`);
+          // Track originally staged files so we can restore them after commit
+          const initialStatus = await git.status();
+          const originallyStaged = new Set([...initialStatus.staged, ...initialStatus.created]);
+          log.info(`[git:commit] Originally staged files: ${originallyStaged.size}`);
 
-        // Stage files
-        if (filesToStage && filesToStage.length > 0) {
-          // First, unstage all files to ensure we only commit what the user selected
-          // This prevents previously-staged files from being included in the commit
-          log.info(`[git:commit] Resetting staging area before staging selected files`);
-          await git.reset(['HEAD']);
+          // Stage files
+          if (filesToStage && filesToStage.length > 0) {
+            // First, unstage all files to ensure we only commit what the user selected
+            // This prevents previously-staged files from being included in the commit
+            log.info(`[git:commit] Resetting staging area before staging selected files`);
+            await git.reset(['HEAD']);
 
-          log.info(`[git:commit] Staging files: ${filesToStage.join(', ')}`);
-          await git.add(filesToStage);
+            log.info(`[git:commit] Staging files: ${filesToStage.join(', ')}`);
+            await git.add(filesToStage);
 
-          // Verify only the selected files are staged
-          const status = await git.status();
-          const stagedFiles = new Set([...status.staged, ...status.created]);
-          log.info(`[git:commit] After staging - staged: ${stagedFiles.size}, created: ${status.created.length}`);
+            // Verify only the selected files are staged
+            const status = await git.status();
+            const stagedFiles = new Set([...status.staged, ...status.created]);
+            log.info(`[git:commit] After staging - staged: ${stagedFiles.size}, created: ${status.created.length}`);
 
-          if (stagedFiles.size === 0) {
-            log.warn(`[git:commit] No files were staged despite add() succeeding`);
+            if (stagedFiles.size === 0) {
+              log.warn(`[git:commit] No files were staged despite add() succeeding`);
+              // Restore originally staged files before returning
+              if (originallyStaged.size > 0) {
+                await git.add(Array.from(originallyStaged));
+              }
+              return {
+                success: false,
+                error: 'No files were staged. The files may not exist or have no changes.',
+              };
+            }
+
+            // Verify staged files match selected files exactly
+            const filesToStageSet = new Set(filesToStage);
+            const unexpectedFiles = Array.from(stagedFiles).filter(f => !filesToStageSet.has(f));
+            const missingFiles = filesToStage.filter(f => !stagedFiles.has(f));
+
+            if (unexpectedFiles.length > 0) {
+              log.error(`[git:commit] Unexpected files staged: ${unexpectedFiles.join(', ')}`);
+              // Restore original state and abort
+              await git.reset(['HEAD']);
+              if (originallyStaged.size > 0) {
+                await git.add(Array.from(originallyStaged));
+              }
+              return {
+                success: false,
+                error: `Unexpected files were staged: ${unexpectedFiles.join(', ')}. Commit aborted.`,
+              };
+            }
+
+            if (missingFiles.length > 0) {
+              log.warn(`[git:commit] Some selected files were not staged: ${missingFiles.join(', ')}`);
+            }
+          }
+
+          // Commit
+          const result = await git.commit(message);
+          log.info(`[git:commit] Commit result: hash=${result.commit || 'empty'}, changes=${result.summary?.changes || 0}`);
+
+          // simple-git returns empty commit hash if nothing was committed
+          if (!result.commit) {
+            log.warn(`[git:commit] Commit returned empty hash - nothing was committed`);
             // Restore originally staged files before returning
             if (originallyStaged.size > 0) {
               await git.add(Array.from(originallyStaged));
             }
             return {
               success: false,
-              error: 'No files were staged. The files may not exist or have no changes.',
+              error: 'No changes were committed. Files may not have been staged correctly.',
             };
           }
 
-          // Verify staged files match selected files exactly
-          const filesToStageSet = new Set(filesToStage);
-          const unexpectedFiles = Array.from(stagedFiles).filter(f => !filesToStageSet.has(f));
-          const missingFiles = filesToStage.filter(f => !stagedFiles.has(f));
-
-          if (unexpectedFiles.length > 0) {
-            log.error(`[git:commit] Unexpected files staged: ${unexpectedFiles.join(', ')}`);
-            // Restore original state and abort
-            await git.reset(['HEAD']);
-            if (originallyStaged.size > 0) {
-              await git.add(Array.from(originallyStaged));
-            }
-            return {
-              success: false,
-              error: `Unexpected files were staged: ${unexpectedFiles.join(', ')}. Commit aborted.`,
-            };
+          // Restore originally staged files that weren't part of this commit
+          const committedFilesSet = new Set(filesToStage || []);
+          const filesToRestage = Array.from(originallyStaged).filter(f => !committedFilesSet.has(f));
+          if (filesToRestage.length > 0) {
+            log.info(`[git:commit] Restoring ${filesToRestage.length} originally staged files`);
+            await git.add(filesToRestage);
           }
 
-          if (missingFiles.length > 0) {
-            log.warn(`[git:commit] Some selected files were not staged: ${missingFiles.join(', ')}`);
-          }
-        }
-
-        // Commit
-        const result = await git.commit(message);
-        log.info(`[git:commit] Commit result: hash=${result.commit || 'empty'}, changes=${result.summary?.changes || 0}`);
-
-        // simple-git returns empty commit hash if nothing was committed
-        if (!result.commit) {
-          log.warn(`[git:commit] Commit returned empty hash - nothing was committed`);
-          // Restore originally staged files before returning
-          if (originallyStaged.size > 0) {
-            await git.add(Array.from(originallyStaged));
-          }
+          log.info(`[git:commit] Successfully committed: ${result.commit}`);
+          return {
+            success: true,
+            commitHash: result.commit,
+          };
+        } catch (error) {
+          log.error('[git:commit] Failed to commit:', error);
           return {
             success: false,
-            error: 'No changes were committed. Files may not have been staged correctly.',
+            error: error instanceof Error ? error.message : String(error),
           };
         }
-
-        // Restore originally staged files that weren't part of this commit
-        const committedFilesSet = new Set(filesToStage || []);
-        const filesToRestage = Array.from(originallyStaged).filter(f => !committedFilesSet.has(f));
-        if (filesToRestage.length > 0) {
-          log.info(`[git:commit] Restoring ${filesToRestage.length} originally staged files`);
-          await git.add(filesToRestage);
-        }
-
-        log.info(`[git:commit] Successfully committed: ${result.commit}`);
-        return {
-          success: true,
-          commitHash: result.commit,
-        };
-      } catch (error) {
-        log.error('[git:commit] Failed to commit:', error);
-        return {
-          success: false,
-          error: error instanceof Error ? error.message : String(error),
-        };
-      }
+      });
     }
   );
 
