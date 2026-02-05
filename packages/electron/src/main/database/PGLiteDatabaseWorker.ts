@@ -356,6 +356,12 @@ export class PGLiteDatabaseWorker {
 
       // Check for database locked error (another instance running)
       if (error?.message?.includes('DATABASE_LOCKED') || error?.message?.includes('locked by another process')) {
+        if (process.env.PLAYWRIGHT === '1') {
+          // In Playwright tests, skip the dialog and exit immediately with a clear error
+          // so the test runner knows it can't run multiple instances in parallel
+          console.error('FATAL: Another instance of Nimbalyst is already running. Cannot run multiple instances in parallel.');
+          process.exit(1);
+        }
         this.showErrorAndQuit(
           'Database Locked',
           'Another instance of Nimbalyst is already running.',
