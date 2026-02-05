@@ -1156,6 +1156,9 @@ export const convertToWorkstreamAtom = atom(
         return null;
       }
 
+      // Check if the original session is pinned - we'll transfer the pin to the parent workstream
+      const originalWasPinned = sessionMeta?.isPinned ?? false;
+
       // Create a new parent session (the workstream root)
       const parentId = crypto.randomUUID();
       const createResult = await window.electronAPI.invoke('sessions:create', {
@@ -1178,6 +1181,16 @@ export const convertToWorkstreamAtom = atom(
 
       const parentSessionId = createResult.id;
 
+      // If the original session was pinned, transfer the pin to the new parent workstream
+      if (originalWasPinned) {
+        try {
+          await window.electronAPI.invoke('sessions:update-pinned', parentSessionId, true);
+        } catch (error) {
+          console.error('[sessions] Failed to pin parent workstream (non-fatal):', error);
+          // Continue anyway - pinning is not critical to the conversion
+        }
+      }
+
       // Helper to clean up parent on failure
       const rollbackParent = async () => {
         try {
@@ -1189,9 +1202,11 @@ export const convertToWorkstreamAtom = atom(
       };
 
       // Update current session to be a child of the new parent
+      // Also unpin the original session if it was pinned (pin transfers to parent workstream)
       try {
         await window.electronAPI.invoke('sessions:update-metadata', sessionId, {
           parentSessionId,
+          ...(originalWasPinned && { isPinned: false }),
         });
       } catch (error) {
         console.error('[sessions] Failed to set parent on original session, rolling back:', error);
@@ -1279,6 +1294,7 @@ export const convertToWorkstreamAtom = atom(
       });
 
       // Add the new parent session to the session list so it appears in the sidebar
+      // If original was pinned, transfer pin to the parent workstream
       const now = Date.now();
       set(addSessionFullAtom, {
         id: parentSessionId,
@@ -1291,16 +1307,18 @@ export const convertToWorkstreamAtom = atom(
         projectPath: workspacePath,
         messageCount: 0,
         isArchived: false,
-        isPinned: false,
+        isPinned: originalWasPinned,
         worktreeId: sessionData.worktreeId || null,
         parentSessionId: null, // This is the root
         childCount: children.length,
       });
 
       // Update the original session in the list to show it now has a parent
+      // Also update isPinned to false if it was pinned (pin transferred to parent)
       set(updateSessionFullAtom, {
         id: sessionId,
         parentSessionId: parentSessionId,
+        ...(originalWasPinned && { isPinned: false }),
       });
 
       // Update the selected workstream to point to the new parent
