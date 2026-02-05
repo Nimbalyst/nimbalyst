@@ -118,10 +118,11 @@ jobs:
           npm run build
 
       # Install Bun for building Claude helper binary (all platforms)
+      # Pin to specific version for deterministic builds
       - name: Install Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: 1.1.43
 
       # Build Claude helper binary for the current platform
       - name: Build Claude helper binary
