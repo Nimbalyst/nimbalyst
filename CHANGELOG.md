@@ -20,6 +20,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.43] - 2026-02-05
+
+
+### Added
+- Standalone Claude helper binary setting (experimental) for improved performance
+
+### Changed
+- CI now pins Bun version to 1.1.43 for deterministic builds
+- Claude helper binary build extended to support all platforms
+
+### Fixed
+<!-- Bug fixes go here -->
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.52.42] - 2026-02-05
 
 
