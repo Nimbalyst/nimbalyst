@@ -263,7 +263,7 @@ export function ClaudeCodePanel({
       <div className="provider-enable flex flex-col gap-2 py-4 mb-4 border-b border-[var(--nim-border)]">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <span className="provider-enable-label text-sm font-medium text-[var(--nim-text)]">Use Standalone Binary</span>
+            <span className="provider-enable-label text-sm font-medium text-[var(--nim-text)]">Use Standalone Binary (Experimental)</span>
             <p className="text-xs text-[var(--nim-text-muted)] mt-1">
               Use a standalone binary instead of Electron to run Claude Agent
               {isMacOS && ' (prevents dock icon)'}
