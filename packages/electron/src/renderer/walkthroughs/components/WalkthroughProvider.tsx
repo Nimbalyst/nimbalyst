@@ -73,6 +73,10 @@ export function WalkthroughProvider({
   const lastTriggeredModeRef = useRef<string | null>(null);
   const triggerDelayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // No walkthroughs for first 10 seconds after app start
+  const APP_STARTUP_DELAY_MS = 10_000;
+  const [startupDelayPassed, setStartupDelayPassed] = React.useState(false);
+
   // Load state from main process on mount and register walkthroughs for menu
   useEffect(() => {
     getWalkthroughState().then(setState);
@@ -82,6 +86,15 @@ export function WalkthroughProvider({
       walkthroughs.map((w) => ({ id: w.id, name: w.name }))
     );
   }, [setState]);
+
+  // Set up startup delay timer - enables walkthrough triggers after 10 seconds
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setStartupDelayPassed(true);
+    }, APP_STARTUP_DELAY_MS);
+
+    return () => clearTimeout(timer);
+  }, []);
 
   // Get current walkthrough definition
   const activeWalkthrough = useMemo(() => {
@@ -213,6 +226,17 @@ export function WalkthroughProvider({
 
   // Evaluate triggers when mode changes or state loads
   useEffect(() => {
+    // Disable walkthroughs entirely in Playwright tests
+    const isPlaywright = (window as any).PLAYWRIGHT;
+    if (isPlaywright) {
+      return;
+    }
+
+    // Skip during app startup delay (no walkthroughs for first 10 seconds)
+    if (!startupDelayPassed) {
+      return;
+    }
+
     // Skip if disabled, no state yet, already showing a walkthrough, or a dialog/overlay is open
     const hasOverlay = hasVisibleOverlay();
     if (!autoTrigger || !state || !state.enabled || activeWalkthroughId || hasActiveDialogs || hasOverlay) {
@@ -313,7 +337,7 @@ export function WalkthroughProvider({
         clearTimeout(triggerDelayRef.current);
       }
     };
-  }, [currentMode, state, activeWalkthroughId, autoTrigger, startWalkthrough, hasActiveDialogs]);
+  }, [currentMode, state, activeWalkthroughId, autoTrigger, startWalkthrough, hasActiveDialogs, startupDelayPassed]);
 
   // Expose test helpers in development mode
   useEffect(() => {
