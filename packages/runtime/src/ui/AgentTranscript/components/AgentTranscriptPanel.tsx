@@ -96,8 +96,8 @@ const AgentTranscriptPanelComponent: React.FC<AgentTranscriptPanelProps> = ({
 }) => {
   // Show floating actions if explicitly enabled, otherwise default to showing when sidebar is visible
   const shouldShowFloatingActions = showFloatingActions ?? !hideSidebar;
-  // Use prop if provided, otherwise fall back to sessionData.workspacePath
-  const effectiveWorkspacePath = workspacePathProp || sessionData.workspacePath;
+  // Prefer worktree path for worktree sessions, then prop, then sessionData
+  const effectiveWorkspacePath = sessionData.worktreePath || workspacePathProp || sessionData.workspacePath;
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
     const stored = localStorage.getItem(`agent-transcript-sidebar-${sessionId}`);
     return stored === 'true';
