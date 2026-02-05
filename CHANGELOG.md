@@ -20,6 +20,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.42] - 2026-02-05
+
+
+### Added
+- Durable interactive prompts architecture for session persistence
+- Database dashboard in database browser extension
+- Support for reference images in image generation
+- PostHog analytics tracking for auto-update system
+- Startup delay for walkthrough triggers to improve UX
+
+### Changed
+- Git commit widget now renders from tool call data directly
+
+### Fixed
+- Header row pinning and column freezing disabled due to UX issues in spreadsheets
+
+### Removed
+- Unused git commit proposal atoms
+
 ## [0.52.41] - 2026-02-04
 
 
