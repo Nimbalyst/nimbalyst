@@ -1,10 +1,14 @@
 #!/bin/bash
 # Build the Claude CLI helper binary using Bun
-# This creates a standalone binary that doesn't show a dock icon on macOS
+# This creates a standalone binary that can be used instead of the Electron binary
+# On macOS, this prevents the dock icon from appearing
 #
 # Usage:
-#   ./build-claude-helper.sh          # Build for current architecture
-#   ./build-claude-helper.sh --all    # Build for all macOS architectures (arm64 + x64)
+#   ./build-claude-helper.sh              # Build for current platform
+#   ./build-claude-helper.sh --mac        # Build universal macOS binary (arm64 + x64)
+#   ./build-claude-helper.sh --windows    # Build Windows binary (x64)
+#   ./build-claude-helper.sh --linux      # Build Linux binary (x64)
+#   ./build-claude-helper.sh --all        # Build for all platforms
 
 set -e
 
@@ -49,12 +53,14 @@ build_for_target() {
         --outfile "$outfile" \
         --target="$target"
 
-    chmod +x "$outfile"
+    chmod +x "$outfile" 2>/dev/null || true
     echo "Built: $outfile ($(ls -lh "$outfile" | awk '{print $5}'))"
 }
 
-if [ "$1" = "--all" ]; then
-    # Build for both macOS architectures
+build_mac_universal() {
+    echo ""
+    echo "=== Building macOS Universal Binary ==="
+
     build_for_target "bun-darwin-arm64" "$OUTPUT_DIR/claude-helper-arm64"
     build_for_target "bun-darwin-x64" "$OUTPUT_DIR/claude-helper-x64"
 
@@ -73,15 +79,79 @@ if [ "$1" = "--all" ]; then
 
     echo "Created universal binary: $OUTPUT_DIR/claude-helper"
     file "$OUTPUT_DIR/claude-helper"
-else
-    # Build for current platform only (faster for development)
-    build_for_target "bun" "$OUTPUT_DIR/claude-helper"
+}
+
+build_windows() {
+    echo ""
+    echo "=== Building Windows Binary ==="
+
+    build_for_target "bun-windows-x64" "$OUTPUT_DIR/claude-helper.exe"
+
+    echo "Created Windows binary: $OUTPUT_DIR/claude-helper.exe"
+}
+
+build_linux() {
+    echo ""
+    echo "=== Building Linux Binary ==="
+
+    build_for_target "bun-linux-x64" "$OUTPUT_DIR/claude-helper-linux"
+
+    # Rename to standard name
+    mv "$OUTPUT_DIR/claude-helper-linux" "$OUTPUT_DIR/claude-helper"
+
+    echo "Created Linux binary: $OUTPUT_DIR/claude-helper"
+}
+
+build_current_platform() {
+    echo ""
+    echo "=== Building for Current Platform ==="
+
+    case "$(uname -s)" in
+        Darwin)
+            build_for_target "bun" "$OUTPUT_DIR/claude-helper"
+            ;;
+        Linux)
+            build_for_target "bun" "$OUTPUT_DIR/claude-helper"
+            ;;
+        MINGW*|MSYS*|CYGWIN*)
+            build_for_target "bun" "$OUTPUT_DIR/claude-helper.exe"
+            ;;
+        *)
+            echo "Unknown platform: $(uname -s)"
+            build_for_target "bun" "$OUTPUT_DIR/claude-helper"
+            ;;
+    esac
+}
+
+# Parse arguments
+case "$1" in
+    --mac)
+        build_mac_universal
+        ;;
+    --windows)
+        build_windows
+        ;;
+    --linux)
+        build_linux
+        ;;
+    --all)
+        build_mac_universal
+        build_windows
+        build_linux
+        ;;
+    *)
+        # Default: build for current platform only (faster for development)
+        build_current_platform
+        ;;
+esac
+
+echo ""
+echo "=== Build Complete ==="
+ls -lh "$OUTPUT_DIR/"
+
+# Verify the binary runs (only for current platform)
+if [ "$1" = "" ] || [ "$1" = "--mac" -a "$(uname -s)" = "Darwin" ]; then
+    echo ""
+    echo "Verifying binary..."
+    "$OUTPUT_DIR/claude-helper" --version 2>/dev/null || echo "Warning: Version check failed (may need API key)"
 fi
-
-echo ""
-ls -lh "$OUTPUT_DIR/claude-helper"
-
-# Verify it runs
-echo ""
-echo "Verifying binary..."
-"$OUTPUT_DIR/claude-helper" --version || echo "Warning: Version check failed (may need API key)"
