@@ -6,13 +6,14 @@
  */
 
 import React, { useEffect, useRef, RefObject } from 'react';
-import { useAtomValue } from 'jotai';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import {
   claudeUsageAtom,
   claudeUsageSessionColorAtom,
   claudeUsageWeeklyColorAtom,
   formatResetTime,
+  setClaudeUsageIndicatorEnabledAtom,
 } from '../../store/atoms/claudeUsageAtoms';
 
 interface ClaudeUsagePopoverProps {
@@ -106,6 +107,7 @@ export const ClaudeUsagePopover: React.FC<ClaudeUsagePopoverProps> = ({
   const usage = useAtomValue(claudeUsageAtom);
   const sessionColor = useAtomValue(claudeUsageSessionColorAtom);
   const weeklyColor = useAtomValue(claudeUsageWeeklyColorAtom);
+  const setUsageIndicatorEnabled = useSetAtom(setClaudeUsageIndicatorEnabledAtom);
   const popoverRef = useRef<HTMLDivElement>(null);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
 
@@ -233,11 +235,22 @@ export const ClaudeUsagePopover: React.FC<ClaudeUsagePopoverProps> = ({
       </div>
 
       {/* Footer */}
-      {usage.lastUpdated && (
-        <div className="px-4 py-2 border-t border-nim text-[10px] text-nim-faint">
-          Updated {formatLastUpdated(usage.lastUpdated)}
-        </div>
-      )}
+      <div className="px-4 py-2 border-t border-nim flex items-center justify-between">
+        {usage.lastUpdated && (
+          <span className="text-[10px] text-nim-faint">
+            Updated {formatLastUpdated(usage.lastUpdated)}
+          </span>
+        )}
+        <button
+          onClick={() => {
+            setUsageIndicatorEnabled(false);
+            onClose();
+          }}
+          className="text-[11px] text-nim-muted hover:text-nim transition-colors"
+        >
+          Disable
+        </button>
+      </div>
     </div>
   );
 };

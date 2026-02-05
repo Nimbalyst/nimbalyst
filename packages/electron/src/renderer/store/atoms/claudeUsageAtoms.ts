@@ -28,10 +28,10 @@ export const claudeUsageAtom = atom<ClaudeUsageData | null>(null);
 
 /**
  * Whether the usage indicator is enabled (user preference).
- * Defaults to false - user must enable it in settings.
+ * Defaults to true - user can disable it in the popover or settings.
  * Persisted via AI settings.
  */
-export const claudeUsageIndicatorEnabledAtom = atom<boolean>(false);
+export const claudeUsageIndicatorEnabledAtom = atom<boolean>(true);
 
 /**
  * Debounce timer for persistence.
@@ -85,12 +85,13 @@ export async function initClaudeUsageIndicatorSetting(): Promise<boolean> {
 
   try {
     const settings = await window.electronAPI.aiGetSettings();
-    return settings?.showUsageIndicator ?? false;
+    // Default to true if setting hasn't been explicitly set
+    return settings?.showUsageIndicator ?? true;
   } catch (error) {
     console.error('[claudeUsageAtoms] Failed to load usage indicator setting:', error);
   }
 
-  return false;
+  return true;
 }
 
 /**
