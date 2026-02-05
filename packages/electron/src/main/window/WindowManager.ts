@@ -23,6 +23,7 @@ import { getMcpConfigService } from '../index';
 export const windows = new Map<number, BrowserWindow>();
 export const windowStates = new Map<number, WindowState>();
 export const savingWindows = new Set<number>();
+export const recentlyDeletedFiles = new Set<string>(); // Tracks files deleted via UI to prevent autosave from recreating them
 export const windowFocusOrder = new Map<number, number>(); // Track focus order for each window
 export const windowDevToolsState = new Map<number, boolean>(); // Track dev tools state for each window
 

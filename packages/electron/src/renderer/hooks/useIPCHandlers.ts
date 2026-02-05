@@ -429,22 +429,27 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     // The legacy file change handler has been removed as it's no longer needed.
     cleanupFns.push(window.electronAPI.onFileMoved(async (data) => {
       console.log('File moved:', data);
-      if (currentFilePathRef.current === data.sourcePath) {
-        // The current file was moved, update the path and reload it
-        console.log('Current file was moved, updating to new path:', data.destinationPath);
 
-        // Update the current file path refs
+      // Update the tab for this file
+      if (editorModeRef.current?.tabs) {
+        const tab = editorModeRef.current.tabs.findTabByPath(data.sourcePath);
+        if (tab) {
+          const newFileName = getFileName(data.destinationPath);
+          editorModeRef.current.tabs.updateTab(tab.id, {
+            filePath: data.destinationPath,
+            fileName: newFileName
+          });
+        }
+      }
+
+      // Update current file path if it was moved (legacy single-file mode)
+      if (currentFilePathRef.current === data.sourcePath) {
         currentFilePathRef.current = data.destinationPath;
         currentFileNameRef.current = getFileName(data.destinationPath);
 
-        // Update the file in main process
         if (window.electronAPI.setCurrentFile) {
           window.electronAPI.setCurrentFile(data.destinationPath);
         }
-
-        // If we're dirty, just update the path but keep the current content
-        // If not dirty, we could optionally reload from the new location
-        // but since it's the same content, we don't need to
       }
     }));
     cleanupFns.push(window.electronAPI.onThemeChange((newTheme) => {
@@ -463,24 +468,19 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     cleanupFns.push(window.electronAPI.onFileRenamed((data) => {
       console.log('File renamed:', data);
 
-      // Update file tree with the renamed file
-      const updateFileTree = (items: FileTreeItem[]): FileTreeItem[] => {
-        return items.map(item => {
-          if (item.path === data.oldPath) {
-            // Update the renamed item
-            const newFileName = getFileName(data.newPath);
-            return { ...item, path: data.newPath, name: newFileName };
-          } else if (item.children) {
-            // Recursively update children
-            return { ...item, children: updateFileTree(item.children) };
-          }
-          return item;
-        });
-      };
+      // Update the tab for this file
+      if (editorModeRef.current?.tabs) {
+        const tab = editorModeRef.current.tabs.findTabByPath(data.oldPath);
+        if (tab) {
+          const newFileName = getFileName(data.newPath);
+          editorModeRef.current.tabs.updateTab(tab.id, {
+            filePath: data.newPath,
+            fileName: newFileName
+          });
+        }
+      }
 
-      // NOTE: setFileTree removed - EditorMode handles file tree updates via onWorkspaceFileTreeUpdated
-
-      // Update current file path if it was renamed
+      // Update current file path if it was renamed (legacy single-file mode)
       if (currentFilePathRef.current === data.oldPath) {
         currentFilePathRef.current = data.newPath;
         currentFileNameRef.current = getFileName(data.newPath);

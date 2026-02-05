@@ -15,7 +15,7 @@ const { writeFile, mkdir, rename, unlink, rmdir, copyFile, readFile, rm, stat, c
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
-import { windowStates, getWindowId, createWindow } from '../window/WindowManager';
+import { windowStates, getWindowId, createWindow, recentlyDeletedFiles } from '../window/WindowManager';
 import { startFileWatcher, stopFileWatcher } from '../file/FileWatcher';
 import { getFolderContents } from '../utils/FileTree';
 import { RIPGREP_EXCLUDE_ARGS_ARRAY, QUICKOPEN_FILE_TYPE_ARGS } from '../utils/fileFilters';
@@ -654,6 +654,10 @@ export function registerWorkspaceHandlers() {
 
             await rename(oldPath, newPath);
 
+            // Prevent autosave from recreating the file at the old path
+            recentlyDeletedFiles.add(oldPath);
+            setTimeout(() => recentlyDeletedFiles.delete(oldPath), 10000);
+
             // Update windows that have this file open
             for (const [windowId, state] of windowStates) {
                 if (state?.filePath === oldPath) {
@@ -699,6 +703,9 @@ export function registerWorkspaceHandlers() {
                 await rm(filePath, { recursive: true, force: true });
             } else {
                 await unlink(filePath);
+                // Prevent autosave from recreating the file (race condition with in-flight save timers)
+                recentlyDeletedFiles.add(filePath);
+                setTimeout(() => recentlyDeletedFiles.delete(filePath), 10000);
             }
 
             // Track file deletion (only for files, not directories)
@@ -766,6 +773,12 @@ export function registerWorkspaceHandlers() {
 
             // Perform the move
             await rename(sourcePath, destinationPath);
+
+            // Prevent autosave from recreating the file at the old path
+            if (!sourceStats.isDirectory()) {
+                recentlyDeletedFiles.add(sourcePath);
+                setTimeout(() => recentlyDeletedFiles.delete(sourcePath), 10000);
+            }
 
             // Update windows that have this file open - AFTER the move
             if (!sourceStats.isDirectory()) {

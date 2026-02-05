@@ -2,7 +2,7 @@ import { dialog, BrowserWindow, app } from 'electron';
 import { safeHandle, safeOn } from '../utils/ipcRegistry';
 import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'fs';
 import { basename, join, dirname, extname } from 'path';
-import { windowStates, savingWindows, findWindowByFilePath, createWindow, getWindowId, windows, documentServices } from '../window/WindowManager';
+import { windowStates, savingWindows, recentlyDeletedFiles, findWindowByFilePath, createWindow, getWindowId, windows, documentServices } from '../window/WindowManager';
 import { loadFileIntoWindow, saveFile } from '../file/FileOperations';
 import { openFileWithDialog, openFile } from '../file/FileOpener';
 import { startFileWatcher, stopFileWatcher, chokidarFileWatcher } from '../file/FileWatcher';
@@ -127,6 +127,13 @@ export function registerFileHandlers() {
                 return null;
             }
 
+            // Don't save to files that were just deleted via the UI
+            // This prevents a race condition where autosave recreates a deleted file
+            if (recentlyDeletedFiles.has(filePath)) {
+                console.log('[SAVE] Skipping save to recently deleted file:', filePath);
+                return { success: true, filePath };
+            }
+
             // Check for conflicts with external changes before saving
             if (lastKnownContent !== undefined && existsSync(filePath)) {
                 try {
@@ -151,6 +158,12 @@ export function registerFileHandlers() {
                     console.error('[SAVE] Failed to check for conflicts:', readError);
                     // Continue with save if we can't read the file
                 }
+            }
+
+            // Don't recreate a file that was deleted from disk
+            if (!existsSync(filePath)) {
+                logger.main.info(`[SAVE] File no longer exists on disk, skipping save: ${filePath}`);
+                return { success: false, deleted: true, filePath };
             }
 
             // Mark that we're saving to prevent file watcher from reacting
