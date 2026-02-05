@@ -20,6 +20,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.41] - 2026-02-04
+
+
+### Added
+- Claude usage indicator with pace tracking for monitoring API costs
+- CLI `--file` flag to open a specific file when launching a workspace
+- Project move/rename feature with automatic data migration
+- Worktree merge now allows uncommitted changes
+
+### Changed
+- Large text attachments now written to /tmp instead of sent inline
+- Worktree rebases use file-level conflict detection
+- Transcript search rewritten to use CSS Custom Highlight API
+- GitHub MCP template updated to use official remote server
+
+### Fixed
+- Session cancellation now properly stops SDK and rejects pending interactions
+- Attachment previews now center on screen instead of in scroll panel
+- Archived sessions toggle race condition
+- Session draft input displays correctly when creating sessions from rebase
+- Cross-platform path handling for worktree names
+- "Resolve with Agent" button now works for bad git state in worktrees
+- Hide dock icon when spawning Claude Code subprocess on macOS
+- Persist showUsageIndicator setting in AI settings
+- Hide redundant CODE provider badge for claude-code sessions
+- Register confirm-dialog with DialogProvider
+- Only show context window walkthrough after /context runs
+- Batch git log calls for performance
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.52.40] - 2026-02-04
 
 
