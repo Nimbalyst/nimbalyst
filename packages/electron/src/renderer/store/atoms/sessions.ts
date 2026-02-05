@@ -1908,16 +1908,19 @@ export const showArchivedSessionsAtom = atom<boolean>(false);
 /**
  * Refresh the session list from the database.
  * This is an action atom that fetches from IPC and updates the list.
+ * @param includeArchivedOverride - Optional explicit value for includeArchived.
+ *   If provided, uses this value instead of reading from showArchivedSessionsAtom.
+ *   This avoids race conditions when the atom is updated but not yet committed.
  */
 export const refreshSessionListAtom = atom(
   null,
-  async (get, set) => {
+  async (get, set, includeArchivedOverride?: boolean) => {
     const workspacePath = get(sessionListWorkspaceAtom);
     if (!workspacePath || !window.electronAPI) {
       return;
     }
 
-    const showArchived = get(showArchivedSessionsAtom);
+    const showArchived = includeArchivedOverride ?? get(showArchivedSessionsAtom);
 
     try {
       set(sessionListLoadingAtom, true);

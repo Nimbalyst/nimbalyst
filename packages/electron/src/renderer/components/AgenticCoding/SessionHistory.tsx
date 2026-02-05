@@ -796,9 +796,11 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   };
 
   const toggleShowArchived = async () => {
-    setShowArchived(!showArchived);
+    const newValue = !showArchived;
+    setShowArchived(newValue);
     // Need to refresh from database since archived sessions may not be loaded yet
-    await refreshSessions();
+    // Pass the new value explicitly to avoid race condition with atom update
+    await refreshSessions(newValue);
   };
 
   // Clear selection when clicking elsewhere
