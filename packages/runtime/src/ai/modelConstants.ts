@@ -12,6 +12,20 @@ export interface ModelDefinition {
 
 export const CLAUDE_MODELS: ModelDefinition[] = [
   {
+    id: 'claude-opus-4-6',
+    displayName: 'Claude Opus 4.6',
+    shortName: 'Opus 4.6',
+    maxTokens: 8192,
+    contextWindow: 1000000,
+  },
+  {
+    id: 'claude-opus-4-5-20251101',
+    displayName: 'Claude Opus 4.5',
+    shortName: 'Opus 4.5',
+    maxTokens: 8192,
+    contextWindow: 200000,
+  },
+  {
     id: 'claude-opus-4-1-20250805',
     displayName: 'Claude Opus 4.1',
     shortName: 'Opus 4.1',
