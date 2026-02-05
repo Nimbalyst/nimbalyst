@@ -7,6 +7,14 @@
 import type { ImageProject, ImageStyle, AspectRatio } from './types';
 
 /**
+ * Reference image that can be passed to guide generation
+ */
+export interface ReferenceImage {
+  /** Absolute file path to the image */
+  filePath: string;
+}
+
+/**
  * API exposed by the editor for AI tool access
  */
 export interface ImageProjectEditorAPI {
@@ -16,7 +24,8 @@ export interface ImageProjectEditorAPI {
     prompt: string,
     style: ImageStyle,
     aspectRatio: AspectRatio,
-    variations: number
+    variations: number,
+    referenceImages?: ReferenceImage[]
   ) => Promise<void>;
 }
 

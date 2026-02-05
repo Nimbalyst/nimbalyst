@@ -29,7 +29,7 @@ import {
 } from '../types';
 import { Gallery } from './Gallery';
 import { BottomBar } from './BottomBar';
-import { registerEditor, unregisterEditor } from '../editorRegistry';
+import { registerEditor, unregisterEditor, type ReferenceImage } from '../editorRegistry';
 import { nanoBananaProvider } from '../providers/nanoBanana';
 
 import { DEFAULT_MODEL, type GeminiImageModel } from '../types';
@@ -419,7 +419,8 @@ export const ImageProjectEditor = forwardRef<unknown, EditorHostProps>(
         prompt: string,
         style: ImageStyle,
         aspectRatio: AspectRatio,
-        variations: number
+        variations: number,
+        referenceImages?: ReferenceImage[]
       ) => {
         if (!project || !activeSession || isGenerating) return;
 
@@ -436,13 +437,41 @@ export const ImageProjectEditor = forwardRef<unknown, EditorHostProps>(
 
         try {
           const now = new Date().toISOString();
-          console.log('[ImageGen] Starting generation:', { prompt, style, aspectRatio, variations });
+          // Debug logging - uncomment if needed
+          // console.log('[ImageGen] Starting generation:', { prompt, style, aspectRatio, variations, referenceImages: referenceImages?.length || 0 });
 
           // Build conversation history if this is not the first message
           let conversationHistory: ConversationMessage[] | undefined;
           if (activeSession.messages.length > 0) {
             console.log('[ImageGen] Building conversation history from', activeSession.messages.length, 'messages');
             conversationHistory = await buildConversationHistory(activeSession);
+          }
+
+          // Load reference images as base64 and add to conversation history
+          if (referenceImages && referenceImages.length > 0) {
+            // Debug logging - uncomment if needed
+            // console.log('[ImageGen] Loading', referenceImages.length, 'reference images');
+            if (!conversationHistory) {
+              conversationHistory = [];
+            }
+            for (const ref of referenceImages) {
+              try {
+                const base64Data = await loadImageAsBase64(ref.filePath);
+                // Determine MIME type from extension
+                const ext = ref.filePath.toLowerCase().split('.').pop();
+                const mimeType = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' :
+                                 ext === 'gif' ? 'image/gif' :
+                                 ext === 'webp' ? 'image/webp' : 'image/png';
+                conversationHistory.push({
+                  role: 'user',
+                  text: 'Here is a reference image to use:',
+                  imageBase64: base64Data,
+                  imageMimeType: mimeType,
+                });
+              } catch (error) {
+                console.warn('[ImageGen] Failed to load reference image:', ref.filePath, error);
+              }
+            }
           }
 
           // Call the image generation API

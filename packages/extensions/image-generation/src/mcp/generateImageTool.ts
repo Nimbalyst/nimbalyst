@@ -10,6 +10,14 @@ import { getEditorAPI } from '../editorRegistry';
 import type { ImageStyle, AspectRatio } from '../types';
 
 /**
+ * Reference image that can be passed to guide generation
+ */
+export interface ReferenceImage {
+  /** Absolute file path to the image */
+  filePath: string;
+}
+
+/**
  * AI tool definition for generate_image
  */
 export const generateImageTool = {
@@ -32,7 +40,10 @@ calls will use the previous images as context, allowing you to iteratively refin
 - Second call: "Make the boxes rounder and add colors"
 - Third call: "Add labels to each service"
 
-The model will see previous images and build upon them.`,
+The model will see previous images and build upon them.
+
+**Reference images**: You can pass reference images to guide the generation. This is useful
+for incorporating existing logos, branding, or visual elements into the generated image.`,
   scope: 'global' as const, // Available even when no .imgproj file is open
   parameters: {
     type: 'object' as const,
@@ -61,6 +72,21 @@ The model will see previous images and build upon them.`,
         type: 'number' as const,
         description: 'Number of variations to generate (1-4, default: 3). Note: When refining a previous image, only 1 variation is generated.',
       },
+      referenceImages: {
+        type: 'array' as const,
+        description:
+          'Optional: Array of reference images to guide the generation. Each item should have a filePath property with the absolute path to an image file (PNG, JPG, etc.). Use this to incorporate existing logos, icons, or visual elements.',
+        items: {
+          type: 'object' as const,
+          properties: {
+            filePath: {
+              type: 'string' as const,
+              description: 'Absolute file path to the reference image',
+            },
+          },
+          required: ['filePath'],
+        },
+      },
       projectFile: {
         type: 'string' as const,
         description:
@@ -75,6 +101,7 @@ The model will see previous images and build upon them.`,
       style?: ImageStyle;
       aspectRatio?: AspectRatio;
       variations?: number;
+      referenceImages?: ReferenceImage[];
       projectFile?: string;
     },
     context: { activeFilePath?: string }
@@ -84,6 +111,7 @@ The model will see previous images and build upon them.`,
       style = 'sketch',
       aspectRatio = '1:1',
       variations = 3,
+      referenceImages,
       projectFile,
     } = params;
 
@@ -100,7 +128,13 @@ The model will see previous images and build upon them.`,
 
     try {
       // Trigger generation through the editor
-      await api.generate(prompt, style, aspectRatio, Math.min(4, Math.max(1, variations)));
+      await api.generate(
+        prompt,
+        style,
+        aspectRatio,
+        Math.min(4, Math.max(1, variations)),
+        referenceImages
+      );
 
       return {
         success: true,
@@ -110,6 +144,7 @@ The model will see previous images and build upon them.`,
           style,
           aspectRatio,
           variations,
+          referenceImages: referenceImages?.length || 0,
         },
       };
     } catch (error) {
