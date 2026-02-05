@@ -652,20 +652,21 @@ async function tryCreateServer(port: number): Promise<any> {
               required: ['workspace_path']
             }
           },
-          {
-            name: 'open_file',
-            description: 'Open a file in the Nimbalyst editor. The file will open in a new tab in the current window.',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                file_path: {
-                  type: 'string',
-                  description: 'The absolute path to the file to open'
-                }
-              },
-              required: ['file_path']
-            }
-          }
+          // TODO: Re-enable open_file tool when it's working
+          // {
+          //   name: 'open_file',
+          //   description: 'Open a file in the Nimbalyst editor. The file will open in a new tab in the current window.',
+          //   inputSchema: {
+          //     type: 'object',
+          //     properties: {
+          //       file_path: {
+          //         type: 'string',
+          //         description: 'The absolute path to the file to open'
+          //       }
+          //     },
+          //     required: ['file_path']
+          //   }
+          // }
         ];
 
         builtInTools.push({
@@ -1089,149 +1090,150 @@ The commit message should follow these guidelines:
           }
 
 
-          case 'open_file': {
-            const filePathArg = args?.file_path as string;
-            // console.log('[MCP Server] open_file called with:', { file_path: filePathArg });
+          // TODO: Re-enable open_file case handler when the tool is working
+          // case 'open_file': {
+          //   const filePathArg = args?.file_path as string;
+          //   // console.log('[MCP Server] open_file called with:', { file_path: filePathArg });
 
-            // Validate file path
-            if (!filePathArg || typeof filePathArg !== 'string') {
-              return {
-                content: [
-                  {
-                    type: 'text',
-                    text: 'Error: file_path is required and must be a string'
-                  }
-                ],
-                isError: true
-              };
-            }
+          //   // Validate file path
+          //   if (!filePathArg || typeof filePathArg !== 'string') {
+          //     return {
+          //       content: [
+          //         {
+          //           type: 'text',
+          //           text: 'Error: file_path is required and must be a string'
+          //         }
+          //       ],
+          //       isError: true
+          //     };
+          //   }
 
-            // Validate it's an absolute path
-            if (!isAbsolute(filePathArg)) {
-              return {
-                content: [
-                  {
-                    type: 'text',
-                    text: `Error: file_path must be an absolute path. Got: ${filePathArg}`
-                  }
-                ],
-                isError: true
-              };
-            }
+          //   // Validate it's an absolute path
+          //   if (!isAbsolute(filePathArg)) {
+          //     return {
+          //       content: [
+          //         {
+          //           type: 'text',
+          //           text: `Error: file_path must be an absolute path. Got: ${filePathArg}`
+          //         }
+          //       ],
+          //       isError: true
+          //     };
+          //   }
 
-            // Validate file exists
-            if (!existsSync(filePathArg)) {
-              return {
-                content: [
-                  {
-                    type: 'text',
-                    text: `Error: File does not exist: ${filePathArg}`
-                  }
-                ],
-                isError: true
-              };
-            }
+          //   // Validate file exists
+          //   if (!existsSync(filePathArg)) {
+          //     return {
+          //       content: [
+          //         {
+          //           type: 'text',
+          //           text: `Error: File does not exist: ${filePathArg}`
+          //         }
+          //       ],
+          //       isError: true
+          //     };
+          //   }
 
-            try {
-              // Find which workspace contains this file
-              // This is worktree-aware: checks both direct path matching and worktree/project relationships
-              let fileWorkspacePath: string | undefined;
+          //   try {
+          //     // Find which workspace contains this file
+          //     // This is worktree-aware: checks both direct path matching and worktree/project relationships
+          //     let fileWorkspacePath: string | undefined;
 
-              // Check registered workspaces first
-              for (const wsPath of workspaceToWindowMap.keys()) {
-                if (isFileInWorkspaceOrWorktree(filePathArg, wsPath)) {
-                  if (!fileWorkspacePath || wsPath.length > fileWorkspacePath.length) {
-                    fileWorkspacePath = wsPath;
-                  }
-                }
-              }
+          //     // Check registered workspaces first
+          //     for (const wsPath of workspaceToWindowMap.keys()) {
+          //       if (isFileInWorkspaceOrWorktree(filePathArg, wsPath)) {
+          //         if (!fileWorkspacePath || wsPath.length > fileWorkspacePath.length) {
+          //           fileWorkspacePath = wsPath;
+          //         }
+          //       }
+          //     }
 
-              // Fallback to session workspaces
-              if (!fileWorkspacePath) {
-                for (const state of documentStateBySession.values()) {
-                  const wsPath = state.workspacePath;
-                  if (wsPath && isFileInWorkspaceOrWorktree(filePathArg, wsPath)) {
-                    if (!fileWorkspacePath || wsPath.length > fileWorkspacePath.length) {
-                      fileWorkspacePath = wsPath;
-                    }
-                  }
-                }
-              }
+          //     // Fallback to session workspaces
+          //     if (!fileWorkspacePath) {
+          //       for (const state of documentStateBySession.values()) {
+          //         const wsPath = state.workspacePath;
+          //         if (wsPath && isFileInWorkspaceOrWorktree(filePathArg, wsPath)) {
+          //           if (!fileWorkspacePath || wsPath.length > fileWorkspacePath.length) {
+          //             fileWorkspacePath = wsPath;
+          //           }
+          //         }
+          //       }
+          //     }
 
-              if (!fileWorkspacePath) {
-                return {
-                  content: [
-                    {
-                      type: 'text',
-                      text: `Error: File "${filePathArg}" does not belong to any open workspace. Please open the workspace first.`
-                    }
-                  ],
-                  isError: true
-                };
-              }
+          //     if (!fileWorkspacePath) {
+          //       return {
+          //         content: [
+          //           {
+          //             type: 'text',
+          //             text: `Error: File "${filePathArg}" does not belong to any open workspace. Please open the workspace first.`
+          //           }
+          //         ],
+          //         isError: true
+          //       };
+          //     }
 
-              // Find the window for this workspace (resolves worktree paths to parent project)
-              const windowId = await findWindowIdForWorkspacePath(fileWorkspacePath);
-              if (!windowId) {
-                return {
-                  content: [
-                    {
-                      type: 'text',
-                      text: `Error: No window found for workspace "${fileWorkspacePath}"`
-                    }
-                  ],
-                  isError: true
-                };
-              }
+          //     // Find the window for this workspace (resolves worktree paths to parent project)
+          //     const windowId = await findWindowIdForWorkspacePath(fileWorkspacePath);
+          //     if (!windowId) {
+          //       return {
+          //         content: [
+          //           {
+          //             type: 'text',
+          //             text: `Error: No window found for workspace "${fileWorkspacePath}"`
+          //           }
+          //         ],
+          //         isError: true
+          //       };
+          //     }
 
-              const targetWindow = BrowserWindow.fromId(windowId);
-              if (!targetWindow || targetWindow.isDestroyed()) {
-                return {
-                  content: [
-                    {
-                      type: 'text',
-                      text: `Error: Window no longer exists for workspace "${fileWorkspacePath}"`
-                    }
-                  ],
-                  isError: true
-                };
-              }
+          //     const targetWindow = BrowserWindow.fromId(windowId);
+          //     if (!targetWindow || targetWindow.isDestroyed()) {
+          //       return {
+          //         content: [
+          //           {
+          //             type: 'text',
+          //             text: `Error: Window no longer exists for workspace "${fileWorkspacePath}"`
+          //           }
+          //         ],
+          //         isError: true
+          //       };
+          //     }
 
-              // Register the workspace if not already registered
-              if (!workspaceToWindowMap.has(fileWorkspacePath)) {
-                workspaceToWindowMap.set(fileWorkspacePath, targetWindow.id);
-                // console.log(`[MCP Server] Registered workspace ${fileWorkspacePath} -> window ${targetWindow.id}`);
-              }
+          //     // Register the workspace if not already registered
+          //     if (!workspaceToWindowMap.has(fileWorkspacePath)) {
+          //       workspaceToWindowMap.set(fileWorkspacePath, targetWindow.id);
+          //       // console.log(`[MCP Server] Registered workspace ${fileWorkspacePath} -> window ${targetWindow.id}`);
+          //     }
 
-              // Send IPC to open the file
-              targetWindow.webContents.send('file:open', { filePath: filePathArg });
+          //     // Send IPC to open the file
+          //     targetWindow.webContents.send('file:open', { filePath: filePathArg });
 
-              // console.log(`[MCP Server] Opened file: ${filePathArg} in window ${targetWindow.id}`);
+          //     // console.log(`[MCP Server] Opened file: ${filePathArg} in window ${targetWindow.id}`);
 
-              return {
-                content: [
-                  {
-                    type: 'text',
-                    text: `Successfully opened file: ${filePathArg}`
-                  }
-                ],
-                isError: false
-              };
-            } catch (error) {
-              console.error('[MCP Server] Failed to open file:', error);
-              const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          //     return {
+          //       content: [
+          //         {
+          //           type: 'text',
+          //           text: `Successfully opened file: ${filePathArg}`
+          //         }
+          //       ],
+          //       isError: false
+          //     };
+          //   } catch (error) {
+          //     console.error('[MCP Server] Failed to open file:', error);
+          //     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
-              return {
-                content: [
-                  {
-                    type: 'text',
-                    text: `Error opening file: ${errorMessage}`
-                  }
-                ],
-                isError: true
-              };
-            }
-          }
+          //     return {
+          //       content: [
+          //         {
+          //           type: 'text',
+          //           text: `Error opening file: ${errorMessage}`
+          //         }
+          //       ],
+          //       isError: true
+          //     };
+          //   }
+          // }
 
           case 'open_workspace': {
             const workspacePathArg = args?.workspace_path as string;
