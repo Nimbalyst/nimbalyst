@@ -10,6 +10,7 @@ import type { SyncProvider, SessionControlMessage } from '@nimbalyst/runtime/syn
 import { ProviderFactory } from '@nimbalyst/runtime/ai/server';
 import type { BrowserWindow } from 'electron';
 import { logger } from '../../utils/logger';
+import type { PermissionScope } from '@nimbalyst/runtime';
 
 const log = logger.ai;
 
@@ -19,12 +20,13 @@ const log = logger.ai;
  */
 export type ControlMessageType =
   | 'cancel'
-  | 'question_response'
+  | 'question_response'  // Legacy - kept for backwards compatibility
+  | 'prompt_response'    // New unified prompt response type
   | 'prompt';
 
-interface CancelPayload {
-  // No additional payload needed
-}
+// ============================================================
+// Payload Types
+// ============================================================
 
 interface QuestionResponsePayload {
   questionId: string;
@@ -35,6 +37,38 @@ interface QuestionResponsePayload {
 interface PromptPayload {
   promptId: string;
   prompt: string;
+}
+
+/**
+ * Unified prompt response payload.
+ * All interactive prompts use this structure.
+ */
+interface PromptResponsePayload {
+  promptType: 'ask_user_question' | 'exit_plan_mode' | 'tool_permission' | 'git_commit';
+  promptId: string;
+  response: AskUserQuestionResponse | ExitPlanModeResponse | ToolPermissionResponse | GitCommitResponse;
+}
+
+interface AskUserQuestionResponse {
+  answers: Record<string, string>;
+  cancelled?: boolean;
+}
+
+interface ExitPlanModeResponse {
+  approved: boolean;
+  feedback?: string;
+  startNewSession?: boolean;
+}
+
+interface ToolPermissionResponse {
+  decision: 'allow' | 'deny';
+  scope: PermissionScope;
+}
+
+interface GitCommitResponse {
+  action: 'committed' | 'cancelled';
+  files?: string[];
+  message?: string;
 }
 
 /**
@@ -73,13 +107,25 @@ function handleControlMessage(
       handleCancel(message.sessionId);
       break;
 
+    // Legacy handler - kept for backwards compatibility with older mobile versions
     case 'question_response': {
       const payload = message.payload as unknown as QuestionResponsePayload;
-      handleQuestionResponse(
+      handleAskUserQuestionResponse(
         message.sessionId,
         payload.questionId,
         payload.answers,
         payload.cancelled ?? false,
+        findWindowByWorkspace
+      );
+      break;
+    }
+
+    // New unified prompt response handler
+    case 'prompt_response': {
+      const payload = message.payload as unknown as PromptResponsePayload;
+      handlePromptResponse(
+        message.sessionId,
+        payload,
         findWindowByWorkspace
       );
       break;
@@ -94,6 +140,67 @@ function handleControlMessage(
 
     default:
       log.warn('Unknown control message type:', message.type);
+  }
+}
+
+/**
+ * Handle unified prompt response - dispatches to type-specific handlers
+ */
+function handlePromptResponse(
+  sessionId: string,
+  payload: PromptResponsePayload,
+  findWindowByWorkspace: (workspacePath: string) => BrowserWindow | null | undefined
+): void {
+  log.info('Handling prompt response:', payload.promptType, 'promptId:', payload.promptId);
+
+  switch (payload.promptType) {
+    case 'ask_user_question': {
+      const response = payload.response as AskUserQuestionResponse;
+      handleAskUserQuestionResponse(
+        sessionId,
+        payload.promptId,
+        response.answers,
+        response.cancelled ?? false,
+        findWindowByWorkspace
+      );
+      break;
+    }
+
+    case 'exit_plan_mode': {
+      const response = payload.response as ExitPlanModeResponse;
+      handleExitPlanModeResponse(
+        sessionId,
+        payload.promptId,
+        response,
+        findWindowByWorkspace
+      );
+      break;
+    }
+
+    case 'tool_permission': {
+      const response = payload.response as ToolPermissionResponse;
+      handleToolPermissionResponse(
+        sessionId,
+        payload.promptId,
+        response,
+        findWindowByWorkspace
+      );
+      break;
+    }
+
+    case 'git_commit': {
+      const response = payload.response as GitCommitResponse;
+      handleGitCommitResponse(
+        sessionId,
+        payload.promptId,
+        response,
+        findWindowByWorkspace
+      );
+      break;
+    }
+
+    default:
+      log.warn('Unknown prompt type:', payload.promptType);
   }
 }
 
@@ -113,10 +220,14 @@ function handleCancel(sessionId: string): void {
   }
 }
 
+// ============================================================
+// Prompt-Specific Handlers
+// ============================================================
+
 /**
- * Handle a question response
+ * Handle AskUserQuestion response from mobile
  */
-function handleQuestionResponse(
+function handleAskUserQuestionResponse(
   sessionId: string,
   questionId: string,
   answers: Record<string, string>,
@@ -151,6 +262,98 @@ function handleQuestionResponse(
     answers,
     answeredBy: 'mobile',
     cancelled,
+  });
+}
+
+/**
+ * Handle ExitPlanMode response from mobile
+ */
+function handleExitPlanModeResponse(
+  sessionId: string,
+  promptId: string,
+  response: ExitPlanModeResponse,
+  findWindowByWorkspace: (workspacePath: string) => BrowserWindow | null | undefined
+): void {
+  log.info('Handling ExitPlanMode response:', promptId, 'approved:', response.approved);
+
+  // Find the window to send the response through
+  // For now, notify all windows and let them handle based on sessionId
+  notifyAllWindows('ai:exitPlanModeResponse', {
+    sessionId,
+    promptId,
+    approved: response.approved,
+    feedback: response.feedback,
+    startNewSession: response.startNewSession,
+    answeredBy: 'mobile',
+  });
+}
+
+/**
+ * Handle ToolPermission response from mobile
+ */
+function handleToolPermissionResponse(
+  sessionId: string,
+  promptId: string,
+  response: ToolPermissionResponse,
+  _findWindowByWorkspace: (workspacePath: string) => BrowserWindow | null | undefined
+): void {
+  log.info('Handling ToolPermission response:', promptId, 'decision:', response.decision, 'scope:', response.scope);
+
+  // Notify renderer to handle the permission response
+  notifyAllWindows('ai:toolPermissionResponse', {
+    sessionId,
+    promptId,
+    decision: response.decision,
+    scope: response.scope,
+    answeredBy: 'mobile',
+  });
+}
+
+/**
+ * Handle GitCommit response from mobile
+ * Mobile can approve the commit, but desktop must execute it
+ */
+async function handleGitCommitResponse(
+  sessionId: string,
+  promptId: string,
+  response: GitCommitResponse,
+  findWindowByWorkspace: (workspacePath: string) => BrowserWindow | null | undefined
+): Promise<void> {
+  log.info('Handling GitCommit response:', promptId, 'action:', response.action);
+
+  if (response.action === 'cancelled') {
+    // Just notify renderer that commit was cancelled
+    notifyAllWindows('ai:gitCommitResponse', {
+      sessionId,
+      promptId,
+      action: 'cancelled',
+      answeredBy: 'mobile',
+    });
+    return;
+  }
+
+  // For 'committed' action, we need to execute the git commit on desktop
+  // and then notify with the result
+  if (!response.files || !response.message) {
+    log.error('GitCommit response missing files or message');
+    notifyAllWindows('ai:gitCommitResponse', {
+      sessionId,
+      promptId,
+      action: 'error',
+      error: 'Missing files or message',
+      answeredBy: 'mobile',
+    });
+    return;
+  }
+
+  // Notify renderer to execute the commit
+  // The renderer will call the git:commit IPC and respond via messages:respond-to-prompt
+  notifyAllWindows('ai:gitCommitRequest', {
+    sessionId,
+    promptId,
+    files: response.files,
+    message: response.message,
+    answeredBy: 'mobile',
   });
 }
 

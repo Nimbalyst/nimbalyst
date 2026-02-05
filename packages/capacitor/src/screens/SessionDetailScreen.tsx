@@ -4,15 +4,10 @@ import { useSync } from '../contexts/CollabV3SyncContext';
 import { getSessionJwt } from '../services/StytchAuthService';
 import { analyticsService } from '../services/AnalyticsService';
 import { AgentTranscriptPanel, transformAgentMessagesToUI, PromptsMenuButton } from '@nimbalyst/runtime';
-import { AIInput, InteractivePromptWidget } from '@nimbalyst/runtime/ui';
+import { setInteractiveWidgetHost } from '@nimbalyst/runtime/store';
+import { AIInput } from '@nimbalyst/runtime/ui';
 import type { SessionData, ChatAttachment, PromptMarker } from '@nimbalyst/runtime';
-import type {
-  PermissionRequestContent,
-  PermissionResponseContent,
-  AskUserQuestionRequestContent,
-  AskUserQuestionResponseContent,
-  InteractivePromptContent,
-} from '@nimbalyst/runtime';
+import { createMobileInteractiveWidgetHost } from '../services/MobileInteractiveWidgetHost';
 import forge from 'node-forge';
 import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics';
 import { Capacitor } from '@capacitor/core';
@@ -233,8 +228,8 @@ export function SessionDetailScreen({ hiddenBackButton, voiceModeActive }: Sessi
   const [isSending, setIsSending] = useState(false);
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
 
-  // Interactive prompt state
-  const [isSubmittingPrompt, setIsSubmittingPrompt] = useState(false);
+  // Note: isSubmittingPrompt was removed - widgets now handle their own submission state
+  // via InteractiveWidgetHost which is set up after WebSocket connection
 
   // Voice mode state
   const [voiceState, setVoiceState] = useState<VoiceServiceState>('idle');
@@ -485,6 +480,80 @@ export function SessionDetailScreen({ hiddenBackButton, voiceModeActive }: Sessi
     };
   }, [config, sessionId]);
 
+  // Helper function to append a tool result message to the transcript
+  // Used by MobileInteractiveWidgetHost to persist responses
+  const appendToolResult = useCallback(async (toolUseId: string, result: string): Promise<void> => {
+    if (!wsRef.current || !encryptionKeyRef.current) {
+      console.error('[SessionDetail] Cannot append tool result: not connected');
+      return;
+    }
+
+    const messageId = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+    const timestamp = Date.now();
+
+    const toolResult = {
+      type: 'nimbalyst_tool_result',
+      tool_use_id: toolUseId,
+      result,
+    };
+
+    // Encrypt the response
+    const responseContent = JSON.stringify({
+      content: JSON.stringify(toolResult),
+      metadata: {},
+    });
+    const { encrypted, iv } = await encrypt(responseContent, encryptionKeyRef.current);
+
+    // Send as a new message
+    const msg: ClientMessage = {
+      type: 'append_message',
+      message: {
+        id: messageId,
+        sequence: 0, // Server will assign proper sequence
+        created_at: timestamp,
+        source: 'system',
+        direction: 'input',
+        encrypted_content: encrypted,
+        iv,
+        metadata: {},
+      },
+    };
+    wsRef.current.send(JSON.stringify(msg));
+
+    // Optimistically add to local messages
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: messageId,
+        createdAt: timestamp,
+        source: 'system',
+        direction: 'input',
+        content: JSON.stringify(toolResult),
+        metadata: {},
+        hidden: false,
+      },
+    ]);
+  }, []);
+
+  // Set up MobileInteractiveWidgetHost for CustomToolWidgets
+  // This allows widgets to respond to prompts via the sync layer
+  useEffect(() => {
+    if (!sessionId || !connected) {
+      return;
+    }
+
+    const host = createMobileInteractiveWidgetHost(
+      sessionId,
+      sendSessionControlMessage,
+      appendToolResult
+    );
+    setInteractiveWidgetHost(sessionId, host);
+
+    return () => {
+      setInteractiveWidgetHost(sessionId, null);
+    };
+  }, [sessionId, connected, sendSessionControlMessage, appendToolResult]);
+
   // Convert synced messages to SessionData format
   const sessionData = useMemo((): SessionData => {
     // Use the same transformation function that the desktop app uses
@@ -518,23 +587,28 @@ export function SessionDetailScreen({ hiddenBackButton, voiceModeActive }: Sessi
   const indexEntry = allSessions.find((s) => s.id === sessionId);
   const title = indexEntry?.title || metadata.title || 'Untitled Session';
 
-  // Detect pending interactive prompts from messages
-  // Note: With the durable prompts architecture, widgets render inline in the transcript.
-  // This detection is used to disable input and show a helpful message while waiting.
-  const pendingPrompt = useMemo((): {
-    type: 'permission_request' | 'ask_user_question_request';
-    content: PermissionRequestContent | AskUserQuestionRequestContent;
-  } | null => {
-    // Scan messages from newest to oldest looking for pending prompts
+  // Detect if there are any pending interactive prompts
+  // With the durable prompts architecture, widgets render inline in the transcript
+  // and handle responses via InteractiveWidgetHost. This detection is only used
+  // to disable the input field while waiting for a response.
+  const INTERACTIVE_TOOL_NAMES = ['ToolPermission', 'AskUserQuestion', 'ExitPlanMode', 'developer_git_commit_proposal', 'mcp__nimbalyst-mcp__developer_git_commit_proposal'];
+
+  const hasPendingPrompt = useMemo((): boolean => {
+    // Scan messages looking for pending interactive prompts
     for (let i = messages.length - 1; i >= 0; i--) {
       const msg = messages[i];
       try {
         const parsed = JSON.parse(msg.content);
 
-        // Check for nimbalyst_tool_use messages (new durable prompts format)
+        // Check for nimbalyst_tool_use messages (durable prompts format)
         if (parsed.type === 'nimbalyst_tool_use') {
           const toolId = parsed.id;
           const toolName = parsed.name;
+
+          // Only check interactive tools
+          if (!INTERACTIVE_TOOL_NAMES.includes(toolName)) {
+            continue;
+          }
 
           // Check for nimbalyst_tool_result with matching tool_use_id
           const hasResult = messages.some(m => {
@@ -545,153 +619,29 @@ export function SessionDetailScreen({ hiddenBackButton, voiceModeActive }: Sessi
           });
 
           if (!hasResult) {
-            if (toolName === 'ToolPermission') {
-              // Transform to legacy format for InteractivePromptWidget compatibility
-              return {
-                type: 'permission_request',
-                content: {
-                  type: 'permission_request',
-                  requestId: toolId,
-                  toolName: parsed.input?.toolName || '',
-                  rawCommand: parsed.input?.rawCommand || '',
-                  pattern: parsed.input?.pattern || '',
-                  patternDisplayName: parsed.input?.patternDisplayName || '',
-                  isDestructive: parsed.input?.isDestructive || false,
-                  warnings: parsed.input?.warnings || [],
-                  timestamp: Date.now(),
-                  status: 'pending',
-                } as PermissionRequestContent,
-              };
-            }
-            if (toolName === 'AskUserQuestion') {
-              return {
-                type: 'ask_user_question_request',
-                content: {
-                  type: 'ask_user_question_request',
-                  questionId: toolId,
-                  questions: parsed.input?.questions || [],
-                  timestamp: Date.now(),
-                  status: 'pending',
-                } as AskUserQuestionRequestContent,
-              };
-            }
+            return true;
           }
         }
 
-        // Legacy format support: permission_request messages
-        if (parsed.type === 'permission_request' && parsed.status === 'pending') {
-          // Check if there's a response for this request
-          const hasResponse = messages.some(m => {
+        // Also check for SDK tool_use blocks (ExitPlanMode, GitCommit)
+        if (parsed.type === 'tool_use' && INTERACTIVE_TOOL_NAMES.includes(parsed.name)) {
+          const hasResult = messages.some(m => {
             try {
               const r = JSON.parse(m.content);
-              return (r.type === 'permission_response' && r.requestId === parsed.requestId) ||
-                     (r.type === 'nimbalyst_tool_result' && r.tool_use_id === parsed.requestId);
+              return r.type === 'tool_result' && r.tool_use_id === parsed.id;
             } catch { return false; }
           });
-          if (!hasResponse) {
-            return { type: 'permission_request', content: parsed as PermissionRequestContent };
-          }
-        }
 
-        // Legacy format support: ask_user_question_request messages
-        if (parsed.type === 'ask_user_question_request' && parsed.status === 'pending') {
-          // Check if there's a response for this question
-          const hasResponse = messages.some(m => {
-            try {
-              const r = JSON.parse(m.content);
-              return (r.type === 'ask_user_question_response' && r.questionId === parsed.questionId) ||
-                     (r.type === 'nimbalyst_tool_result' && r.tool_use_id === parsed.questionId);
-            } catch { return false; }
-          });
-          if (!hasResponse) {
-            return { type: 'ask_user_question_request', content: parsed as AskUserQuestionRequestContent };
+          if (!hasResult) {
+            return true;
           }
         }
       } catch {
         // Not JSON or not an interactive prompt
       }
     }
-    return null;
+    return false;
   }, [messages]);
-
-  // Handle submitting a response to an interactive prompt
-  const handlePromptResponse = useCallback(async (
-    response: PermissionResponseContent | AskUserQuestionResponseContent
-  ) => {
-    if (!wsRef.current || !encryptionKeyRef.current) {
-      console.error('[SessionDetail] Cannot submit prompt response: not connected');
-      return;
-    }
-
-    setIsSubmittingPrompt(true);
-    try {
-      const messageId = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-      const timestamp = Date.now();
-
-      // Encrypt the response
-      const responseContent = JSON.stringify({
-        content: JSON.stringify(response),
-        metadata: {},
-      });
-      const { encrypted, iv } = await encrypt(responseContent, encryptionKeyRef.current);
-
-      // Send as a new message
-      const msg: ClientMessage = {
-        type: 'append_message',
-        message: {
-          id: messageId,
-          sequence: 0, // Server will assign proper sequence
-          created_at: timestamp,
-          source: 'system',
-          direction: 'input',
-          encrypted_content: encrypted,
-          iv,
-          metadata: {},
-        },
-      };
-      wsRef.current.send(JSON.stringify(msg));
-
-      // Optimistically add to local messages so pendingPrompt clears immediately
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: messageId,
-          createdAt: timestamp,
-          source: 'system',
-          direction: 'input',
-          content: JSON.stringify(response),
-          metadata: {},
-          hidden: false,
-        },
-      ]);
-
-      // For AskUserQuestion responses, also send via IndexRoom so desktop receives it immediately
-      if (response.type === 'ask_user_question_response' && sessionId) {
-        const questionResponse = response as AskUserQuestionResponseContent;
-        const isCancelled = questionResponse.cancelled;
-        console.log('[SessionDetail]', isCancelled ? 'Cancelled' : 'Submitted', 'question response via IndexRoom:', questionResponse.questionId);
-
-        if (isCancelled) {
-          // For cancellation, send the cancel control message
-          sendSessionControlMessage(sessionId, 'cancel');
-        } else {
-          // For normal responses, send the question response control message
-          sendSessionControlMessage(sessionId, 'question_response', {
-            questionId: questionResponse.questionId,
-            answers: questionResponse.answers,
-            cancelled: false,
-          });
-        }
-      } else {
-        console.log('[SessionDetail] Submitted prompt response:', response.type);
-      }
-    } catch (err) {
-      console.error('[SessionDetail] Failed to submit prompt response:', err);
-      setError('Failed to submit response');
-    } finally {
-      setIsSubmittingPrompt(false);
-    }
-  }, [sessionId, sendSessionControlMessage]);
 
   // Generate unique ID for messages
   const generateId = () => {
@@ -1143,29 +1093,17 @@ export function SessionDetailScreen({ hiddenBackButton, voiceModeActive }: Sessi
         )}
       </main>
 
-      {/* Interactive Prompt (when pending) */}
-      {pendingPrompt && (
-        <div className="flex-shrink-0 px-3 py-2 border-t border-[var(--nim-border)] bg-[var(--nim-bg-secondary)]">
-          <InteractivePromptWidget
-            promptType={pendingPrompt.type}
-            content={pendingPrompt.content}
-            onSubmitResponse={handlePromptResponse}
-            isMobile={true}
-            isSubmitting={isSubmittingPrompt}
-          />
-        </div>
-      )}
-
       {/* AI Input - Fixed at bottom with safe area for home indicator */}
+      {/* Note: Interactive prompts now render inline via CustomToolWidgets in AgentTranscriptPanel */}
       <footer className="flex-shrink-0 bg-[var(--nim-bg)] border-t border-[var(--nim-border)] safe-area-bottom">
         <AIInput
           value={inputValue}
           onChange={handleInputChange}
           onSend={handleSendMessage}
-          disabled={!connected || isSending || !!pendingPrompt}
+          disabled={!connected || isSending || hasPendingPrompt}
           isLoading={isSending || metadata.isExecuting}
           onCancel={metadata.isExecuting ? handleCancel : undefined}
-          placeholder={pendingPrompt ? 'Respond to prompt above...' : (connected ? 'Type your message...' : 'Connecting...')}
+          placeholder={hasPendingPrompt ? 'Respond to prompt in transcript...' : (connected ? 'Type your message...' : 'Connecting...')}
           attachments={attachments}
           onAttachmentAdd={handleAttachmentAdd}
           onAttachmentRemove={handleAttachmentRemove}

@@ -1,5 +1,7 @@
 import React, { useEffect, useCallback, useState } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { Provider as JotaiProvider } from 'jotai';
+import { store } from '@nimbalyst/runtime/store';
 import { CollabV3SyncProvider, useSync, reportMobileActivity } from './contexts/CollabV3SyncContext';
 import { ProjectListScreen } from './screens/ProjectListScreen';
 import { SessionListScreen } from './screens/SessionListScreen';
@@ -281,10 +283,12 @@ function SplitViewPlaceholder() {
 
 export function App() {
   return (
-    <CollabV3SyncProvider>
-      <div className="min-h-screen bg-nim">
-        <AppContent />
-      </div>
-    </CollabV3SyncProvider>
+    <JotaiProvider store={store}>
+      <CollabV3SyncProvider>
+        <div className="min-h-screen bg-nim">
+          <AppContent />
+        </div>
+      </CollabV3SyncProvider>
+    </JotaiProvider>
   );
 }

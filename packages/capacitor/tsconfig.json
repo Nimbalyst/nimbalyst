@@ -11,7 +11,12 @@
     "noEmit": true,
     "jsx": "react-jsx",
     "strict": true,
-    "types": ["vite/client"]
+    "types": ["vite/client"],
+    "baseUrl": ".",
+    "paths": {
+      "@nimbalyst/runtime": ["../runtime/src/index.ts"],
+      "@nimbalyst/runtime/*": ["../runtime/src/*"]
+    }
   },
   "include": ["src"]
 }
