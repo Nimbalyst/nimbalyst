@@ -364,7 +364,7 @@ async function openFileWithWorkspaceDetection(filePath: string): Promise<void> {
     // Check if file is already open in a window
     const existingWindow = findWindowByFilePath(filePath);
     if (existingWindow) {
-        existingWindow.focus();
+        // Window is already open - no need to focus, let macOS handle window ordering
         return;
     }
 
@@ -379,8 +379,7 @@ async function openFileWithWorkspaceDetection(filePath: string): Promise<void> {
         let workspaceWindow = findWindowByWorkspace(workspacePath);
 
         if (workspaceWindow) {
-            // Workspace window exists, use it
-            workspaceWindow.focus();
+            // Workspace window exists, use it - no need to focus, let macOS handle window ordering
             await loadFileIntoWindow(workspaceWindow, filePath);
         } else {
             // Create new workspace window for this workspace
@@ -1176,7 +1175,8 @@ app.on('before-quit', async (event) => {
     }
 
     // Check for active AI sessions before proceeding
-    if (hasActiveStreamingSessions()) {
+    // Skip in Playwright test environment to allow clean test teardown
+    if (hasActiveStreamingSessions() && !process.env.PLAYWRIGHT) {
         event.preventDefault();
 
         analytics.sendEvent('quit_confirmation_shown', {

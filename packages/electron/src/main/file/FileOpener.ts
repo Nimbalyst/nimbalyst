@@ -236,8 +236,8 @@ export async function openFile(options: OpenFileOptions): Promise<OpenFileResult
     });
   }
 
-  // Focus window
-  window.focus();
+  // Note: We don't focus here - let macOS handle window ordering naturally.
+  // User-initiated actions that need focus (menu, notifications) handle it themselves.
 
   console.log('[FileOpener] Opened file:', JSON.stringify({
     filePath: basename(filePath),
