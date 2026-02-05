@@ -32,8 +32,24 @@ export function safeHandle(
     console.warn(`[IPC] Handler already registered, skipping: ${channel}`);
     return;
   }
-  registeredHandlers.add(channel);
-  ipcMain.handle(channel, handler);
+
+  // Special case: electron-log registers its own '__ELECTRON_LOG__' handler
+  // If we try to register after electron-log has already initialized, we'll get an error
+  // This can happen during HMR or if the module is bundled multiple times
+  try {
+    registeredHandlers.add(channel);
+    ipcMain.handle(channel, handler);
+  } catch (error: any) {
+    if (error?.message?.includes('Attempted to register a second handler')) {
+      console.warn(`[IPC] Handler registration failed (already exists): ${channel}`);
+      // Keep the channel in our registry even though registration failed
+      // This prevents us from trying again
+    } else {
+      // Remove from registry if registration failed for another reason
+      registeredHandlers.delete(channel);
+      throw error;
+    }
+  }
 }
 
 /**

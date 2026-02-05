@@ -5,7 +5,7 @@
 import { BrowserWindow } from 'electron';
 import { safeHandle } from '../../utils/ipcRegistry';
 import Store from 'electron-store';
-import { SessionManager, ProviderFactory, ModelRegistry, AIProvider, isAskUserQuestionProvider } from '@nimbalyst/runtime/ai/server';
+import { SessionManager, ProviderFactory, ModelRegistry, AIProvider, isAskUserQuestionProvider, ClaudeCodeProvider } from '@nimbalyst/runtime/ai/server';
 import { getSessionStateManager } from '@nimbalyst/runtime/ai/server/SessionStateManager';
 import { parseContextUsageMessage } from '@nimbalyst/runtime/ai/server/utils/contextUsage';
 import { isBedrockToolSearchError } from '@nimbalyst/runtime/ai/server/utils/errorDetection';
@@ -3525,7 +3525,6 @@ export class AIService {
       if (settings.useStandaloneBinary !== undefined) {
         this.getSettingsStore().set('useStandaloneBinary', settings.useStandaloneBinary);
         // Update ClaudeCodeProvider immediately so new sessions use the updated setting
-        const { ClaudeCodeProvider } = await import('@nimbalyst/runtime/ai/server');
         ClaudeCodeProvider.setUseStandaloneBinary(settings.useStandaloneBinary);
       }
 

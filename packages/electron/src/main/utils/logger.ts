@@ -1,14 +1,31 @@
 import log from 'electron-log/main';
 import Store from 'electron-store';
-import { app } from 'electron';
+import { app, ipcMain } from 'electron';
 
 // Initialize electron-log for IPC communication with renderer.
-// Note: The ipcMain.handle patch in bootstrap.ts prevents "second handler" errors
-// if electron-log's module is evaluated multiple times.
+// electron-log registers an IPC handler for '__ELECTRON_LOG__' when initialize() is called.
+// We must ensure this only happens once, even if the module is re-evaluated during bundling.
+// Check if the handler already exists by trying to list handlers (electron doesn't expose this,
+// so we use a global flag AND catch registration errors)
 const INIT_FLAG = '__electron_log_initialized__';
+const ELECTRON_LOG_CHANNEL = '__ELECTRON_LOG__';
+
 if (!(global as any)[INIT_FLAG]) {
   (global as any)[INIT_FLAG] = true;
-  log.initialize();
+  try {
+    // Only initialize if the handler doesn't already exist
+    // We can't directly check if a handler exists, so we rely on the error
+    log.initialize();
+  } catch (error: any) {
+    // Suppress duplicate handler registration errors
+    // This happens when modules are bundled into separate chunks and both try to initialize
+    if (error?.message?.includes('Attempted to register a second handler')) {
+      console.warn('[logger] electron-log IPC handler already registered, skipping initialization');
+      // Don't throw - this is expected when runtime and electron packages are in separate chunks
+    } else {
+      throw error;
+    }
+  }
 }
 
 // Define component scopes for logging
