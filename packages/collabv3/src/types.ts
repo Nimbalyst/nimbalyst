@@ -375,6 +375,8 @@ export interface SessionMetadata {
   project_id_iv: string;
   created_at: number;
   updated_at: number;
+  /** Whether the session is currently executing (processing AI request) */
+  isExecuting?: boolean;
 }
 
 /** Session entry in the IndexRoom */

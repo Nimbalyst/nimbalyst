@@ -476,6 +476,8 @@ export class SessionRoom implements DurableObject {
       project_id_iv: metadata.project_id_iv ?? '',
       created_at: parseInt(metadata.created_at ?? '0', 10),
       updated_at: parseInt(metadata.updated_at ?? '0', 10),
+      // Include executing state for mobile sync
+      isExecuting: metadata.isExecuting === 'true',
     };
   }
 
