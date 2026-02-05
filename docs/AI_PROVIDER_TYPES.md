@@ -18,8 +18,19 @@ Agent providers are designed for autonomous coding tasks. They have full access 
 
 | Provider | Description |
 |----------|-------------|
-| Claude Agent | Uses the Claude Agent SDK with full MCP integration |
+| Claude Code | Uses the Claude Agent SDK with full MCP integration |
 | OpenAI Codex | Uses the OpenAI Codex CLI (experimental) |
+
+### Claude Code Provider Details
+
+The primary agent provider, Claude Code, uses the Model Context Protocol for enhanced code-aware features:
+
+- **Provider ID**: `claude-code`
+- **Implementation**: `packages/runtime/src/ai/server/providers/ClaudeCodeProvider.ts`
+- **SDK**: Dynamically loads `@anthropic-ai/claude-agent-sdk` from user's installation
+- **Installation**: Requires `npm install -g @anthropic-ai/claude-agent-sdk` or local installation
+- **Model Selection**: Manages its own model selection internally (do not pass model IDs)
+- **Internal MCP Servers**: See [INTERNAL_MCP_SERVERS.md](./INTERNAL_MCP_SERVERS.md) for how to implement and add new MCP servers
 
 ### When to Use
 
@@ -46,6 +57,24 @@ Chat providers use direct API calls for conversational AI assistance. Files are 
 | Claude Chat | Direct Anthropic API - reliable, fast responses |
 | OpenAI | GPT-4 and other OpenAI models |
 | LM Studio | Local models for privacy-focused usage |
+
+### Claude Chat Provider Details
+
+Direct Anthropic API integration for standard chat:
+
+- **Provider ID**: `claude`
+- **Implementation**: `packages/runtime/src/ai/server/providers/ClaudeProvider.ts`
+- **SDK**: Uses official Anthropic SDK (`@anthropic-ai/sdk`)
+- **Features**:
+  - Standard Claude models (Opus 4.1, Opus 4, Sonnet 4, Sonnet 3.7)
+  - Streaming responses with tool use support
+  - Direct API key authentication
+  - Full control over model selection
+
+### Other Chat Providers
+
+- **OpenAI**: GPT-4 and GPT-3.5 models via OpenAI API
+- **LM Studio**: Local model support for privacy-focused usage - automatically detects models running locally
 
 ### When to Use
 

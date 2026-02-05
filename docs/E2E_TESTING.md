@@ -2,6 +2,43 @@
 
 This repository uses [Playwright](https://playwright.dev) for automated end-to-end coverage across the web playground and the Electron desktop shell.
 
+## AI Agent Guidelines for E2E Tests
+
+**IMPORTANT**: These guidelines are for AI agents running E2E tests in this codebase.
+
+### When to Run in Dev Containers
+
+Run E2E tests in a dev container if ANY of the following are true:
+1. You are in a git worktree
+2. You are in a CI environment
+3. You are specifically asked to
+
+If none of the above are true, run E2E tests normally.
+
+**ALWAYS use the `/e2e-devcontainer` command when running E2E tests in a dev container.**
+
+### Running Targeted Tests
+
+You may use the `e2e-runner` agent to run **targeted E2E tests** related to the code you are working on. However:
+- **Do NOT run the full E2E test suite** unless explicitly asked - it takes a long time and some existing tests may be broken
+- **Prefer specific test files** related to your changes (e.g., `e2e/editors/monaco.spec.ts` when working on Monaco editor)
+- **Use grep patterns** to run specific test cases when only a few tests are relevant
+
+### Quick Command Reference
+
+```bash
+# Run specific test file
+npx playwright test e2e/monaco/file-watcher-updates.spec.ts
+
+# Run tests in a directory
+npx playwright test e2e/monaco/
+
+# Run all E2E tests (avoid unless explicitly asked)
+npx playwright test
+```
+
+**IMPORTANT**: Always use `npx playwright test` directly for E2E tests. Never use parallel execution as it corrupts PGLite.
+
 ## Installation
 
 ```bash

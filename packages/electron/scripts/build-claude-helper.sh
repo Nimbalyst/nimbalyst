@@ -57,32 +57,12 @@ build_for_target() {
     echo "Built: $outfile ($(ls -lh "$outfile" | awk '{print $5}'))"
 }
 
-strip_bun_signature() {
-    local binary=$1
-    echo "Stripping Bun adhoc signature from $binary..."
-
-    # Bun binaries include an adhoc signature that causes codesign issues.
-    # We must remove it BEFORE creating the universal binary with lipo,
-    # otherwise the combined signature structure can become corrupted.
-    if codesign --remove-signature "$binary" 2>/dev/null; then
-        echo "  Stripped signature using codesign"
-    else
-        # If codesign fails, the binary may not have a signature or it's corrupted
-        echo "  No signature to strip or codesign failed (this is OK)"
-    fi
-}
-
 build_mac_universal() {
     echo ""
     echo "=== Building macOS Universal Binary ==="
 
     build_for_target "bun-darwin-arm64" "$OUTPUT_DIR/claude-helper-arm64"
     build_for_target "bun-darwin-x64" "$OUTPUT_DIR/claude-helper-x64"
-
-    # Strip Bun adhoc signatures BEFORE creating universal binary
-    # This prevents signature corruption issues during lipo merge
-    strip_bun_signature "$OUTPUT_DIR/claude-helper-arm64"
-    strip_bun_signature "$OUTPUT_DIR/claude-helper-x64"
 
     # Create universal binary using lipo
     echo ""

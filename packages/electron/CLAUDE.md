@@ -18,7 +18,7 @@ From the repository root:
 
 **IMPORTANT**: Always use `npx playwright test` directly for E2E tests. Never use parallel execution as it corrupts PGLite.
 
-See `/docs/PLAYWRIGHT.md` for comprehensive E2E testing documentation.
+See `/docs/E2E_TESTING.md` for comprehensive E2E testing documentation.
 
 ## Architecture
 
@@ -376,7 +376,7 @@ Nimbalyst supports creating git worktrees for isolated AI coding sessions. See [
 
 ## Testing
 
-E2E tests use Playwright. See `/docs/PLAYWRIGHT.md` for comprehensive testing documentation.
+E2E tests use Playwright. See `/docs/E2E_TESTING.md` for comprehensive testing documentation.
 
 **Key testing patterns:**
 - Always create test files BEFORE launching the app

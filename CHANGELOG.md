@@ -20,38 +20,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
-## [0.52.47] - 2026-02-05
-
-
-### Added
-<!-- New features go here -->
-
-### Changed
-<!-- Changes to existing functionality go here -->
-
-### Fixed
-- Transfer pinned state when converting session to workstream
-- Add missing styles to workstream context menu items
-- Upgrade Bun to 1.3.8 for macOS codesign support
-
-### Removed
-<!-- Removed features go here -->
-
-## [0.52.46] - 2026-02-05
-
-
-### Added
-<!-- New features go here -->
-
-### Changed
-<!-- Changes to existing functionality go here -->
-
-### Fixed
-- Strip Bun signatures before lipo to prevent codesign failures on macOS
-
-### Removed
-<!-- Removed features go here -->
-
 ## [0.52.45] - 2026-02-05
 
 

@@ -213,14 +213,8 @@ export const ExitPlanModeWidget: React.FC<CustomToolWidgetProps> = ({
     // Check if path is already absolute (works for both Unix and Windows)
     const isAbsolute = planFilePath.startsWith('/') || /^[a-zA-Z]:[\\/]/.test(planFilePath);
 
-    // If path is relative but we don't have a workspacePath, we can't resolve it
-    if (!isAbsolute && !workspacePath) {
-      console.warn('[ExitPlanModeWidget] Cannot resolve relative path without workspacePath:', planFilePath);
-      return;
-    }
-
     // Detect path separator from workspacePath (works cross-platform)
-    const separator = workspacePath?.includes('\\') ? '\\' : '/';
+    const separator = workspacePath.includes('\\') ? '\\' : '/';
 
     const absolutePath = isAbsolute
       ? planFilePath

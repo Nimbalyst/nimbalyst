@@ -576,7 +576,7 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
           {/* Workstream menu items */}
           {type === 'workstream' && onWorkstreamPinToggle && (
             <button
-              className="workstream-group-context-menu-item flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
+              className="workstream-group-context-menu-item"
               onClick={handlePinToggle}
             >
               <MaterialSymbol icon="push_pin" size={14} />
@@ -585,9 +585,9 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
           )}
           {type === 'workstream' && onWorkstreamArchive && (
             <>
-              {onWorkstreamPinToggle && <div className="workstream-group-context-menu-divider h-px my-1 bg-[var(--nim-border)]" />}
+              {onWorkstreamPinToggle && <div className="workstream-group-context-menu-divider" />}
               <button
-                className="workstream-group-context-menu-item destructive flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-error)] text-left rounded transition-colors duration-150 hover:bg-[rgba(239,68,68,0.1)]"
+                className="workstream-group-context-menu-item destructive"
                 onClick={handleArchive}
               >
                 <MaterialSymbol icon="archive" size={14} />
