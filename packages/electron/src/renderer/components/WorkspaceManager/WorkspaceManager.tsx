@@ -703,7 +703,7 @@ export const WorkspaceManager: React.FC = () => {
                 <img src="./icon.png" alt="Nimbalyst" className="welcome-logo w-16 h-16 object-contain" />
                 <div className="welcome-text text-left">
                   <h1 className="welcome-title text-[28px] font-extrabold text-[var(--nim-text)] m-0 mb-1 tracking-tight">Nimbalyst</h1>
-                  <p className="welcome-subtitle text-sm text-[var(--nim-text-muted)] m-0 font-normal">AI-native markdown editor</p>
+                  <p className="welcome-subtitle text-sm text-[var(--nim-text-muted)] m-0 font-normal">AI-native, interactive work platform</p>
                 </div>
               </div>
 
