@@ -20,6 +20,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.44] - 2026-02-05
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+- Use bash explicitly for claude-helper build scripts on Windows
+
+### Fixed
+<!-- Bug fixes go here -->
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.52.43] - 2026-02-05
 
 
