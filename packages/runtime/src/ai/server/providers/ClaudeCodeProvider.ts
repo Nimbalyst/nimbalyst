@@ -379,9 +379,15 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     // Track session mode for MCP server configuration and tool filtering
     this.currentMode = (documentContext as any)?.mode || 'agent';
 
+    // Threshold for large text attachments that should be written to /tmp instead of sent inline
+    // This reduces initial token usage for very large attachments
+    const LARGE_ATTACHMENT_CHAR_THRESHOLD = 10000;
+
     // Build content blocks for attachments (sent directly to Claude, not via file paths)
     const imageContentBlocks: ImageBlockParam[] = [];
     const documentContentBlocks: DocumentBlockParam[] = [];
+    // Track large text attachments that will be written to /tmp and referenced in the system message
+    const largeAttachmentFilePaths: { filename: string; filepath: string }[] = [];
     // Debug logging - uncomment if needed for attachment troubleshooting
     if (attachments && attachments.length > 0) {
 
@@ -444,19 +450,29 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             console.error(`[CLAUDE-CODE] Failed to read PDF attachment:`, error);
           }
         } else if (attachment.type === 'document' && attachment.filepath) {
-          // Read text/document files and send as document content blocks
+          // Read text/document files - small ones sent inline, large ones written to /tmp
           try {
             const textContent = await fs.promises.readFile(attachment.filepath, 'utf-8');
             const filename = attachment.filename || path.basename(attachment.filepath);
-            documentContentBlocks.push({
-              type: 'document',
-              source: {
-                type: 'text',
-                media_type: 'text/plain',
-                data: textContent
-              },
-              title: filename
-            });
+
+            if (textContent.length > LARGE_ATTACHMENT_CHAR_THRESHOLD) {
+              // Large attachment - write to /tmp and reference in system message
+              // Claude can use the Read tool to access the content when needed
+              const tmpFilePath = path.join('/tmp', `nimbalyst-attachment-${Date.now()}-${filename}`);
+              await fs.promises.writeFile(tmpFilePath, textContent, 'utf-8');
+              largeAttachmentFilePaths.push({ filename, filepath: tmpFilePath });
+            } else {
+              // Small attachment - send inline as document content block
+              documentContentBlocks.push({
+                type: 'document',
+                source: {
+                  type: 'text',
+                  media_type: 'text/plain',
+                  data: textContent
+                },
+                title: filename
+              });
+            }
           } catch (error) {
             console.error(`[CLAUDE-CODE] Failed to read document attachment:`, error);
           }
@@ -500,6 +516,27 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         if (parts.length > 0) {
           userMessageAddition = parts.join('\n\n');
           message = `${message}\n\n<NIMBALYST_SYSTEM_MESSAGE>\n${userMessageAddition}\n</NIMBALYST_SYSTEM_MESSAGE>`;
+        }
+      }
+
+      // Add large attachment file paths to system message
+      // These are text attachments over 10k chars that were written to /tmp
+      if (largeAttachmentFilePaths.length > 0) {
+        const attachmentSection = largeAttachmentFilePaths.map(
+          ({ filename, filepath }) => `- ${filename}: ${filepath}`
+        ).join('\n');
+
+        const attachmentInstructions = `<LARGE_ATTACHMENTS>\nThe following attached files are too large to include inline. Use the Read tool to access their contents:\n${attachmentSection}\n</LARGE_ATTACHMENTS>`;
+
+        if (message.includes('</NIMBALYST_SYSTEM_MESSAGE>')) {
+          // Insert before closing tag
+          message = message.replace(
+            '</NIMBALYST_SYSTEM_MESSAGE>',
+            `\n\n${attachmentInstructions}\n</NIMBALYST_SYSTEM_MESSAGE>`
+          );
+        } else {
+          // No existing system message - create one
+          message = `${message}\n\n<NIMBALYST_SYSTEM_MESSAGE>\n${attachmentInstructions}\n</NIMBALYST_SYSTEM_MESSAGE>`;
         }
       }
 
