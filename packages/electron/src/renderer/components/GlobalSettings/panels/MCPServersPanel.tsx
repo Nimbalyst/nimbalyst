@@ -258,9 +258,15 @@ const MCP_SERVER_TEMPLATES: MCPServerTemplate[] = [
     authType: 'api-key',
     config: {
       command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-github'],
+      args: [
+        '-y',
+        'mcp-remote',
+        'https://api.githubcopilot.com/mcp/',
+        '--header',
+        'Authorization:Bearer ${GITHUB_PERSONAL_ACCESS_TOKEN}'
+      ],
       env: {
-        GITHUB_PERSONAL_ACCESS_TOKEN: '${GITHUB_PERSONAL_ACCESS_TOKEN}'
+        GITHUB_PERSONAL_ACCESS_TOKEN: ''
       }
     }
   },
