@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { VList } from 'virtua';
+import { DatabaseDashboard } from './DatabaseDashboard';
 
 interface Table {
   name: string;
@@ -602,9 +603,7 @@ export function DatabaseBrowser() {
         )}
 
         {!selectedTable && !queryResult && (
-          <div className="empty-state flex-1 flex items-center justify-center text-[var(--nim-text-faint)] text-sm">
-            <p>Select a table from the sidebar or execute a SQL query</p>
-          </div>
+          <DatabaseDashboard onTableSelect={handleTableSelect} />
         )}
       </div>
 

@@ -79,14 +79,14 @@ export function registerDatabaseBrowserHandlers() {
     // Execute arbitrary SQL query
     safeHandle('database:executeQuery', async (event, sql: string) => {
         try {
-            // Safety check: only allow SELECT queries for now
+            // Safety check: only allow SELECT queries
             const trimmedSQL = sql.trim().toLowerCase();
-            // if (!trimmedSQL.startsWith('select')) {
-            //     return {
-            //         success: false,
-            //         error: 'Only SELECT queries are allowed for safety. Use the database protocol server for write operations.'
-            //     };
-            // }
+            if (!trimmedSQL.startsWith('select')) {
+                return {
+                    success: false,
+                    error: 'Only SELECT queries are allowed in the Database Browser.'
+                };
+            }
 
             const result = await database.query(sql);
 
@@ -108,6 +108,89 @@ export function registerDatabaseBrowserHandlers() {
             return { success: true, stats };
         } catch (error) {
             console.error('[DatabaseBrowserHandlers] Error fetching database stats:', error);
+            return { success: false, error: String(error) };
+        }
+    });
+
+    // Get comprehensive dashboard stats
+    safeHandle('database:getDashboardStats', async () => {
+        try {
+            // Get list of tables first
+            const tablesResult = await database.query<{ tablename: string }>(
+                `SELECT tablename FROM pg_catalog.pg_tables
+                 WHERE schemaname = 'public'
+                 ORDER BY tablename`
+            );
+
+            // Get row counts and sizes for each table
+            const tableStats: Array<{
+                name: string;
+                rowCount: number;
+                size: string;
+                sizeBytes: number;
+            }> = [];
+
+            for (const table of tablesResult.rows) {
+                const tableName = table.tablename;
+                try {
+                    // Get actual row count
+                    const countResult = await database.query<{ count: string }>(
+                        `SELECT COUNT(*) as count FROM "${tableName}"`
+                    );
+                    // Get table size (including TOAST and indexes)
+                    const sizeResult = await database.query<{ size: string; size_bytes: string }>(`
+                        SELECT
+                            pg_size_pretty(pg_total_relation_size('"${tableName}"')) as size,
+                            pg_total_relation_size('"${tableName}"') as size_bytes
+                    `);
+
+                    tableStats.push({
+                        name: tableName,
+                        rowCount: parseInt(countResult.rows[0]?.count) || 0,
+                        size: sizeResult.rows[0]?.size || '0 bytes',
+                        sizeBytes: parseInt(sizeResult.rows[0]?.size_bytes) || 0
+                    });
+                } catch (err) {
+                    // If we fail to get stats for a table, add it with zeros
+                    tableStats.push({
+                        name: tableName,
+                        rowCount: 0,
+                        size: '0 bytes',
+                        sizeBytes: 0
+                    });
+                }
+            }
+
+            // Sort by size descending
+            tableStats.sort((a, b) => b.sizeBytes - a.sizeBytes);
+
+            // Get total database size
+            const dbSizeResult = await database.query<{ size: string; size_bytes: string }>(`
+                SELECT
+                    pg_size_pretty(pg_database_size(current_database())) as size,
+                    pg_database_size(current_database()) as size_bytes
+            `);
+
+            // Get basic stats (session count, etc.)
+            const basicStats = await database.getStats();
+
+            // Get backup status
+            const backupService = database.getBackupService();
+            let backupStatus = null;
+            if (backupService) {
+                backupStatus = backupService.getBackupStatus();
+            }
+
+            return {
+                success: true,
+                tableStats,
+                totalSize: dbSizeResult.rows[0]?.size || '0 bytes',
+                totalSizeBytes: parseInt(dbSizeResult.rows[0]?.size_bytes) || 0,
+                basicStats: basicStats,
+                backupStatus
+            };
+        } catch (error) {
+            console.error('[DatabaseBrowserHandlers] Error fetching dashboard stats:', error);
             return { success: false, error: String(error) };
         }
     });
