@@ -20,6 +20,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.48] - 2026-02-05
+
+
+### Added
+- Claude Opus 4.6 model support
+
+### Changed
+- Update claude-agent-sdk to 0.2.32 and mcp-sdk to 1.26.0
+
+### Fixed
+- Prevent duplicate ELECTRON_LOG handler registration
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.52.45] - 2026-02-05
 
 
