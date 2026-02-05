@@ -20,6 +20,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.45] - 2026-02-05
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- Strip Bun binary signature before macOS codesign to fix notarization
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.52.44] - 2026-02-05
 
 
