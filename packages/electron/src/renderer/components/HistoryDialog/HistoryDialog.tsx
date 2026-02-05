@@ -1,11 +1,12 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { usePostHog } from 'posthog-js/react';
-import { ProviderIcon } from '@nimbalyst/runtime';
+import { ProviderIcon, MarkdownEditor, MonacoEditor } from '@nimbalyst/runtime';
 import { useHistory } from '../../hooks/useHistory';
 import { DiffPreviewEditor, type DiffNavigationState } from './DiffPreviewEditor';
 import { TextDiffViewer, type TextDiffNavigationState } from './TextDiffViewer';
 import { MonacoDiffViewer } from './MonacoDiffViewer';
 import { ImageDiffViewer } from './ImageDiffViewer';
+import { createReadOnlyEditorHost } from './createReadOnlyEditorHost';
 import { getFileType, type EditorType } from '../../utils/fileTypeDetector';
 import { getFileName } from '../../utils/pathUtils';
 import { getRelativeTimeString } from '../../utils/dateFormatting';
@@ -39,6 +40,7 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore, theme = 'l
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [diffMode, setDiffMode] = useState(false);
   const [diffViewMode, setDiffViewMode] = useState<'rich' | 'text'>('rich');
+  const [viewMode, setViewMode] = useState<'changes' | 'version'>('changes');
   const [compactView, setCompactView] = useState(true);
   const [versionAContent, setVersionAContent] = useState<string>('');
   const [versionBContent, setVersionBContent] = useState<string>('');
@@ -158,6 +160,7 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore, theme = 'l
       setPreviewContent('');
       setDiffMode(false);
       setDiffViewMode('rich');
+      setViewMode('changes');
       setVersionAContent('');
       setVersionBContent('');
       setVersionAMeta(null);
@@ -182,6 +185,39 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore, theme = 'l
     };
   }, [isOpen, onClose]);
 
+  // Reload preview when view mode changes
+  useEffect(() => {
+    if (selectedVersions.length !== 1) return;
+
+    const selection = selectedVersions[0];
+    const idParts = selection.snapshotId.split('-');
+    const selectedIndex = parseInt(idParts[idParts.length - 1]);
+    const previousSnapshot = displayedSnapshots[selectedIndex + 1];
+
+    const reloadPreview = async () => {
+      if (viewMode === 'changes' && previousSnapshot) {
+        await loadDiffMode(previousSnapshot.timestamp, selection.timestamp);
+      } else {
+        // Version mode or no previous - just show content
+        setDiffMode(false);
+        setLoadingPreview(true);
+        try {
+          const content = await loadSnapshot(selection.timestamp);
+          if (content) {
+            setPreviewContent(content);
+          }
+        } catch (error) {
+          console.error('Failed to load snapshot:', error);
+          setPreviewContent('Failed to load snapshot');
+        } finally {
+          setLoadingPreview(false);
+        }
+      }
+    };
+
+    reloadPreview();
+  }, [viewMode]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleSnapshotSelect = async (snapshotId: string, timestamp: string, clickedIndex: number, isCommandClick: boolean) => {
     // Check if this version is already selected
     const existingIndex = selectedVersions.findIndex(v => v.snapshotId === snapshotId);
@@ -192,7 +228,7 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore, theme = 'l
       setSelectedVersions(newSelections);
       setDiffMode(false);
 
-      // If we still have one selection, load diff with previous version
+      // If we still have one selection, load based on view mode
       if (newSelections.length === 1) {
         const remainingSelection = newSelections[0];
         // Parse the index from the snapshotId (last segment after final dash)
@@ -200,10 +236,22 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore, theme = 'l
         const remainingIndex = parseInt(idParts[idParts.length - 1]);
         const previousSnapshot = displayedSnapshots[remainingIndex + 1];
 
-        if (previousSnapshot) {
+        if (viewMode === 'changes' && previousSnapshot) {
           await loadDiffMode(previousSnapshot.timestamp, remainingSelection.timestamp);
         } else {
-          setPreviewContent('');
+          // Version mode or no previous - just show content
+          setLoadingPreview(true);
+          try {
+            const content = await loadSnapshot(remainingSelection.timestamp);
+            if (content) {
+              setPreviewContent(content);
+            }
+          } catch (error) {
+            console.error('Failed to load snapshot:', error);
+            setPreviewContent('Failed to load snapshot');
+          } finally {
+            setLoadingPreview(false);
+          }
         }
       } else {
         setPreviewContent('');
@@ -211,8 +259,8 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore, theme = 'l
       return;
     }
 
-    // Command-click: add to selection for manual diff
-    if (isCommandClick) {
+    // Command-click: add to selection for manual diff (only in changes mode)
+    if (isCommandClick && viewMode === 'changes') {
       if (selectedVersions.length < 2) {
         const label: 'A' | 'B' = selectedVersions.length === 0 ? 'A' : 'B';
         const newSelections = [...selectedVersions, { snapshotId, timestamp, label }];
@@ -226,17 +274,32 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore, theme = 'l
       return;
     }
 
-    // Regular click: ALWAYS reset to single selection and show diff with previous version
-    // This ensures that even if you had command-clicked before, a regular click
-    // switches back to the default "diff with previous" behavior
-    const previousSnapshot = displayedSnapshots[clickedIndex + 1];
-
+    // Regular click: reset to single selection
     setSelectedVersions([{ snapshotId, timestamp, label: 'A' }]);
 
-    if (previousSnapshot) {
-      await loadDiffMode(previousSnapshot.timestamp, timestamp);
+    if (viewMode === 'changes') {
+      // Changes mode: show diff with previous version
+      const previousSnapshot = displayedSnapshots[clickedIndex + 1];
+      if (previousSnapshot) {
+        await loadDiffMode(previousSnapshot.timestamp, timestamp);
+      } else {
+        // No previous version - just show the content
+        setDiffMode(false);
+        setLoadingPreview(true);
+        try {
+          const content = await loadSnapshot(timestamp);
+          if (content) {
+            setPreviewContent(content);
+          }
+        } catch (error) {
+          console.error('Failed to load snapshot:', error);
+          setPreviewContent('Failed to load snapshot');
+        } finally {
+          setLoadingPreview(false);
+        }
+      }
     } else {
-      // No previous version - just show the content
+      // Version mode: just show the content
       setDiffMode(false);
       setLoadingPreview(true);
       try {
@@ -423,9 +486,27 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore, theme = 'l
             <h2 className="m-0 text-base font-semibold text-[var(--nim-text)] whitespace-nowrap overflow-hidden text-ellipsis">{filePath ? getFileName(filePath) : 'Document History'}</h2>
             {filePath && <span className="history-dialog-path text-[11px] text-[var(--nim-text-muted)] whitespace-nowrap overflow-hidden text-ellipsis">{filePath}</span>}
           </div>
-          <button className="history-dialog-close nim-btn-icon" onClick={onClose}>
-            <span className="material-symbols-outlined text-xl">close</span>
-          </button>
+          <div className="history-dialog-header-right flex items-center gap-3">
+            <div className="view-mode-toggle flex bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded-md p-0.5 gap-0.5">
+              <button
+                className={`view-mode-button py-1 px-3 text-[11px] font-medium bg-transparent border-none rounded cursor-pointer transition-all duration-200 ${viewMode === 'changes' ? 'text-white bg-[var(--nim-primary)]' : 'text-[var(--nim-text-muted)] hover:text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]'}`}
+                onClick={() => setViewMode('changes')}
+                title="Show diff with previous version"
+              >
+                Diff
+              </button>
+              <button
+                className={`view-mode-button py-1 px-3 text-[11px] font-medium bg-transparent border-none rounded cursor-pointer transition-all duration-200 ${viewMode === 'version' ? 'text-white bg-[var(--nim-primary)]' : 'text-[var(--nim-text-muted)] hover:text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]'}`}
+                onClick={() => setViewMode('version')}
+                title="View full content"
+              >
+                Full
+              </button>
+            </div>
+            <button className="history-dialog-close nim-btn-icon" onClick={onClose}>
+              <span className="material-symbols-outlined text-xl">close</span>
+            </button>
+          </div>
         </div>
         
         <div className="history-dialog-content flex-1 flex overflow-hidden">
@@ -489,14 +570,14 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore, theme = 'l
                             <span className={`history-item-time text-[11px] whitespace-nowrap shrink-0 ${isSelected ? 'text-white' : 'text-[var(--nim-text-faint)]'}`}>{relativeTime}</span>
                           </div>
                           {isAIEdit && session && (
-                            <button
-                              className={`history-item-session-link flex items-center gap-1 py-0.5 px-1.5 mt-0.5 border-none rounded text-[11px] cursor-pointer transition-all duration-150 max-w-full overflow-hidden ${isSelected ? 'bg-white/20 text-white hover:bg-white/30' : 'bg-[var(--nim-bg-tertiary)] text-[var(--nim-text-muted)] hover:bg-[var(--nim-accent-light)] hover:text-[var(--nim-primary)]'}`}
+                            <a
+                              className={`history-item-session-link flex items-center gap-1 text-[11px] cursor-pointer transition-colors duration-150 max-w-full overflow-hidden no-underline ${isSelected ? 'text-white/80 hover:text-white' : 'text-[var(--nim-link)] hover:text-[var(--nim-link-hover)]'}`}
                               onClick={handleSessionClick}
                               title="Open AI session in chat"
                             >
-                              <ProviderIcon provider={session.provider} size={12} />
-                              <span className="history-item-session-name whitespace-nowrap overflow-hidden text-ellipsis">{session.title}</span>
-                            </button>
+                              <ProviderIcon provider={session.provider} size={11} />
+                              <span className="history-item-session-name whitespace-nowrap overflow-hidden text-ellipsis hover:underline">{session.title}</span>
+                            </a>
                           )}
                         </div>
                       </div>
@@ -643,18 +724,48 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore, theme = 'l
                 )}
               </div>
             ) : selectedVersions.length === 1 ? (
-              <div className="history-preview-content nim-scrollbar flex-1 overflow-auto [&_pre]:m-0 [&_pre]:font-mono [&_pre]:text-[13px] [&_pre]:leading-relaxed [&_pre]:text-[var(--nim-text)] [&_pre]:whitespace-pre-wrap [&_pre]:break-words">
+              <div className="history-preview-content nim-scrollbar flex-1 overflow-auto [&:has(.monaco-editor)]:overflow-hidden [&:has(.stravu-editor-root)]:overflow-hidden">
                 {fileType === 'image' ? (
                   <div className="image-preview flex items-center justify-center w-full h-full bg-[var(--nim-bg-tertiary)] p-4 [&_img]:max-w-full [&_img]:max-h-full [&_img]:object-contain">
                     <img src={`file://${filePath}`} alt="Preview" />
                   </div>
+                ) : fileType === 'markdown' ? (
+                  <div className="markdown-preview h-full">
+                    <MarkdownEditor
+                      key={selectedVersions[0]?.timestamp}
+                      host={createReadOnlyEditorHost({
+                        filePath: filePath || '',
+                        fileName: getFileName(filePath || ''),
+                        theme: theme || 'light',
+                        content: previewContent,
+                      })}
+                      config={{
+                        theme: theme,
+                      }}
+                    />
+                  </div>
                 ) : (
-                  <pre>{previewContent}</pre>
+                  <MonacoEditor
+                    key={selectedVersions[0]?.timestamp}
+                    host={createReadOnlyEditorHost({
+                      filePath: filePath || '',
+                      fileName: getFileName(filePath || ''),
+                      theme: theme || 'light',
+                      content: previewContent,
+                    })}
+                    fileName={getFileName(filePath || '')}
+                    config={{
+                      theme: theme,
+                      isActive: true,
+                    }}
+                  />
                 )}
               </div>
             ) : (
               <div className="history-preview-empty flex-1 flex items-center justify-center text-[var(--nim-text-muted)] text-sm">
-                Select a snapshot to see diff with previous version, or Cmd+Click two snapshots to compare any versions
+                {viewMode === 'changes'
+                  ? 'Select a snapshot to see diff, or Cmd+Click two to compare'
+                  : 'Select a snapshot to view'}
               </div>
             )}
 
