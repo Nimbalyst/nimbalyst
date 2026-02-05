@@ -469,6 +469,8 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
           workstreamSessionCount={workstreamSessions.length}
           worktreeName={worktreePath ? getWorktreeNameFromPath(worktreePath) : undefined}
         />
+        {/* Spacer to push controls to the right */}
+        <div className="flex-1" />
         {/* Expand/Collapse controls */}
         <div className="files-edited-sidebar__controls flex gap-1 shrink-0">
           <button

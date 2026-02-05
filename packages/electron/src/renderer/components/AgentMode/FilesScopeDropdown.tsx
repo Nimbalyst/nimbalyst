@@ -141,25 +141,25 @@ export const FilesScopeDropdown: React.FC<FilesScopeDropdownProps> = ({
   };
 
   return (
-    <div ref={dropdownRef} className="files-scope-dropdown flex-1 min-w-0">
+    <div ref={dropdownRef} className="files-scope-dropdown min-w-0">
       {/* Dropdown trigger - acts as the title */}
       <button
         ref={triggerRef}
         onClick={handleToggle}
         data-testid="files-scope-dropdown"
-        className={`files-scope-dropdown__trigger flex flex-col items-start gap-0 px-2 py-1 -mx-2 -my-1 border-none rounded cursor-pointer transition-colors ${
+        className={`files-scope-dropdown__trigger flex flex-col items-start gap-0 px-2 py-1 -mx-2 -my-1 border-none rounded cursor-pointer transition-colors max-w-full ${
           isOpen ? 'bg-[var(--nim-bg-tertiary)]' : 'bg-transparent hover:bg-[var(--nim-bg-hover)]'
         }`}
       >
-        <div className="files-scope-dropdown__title-row flex items-center gap-1">
-          <MaterialSymbol icon="description" size={16} className="text-[var(--nim-text-muted)]" />
-          <span className="files-scope-dropdown__title text-sm font-medium text-[var(--nim-text)] truncate">
+        <div className="files-scope-dropdown__title-row flex items-center gap-1 max-w-full">
+          <MaterialSymbol icon="description" size={16} className="text-[var(--nim-text-muted)] shrink-0" />
+          <span className="files-scope-dropdown__title text-sm font-medium text-[var(--nim-text)] truncate min-w-0">
             {currentLabel.title}
           </span>
           <MaterialSymbol
             icon="expand_more"
             size={16}
-            className={`files-scope-dropdown__chevron text-[var(--nim-text-muted)] transition-transform duration-200 ${
+            className={`files-scope-dropdown__chevron text-[var(--nim-text-muted)] transition-transform duration-200 shrink-0 ${
               isOpen ? 'rotate-180' : ''
             }`}
           />
