@@ -595,11 +595,18 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
     const result = effectiveResult;
     if (result.error === 'Cancelled') {
       return (
-        <div className="git-commit-widget rounded-lg bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] overflow-hidden opacity-70">
+        <div
+          data-testid="git-commit-widget"
+          data-state="cancelled"
+          className="git-commit-widget rounded-lg bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] overflow-hidden opacity-70"
+        >
           <div className="git-commit-widget__header flex items-center gap-2 p-2 border-b border-[var(--nim-border)] bg-[var(--nim-bg-secondary)]">
             <MaterialSymbol icon="close" size={16} className="text-[var(--nim-text-muted)]" />
             <span className="text-sm font-semibold text-[var(--nim-text)] flex-1">Commit Proposal</span>
-            <span className="flex items-center gap-1 text-xs font-medium text-[var(--nim-text-muted)] py-1 px-2 bg-[var(--nim-bg-tertiary)] rounded-full">
+            <span
+              data-testid="git-commit-cancelled"
+              className="flex items-center gap-1 text-xs font-medium text-[var(--nim-text-muted)] py-1 px-2 bg-[var(--nim-bg-tertiary)] rounded-full"
+            >
               Cancelled
             </span>
           </div>
@@ -617,7 +624,11 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
     });
 
     return (
-      <div className={`git-commit-widget rounded-lg bg-[var(--nim-bg-secondary)] border overflow-hidden ${result.success ? 'border-[var(--nim-success)]' : 'border-[var(--nim-error)]'}`}>
+      <div
+        data-testid="git-commit-widget"
+        data-state={result.success ? 'committed' : 'error'}
+        className={`git-commit-widget rounded-lg bg-[var(--nim-bg-secondary)] border overflow-hidden ${result.success ? 'border-[var(--nim-success)]' : 'border-[var(--nim-error)]'}`}
+      >
         <div className="git-commit-widget__header flex items-center gap-2 p-2 border-b border-[var(--nim-border)] bg-[var(--nim-bg-secondary)]">
           <MaterialSymbol
             icon={result.success ? 'check_circle' : 'error'}
@@ -628,7 +639,10 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
             {result.success ? 'Changes Committed' : 'Commit Failed'}
           </span>
           {result.success && result.commitHash && (
-            <span className="font-mono text-[0.6875rem] font-semibold text-[var(--nim-success)] bg-[color-mix(in_srgb,var(--nim-success)_12%,transparent)] py-0.5 px-2 rounded-full">
+            <span
+              data-testid="git-commit-committed"
+              className="font-mono text-[0.6875rem] font-semibold text-[var(--nim-success)] bg-[color-mix(in_srgb,var(--nim-success)_12%,transparent)] py-0.5 px-2 rounded-full"
+            >
               {result.commitHash.slice(0, 7)}
             </span>
           )}
@@ -672,7 +686,11 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
 
   // Show interactive UI for pending proposals
   return (
-    <div className="git-commit-widget flex flex-col rounded-lg bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] overflow-hidden">
+    <div
+      data-testid="git-commit-widget"
+      data-state="pending"
+      className="git-commit-widget flex flex-col rounded-lg bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] overflow-hidden"
+    >
       {/* Header matching FileEditsSidebar controls bar */}
       <div className="git-commit-widget__header flex items-center gap-2 p-2 border-b border-[var(--nim-border)] bg-[var(--nim-bg-secondary)]">
         <MaterialSymbol icon="commit" size={16} className="text-[var(--nim-primary)]" />
@@ -702,6 +720,7 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
         <div className="git-commit-widget__message flex flex-col gap-1.5">
           <div className="text-[0.6875rem] font-semibold uppercase tracking-wide text-[var(--nim-text-muted)]">Commit Message</div>
           <textarea
+            data-testid="git-commit-message-input"
             className="w-full p-2 border border-[var(--nim-border)] rounded bg-[var(--nim-bg)] text-[var(--nim-text)] text-[0.8125rem] font-mono resize-y leading-snug focus:outline-none focus:border-[var(--nim-border-focus)] placeholder:text-[var(--nim-text-faint)]"
             value={commitMessage}
             onChange={(e) => setCommitMessage(e.target.value)}
@@ -713,6 +732,7 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
         {/* Actions */}
         <div className="git-commit-widget__actions flex gap-2 justify-end pt-2 border-t border-[var(--nim-border)]">
           <button
+            data-testid="git-commit-cancel"
             className="git-commit-widget__cancel-btn flex items-center gap-1.5 py-1.5 px-3 text-[0.8125rem] font-medium border border-[var(--nim-border)] rounded bg-[var(--nim-bg)] text-[var(--nim-text)] cursor-pointer transition-all hover:bg-[var(--nim-bg-hover)] disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={handleCancel}
             disabled={isCommitting}
@@ -720,6 +740,7 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
             Cancel
           </button>
           <button
+            data-testid="git-commit-confirm"
             className="git-commit-widget__confirm-btn flex items-center gap-1.5 py-1.5 px-3 text-[0.8125rem] font-medium border-none rounded bg-[var(--nim-primary)] text-white cursor-pointer transition-all hover:bg-[var(--nim-primary-hover)] disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={handleConfirm}
             disabled={isCommitting || filesToStage.size === 0 || !commitMessage.trim()}

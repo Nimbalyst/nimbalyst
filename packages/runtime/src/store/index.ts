@@ -54,17 +54,13 @@ export {
   type TabMetadata,
 } from './atoms/editors';
 
-// Pending question atoms
-export {
-  sessionPendingQuestionIdAtom,
-  sessionHasPendingQuestionAtom,
-  registerPendingQuestion,
-  clearPendingQuestionForSession,
-  isQuestionPending,
-  sessionHasPendingQuestion,
-  cleanupSessionPendingQuestion,
-  type PendingQuestionData,
-} from './atoms/pendingQuestions';
-
 // Git commit proposal types (widget uses tool call data directly, no atoms needed)
 export { type GitCommitProposalData } from './atoms/gitCommitProposals';
+
+// Interactive widget host atoms
+export {
+  interactiveWidgetHostAtom,
+  setInteractiveWidgetHost,
+  getInteractiveWidgetHost,
+  cleanupInteractiveWidgetHost,
+} from './atoms/interactiveWidgetHost';

@@ -182,10 +182,5 @@ export function clearSessionError(sessionId: string): void {
   store.set(sessionErrorAtom(sessionId), null);
 }
 
-/**
- * @deprecated No longer needed - ExitPlanMode is now DB-backed.
- * Responses are persisted via respondToPromptAtom and cleared automatically.
- */
-export function clearSessionExitPlanModeConfirm(sessionId: string): void {
-  // No-op: DB handles state through refreshPendingPromptsAtom
-}
+// Note: ExitPlanMode uses inline widget rendering from tool call data
+// No clearSessionExitPlanModeConfirm needed - widget state is derived from toolCall.result

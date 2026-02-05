@@ -14,7 +14,6 @@
 
 import { atom } from 'jotai';
 import { atomFamily } from 'jotai/utils';
-import type { ExitPlanModeConfirmationData } from '../../components/UnifiedAI/ExitPlanModeConfirmation';
 
 /**
  * Per-session error state.
@@ -24,13 +23,8 @@ export const sessionErrorAtom = atomFamily((_sessionId: string) =>
   atom<{ message: string; isBedrockToolError?: boolean; isServerError?: boolean } | null>(null)
 );
 
-/**
- * @deprecated Use sessionPendingExitPlanModeAtom from sessions.ts instead.
- * This atom is no longer used - ExitPlanMode is now DB-backed.
- */
-export const sessionExitPlanModeConfirmAtom = atomFamily((_sessionId: string) =>
-  atom<any | null>(null)
-);
+// Note: ExitPlanMode uses inline widget rendering from tool call data via ExitPlanModeWidget
+// No atoms needed - see packages/runtime/src/ui/AgentTranscript/components/CustomToolWidgets/ExitPlanModeWidget.tsx
 
 /**
  * Per-session queued prompts.

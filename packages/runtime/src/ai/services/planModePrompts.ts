@@ -28,7 +28,7 @@ You MUST:
 - Explore the codebase using Read, Glob, Grep tools
 - Ask questions using AskUserQuestion to clarify requirements
 - Write and iteratively update a plan file in the plans/ directory
-- Call ExitPlanMode with planFilePath parameter when ready for approval (e.g., ExitPlanMode with planFilePath: "plans/my-feature.md")
+- Call ExitPlanMode when ready for approval (optionally include planFilePath: "plans/my-feature.md" if you created a plan file)
 
 ## Plan File
 

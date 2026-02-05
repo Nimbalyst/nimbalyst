@@ -123,7 +123,9 @@ All events include `$session_id` property automatically. Dev users are marked wi
 | `ai_diff_accepted` | `DiffApprovalBar.tsx:315, 436`<br/>`TabEditor.tsx:1382` | User accepts diff or all diffs (markdown/code/mockup) | `acceptType` (partial/all)<br/>`replacementCount`<br/>`fileType` (mockup, optional) | v0.45.25 (2025-11-14) |  |
 | `ai_diff_rejected` | `DiffApprovalBar.tsx:380, 450`<br/>`TabEditor.tsx:1442` | User rejects diff or all diffs (markdown/code/mockup) | `rejectType` (partial/all)<br/>`replacementCount`<br/>`fileType` (mockup, optional) | v0.45.25 (2025-11-14) |  |
 | `session_reparented` | `SessionListItem.tsx:290` | User drags session to change parent (workstream reassignment) | `had_previous_parent`<br/>`workspace_path` | (pending release) |  |
-| `exit_plan_mode_response` | `SessionTranscript.tsx:838, 862, 891` | User responds to plan completion confirmation | `decision` (approved/denied/start_new_session)<br/>`has_feedback` (boolean, for denied only) | (pending release) |  |
+| `exit_plan_mode_response` | `SessionTranscript.tsx:923, 943, 974, 1060` | User responds to plan completion confirmation | `decision` (approved/denied/start_new_session/cancelled)<br/>`has_feedback` (boolean, for denied only)<br/>`is_worktree` (boolean, for start_new_session only) | (pending release) |  |
+| `ask_user_question_answered` | `SessionTranscript.tsx:1081` | User answers an AskUserQuestion prompt from Claude | `numQuestions` (number of questions answered) | (pending release) |  |
+| `ask_user_question_cancelled` | `SessionTranscript.tsx:1087` | User cancels an AskUserQuestion prompt | None | (pending release) |  |
 | `git_commit_proposal_response` | `GitCommitConfirmationWidget.tsx:600, 672` | User responds to AI-generated git commit proposal | `action` (committed/cancelled/error)<br/>`file_count` (1-5/6-10/11-20/20+)<br/>`success` (boolean, for committed only) | (pending release) |  |
 
 ### Claude Code (MCP)
@@ -252,7 +254,7 @@ The `known_error` event uses an `errorId` property to identify specific error co
 | --- | --- | --- | --- | --- | --- |
 | `agent_permissions_opened` | `ProjectPermissionsPanel.tsx:75` | User opens the agent permissions settings panel | `isTrusted`<br/>`permissionMode`<br/>`allowedPatternsCount`<br/>`additionalDirectoriesCount` | (pending release as of d00c15df) |  |
 | `permission_setting_changed` | `ProjectPermissionsPanel.tsx` | User changes any permission setting | `action` (trust_workspace/revoke_trust/change_mode/remove_pattern/reset_to_defaults/add_directory/remove_directory/add_url_pattern/remove_url_pattern/allow_all_domains/revoke_all_domains)<br/>`mode` (only for change_mode action) | (pending release as of d00c15df) |  |
-| `tool_permission_responded` | `AISessionView.tsx:536` | User responds to tool permission dialog | `decision` (allow/deny)<br/>`scope` (once/session/always/always-all)<br/>`toolCategory` (bash/webfetch/mcp/file/other) | (pending release as of d00c15df) |  |
+| `tool_permission_responded` | `SessionTranscript.tsx:1112` | User responds to tool permission request via widget | `decision` (allow/deny)<br/>`scope` (once/session/always/always-all) | (pending release as of d00c15df) | (pending release): Migrated to widget-based tracking in SessionTranscript; removed toolCategory property |
 | `trust_dialog_saved` | `ProjectTrustToast.tsx:151` | User saves trust choice in dialog | `permissionMode` (ask/allow-all/bypass-all)<br/>`isChangingMode` | (pending release as of d00c15df) |  |
 
 ### Auto-Update
@@ -304,15 +306,15 @@ Events from the iOS companion app. These events share the same PostHog project a
 
 ## Event Summary Statistics
 
-- **Total Events**: 93 unique event names
+- **Total Events**: 95 unique event names
 - **Main Process Events**: 51 (via AnalyticsService)
-- **Renderer Process Events**: 35 (via usePostHog hook)
+- **Renderer Process Events**: 37 (via usePostHog hook)
 - **Mobile Events**: 7 (via Capacitor AnalyticsService)
 - **File Operations**: 7 events
 - **Workspace Operations**: 4 events
 - **Navigation & Editor Mode**: 3 events
 - **File History**: 2 events
-- **AI-Related**: 21 events
+- **AI-Related**: 23 events
 - **MCP Configuration**: 3 events
 - **Terminal**: 1 event
 - **Extensions**: 1 event

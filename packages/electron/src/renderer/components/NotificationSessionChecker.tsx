@@ -13,7 +13,7 @@ export function NotificationSessionChecker(): null {
   const activeSessionId = useAtomValue(activeSessionIdAtom);
 
   useEffect(() => {
-    if (!window.electronAPI?.on || !window.electronAPI?.invoke) {
+    if (!window.electronAPI?.on || !window.electronAPI?.send) {
       return;
     }
 
@@ -21,8 +21,8 @@ export function NotificationSessionChecker(): null {
       const { requestId, sessionId } = data;
       const isViewing = activeSessionId === sessionId;
 
-      // Respond to the main process
-      window.electronAPI.invoke(`notifications:session-check-response:${requestId}`, isViewing);
+      // Respond to the main process (use 'send' not 'invoke' since main uses 'once' listener)
+      window.electronAPI.send(`notifications:session-check-response:${requestId}`, isViewing);
     };
 
     const cleanup = window.electronAPI.on('notifications:check-active-session', handleCheckActiveSession);

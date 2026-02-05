@@ -759,6 +759,112 @@ export async function registerSessionHandlers() {
         }
     });
 
+    // ============================================================
+    // Test-only handlers for E2E testing without AI agent
+    // These allow inserting mock sessions and messages for testing
+    // interactive prompt widgets in isolation.
+    // SECURITY: Only registered in development/test environments.
+    // ============================================================
+
+    const isTestEnv = process.env.NODE_ENV === 'development' ||
+                      process.env.NODE_ENV === 'test' ||
+                      process.env.PLAYWRIGHT_TEST === 'true';
+
+    if (!isTestEnv) {
+        console.log('[SessionHandlers] Skipping test handlers in production');
+    }
+
+    /**
+     * Test-only: Create a test session directly in the database.
+     * Used for E2E testing interactive prompts without invoking the AI agent.
+     */
+    if (isTestEnv) safeHandle('test:insert-session', async (event, payload: {
+        id: string;
+        workspaceId: string;
+        provider?: string;
+        model?: string;
+        title?: string;
+    }) => {
+        try {
+            const { database } = await import('../database/PGLiteDatabaseWorker');
+            const { id, workspaceId, provider = 'claude-code', model = 'opus', title = 'Test Session' } = payload;
+
+            await database.query(
+                `INSERT INTO ai_sessions (id, workspace_id, provider, model, title, session_type, created_at, updated_at)
+                 VALUES ($1, $2, $3, $4, $5, 'chat', NOW(), NOW())`,
+                [id, workspaceId, provider, model, title]
+            );
+
+            // Notify renderer to refresh session list
+            event.sender.send('sessions:refresh-list', {
+                workspacePath: workspaceId,
+                sessionId: id
+            });
+
+            return { success: true, id };
+        } catch (error) {
+            console.error('[SessionHandlers] test:insert-session error:', error);
+            return { success: false, error: String(error) };
+        }
+    });
+
+    /**
+     * Test-only: Insert a message directly into ai_agent_messages.
+     * Used for E2E testing interactive prompts without invoking the AI agent.
+     */
+    if (isTestEnv) safeHandle('test:insert-message', async (event, payload: {
+        sessionId: string;
+        direction: 'input' | 'output';
+        content: string;
+        source?: string;
+        metadata?: any;
+    }) => {
+        try {
+            const { database } = await import('../database/PGLiteDatabaseWorker');
+            const { sessionId, direction, content, source = 'nimbalyst', metadata } = payload;
+
+            const { rows } = await database.query<{ id: string }>(
+                `INSERT INTO ai_agent_messages (session_id, source, direction, content, metadata, created_at, hidden)
+                 VALUES ($1, $2, $3, $4, $5, NOW(), false)
+                 RETURNING id`,
+                [sessionId, source, direction, content, metadata ? JSON.stringify(metadata) : null]
+            );
+            return { success: true, id: rows[0].id };
+        } catch (error) {
+            console.error('[SessionHandlers] test:insert-message error:', error);
+            return { success: false, error: String(error) };
+        }
+    });
+
+    /**
+     * Test-only: Clean up test sessions for a workspace.
+     * Removes sessions with titles starting with 'Test Session'.
+     */
+    if (isTestEnv) safeHandle('test:clear-test-sessions', async (event, workspaceId: string) => {
+        try {
+            const { database } = await import('../database/PGLiteDatabaseWorker');
+
+            // Delete messages first (foreign key constraint)
+            await database.query(
+                `DELETE FROM ai_agent_messages WHERE session_id IN (
+                   SELECT id FROM ai_sessions WHERE workspace_id = $1 AND title LIKE 'Test Session%'
+                 )`,
+                [workspaceId]
+            );
+
+            // Then delete sessions
+            await database.query(
+                `DELETE FROM ai_sessions WHERE workspace_id = $1 AND title LIKE 'Test Session%'`,
+                [workspaceId]
+            );
+
+            return { success: true };
+        } catch (error) {
+            console.error('[SessionHandlers] test:clear-test-sessions error:', error);
+            return { success: false, error: String(error) };
+        }
+    });
+
     // Get FTS index status - check if index exists AND if backfill has been done
     safeHandle('sessions:get-fts-index-status', async (event, workspaceId: string) => {
         try {

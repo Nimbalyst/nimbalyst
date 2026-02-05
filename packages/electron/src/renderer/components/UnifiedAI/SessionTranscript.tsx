@@ -16,9 +16,8 @@
 
 import React, { useCallback, useRef, useImperativeHandle, forwardRef, useEffect, useState } from 'react';
 import { useAtom, useSetAtom, useAtomValue } from 'jotai';
-import { store } from '@nimbalyst/runtime/store';
-import { AgentTranscriptPanel, TodoItem, storeAskUserQuestionAnswers } from '@nimbalyst/runtime';
-import { registerPendingQuestion, clearPendingQuestionForSession } from '@nimbalyst/runtime/store';
+import { store, setInteractiveWidgetHost } from '@nimbalyst/runtime/store';
+import { AgentTranscriptPanel, TodoItem, type InteractiveWidgetHost, type PermissionScope } from '@nimbalyst/runtime';
 import type { SessionData, ChatAttachment } from '@nimbalyst/runtime/ai/server/types';
 import { AIInput, AIInputRef } from './AIInput';
 import { PromptQueueList } from './PromptQueueList';
@@ -27,9 +26,7 @@ import { FileGutter } from '../AIChat/FileGutter';
 import { recordClaudeActivity } from '../../store/listeners/claudeUsageListeners';
 import { PendingReviewBanner } from '../AIChat/PendingReviewBanner';
 import type { AIMode } from './ModeTag';
-import { ExitPlanModeConfirmation } from './ExitPlanModeConfirmation';
-import { AskUserQuestionConfirmation, AskUserQuestionData } from './AskUserQuestionConfirmation';
-import { ToolPermissionConfirmation, ToolPermissionData } from './ToolPermissionConfirmation';
+// Note: ExitPlanMode, AskUserQuestion, and ToolPermission use inline widgets via InteractiveWidgetHost (in runtime package)
 import { SlashCommandSuggestions } from './SlashCommandSuggestions';
 import type { TextSelection } from './TextSelectionIndicator';
 import type { SerializableDocumentContext } from '../../hooks/useDocumentContext';
@@ -55,11 +52,9 @@ import {
   createChildSessionAtom,
   sessionChildrenAtom,
   sessionParentIdAtom,
-  sessionPendingQuestionAtom,
   // DB-derived atoms for durable prompts
   sessionPendingPromptsAtom,
-  sessionPendingPermissionsAtom,
-  sessionPendingExitPlanModeAtom,
+  // Note: ExitPlanMode, AskUserQuestion, and ToolPermission use inline widgets, no atom needed
   refreshPendingPromptsAtom,
   respondToPromptAtom,
   // Centralized transcript state atoms
@@ -68,7 +63,7 @@ import {
   clearSessionError,
   loadInitialQueuedPrompts,
 } from '../../store';
-import { convertToWorkstreamAtom, sessionPromptAdditionsAtom, type ExitPlanModeConfirmationData } from '../../store/atoms/sessions';
+import { convertToWorkstreamAtom, sessionPromptAdditionsAtom } from '../../store/atoms/sessions';
 import { usePostHog } from 'posthog-js/react';
 import { setAgentModeSettingsAtom, showPromptAdditionsAtom, hasExternalEditorAtom, externalEditorNameAtom, openInExternalEditorAtom, defaultAgentModelAtom } from '../../store/atoms/appSettings';
 import { buildPlanModeInstructions, PLAN_MODE_DEACTIVATION } from '@nimbalyst/runtime/ai/services/planModePrompts';
@@ -305,40 +300,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   const refreshPendingPrompts = useSetAtom(refreshPendingPromptsAtom);
   const respondToPrompt = useSetAtom(respondToPromptAtom);
 
-  // Derived pending prompts for compatibility with existing UI components
-  const pendingAskUserQuestionRaw = useAtomValue(sessionPendingQuestionAtom(sessionId));
-  const pendingToolPermissionsRaw = useAtomValue(sessionPendingPermissionsAtom(sessionId));
-
-  // Only show prompts that are at the end of the conversation
-  // If the conversation has moved past the prompt, don't show the UI
-  const lastMessageTimestamp = React.useMemo(() => {
-    if (messages.length === 0) return 0;
-    const lastMsg = messages[messages.length - 1];
-    return lastMsg.timestamp || 0;
-  }, [messages]);
-
-  const pendingAskUserQuestion = React.useMemo(() => {
-    if (!pendingAskUserQuestionRaw) return null;
-    // Show only if the question was asked after the last message
-    // (or within a reasonable tolerance for timing differences)
-    const questionTimestamp = pendingAskUserQuestionRaw.timestamp || 0;
-    if (questionTimestamp >= lastMessageTimestamp - 1000) {
-      return pendingAskUserQuestionRaw;
-    }
-    return null;
-  }, [pendingAskUserQuestionRaw, lastMessageTimestamp]);
-
-  const pendingToolPermissions = React.useMemo(() => {
-    // Filter to only show permissions that are at the end of conversation
-    return pendingToolPermissionsRaw.filter(permission => {
-      const permissionTimestamp = permission.timestamp || 0;
-      return permissionTimestamp >= lastMessageTimestamp - 1000;
-    });
-  }, [pendingToolPermissionsRaw, lastMessageTimestamp]);
-
-  // ExitPlanMode confirmation - DB-derived, updated by refreshPendingPromptsAtom
-  const pendingExitPlanConfirmation = useAtomValue(sessionPendingExitPlanModeAtom(sessionId));
-
+  // Note: ExitPlanMode, AskUserQuestion, and ToolPermission use inline widgets via InteractiveWidgetHost
   // Note: GitCommitProposal widget renders directly from tool call data
   // No atom sync needed - widget uses toolCall.id as proposalId
 
@@ -485,15 +447,8 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   // All prompts are DB-backed and derived from sessionPendingPromptsAtom
   // ============================================================
 
-  // Register pending question in global store when it exists (for widget rendering)
-  // The central listener (sessionStateListeners.ts) handles IPC events and refreshes atoms
-  useEffect(() => {
-    if (pendingAskUserQuestion) {
-      registerPendingQuestion(pendingAskUserQuestion.questionId, sessionId);
-    }
-  }, [pendingAskUserQuestion, sessionId]);
-
   // Refresh pending prompts when session loads
+  // Note: AskUserQuestion now uses inline widget, no need to register in global store
   useEffect(() => {
     if (sessionId) {
       refreshPendingPrompts(sessionId);
@@ -1112,119 +1067,119 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     }
   }, [respondToPrompt, posthog]);
 
-  const handleAskUserQuestionSubmit = useCallback(async (questionId: string, confirmSessionId: string, answers: Record<string, string>) => {
-    storeAskUserQuestionAnswers(answers);
-    // Clear from global Jotai store so widget can render as completed
-    clearPendingQuestionForSession(confirmSessionId);
+  // Note: AskUserQuestion, ToolPermission handlers removed - now handled by inline widgets via InteractiveWidgetHost
 
-    // Try to answer via SDK first
-    const result = await window.electronAPI.invoke('claude-code:answer-question', { questionId, answers }) as { success: boolean; error?: string };
+  // Set the interactive widget host in the atom - widgets read from here
+  // This provides methods for widgets to call that have access to atoms, callbacks, and analytics
+  useEffect(() => {
+    const host: InteractiveWidgetHost = {
+      sessionId,
+      workspacePath: workspacePath || '',
+      worktreeId,
 
-    // Refresh pending prompts from DB (clears the answered question)
-    refreshPendingPrompts(confirmSessionId);
+      // AskUserQuestion operations
+      askUserQuestionSubmit: async (questionId: string, answers: Record<string, string>) => {
+        await window.electronAPI.invoke('claude-code:answer-question', { questionId, answers, sessionId });
+        posthog?.capture('ask_user_question_answered', {
+          numQuestions: Object.keys(answers).length,
+        });
+      },
+      askUserQuestionCancel: async (questionId: string) => {
+        await window.electronAPI.invoke('claude-code:cancel-question', { questionId, sessionId });
+        posthog?.capture('ask_user_question_cancelled');
+      },
 
-    if (!result.success) {
-      // SDK doesn't have this question anymore (session was interrupted)
-      // Fall back to sending answers as a plain text message to continue the conversation
-      console.log('[SessionTranscript] SDK question not found, sending answers as message:', result.error);
-      const answersText = Object.entries(answers)
-        .map(([q, a]) => `${q}: ${a}`)
-        .join('\n');
-      // Send as a simple user message - the AI will understand this is in response to its questions
-      const fallbackMessage = `Here are my answers to your questions:\n\n${answersText}`;
+      // ExitPlanMode operations
+      exitPlanModeApprove: async (requestId: string) => {
+        await handleExitPlanModeApprove(requestId, sessionId);
+      },
+      exitPlanModeStartNewSession: async (requestId: string, planFilePath: string) => {
+        await handleExitPlanModeStartNewSession(requestId, sessionId, planFilePath);
+      },
+      exitPlanModeDeny: async (requestId: string, feedback?: string) => {
+        await handleExitPlanModeDeny(requestId, sessionId, feedback);
+      },
+      exitPlanModeCancel: async (requestId: string) => {
+        await handleExitPlanModeCancel(requestId, sessionId);
+      },
 
-      try {
-        await window.electronAPI.invoke('ai:sendMessage', fallbackMessage, { mode: aiMode }, confirmSessionId, workspacePath);
-      } catch (sendError) {
-        console.error('[SessionTranscript] Failed to send fallback message:', sendError);
-      }
-    }
-  }, [aiMode, workspacePath, refreshPendingPrompts]);
+      // Tool permission operations
+      toolPermissionSubmit: async (requestId: string, response: { decision: 'allow' | 'deny'; scope: 'once' | 'session' | 'always' | 'always-all' }) => {
+        await window.electronAPI.invoke('claude-code:answer-tool-permission', {
+          requestId,
+          sessionId,
+          response,
+        });
 
-  const handleAskUserQuestionCancel = useCallback(async (questionId: string, confirmSessionId: string) => {
-    // Clear from global Jotai store
-    clearPendingQuestionForSession(confirmSessionId);
+        posthog?.capture('tool_permission_responded', {
+          decision: response.decision,
+          scope: response.scope,
+        });
 
-    // Try SDK cancel (might fail for old/inactive sessions - that's OK)
-    try {
-      await window.electronAPI.invoke('claude-code:cancel-question', { questionId });
-    } catch (error) {
-      // Debug logging - uncomment if needed
-      // console.log('[SessionTranscript] SDK cancel failed (session may be inactive):', error);
-    }
+        // Refresh pending prompts from DB
+        refreshPendingPrompts(sessionId);
+      },
+      toolPermissionCancel: async (requestId: string) => {
+        // Try SDK cancel (might fail for old/inactive sessions - that's OK)
+        try {
+          await window.electronAPI.invoke('claude-code:cancel-tool-permission', {
+            requestId,
+            sessionId,
+          });
+        } catch (error) {
+          // Debug logging - uncomment if needed
+          // console.log('[SessionTranscript] SDK cancel failed (session may be inactive):', error);
+        }
 
-    // Always mark as cancelled in DB so it doesn't reappear
-    // This creates a response message which the pending query will see
-    await respondToPrompt({
-      sessionId: confirmSessionId,
-      promptId: questionId,
-      promptType: 'ask_user_question_request',
-      response: { cancelled: true },
-    });
+        // Always mark as cancelled in DB so it doesn't reappear
+        await respondToPrompt({
+          sessionId,
+          promptId: requestId,
+          promptType: 'permission_request',
+          response: { decision: 'deny', scope: 'once', cancelled: true },
+        });
 
-    // Refresh pending prompts from DB
-    refreshPendingPrompts(confirmSessionId);
-  }, [refreshPendingPrompts, respondToPrompt]);
+        // Refresh pending prompts from DB
+        refreshPendingPrompts(sessionId);
+      },
 
-  const getToolCategory = useCallback((pattern: string): string => {
-    if (pattern.startsWith('Bash')) return 'bash';
-    if (pattern.startsWith('WebFetch')) return 'webfetch';
-    if (pattern.startsWith('mcp__')) return 'mcp';
-    if (['Edit', 'Write', 'Read', 'Glob', 'Grep'].includes(pattern)) return 'file';
-    return 'other';
-  }, []);
+      // Git commit operations (placeholder - can be wired up later)
+      gitCommit: async (_proposalId: string, _files: string[], _message: string) => {
+        // GitCommitConfirmationWidget currently handles this directly via IPC
+        // This is here for future consolidation
+        return { success: false, error: 'Not implemented via host' };
+      },
+      gitCommitCancel: async (_proposalId: string) => {
+        // GitCommitConfirmationWidget currently handles this directly via IPC
+      },
 
-  const handleToolPermissionSubmit = useCallback(async (
-    requestId: string,
-    confirmSessionId: string,
-    response: { decision: 'allow' | 'deny'; scope: 'once' | 'session' | 'always' | 'always-all' }
-  ) => {
-    const requestData = pendingToolPermissions.find(p => p.requestId === requestId);
-    const firstPattern = requestData?.request.actionsNeedingApproval[0]?.action.pattern;
+      // Common operations
+      openFile: async (filePath: string) => {
+        await window.electronAPI.invoke('workspace:openFile', filePath);
+      },
+      trackEvent: (eventName: string, properties?: Record<string, unknown>) => {
+        posthog?.capture(eventName, properties);
+      },
+    };
 
-    try {
-      await window.electronAPI.invoke('claude-code:answer-tool-permission', {
-        requestId,
-        sessionId: confirmSessionId,
-        response
-      });
+    setInteractiveWidgetHost(sessionId, host);
 
-      posthog?.capture('tool_permission_responded', {
-        decision: response.decision,
-        scope: response.scope,
-        toolCategory: firstPattern ? getToolCategory(firstPattern) : 'unknown',
-      });
-
-      // Refresh pending prompts from DB (clears the answered permission)
-      refreshPendingPrompts(confirmSessionId);
-    } catch (error) {
-      console.error('[SessionTranscript] Failed to submit tool permission response:', error);
-    }
-  }, [pendingToolPermissions, posthog, getToolCategory, refreshPendingPrompts]);
-
-  const handleToolPermissionCancel = useCallback(async (requestId: string, confirmSessionId: string) => {
-    // Try SDK cancel (might fail for old/inactive sessions - that's OK)
-    try {
-      await window.electronAPI.invoke('claude-code:cancel-tool-permission', {
-        requestId,
-        sessionId: confirmSessionId
-      });
-    } catch (error) {
-      // Debug logging - uncomment if needed
-      // console.log('[SessionTranscript] SDK cancel failed (session may be inactive):', error);
-    }
-
-    // Always mark as cancelled in DB so it doesn't reappear
-    await respondToPrompt({
-      sessionId: confirmSessionId,
-      promptId: requestId,
-      promptType: 'permission_request',
-      response: { decision: 'deny', scope: 'once', cancelled: true },
-    });
-
-    // Refresh pending prompts from DB
-    refreshPendingPrompts(confirmSessionId);
-  }, [refreshPendingPrompts, respondToPrompt]);
+    // Cleanup on unmount or sessionId change
+    return () => {
+      setInteractiveWidgetHost(sessionId, null);
+    };
+  }, [
+    sessionId,
+    workspacePath,
+    worktreeId,
+    handleExitPlanModeApprove,
+    handleExitPlanModeStartNewSession,
+    handleExitPlanModeDeny,
+    handleExitPlanModeCancel,
+    refreshPendingPrompts,
+    respondToPrompt,
+    posthog
+  ]);
 
   // Feature flags
   const enableSlashCommands = sessionData?.provider === 'claude-code';
@@ -1338,37 +1293,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
         onEdit={handleEditQueuedPrompt}
       />
 
-      {/* Confirmation dialogs */}
-      {pendingExitPlanConfirmation && (
-        <ExitPlanModeConfirmation
-          data={pendingExitPlanConfirmation}
-          workspacePath={workspacePath}
-          worktreeId={worktreeId}
-          onFileClick={handleFileClick}
-          onApprove={handleExitPlanModeApprove}
-          onStartNewSession={handleExitPlanModeStartNewSession}
-          onDeny={handleExitPlanModeDeny}
-          onCancel={handleExitPlanModeCancel}
-        />
-      )}
-
-      {pendingAskUserQuestion && (
-        <AskUserQuestionConfirmation
-          key={pendingAskUserQuestion.questionId}
-          data={pendingAskUserQuestion}
-          onSubmit={handleAskUserQuestionSubmit}
-          onCancel={handleAskUserQuestionCancel}
-        />
-      )}
-
-      {pendingToolPermissions.map(permission => (
-        <ToolPermissionConfirmation
-          key={permission.requestId}
-          data={permission}
-          onSubmit={handleToolPermissionSubmit}
-          onCancel={handleToolPermissionCancel}
-        />
-      ))}
+      {/* Note: All interactive prompts (ToolPermission, ExitPlanMode, AskUserQuestion) use inline widgets in transcript */}
 
       {/* Input area */}
       <AIInput

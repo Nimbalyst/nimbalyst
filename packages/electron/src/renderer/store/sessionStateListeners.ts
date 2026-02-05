@@ -31,11 +31,9 @@ import {
   selectedWorkstreamAtom,
   setSelectedWorkstreamAtom,
   sessionUnreadAtom,
-  sessionWaitingForQuestionAtom,
-  sessionWaitingForPlanApprovalAtom,
+  sessionHasPendingInteractivePromptAtom,
   sessionRegistryAtom,
   sessionStoreAtom,
-  refreshPendingPromptsAtom,
 } from './atoms/sessions';
 import { workstreamActiveChildAtom, workstreamStateAtom } from './atoms/workstreamState';
 import { triggerWorktreeRefreshAtom } from './atoms/gitOperations';
@@ -76,9 +74,8 @@ export function initSessionStateListeners(): () => void {
       case 'session:error':
       case 'session:interrupted':
         store.set(sessionProcessingAtom(sessionId), false);
-        // Also clear waiting states - if session ended, no longer waiting
-        store.set(sessionWaitingForQuestionAtom(sessionId), false);
-        store.set(sessionWaitingForPlanApprovalAtom(sessionId), false);
+        // Also clear pending interactive prompt state - if session ended, no longer waiting
+        store.set(sessionHasPendingInteractivePromptAtom(sessionId), false);
 
         // If this session is in a worktree, trigger a git panel refresh
         // This ensures the GitOperationsPanel shows updated status after agent work
@@ -199,48 +196,42 @@ export function initSessionStateListeners(): () => void {
 
   /**
    * Handle AskUserQuestion events globally.
-   * Refreshes pending prompts from DB to update all relevant atoms.
-   * The DB is the source of truth - IPC is just a notification to refresh.
+   * Sets the pending interactive prompt indicator for the sidebar.
    */
   const handleAskUserQuestion = (data: { sessionId: string; questionId: string }) => {
     const { sessionId } = data;
     if (!sessionId) return;
-    // Refresh pending prompts from DB - this updates all derived atoms
-    store.set(refreshPendingPromptsAtom, sessionId);
+    store.set(sessionHasPendingInteractivePromptAtom(sessionId), true);
   };
 
   /**
    * Handle AskUserQuestion answered/cancelled events globally.
-   * Refreshes pending prompts from DB to remove the answered question.
+   * Clears the pending interactive prompt indicator.
    */
   const handleAskUserQuestionResolved = (data: { sessionId: string }) => {
     const { sessionId } = data;
     if (!sessionId) return;
-    // Refresh pending prompts from DB
-    store.set(refreshPendingPromptsAtom, sessionId);
+    store.set(sessionHasPendingInteractivePromptAtom(sessionId), false);
   };
 
   /**
-   * Handle ExitPlanMode confirmation events globally.
-   * Refreshes pending prompts from DB to update all relevant atoms.
+   * Handle ExitPlanMode confirm events globally.
+   * Sets pending interactive prompt indicator for the sidebar.
    */
   const handleExitPlanModeConfirm = (data: { sessionId: string; requestId: string }) => {
     const { sessionId } = data;
     if (!sessionId) return;
-    // Refresh pending prompts from DB
-    store.set(refreshPendingPromptsAtom, sessionId);
+    store.set(sessionHasPendingInteractivePromptAtom(sessionId), true);
   };
 
   /**
    * Handle ExitPlanMode response events globally.
-   * Refreshes pending prompts from DB to remove the approved/denied plan.
-   * Also updates the session mode to 'agent' if the plan was approved.
+   * Clears pending indicator and updates session mode if approved.
    */
   const handleExitPlanModeResolved = (data: { sessionId: string; approved?: boolean }) => {
     const { sessionId, approved } = data;
     if (!sessionId) return;
-    // Refresh pending prompts from DB
-    store.set(refreshPendingPromptsAtom, sessionId);
+    store.set(sessionHasPendingInteractivePromptAtom(sessionId), false);
 
     // If approved, update the session mode atom to 'agent' to sync with database
     if (approved) {
@@ -253,32 +244,32 @@ export function initSessionStateListeners(): () => void {
 
   /**
    * Handle ToolPermission events globally.
-   * Refreshes pending prompts from DB.
+   * Sets pending interactive prompt indicator for the sidebar.
    */
   const handleToolPermission = (data: { sessionId: string; requestId: string }) => {
     const { sessionId } = data;
     if (!sessionId) return;
-    store.set(refreshPendingPromptsAtom, sessionId);
+    store.set(sessionHasPendingInteractivePromptAtom(sessionId), true);
   };
 
   /**
    * Handle ToolPermission resolved events globally.
-   * Refreshes pending prompts from DB.
+   * Clears pending interactive prompt indicator.
    */
   const handleToolPermissionResolved = (data: { sessionId: string; requestId: string }) => {
     const { sessionId } = data;
     if (!sessionId) return;
-    store.set(refreshPendingPromptsAtom, sessionId);
+    store.set(sessionHasPendingInteractivePromptAtom(sessionId), false);
   };
 
   /**
    * Handle GitCommitProposal events globally.
-   * Refreshes pending prompts from DB to update all relevant atoms.
+   * Sets pending interactive prompt indicator for the sidebar.
    */
   const handleGitCommitProposal = (data: { sessionId: string; proposalId: string }) => {
     const { sessionId } = data;
     if (!sessionId) return;
-    store.set(refreshPendingPromptsAtom, sessionId);
+    store.set(sessionHasPendingInteractivePromptAtom(sessionId), true);
   };
 
   /**

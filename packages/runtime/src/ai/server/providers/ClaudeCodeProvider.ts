@@ -1057,8 +1057,9 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                   }
 
                   // SDK-native tools that are executed by the Claude Code SDK itself
+                  // AskUserQuestion is included because we handle it in canUseTool (user input, not local execution)
                   const sdkNativeTools = ['Read', 'Write', 'Edit', 'MultiEdit', 'Glob', 'Grep', 'LS', 'Bash',
-                                          'WebFetch', 'WebSearch', 'Task', 'ExitPlanMode',
+                                          'WebFetch', 'WebSearch', 'Task', 'ExitPlanMode', 'AskUserQuestion',
                                           'NotebookRead', 'NotebookEdit', 'TodoRead', 'TodoWrite'];
                   const isSdkNativeTool = sdkNativeTools.includes(toolName);
 
@@ -1232,8 +1233,9 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             const isMcpTool = toolName.startsWith('mcp__');
 
             // SDK-native tools that are executed by the Claude Code SDK itself
+            // AskUserQuestion is included because we handle it in canUseTool (user input, not local execution)
             const sdkNativeTools = ['Read', 'Write', 'Edit', 'MultiEdit', 'Glob', 'Grep', 'LS', 'Bash',
-                                    'WebFetch', 'WebSearch', 'Task', 'ExitPlanMode',
+                                    'WebFetch', 'WebSearch', 'Task', 'ExitPlanMode', 'AskUserQuestion',
                                     'NotebookRead', 'NotebookEdit', 'TodoRead', 'TodoWrite'];
             const isSdkNativeTool = sdkNativeTools.includes(toolName);
 
@@ -2142,21 +2144,18 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       pending.resolve(answers);
       this.pendingAskUserQuestions.delete(questionId);
 
-      // Persist the response as a message for sync and audit trail
+      // Log as nimbalyst_tool_result to complete the tool call
+      // This sets toolCall.result which changes widget from interactive to completed
       if (sessionId) {
-        const responseContent: AskUserQuestionResponseContent = {
-          type: 'ask_user_question_response',
-          questionId,
-          answers,
-          respondedAt: Date.now(),
-          respondedBy,
-        };
         this.logAgentMessage(
           sessionId,
           'claude-code',
           'output',
-          JSON.stringify(responseContent),
-          { messageType: 'ask_user_question_response' }
+          JSON.stringify({
+            type: 'nimbalyst_tool_result',
+            tool_use_id: questionId,
+            result: JSON.stringify({ answers, respondedAt: Date.now(), respondedBy })
+          })
         ).catch(err => {
           console.error('[CLAUDE-CODE] Failed to persist AskUserQuestion response:', err);
         });
@@ -2181,22 +2180,18 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       const sessionIdMatch = questionId.match(/^ask-(.+)-\d+$/);
       const sessionId = sessionIdMatch?.[1];
 
-      // Persist cancelled response for sync (so mobile knows it was cancelled)
+      // Log as nimbalyst_tool_result with error flag to mark as cancelled
       if (sessionId && sessionId !== 'unknown') {
-        const responseContent: AskUserQuestionResponseContent = {
-          type: 'ask_user_question_response',
-          questionId,
-          answers: {},
-          cancelled: true,
-          respondedAt: Date.now(),
-          respondedBy: 'desktop',
-        };
         this.logAgentMessage(
           sessionId,
           'claude-code',
           'output',
-          JSON.stringify(responseContent),
-          { messageType: 'ask_user_question_response' }
+          JSON.stringify({
+            type: 'nimbalyst_tool_result',
+            tool_use_id: questionId,
+            result: JSON.stringify({ cancelled: true, respondedAt: Date.now() }),
+            is_error: true
+          })
         ).catch(err => {
           console.error('[CLAUDE-CODE] Failed to persist AskUserQuestion cancel:', err);
         });
@@ -2231,22 +2226,23 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       pending.resolve(response);
       this.pendingToolPermissions.delete(requestId);
 
-      // Persist the response as a message for sync and audit trail
+      // Persist the response as nimbalyst_tool_result for widget rendering
+      // SessionManager will parse this and attach to the tool call as toolCall.result
       if (sessionId) {
-        const responseContent: PermissionResponseContent = {
-          type: 'permission_response',
-          requestId,
-          decision: response.decision,
-          scope: response.scope,
-          respondedAt: Date.now(),
-          respondedBy,
-        };
         this.logAgentMessage(
           sessionId,
           'claude-code',
           'output',
-          JSON.stringify(responseContent),
-          { messageType: 'permission_response' }
+          JSON.stringify({
+            type: 'nimbalyst_tool_result',
+            tool_use_id: requestId,
+            result: JSON.stringify({
+              decision: response.decision,
+              scope: response.scope,
+              respondedAt: Date.now(),
+              respondedBy,
+            })
+          })
         ).catch(err => {
           console.error('[CLAUDE-CODE] Failed to persist permission response:', err);
         });
@@ -2258,12 +2254,35 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
   /**
    * Reject a pending tool permission request (e.g., on cancel/abort)
+   * @param sessionId - Session ID for persisting the cancellation message
    */
-  public rejectToolPermission(requestId: string, error: Error): void {
+  public rejectToolPermission(requestId: string, error: Error, sessionId?: string): void {
     const pending = this.pendingToolPermissions.get(requestId);
     if (pending) {
       pending.reject(error);
       this.pendingToolPermissions.delete(requestId);
+
+      // Persist cancellation as nimbalyst_tool_result for widget rendering
+      if (sessionId) {
+        this.logAgentMessage(
+          sessionId,
+          'claude-code',
+          'output',
+          JSON.stringify({
+            type: 'nimbalyst_tool_result',
+            tool_use_id: requestId,
+            result: JSON.stringify({
+              decision: 'deny',
+              scope: 'once',
+              cancelled: true,
+              respondedAt: Date.now(),
+            }),
+            is_error: true
+          })
+        ).catch(err => {
+          console.error('[CLAUDE-CODE] Failed to persist permission cancellation:', err);
+        });
+      }
     }
   }
 
@@ -2301,25 +2320,44 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         // Get recent messages for this session
         const messages = await AgentMessagesRepository.list(sessionId, { limit: 50 });
 
-        // Look for a permission_response that matches our requestId
+        // Look for a nimbalyst_tool_result that matches our requestId
         for (const msg of messages) {
           try {
             const content = JSON.parse(msg.content);
+            // Check for new nimbalyst_tool_result format
+            if (content.type === 'nimbalyst_tool_result' && content.tool_use_id === requestId) {
+              // Found a response - parse the result and resolve
+              const result = typeof content.result === 'string' ? JSON.parse(content.result) : content.result;
+              const pending = this.pendingToolPermissions.get(requestId);
+              if (pending && result.decision) {
+                pending.resolve({
+                  decision: result.decision,
+                  scope: result.scope
+                });
+                this.pendingToolPermissions.delete(requestId);
+                this.logSecurity('[pollForPermissionResponse] Found nimbalyst_tool_result:', {
+                  requestId,
+                  decision: result.decision,
+                  scope: result.scope,
+                  respondedBy: result.respondedBy
+                });
+              }
+              return;
+            }
+            // Legacy: also check for permission_response (for backwards compatibility)
             if (content.type === 'permission_response' && content.requestId === requestId) {
-              // Found a response - resolve the pending promise
-              const response: PermissionResponseContent = content;
               const pending = this.pendingToolPermissions.get(requestId);
               if (pending) {
                 pending.resolve({
-                  decision: response.decision,
-                  scope: response.scope
+                  decision: content.decision,
+                  scope: content.scope
                 });
                 this.pendingToolPermissions.delete(requestId);
-                this.logSecurity('[pollForPermissionResponse] Found response message:', {
+                this.logSecurity('[pollForPermissionResponse] Found legacy permission_response:', {
                   requestId,
-                  decision: response.decision,
-                  scope: response.scope,
-                  respondedBy: response.respondedBy
+                  decision: content.decision,
+                  scope: content.scope,
+                  respondedBy: content.respondedBy
                 });
               }
               return;
@@ -2736,7 +2774,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     return async (
       toolName: string,
       input: any,
-      options: { signal: AbortSignal; suggestions?: any[] }
+      options: { signal: AbortSignal; suggestions?: any[]; toolUseID?: string }
     ): Promise<{ behavior: 'allow' | 'deny'; updatedInput?: any; message?: string }> => {
       // Log all tool permission checks (verbose - uncomment for debugging)
       // this.logSecurity('[canUseTool] Tool call received:', {
@@ -2758,7 +2796,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
       // Handle AskUserQuestion separately - it's about getting user input, not permission
       if (toolName === 'AskUserQuestion') {
-        return this.handleAskUserQuestion(sessionId, input, options);
+        return this.handleAskUserQuestion(sessionId, input, options, options.toolUseID);
       }
 
       // Check workspace trust before allowing any tools
@@ -2820,33 +2858,33 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         requestId,
       });
 
-      // Create the permission request content for persisting as a message
-      const permissionRequestContent: PermissionRequestContent = {
-        type: 'permission_request',
-        requestId,
-        toolName,
-        rawCommand,
-        pattern,
-        patternDisplayName: patternDisplay,
-        isDestructive,
-        warnings: [],
-        timestamp: Date.now(),
-        status: 'pending',
-      };
-
-      // Persist permission request as a message for mobile compatibility
-      // This allows any device (desktop or mobile) to see and respond to the request
+      // Log as nimbalyst_tool_use - our own message type that won't conflict with SDK messages
+      // SessionManager recognizes this type and creates a toolCall property for widget rendering
+      // The widget will show interactive UI while !toolCall.result, completed UI when answered
       if (sessionId) {
         await this.logAgentMessage(
           sessionId,
           'claude-code',
           'output',
-          JSON.stringify(permissionRequestContent),
-          { messageType: 'permission_request' }
+          JSON.stringify({
+            type: 'nimbalyst_tool_use',
+            id: requestId,
+            name: 'ToolPermission',
+            input: {
+              requestId,
+              toolName,
+              rawCommand,
+              pattern,
+              patternDisplayName: patternDisplay,
+              isDestructive,
+              warnings: [],
+              workspacePath,
+            }
+          })
         );
       }
 
-      // Create a simplified permission request for the legacy UI (backwards compatibility)
+      // Create a simplified permission request for the legacy IPC path (backwards compatibility)
       const request = {
         id: requestId,
         toolName,
@@ -2979,11 +3017,16 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
   /**
    * Handle AskUserQuestion tool - get user input for questions
+   *
+   * The toolUseID is the SDK's ID for this tool call. We use it so our synthetic
+   * tool_use message has the same ID the SDK will use, allowing the widget to
+   * correlate the pending question with the eventual tool_result.
    */
   private async handleAskUserQuestion(
     sessionId: string | undefined,
     input: any,
-    options: { signal: AbortSignal }
+    options: { signal: AbortSignal },
+    toolUseID?: string
   ): Promise<{ behavior: 'allow' | 'deny'; updatedInput?: any; message?: string }> {
       // Debug logging - uncomment if needed
 
@@ -2999,27 +3042,23 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         };
       }
 
-      // Generate unique ID for this question set
-      const questionId = `ask-${sessionId || 'unknown'}-${Date.now()}`;
+      // Use the SDK's tool_use ID so our message can correlate with SDK events
+      const questionId = toolUseID || `ask-${sessionId || 'unknown'}-${Date.now()}`;
 
-      // Create the AskUserQuestion request content for persisting as a message
-      const askUserQuestionContent: AskUserQuestionRequestContent = {
-        type: 'ask_user_question_request',
-        questionId,
-        questions,
-        timestamp: Date.now(),
-        status: 'pending',
-      };
-
-      // Persist the question request as a message for mobile compatibility
-      // This allows any device (desktop or mobile) to see and respond to the questions
+      // Log as nimbalyst_tool_use - our own message type that won't conflict with SDK messages
+      // SessionManager recognizes this type and creates a toolCall property for widget rendering
+      // The widget will show interactive UI while !toolCall.result, completed UI when answered
       if (sessionId) {
         await this.logAgentMessage(
           sessionId,
           'claude-code',
           'output',
-          JSON.stringify(askUserQuestionContent),
-          { messageType: 'ask_user_question_request' }
+          JSON.stringify({
+            type: 'nimbalyst_tool_use',
+            id: questionId,
+            name: 'AskUserQuestion',
+            input: { questions }
+          })
         );
       }
 
@@ -3109,38 +3148,11 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
       // EXITPLANMODE CONFIRMATION: Intercept ExitPlanMode tool calls in planning mode
       if (toolName === 'ExitPlanMode' && this.currentMode === 'planning') {
-        // Require planFilePath - the user needs to know which plan file to implement
-        const planFilePath = toolInput?.planFilePath;
+        // planFilePath is optional - used for "Start new session to implement" option
+        const planFilePath = toolInput?.planFilePath || '';
 
-        if (!planFilePath || typeof planFilePath !== 'string') {
-          return {
-            hookSpecificOutput: {
-              hookEventName: 'PreToolUse' as const,
-              permissionDecision: 'deny' as const,
-              permissionDecisionReason: `Missing required planFilePath parameter. You must provide the path to the plan file you created (e.g., planFilePath: "plans/my-feature.md"). This is required so the implementation session knows which plan to implement.`
-            }
-          };
-        }
-
-        // Normalize path separators for cross-platform compatibility (Windows uses backslashes)
-        const normalizedPath = planFilePath.replace(/\\/g, '/');
-
-        // Validate it's a proper path
-        const isValidPlanPath = normalizedPath.endsWith('.md') &&
-          (normalizedPath.startsWith('plans/') || normalizedPath.includes('/plans/'));
-
-        if (!isValidPlanPath) {
-          return {
-            hookSpecificOutput: {
-              hookEventName: 'PreToolUse' as const,
-              permissionDecision: 'deny' as const,
-              permissionDecisionReason: `Invalid planFilePath: '${planFilePath}'. The planFilePath must be a .md file in the plans/ directory (e.g., 'plans/add-dark-mode.md').`
-            }
-          };
-        }
-
-        // Generate unique request ID for this confirmation
-        const requestId = `exit-plan-${sessionId}-${Date.now()}`;
+        // Use the SDK's tool_use ID as the request ID so the widget can match it via toolCall.id
+        const requestId = toolUseID || `exit-plan-${sessionId}-${Date.now()}`;
         const planSummary = toolInput?.plan || '';
 
         // Create a promise that will be resolved when user responds

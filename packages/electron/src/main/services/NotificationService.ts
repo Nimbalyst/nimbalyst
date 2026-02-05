@@ -93,15 +93,16 @@ class NotificationService {
     return new Promise((resolve) => {
       // Generate unique request ID
       const requestId = `check-session-${Date.now()}-${Math.random()}`;
+      const channel = `notifications:session-check-response:${requestId}`;
 
       // Set timeout in case renderer doesn't respond
       const timeout = setTimeout(() => {
-        ipcMain.removeHandler(`notifications:session-check-response:${requestId}`);
+        ipcMain.removeAllListeners(channel);
         resolve(false); // Assume not viewing on timeout
       }, 500);
 
-      // Register one-time handler for response
-      ipcMain.handleOnce(`notifications:session-check-response:${requestId}`, (_event, isViewing: boolean) => {
+      // Register one-time listener for response (use 'once' not 'handleOnce' since renderer uses 'send')
+      ipcMain.once(channel, (_event, isViewing: boolean) => {
         clearTimeout(timeout);
         resolve(isViewing);
       });

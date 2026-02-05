@@ -42,10 +42,16 @@ import type { Message } from '../../../../ai/server/types';
 
 // Re-export widgets
 export { MockupScreenshotWidget } from './MockupScreenshotWidget';
-export { AskUserQuestionWidget, storeAskUserQuestionAnswers, registerPendingQuestion, unregisterPendingQuestion } from './AskUserQuestionWidget';
+export { AskUserQuestionWidget } from './AskUserQuestionWidget';
 export { VisualDisplayWidget } from './VisualDisplayWidget';
 export { BashWidget } from './BashWidget';
 export { GitCommitConfirmationWidget } from './GitCommitConfirmationWidget';
+export { ExitPlanModeWidget } from './ExitPlanModeWidget';
+export { ToolPermissionWidget } from './ToolPermissionWidget';
+
+// Re-export host types (for use in SessionTranscript to set the host)
+export type { InteractiveWidgetHost, PermissionScope, ToolPermissionResponse } from './InteractiveWidgetHost';
+export { noopInteractiveWidgetHost } from './InteractiveWidgetHost';
 
 /**
  * Props passed to custom tool widgets
@@ -63,6 +69,8 @@ export interface CustomToolWidgetProps {
   sessionId: string;
   /** Optional: Read a file from the filesystem (for loading persisted output files) */
   readFile?: (filePath: string) => Promise<{ success: boolean; content?: string; error?: string }>;
+  // Note: Interactive widgets read their host from interactiveWidgetHostAtom(sessionId)
+  // No host prop needed - avoids prop drilling through the component tree
 }
 
 /**
@@ -81,6 +89,8 @@ import { AskUserQuestionWidget } from './AskUserQuestionWidget';
 import { VisualDisplayWidget } from './VisualDisplayWidget';
 import { BashWidget } from './BashWidget';
 import { GitCommitConfirmationWidget } from './GitCommitConfirmationWidget';
+import { ExitPlanModeWidget } from './ExitPlanModeWidget';
+import { ToolPermissionWidget } from './ToolPermissionWidget';
 
 /**
  * Registry of custom tool widgets
@@ -99,6 +109,9 @@ export const CUSTOM_TOOL_WIDGETS: CustomToolWidgetRegistry = {
   // AskUserQuestion tool - displays questions from Claude for user input
   'AskUserQuestion': AskUserQuestionWidget,
 
+  // ExitPlanMode tool - interactive confirmation widget for exiting planning mode
+  'ExitPlanMode': ExitPlanModeWidget,
+
   // Display to user tool - renders charts and image galleries inline in the transcript
   'display_to_user': VisualDisplayWidget,
   'mcp__nimbalyst__display_to_user': VisualDisplayWidget,
@@ -112,6 +125,9 @@ export const CUSTOM_TOOL_WIDGETS: CustomToolWidgetRegistry = {
   'developer.git_commit_proposal': GitCommitConfirmationWidget,
   'mcp__nimbalyst-mcp__developer_git_commit_proposal': GitCommitConfirmationWidget,
   'mcp__nimbalyst-extension-dev__developer_git_commit_proposal': GitCommitConfirmationWidget,
+
+  // Tool permission - interactive permission widget for tools requiring approval
+  'ToolPermission': ToolPermissionWidget,
 };
 
 /**

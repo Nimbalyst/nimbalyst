@@ -331,6 +331,7 @@ interface RichTranscriptViewProps {
     timestamp: number;
     messageIndex: number; // Index of user message this belongs to (for stable positioning)
   } | null;
+  // Note: Interactive widgets read their host from interactiveWidgetHostAtom(sessionId)
 }
 
 const defaultSettings: TranscriptSettings = {

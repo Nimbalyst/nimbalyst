@@ -72,15 +72,9 @@ export {
   sessionProcessingAtom,
   sessionUnreadAtom,
   sessionPendingPromptAtom,
-  sessionPendingPermissionAtom,
-  sessionWaitingForQuestionAtom,
-  sessionPendingQuestionAtom,
-  sessionWaitingForPlanApprovalAtom,
-  // Durable interactive prompts (DB-derived)
+  sessionHasPendingInteractivePromptAtom,
+  // Durable interactive prompts (DB-derived) - used for pending indicator
   sessionPendingPromptsAtom,
-  sessionPendingPermissionsAtom,
-  sessionPendingAskUserQuestionAtom,
-  sessionPendingExitPlanModeAtom,
   refreshPendingPromptsAtom,
   respondToPromptAtom,
   sessionPromptAdditionsAtom,
@@ -94,7 +88,7 @@ export {
   resetSessionHistoryAtom,
   totalUnreadCountAtom,
   anySessionProcessingAtom,
-  anyPendingPermissionAtom,
+  anyPendingInteractivePromptAtom,
   markSessionReadAtom,
   setActiveSessionAtom,
   // Session list loading
@@ -150,7 +144,7 @@ export {
   workstreamProcessingAtom,
   workstreamUnreadAtom,
   workstreamPendingPromptAtom,
-  workstreamPendingPermissionAtom,
+  workstreamPendingInteractivePromptAtom,
   workstreamTitleAtom,
   type SessionInfo,
   type SessionListItem,
@@ -367,9 +361,9 @@ export {
 } from './atoms/navigationHistory';
 
 // Session transcript atoms (centralized state for SessionTranscript)
+// Note: ExitPlanMode uses inline widget, no atom needed
 export {
   sessionErrorAtom,
-  sessionExitPlanModeConfirmAtom,
   sessionQueuedPromptsAtom,
   type QueuedPrompt,
 } from './atoms/sessionTranscript';
@@ -379,5 +373,4 @@ export {
   initSessionTranscriptListeners,
   loadInitialQueuedPrompts,
   clearSessionError,
-  clearSessionExitPlanModeConfirm,
 } from './listeners/sessionTranscriptListeners';

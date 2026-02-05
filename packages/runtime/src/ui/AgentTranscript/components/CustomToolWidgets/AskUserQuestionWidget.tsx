@@ -1,47 +1,21 @@
 /**
- * Custom widget for the AskUserQuestion tool (DISPLAY ONLY)
+ * AskUserQuestionWidget
  *
- * This widget displays the questions and answers from a completed AskUserQuestion tool call.
- * The interactive answering happens via AskUserQuestionConfirmation in the electron package,
- * which is shown while the canUseTool callback is waiting for user input.
+ * Interactive widget for the AskUserQuestion tool.
+ * Renders questions from Claude and allows user to select answers.
  *
- * Once the user answers and the tool completes, this widget displays:
- * - The questions that were asked
- * - The answers the user provided
- * - A "Questions Answered" status
+ * Uses InteractiveWidgetHost for operations that require access to atoms, callbacks, and analytics.
+ * The host is read from interactiveWidgetHostAtom(sessionId) - no prop drilling needed.
  */
 
-import React from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import type { CustomToolWidgetProps } from './index';
-import { sessionHasPendingQuestionAtom } from '../../../../store/atoms/pendingQuestions';
+import { interactiveWidgetHostAtom } from '../../../../store/atoms/interactiveWidgetHost';
 
-// Re-export Jotai-based functions for backwards compatibility
-export { registerPendingQuestion, clearPendingQuestionForSession as unregisterPendingQuestion } from '../../../../store/atoms/pendingQuestions';
-
-/**
- * Global store for AskUserQuestion answers.
- * Keyed by question text, stores the answer string.
- * This is populated when answers are submitted via the confirmation dialog.
- */
-const askUserQuestionAnswersStore: Map<string, string> = new Map();
-
-/**
- * Store answers for AskUserQuestion.
- * Called from AISessionView when answers are submitted.
- */
-export function storeAskUserQuestionAnswers(answers: Record<string, string>): void {
-  for (const [question, answer] of Object.entries(answers)) {
-    askUserQuestionAnswersStore.set(question, answer);
-  }
-}
-
-/**
- * Get stored answer for a question.
- */
-function getStoredAnswer(question: string): string | undefined {
-  return askUserQuestionAnswersStore.get(question);
-}
+// ============================================================
+// Types
+// ============================================================
 
 interface QuestionOption {
   label: string;
@@ -55,9 +29,10 @@ interface Question {
   multiSelect: boolean;
 }
 
-/**
- * Parse the tool arguments to extract questions
- */
+// ============================================================
+// Helper Functions
+// ============================================================
+
 function parseQuestions(args: any): Question[] {
   if (!args?.questions || !Array.isArray(args.questions)) {
     return [];
@@ -65,33 +40,22 @@ function parseQuestions(args: any): Question[] {
   return args.questions;
 }
 
-/**
- * Parse existing answers from tool input or result
- * The answers may be in:
- * 1. tool.arguments.answers (if SDK updated the input)
- * 2. tool.result (if the tool returned the answers as its result)
- * 3. tool.result as a string like: 'User has answered: "question"="answer"'
- */
 function parseAnswers(args: any, result: any): Record<string, string> {
-  // First check arguments
+  // Check arguments first
   if (args?.answers && typeof args.answers === 'object') {
     return args.answers;
   }
 
-  // Then check result - it might be a string or object
+  // Check result
   if (result) {
-    // If result is a string containing the answers
     if (typeof result === 'string') {
-      // Try to parse JSON from result
       try {
         const parsed = JSON.parse(result);
         if (parsed?.answers && typeof parsed.answers === 'object') {
           return parsed.answers;
         }
       } catch {
-        // Not JSON, try to parse the SDK's string format
-        // Format: 'User has answered your questions: "question1"="answer1". ...'
-        // or: '"question"="answer"'
+        // Try SDK string format: "question"="answer"
         const answers: Record<string, string> = {};
         const regex = /"([^"]+)"="([^"]+)"/g;
         let match;
@@ -103,7 +67,6 @@ function parseAnswers(args: any, result: any): Record<string, string> {
         }
       }
     }
-    // If result is an object with answers
     if (typeof result === 'object' && result.answers) {
       return result.answers;
     }
@@ -112,87 +75,286 @@ function parseAnswers(args: any, result: any): Record<string, string> {
   return {};
 }
 
-/**
- * Check if an option is selected for a question
- */
-function isOptionSelected(answer: string | undefined, optionLabel: string, multiSelect: boolean): boolean {
-  if (!answer) return false;
-
-  if (multiSelect) {
-    const selectedOptions = answer.split(', ').filter(o => o.trim());
-    return selectedOptions.includes(optionLabel);
-  } else {
-    return answer === optionLabel;
-  }
-}
+// ============================================================
+// Widget Component
+// ============================================================
 
 export const AskUserQuestionWidget: React.FC<CustomToolWidgetProps> = ({
   message,
   sessionId,
 }) => {
-  // Track pending question state reactively via Jotai atom
-  const hasPendingQuestion = useAtomValue(sessionHasPendingQuestionAtom(sessionId));
+  const toolCall = message.toolCall;
+  if (!toolCall) return null;
 
-  const tool = message.toolCall;
-  if (!tool) return null;
+  // Get host from atom (set by SessionTranscript)
+  const host = useAtomValue(interactiveWidgetHostAtom(sessionId));
 
-  const questions = parseQuestions(tool.arguments);
+  const questions = parseQuestions(toolCall.arguments);
+  const questionId = toolCall.id || '';
 
-  // Don't render if this session has a pending question
-  // The interactive AskUserQuestionConfirmation component handles the pending state
-  if (hasPendingQuestion) {
-    return null;
-  }
+  // Parse result to determine completion state
+  const rawResult = toolCall.result;
+  const parsedAnswers = useMemo(() => parseAnswers(toolCall.arguments, rawResult), [toolCall.arguments, rawResult]);
+  const hasResult = rawResult !== undefined && rawResult !== null && rawResult !== '';
 
-  // Try to get answers from multiple sources:
-  // 1. tool.arguments.answers (if SDK updated the input)
-  // 2. tool.result (if parsed from result string)
-  // 3. Global store (populated when user submits via confirmation dialog)
-  let answers = parseAnswers(tool.arguments, tool.result);
-
-  // If no answers from tool data, check the global store
-  if (Object.keys(answers).length === 0) {
-    const storedAnswers: Record<string, string> = {};
-    for (const q of questions) {
-      const stored = getStoredAnswer(q.question);
-      if (stored) {
-        storedAnswers[q.question] = stored;
+  // Check if cancelled
+  const isCancelled = useMemo(() => {
+    if (typeof rawResult === 'string') {
+      try {
+        const parsed = JSON.parse(rawResult);
+        return parsed?.cancelled === true;
+      } catch {
+        return rawResult.toLowerCase().includes('cancelled') || rawResult.toLowerCase().includes('canceled');
       }
     }
-    if (Object.keys(storedAnswers).length > 0) {
-      answers = storedAnswers;
+    return false;
+  }, [rawResult]);
+
+  const isCompleted = hasResult;
+  const isPending = !isCompleted;
+
+  // Local state for selections
+  const [selections, setSelections] = useState<Record<string, string[]>>(() => {
+    // Initialize from parsed answers if available
+    const initial: Record<string, string[]> = {};
+    for (const q of questions) {
+      const answer = parsedAnswers[q.question];
+      if (answer) {
+        initial[q.question] = q.multiSelect ? answer.split(', ').filter(a => a.trim()) : [answer];
+      } else {
+        initial[q.question] = [];
+      }
     }
-  }
+    return initial;
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [hasResponded, setHasResponded] = useState(false);
+  const [localResult, setLocalResult] = useState<{ answers: Record<string, string>; cancelled?: boolean } | null>(null);
 
-  const hasAnswers = Object.keys(answers).length > 0;
-  const hasResult = tool.result !== undefined && tool.result !== null && tool.result !== '';
+  // Handle option toggle
+  const handleOptionToggle = useCallback((question: Question, optionLabel: string) => {
+    if (!isPending || hasResponded) return;
 
-  // Check if the question was cancelled
-  // The result will contain "cancelled" or be an error when the user cancels
-  const isCancelled = typeof tool.result === 'string' && (
-    tool.result.toLowerCase().includes('cancelled') ||
-    tool.result.toLowerCase().includes('canceled') ||
-    tool.result.toLowerCase().includes('user cancelled')
-  );
+    setSelections(prev => {
+      const current = prev[question.question] || [];
+      if (question.multiSelect) {
+        if (current.includes(optionLabel)) {
+          return { ...prev, [question.question]: current.filter(o => o !== optionLabel) };
+        } else {
+          return { ...prev, [question.question]: [...current, optionLabel] };
+        }
+      } else {
+        return { ...prev, [question.question]: [optionLabel] };
+      }
+    });
+  }, [isPending, hasResponded]);
+
+  // Handle submit
+  const handleSubmit = useCallback(async () => {
+    if (!host || hasResponded || !isPending) return;
+
+    // Build answers object
+    const answers: Record<string, string> = {};
+    for (const q of questions) {
+      const selected = selections[q.question] || [];
+      if (selected.length > 0) {
+        answers[q.question] = q.multiSelect ? selected.join(', ') : selected[0];
+      }
+    }
+
+    // Validate all questions have answers
+    const unanswered = questions.filter(q => !answers[q.question]);
+    if (unanswered.length > 0) {
+      // Don't submit if not all questions answered
+      return;
+    }
+
+    setIsSubmitting(true);
+    setLocalResult({ answers });
+    setHasResponded(true);
+
+    try {
+      await host.askUserQuestionSubmit(questionId, answers);
+    } catch (error) {
+      console.error('[AskUserQuestionWidget] Failed to submit:', error);
+      setLocalResult(null);
+      setHasResponded(false);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [host, questionId, questions, selections, hasResponded, isPending]);
+
+  // Handle cancel
+  const handleCancel = useCallback(async () => {
+    if (!host || hasResponded || !isPending) return;
+
+    setIsSubmitting(true);
+    setLocalResult({ answers: {}, cancelled: true });
+    setHasResponded(true);
+
+    try {
+      await host.askUserQuestionCancel(questionId);
+    } catch (error) {
+      console.error('[AskUserQuestionWidget] Failed to cancel:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [host, questionId, hasResponded, isPending]);
 
   // If no questions, show nothing
   if (questions.length === 0) {
     return null;
   }
 
-  // Determine status based on whether we have answers or at least a result
-  // hasResult indicates the tool completed even if we can't parse the answers
-  const isCompleted = hasAnswers || hasResult;
+  // Determine display result (local takes precedence while waiting)
+  const displayResult = localResult || (isCompleted ? { answers: parsedAnswers, cancelled: isCancelled } : null);
+  const displayAnswers = displayResult?.answers || {};
+  const displayCancelled = displayResult?.cancelled || false;
 
-  // Don't render the widget if the tool hasn't completed yet
-  if (!isCompleted) {
-    return null;
+  // Check if all questions have selections (for enabling submit button)
+  const allAnswered = questions.every(q => (selections[q.question] || []).length > 0);
+
+  // Show completed state
+  if (displayResult || hasResponded) {
+    const statusText = displayCancelled ? 'Question Cancelled' : 'Questions Answered';
+
+    return (
+      <div
+        data-testid="ask-user-question-widget"
+        data-state={displayCancelled ? 'cancelled' : 'completed'}
+        className={`ask-user-question-widget rounded-lg bg-nim-secondary border border-nim overflow-hidden opacity-85`}
+      >
+        <div className="flex items-center gap-2 py-3 px-4 border-b border-nim bg-nim-tertiary">
+          <div className="w-5 h-5 text-nim-primary shrink-0">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
+              <path d="M8 14A6 6 0 1 0 8 2a6 6 0 0 0 0 12z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M6.06 6a2 2 0 0 1 3.88.67c0 1.33-2 2-2 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M8 11h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </div>
+          <span className="text-sm font-semibold text-nim flex-1">
+            {statusText}
+          </span>
+          {!displayCancelled && (
+            <span
+              data-testid="ask-user-question-completed"
+              className="flex items-center gap-1 text-xs font-medium text-nim-success py-1 px-2 bg-[color-mix(in_srgb,var(--nim-success)_12%,transparent)] rounded-full"
+            >
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M10 3L4.5 8.5L2 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              Submitted
+            </span>
+          )}
+          {displayCancelled && (
+            <span
+              data-testid="ask-user-question-cancelled"
+              className="flex items-center gap-1 text-xs font-medium text-nim-muted py-1 px-2 bg-nim-tertiary rounded-full"
+            >
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M9 3L3 9M3 3l6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              Cancelled
+            </span>
+          )}
+        </div>
+
+        <div className="p-3 flex flex-col gap-3">
+          {questions.map((question, qIndex) => {
+            const answer = displayAnswers[question.question];
+
+            return (
+              <div key={qIndex} className="bg-nim border border-nim rounded-md p-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-[0.6875rem] font-semibold uppercase tracking-wide text-nim-primary bg-[color-mix(in_srgb,var(--nim-primary)_12%,transparent)] py-0.5 px-2 rounded-full">{question.header}</span>
+                  {question.multiSelect && (
+                    <span className="text-[0.6875rem] text-nim-faint italic">Multiple selection</span>
+                  )}
+                </div>
+                <div className="text-sm text-nim leading-normal mb-3">
+                  {question.question}
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  {question.options.map((option, oIndex) => {
+                    const isSelected = question.multiSelect
+                      ? (answer?.split(', ') || []).includes(option.label)
+                      : answer === option.label;
+
+                    return (
+                      <div
+                        key={oIndex}
+                        className={`flex items-start gap-2 py-2 px-2.5 rounded border cursor-default ${
+                          isSelected
+                            ? 'border-nim-primary bg-[color-mix(in_srgb,var(--nim-primary)_8%,var(--nim-bg-secondary))]'
+                            : 'border-nim bg-nim-secondary'
+                        }`}
+                      >
+                        <div className={`w-4 h-4 mt-0.5 shrink-0 border rounded-sm flex items-center justify-center ${
+                          isSelected
+                            ? 'bg-nim-primary border-nim-primary text-white'
+                            : 'bg-nim border-nim text-nim-primary'
+                        }`}>
+                          {isSelected && (
+                            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M8.5 2.5L3.75 7.25L1.5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                          )}
+                        </div>
+                        <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+                          <span className="text-[0.8125rem] font-medium text-nim leading-snug">{option.label}</span>
+                          {option.description && (
+                            <span className="text-xs text-nim-muted leading-snug">{option.description}</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {answer && (
+                  <div className="mt-2 pt-2 border-t border-nim text-xs text-nim-muted italic">
+                    Selected: {answer}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
   }
 
-  const statusText = isCancelled ? 'Question Cancelled' : 'Questions Answered';
+  // If no host available, show non-interactive pending state
+  if (!host) {
+    return (
+      <div
+        data-testid="ask-user-question-widget"
+        data-state="pending"
+        className="ask-user-question-widget rounded-lg bg-nim-secondary border border-nim-primary overflow-hidden"
+      >
+        <div className="flex items-center gap-2 py-3 px-4 bg-nim-tertiary">
+          <div className="w-5 h-5 text-nim-primary shrink-0">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
+              <path d="M8 14A6 6 0 1 0 8 2a6 6 0 0 0 0 12z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M6.06 6a2 2 0 0 1 3.88.67c0 1.33-2 2-2 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M8 11h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </div>
+          <span className="text-sm font-semibold text-nim flex-1">
+            Questions from Claude
+          </span>
+          <span data-testid="ask-user-question-pending" className="text-xs text-nim-muted">Waiting...</span>
+        </div>
+      </div>
+    );
+  }
 
+  // Show interactive UI for pending request
   return (
-    <div className={`ask-user-question-widget rounded-lg bg-nim-secondary border border-nim overflow-hidden ${isCompleted ? 'opacity-85' : ''}`}>
+    <div
+      data-testid="ask-user-question-widget"
+      data-state="pending"
+      className="ask-user-question-widget rounded-lg bg-nim-secondary border border-nim-primary overflow-hidden"
+    >
       <div className="flex items-center gap-2 py-3 px-4 border-b border-nim bg-nim-tertiary">
         <div className="w-5 h-5 text-nim-primary shrink-0">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
@@ -202,36 +364,20 @@ export const AskUserQuestionWidget: React.FC<CustomToolWidgetProps> = ({
           </svg>
         </div>
         <span className="text-sm font-semibold text-nim flex-1">
-          {statusText}
+          Questions from Claude
         </span>
-        {isCompleted && !isCancelled && (
-          <span className="flex items-center gap-1 text-xs font-medium text-nim-success py-1 px-2 bg-[color-mix(in_srgb,var(--nim-success)_12%,transparent)] rounded-full">
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M10 3L4.5 8.5L2 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-            Submitted
-          </span>
-        )}
-        {isCancelled && (
-          <span className="flex items-center gap-1 text-xs font-medium text-nim-muted py-1 px-2 bg-nim-tertiary rounded-full">
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M9 3L3 9M3 3l6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-            Cancelled
-          </span>
-        )}
       </div>
 
       <div className="p-3 flex flex-col gap-3">
         {questions.map((question, qIndex) => {
-          const answer = answers[question.question];
+          const selectedOptions = selections[question.question] || [];
 
           return (
             <div key={qIndex} className="bg-nim border border-nim rounded-md p-3">
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-[0.6875rem] font-semibold uppercase tracking-wide text-nim-primary bg-[color-mix(in_srgb,var(--nim-primary)_12%,transparent)] py-0.5 px-2 rounded-full">{question.header}</span>
                 {question.multiSelect && (
-                  <span className="text-[0.6875rem] text-nim-faint italic">Multiple selection</span>
+                  <span className="text-[0.6875rem] text-nim-faint italic">Select multiple</span>
                 )}
               </div>
               <div className="text-sm text-nim leading-normal mb-3">
@@ -239,18 +385,24 @@ export const AskUserQuestionWidget: React.FC<CustomToolWidgetProps> = ({
               </div>
               <div className="flex flex-col gap-1.5">
                 {question.options.map((option, oIndex) => {
-                  const isSelected = isOptionSelected(answer, option.label, question.multiSelect);
+                  const isSelected = selectedOptions.includes(option.label);
 
                   return (
-                    <div
+                    <button
                       key={oIndex}
-                      className={`flex items-start gap-2 py-2 px-2.5 rounded border transition-all duration-150 cursor-default ${
+                      type="button"
+                      data-testid="ask-user-question-option"
+                      data-option-label={option.label}
+                      data-selected={isSelected}
+                      onClick={() => handleOptionToggle(question, option.label)}
+                      disabled={isSubmitting}
+                      className={`flex items-start gap-2 py-2 px-2.5 rounded border transition-all duration-150 cursor-pointer text-left bg-transparent disabled:opacity-50 disabled:cursor-not-allowed ${
                         isSelected
                           ? 'border-nim-primary bg-[color-mix(in_srgb,var(--nim-primary)_8%,var(--nim-bg-secondary))]'
-                          : 'border-nim bg-nim-secondary'
+                          : 'border-nim bg-nim-secondary hover:bg-nim-hover'
                       }`}
                     >
-                      <div className={`w-4 h-4 mt-0.5 shrink-0 border rounded-sm flex items-center justify-center ${
+                      <div className={`w-4 h-4 mt-0.5 shrink-0 border rounded-sm flex items-center justify-center transition-colors ${
                         isSelected
                           ? 'bg-nim-primary border-nim-primary text-white'
                           : 'bg-nim border-nim text-nim-primary'
@@ -267,19 +419,35 @@ export const AskUserQuestionWidget: React.FC<CustomToolWidgetProps> = ({
                           <span className="text-xs text-nim-muted leading-snug">{option.description}</span>
                         )}
                       </div>
-                    </div>
+                    </button>
                   );
                 })}
               </div>
-              {/* Show selected answer summary if answered */}
-              {answer && (
-                <div className="mt-2 pt-2 border-t border-nim text-xs text-nim-muted italic">
-                  Selected: {answer}
-                </div>
-              )}
             </div>
           );
         })}
+
+        {/* Action buttons */}
+        <div className="flex gap-2 justify-end pt-2 border-t border-nim">
+          <button
+            type="button"
+            data-testid="ask-user-question-cancel"
+            onClick={handleCancel}
+            disabled={isSubmitting}
+            className="px-3 py-1.5 rounded-md text-[13px] cursor-pointer border border-nim transition-colors duration-150 hover:bg-nim-hover bg-nim-tertiary text-nim-muted disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            data-testid="ask-user-question-submit"
+            onClick={handleSubmit}
+            disabled={!allAnswered || isSubmitting}
+            className="px-4 py-1.5 rounded-md text-[13px] font-medium cursor-pointer border-none transition-colors duration-150 hover:opacity-90 bg-nim-primary text-white disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isSubmitting ? 'Submitting...' : 'Submit'}
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -3223,34 +3223,35 @@ export class AIService {
 
     // Handle AskUserQuestion answer response from renderer
     // Used when Claude's AskUserQuestion tool needs user input
-    safeHandle('claude-code:answer-question', async (event, { questionId, answers }: { questionId: string; answers: Record<string, string> }) => {
+    safeHandle('claude-code:answer-question', async (event, { questionId, answers, sessionId }: { questionId: string; answers: Record<string, string>; sessionId?: string }) => {
       // logger.main.info(`[AIService] AskUserQuestion answer received: questionId=${questionId}`);
 
-      // Extract sessionId from questionId (format: ask-{sessionId}-{timestamp})
-      const sessionIdMatch = questionId.match(/^ask-(.+)-\d+$/);
-      if (!sessionIdMatch) {
-        logger.main.warn(`[AIService] Invalid questionId format: ${questionId}`);
-        return { success: false, error: 'Invalid question ID format' };
+      // sessionId can be passed directly or extracted from legacy questionId format (ask-{sessionId}-{timestamp})
+      let resolvedSessionId = sessionId;
+      if (!resolvedSessionId) {
+        const sessionIdMatch = questionId.match(/^ask-(.+)-\d+$/);
+        if (sessionIdMatch && sessionIdMatch[1] !== 'unknown') {
+          resolvedSessionId = sessionIdMatch[1];
+        }
       }
 
-      const sessionId = sessionIdMatch[1];
-      if (sessionId === 'unknown') {
-        logger.main.warn(`[AIService] Unknown session for question: ${questionId}`);
-        return { success: false, error: 'Unknown session' };
+      if (!resolvedSessionId) {
+        logger.main.warn(`[AIService] No sessionId for AskUserQuestion: ${questionId}`);
+        return { success: false, error: 'Session ID required' };
       }
 
       // Use repository directly - we just need session metadata (provider type),
       // not the full session load with messages
       const { AISessionsRepository } = await import('@nimbalyst/runtime/storage/repositories/AISessionsRepository');
-      const session = await AISessionsRepository.get(sessionId);
+      const session = await AISessionsRepository.get(resolvedSessionId);
       if (!session) {
-        logger.main.warn(`[AIService] Session not found for AskUserQuestion: ${sessionId}`);
+        logger.main.warn(`[AIService] Session not found for AskUserQuestion: ${resolvedSessionId}`);
         return { success: false, error: 'Session not found' };
       }
 
-      const provider = ProviderFactory.getProvider(session.provider as AIProviderType, sessionId);
+      const provider = ProviderFactory.getProvider(session.provider as AIProviderType, resolvedSessionId);
       if (!provider) {
-        logger.main.warn(`[AIService] Provider not found for AskUserQuestion: ${sessionId}`);
+        logger.main.warn(`[AIService] Provider not found for AskUserQuestion: ${resolvedSessionId}`);
         return { success: false, error: 'Provider not found' };
       }
 
@@ -3258,7 +3259,7 @@ export class AIService {
       if (isAskUserQuestionProvider(provider)) {
         // Pass sessionId for response message persistence
         // Provider logs warning if question not found - no need to duplicate here
-        const resolved = provider.resolveAskUserQuestion(questionId, answers, sessionId, 'desktop');
+        const resolved = provider.resolveAskUserQuestion(questionId, answers, resolvedSessionId, 'desktop');
         return resolved ? { success: true } : { success: false, error: 'Question not found' };
       } else {
         logger.main.warn(`[AIService] Provider does not support AskUserQuestion: ${session.provider}`);
@@ -3268,34 +3269,35 @@ export class AIService {
 
     // Handle AskUserQuestion cancel from renderer
     // Rejects the pending promise and aborts the AI request
-    safeHandle('claude-code:cancel-question', async (event, { questionId }: { questionId: string }) => {
+    safeHandle('claude-code:cancel-question', async (event, { questionId, sessionId }: { questionId: string; sessionId?: string }) => {
       logger.main.info(`[AIService] AskUserQuestion cancel received: questionId=${questionId}`);
 
-      // Extract sessionId from questionId (format: ask-{sessionId}-{timestamp})
-      const sessionIdMatch = questionId.match(/^ask-(.+)-\d+$/);
-      if (!sessionIdMatch) {
-        logger.main.warn(`[AIService] Invalid questionId format: ${questionId}`);
-        return { success: false, error: 'Invalid question ID format' };
+      // sessionId can be passed directly or extracted from legacy questionId format (ask-{sessionId}-{timestamp})
+      let resolvedSessionId = sessionId;
+      if (!resolvedSessionId) {
+        const sessionIdMatch = questionId.match(/^ask-(.+)-\d+$/);
+        if (sessionIdMatch && sessionIdMatch[1] !== 'unknown') {
+          resolvedSessionId = sessionIdMatch[1];
+        }
       }
 
-      const sessionId = sessionIdMatch[1];
-      if (sessionId === 'unknown') {
-        logger.main.warn(`[AIService] Unknown session for question: ${questionId}`);
-        return { success: false, error: 'Unknown session' };
+      if (!resolvedSessionId) {
+        logger.main.warn(`[AIService] No sessionId for AskUserQuestion cancel: ${questionId}`);
+        return { success: false, error: 'Session ID required' };
       }
 
       // Use repository directly - we just need session metadata (provider type),
       // not the full session load with messages
       const { AISessionsRepository } = await import('@nimbalyst/runtime/storage/repositories/AISessionsRepository');
-      const session = await AISessionsRepository.get(sessionId);
+      const session = await AISessionsRepository.get(resolvedSessionId);
       if (!session) {
-        logger.main.warn(`[AIService] Session not found for AskUserQuestion cancel: ${sessionId}`);
+        logger.main.warn(`[AIService] Session not found for AskUserQuestion cancel: ${resolvedSessionId}`);
         return { success: false, error: 'Session not found' };
       }
 
-      const provider = ProviderFactory.getProvider(session.provider as AIProviderType, sessionId);
+      const provider = ProviderFactory.getProvider(session.provider as AIProviderType, resolvedSessionId);
       if (!provider) {
-        logger.main.warn(`[AIService] Provider not found for AskUserQuestion cancel: ${sessionId}`);
+        logger.main.warn(`[AIService] Provider not found for AskUserQuestion cancel: ${resolvedSessionId}`);
         return { success: false, error: 'Provider not found' };
       }
 
@@ -3306,7 +3308,7 @@ export class AIService {
         provider.abort();
         return { success: true };
       } else {
-        logger.main.warn(`[AIService] Provider does not support AskUserQuestion cancel: ${session.provider}`);
+        logger.main.warn(`[AIService] Provider does not support AskUserQuestion cancel: ${resolvedSessionId}`);
         return { success: false, error: 'Provider does not support AskUserQuestion cancel' };
       }
     });

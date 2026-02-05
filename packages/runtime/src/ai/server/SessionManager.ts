@@ -323,6 +323,42 @@ export function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
               isAuthError,
               errorMessage: errorContent
             });
+          } else if (parsed.type === 'nimbalyst_tool_use') {
+            // Nimbalyst-specific tool call (e.g., AskUserQuestion, ToolPermission)
+            // These are our own tool calls that won't conflict with SDK messages
+            // Skip if we already have a tool with this ID (deduplication)
+            if (parsed.id && allToolMessages.has(parsed.id)) {
+              continue;
+            }
+
+            const toolMessage: Message = {
+              role: 'tool',
+              content: '',
+              timestamp,
+              toolCall: {
+                id: parsed.id,
+                name: parsed.name,
+                arguments: parsed.input,
+                childToolCalls: []
+              }
+            };
+
+            // Store in allToolMessages map for result matching
+            if (parsed.id) {
+              allToolMessages.set(parsed.id, toolMessage);
+            }
+
+            uiMessages.push(toolMessage);
+          } else if (parsed.type === 'nimbalyst_tool_result') {
+            // Nimbalyst-specific tool result - find corresponding nimbalyst_tool_use and add result
+            const toolUseId = parsed.tool_use_id || parsed.id;
+            const toolMsg = allToolMessages.get(toolUseId);
+            if (toolMsg && toolMsg.toolCall) {
+              toolMsg.toolCall.result = parsed.result;
+              if (parsed.is_error) {
+                toolMsg.isError = true;
+              }
+            }
           } else if (parsed.type === 'user' && parsed.message) {
             // Skip messages that have parent_tool_use_id - these are sub-agent metadata, not conversation messages
             if (parsed.parent_tool_use_id) {

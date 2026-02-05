@@ -519,6 +519,8 @@ export function SessionDetailScreen({ hiddenBackButton, voiceModeActive }: Sessi
   const title = indexEntry?.title || metadata.title || 'Untitled Session';
 
   // Detect pending interactive prompts from messages
+  // Note: With the durable prompts architecture, widgets render inline in the transcript.
+  // This detection is used to disable input and show a helpful message while waiting.
   const pendingPrompt = useMemo((): {
     type: 'permission_request' | 'ask_user_question_request';
     content: PermissionRequestContent | AskUserQuestionRequestContent;
@@ -528,24 +530,77 @@ export function SessionDetailScreen({ hiddenBackButton, voiceModeActive }: Sessi
       const msg = messages[i];
       try {
         const parsed = JSON.parse(msg.content);
+
+        // Check for nimbalyst_tool_use messages (new durable prompts format)
+        if (parsed.type === 'nimbalyst_tool_use') {
+          const toolId = parsed.id;
+          const toolName = parsed.name;
+
+          // Check for nimbalyst_tool_result with matching tool_use_id
+          const hasResult = messages.some(m => {
+            try {
+              const r = JSON.parse(m.content);
+              return r.type === 'nimbalyst_tool_result' && r.tool_use_id === toolId;
+            } catch { return false; }
+          });
+
+          if (!hasResult) {
+            if (toolName === 'ToolPermission') {
+              // Transform to legacy format for InteractivePromptWidget compatibility
+              return {
+                type: 'permission_request',
+                content: {
+                  type: 'permission_request',
+                  requestId: toolId,
+                  toolName: parsed.input?.toolName || '',
+                  rawCommand: parsed.input?.rawCommand || '',
+                  pattern: parsed.input?.pattern || '',
+                  patternDisplayName: parsed.input?.patternDisplayName || '',
+                  isDestructive: parsed.input?.isDestructive || false,
+                  warnings: parsed.input?.warnings || [],
+                  timestamp: Date.now(),
+                  status: 'pending',
+                } as PermissionRequestContent,
+              };
+            }
+            if (toolName === 'AskUserQuestion') {
+              return {
+                type: 'ask_user_question_request',
+                content: {
+                  type: 'ask_user_question_request',
+                  questionId: toolId,
+                  questions: parsed.input?.questions || [],
+                  timestamp: Date.now(),
+                  status: 'pending',
+                } as AskUserQuestionRequestContent,
+              };
+            }
+          }
+        }
+
+        // Legacy format support: permission_request messages
         if (parsed.type === 'permission_request' && parsed.status === 'pending') {
           // Check if there's a response for this request
           const hasResponse = messages.some(m => {
             try {
               const r = JSON.parse(m.content);
-              return r.type === 'permission_response' && r.requestId === parsed.requestId;
+              return (r.type === 'permission_response' && r.requestId === parsed.requestId) ||
+                     (r.type === 'nimbalyst_tool_result' && r.tool_use_id === parsed.requestId);
             } catch { return false; }
           });
           if (!hasResponse) {
             return { type: 'permission_request', content: parsed as PermissionRequestContent };
           }
         }
+
+        // Legacy format support: ask_user_question_request messages
         if (parsed.type === 'ask_user_question_request' && parsed.status === 'pending') {
           // Check if there's a response for this question
           const hasResponse = messages.some(m => {
             try {
               const r = JSON.parse(m.content);
-              return r.type === 'ask_user_question_response' && r.questionId === parsed.questionId;
+              return (r.type === 'ask_user_question_response' && r.questionId === parsed.questionId) ||
+                     (r.type === 'nimbalyst_tool_result' && r.tool_use_id === parsed.questionId);
             } catch { return false; }
           });
           if (!hasResponse) {

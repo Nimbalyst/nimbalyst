@@ -125,52 +125,17 @@ export const sessionPendingPromptAtom = atomFamily((_sessionId: string) =>
 );
 
 /**
- * Per-session pending permission request state.
- * Set when there's a tool call waiting for user approval.
+ * Per-session pending interactive prompt state.
+ * Set when any interactive tool is waiting for user input:
+ * - AskUserQuestion
+ * - ExitPlanMode
+ * - ToolPermission
+ * - GitCommitProposal
+ *
+ * Shows a "waiting for input" icon in the sidebar.
+ * This is a simple boolean - widgets render the actual prompt from toolCall data.
  */
-export const sessionPendingPermissionAtom = atomFamily((_sessionId: string) =>
-  atom(false)
-);
-
-/**
- * Per-session waiting for question response state.
- * Set when the AskUserQuestion tool is waiting for user input.
- * Shows a distinct icon in the sidebar (not the processing spinner).
- */
-export const sessionWaitingForQuestionAtom = atomFamily((_sessionId: string) =>
-  atom(false)
-);
-
-/**
- * Data for a pending AskUserQuestion.
- */
-export interface PendingAskUserQuestionData {
-  questionId: string;
-  sessionId: string;
-  questions: Array<{
-    question: string;
-    header: string;
-    options: Array<{ label: string; description: string }>;
-    multiSelect: boolean;
-  }>;
-  timestamp: number;
-}
-
-/**
- * Per-session pending AskUserQuestion data.
- * Stores the full question data so it persists across navigation.
- * This is the source of truth for showing the AskUserQuestionConfirmation component.
- */
-export const sessionPendingQuestionAtom = atomFamily((_sessionId: string) =>
-  atom<PendingAskUserQuestionData | null>(null)
-);
-
-/**
- * Per-session waiting for plan approval state.
- * Set when the ExitPlanMode tool is waiting for user approval.
- * Shows a distinct icon in the sidebar (not the processing spinner).
- */
-export const sessionWaitingForPlanApprovalAtom = atomFamily((_sessionId: string) =>
+export const sessionHasPendingInteractivePromptAtom = atomFamily((_sessionId: string) =>
   atom(false)
 );
 
@@ -258,27 +223,9 @@ export const refreshPendingPromptsAtom = atom(
         }));
         set(sessionPendingPromptsAtom(sessionId), pendingPrompts);
 
-        // Also update the legacy atoms for backward compatibility
-        const askQuestion = pendingPrompts.find(p => p.promptType === 'ask_user_question_request');
-        if (askQuestion) {
-          set(sessionPendingQuestionAtom(sessionId), {
-            questionId: askQuestion.promptId,
-            sessionId: askQuestion.sessionId,
-            questions: askQuestion.data.questions,
-            timestamp: askQuestion.data.timestamp,
-          });
-          set(sessionWaitingForQuestionAtom(sessionId), true);
-        } else {
-          set(sessionPendingQuestionAtom(sessionId), null);
-          set(sessionWaitingForQuestionAtom(sessionId), false);
-        }
-
-        // Update plan approval state
-        const planApproval = pendingPrompts.find(p =>
-          p.promptType === 'permission_request' &&
-          p.data.toolName?.includes('ExitPlanMode')
-        );
-        set(sessionWaitingForPlanApprovalAtom(sessionId), !!planApproval);
+        // Update unified pending interactive prompt state
+        // Any pending prompt means we're waiting for user input
+        set(sessionHasPendingInteractivePromptAtom(sessionId), pendingPrompts.length > 0);
       }
     } catch (error) {
       console.error('[refreshPendingPromptsAtom] Failed to refresh:', error);
@@ -286,135 +233,17 @@ export const refreshPendingPromptsAtom = atom(
   }
 );
 
-/**
- * ToolPermissionData as expected by UI components.
- * This matches the structure of the data stored in permission_request messages.
- */
-export interface ToolPermissionData {
-  requestId: string;
-  sessionId: string;
-  workspacePath: string;
-  request: any;  // PermissionRequest from claude-code
-  timestamp: number;
-}
-
-/**
- * Derived atom: Get pending permission requests for a session.
- * Maps PendingPrompt to ToolPermissionData for UI compatibility.
- *
- * The database stores PermissionRequestContent (flat structure) but the UI component
- * expects ToolPermissionData with a nested `request` object containing `actionsNeedingApproval`.
- * This atom transforms between the two formats.
- */
-export const sessionPendingPermissionsAtom = atomFamily((sessionId: string) =>
-  atom<ToolPermissionData[]>((get) => {
-    const prompts = get(sessionPendingPromptsAtom(sessionId));
-    return prompts
-      .filter(p => p.promptType === 'permission_request')
-      .map(p => {
-        const data = p.data;
-
-        // If data already has the nested `request` structure (legacy in-memory format), use it directly
-        if (data.request && data.request.actionsNeedingApproval) {
-          return data as ToolPermissionData;
-        }
-
-        // Transform flat PermissionRequestContent to nested ToolPermissionData format
-        // The flat format is what gets persisted to the database
-        const flatData = data as {
-          type: string;
-          requestId: string;
-          toolName: string;
-          rawCommand: string;
-          pattern: string;
-          patternDisplayName: string;
-          isDestructive: boolean;
-          warnings: string[];
-          timestamp: number;
-          status: string;
-          workspacePath?: string;
-        };
-
-        return {
-          requestId: flatData.requestId,
-          sessionId: p.sessionId,
-          workspacePath: flatData.workspacePath || '',
-          timestamp: flatData.timestamp,
-          request: {
-            id: flatData.requestId,
-            toolName: flatData.toolName,
-            rawCommand: flatData.rawCommand,
-            actionsNeedingApproval: [{
-              action: {
-                pattern: flatData.pattern,
-                displayName: flatData.patternDisplayName,
-                command: flatData.rawCommand,
-                isDestructive: flatData.isDestructive,
-                referencedPaths: [],
-                hasRedirection: false,
-              },
-              decision: 'ask' as const,
-              reason: 'Tool requires user approval',
-              isDestructive: flatData.isDestructive,
-              isRisky: flatData.toolName === 'Bash',
-              warnings: flatData.warnings || [],
-              outsidePaths: [],
-              sensitivePaths: [],
-            }],
-            hasDestructiveActions: flatData.isDestructive,
-            createdAt: flatData.timestamp,
-          },
-        } as ToolPermissionData;
-      });
-  })
-);
-
-/**
- * Derived atom: Get pending AskUserQuestion for a session (only one allowed).
- */
-export const sessionPendingAskUserQuestionAtom = atomFamily((sessionId: string) =>
-  atom((get) => {
-    const prompts = get(sessionPendingPromptsAtom(sessionId));
-    return prompts.find(p => p.promptType === 'ask_user_question_request') || null;
-  })
-);
-
-/**
- * ExitPlanMode confirmation data as expected by UI components.
- * This matches the structure stored in exit_plan_mode_request messages.
- */
-export interface ExitPlanModeConfirmationData {
-  requestId: string;
-  sessionId: string;
-  planSummary: string;
-  planFilePath?: string;
-  timestamp: number;
-}
-
-/**
- * Derived atom: Get pending ExitPlanMode confirmation for a session (only one allowed).
- * Filters prompts to only return the latest ExitPlanMode request.
- */
-export const sessionPendingExitPlanModeAtom = atomFamily((sessionId: string) =>
-  atom<ExitPlanModeConfirmationData | null>((get) => {
-    const prompts = get(sessionPendingPromptsAtom(sessionId));
-    const exitPlanPrompt = prompts.find(p => p.data.type === 'exit_plan_mode_request');
-    if (!exitPlanPrompt) return null;
-
-    // Map PendingPrompt to ExitPlanModeConfirmationData
-    return {
-      requestId: exitPlanPrompt.promptId,
-      sessionId: exitPlanPrompt.sessionId,
-      planSummary: exitPlanPrompt.data.planSummary || '',
-      planFilePath: exitPlanPrompt.data.planFilePath,
-      timestamp: exitPlanPrompt.data.timestamp || exitPlanPrompt.createdAt,
-    };
-  })
-);
-
-// Note: GitCommitProposal widget renders directly from tool call data
-// No atom needed - widget uses toolCall.id as proposalId and toolCall.input for data
-// See packages/runtime/src/ui/AgentTranscript/components/CustomToolWidgets/GitCommitConfirmationWidget.tsx
+// ============================================================
+// Interactive Prompt Widgets (Durable Prompts Architecture)
+// ============================================================
+// All interactive prompts render from message data directly via widgets:
+// - AskUserQuestion: AskUserQuestionWidget renders from nimbalyst_tool_use messages
+// - ExitPlanMode: ExitPlanModeWidget renders from tool_use messages
+// - GitCommitProposal: GitCommitConfirmationWidget renders from MCP tool_use messages
+// - ToolPermission: ToolPermissionWidget renders from nimbalyst_tool_use messages
+//
+// No atoms needed - widgets use toolCall.id as promptId and toolCall.arguments for data
+// See packages/runtime/src/ui/AgentTranscript/components/CustomToolWidgets/
 
 /**
  * Action atom to respond to an interactive prompt.
@@ -1693,9 +1522,7 @@ export const cleanupSessionAtom = atom(null, (get, set, sessionId: string) => {
   sessionProcessingAtom.remove(sessionId);
   sessionUnreadAtom.remove(sessionId);
   sessionPendingPromptAtom.remove(sessionId);
-  sessionPendingPermissionAtom.remove(sessionId);
-  sessionWaitingForQuestionAtom.remove(sessionId);
-  sessionWaitingForPlanApprovalAtom.remove(sessionId);
+  sessionHasPendingInteractivePromptAtom.remove(sessionId);
   sessionLastReadAtom.remove(sessionId);
   sessionDraftInputAtom.remove(sessionId);
   sessionDraftAttachmentsAtom.remove(sessionId);
@@ -1724,12 +1551,12 @@ export const anySessionProcessingAtom = atom((get) => {
 });
 
 /**
- * Derived: any session with pending permission.
+ * Derived: any session with pending interactive prompt.
  * Useful for global attention indicator.
  */
-export const anyPendingPermissionAtom = atom((get) => {
+export const anyPendingInteractivePromptAtom = atom((get) => {
   const sessions = get(sessionListAtom);
-  return sessions.some((s) => get(sessionPendingPermissionAtom(s.id)));
+  return sessions.some((s) => get(sessionHasPendingInteractivePromptAtom(s.id)));
 });
 
 /**
@@ -1957,9 +1784,9 @@ export const refreshSessionListAtom = atom(
           if (s.hasUnread) {
             set(sessionUnreadAtom(s.id), true);
           }
-          // Initialize pending question state from database metadata (for sidebar indicator persistence)
-          if ((s as any).hasPendingQuestion) {
-            set(sessionWaitingForQuestionAtom(s.id), true);
+          // Initialize pending interactive prompt state from database metadata (for sidebar indicator persistence)
+          if ((s as any).hasPendingQuestion || (s as any).hasPendingInteractivePrompt) {
+            set(sessionHasPendingInteractivePromptAtom(s.id), true);
           }
         }
 
@@ -2288,12 +2115,12 @@ export const workstreamPendingPromptAtom = atomFamily((workstreamId: string) =>
 );
 
 /**
- * Derived: Does any session in this workstream have a pending permission?
+ * Derived: Does any session in this workstream have a pending interactive prompt?
  */
-export const workstreamPendingPermissionAtom = atomFamily((workstreamId: string) =>
+export const workstreamPendingInteractivePromptAtom = atomFamily((workstreamId: string) =>
   atom((get) => {
     const sessions = get(workstreamSessionsAtom(workstreamId));
-    return sessions.some(id => get(sessionPendingPermissionAtom(id)));
+    return sessions.some(id => get(sessionHasPendingInteractivePromptAtom(id)));
   })
 );
 
