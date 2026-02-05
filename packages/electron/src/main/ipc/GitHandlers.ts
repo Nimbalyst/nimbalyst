@@ -141,11 +141,12 @@ export function registerGitHandlers(): void {
           log.info(`[git:commit] Staging files: ${filesToStage.join(', ')}`);
           await git.add(filesToStage);
 
-          // Verify files were staged
+          // Verify only the selected files are staged
           const status = await git.status();
-          const stagedFiles = [...status.staged, ...status.created];
-          log.info(`[git:commit] After staging - staged: ${stagedFiles.length}, created: ${status.created.length}`);
-          if (stagedFiles.length === 0) {
+          const stagedFiles = new Set([...status.staged, ...status.created]);
+          log.info(`[git:commit] After staging - staged: ${stagedFiles.size}, created: ${status.created.length}`);
+
+          if (stagedFiles.size === 0) {
             log.warn(`[git:commit] No files were staged despite add() succeeding`);
             // Restore originally staged files before returning
             if (originallyStaged.size > 0) {
@@ -155,6 +156,28 @@ export function registerGitHandlers(): void {
               success: false,
               error: 'No files were staged. The files may not exist or have no changes.',
             };
+          }
+
+          // Verify staged files match selected files exactly
+          const filesToStageSet = new Set(filesToStage);
+          const unexpectedFiles = Array.from(stagedFiles).filter(f => !filesToStageSet.has(f));
+          const missingFiles = filesToStage.filter(f => !stagedFiles.has(f));
+
+          if (unexpectedFiles.length > 0) {
+            log.error(`[git:commit] Unexpected files staged: ${unexpectedFiles.join(', ')}`);
+            // Restore original state and abort
+            await git.reset(['HEAD']);
+            if (originallyStaged.size > 0) {
+              await git.add(Array.from(originallyStaged));
+            }
+            return {
+              success: false,
+              error: `Unexpected files were staged: ${unexpectedFiles.join(', ')}. Commit aborted.`,
+            };
+          }
+
+          if (missingFiles.length > 0) {
+            log.warn(`[git:commit] Some selected files were not staged: ${missingFiles.join(', ')}`);
           }
         }
 
@@ -176,8 +199,8 @@ export function registerGitHandlers(): void {
         }
 
         // Restore originally staged files that weren't part of this commit
-        const filesToStageSet = new Set(filesToStage || []);
-        const filesToRestage = Array.from(originallyStaged).filter(f => !filesToStageSet.has(f));
+        const committedFilesSet = new Set(filesToStage || []);
+        const filesToRestage = Array.from(originallyStaged).filter(f => !committedFilesSet.has(f));
         if (filesToRestage.length > 0) {
           log.info(`[git:commit] Restoring ${filesToRestage.length} originally staged files`);
           await git.add(filesToRestage);
