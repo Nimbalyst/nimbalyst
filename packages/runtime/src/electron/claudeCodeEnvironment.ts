@@ -16,6 +16,21 @@ interface ClaudeSpawnOptions {
 }
 
 /**
+ * Claude helper method used for spawning Claude Code subprocess.
+ * - 'electron': Use Electron binary in node mode (default, works everywhere)
+ * - 'standalone': Use Bun-compiled standalone binary (hides dock icon on macOS)
+ */
+export type ClaudeHelperMethod = 'electron' | 'standalone';
+
+/**
+ * Result of getting executable options, includes the method used for logging/analytics.
+ */
+export interface ClaudeCodeExecutableResult {
+  options: { executable?: string; executableArgs?: string[]; pathToClaudeCodeExecutable?: string };
+  method: ClaudeHelperMethod;
+}
+
+/**
  * Setup environment for Claude Agent SDK in packaged builds
  * This is used by both ClaudeCodeHandlers and ClaudeCodeProvider
  *
@@ -112,49 +127,92 @@ export function setupClaudeCodeEnvironment(): NodeJS.ProcessEnv {
 }
 
 /**
- * Get SDK options for packaged builds
- * Sets the executable to use Electron as Node with background processing flags
+ * Get the path to the standalone binary for the current platform.
  */
-export function getClaudeCodeExecutableOptions(): { executable: string; executableArgs: string[]; pathToClaudeCodeExecutable?: string } | {} {
+function getStandaloneBinaryPath(): string {
+  const binaryName = process.platform === 'win32' ? 'claude-helper.exe' : 'claude-helper';
+  return path.join(
+    process.resourcesPath,
+    'claude-helper-bin',
+    binaryName
+  );
+}
+
+/**
+ * Check if the standalone Bun-compiled binary is available.
+ * Available on all platforms in packaged builds if the binary was built and included.
+ */
+export function isStandaloneBinaryAvailable(): boolean {
   if (!app.isPackaged) {
-    return {};
+    return false;
   }
 
-  // On macOS, use the standalone Bun-compiled binary to avoid dock icon
-  // The binary is a standalone executable with no app bundle, so macOS won't show a dock icon
-  if (process.platform === 'darwin') {
-    const helperBinaryPath = path.join(
-      process.resourcesPath,
-      'claude-helper-bin',
-      'claude-helper'
-    );
+  return fs.existsSync(getStandaloneBinaryPath());
+}
 
-    // Check if the standalone binary exists
-    if (fs.existsSync(helperBinaryPath)) {
-      // Use pathToClaudeCodeExecutable to point directly to the CLI binary
-      // This tells the SDK to use this binary instead of spawning via node/bun
-      return {
-        pathToClaudeCodeExecutable: helperBinaryPath
-      };
-    }
+/**
+ * Get SDK options for packaged builds.
+ * Sets the executable to use for spawning Claude Code subprocess.
+ *
+ * @param useStandaloneBinary - If true, use the standalone Bun-compiled binary (macOS only).
+ *                              If false or binary unavailable, use Electron binary.
+ * @param log - Optional logging function for diagnostics
+ * @returns Object containing executable options and the method that was used
+ */
+export function getClaudeCodeExecutableOptions(
+  useStandaloneBinary: boolean = false,
+  log?: (message: string, data?: Record<string, unknown>) => void
+): ClaudeCodeExecutableResult {
+  const logInfo = log || ((msg: string, data?: Record<string, unknown>) => {
+    console.log(`[ClaudeCodeEnvironment] ${msg}`, data || '');
+  });
 
-    // Fallback to wrapper app if binary doesn't exist
-    const wrapperPath = path.join(
-      process.resourcesPath,
-      'claude-helper.app',
-      'Contents',
-      'MacOS',
-      'claude-helper'
-    );
+  if (!app.isPackaged) {
+    logInfo('Development mode - using default SDK spawn behavior', { method: 'electron' });
     return {
-      executable: wrapperPath,
-      executableArgs: []
+      options: {},
+      method: 'electron'
     };
   }
 
+  const helperBinaryPath = getStandaloneBinaryPath();
+  const standaloneBinaryExists = fs.existsSync(helperBinaryPath);
+
+  if (useStandaloneBinary) {
+    // User requested standalone - use it regardless of whether it exists
+    // If it doesn't exist, the spawn will fail and the user will see the error
+    logInfo('Using standalone Bun-compiled binary for Claude Code', {
+      method: 'standalone',
+      path: helperBinaryPath,
+      binaryExists: standaloneBinaryExists,
+      platform: process.platform
+    });
+    if (!standaloneBinaryExists) {
+      logInfo('WARNING: Standalone binary not found - spawn will likely fail', {
+        binaryPath: helperBinaryPath
+      });
+    }
+    return {
+      options: {
+        pathToClaudeCodeExecutable: helperBinaryPath
+      },
+      method: 'standalone'
+    };
+  } else {
+    logInfo('Using Electron binary for Claude Code (standalone not enabled)', {
+      method: 'electron',
+      standaloneBinaryAvailable: standaloneBinaryExists,
+      platform: process.platform
+    });
+  }
+
+  // Default: use Electron binary
   return {
-    executable: process.execPath,
-    executableArgs: []
+    options: {
+      executable: process.execPath,
+      executableArgs: []
+    },
+    method: 'electron'
   };
 }
 
