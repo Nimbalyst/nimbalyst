@@ -8,8 +8,8 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
 import { useAtomValue } from 'jotai';
+import { FullscreenModal } from '../FullscreenModal';
 import {
   BarChart,
   Bar,
@@ -693,62 +693,59 @@ const Lightbox: React.FC<{
   onNavigate: (index: number) => void;
   readFile?: (path: string) => Promise<{ success: boolean; content?: string; error?: string }>;
 }> = ({ images, selectedIndex, onClose, onNavigate, readFile }) => {
-  const lightboxContent = (
-    <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center bg-[color-mix(in_srgb,var(--nim-bg)_90%,transparent)] backdrop-blur"
-      onClick={onClose}
+  return (
+    <FullscreenModal
+      isOpen={true}
+      onClose={onClose}
+      ariaLabel="Image lightbox"
+      contentClassName="max-w-[90vw] max-h-[90vh] flex flex-col items-center"
     >
-      <div className="relative max-w-[90vw] max-h-[90vh] flex flex-col items-center" onClick={e => e.stopPropagation()}>
-        <button
-          className="absolute top-2 right-2 w-10 h-10 p-2 bg-nim-secondary border border-nim rounded-full text-nim-muted cursor-pointer transition-all duration-200 flex items-center justify-center z-10 shadow-lg hover:bg-nim-hover hover:text-nim hover:scale-110"
-          onClick={onClose}
-          aria-label="Close"
-        >
-          <span className="text-2xl leading-none">&times;</span>
-        </button>
-        <div className="max-w-full max-h-[calc(90vh-3rem)]">
-          <ImageDisplay
-            image={images[selectedIndex].image!}
-            description={images[selectedIndex].description}
-            readFile={readFile}
-          />
-        </div>
-        <div className="mt-3 text-sm text-nim-muted font-mono bg-nim-secondary py-2 px-3 rounded text-center">
-          {images[selectedIndex].description}
-        </div>
-        {images.length > 1 && (
-          <div className="flex items-center gap-3 mt-3">
-            <button
-              className="w-10 h-10 flex items-center justify-center bg-nim-secondary border border-nim rounded-full text-nim-muted cursor-pointer transition-all duration-200 hover:bg-nim-hover hover:text-nim"
-              onClick={(e) => {
-                e.stopPropagation();
-                onNavigate((selectedIndex - 1 + images.length) % images.length);
-              }}
-              aria-label="Previous"
-            >
-              &larr;
-            </button>
-            <span className="text-sm text-nim-muted font-mono">
-              {selectedIndex + 1} / {images.length}
-            </span>
-            <button
-              className="w-10 h-10 flex items-center justify-center bg-nim-secondary border border-nim rounded-full text-nim-muted cursor-pointer transition-all duration-200 hover:bg-nim-hover hover:text-nim"
-              onClick={(e) => {
-                e.stopPropagation();
-                onNavigate((selectedIndex + 1) % images.length);
-              }}
-              aria-label="Next"
-            >
-              &rarr;
-            </button>
-          </div>
-        )}
+      <button
+        className="absolute top-2 right-2 w-10 h-10 p-2 bg-nim-secondary border border-nim rounded-full text-nim-muted cursor-pointer transition-all duration-200 flex items-center justify-center z-10 shadow-lg hover:bg-nim-hover hover:text-nim hover:scale-110"
+        onClick={onClose}
+        aria-label="Close"
+      >
+        <span className="text-2xl leading-none">&times;</span>
+      </button>
+      <div className="max-w-full max-h-[calc(90vh-3rem)]">
+        <ImageDisplay
+          image={images[selectedIndex].image!}
+          description={images[selectedIndex].description}
+          readFile={readFile}
+        />
       </div>
-    </div>
+      <div className="mt-3 text-sm text-nim-muted font-mono bg-nim-secondary py-2 px-3 rounded text-center">
+        {images[selectedIndex].description}
+      </div>
+      {images.length > 1 && (
+        <div className="flex items-center gap-3 mt-3">
+          <button
+            className="w-10 h-10 flex items-center justify-center bg-nim-secondary border border-nim rounded-full text-nim-muted cursor-pointer transition-all duration-200 hover:bg-nim-hover hover:text-nim"
+            onClick={(e) => {
+              e.stopPropagation();
+              onNavigate((selectedIndex - 1 + images.length) % images.length);
+            }}
+            aria-label="Previous"
+          >
+            &larr;
+          </button>
+          <span className="text-sm text-nim-muted font-mono">
+            {selectedIndex + 1} / {images.length}
+          </span>
+          <button
+            className="w-10 h-10 flex items-center justify-center bg-nim-secondary border border-nim rounded-full text-nim-muted cursor-pointer transition-all duration-200 hover:bg-nim-hover hover:text-nim"
+            onClick={(e) => {
+              e.stopPropagation();
+              onNavigate((selectedIndex + 1) % images.length);
+            }}
+            aria-label="Next"
+          >
+            &rarr;
+          </button>
+        </div>
+      )}
+    </FullscreenModal>
   );
-
-  // Always render via portal to document.body for full-screen display
-  return createPortal(lightboxContent, document.body);
 };
 
 /**

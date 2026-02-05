@@ -5,6 +5,7 @@ import { JSONViewer } from './JSONViewer';
 import { DiffViewer } from './DiffViewer';
 import { LoginRequiredWidget } from './LoginRequiredWidget';
 import { ContextLimitWidget } from './ContextLimitWidget';
+import { FullscreenModal } from './FullscreenModal';
 import { MaterialSymbol } from '../../icons/MaterialSymbol';
 import { formatToolDisplayName } from '../utils/toolNameFormatter';
 
@@ -46,35 +47,6 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
   const [textContent, setTextContent] = useState<string | null>(null);
   const [textLoadError, setTextLoadError] = useState<string | null>(null);
 
-  // Handle Escape key to close enlarged image modal
-  useEffect(() => {
-    if (!enlargedImage) return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setEnlargedImage(null);
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [enlargedImage]);
-
-  // Handle Escape key to close enlarged text modal
-  useEffect(() => {
-    if (!enlargedText) return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setEnlargedText(null);
-        setTextContent(null);
-        setTextLoadError(null);
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [enlargedText]);
 
   // Load text content when a text attachment is selected
   useEffect(() => {
@@ -381,11 +353,10 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
 
   // Render image lightbox modal
   const renderImageModal = () => {
-    if (!enlargedImage) return null;
-
     // For enlarged view, use the full file path (not thumbnail)
     // Convert file path to file:// URL for Electron
     const getEnlargedSrc = () => {
+      if (!enlargedImage) return '';
       if (enlargedImage.filepath) {
         // If it's already a file:// URL or data URL, use as-is
         if (enlargedImage.filepath.startsWith('file://') || enlargedImage.filepath.startsWith('data:')) {
@@ -399,38 +370,37 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
     };
 
     return (
-      <div
-        className="message-attachment-modal-overlay fixed inset-0 bg-black/80 flex items-center justify-center z-[10000] p-10 cursor-pointer"
-        onClick={() => setEnlargedImage(null)}
+      <FullscreenModal
+        isOpen={!!enlargedImage}
+        onClose={() => setEnlargedImage(null)}
+        ariaLabel="Image preview"
+        contentClassName="max-w-[90vw] max-h-[90vh] flex flex-col items-center"
       >
-        <div
-          className="message-attachment-modal relative max-w-[90vw] max-h-[90vh] flex flex-col items-center cursor-default"
-          onClick={(e) => e.stopPropagation()}
+        <button
+          className="message-attachment-modal-close absolute -top-8 -right-8 w-7 h-7 p-0 border-none bg-[var(--nim-bg-secondary)] rounded-full cursor-pointer flex items-center justify-center text-[var(--nim-text)] transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
+          onClick={() => setEnlargedImage(null)}
+          aria-label="Close"
         >
-          <button
-            className="message-attachment-modal-close absolute -top-8 -right-8 w-7 h-7 p-0 border-none bg-[var(--nim-bg-secondary)] rounded-full cursor-pointer flex items-center justify-center text-[var(--nim-text)] transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
-            onClick={() => setEnlargedImage(null)}
-            aria-label="Close"
-          >
-            <MaterialSymbol icon="close" size={20} />
-          </button>
-          <img
-            src={getEnlargedSrc()}
-            alt={enlargedImage.filename}
-            className="message-attachment-modal-image max-w-full max-h-[calc(90vh-60px)] object-contain rounded-lg shadow-[0_4px_24px_rgba(0,0,0,0.3)]"
-          />
-          <div className="message-attachment-modal-caption mt-3 text-[13px] text-[var(--nim-text-muted)] bg-[var(--nim-bg-secondary)] px-3 py-1.5 rounded max-w-full whitespace-nowrap overflow-hidden text-ellipsis">
-            {enlargedImage.filename}
-          </div>
-        </div>
-      </div>
+          <MaterialSymbol icon="close" size={20} />
+        </button>
+        {enlargedImage && (
+          <>
+            <img
+              src={getEnlargedSrc()}
+              alt={enlargedImage.filename}
+              className="message-attachment-modal-image max-w-full max-h-[calc(90vh-60px)] object-contain rounded-lg shadow-[0_4px_24px_rgba(0,0,0,0.3)]"
+            />
+            <div className="message-attachment-modal-caption mt-3 text-[13px] text-[var(--nim-text-muted)] bg-[var(--nim-bg-secondary)] px-3 py-1.5 rounded max-w-full whitespace-nowrap overflow-hidden text-ellipsis">
+              {enlargedImage.filename}
+            </div>
+          </>
+        )}
+      </FullscreenModal>
     );
   };
 
   // Render text preview modal
   const renderTextModal = () => {
-    if (!enlargedText) return null;
-
     const handleClose = () => {
       setEnlargedText(null);
       setTextContent(null);
@@ -438,48 +408,49 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
     };
 
     return (
-      <div
-        className="message-attachment-modal-overlay fixed inset-0 bg-black/80 flex items-center justify-center z-[10000] p-10 cursor-pointer"
-        onClick={handleClose}
+      <FullscreenModal
+        isOpen={!!enlargedText}
+        onClose={handleClose}
+        ariaLabel="Text file preview"
+        contentClassName="w-[80vw] max-w-[900px] max-h-[80vh] flex flex-col bg-[var(--nim-bg)] rounded-lg shadow-[0_4px_24px_rgba(0,0,0,0.3)] overflow-hidden"
       >
-        <div
-          className="message-attachment-text-modal relative w-[80vw] max-w-[900px] max-h-[80vh] flex flex-col bg-[var(--nim-bg)] rounded-lg shadow-[0_4px_24px_rgba(0,0,0,0.3)] cursor-default overflow-hidden"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="message-attachment-text-modal-header flex items-center gap-2 px-4 py-3 border-b border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] shrink-0 text-[var(--nim-text-muted)]">
-            <MaterialSymbol
-              icon={enlargedText.type === 'pdf' ? 'picture_as_pdf' : 'description'}
-              size={18}
-            />
-            <span className="message-attachment-text-modal-title text-sm font-medium text-[var(--nim-text)] whitespace-nowrap overflow-hidden text-ellipsis flex-1">
-              {enlargedText.filename}
-            </span>
-            <button
-              className="message-attachment-modal-close static ml-auto w-6 h-6 p-0 border-none bg-[var(--nim-bg-secondary)] rounded-full cursor-pointer flex items-center justify-center text-[var(--nim-text)] transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
-              onClick={handleClose}
-              aria-label="Close"
-            >
-              <MaterialSymbol icon="close" size={18} />
-            </button>
-          </div>
-          <div className="message-attachment-text-modal-content flex-1 overflow-auto p-4 bg-[var(--nim-bg)]">
-            {textLoadError ? (
-              <div className="message-attachment-text-modal-error flex flex-col items-center justify-center gap-2 p-8 text-[var(--nim-error)] text-sm">
-                <MaterialSymbol icon="error" size={24} />
-                <span>{textLoadError}</span>
-              </div>
-            ) : textContent === null ? (
-              <div className="message-attachment-text-modal-loading flex flex-col items-center justify-center gap-2 p-8 text-[var(--nim-text-faint)] text-sm">
-                <span>Loading...</span>
-              </div>
-            ) : (
-              <pre className="message-attachment-text-modal-pre m-0 font-mono text-[13px] leading-normal text-[var(--nim-text)] whitespace-pre-wrap break-words tab-4">
-                {textContent}
-              </pre>
-            )}
-          </div>
-        </div>
-      </div>
+        {enlargedText && (
+          <>
+            <div className="message-attachment-text-modal-header flex items-center gap-2 px-4 py-3 border-b border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] shrink-0 text-[var(--nim-text-muted)]">
+              <MaterialSymbol
+                icon={enlargedText.type === 'pdf' ? 'picture_as_pdf' : 'description'}
+                size={18}
+              />
+              <span className="message-attachment-text-modal-title text-sm font-medium text-[var(--nim-text)] whitespace-nowrap overflow-hidden text-ellipsis flex-1">
+                {enlargedText.filename}
+              </span>
+              <button
+                className="message-attachment-modal-close static ml-auto w-6 h-6 p-0 border-none bg-[var(--nim-bg-secondary)] rounded-full cursor-pointer flex items-center justify-center text-[var(--nim-text)] transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
+                onClick={handleClose}
+                aria-label="Close"
+              >
+                <MaterialSymbol icon="close" size={18} />
+              </button>
+            </div>
+            <div className="message-attachment-text-modal-content flex-1 overflow-auto p-4 bg-[var(--nim-bg)]">
+              {textLoadError ? (
+                <div className="message-attachment-text-modal-error flex flex-col items-center justify-center gap-2 p-8 text-[var(--nim-error)] text-sm">
+                  <MaterialSymbol icon="error" size={24} />
+                  <span>{textLoadError}</span>
+                </div>
+              ) : textContent === null ? (
+                <div className="message-attachment-text-modal-loading flex flex-col items-center justify-center gap-2 p-8 text-[var(--nim-text-faint)] text-sm">
+                  <span>Loading...</span>
+                </div>
+              ) : (
+                <pre className="message-attachment-text-modal-pre m-0 font-mono text-[13px] leading-normal text-[var(--nim-text)] whitespace-pre-wrap break-words tab-4">
+                  {textContent}
+                </pre>
+              )}
+            </div>
+          </>
+        )}
+      </FullscreenModal>
     );
   };
 
