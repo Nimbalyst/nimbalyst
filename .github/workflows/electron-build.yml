@@ -117,12 +117,24 @@ jobs:
           cd packages/extensions/csv-spreadsheet
           npm run build
 
-      # Install Bun for building Claude helper binary (macOS only)
+      # Install Bun for building Claude helper binary (all platforms)
       - name: Install Bun
-        if: startsWith(matrix.os, 'macos')
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
+
+      # Build Claude helper binary for the current platform
+      - name: Build Claude helper binary
+        working-directory: packages/electron
+        run: |
+          if [ "${{ matrix.platform }}" == "mac" ]; then
+            npm run build:claude-helper:mac
+          elif [ "${{ matrix.platform }}" == "win" ]; then
+            npm run build:claude-helper:windows
+          else
+            npm run build:claude-helper:linux
+          fi
+        shell: bash
 
       # macOS specific setup
       - name: Import macOS certificates
