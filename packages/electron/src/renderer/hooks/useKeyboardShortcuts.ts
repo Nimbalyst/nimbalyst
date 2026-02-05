@@ -46,6 +46,8 @@ interface KeyboardShortcutsOptions {
  * - Cmd+Alt+W: Create new worktree session
  * - Cmd+`: Toggle Terminal panel
  */
+const isMac = navigator.platform.startsWith('Mac');
+
 export function useKeyboardShortcuts({
   activeMode,
   workspaceMode,
@@ -74,8 +76,11 @@ export function useKeyboardShortcuts({
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent): void => {
+      // On macOS, app shortcuts use Command (metaKey). On Windows/Linux, they use Ctrl.
+      const isAppModifier = isMac ? e.metaKey : e.ctrlKey;
+
       // Cmd+E for Files mode (toggle sidebar if already in files mode)
-      if ((e.metaKey || e.ctrlKey) && e.key === 'e') {
+      if (isAppModifier && e.key === 'e') {
         e.preventDefault();
         e.stopPropagation();
 
@@ -90,7 +95,7 @@ export function useKeyboardShortcuts({
 
       // Cmd+K for Agent mode (toggle session history if already in agent mode)
       // This is a global shortcut, but should be preempted if another component handles it
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k' && !e.shiftKey) {
+      if (isAppModifier && e.key === 'k' && !e.shiftKey) {
         e.preventDefault();
         e.stopPropagation();
 
@@ -104,7 +109,7 @@ export function useKeyboardShortcuts({
       }
 
       // Cmd+Y for history dialog (Files mode only)
-      if ((e.metaKey || e.ctrlKey) && e.key === 'y') {
+      if (isAppModifier && e.key === 'y') {
         e.preventDefault();
         // Only open history dialog when in files mode
         if (workspaceMode && activeModeStateRef.current === 'files' && editorModeRef.current) {
@@ -113,14 +118,14 @@ export function useKeyboardShortcuts({
       }
 
       // Cmd+T to toggle tracker panel (remembers last active type)
-      if (workspaceMode && (e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key === 't') {
+      if (workspaceMode && isAppModifier && !e.shiftKey && !e.altKey && e.key === 't') {
         e.preventDefault();
         toggleTrackerPanel();
         setTerminalPanelVisible(false);
       }
       // Cmd+` (macOS) or Ctrl+` (Windows/Linux) for Terminal panel
       if (workspaceMode && e.code === 'Backquote' && !e.shiftKey && !e.altKey &&
-          (e.metaKey || e.ctrlKey)) {
+          isAppModifier) {
         e.preventDefault();
         e.stopPropagation();
         setTerminalPanelVisible(prev => {
@@ -130,7 +135,7 @@ export function useKeyboardShortcuts({
       }
 
       // Cmd+Alt+W (Mac) or Ctrl+Alt+W (Windows) to create new worktree session
-      if (workspaceMode && (e.metaKey || e.ctrlKey) && e.altKey && e.key === 'w') {
+      if (workspaceMode && isAppModifier && e.altKey && e.key === 'w') {
         e.preventDefault();
         e.stopPropagation();
 

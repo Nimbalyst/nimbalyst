@@ -7,6 +7,8 @@
 
 import React, { useEffect, useRef } from 'react';
 import { useNavigationDialogs } from '../dialogs';
+
+const isMac = navigator.platform.startsWith('Mac');
 import type {
   QuickOpenData,
   SessionQuickOpenData,
@@ -100,9 +102,12 @@ export function NavigationDialogKeyboardHandler({
       // Only handle shortcuts in workspace mode
       if (!props.workspaceMode || !props.workspacePath) return;
 
+      // On macOS, app shortcuts use Command (metaKey). On Windows/Linux, they use Ctrl.
+      const isAppModifier = isMac ? e.metaKey : e.ctrlKey;
+
       // Cmd+Shift+F (Mac) or Ctrl+Shift+F (Windows/Linux) for Quick Open in content search mode
       if (
-        (e.metaKey || e.ctrlKey) &&
+        isAppModifier &&
         e.shiftKey &&
         (e.key === 'F' || e.key === 'f')
       ) {
@@ -119,7 +124,7 @@ export function NavigationDialogKeyboardHandler({
       }
 
       // Cmd+O (Mac) or Ctrl+O (Windows/Linux) for Quick Open
-      if ((e.metaKey || e.ctrlKey) && e.key === 'o') {
+      if (isAppModifier && e.key === 'o') {
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
@@ -132,7 +137,7 @@ export function NavigationDialogKeyboardHandler({
       }
 
       // Cmd+L (Mac) or Ctrl+L (Windows/Linux) for Session Quick Open
-      if ((e.metaKey || e.ctrlKey) && e.key === 'l' && !e.shiftKey) {
+      if (isAppModifier && e.key === 'l' && !e.shiftKey) {
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
@@ -145,7 +150,7 @@ export function NavigationDialogKeyboardHandler({
 
       // Cmd+Shift+L (Mac) or Ctrl+Shift+L (Windows/Linux) for Prompt Quick Open
       if (
-        (e.metaKey || e.ctrlKey) &&
+        isAppModifier &&
         e.shiftKey &&
         (e.key === 'L' || e.key === 'l')
       ) {
