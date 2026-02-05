@@ -929,6 +929,12 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       // Stream the response
       try {
         for await (const rawChunk of queryIterator) {
+          // Check for abort signal between iterations - SDK subprocess may not honor abort immediately
+          if (this.abortController?.signal.aborted) {
+            console.log('[CLAUDE-CODE] Abort signal detected in streaming loop, breaking out');
+            break;
+          }
+
           const chunk = rawChunk as any;
           chunkCount++;
 
@@ -1978,8 +1984,10 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       console.warn('[CLAUDE-CODE] No active request to abort - abortController is null!');
     }
 
-    // Clean up any pending ExitPlanMode confirmations
+    // Clean up any pending user interactions that will never be answered
     this.rejectAllPendingConfirmations();
+    this.rejectAllPendingQuestions();
+    this.rejectAllPendingPermissions();
   }
 
   /**
@@ -1988,12 +1996,8 @@ export class ClaudeCodeProvider extends BaseAIProvider {
    */
   destroy(): void {
     console.log('[CLAUDE-CODE] Destroying provider');
-    // Abort any active SDK subprocess before base cleanup
+    // Abort any active SDK subprocess and reject all pending user interactions
     this.abort();
-    // Reject any pending user interactions that will never be answered
-    // (abort() already calls rejectAllPendingConfirmations for ExitPlanMode)
-    this.rejectAllPendingQuestions();
-    this.rejectAllPendingPermissions();
     // Call base class cleanup (removes event listeners)
     super.destroy();
   }
