@@ -272,12 +272,35 @@ function handleExitPlanModeResponse(
   sessionId: string,
   promptId: string,
   response: ExitPlanModeResponse,
-  findWindowByWorkspace: (workspacePath: string) => BrowserWindow | null | undefined
+  _findWindowByWorkspace: (workspacePath: string) => BrowserWindow | null | undefined
 ): void {
   log.info('Handling ExitPlanMode response:', promptId, 'approved:', response.approved);
 
-  // Find the window to send the response through
-  // For now, notify all windows and let them handle based on sessionId
+  // Get the provider to resolve the SDK's pending promise
+  const provider = ProviderFactory.getProvider('claude-code', sessionId);
+
+  if (!provider) {
+    log.warn('No provider found for session:', sessionId);
+    return;
+  }
+
+  // Call resolveExitPlanModeConfirmation on the provider to resolve the SDK's pending promise
+  if ('resolveExitPlanModeConfirmation' in provider) {
+    log.info('Resolving ExitPlanMode confirmation:', promptId, 'approved:', response.approved);
+    (provider as { resolveExitPlanModeConfirmation: (requestId: string, response: { approved: boolean; clearContext?: boolean; feedback?: string }, sessionId: string, source: string) => void })
+      .resolveExitPlanModeConfirmation(
+        promptId,
+        {
+          approved: response.approved,
+          clearContext: response.startNewSession,
+          feedback: response.feedback,
+        },
+        sessionId,
+        'mobile'
+      );
+  }
+
+  // Notify renderer to update the UI
   notifyAllWindows('ai:exitPlanModeResponse', {
     sessionId,
     promptId,

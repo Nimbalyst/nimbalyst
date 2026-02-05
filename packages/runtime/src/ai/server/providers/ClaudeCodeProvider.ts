@@ -2816,6 +2816,13 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         return this.handleAskUserQuestion(sessionId, input, options, options.toolUseID);
       }
 
+      // ExitPlanMode is handled by our PreToolUse hook with a custom widget.
+      // Auto-allow here to prevent the SDK from showing a generic permission dialog
+      // if our hook times out or the SDK falls back to canUseTool.
+      if (toolName === 'ExitPlanMode') {
+        return { behavior: 'allow', updatedInput: input };
+      }
+
       // Check workspace trust before allowing any tools
       // Use permissionsPath (parent project for worktrees) for trust checks
       if (pathForTrust && ClaudeCodeProvider.trustChecker) {

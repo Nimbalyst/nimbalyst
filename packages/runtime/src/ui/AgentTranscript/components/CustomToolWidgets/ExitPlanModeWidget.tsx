@@ -73,7 +73,6 @@ export const ExitPlanModeWidget: React.FC<CustomToolWidgetProps> = ({
     approved: boolean;
     feedback?: string;
     startNewSession?: boolean;
-    timedOut?: boolean;
   } | null>(null);
   const feedbackInputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -100,19 +99,12 @@ export const ExitPlanModeWidget: React.FC<CustomToolWidgetProps> = ({
       return { type: 'denied' as const };
     }
 
-    // Check if this was a user-initiated approval vs SDK timeout
-    // SDK timeout message is generic: "User has approved exiting plan mode. You can now proceed."
-    // User-initiated approval via our IPC would have logged an exit_plan_mode_response message
-    // If we only have the SDK's generic message without our response, it was a timeout
-    // For now, check if the result lacks specific indicators of user action
-    const isGenericSdkMessage = resultLower === 'user has approved exiting plan mode. you can now proceed.';
-
-    if (isGenericSdkMessage) {
-      // This is the SDK's timeout/auto-approval - not a real user approval
-      return { type: 'timed_out' as const };
-    }
-
-    // Check for approval patterns (user actually approved)
+    // Check for approval patterns
+    // Note: We can't reliably distinguish user-initiated approval from SDK timeout
+    // based solely on the tool result text. Both produce similar messages.
+    // TODO: To detect timeouts, we'd need to check if there's an exit_plan_mode_response
+    // message in the transcript (which we persist when user responds via IPC).
+    // For now, treat all approvals the same - the agent proceeded either way.
     if (resultLower.includes('approved') || resultLower.includes('exited planning')) {
       return { type: 'approved' as const };
     }
@@ -124,7 +116,6 @@ export const ExitPlanModeWidget: React.FC<CustomToolWidgetProps> = ({
   // Determine display result (local takes precedence while waiting for tool to complete)
   const displayResult = localResult || (completedState ? {
     approved: completedState.type === 'approved',
-    timedOut: completedState.type === 'timed_out',
   } : null);
 
   // Handle approve
@@ -253,37 +244,18 @@ export const ExitPlanModeWidget: React.FC<CustomToolWidgetProps> = ({
   // Show completed state
   if (displayResult || hasResponded) {
     const approved = displayResult?.approved ?? false;
-    const timedOut = displayResult?.timedOut ?? false;
-
-    // Determine state for styling and display
-    const stateType = timedOut ? 'timed-out' : (approved ? 'approved' : 'denied');
-    const stateLabel = timedOut ? 'Timed Out' : (approved ? 'Approved' : 'Denied');
-    const stateTitle = timedOut ? 'Plan Mode Timed Out' : (approved ? 'Exited Planning Mode' : 'Continued Planning');
-
-    // Timed out uses warning color, approved uses success, denied uses muted
-    const iconColorClass = timedOut ? 'text-nim-warning' : (approved ? 'text-nim-success' : 'text-nim-muted');
-    const borderClass = timedOut ? 'border-nim-warning' : (approved ? 'border-nim-success' : 'border-nim');
-    const badgeClass = timedOut
-      ? 'text-nim-warning bg-[color-mix(in_srgb,var(--nim-warning)_12%,transparent)]'
-      : (approved
-        ? 'text-nim-success bg-[color-mix(in_srgb,var(--nim-success)_12%,transparent)]'
-        : 'text-nim-muted bg-nim-tertiary');
 
     return (
       <div
         data-testid="exit-plan-mode-widget"
-        data-state={stateType}
-        className={`exit-plan-mode-widget rounded-lg border overflow-hidden opacity-85 bg-nim-secondary ${borderClass}`}
+        data-state={approved ? 'approved' : 'denied'}
+        className={`exit-plan-mode-widget rounded-lg border overflow-hidden opacity-85 ${
+          approved ? 'bg-nim-secondary border-nim-success' : 'bg-nim-secondary border-nim'
+        }`}
       >
         <div className="flex items-center gap-2 py-3 px-4 bg-nim-tertiary">
-          <div className={`w-5 h-5 shrink-0 ${iconColorClass}`}>
-            {timedOut ? (
-              // Clock icon for timeout
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
-                <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5"/>
-                <path d="M8 4.5V8L10.5 10.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            ) : approved ? (
+          <div className={`w-5 h-5 shrink-0 ${approved ? 'text-nim-success' : 'text-nim-muted'}`}>
+            {approved ? (
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
                 <path d="M13 4L6 11L3 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
@@ -294,13 +266,15 @@ export const ExitPlanModeWidget: React.FC<CustomToolWidgetProps> = ({
             )}
           </div>
           <span className="text-sm font-semibold text-nim flex-1">
-            {stateTitle}
+            {approved ? 'Exited Planning Mode' : 'Continued Planning'}
           </span>
           <span
-            data-testid={`exit-plan-mode-${stateType}`}
-            className={`flex items-center gap-1 text-xs font-medium py-1 px-2 rounded-full ${badgeClass}`}
+            data-testid={approved ? 'exit-plan-mode-approved' : 'exit-plan-mode-denied'}
+            className={`flex items-center gap-1 text-xs font-medium py-1 px-2 rounded-full ${
+              approved ? 'text-nim-success bg-[color-mix(in_srgb,var(--nim-success)_12%,transparent)]' : 'text-nim-muted bg-nim-tertiary'
+            }`}
           >
-            {stateLabel}
+            {approved ? 'Approved' : 'Denied'}
           </span>
         </div>
         {planFilePath && (
