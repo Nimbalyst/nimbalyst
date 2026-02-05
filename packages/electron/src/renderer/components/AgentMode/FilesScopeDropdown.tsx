@@ -141,7 +141,7 @@ export const FilesScopeDropdown: React.FC<FilesScopeDropdownProps> = ({
   };
 
   return (
-    <div ref={dropdownRef} className="files-scope-dropdown min-w-0">
+    <div ref={dropdownRef} className="files-scope-dropdown min-w-60">
       {/* Dropdown trigger - acts as the title */}
       <button
         ref={triggerRef}
