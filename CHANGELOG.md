@@ -20,6 +20,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.59] - 2026-02-06
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+- Reverted parallel initialization startup optimization
+
+### Fixed
+- Worktree merge errors now show a dialog instead of failing silently
+- Prevented bash heredoc content from creating false file tracking entries
+- Prevented open_workspace MCP tool from creating duplicate windows
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.52.58] - 2026-02-06
 
 
