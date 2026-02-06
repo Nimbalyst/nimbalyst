@@ -222,4 +222,54 @@ describe('bashUtils - Bash Parser', () => {
       expect(files).toEqual([path.join(testWorkspace, 'file-with-dashes_and_underscores.txt')]);
     });
   });
+
+  describe('Heredoc Handling', () => {
+    it('should strip heredoc content and only detect the redirect target', () => {
+      const cmd = `cat << 'EOF' > output.txt
+This is heredoc content with --> arrows
+and other > redirect-like > syntax
+EOF`;
+      const files = parseBashForFileOps(cmd, testWorkspace);
+      expect(files).toEqual([path.join(testWorkspace, 'output.txt')]);
+    });
+
+    it('should not produce false positives from mermaid syntax in heredocs', () => {
+      const cmd = `cat << 'EOF' > dog-breeds.excalidraw
+graph TD
+    A[Breeds] --> B[Sporting]
+    A --> C[Herding]
+    A --> D[Working]
+    B --> B1[Labrador Retriever]
+    C --> C1[German Shepherd]
+EOF`;
+      const files = parseBashForFileOps(cmd, testWorkspace);
+      expect(files).toEqual([path.join(testWorkspace, 'dog-breeds.excalidraw')]);
+    });
+
+    it('should handle heredoc with unquoted delimiter', () => {
+      const cmd = `cat << DELIM > file.txt
+content with > redirect chars
+DELIM`;
+      const files = parseBashForFileOps(cmd, testWorkspace);
+      expect(files).toEqual([path.join(testWorkspace, 'file.txt')]);
+    });
+  });
+
+  describe('Path Validation', () => {
+    it('should reject paths containing brackets', () => {
+      // These could come from mermaid node IDs like B[Sporting]
+      const files = parseBashForFileOps('echo test > B[Sporting]', testWorkspace);
+      expect(files).toEqual([]);
+    });
+
+    it('should reject paths containing curly braces', () => {
+      const files = parseBashForFileOps('echo test > {output}', testWorkspace);
+      expect(files).toEqual([]);
+    });
+
+    it('should allow paths with dots, dashes, underscores, and slashes', () => {
+      const files = parseBashForFileOps('echo test > src/my-file_v2.0.txt', testWorkspace);
+      expect(files).toEqual([path.join(testWorkspace, 'src/my-file_v2.0.txt')]);
+    });
+  });
 });

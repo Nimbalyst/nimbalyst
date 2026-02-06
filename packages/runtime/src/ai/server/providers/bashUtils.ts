@@ -74,6 +74,29 @@ export function splitOnShellOperators(command: string): string[] {
 }
 
 /**
+ * Strip heredoc body content from a command before parsing.
+ * shell-quote doesn't understand heredocs, so content like:
+ *   cat << 'EOF' > file.txt
+ *   A --> B[Sporting]
+ *   EOF
+ * would have the body parsed as shell tokens, causing false positives
+ * (e.g., --> interpreted as redirect operator, B[Sporting] as a file path).
+ *
+ * This preserves the first line (command + redirect) and only strips the
+ * heredoc body (from the line after << DELIMITER to the closing DELIMITER).
+ */
+function stripHeredocs(command: string): string {
+  // Match: <<[-]? ['"]?WORD['"]? [rest of first line]\n[heredoc body]\nWORD
+  // Capture group 1: the delimiter word
+  // Capture group 2: the rest of the first line (e.g., "> file.txt")
+  // Replace with just the rest of the first line, dropping the heredoc body
+  return command.replace(
+    /<<-?\s*['"]?(\w+)['"]?(.*)\n[\s\S]*?\n\s*\1\s*$/gm,
+    '$2'
+  );
+}
+
+/**
  * Parse a Bash command to detect file operations
  * Returns absolute paths to files that may be affected by the command
  *
@@ -88,7 +111,10 @@ export function parseBashForFileOps(command: string, cwd: string): string[] {
   const files = new Set<string>();
 
   try {
-    const parsed = parseShellCommand(command);
+    // Strip heredoc content before parsing - shell-quote doesn't handle heredocs
+    // and will misinterpret their content (e.g., mermaid --> arrows as redirects)
+    const cleanedCommand = stripHeredocs(command);
+    const parsed = parseShellCommand(cleanedCommand);
     let currentCommand: string[] = [];
     let expectingRedirectTarget = false;
     let redirectOp: string | null = null;
@@ -216,6 +242,11 @@ function processCommand(tokens: string[], files: Set<string>, cwd: string): void
 function addFileToSet(filePath: string, cwd: string, files: Set<string>): void {
   if (!filePath || filePath.startsWith('$')) return; // Skip variables
 
+  // Reject paths that contain characters not found in real file paths.
+  // This catches false positives from mermaid syntax (B[Sporting]),
+  // URLs, and other non-path content that shell-quote misparses.
+  if (/[\[\]{}()<>:;,!@#%^&*?|=+`"']/.test(filePath)) return;
+
   try {
     const absPath = path.resolve(cwd, filePath);
     if (absPath.startsWith(cwd)) {
@@ -233,10 +264,13 @@ function addFileToSet(filePath: string, cwd: string, files: Set<string>): void {
 function parseBashForFileOpsRegex(command: string, cwd: string): string[] {
   const files = new Set<string>();
 
+  // Strip heredoc content before regex parsing too
+  const cleanedCommand = stripHeredocs(command);
+
   // Pattern 1: Output redirects (cat/echo > file, cat/echo >> file)
   const redirectPattern = /(?:cat|echo|printf)\s+.*?\s*(>>?)\s*([^\s;&|]+)/g;
   let match;
-  while ((match = redirectPattern.exec(command)) !== null) {
+  while ((match = redirectPattern.exec(cleanedCommand)) !== null) {
     const filePath = match[2];
     if (filePath && !filePath.startsWith('$')) {
       try {
@@ -252,7 +286,7 @@ function parseBashForFileOpsRegex(command: string, cwd: string): string[] {
 
   // Pattern 2: Direct redirects
   const directRedirectPattern = /^\s*(>>?)\s*([^\s;&|]+)/gm;
-  while ((match = directRedirectPattern.exec(command)) !== null) {
+  while ((match = directRedirectPattern.exec(cleanedCommand)) !== null) {
     const filePath = match[2];
     if (filePath && !filePath.startsWith('$')) {
       try {
@@ -268,7 +302,7 @@ function parseBashForFileOpsRegex(command: string, cwd: string): string[] {
 
   // Pattern 3: rm command
   const rmPattern = /\brm\s+(?:-[rf]+\s+)?([^\s;&|]+)/g;
-  while ((match = rmPattern.exec(command)) !== null) {
+  while ((match = rmPattern.exec(cleanedCommand)) !== null) {
     const filePath = match[1];
     if (filePath && !filePath.startsWith('$') && !filePath.startsWith('-')) {
       try {
@@ -284,7 +318,7 @@ function parseBashForFileOpsRegex(command: string, cwd: string): string[] {
 
   // Pattern 4: mv command
   const mvPattern = /\bmv\s+(?:-[if]+\s+)?([^\s;&|]+)\s+([^\s;&|]+)/g;
-  while ((match = mvPattern.exec(command)) !== null) {
+  while ((match = mvPattern.exec(cleanedCommand)) !== null) {
     const sourcePath = match[1];
     const destPath = match[2];
 
@@ -313,7 +347,7 @@ function parseBashForFileOpsRegex(command: string, cwd: string): string[] {
 
   // Pattern 5: cp command
   const cpPattern = /\bcp\s+(?:-[rif]+\s+)?([^\s;&|]+)\s+([^\s;&|]+)/g;
-  while ((match = cpPattern.exec(command)) !== null) {
+  while ((match = cpPattern.exec(cleanedCommand)) !== null) {
     const destPath = match[2];
 
     if (destPath && !destPath.startsWith('$') && !destPath.startsWith('-')) {
@@ -330,7 +364,7 @@ function parseBashForFileOpsRegex(command: string, cwd: string): string[] {
 
   // Pattern 6: sed -i
   const sedPattern = /\bsed\s+-i(?:\.bak)?\s+(?:'[^']+'|"[^"]+")\s+([^\s;&|]+)/g;
-  while ((match = sedPattern.exec(command)) !== null) {
+  while ((match = sedPattern.exec(cleanedCommand)) !== null) {
     const filePath = match[1];
     if (filePath && !filePath.startsWith('$')) {
       try {
@@ -346,7 +380,7 @@ function parseBashForFileOpsRegex(command: string, cwd: string): string[] {
 
   // Pattern 7: tee
   const teePattern = /\btee\s+(?:-a\s+)?([^\s;&|]+)/g;
-  while ((match = teePattern.exec(command)) !== null) {
+  while ((match = teePattern.exec(cleanedCommand)) !== null) {
     const filePath = match[1];
     if (filePath && !filePath.startsWith('$')) {
       try {
