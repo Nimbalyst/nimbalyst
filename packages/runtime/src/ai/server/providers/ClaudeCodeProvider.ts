@@ -2830,10 +2830,18 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       //   permissionsPath: permissionsPath?.slice(-30),
       // });
 
-      // Internal Nimbalyst MCP tools that should always be allowed without permission prompts
+      // Internal Nimbalyst MCP tools that should always be allowed without permission prompts.
+      // These are either read-only, display-only, or interactive widgets where the user
+      // confirms/denies the action within the widget itself (e.g., commit proposal).
       const internalMcpTools = [
         'mcp__nimbalyst-session-naming__name_session',
         'mcp__nimbalyst-mcp__capture_editor_screenshot',
+        'mcp__nimbalyst-mcp__display_to_user',
+        'mcp__nimbalyst-mcp__voice_agent_speak',
+        'mcp__nimbalyst-mcp__voice_agent_stop',
+        'mcp__nimbalyst-mcp__get_session_edited_files',
+        'mcp__nimbalyst-mcp__developer_git_commit_proposal',
+        'mcp__nimbalyst-mcp__developer_git_log',
       ];
 
       if (internalMcpTools.includes(toolName)) {
