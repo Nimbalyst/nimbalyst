@@ -20,6 +20,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.56] - 2026-02-06
+
+
+### Added
+- Warning dialog when running x64 build on Apple Silicon via Rosetta
+
+### Fixed
+- Image generation now respects aspect ratio setting via Gemini API
+- Git index.lock race condition between status and commit operations
+- ToolPermissionWidget not rendering for compound Bash commands
+- Skip redundant permission prompts for built-in MCP tools
+- Handle EMFILE errors gracefully in file watchers
+- Suppress git errors when opening non-git workspaces
+- Updated mobile splash screen
+
 ## [0.52.55] - 2026-02-06
 
 
