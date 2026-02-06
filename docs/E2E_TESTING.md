@@ -148,6 +148,81 @@ Some tests require a fresh app instance:
 
 For these, use `beforeEach`/`afterEach` but keep them in separate spec files.
 
+### CRITICAL: Worker Restart on Test Failure
+
+**Playwright restarts the worker process when a test fails, which re-runs `beforeAll`.**
+
+This is documented Playwright behavior ([GitHub Issue #34249](https://github.com/microsoft/playwright/issues/34249)). When a test fails:
+1. Playwright terminates the current worker
+2. A new worker starts for the next test
+3. `beforeAll` runs again in the new worker
+4. This creates a NEW app instance with a NEW workspace
+
+**This means failing tests will still cause app restarts, even with proper `beforeAll`/`afterAll` structure.**
+
+#### Implications for Test Development
+
+1. **Fix tests one at a time** - When working on a consolidated test file, get the FIRST test passing before moving to the next. A failing test will cause all subsequent tests to start fresh app instances.
+
+2. **Use `test.describe.configure({ mode: 'serial' })` for debugging** - This prevents worker restarts within the serial group, but tests will still restart if they timeout.
+
+3. **Don't rely on shared state across failing tests** - If test A fails, test B will get a fresh app, not the state left by test A.
+
+#### The Correct Approach When Consolidating Tests
+
+```typescript
+// Step 1: Structure your file correctly (no test.describe wrappers)
+let electronApp: ElectronApplication;
+let page: Page;
+let workspaceDir: string;
+
+test.beforeAll(async () => {
+  // Setup once for all tests
+});
+
+test.afterAll(async () => {
+  // Cleanup once after all tests
+});
+
+// Step 2: Write ONE test and get it passing
+test('first scenario', async () => {
+  // Get this working completely before writing more tests
+});
+
+// Step 3: Only after test 1 passes, add test 2
+test('second scenario', async () => {
+  // ...
+});
+```
+
+#### DO NOT use `test.describe` blocks with module-level hooks
+
+When you have `test.describe` blocks, even with module-level `beforeAll`/`afterAll`, the worker restart behavior becomes unpredictable. The safest pattern is:
+
+```typescript
+// GOOD: All tests at module level, no describe wrappers
+test.beforeAll(async () => { /* ... */ });
+test.afterAll(async () => { /* ... */ });
+
+test('test 1', async () => { /* ... */ });
+test('test 2', async () => { /* ... */ });
+test('test 3', async () => { /* ... */ });
+
+// BAD: describe blocks with module-level hooks
+test.beforeAll(async () => { /* ... */ });
+test.afterAll(async () => { /* ... */ });
+
+test.describe('Group A', () => {
+  test('test 1', async () => { /* ... */ });
+});
+
+test.describe('Group B', () => {
+  test('test 2', async () => { /* ... */ });
+});
+```
+
+Use comments (like `// ============ Section Name ============`) instead of `test.describe` blocks if you want visual organization.
+
 ### Consolidation Examples
 
 | Before | After | Savings |
@@ -328,15 +403,17 @@ export const PLAYWRIGHT_TEST_SELECTORS = {
 
 **CRITICAL: Always create test files BEFORE launching the app!** Tests will fail if files are created after the app starts because the file tree won't be populated.
 
+**Use `beforeAll` to share the app instance** - see the [Test Consolidation](#test-consolidation-performance-critical) section above. Only use `beforeEach` when tests CANNOT share app state (e.g., tests for app startup, session restore, or permission mode switching).
+
 ```typescript
-test.beforeEach(async () => {
+// GOOD: Consolidated pattern - one app for all tests in the file
+test.beforeAll(async () => {
   workspaceDir = await createTempWorkspace();
-  testFilePath = path.join(workspaceDir, 'test.md');
 
-  // ALWAYS create files BEFORE launching the app
-  await fs.writeFile(testFilePath, '# Test\n\nInitial content.\n', 'utf8');
+  // Create ALL test files upfront
+  await fs.writeFile(path.join(workspaceDir, 'test1.md'), '# Test 1\n');
+  await fs.writeFile(path.join(workspaceDir, 'test2.md'), '# Test 2\n');
 
-  // NOW launch the app with the workspace
   electronApp = await launchElectronApp({ workspace: workspaceDir });
   page = await electronApp.firstWindow();
   await waitForAppReady(page);
@@ -345,6 +422,8 @@ test.beforeEach(async () => {
 
 ### Workspace Setup Pattern
 
+The recommended pattern uses `beforeAll`/`afterAll` to share a single app instance across all tests in the file. Each test uses a different pre-created file to avoid state conflicts.
+
 ```typescript
 import {
   launchElectronApp,
@@ -352,34 +431,46 @@ import {
   waitForAppReady,
   TEST_TIMEOUTS
 } from '../helpers';
+import {
+  openFileFromTree,
+  closeTabByFileName,
+} from '../utils/testHelpers';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
 let electronApp: ElectronApplication;
 let page: Page;
 let workspaceDir: string;
-let testFilePath: string;
 
-test.beforeEach(async () => {
-  // 1. Create temporary workspace directory
+// Share app instance across all tests
+test.beforeAll(async () => {
   workspaceDir = await createTempWorkspace();
-  testFilePath = path.join(workspaceDir, 'test.md');
 
-  // 2. Create test files BEFORE launching app
-  await fs.writeFile(testFilePath, 'Initial content', 'utf8');
+  // Create ALL files needed by any test in this spec
+  await fs.writeFile(path.join(workspaceDir, 'autosave-test.md'), '# Autosave\n');
+  await fs.writeFile(path.join(workspaceDir, 'edit-test.md'), '# Edit Test\n');
+  await fs.writeFile(path.join(workspaceDir, 'save-test.md'), '# Save Test\n');
 
-  // 3. Launch Electron app with workspace
   electronApp = await launchElectronApp({ workspace: workspaceDir });
-
-  // 4. Get the first window and wait for app to be ready
   page = await electronApp.firstWindow();
   await waitForAppReady(page);
 });
 
-test.afterEach(async () => {
-  // Clean up: close app and remove temp files
-  await electronApp.close();
+test.afterAll(async () => {
+  await electronApp?.close();
   await fs.rm(workspaceDir, { recursive: true, force: true });
+});
+
+test('autosave works', async () => {
+  await openFileFromTree(page, 'autosave-test.md');
+  // ... test logic ...
+  await closeTabByFileName(page, 'autosave-test.md'); // Clean up for next test
+});
+
+test('edit functionality', async () => {
+  await openFileFromTree(page, 'edit-test.md');
+  // ... test logic ...
+  await closeTabByFileName(page, 'edit-test.md');
 });
 ```
 
@@ -940,7 +1031,8 @@ This structure makes it easy to:
 ## Conventions
 
 - Electron specs live under `packages/electron/e2e/` and use TypeScript (`.ts`) extension.
-- Keep specs self-cleaning: temporary files and launched apps must be disposed in `test.afterEach()`.
+- **Use `beforeAll`/`afterAll` by default** - Share app instance across tests for performance. Only use `beforeEach` when tests cannot share state.
+- Keep specs self-cleaning: temporary files and launched apps must be disposed in `test.afterAll()` (or `test.afterEach()` if using per-test isolation).
 - Prefer Playwright locators over raw selectors to benefit from auto-waiting and improved error messages.
 - Always create test files BEFORE launching the app to ensure file tree is populated.
 - Use manual save utilities (`triggerManualSave`, `waitForSave`) instead of keyboard shortcuts or autosave waits.
@@ -960,6 +1052,10 @@ This structure makes it easy to:
 8. **Not using test helpers** - Check `testHelpers.ts` before writing repetitive code. The utility probably already exists.
 9. **Repeating complex operations** - If you're copying code between tests, extract it to a utility function.
 10. **Not creating markdown files** - Tests that wait for an editor MUST create and open a markdown file first. See "The Fixture Error" section below.
+11. **Using `beforeEach` when `beforeAll` works** - Each app launch costs 4-5 seconds. Use `beforeAll` to share the app unless tests truly cannot share state (e.g., testing startup, session restore, or permission mode switching).
+12. **Using excessively long timeouts** - The app is very fast (sub-second for most operations). Use short timeouts (500-1000ms) by default. Long timeouts (5s+) mask real bugs and slow down test failures. Only use longer timeouts for operations that genuinely take time (e.g., AI API calls).
+13. **Using wrong selectors for buttons** - When clicking buttons fails silently, add `data-testid` attributes to the component rather than trying different CSS selectors. Example: `data-testid="diff-keep-all"` is more reliable than `.unified-diff-header-button-accept`.
+14. **Known Lexical table diff bug** - Table diffs in Lexical may require clicking "Keep All" twice. Use a workaround pattern: click once, wait briefly, check if header is still visible, click again if needed.
 
 ## The Fixture Error Pattern
 
@@ -978,33 +1074,44 @@ The error message is misleading. The actual problem is:
 **ALWAYS create at least one markdown file and open it before waiting for the editor:**
 
 ```typescript
-test.beforeEach(async () => {
+// Using consolidated pattern (recommended)
+test.beforeAll(async () => {
   workspaceDir = await createTempWorkspace();
 
   // REQUIRED: Create at least one markdown file
-  const testFilePath = path.join(workspaceDir, 'test.md');
-  await fs.writeFile(testFilePath, '# Test Document\n\nTest content.\n', 'utf8');
+  await fs.writeFile(path.join(workspaceDir, 'test.md'), '# Test Document\n\nTest content.\n', 'utf8');
+  // Create other test files upfront
+  await fs.writeFile(path.join(workspaceDir, 'another.md'), '# Another\n', 'utf8');
 
   // Launch app
   electronApp = await launchElectronApp({ workspace: workspaceDir });
   page = await electronApp.firstWindow();
   await page.waitForLoadState('domcontentloaded');
-
-  // Wait for workspace using utility
   await waitForWorkspaceReady(page);
+});
 
-  // REQUIRED: Open the file using utility
+test.afterAll(async () => {
+  await electronApp?.close();
+  await fs.rm(workspaceDir, { recursive: true, force: true });
+});
+
+test('example test', async () => {
+  // Open the file using utility
   await openFileFromTree(page, 'test.md');
 
   // NOW it's safe to wait for editor
   await page.waitForSelector(ACTIVE_EDITOR_SELECTOR, { timeout: TEST_TIMEOUTS.EDITOR_LOAD });
+
+  // ... test logic ...
+
+  await closeTabByFileName(page, 'test.md'); // Clean up
 });
 ```
 
 ### What NOT To Do
 ```typescript
 // BAD: No markdown file created, app has no editor
-test.beforeEach(async () => {
+test.beforeAll(async () => {
   workspaceDir = await createTempWorkspace();
 
   // Only creating non-markdown files (images, etc.)
@@ -1012,7 +1119,9 @@ test.beforeEach(async () => {
 
   electronApp = await launchElectronApp({ workspace: workspaceDir });
   page = await electronApp.firstWindow();
+});
 
+test('will fail', async () => {
   // THIS WILL FAIL WITH "fixture error"
   await page.waitForSelector(ACTIVE_EDITOR_SELECTOR); // No editor exists!
 });

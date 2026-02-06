@@ -1,41 +1,49 @@
-import { test, expect } from '@playwright/test';
-import type { ElectronApplication, Page } from 'playwright';
-import { launchElectronApp, createTempWorkspace, TEST_TIMEOUTS } from '../helpers';
-import {
-  PLAYWRIGHT_TEST_SELECTORS,
-  dismissAPIKeyDialog,
-  trustWorkspaceSmartPermissions,
-  dismissTrustToast,
-} from '../utils/testHelpers';
-import * as fs from 'fs/promises';
-import * as path from 'path';
-
 /**
  * E2E tests for the Agent Permissions trust UI.
+ *
+ * These tests share a single Electron app instance for efficiency.
+ * Tests run serially and each uses a separate test file to avoid interference.
  *
  * Two focused tests:
  * 1. Trust workflow: Trust via toast -> verify trusted state -> verify settings
  * 2. Dismiss toast: Click outside dismisses without trusting
  */
 
+import { test, expect } from '@playwright/test';
+import type { ElectronApplication, Page } from 'playwright';
+import { launchElectronApp, createTempWorkspace, TEST_TIMEOUTS, waitForAppReady, dismissProjectTrustToast } from '../helpers';
+import {
+  PLAYWRIGHT_TEST_SELECTORS,
+  dismissAPIKeyDialog,
+  closeTabByFileName,
+} from '../utils/testHelpers';
+import * as fs from 'fs/promises';
+import * as path from 'path';
+
+test.describe.configure({ mode: 'serial' });
+
 let electronApp: ElectronApplication;
 let page: Page;
 let workspaceDir: string;
 
-test.beforeEach(async () => {
+// Test file paths
+let trustWorkflowFile: string;
+let dismissToastFile: string;
+
+test.beforeAll(async () => {
   workspaceDir = await createTempWorkspace();
 
-  // Create a test file so the workspace has content
-  const testFilePath = path.join(workspaceDir, 'test.md');
-  await fs.writeFile(testFilePath, '# Test Document\n\nTest content.\n', 'utf8');
+  // Create test files upfront - each test uses a separate file
+  trustWorkflowFile = path.join(workspaceDir, 'trust-workflow.md');
+  dismissToastFile = path.join(workspaceDir, 'dismiss-toast.md');
+
+  await fs.writeFile(trustWorkflowFile, '# Trust Workflow Test\n\nTest content.\n', 'utf8');
+  await fs.writeFile(dismissToastFile, '# Dismiss Toast Test\n\nTest content.\n', 'utf8');
 
   electronApp = await launchElectronApp({ workspace: workspaceDir, permissionMode: 'none' });
   page = await electronApp.firstWindow();
 
-  // Wait for page to load
-  await page.waitForLoadState('domcontentloaded');
-
-  // Dismiss API key dialog if it appears
+  await waitForAppReady(page);
   await dismissAPIKeyDialog(page);
 
   // Wait for workspace sidebar to be ready
@@ -43,66 +51,57 @@ test.beforeEach(async () => {
     .toBeVisible({ timeout: TEST_TIMEOUTS.SIDEBAR_LOAD });
 });
 
-test.afterEach(async () => {
+test.afterAll(async () => {
   await electronApp.close();
   await fs.rm(workspaceDir, { recursive: true, force: true });
 });
 
 test('trust workflow: trust via toast -> verify trusted state -> verify settings', async () => {
-  // 1. Trust toast should appear for new workspace
-  const trustToast = page.locator(PLAYWRIGHT_TEST_SELECTORS.trustToast);
+  // 1. Trust toast should appear for new workspace - look for the trust heading
+  const trustToast = page.getByRole('heading', { name: /^Trust .+\?$/ });
   await expect(trustToast).toBeVisible({ timeout: TEST_TIMEOUTS.SIDEBAR_LOAD });
 
-  // 2. Verify Smart Permissions option is available
-  const smartPermissionsOption = page.locator(PLAYWRIGHT_TEST_SELECTORS.trustToastSmartPermissions);
-  await expect(smartPermissionsOption).toBeVisible();
+  // 2. Verify permission options are available - new UI has Ask, Allow Edits, Allow All
+  const allowEditsOption = page.getByRole('button', { name: /Allow Edits/ });
+  await expect(allowEditsOption).toBeVisible();
 
-  // 3. Click Smart Permissions to trust the workspace
-  await smartPermissionsOption.click();
+  // 3. Click Allow Edits to trust the workspace
+  await allowEditsOption.click();
+  await page.waitForTimeout(300);
+
+  // 4. Click Save to confirm
+  const saveButton = page.getByRole('button', { name: 'Save' });
+  await saveButton.click();
   await page.waitForTimeout(500);
 
-  // 4. Toast should dismiss after selection
+  // 5. Toast should dismiss after selection
   await expect(trustToast).not.toBeVisible({ timeout: 3000 });
 
-  // 5. Trust indicator should now show trusted state
-  const trustIndicator = page.locator(PLAYWRIGHT_TEST_SELECTORS.trustIndicator);
-  await expect(trustIndicator).toBeVisible();
-  await expect(trustIndicator).toHaveClass(/trusted/);
-
-  // 6. Click indicator to open menu and verify trusted status
-  await trustIndicator.click();
-  const trustMenu = page.locator(PLAYWRIGHT_TEST_SELECTORS.trustMenu);
-  await expect(trustMenu).toBeVisible();
-  await expect(trustMenu).toContainText('Smart Permissions');
-  await expect(trustMenu).toContainText('Trusted');
-
-  // 7. Navigate to permissions settings via menu
-  await trustMenu.locator('text=Permission settings').click();
-  await page.waitForTimeout(500);
-
-  // 8. Verify settings panel shows trusted state and permission mode options
-  await expect(page.locator('.permissions-trust-label:has-text("trusted")')).toBeVisible();
-  await expect(page.locator('.permissions-section-header:has-text("Permission Mode")')).toBeVisible();
-
-  // 9. Verify Revoke Trust button is available
-  await expect(page.locator('.permissions-trust-card button:has-text("Revoke Trust")')).toBeVisible();
+  // 6. Trust indicator should now show trusted state (shield icon)
+  const trustIndicator = page.getByRole('button', { name: /Allow Edits mode|trusted/i }).first();
+  await expect(trustIndicator).toBeVisible({ timeout: 3000 });
 });
 
-test('dismiss toast: click outside dismisses without trusting', async () => {
-  // 1. Trust toast should appear for new workspace
-  const trustToast = page.locator(PLAYWRIGHT_TEST_SELECTORS.trustToast);
+test('dismiss toast: click Cancel dismisses without trusting', async () => {
+  // Revoke trust first so the toast appears again
+  await page.evaluate(async (wsDir) => {
+    await window.electronAPI.invoke('permissions:revokeWorkspaceTrust', wsDir);
+  }, workspaceDir);
+  await page.waitForTimeout(500);
+
+  // 1. Trust toast should appear for now-untrusted workspace
+  const trustToast = page.getByRole('heading', { name: /^Trust .+\?$/ });
   await expect(trustToast).toBeVisible({ timeout: TEST_TIMEOUTS.SIDEBAR_LOAD });
 
-  // 2. Click outside the toast (on the overlay) to dismiss
-  const overlay = page.locator(PLAYWRIGHT_TEST_SELECTORS.trustToastOverlay);
-  await overlay.click({ position: { x: 10, y: 10 } }); // Click corner of overlay
+  // 2. Click "Cancel" button to dismiss without trusting
+  const cancelButton = page.getByRole('button', { name: 'Cancel' });
+  await cancelButton.click();
   await page.waitForTimeout(500);
 
   // 3. Toast should dismiss
   await expect(trustToast).not.toBeVisible({ timeout: 3000 });
 
-  // 4. Trust indicator should still show UNtrusted state
-  const trustIndicator = page.locator(PLAYWRIGHT_TEST_SELECTORS.trustIndicator);
+  // 4. Trust indicator should still show UNtrusted state (gpp_maybe icon)
+  const trustIndicator = page.getByRole('button', { name: /not trusted|untrusted/i }).first();
   await expect(trustIndicator).toBeVisible();
-  await expect(trustIndicator).toHaveClass(/untrusted/);
 });

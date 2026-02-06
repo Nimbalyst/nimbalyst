@@ -7,8 +7,9 @@
  * - Tab navigation shortcuts
  * - Autosave on tab switch
  *
- * Note: These tests use beforeEach/afterEach pattern (not beforeAll)
- * because tab state modifications significantly affect other tests.
+ * IMPORTANT: These tests share a single Electron app instance for performance.
+ * Each test uses a separate file to avoid interference, and closes its tab at the end.
+ * The test suite is configured for serial execution.
  */
 
 import { test, expect, ElectronApplication, Page } from '@playwright/test';
@@ -26,31 +27,63 @@ import {
 } from './helpers';
 import {
   PLAYWRIGHT_TEST_SELECTORS,
+  dismissAPIKeyDialog,
+  closeTabByFileName,
 } from './utils/testHelpers';
+
+// Test files for each scenario
+const TEST_FILES = {
+  // Content isolation test files
+  contentAlpha: 'content-alpha.md',
+  contentBeta: 'content-beta.md',
+  contentGamma: 'content-gamma.md',
+  // Tab reordering test files
+  reorderFile1: 'reorder-file1.md',
+  reorderFile2: 'reorder-file2.md',
+  reorderFile3: 'reorder-file3.md',
+  // No-reload test file
+  noReloadFile: 'no-reload-file.md',
+  // Tab navigation test files
+  navFile1: 'nav-file1.md',
+  navFile2: 'nav-file2.md',
+  // Autosave test files
+  autosaveAlpha: 'autosave-alpha.md',
+  autosaveBeta: 'autosave-beta.md',
+};
+
+// Use serial mode to prevent worker restarts on test failures
+// This ensures all tests share the same Electron app instance
+test.describe.configure({ mode: 'serial' });
 
 let electronApp: ElectronApplication;
 let page: Page;
 let workspaceDir: string;
 
-test.beforeEach(async () => {
+test.beforeAll(async () => {
   workspaceDir = await createTempWorkspace();
 
-  // Create test files
-  await fs.writeFile(path.join(workspaceDir, 'alpha.md'), '# Alpha Document\n\nThis is the alpha file.\n', 'utf8');
-  await fs.writeFile(path.join(workspaceDir, 'beta.md'), '# Beta Document\n\nThis is the beta file.\n', 'utf8');
-  await fs.writeFile(path.join(workspaceDir, 'gamma.md'), '# Gamma Document\n\nThis is the gamma file.\n', 'utf8');
-  await fs.writeFile(path.join(workspaceDir, 'file1.md'), '# File 1\n\nContent 1\n', 'utf8');
-  await fs.writeFile(path.join(workspaceDir, 'file2.md'), '# File 2\n\nContent 2\n', 'utf8');
-  await fs.writeFile(path.join(workspaceDir, 'file3.md'), '# File 3\n\nContent 3\n', 'utf8');
+  // Create all test files upfront
+  await fs.writeFile(path.join(workspaceDir, TEST_FILES.contentAlpha), '# Alpha Document\n\nThis is the alpha file.\n', 'utf8');
+  await fs.writeFile(path.join(workspaceDir, TEST_FILES.contentBeta), '# Beta Document\n\nThis is the beta file.\n', 'utf8');
+  await fs.writeFile(path.join(workspaceDir, TEST_FILES.contentGamma), '# Gamma Document\n\nThis is the gamma file.\n', 'utf8');
+  await fs.writeFile(path.join(workspaceDir, TEST_FILES.reorderFile1), '# File 1\n\nContent 1\n', 'utf8');
+  await fs.writeFile(path.join(workspaceDir, TEST_FILES.reorderFile2), '# File 2\n\nContent 2\n', 'utf8');
+  await fs.writeFile(path.join(workspaceDir, TEST_FILES.reorderFile3), '# File 3\n\nContent 3\n', 'utf8');
+  await fs.writeFile(path.join(workspaceDir, TEST_FILES.noReloadFile), '# No Reload File\n\nContent for no-reload test.\n', 'utf8');
+  await fs.writeFile(path.join(workspaceDir, TEST_FILES.navFile1), '# Nav File 1\n\nContent 1\n', 'utf8');
+  await fs.writeFile(path.join(workspaceDir, TEST_FILES.navFile2), '# Nav File 2\n\nContent 2\n', 'utf8');
+  await fs.writeFile(path.join(workspaceDir, TEST_FILES.autosaveAlpha), '# Autosave Alpha\n\nThis is the autosave alpha file.\n', 'utf8');
+  await fs.writeFile(path.join(workspaceDir, TEST_FILES.autosaveBeta), '# Autosave Beta\n\nThis is the autosave beta file.\n', 'utf8');
 
   electronApp = await launchElectronApp({ workspace: workspaceDir });
   page = await electronApp.firstWindow();
   await page.waitForLoadState('domcontentloaded');
   await waitForAppReady(page);
   await dismissProjectTrustToast(page);
+  await dismissAPIKeyDialog(page);
 });
 
-test.afterEach(async () => {
+test.afterAll(async () => {
   await electronApp?.close();
   if (workspaceDir) {
     await fs.rm(workspaceDir, { recursive: true, force: true });
@@ -64,9 +97,9 @@ test.afterEach(async () => {
 test('should preserve each file content independently when switching tabs', async () => {
   const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
 
-  // Open alpha.md
-  await page.locator('.file-tree-name', { hasText: 'alpha.md' }).click();
-  await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('alpha.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+  // Open content-alpha.md
+  await page.locator('.file-tree-name', { hasText: TEST_FILES.contentAlpha }).click();
+  await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText(TEST_FILES.contentAlpha, { timeout: TEST_TIMEOUTS.TAB_SWITCH });
 
   // Add unique marker to alpha
   const alphaMarker = `alpha-marker-${Date.now()}`;
@@ -79,9 +112,9 @@ test('should preserve each file content independently when switching tabs', asyn
   expect(editorText).toContain('Alpha Document');
   expect(editorText).toContain(alphaMarker);
 
-  // Switch to beta.md
-  await page.locator('.file-tree-name', { hasText: 'beta.md' }).click();
-  await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('beta.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+  // Switch to content-beta.md
+  await page.locator('.file-tree-name', { hasText: TEST_FILES.contentBeta }).click();
+  await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText(TEST_FILES.contentBeta, { timeout: TEST_TIMEOUTS.TAB_SWITCH });
   await page.waitForTimeout(TEST_TIMEOUTS.DEFAULT_WAIT);
 
   // Verify beta content (should NOT contain alpha content)
@@ -91,14 +124,18 @@ test('should preserve each file content independently when switching tabs', asyn
   expect(editorText).not.toContain(alphaMarker);
 
   // Switch back to alpha - should still have alpha content only
-  await page.locator('.file-tabs-container .tab', { has: page.locator('.tab-title', { hasText: 'alpha.md' }) }).click();
-  await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('alpha.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+  await page.locator('.file-tabs-container .tab', { has: page.locator('.tab-title', { hasText: TEST_FILES.contentAlpha }) }).click();
+  await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText(TEST_FILES.contentAlpha, { timeout: TEST_TIMEOUTS.TAB_SWITCH });
   await page.waitForTimeout(TEST_TIMEOUTS.DEFAULT_WAIT);
 
   editorText = await editor.innerText();
   expect(editorText).toContain('Alpha Document');
   expect(editorText).toContain(alphaMarker);
   expect(editorText).not.toContain('Beta Document');
+
+  // Close tabs for cleanup
+  await closeTabByFileName(page, TEST_FILES.contentAlpha);
+  await closeTabByFileName(page, TEST_FILES.contentBeta);
 });
 
 // ============================================================================
@@ -108,14 +145,14 @@ test('should preserve each file content independently when switching tabs', asyn
 // Skip: Drag-to-reorder test is flaky - dragTo behavior is inconsistent
 test.skip('should allow dragging tabs to reorder them', async () => {
   // Open all three files
-  await page.locator('.file-tree-name', { hasText: 'file1.md' }).click();
-  await expect(page.locator('.file-tabs-container .tab .tab-title', { hasText: 'file1.md' })).toBeVisible({ timeout: TEST_TIMEOUTS.TAB_SWITCH });
+  await page.locator('.file-tree-name', { hasText: TEST_FILES.reorderFile1 }).click();
+  await expect(page.locator('.file-tabs-container .tab .tab-title', { hasText: TEST_FILES.reorderFile1 })).toBeVisible({ timeout: TEST_TIMEOUTS.TAB_SWITCH });
 
-  await page.locator('.file-tree-name', { hasText: 'file2.md' }).click();
-  await expect(page.locator('.file-tabs-container .tab .tab-title', { hasText: 'file2.md' })).toBeVisible({ timeout: TEST_TIMEOUTS.TAB_SWITCH });
+  await page.locator('.file-tree-name', { hasText: TEST_FILES.reorderFile2 }).click();
+  await expect(page.locator('.file-tabs-container .tab .tab-title', { hasText: TEST_FILES.reorderFile2 })).toBeVisible({ timeout: TEST_TIMEOUTS.TAB_SWITCH });
 
-  await page.locator('.file-tree-name', { hasText: 'file3.md' }).click();
-  await expect(page.locator('.file-tabs-container .tab .tab-title', { hasText: 'file3.md' })).toBeVisible({ timeout: TEST_TIMEOUTS.TAB_SWITCH });
+  await page.locator('.file-tree-name', { hasText: TEST_FILES.reorderFile3 }).click();
+  await expect(page.locator('.file-tabs-container .tab .tab-title', { hasText: TEST_FILES.reorderFile3 })).toBeVisible({ timeout: TEST_TIMEOUTS.TAB_SWITCH });
 
   // Get all tabs
   const tabs = page.locator('.file-tabs-container .tab .tab-title');
@@ -123,11 +160,11 @@ test.skip('should allow dragging tabs to reorder them', async () => {
 
   // Check initial order
   const initialOrder = await tabs.allInnerTexts();
-  expect(initialOrder).toEqual(['file1.md', 'file2.md', 'file3.md']);
+  expect(initialOrder).toEqual([TEST_FILES.reorderFile1, TEST_FILES.reorderFile2, TEST_FILES.reorderFile3]);
 
   // Drag file3 to the first position
-  const file3Tab = page.locator('.file-tabs-container .tab', { has: page.locator('.tab-title', { hasText: 'file3.md' }) });
-  const file1Tab = page.locator('.file-tabs-container .tab', { has: page.locator('.tab-title', { hasText: 'file1.md' }) });
+  const file3Tab = page.locator('.file-tabs-container .tab', { has: page.locator('.tab-title', { hasText: TEST_FILES.reorderFile3 }) });
+  const file1Tab = page.locator('.file-tabs-container .tab', { has: page.locator('.tab-title', { hasText: TEST_FILES.reorderFile1 }) });
 
   // Perform drag and drop
   await file3Tab.dragTo(file1Tab);
@@ -135,12 +172,17 @@ test.skip('should allow dragging tabs to reorder them', async () => {
 
   // Check new order
   const newOrder = await tabs.allInnerTexts();
-  expect(newOrder[0]).toBe('file3.md');
+  expect(newOrder[0]).toBe(TEST_FILES.reorderFile3);
+
+  // Close tabs for cleanup
+  await closeTabByFileName(page, TEST_FILES.reorderFile1);
+  await closeTabByFileName(page, TEST_FILES.reorderFile2);
+  await closeTabByFileName(page, TEST_FILES.reorderFile3);
 });
 
 test('should not reload tab when clicking on already active tab', async () => {
-  await page.locator('.file-tree-name', { hasText: 'file1.md' }).click();
-  await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('file1.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+  await page.locator('.file-tree-name', { hasText: TEST_FILES.noReloadFile }).click();
+  await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText(TEST_FILES.noReloadFile, { timeout: TEST_TIMEOUTS.TAB_SWITCH });
 
   const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
   await editor.click();
@@ -150,7 +192,7 @@ test('should not reload tab when clicking on already active tab', async () => {
   await page.keyboard.type(marker);
 
   // Click the already-active tab
-  const activeTab = page.locator('.tab.active', { has: page.locator('.tab-title', { hasText: 'file1.md' }) });
+  const activeTab = page.locator('.tab.active', { has: page.locator('.tab-title', { hasText: TEST_FILES.noReloadFile }) });
   await activeTab.click();
 
   // Editor should still have our marker
@@ -158,7 +200,10 @@ test('should not reload tab when clicking on already active tab', async () => {
   expect(editorText).toContain(marker);
 
   // Tab should still be active
-  await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('file1.md');
+  await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText(TEST_FILES.noReloadFile);
+
+  // Close tab for cleanup
+  await closeTabByFileName(page, TEST_FILES.noReloadFile);
 });
 
 // ============================================================================
@@ -168,18 +213,18 @@ test('should not reload tab when clicking on already active tab', async () => {
 // Skip: IPC-based tab navigation test is flaky in consolidated mode
 test.skip('tab navigation works in both Files and Agent modes', async () => {
   // Open first file
-  await page.locator('.file-tree-name', { hasText: 'file1.md' }).click();
+  await page.locator('.file-tree-name', { hasText: TEST_FILES.navFile1 }).click();
   await page.waitForTimeout(300);
 
   // Open second file
-  await page.locator('.file-tree-name', { hasText: 'file2.md' }).click();
+  await page.locator('.file-tree-name', { hasText: TEST_FILES.navFile2 }).click();
   await page.waitForTimeout(300);
 
-  // Verify file2 is active
+  // Verify navFile2 is active
   let activeTab = await page.locator(`${PLAYWRIGHT_TEST_SELECTORS.fileTabsContainer} .tab.active ${PLAYWRIGHT_TEST_SELECTORS.tabTitle}`).textContent();
-  expect(activeTab).toContain('file2.md');
+  expect(activeTab).toContain(TEST_FILES.navFile2);
 
-  // Navigate BACK (using IPC) from file2 -> should go to file1
+  // Navigate BACK (using IPC) from navFile2 -> should go to navFile1
   await electronApp.evaluate(({ BrowserWindow }) => {
     const focused = BrowserWindow.getFocusedWindow();
     if (focused) {
@@ -189,9 +234,9 @@ test.skip('tab navigation works in both Files and Agent modes', async () => {
   await page.waitForTimeout(500);
 
   activeTab = await page.locator(`${PLAYWRIGHT_TEST_SELECTORS.fileTabsContainer} .tab.active ${PLAYWRIGHT_TEST_SELECTORS.tabTitle}`).textContent();
-  expect(activeTab).toContain('file1.md');
+  expect(activeTab).toContain(TEST_FILES.navFile1);
 
-  // Navigate FORWARD from file1 -> should go to file2
+  // Navigate FORWARD from navFile1 -> should go to navFile2
   await electronApp.evaluate(({ BrowserWindow }) => {
     const focused = BrowserWindow.getFocusedWindow();
     if (focused) {
@@ -201,7 +246,7 @@ test.skip('tab navigation works in both Files and Agent modes', async () => {
   await page.waitForTimeout(500);
 
   activeTab = await page.locator(`${PLAYWRIGHT_TEST_SELECTORS.fileTabsContainer} .tab.active ${PLAYWRIGHT_TEST_SELECTORS.tabTitle}`).textContent();
-  expect(activeTab).toContain('file2.md');
+  expect(activeTab).toContain(TEST_FILES.navFile2);
 
   // Test that next-tab at the end does NOT wrap
   await electronApp.evaluate(({ BrowserWindow }) => {
@@ -213,7 +258,7 @@ test.skip('tab navigation works in both Files and Agent modes', async () => {
   await page.waitForTimeout(500);
 
   activeTab = await page.locator(`${PLAYWRIGHT_TEST_SELECTORS.fileTabsContainer} .tab.active ${PLAYWRIGHT_TEST_SELECTORS.tabTitle}`).textContent();
-  expect(activeTab).toContain('file2.md'); // No wrap
+  expect(activeTab).toContain(TEST_FILES.navFile2); // No wrap
 
   // Switch to Agent mode
   await page.keyboard.press('Meta+k');
@@ -239,9 +284,13 @@ test.skip('tab navigation works in both Files and Agent modes', async () => {
   await page.keyboard.press('Meta+e');
   await page.waitForTimeout(500);
 
-  // Verify file2 is still the active tab
+  // Verify navFile2 is still the active tab
   activeTab = await page.locator(`${PLAYWRIGHT_TEST_SELECTORS.fileTabsContainer} .tab.active ${PLAYWRIGHT_TEST_SELECTORS.tabTitle}`).textContent();
-  expect(activeTab).toContain('file2.md');
+  expect(activeTab).toContain(TEST_FILES.navFile2);
+
+  // Close tabs for cleanup
+  await closeTabByFileName(page, TEST_FILES.navFile1);
+  await closeTabByFileName(page, TEST_FILES.navFile2);
 });
 
 // ============================================================================
@@ -251,11 +300,11 @@ test.skip('tab navigation works in both Files and Agent modes', async () => {
 // Skip: Autosave timing test is flaky - works locally but inconsistent in CI
 test.skip('should auto-save on tab switch to prevent data loss', async () => {
   const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
-  const alphaPath = path.join(workspaceDir, 'alpha.md');
+  const alphaPath = path.join(workspaceDir, TEST_FILES.autosaveAlpha);
 
-  // Open alpha and modify it
-  await page.locator('.file-tree-name', { hasText: 'alpha.md' }).click();
-  await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('alpha.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+  // Open autosave-alpha and modify it
+  await page.locator('.file-tree-name', { hasText: TEST_FILES.autosaveAlpha }).click();
+  await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText(TEST_FILES.autosaveAlpha, { timeout: TEST_TIMEOUTS.TAB_SWITCH });
 
   const uniqueMarker = `modified-at-${Date.now()}`;
   await editor.click();
@@ -263,16 +312,16 @@ test.skip('should auto-save on tab switch to prevent data loss', async () => {
   await page.keyboard.type(`\n\n${uniqueMarker}`);
 
   // Verify alpha is dirty
-  const alphaTab = page.locator('.file-tabs-container .tab', { has: page.locator('.tab-title', { hasText: 'alpha.md' }) });
+  const alphaTab = page.locator('.file-tabs-container .tab', { has: page.locator('.tab-title', { hasText: TEST_FILES.autosaveAlpha }) });
   await expect(alphaTab.locator('.tab-dirty-indicator')).toBeVisible();
 
   // Verify file not saved yet
   const contentBeforeSwitch = await fs.readFile(alphaPath, 'utf-8');
   expect(contentBeforeSwitch).not.toContain(uniqueMarker);
 
-  // Switch to beta - this should trigger auto-save of alpha
-  await page.locator('.file-tree-name', { hasText: 'beta.md' }).click();
-  await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('beta.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+  // Switch to autosave-beta - this should trigger auto-save of alpha
+  await page.locator('.file-tree-name', { hasText: TEST_FILES.autosaveBeta }).click();
+  await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText(TEST_FILES.autosaveBeta, { timeout: TEST_TIMEOUTS.TAB_SWITCH });
 
   // Wait for auto-save to complete
   await page.waitForTimeout(1000);
@@ -283,4 +332,8 @@ test.skip('should auto-save on tab switch to prevent data loss', async () => {
 
   // Verify alpha's dirty indicator cleared after auto-save
   await expect(alphaTab.locator('.tab-dirty-indicator')).toHaveCount(0);
+
+  // Close tabs for cleanup
+  await closeTabByFileName(page, TEST_FILES.autosaveAlpha);
+  await closeTabByFileName(page, TEST_FILES.autosaveBeta);
 });

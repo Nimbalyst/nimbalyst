@@ -1,9 +1,28 @@
+/**
+ * E2E tests for WebFetch and WebSearch permission checks.
+ *
+ * Tests share a single app instance for performance. Each test uses a separate file
+ * to avoid interference between tests. Tests must run serially since they share
+ * the same workspace and app state.
+ *
+ * Tests that in Smart Permissions mode:
+ * - WebFetch requests trigger permission confirmation and "Always" saves URL patterns
+ * - WebSearch requests trigger permission confirmation and "Always" saves tool patterns
+ */
+
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from 'playwright';
-import { launchElectronApp, createTempWorkspace, TEST_TIMEOUTS } from '../helpers';
+import {
+  launchElectronApp,
+  createTempWorkspace,
+  waitForAppReady,
+  dismissProjectTrustToast,
+  TEST_TIMEOUTS,
+} from '../helpers';
 import {
   PLAYWRIGHT_TEST_SELECTORS,
   dismissAPIKeyDialog,
+  closeTabByFileName,
   trustWorkspaceSmartPermissions,
   switchToAgentMode,
   submitChatPrompt,
@@ -14,42 +33,44 @@ import {
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
-/**
- * E2E tests for WebFetch and WebSearch permission checks.
- *
- * Tests that in Smart Permissions mode:
- * - WebFetch requests trigger permission confirmation and "Always" saves URL patterns
- * - WebSearch requests trigger permission confirmation and "Always" saves tool patterns
- */
-
 // Increase timeout for AI-related tests
 test.setTimeout(90000);
+
+// Tests must run serially since they share the app instance
+test.describe.configure({ mode: 'serial' });
 
 let electronApp: ElectronApplication;
 let page: Page;
 let workspaceDir: string;
 
-test.beforeEach(async () => {
+test.beforeAll(async () => {
   workspaceDir = await createTempWorkspace();
 
-  // Create a test file so the workspace has content
-  const testFilePath = path.join(workspaceDir, 'test.md');
-  await fs.writeFile(testFilePath, '# Test Document\n\nTest content.\n', 'utf8');
+  // Create all test files upfront - each test uses a separate file
+  await fs.writeFile(
+    path.join(workspaceDir, 'webfetch-test.md'),
+    '# WebFetch Test Document\n\nTest content for webfetch permission tests.\n',
+    'utf8'
+  );
+  await fs.writeFile(
+    path.join(workspaceDir, 'websearch-test.md'),
+    '# WebSearch Test Document\n\nTest content for websearch permission tests.\n',
+    'utf8'
+  );
 
   electronApp = await launchElectronApp({ workspace: workspaceDir, permissionMode: 'none' });
   page = await electronApp.firstWindow();
 
   await page.waitForLoadState('domcontentloaded');
+  await waitForAppReady(page);
   await dismissAPIKeyDialog(page);
-
-  await expect(page.locator(PLAYWRIGHT_TEST_SELECTORS.workspaceSidebar))
-    .toBeVisible({ timeout: TEST_TIMEOUTS.SIDEBAR_LOAD });
+  await dismissProjectTrustToast(page);
 
   // Trust with Smart Permissions (not Always Allow)
   await trustWorkspaceSmartPermissions(page);
 });
 
-test.afterEach(async () => {
+test.afterAll(async () => {
   // Cancel any active AI request to avoid the "AI session running" quit dialog
   try {
     const cancelButton = page.locator('button.ai-cancel-button, [aria-label="Cancel"]');
@@ -61,17 +82,11 @@ test.afterEach(async () => {
     // No cancel button visible, that's fine
   }
 
-  // Force close - use evaluate to set a flag that bypasses the quit confirmation
-  try {
-    await electronApp.evaluate(async ({ app }) => {
-      // Force quit without confirmation
-      app.exit(0);
-    });
-  } catch {
-    // App may already be closed
-  }
+  await electronApp?.close();
 
-  await fs.rm(workspaceDir, { recursive: true, force: true }).catch(() => {});
+  if (workspaceDir) {
+    await fs.rm(workspaceDir, { recursive: true, force: true }).catch(() => {});
+  }
 });
 
 test('webfetch: Allow Always saves pattern and subsequent requests pass without asking', async () => {

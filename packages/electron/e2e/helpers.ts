@@ -169,7 +169,7 @@ export async function waitForAppReady(page: Page): Promise<void> {
 
 /**
  * Dismiss the project trust toast if it appears.
- * Clicks "Smart Permissions" (the recommended option) to trust the project.
+ * Clicks "Allow Edits" (the recommended option) to trust the project.
  * Safe to call even if the toast doesn't appear - will just return after timeout.
  *
  * @param page The Playwright page
@@ -177,13 +177,17 @@ export async function waitForAppReady(page: Page): Promise<void> {
  */
 export async function dismissProjectTrustToast(page: Page, timeout = 2000): Promise<void> {
   try {
-    // Wait for the trust toast to appear
-    const toast = page.locator('.project-trust-toast-overlay');
+    // Wait for the trust toast to appear - new UI has a heading with "Trust" in it
+    const toast = page.getByRole('heading', { name: /^Trust .+\?$/ });
     await toast.waitFor({ state: 'visible', timeout });
 
-    // Click the "Smart Permissions" button (first option, recommended)
-    const smartPermissionsBtn = page.locator('.project-trust-toast-option--primary');
-    await smartPermissionsBtn.click();
+    // Click the "Allow Edits" button (recommended option in new UI)
+    const allowEditsBtn = page.getByRole('button', { name: /Allow Edits/ });
+    await allowEditsBtn.click();
+
+    // Click Save to confirm
+    const saveButton = page.getByRole('button', { name: 'Save' });
+    await saveButton.click();
 
     // Wait for the toast to disappear
     await toast.waitFor({ state: 'hidden', timeout: 2000 });

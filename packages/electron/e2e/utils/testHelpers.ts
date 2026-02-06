@@ -70,8 +70,8 @@ export const PLAYWRIGHT_TEST_SELECTORS = {
   rejectAllButton: 'button.diff-reject-all-button[data-action="reject-all"]', // Alias for compatibility
   diffApprovalBar: '.diff-approval-bar', // Legacy - Lexical now uses unifiedDiffHeader
   unifiedDiffHeader: '.unified-diff-header', // Used by Lexical, Monaco, and custom editors
-  unifiedDiffAcceptAllButton: '.unified-diff-header-button-accept',
-  unifiedDiffRejectAllButton: '.unified-diff-header-button-reject',
+  unifiedDiffAcceptAllButton: '[data-testid="diff-keep-all"]',
+  unifiedDiffRejectAllButton: '[data-testid="diff-revert-all"]',
   diffChangeCounter: '.diff-change-counter',
 
   // Monaco diff approval (Code files)
@@ -505,9 +505,15 @@ export interface AITestSession {
  * Dismiss API key dialog if present
  */
 export async function dismissAPIKeyDialog(page: Page): Promise<void> {
-  const apiDialog = page.locator(PLAYWRIGHT_TEST_SELECTORS.apiKeyDialogOverlay);
-  if (await apiDialog.isVisible()) {
-    await page.locator(PLAYWRIGHT_TEST_SELECTORS.apiKeyDialogDismissButton).click();
+  try {
+    const apiDialog = page.locator(PLAYWRIGHT_TEST_SELECTORS.apiKeyDialogOverlay);
+    // Use a short timeout to check visibility
+    const isVisible = await apiDialog.isVisible().catch(() => false);
+    if (isVisible) {
+      await page.locator(PLAYWRIGHT_TEST_SELECTORS.apiKeyDialogDismissButton).click();
+    }
+  } catch {
+    // Dialog not present or already dismissed
   }
 }
 

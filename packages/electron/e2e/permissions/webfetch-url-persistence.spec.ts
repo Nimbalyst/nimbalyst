@@ -1,6 +1,27 @@
+/**
+ * E2E tests for WebFetch URL pattern persistence.
+ *
+ * These tests share a single Electron app instance for performance.
+ * Each test uses its own pre-created file to avoid state conflicts.
+ * Tests close their tabs at the end to clean up for the next test.
+ *
+ * These tests verify that URL patterns saved via "Allow Always" are:
+ * 1. Correctly persisted to the permission engine cache
+ * 2. Correctly checked on subsequent URL requests
+ * 3. Persisted across app restarts
+ *
+ * This tests the issue where users report that "Allow Always" doesn't
+ * persist and they keep getting prompted for the same URLs.
+ */
+
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from 'playwright';
-import { launchElectronApp, createTempWorkspace } from '../helpers';
+import {
+  launchElectronApp,
+  createTempWorkspace,
+  waitForAppReady,
+  dismissProjectTrustToast,
+} from '../helpers';
 import { dismissAPIKeyDialog } from '../utils/testHelpers';
 import {
   getWorkspacePermissions,
@@ -12,47 +33,47 @@ import {
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
-/**
- * E2E tests for WebFetch URL pattern persistence.
- *
- * These tests verify that URL patterns saved via "Allow Always" are:
- * 1. Correctly persisted to the permission engine cache
- * 2. Correctly checked on subsequent URL requests
- * 3. Persisted across app restarts
- *
- * This tests the issue where users report that "Allow Always" doesn't
- * persist and they keep getting prompted for the same URLs.
- */
+// Pre-created file names for each test scenario
+const TEST_FILES = {
+  isUrlAllowedBasic: 'test-is-url-allowed-basic.md',
+  multiplePatterns: 'test-multiple-patterns.md',
+  patternSavedToDisk: 'test-pattern-saved-to-disk.md',
+  cachedEngine: 'test-cached-engine.md',
+  wildcardPattern: 'test-wildcard-pattern.md',
+  subdomainHandling: 'test-subdomain-handling.md',
+  allowAllMode: 'test-allow-all-mode.md',
+};
+
+// Initial content for test files
+const INITIAL_CONTENT = '# Test Document\n\nTest content.\n';
 
 test.setTimeout(60000);
+
+// Use serial mode to prevent worker restarts on test failures
+// This ensures all tests share the same Electron app instance
+test.describe.configure({ mode: 'serial' });
 
 let electronApp: ElectronApplication;
 let page: Page;
 let workspaceDir: string;
 
-test.beforeEach(async () => {
+test.beforeAll(async () => {
   workspaceDir = await createTempWorkspace();
 
-  // Create a test file so the workspace has content
-  const testFilePath = path.join(workspaceDir, 'test.md');
-  await fs.writeFile(testFilePath, '# Test Document\n\nTest content.\n', 'utf8');
+  // Create ALL test files upfront
+  for (const fileName of Object.values(TEST_FILES)) {
+    await fs.writeFile(path.join(workspaceDir, fileName), INITIAL_CONTENT, 'utf8');
+  }
 
   electronApp = await launchElectronApp({ workspace: workspaceDir, permissionMode: 'none' });
   page = await electronApp.firstWindow();
-
-  await page.waitForLoadState('domcontentloaded');
+  await waitForAppReady(page);
+  await dismissProjectTrustToast(page);
   await dismissAPIKeyDialog(page);
 });
 
-test.afterEach(async () => {
-  try {
-    await electronApp.evaluate(async ({ app }) => {
-      app.exit(0);
-    });
-  } catch {
-    // App may already be closed
-  }
-
+test.afterAll(async () => {
+  await electronApp?.close();
   await fs.rm(workspaceDir, { recursive: true, force: true }).catch(() => {});
 });
 
@@ -136,7 +157,8 @@ test('URL pattern: persists across app restart', async () => {
   // Step 3: Relaunch the app with the same workspace
   electronApp = await launchElectronApp({ workspace: workspaceDir, permissionMode: 'none' });
   page = await electronApp.firstWindow();
-  await page.waitForLoadState('domcontentloaded');
+  await waitForAppReady(page);
+  await dismissProjectTrustToast(page);
   await dismissAPIKeyDialog(page);
 
   // Step 4: Verify the URL pattern persisted and isUrlAllowed still works

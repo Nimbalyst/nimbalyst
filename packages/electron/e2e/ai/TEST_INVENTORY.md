@@ -1,77 +1,69 @@
 # AI E2E Test Inventory
 
-## Tests Using Old AgenticCodingWindow (NEEDS FIX)
-These tests try to open a separate "Agentic Coding Window" which no longer exists. They need to be rewritten to use Agent mode instead.
+## Final State: 7 files, ~45 tests
 
-1. **agentic-coding-window.spec.ts** - Tests for opening agentic coding window
-   - Status: BROKEN - Uses `Meta+Alt+A` to open separate window
-   - Fix: Switch to agent mode using `[data-mode="agent"]`
+### Real AI Integration (1 file)
+| File | Tests | What it tests |
+| --- | --- | --- |
+| ai-smoke.spec.ts | 1 | Sends one prompt to Claude Code, verifies response. Skips without API key. |
 
-2. **agentic-coding-streaming.spec.ts** - Tests streaming transcript in agentic window
-   - Status: BROKEN - Opens separate window via IPC
-   - Fix: Use agent mode and check streaming in active session
+### Simulated Diff System (2 files)
+Uses `simulateApplyDiff`, `simulateStreamContent`, or direct `__editorRegistry` calls.
 
-3. **slash-command-simple.spec.ts** - Tests slash commands
-   - Status: BROKEN - Opens agentic window
-   - Fix: Use agent mode for slash command testing
+| File | Tests | What it tests |
+| --- | --- | --- |
+| diff-behavior.spec.ts | 12 | Tab targeting, consecutive edits, group approval, baseline tracking, cleanup |
+| diff-reliability.spec.ts | 18 | Complex diff edge cases (nested lists, tables, code blocks, streaming, special chars) |
 
-4. **slash-command-typeahead.spec.ts** - Tests slash command typeahead
-   - Status: BROKEN - Opens agentic window
-   - Fix: Use agent mode for typeahead testing
+### Session Management (1 file)
+| File | Tests | What it tests |
+| --- | --- | --- |
+| session-management.spec.ts | ~19 | Agent mode UI, concurrent sessions, cross-mode visibility, status indicators, workstreams, child session persistence, worktree persistence |
 
-## Tests That May Work (NEEDS VERIFICATION)
+### Input & Attachments (1 file)
+| File | Tests | What it tests |
+| --- | --- | --- |
+| ai-input-attachments.spec.ts | 8 | Image drag/drop, paste, removal, size validation, clear after send, @mention typeahead |
 
-5. **multi-panel-streaming.spec.ts** - Tests parallel streaming to multiple sessions
-   - Status: WORKING - Uses correct agent mode patterns
-   - Note: This is our reference implementation
+### AI Features (1 file)
+| File | Tests | What it tests |
+| --- | --- | --- |
+| ai-features.spec.ts | 3 | Claude Code session creation, context usage display, agent mode stability |
 
-6. **chat-panel-streaming.spec.ts** - Tests streaming in chat panel
-   - Status: NEEDS REVIEW - May simulate events incorrectly
-   - Fix: Verify it uses correct selectors and mode switching
+### File Operations (1 file)
+| File | Tests | What it tests |
+| --- | --- | --- |
+| ai-file-operations.spec.ts | 5 | Bash file tracking (cat, echo, rm, mv), git state clearing after commit |
 
-## Tests Needing Specific Updates
+## Consolidation History
 
-7. **ai-file-mention-*.spec.ts** (4 files)
-   - Tests for file mention typeahead feature
-   - May need selector updates
+- **Phase 1**: Deleted 3 real-AI test files, added smoke test, deleted outdated READMEs (28 -> 26 files)
+- **Phase 2**: Consolidated 8 simulated diff files into `diff-behavior.spec.ts` (26 -> 19 files)
+- **Phase 3**: Consolidated 16 UI-only files into 4 files, deleted `model-switching.spec.ts` (entirely skipped) (19 -> 7 files)
+- **Phase 4**: TBD - Add missing coverage for newer features
 
-8. **ai-multi-tab-editing.spec.ts**
-   - Tests editing multiple tabs
-   - May need selector updates
+## Deleted/Consolidated Files (Phase 3)
 
-9. **diff-*.spec.ts** (3 files)
-   - Tests diff/replacement functionality
-   - May need selector updates
+Into `session-management.spec.ts`:
+- agent-mode-comprehensive.spec.ts
+- concurrent-sessions.spec.ts
+- session-state-cross-mode.spec.ts
+- session-status-indicators.spec.ts
+- session-workstreams.spec.ts
+- child-session-persistence.spec.ts
+- worktree-session-persistence.spec.ts
 
-10. **mcp-*.spec.ts** (2 files)
-    - Tests MCP protocol integration
-    - May need selector updates
+Into `ai-input-attachments.spec.ts`:
+- ai-image-attachment.spec.ts
+- file-mention-all-types.spec.ts
+- image-attachment-persistence.spec.ts
 
-11. **claude-code-*.spec.ts** (3 files)
-    - Tests Claude Code SDK integration
-    - May need updates
+Into `ai-features.spec.ts`:
+- claude-code-basic.spec.ts
+- context-usage-display.spec.ts (kept UI test only, dropped real-AI tests)
+- slash-command-error.spec.ts
+- model-switching.spec.ts (deleted - entirely skipped)
 
-## Other Tests
-
-12. **ai-image-attachment.spec.ts**
-13. **ai-list-editing.spec.ts**
-14. **ai-session-file-tracking.spec.ts**
-15. **ai-table-diff-failure.spec.ts**
-16. **ai-tool-simulator.spec.ts**
-17. **model-switching.spec.ts**
-
-## Fix Priority
-
-### High Priority (Completely Broken)
-1. agentic-coding-window.spec.ts
-2. agentic-coding-streaming.spec.ts
-3. slash-command-simple.spec.ts
-4. slash-command-typeahead.spec.ts
-
-### Medium Priority (Likely Broken)
-5. chat-panel-streaming.spec.ts
-6. ai-file-mention-*.spec.ts
-7. ai-multi-tab-editing.spec.ts
-
-### Low Priority (May Just Need Minor Updates)
-8. All other tests - verify selectors and patterns
+Into `ai-file-operations.spec.ts`:
+- bash-file-tracking.spec.ts
+- git-state-clearing.spec.ts
