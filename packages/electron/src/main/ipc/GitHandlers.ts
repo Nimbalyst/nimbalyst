@@ -8,7 +8,7 @@ import { ipcMain } from 'electron';
 import simpleGit, { SimpleGit } from 'simple-git';
 import log from 'electron-log/main';
 import { existsSync } from 'fs';
-import { join } from 'path';
+import { join, relative, isAbsolute } from 'path';
 import { gitOperationLock } from '../services/GitOperationLock';
 
 function isGitRepository(workspacePath: string): boolean {
@@ -186,6 +186,15 @@ export function registerGitHandlers(): void {
           const repoHasCommits = await hasCommits(git);
           log.info(`[git:commit] Starting commit in ${workspacePath} with ${filesToStage?.length || 0} files (hasCommits: ${repoHasCommits})`);
 
+          // Convert a file path (possibly absolute) to a git-relative path with forward slashes.
+          // git.status() returns relative paths with forward slashes, but filesToStage
+          // may contain absolute paths (from renderer). On Windows, path.relative()
+          // returns backslashes, so normalize to forward slashes.
+          const toGitPath = (f: string) => {
+            const rel = isAbsolute(f) ? relative(workspacePath, f) : f;
+            return rel.replace(/\\/g, '/');
+          };
+
           // Track originally staged files so we can restore them after commit
           const initialStatus = await git.status();
           const originallyStaged = new Set([...initialStatus.staged, ...initialStatus.created]);
@@ -226,10 +235,10 @@ export function registerGitHandlers(): void {
               };
             }
 
-            // Verify staged files match selected files exactly
-            const filesToStageSet = new Set(filesToStage);
-            const unexpectedFiles = Array.from(stagedFiles).filter(f => !filesToStageSet.has(f));
-            const missingFiles = filesToStage.filter(f => !stagedFiles.has(f));
+            const filesToStageRelative = filesToStage.map(toGitPath);
+            const filesToStageRelSet = new Set(filesToStageRelative);
+            const unexpectedFiles = Array.from(stagedFiles).filter(f => !filesToStageRelSet.has(f));
+            const missingFiles = filesToStageRelative.filter(f => !stagedFiles.has(f));
 
             if (unexpectedFiles.length > 0) {
               log.error(`[git:commit] Unexpected files staged: ${unexpectedFiles.join(', ')}`);
@@ -271,7 +280,7 @@ export function registerGitHandlers(): void {
           }
 
           // Restore originally staged files that weren't part of this commit
-          const committedFilesSet = new Set(filesToStage || []);
+          const committedFilesSet = new Set((filesToStage || []).map(toGitPath));
           const filesToRestage = Array.from(originallyStaged).filter(f => !committedFilesSet.has(f));
           if (filesToRestage.length > 0) {
             log.info(`[git:commit] Restoring ${filesToRestage.length} originally staged files`);
