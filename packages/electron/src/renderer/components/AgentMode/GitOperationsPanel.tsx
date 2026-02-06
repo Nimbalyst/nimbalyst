@@ -592,6 +592,12 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
           if ((result?.message === 'merge-conflict-detected' || result?.message === 'merge-conflict-in-main') && result?.conflictedFiles) {
             // Show merge conflict dialog
             setMergeConflictFiles(result.conflictedFiles);
+          } else if (result?.message) {
+            // Show bad git state or other error dialog
+            setBadGitStateError({
+              message: result.message,
+              conflictedFiles: result.conflictedFiles,
+            });
           } else {
             console.error('[GitOperationsPanel] Worktree merge failed:', result?.error || result?.message);
           }

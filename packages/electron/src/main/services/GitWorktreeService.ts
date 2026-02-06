@@ -844,8 +844,9 @@ export class GitWorktreeService {
 
       // Check for various git states by looking for specific files in .git directory
       const inMerge = fs.existsSync(path.join(gitDir, 'MERGE_HEAD'));
-      const inRebase = fs.existsSync(path.join(gitDir, 'REBASE_HEAD')) ||
-                       fs.existsSync(path.join(gitDir, 'rebase-merge')) ||
+      // Note: REBASE_HEAD alone is NOT sufficient - it can be a stale leftover.
+      // Git tracks active rebases via rebase-merge/ or rebase-apply/ directories.
+      const inRebase = fs.existsSync(path.join(gitDir, 'rebase-merge')) ||
                        fs.existsSync(path.join(gitDir, 'rebase-apply'));
       const inCherryPick = fs.existsSync(path.join(gitDir, 'CHERRY_PICK_HEAD'));
       const inRevert = fs.existsSync(path.join(gitDir, 'REVERT_HEAD'));
