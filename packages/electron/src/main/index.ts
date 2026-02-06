@@ -14,6 +14,7 @@ import { createApplicationMenu } from './menu/ApplicationMenu';
 import { updateNativeTheme, updateWindowTitleBars } from './theme/ThemeManager';
 import { restoreSessionState, saveSessionState } from './session/SessionState';
 import { createWorkspaceManagerWindow, setupWorkspaceManagerHandlers, wasWorkspaceManagerManuallyClosed } from './window/WorkspaceManagerWindow.ts';
+import { showSplashScreen, closeSplashScreen } from './window/SplashScreen';
 import { registerFileHandlers } from './ipc/FileHandlers';
 import { registerWorkspaceHandlers } from './ipc/WorkspaceHandlers.ts';
 import { registerSettingsHandlers } from './ipc/SettingsHandlers';
@@ -460,6 +461,9 @@ function parseCommandLineArgs() {
 app.whenReady().then(async () => {
     checkpoint('app-ready');
 
+    // Show splash screen immediately so the user sees something while we initialize
+    showSplashScreen();
+
     // Set up permission request handler to control when system permission dialogs appear
     // This prevents microphone permission prompt from appearing on app launch
     // Microphone access is only granted when the user explicitly enables voice mode
@@ -903,6 +907,9 @@ app.whenReady().then(async () => {
     const useStandaloneBinary = store.get('useStandaloneBinary', false) as boolean;
     ClaudeCodeProvider.setUseStandaloneBinary(useStandaloneBinary);
     logger.main.info('[ClaudeCodeProvider] Initialized useStandaloneBinary setting', { useStandaloneBinary });
+
+    // Close splash screen now that initialization is done and a real window is about to show
+    closeSplashScreen();
 
     if (pendingWorkspacePath) {
         // Handle workspace path from CLI

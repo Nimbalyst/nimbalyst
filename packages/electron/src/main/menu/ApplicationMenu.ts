@@ -38,6 +38,7 @@ import { getFileWatcherStatus, refreshWorkspaceFileTree, getGlobalFileWatcherSta
 import { getFolderContents } from '../utils/FileTree';
 import { logger } from '../utils/logger';
 import { getFocusedWindow } from '../utils/windowFocus';
+import { showSplashScreen } from '../window/SplashScreen';
 import { autoUpdaterService } from '../services/autoUpdater';
 import { KeyboardShortcuts } from './KeyboardShortcuts';
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
@@ -1235,6 +1236,12 @@ export async function createApplicationMenu() {
                             label: 'Show Database Recovery Dialog',
                             click: async () => {
                                 database.showRecoveryDialog();
+                            }
+                        },
+                        {
+                            label: 'Show Splash Screen',
+                            click: () => {
+                                showSplashScreen();
                             }
                         }
                     ]
