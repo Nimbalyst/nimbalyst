@@ -32,15 +32,21 @@ export interface ReadOnlyEditorHostOptions {
 export function createReadOnlyEditorHost(options: ReadOnlyEditorHostOptions): EditorHost {
   // Minimal no-op storage
   const noopStorage: ExtensionStorage = {
-    async get<T>(_key: string, defaultValue?: T): Promise<T | undefined> {
-      return defaultValue;
+    get<T>(_key: string): T | undefined {
+      return undefined;
     },
     async set(_key: string, _value: unknown): Promise<void> {},
     async delete(_key: string): Promise<void> {},
-    async keys(): Promise<string[]> {
-      return [];
+    getGlobal<T>(_key: string): T | undefined {
+      return undefined;
     },
-    async clear(): Promise<void> {},
+    async setGlobal(_key: string, _value: unknown): Promise<void> {},
+    async deleteGlobal(_key: string): Promise<void> {},
+    async getSecret(_key: string): Promise<string | undefined> {
+      return undefined;
+    },
+    async setSecret(_key: string, _value: string): Promise<void> {},
+    async deleteSecret(_key: string): Promise<void> {},
   };
 
   return {

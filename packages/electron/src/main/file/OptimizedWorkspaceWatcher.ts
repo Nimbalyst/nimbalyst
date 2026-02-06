@@ -149,8 +149,9 @@ export class OptimizedWorkspaceWatcher {
                 .on('ready', () => {
                     // console.log(`[WorkspaceWatcher] *** WATCHER READY *** for: ${workspacePath}`);
                 })
-                .on('error', (error: NodeJS.ErrnoException) => {
-                    if (error.code === 'EMFILE' || error.code === 'ENFILE') {
+                .on('error', (error: unknown) => {
+                    const code = error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined;
+                    if (code === 'EMFILE' || code === 'ENFILE') {
                         logger.workspaceWatcher.warn(`Too many open files - some file tree changes may not be detected. Try closing other workspaces or collapsing large folders.`);
                     } else {
                         logger.workspaceWatcher.error('Watcher error:', error);
