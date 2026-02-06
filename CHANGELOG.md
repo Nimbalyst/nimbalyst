@@ -20,6 +20,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.52] - 2026-02-06
+
+
+### Added
+- Onboarding "Other" referral source now includes a write-in text field
+- Effort level selector for Opus 4.6 sessions
+
+### Fixed
+- Prevent duplicate error dialog when database lock is detected
+
 ## [0.52.51] - 2026-02-05
 
 
