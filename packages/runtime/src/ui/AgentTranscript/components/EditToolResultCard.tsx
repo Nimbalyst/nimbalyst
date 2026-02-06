@@ -1,9 +1,18 @@
 import React from 'react';
 import type { Message } from '../../../ai/server/types';
 import { DiffViewer } from './DiffViewer';
+import { NewFilePreview } from './NewFilePreview';
 import { toProjectRelative, shortenPath } from '../utils/pathResolver';
 import { formatToolDisplayName } from '../utils/toolNameFormatter';
 import { MaterialSymbol } from '../../icons/MaterialSymbol';
+
+/** Returns true if the edit represents a new file creation (content only, no diff) */
+const isNewFileEdit = (edit: any): boolean => {
+  if (!edit.content || typeof edit.content !== 'string') return false;
+  if (edit.old_string || edit.new_string || edit.oldText || edit.newText) return false;
+  if (Array.isArray(edit.replacements) && edit.replacements.length > 0) return false;
+  return true;
+};
 
 interface EditToolResultCardProps {
   toolMessage: Message;
@@ -52,9 +61,12 @@ export const EditToolResultCard: React.FC<EditToolResultCardProps> = ({ toolMess
   const toolDisplayName = formatToolDisplayName(tool.name || '') || tool.name || 'Edit';
 
   const instruction = truncateInstruction(getInstructionText(toolMessage));
-  const statusLabel = toolMessage.isError ? 'Failed' : 'Applied';
+  const allNewFiles = edits.every(isNewFileEdit);
+  const statusLabel = toolMessage.isError ? 'Failed' : allNewFiles ? 'Created' : 'Applied';
   const statusClass = toolMessage.isError ? 'error' : 'success';
-  const editCountLabel = edits.length === 1 ? '1 edit' : `${edits.length} edits`;
+  const editCountLabel = allNewFiles
+    ? `${edits[0].content.split('\n').length} lines`
+    : edits.length === 1 ? '1 edit' : `${edits.length} edits`;
 
   const handleOpenFile = () => {
     if (firstEditPath && onOpenFile) {
@@ -66,7 +78,7 @@ export const EditToolResultCard: React.FC<EditToolResultCardProps> = ({ toolMess
     <div className="rich-transcript-edit-card rounded bg-nim-secondary border border-nim p-2 flex flex-col gap-2">
       <div className="rich-transcript-edit-card__header flex items-start gap-2">
         <div className="rich-transcript-edit-card__icon w-5 h-5 text-nim-primary shrink-0 p-1 rounded-lg flex items-center justify-center" aria-hidden="true">
-          <MaterialSymbol icon="edit" size={16} />
+          <MaterialSymbol icon={allNewFiles ? "note_add" : "edit"} size={16} />
         </div>
         <div className="rich-transcript-edit-card__details flex-1 min-w-0">
           <div className="rich-transcript-edit-card__title font-mono text-[0.85rem] text-nim font-semibold flex flex-wrap items-baseline gap-1 leading-[1.4]">
@@ -119,6 +131,20 @@ export const EditToolResultCard: React.FC<EditToolResultCardProps> = ({ toolMess
         {edits.map((edit, idx) => {
           const absolutePath = resolveEditFilePath(edit, toolMessage);
           const relativePath = absolutePath ? toProjectRelative(absolutePath, workspacePath) : undefined;
+
+          if (isNewFileEdit(edit)) {
+            return (
+              <NewFilePreview
+                key={`new-${idx}`}
+                content={edit.content}
+                filePath={relativePath || absolutePath}
+                maxHeight="18rem"
+                onOpenFile={onOpenFile}
+                absoluteFilePath={absolutePath}
+              />
+            );
+          }
+
           return (
             <DiffViewer
               key={`edit-${idx}`}
