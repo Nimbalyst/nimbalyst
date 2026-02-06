@@ -232,10 +232,14 @@ export class NanoBananaProvider implements ImageProvider {
       parts: [{ text: enhancedPrompt }],
     });
 
+    const aspectRatio = request.aspectRatio || '1:1';
     const requestBody = {
       contents,
       generationConfig: {
         responseModalities: ['TEXT', 'IMAGE'],
+        imageConfig: {
+          aspectRatio,
+        },
       },
     };
 
@@ -354,6 +358,9 @@ export class NanoBananaProvider implements ImageProvider {
       ],
       generationConfig: {
         responseModalities: ['TEXT', 'IMAGE'],
+        imageConfig: {
+          aspectRatio,
+        },
       },
     };
 
