@@ -20,6 +20,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.54] - 2026-02-06
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- Fixed clicks being blocked after Claude Code login by properly passing auth error flag through IPC error handler and clearing pointer-events overlay
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.52.53] - 2026-02-06
 
 
