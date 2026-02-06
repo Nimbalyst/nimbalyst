@@ -20,7 +20,7 @@ import { atomFamily } from 'jotai/utils';
  * Set when ai:error event fires for this session.
  */
 export const sessionErrorAtom = atomFamily((_sessionId: string) =>
-  atom<{ message: string; isBedrockToolError?: boolean; isServerError?: boolean } | null>(null)
+  atom<{ message: string; isAuthError?: boolean; isBedrockToolError?: boolean; isServerError?: boolean } | null>(null)
 );
 
 // Note: ExitPlanMode uses inline widget rendering from tool call data via ExitPlanModeWidget

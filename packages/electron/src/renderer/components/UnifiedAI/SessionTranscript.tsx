@@ -430,6 +430,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
         content: `Error: ${sessionError.message}`,
         timestamp: Date.now(),
         isError: true,
+        ...(sessionError.isAuthError && { isAuthError: true }),
       };
       updateSessionStore({
         sessionId,

@@ -64,14 +64,15 @@ export function initSessionTranscriptListeners(): () => void {
     window.electronAPI.on('ai:error', (data: {
       sessionId: string;
       message: string;
+      isAuthError?: boolean;
       isBedrockToolError?: boolean;
       isServerError?: boolean;
     }) => {
-      const { sessionId, message, isBedrockToolError, isServerError } = data;
+      const { sessionId, message, isAuthError, isBedrockToolError, isServerError } = data;
       if (!sessionId) return;
 
       // Set the error in the atom - SessionTranscript will read it and display
-      store.set(sessionErrorAtom(sessionId), { message, isBedrockToolError, isServerError });
+      store.set(sessionErrorAtom(sessionId), { message, isAuthError, isBedrockToolError, isServerError });
     })
   );
 
