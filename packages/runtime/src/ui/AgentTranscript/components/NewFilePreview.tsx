@@ -20,6 +20,14 @@ const extensionToLanguage: Record<string, string> = {
 
 const markdownExtensions = new Set(['md', 'mdx', 'markdown']);
 
+/** Strip YAML frontmatter (---\n...\n---) from markdown content */
+function stripFrontmatter(text: string): string {
+  if (!text.startsWith('---')) return text;
+  const end = text.indexOf('\n---', 3);
+  if (end === -1) return text;
+  return text.slice(end + 4).trimStart();
+}
+
 function getFileInfo(filePath?: string): { language: string; isMarkdown: boolean } {
   if (!filePath) return { language: '', isMarkdown: false };
   const filename = filePath.split('/').pop()?.toLowerCase() || '';
@@ -87,7 +95,7 @@ export const NewFilePreview: React.FC<NewFilePreviewProps> = ({
       <div className="relative" style={isCollapsed ? { maxHeight, overflow: 'hidden' } : undefined}>
         {isMarkdown ? (
           <div className="p-3">
-            <MarkdownRenderer content={displayContent} />
+            <MarkdownRenderer content={stripFrontmatter(displayContent)} />
           </div>
         ) : (
           <div className="markdown-content" style={{ color: 'var(--nim-text)' }}>
