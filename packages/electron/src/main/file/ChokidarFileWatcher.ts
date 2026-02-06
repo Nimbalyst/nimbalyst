@@ -122,9 +122,14 @@ export class ChokidarFileWatcher {
                 });
 
                 // Handle errors
-                watcher.on('error', (error) => {
-                    logger.fileWatcher.error(`Watcher error for ${filePath}:`, error);
-                    reject(error);
+                watcher.on('error', (error: NodeJS.ErrnoException) => {
+                    if (error.code === 'EMFILE' || error.code === 'ENFILE') {
+                        logger.fileWatcher.warn(`Too many open files - could not watch ${filePath}. External changes to this file may not be detected.`);
+                        resolve(); // Don't reject - the file can still be edited, just not watched
+                    } else {
+                        logger.fileWatcher.error(`Watcher error for ${filePath}:`, error);
+                        reject(error);
+                    }
                 });
 
                 windowWatchers.set(filePath, watcher);

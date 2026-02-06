@@ -69,10 +69,14 @@ export class OptimizedWorkspaceWatcher {
                         relativePath.includes('/out/') ||
                         relativePath.includes('/coverage/') ||
                         relativePath.includes('/.next/') ||
+                        relativePath.includes('/.nuxt/') ||
                         relativePath.includes('/.vscode/') ||
                         relativePath.includes('/.idea/') ||
                         relativePath.includes('/target/') ||
-                        relativePath.includes('/worktrees/')) {
+                        relativePath.includes('/worktrees/') ||
+                        relativePath.includes('/.cache/') ||
+                        relativePath.includes('/.turbo/') ||
+                        relativePath.includes('/.svelte-kit/')) {
                         return true;
                     }
 
@@ -145,9 +149,13 @@ export class OptimizedWorkspaceWatcher {
                 .on('ready', () => {
                     // console.log(`[WorkspaceWatcher] *** WATCHER READY *** for: ${workspacePath}`);
                 })
-                .on('error', (error) => {
-                    logger.workspaceWatcher.error('Watcher error:', error);
-                    console.error(`[WorkspaceWatcher] Error:`, error);
+                .on('error', (error: NodeJS.ErrnoException) => {
+                    if (error.code === 'EMFILE' || error.code === 'ENFILE') {
+                        logger.workspaceWatcher.warn(`Too many open files - some file tree changes may not be detected. Try closing other workspaces or collapsing large folders.`);
+                    } else {
+                        logger.workspaceWatcher.error('Watcher error:', error);
+                        console.error(`[WorkspaceWatcher] Error:`, error);
+                    }
                 });
 
             this.watchers.set(windowId, watcher);
