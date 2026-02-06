@@ -40,6 +40,8 @@ import {
     type AppTheme,
     dismissClaudeCodeWindowsWarning,
     dismissDiscordInvitation,
+    shouldShowRosettaWarning,
+    dismissRosettaWarning,
     getSessionSyncConfig,
     getTheme,
     hasCheckedClaudeCodeInstallation,
@@ -877,6 +879,16 @@ app.whenReady().then(async () => {
     safeOn('dismiss-claude-code-windows-warning', (event) => {
         logger.main.info('User dismissed Windows Claude Code warning permanently');
         dismissClaudeCodeWindowsWarning();
+    });
+
+    // Rosetta warning: x64 build running on Apple Silicon via translation
+    safeHandle('platform:should-show-rosetta-warning', async () => {
+        return shouldShowRosettaWarning();
+    });
+
+    safeOn('dismiss-rosetta-warning', (event) => {
+        logger.main.info('User dismissed Rosetta warning permanently');
+        dismissRosettaWarning();
     });
 
     // Skip session restoration if opening a specific workspace from CLI

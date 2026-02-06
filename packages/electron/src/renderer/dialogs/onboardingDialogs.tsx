@@ -9,6 +9,7 @@ import React from 'react';
 import { registerDialog } from '../contexts/DialogContext';
 import type { DialogConfig } from '../contexts/DialogContext.types';
 import { WindowsClaudeCodeWarning } from '../components/WindowsClaudeCodeWarning/WindowsClaudeCodeWarning';
+import { RosettaWarning } from '../components/RosettaWarning/RosettaWarning';
 import { UnifiedOnboarding, type OnboardingData } from '../components/UnifiedOnboarding/UnifiedOnboarding';
 import { DIALOG_IDS } from './registry';
 
@@ -18,6 +19,12 @@ export interface WindowsClaudeCodeWarningData {
   onClose: () => void;
   onDismiss: () => void;
   onOpenSettings: () => void;
+}
+
+export interface RosettaWarningData {
+  onClose: () => void;
+  onDismiss: () => void;
+  onDownload: () => void;
 }
 
 export interface UnifiedOnboardingData {
@@ -84,6 +91,34 @@ function UnifiedOnboardingWrapper({
   );
 }
 
+function RosettaWarningWrapper({
+  isOpen,
+  onClose,
+  data,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  data: RosettaWarningData;
+}) {
+  return (
+    <RosettaWarning
+      isOpen={isOpen}
+      onClose={() => {
+        data.onClose();
+        onClose();
+      }}
+      onDismiss={() => {
+        data.onDismiss();
+        onClose();
+      }}
+      onDownload={() => {
+        data.onDownload();
+        onClose();
+      }}
+    />
+  );
+}
+
 // Register all onboarding dialogs
 export function registerOnboardingDialogs() {
   registerDialog<WindowsClaudeCodeWarningData>({
@@ -100,5 +135,13 @@ export function registerOnboardingDialogs() {
     component:
       UnifiedOnboardingWrapper as DialogConfig<UnifiedOnboardingData>['component'],
     priority: 210, // Slightly higher than Windows warning
+  });
+
+  registerDialog<RosettaWarningData>({
+    id: DIALOG_IDS.ROSETTA_WARNING,
+    group: 'onboarding',
+    component:
+      RosettaWarningWrapper as DialogConfig<RosettaWarningData>['component'],
+    priority: 190,
   });
 }

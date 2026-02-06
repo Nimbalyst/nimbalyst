@@ -35,6 +35,7 @@ export {
 export {
   registerOnboardingDialogs,
   type WindowsClaudeCodeWarningData,
+  type RosettaWarningData,
   type UnifiedOnboardingData,
   type OnboardingData,
 } from './onboardingDialogs';

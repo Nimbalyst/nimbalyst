@@ -1,4 +1,5 @@
 import Store from 'electron-store';
+import { execSync } from 'child_process';
 import { existsSync } from 'fs';
 import * as path from 'path';
 import { RecentItem, SessionState, SessionWindow } from '../types';
@@ -890,6 +891,28 @@ export function shouldShowClaudeCodeWindowsWarning(): boolean {
   const isWindows = process.platform === 'win32';
   const dismissed = isClaudeCodeWindowsWarningDismissed();
   return isWindows && !dismissed;
+}
+
+export function isRosettaWarningDismissed(): boolean {
+  return getAppStore().get('rosettaWarningDismissed', false);
+}
+
+export function dismissRosettaWarning(): void {
+  getAppStore().set('rosettaWarningDismissed', true);
+}
+
+export function shouldShowRosettaWarning(): boolean {
+  if (process.platform !== 'darwin') return false;
+  if (isRosettaWarningDismissed()) return false;
+  try {
+    const result = execSync('sysctl -n sysctl.proc_translated', {
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'ignore'],
+    }).trim();
+    return result === '1';
+  } catch {
+    return false;
+  }
 }
 
 export function isDiscordInvitationDismissed(): boolean {

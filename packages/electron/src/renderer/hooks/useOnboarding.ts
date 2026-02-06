@@ -3,7 +3,7 @@ import { useAtomValue, useSetAtom } from 'jotai';
 import { usePostHog } from 'posthog-js/react';
 import { dialogRef, dialogReadyAtom } from '../contexts/DialogContext';
 import { DIALOG_IDS } from '../dialogs';
-import type { OnboardingData, UnifiedOnboardingData, WindowsClaudeCodeWarningData } from '../dialogs';
+import type { OnboardingData, UnifiedOnboardingData, WindowsClaudeCodeWarningData, RosettaWarningData } from '../dialogs';
 import OnboardingService from '../services/OnboardingService';
 import type { ContentMode } from '../types/WindowModeTypes';
 import { setDeveloperFeatureSettingsAtom } from '../store/atoms/appSettings';
@@ -156,8 +156,9 @@ export function useOnboarding({
 
     onboardingOpenRef.current = false;
 
-    // After onboarding closes, check if we need to show Windows warning
+    // After onboarding closes, check if we need to show platform warnings
     checkWindowsWarning();
+    checkRosettaWarning();
   }, [posthog]);
 
   // Check if we should show the Windows Claude Code warning
@@ -207,6 +208,40 @@ export function useOnboarding({
     }
   }, [workspaceMode, posthog, setActiveMode]);
 
+  // Check if we should show the Rosetta warning (x64 build on Apple Silicon)
+  const checkRosettaWarning = useCallback(async () => {
+    // Only run on macOS
+    if (!navigator.platform.startsWith('Mac')) return;
+
+    // Skip in Playwright tests
+    if ((window as any).PLAYWRIGHT) return;
+
+    // Only show in workspace mode windows
+    if (!workspaceMode) return;
+
+    try {
+      const shouldShow = await window.electronAPI.invoke('platform:should-show-rosetta-warning');
+      if (!shouldShow) return;
+
+      if (dialogRef.current) {
+        dialogRef.current.open<RosettaWarningData>(DIALOG_IDS.ROSETTA_WARNING, {
+          onClose: () => {
+            posthog?.capture('rosetta_warning_closed');
+          },
+          onDismiss: () => {
+            posthog?.capture('rosetta_warning_dismissed_forever');
+          },
+          onDownload: () => {
+            posthog?.capture('rosetta_warning_download_clicked');
+            window.electronAPI.openExternal('https://nimbalyst.com');
+          },
+        });
+      }
+    } catch (error) {
+      console.error('[useOnboarding] Error checking Rosetta warning:', error);
+    }
+  }, [workspaceMode, posthog]);
+
   // Check for unified onboarding on first launch
   // Wait for: initialization complete, dialog system ready, workspace mode
   useEffect(() => {
@@ -226,8 +261,9 @@ export function useOnboarding({
 
       // Only check the new unified onboarding flag
       if (state.unifiedOnboardingCompleted) {
-        // Onboarding already done, check Windows warning
+        // Onboarding already done, check platform warnings
         checkWindowsWarning();
+        checkRosettaWarning();
         return;
       }
 

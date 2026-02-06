@@ -39,6 +39,7 @@ export const DIALOG_IDS = {
   ONBOARDING: 'onboarding',
   FEATURE_WALKTHROUGH: 'feature-walkthrough',
   WINDOWS_CLAUDE_CODE_WARNING: 'windows-claude-code-warning',
+  ROSETTA_WARNING: 'rosetta-warning',
 
   // Developer group
   SESSION_IMPORT: 'session-import',
