@@ -320,7 +320,8 @@
     },
     "nsis": {
       "oneClick": false,
-      "packElevateHelper": false
+      "packElevateHelper": false,
+      "runAfterFinish": false
     },
     "linux": {
       "target": "AppImage",

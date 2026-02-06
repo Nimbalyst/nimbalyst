@@ -81,6 +81,7 @@ import { stopAllFileWatchers } from './file/FileWatcher';
 import { stopAllWorkspaceWatchers } from './file/WorkspaceWatcher.ts';
 import { autoUpdaterService, AutoUpdaterService } from './services/autoUpdater';
 import { initializeDatabase } from './database/initialize';
+import { HandledError } from './database/PGLiteDatabaseWorker';
 import { AnalyticsService } from "./services/analytics/AnalyticsService.ts";
 import { registerAnalyticsHandlers } from "./ipc/AnalyticsHandlers.ts";
 import { shutdownStytchAuth, handleAuthCallback } from './services/StytchAuthService';
@@ -530,6 +531,13 @@ app.whenReady().then(async () => {
         logger.main.info('Database initialization completed');
       } catch (error) {
         logger.main.error('Error initializing database:', error);
+
+        // If the error was already handled with a user-facing dialog (e.g. DATABASE_LOCKED),
+        // don't show a second dialog. The dialog's own callback will call app.quit().
+        if (error instanceof HandledError) {
+            logger.main.info('Database error already handled via dialog, skipping redundant error UI');
+            return;
+        }
 
         const errorMessage = error instanceof Error ? error.message : String(error);
 

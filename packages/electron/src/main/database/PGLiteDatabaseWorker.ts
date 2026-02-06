@@ -11,6 +11,12 @@ import { v4 as uuidv4 } from 'uuid';
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
 import { DatabaseBackupService } from '../services/database/DatabaseBackupService';
 
+/**
+ * Error that has already been shown to the user via a dialog.
+ * Callers should skip redundant error UI when catching this.
+ */
+export class HandledError extends Error {}
+
 // Helper to categorize database errors
 function categorizeDBError(error: any): string {
   const message = error?.message?.toLowerCase() || String(error).toLowerCase();
@@ -367,8 +373,9 @@ export class PGLiteDatabaseWorker {
           'Another instance of Nimbalyst is already running.',
           'The database is locked by another process. Please close the other instance before starting a new one.\n\nRunning multiple instances simultaneously can cause data corruption.'
         );
-        // Don't re-throw - we're quitting
-        return;
+        // Throw to prevent downstream code from continuing while quit dialog is pending.
+        // HandledError signals to index.ts that a user-facing dialog was already shown.
+        throw new HandledError('DATABASE_LOCKED');
       }
 
       // Check for DATABASE_INIT_FAILED - offer restore if backups exist
