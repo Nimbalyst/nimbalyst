@@ -19,6 +19,19 @@ function isGitRepository(workspacePath: string): boolean {
   }
 }
 
+/**
+ * Check if the repository has any commits (HEAD exists).
+ * In a fresh repo, HEAD doesn't exist and commands like `git reset HEAD` or `git diff HEAD` will fail.
+ */
+async function hasCommits(git: SimpleGit): Promise<boolean> {
+  try {
+    await git.revparse(['HEAD']);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 interface GitStatusResult {
   branch: string;
   ahead: number;
@@ -51,21 +64,26 @@ export function registerGitHandlers(): void {
       return { branch: '', ahead: 0, behind: 0, hasUncommitted: false };
     }
 
-    try {
-      const git: SimpleGit = simpleGit(workspacePath);
-      const status = await git.status();
-      const branch = status.current || 'HEAD';
+    // Use lock to prevent racing with git:commit and other write operations.
+    // simple-git's git.status() refreshes the index (creates index.lock),
+    // which races with concurrent git add/commit/reset operations.
+    return gitOperationLock.withLock(workspacePath, 'git:status', async () => {
+      try {
+        const git: SimpleGit = simpleGit(workspacePath);
+        const status = await git.status();
+        const branch = status.current || 'HEAD';
 
-      return {
-        branch,
-        ahead: status.ahead || 0,
-        behind: status.behind || 0,
-        hasUncommitted: !status.isClean(),
-      };
-    } catch (error) {
-      log.error('Failed to get git status:', error);
-      throw error;
-    }
+        return {
+          branch,
+          ahead: status.ahead || 0,
+          behind: status.behind || 0,
+          hasUncommitted: !status.isClean(),
+        };
+      } catch (error) {
+        log.error('Failed to get git status:', error);
+        throw error;
+      }
+    });
   });
 
   /**
@@ -84,6 +102,11 @@ export function registerGitHandlers(): void {
 
       try {
         const git: SimpleGit = simpleGit(workspacePath);
+
+        if (!(await hasCommits(git))) {
+          return [];
+        }
+
         const gitLog = await git.log({ maxCount: Math.min(limit, 50) });
 
         return gitLog.all.map((commit) => ({
@@ -118,6 +141,13 @@ export function registerGitHandlers(): void {
 
       try {
         const git: SimpleGit = simpleGit(workspacePath);
+
+        // In a fresh repo with no commits, diff against an empty tree instead of HEAD
+        if (!(await hasCommits(git))) {
+          const diff = await git.diff(['--cached', '--', filePath]);
+          return diff;
+        }
+
         const diff = await git.diff(['HEAD', '--', filePath]);
         return diff;
       } catch (error) {
@@ -153,7 +183,8 @@ export function registerGitHandlers(): void {
       return gitOperationLock.withLock(workspacePath, 'git:commit', async () => {
         try {
           const git: SimpleGit = simpleGit(workspacePath);
-          log.info(`[git:commit] Starting commit in ${workspacePath} with ${filesToStage?.length || 0} files`);
+          const repoHasCommits = await hasCommits(git);
+          log.info(`[git:commit] Starting commit in ${workspacePath} with ${filesToStage?.length || 0} files (hasCommits: ${repoHasCommits})`);
 
           // Track originally staged files so we can restore them after commit
           const initialStatus = await git.status();
@@ -165,7 +196,15 @@ export function registerGitHandlers(): void {
             // First, unstage all files to ensure we only commit what the user selected
             // This prevents previously-staged files from being included in the commit
             log.info(`[git:commit] Resetting staging area before staging selected files`);
-            await git.reset(['HEAD']);
+            if (repoHasCommits) {
+              await git.reset(['HEAD']);
+            } else {
+              // In a fresh repo with no commits, HEAD doesn't exist.
+              // Use `git rm --cached` to unstage files instead.
+              if (originallyStaged.size > 0) {
+                await git.raw(['rm', '--cached', '-r', '.']);
+              }
+            }
 
             log.info(`[git:commit] Staging files: ${filesToStage.join(', ')}`);
             await git.add(filesToStage);
@@ -195,7 +234,11 @@ export function registerGitHandlers(): void {
             if (unexpectedFiles.length > 0) {
               log.error(`[git:commit] Unexpected files staged: ${unexpectedFiles.join(', ')}`);
               // Restore original state and abort
-              await git.reset(['HEAD']);
+              if (repoHasCommits) {
+                await git.reset(['HEAD']);
+              } else {
+                await git.raw(['rm', '--cached', '-r', '.']);
+              }
               if (originallyStaged.size > 0) {
                 await git.add(Array.from(originallyStaged));
               }
