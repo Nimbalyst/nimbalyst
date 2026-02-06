@@ -3427,6 +3427,31 @@ export class ClaudeCodeProvider extends BaseAIProvider {
               createdAt: Date.now(),
             };
 
+            // Log as nimbalyst_tool_use so SessionManager creates a toolCall for ToolPermissionWidget rendering
+            if (sessionId) {
+              const patternDisplay = getPatternDisplayName(subPattern);
+              await this.logAgentMessage(
+                sessionId,
+                'claude-code',
+                'output',
+                JSON.stringify({
+                  type: 'nimbalyst_tool_use',
+                  id: requestId,
+                  name: 'ToolPermission',
+                  input: {
+                    requestId,
+                    toolName: 'Bash',
+                    rawCommand: subCommand,
+                    pattern: subPattern,
+                    patternDisplayName: patternDisplay,
+                    isDestructive: true,
+                    warnings: ['This is part of a compound command - each part is checked separately'],
+                    workspacePath,
+                  }
+                })
+              );
+            }
+
             // Wait for user approval
             const responsePromise = new Promise<{ decision: 'allow' | 'deny'; scope: 'once' | 'session' | 'always' | 'always-all' }>((resolve, reject) => {
               this.pendingToolPermissions.set(requestId, { resolve, reject, request });
