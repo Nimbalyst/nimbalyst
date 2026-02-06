@@ -71,6 +71,7 @@ export const UnifiedOnboarding: React.FC<UnifiedOnboardingProps> = ({
   const [selectedRole, setSelectedRole] = useState<string>('');
   const [customRole, setCustomRole] = useState<string>('');
   const [referralSource, setReferralSource] = useState<string>('');
+  const [customReferral, setCustomReferral] = useState<string>('');
   const [socialMediaPlatform, setSocialMediaPlatform] = useState<string>('');
   const [email, setEmail] = useState<string>('');
   const [emailError, setEmailError] = useState<string>('');
@@ -105,6 +106,7 @@ export const UnifiedOnboarding: React.FC<UnifiedOnboardingProps> = ({
       setSelectedRole('');
       setCustomRole('');
       setReferralSource('');
+      setCustomReferral('');
       setSocialMediaPlatform('');
       setEmail('');
       setEmailError('');
@@ -148,9 +150,12 @@ export const UnifiedOnboarding: React.FC<UnifiedOnboardingProps> = ({
 
   const handleComplete = () => {
     // Build referral source string: if social, append platform (e.g., "social:LinkedIn")
+    // If other, append custom text (e.g., "other:Podcast")
     let finalReferralSource = referralSource || null;
     if (referralSource === 'social' && socialMediaPlatform) {
       finalReferralSource = `social:${socialMediaPlatform}`;
+    } else if (referralSource === 'other' && customReferral.trim()) {
+      finalReferralSource = `other:${customReferral.trim()}`;
     }
 
     const data: OnboardingData = {
@@ -300,6 +305,9 @@ export const UnifiedOnboarding: React.FC<UnifiedOnboardingProps> = ({
                     if (e.target.value !== 'social') {
                       setSocialMediaPlatform('');
                     }
+                    if (e.target.value !== 'other') {
+                      setCustomReferral('');
+                    }
                   }}
                   className="unified-onboarding-select"
                   disabled={!isModeSelected}
@@ -310,6 +318,21 @@ export const UnifiedOnboarding: React.FC<UnifiedOnboardingProps> = ({
                     </option>
                   ))}
                 </select>
+
+                {referralSource === 'other' && (
+                  <div className="custom-role-input">
+                    <input
+                      id="custom-referral-input"
+                      type="text"
+                      placeholder="e.g. Podcast, Blog, Conference"
+                      value={customReferral}
+                      onChange={(e) => setCustomReferral(e.target.value)}
+                      className="unified-onboarding-input"
+                      disabled={!isModeSelected}
+                      autoFocus
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Email */}

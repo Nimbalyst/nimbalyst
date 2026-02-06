@@ -114,9 +114,15 @@ export function useOnboarding({
           surveyPayload['$survey_response'] = data.customRole || roleLabels[data.role] || data.role;
         }
         if (data.referralSource) {
-          // Handle social:Platform format
-          const referralKey = data.referralSource.startsWith('social:') ? 'social' : data.referralSource;
-          surveyPayload['$survey_response_1'] = referralLabels[referralKey] || data.referralSource;
+          // Handle social:Platform and other:CustomText formats
+          if (data.referralSource.startsWith('social:')) {
+            surveyPayload['$survey_response_1'] = referralLabels['social'] || data.referralSource;
+          } else if (data.referralSource.startsWith('other:')) {
+            const customText = data.referralSource.substring('other:'.length);
+            surveyPayload['$survey_response_1'] = `Other: ${customText}`;
+          } else {
+            surveyPayload['$survey_response_1'] = referralLabels[data.referralSource] || data.referralSource;
+          }
         }
         posthog.capture('survey sent', surveyPayload);
       }
