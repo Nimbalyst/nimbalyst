@@ -275,6 +275,7 @@ export function initSessionStateListeners(): () => void {
   /**
    * Handle notification click events.
    * Switches to the session that was clicked in the OS notification.
+   * If the session is a child of a workstream, selects the parent instead.
    */
   const handleNotificationClicked = (data: { sessionId: string }) => {
     const { sessionId } = data;
@@ -286,10 +287,31 @@ export function initSessionStateListeners(): () => void {
       return;
     }
 
-    // Switch to the session
+    // Check if this is a child session - if so, select the parent workstream
+    const registry = store.get(sessionRegistryAtom);
+    const sessionMeta = registry.get(sessionId);
+    if (sessionMeta?.parentSessionId) {
+      // Child session - select parent and set this child as active
+      const parentState = store.get(workstreamStateAtom(sessionMeta.parentSessionId));
+      const parentType = parentState.type === 'worktree' ? 'worktree'
+        : parentState.type === 'workstream' ? 'workstream'
+        : 'workstream'; // Default to workstream since it has children
+      store.set(setSelectedWorkstreamAtom, {
+        workspacePath,
+        selection: { type: parentType, id: sessionMeta.parentSessionId },
+      });
+      return;
+    }
+
+    // Root session - determine its type
+    const state = store.get(workstreamStateAtom(sessionId));
+    const type = state.type === 'worktree' ? 'worktree'
+      : state.type === 'workstream' ? 'workstream'
+      : 'session';
+
     store.set(setSelectedWorkstreamAtom, {
       workspacePath,
-      selection: { type: 'session', id: sessionId },
+      selection: { type, id: sessionId },
     });
   };
 

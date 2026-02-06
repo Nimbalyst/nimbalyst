@@ -50,6 +50,7 @@ import { initFileStateListeners } from '../../store/listeners/fileStateListeners
 import { initSessionListListeners } from '../../store/listeners/sessionListListeners';
 import { initSessionTranscriptListeners } from '../../store/listeners/sessionTranscriptListeners';
 import { initClaudeUsageListeners } from '../../store/listeners/claudeUsageListeners';
+import { fetchSessionSharesAtom } from '../../store';
 import type { WorktreeCreateResult, SessionCreateResult } from '../../../shared/ipc/types';
 
 export interface AgentModeRef {
@@ -117,6 +118,9 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
   // Default model for new sessions (user's last selected model)
   const defaultModel = useAtomValue(defaultAgentModelAtom);
 
+  // Shares state
+  const fetchShares = useSetAtom(fetchSessionSharesAtom);
+
   // Get the active child session ID if the selected workstream has one
   const activeChildAtom = useMemo(
     () => selectedWorkstream ? workstreamActiveChildAtom(selectedWorkstream.id) : atom(null),
@@ -162,6 +166,11 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
     const cleanup = initClaudeUsageListeners();
     return cleanup;
   }, []);
+
+  // Fetch session shares on mount (if authenticated)
+  useEffect(() => {
+    fetchShares();
+  }, [fetchShares]);
 
   // Initialize file state listeners (global, runs once per workspace)
   useEffect(() => {
@@ -505,30 +514,6 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
     }
   }, [workspacePath, setSelectedWorkstream, addSession]);
 
-  // Handle session selection from list (for root sessions/workstreams)
-  const handleSessionSelect = useCallback((sessionId: string) => {
-    // Determine the actual type by checking the workstream state
-    const state = store.get(workstreamStateAtom(sessionId));
-    // Map internal state type ('single') to selection type ('session')
-    const type = state.type === 'worktree' ? 'worktree'
-      : state.type === 'workstream' ? 'workstream'
-      : 'session';
-
-    // Track active session for worktree (for "return to last session" feature)
-    const sessionData = store.get(sessionStoreAtom(sessionId));
-    if (sessionData?.worktreeId) {
-      store.set(setWorktreeActiveSessionAtom, {
-        worktreeId: sessionData.worktreeId,
-        sessionId,
-      });
-    }
-
-    setSelectedWorkstream({
-      workspacePath,
-      selection: { type, id: sessionId },
-    });
-  }, [workspacePath, setSelectedWorkstream]);
-
   // Handle child session selection from workstream group
   // Opens the parent workstream and sets the child as active
   const handleChildSessionSelect = useCallback(async (
@@ -579,6 +564,40 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
       });
     }
   }, [workspacePath, setSelectedWorkstream]);
+
+  // Handle session selection from list (for root sessions/workstreams)
+  // Also handles child sessions by detecting parentSessionId and redirecting to parent
+  const handleSessionSelect = useCallback((sessionId: string) => {
+    // Check if this is a child session - if so, redirect to the parent workstream
+    const registry = store.get(sessionRegistryAtom);
+    const sessionMeta = registry.get(sessionId);
+    if (sessionMeta?.parentSessionId) {
+      // This is a child session - select the parent workstream instead
+      handleChildSessionSelect(sessionId, sessionMeta.parentSessionId, 'workstream');
+      return;
+    }
+
+    // Determine the actual type by checking the workstream state
+    const state = store.get(workstreamStateAtom(sessionId));
+    // Map internal state type ('single') to selection type ('session')
+    const type = state.type === 'worktree' ? 'worktree'
+      : state.type === 'workstream' ? 'workstream'
+      : 'session';
+
+    // Track active session for worktree (for "return to last session" feature)
+    const sessionData = store.get(sessionStoreAtom(sessionId));
+    if (sessionData?.worktreeId) {
+      store.set(setWorktreeActiveSessionAtom, {
+        worktreeId: sessionData.worktreeId,
+        sessionId,
+      });
+    }
+
+    setSelectedWorkstream({
+      workspacePath,
+      selection: { type, id: sessionId },
+    });
+  }, [workspacePath, setSelectedWorkstream, handleChildSessionSelect]);
 
   // Session management atoms
   const refreshSessions = useSetAtom(refreshSessionListAtom);

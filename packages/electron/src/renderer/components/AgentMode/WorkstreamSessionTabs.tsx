@@ -13,7 +13,8 @@
 import React, { useCallback, useState, useRef, useEffect } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { MaterialSymbol, ProviderIcon } from '@nimbalyst/runtime';
-import { sessionArchivedAtom } from '../../store/atoms/sessions';
+import { store } from '@nimbalyst/runtime/store';
+import { sessionArchivedAtom, sessionRegistryAtom } from '../../store/atoms/sessions';
 import { AgentSessionPanel } from './AgentSessionPanel';
 import {
   sessionTitleAtom,
@@ -288,11 +289,16 @@ export const WorkstreamSessionTabs: React.FC<WorkstreamSessionTabsProps> = React
       return;
     }
 
+    // Resolve the actual parent ID - if workstreamId is a child session, use its parent
+    const registry = store.get(sessionRegistryAtom);
+    const sessionMeta = registry.get(workstreamId);
+    const resolvedParentId = sessionMeta?.parentSessionId || workstreamId;
+
     // Regular workstream logic
-    if (hasChildren) {
-      // Already a workstream - just create a child with user's default model
+    if (hasChildren || resolvedParentId !== workstreamId) {
+      // Already a workstream (has children, or we resolved to a parent) - create a child
       await createChildSession({
-        parentSessionId: workstreamId,
+        parentSessionId: resolvedParentId,
         workspacePath,
         model: defaultModel,
       });
