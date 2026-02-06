@@ -1356,8 +1356,11 @@ export async function initializeExtensions(): Promise<void> {
       const discovered = await loader.discoverExtensions();
       console.info(`[ExtensionLoader] Found ${discovered.length} extension(s):`, discovered.map(d => d.manifest.id));
 
-      for (const ext of discovered) {
-        // Check persisted enabled state, passing manifest's defaultEnabled
+      // Load extensions concurrently for faster startup.
+      // Each extension is independent (own module, own context, own activation).
+      // The loadedExtensions Map is updated synchronously within each async task,
+      // which is safe in single-threaded JS.
+      const loadPromises = discovered.map(async (ext) => {
         let shouldLoad = true;
         if (enabledStateProvider) {
           try {
@@ -1375,7 +1378,7 @@ export async function initializeExtensions(): Promise<void> {
           console.info(
             `[ExtensionLoader] Skipping disabled extension: ${ext.manifest.name}`
           );
-          continue;
+          return;
         }
 
         console.info(
@@ -1385,7 +1388,8 @@ export async function initializeExtensions(): Promise<void> {
         if (!result.success) {
           console.error(`[ExtensionLoader] Failed to load ${ext.manifest.id}:`, result.error);
         }
-      }
+      });
+      await Promise.all(loadPromises);
 
       console.info(
         `[ExtensionLoader] Loaded ${loader.getLoadedExtensions().length} extension(s)`

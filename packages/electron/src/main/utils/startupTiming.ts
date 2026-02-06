@@ -2,12 +2,11 @@
  * Startup Timing Instrumentation
  *
  * Provides lightweight timing instrumentation for measuring main process
- * initialization performance. Enable with NIMBALYST_STARTUP_TIMING=true
- * environment variable.
+ * initialization performance. Always enabled to help diagnose slow startup
+ * on all platforms. The overhead is negligible (Date.now() calls + Map entries).
  */
 
-const isEnabled = process.env.NIMBALYST_STARTUP_TIMING === 'true' ||
-                  process.env.NODE_ENV === 'development';
+const isEnabled = true;
 
 const startupStart = Date.now();
 const timings: Map<string, { start: number; end?: number }> = new Map();
@@ -71,12 +70,19 @@ export function getSummary(): Record<string, { duration: number; total: number }
 }
 
 /**
+ * Get total elapsed time since startup began.
+ */
+export function getTotalStartupTime(): number {
+  return Date.now() - startupStart;
+}
+
+/**
  * Log the final startup summary.
  */
 export function logSummary(): void {
   if (!isEnabled) return;
 
-  const totalTime = Date.now() - startupStart;
+  const totalTime = getTotalStartupTime();
   console.log('\n[STARTUP] === Summary ===');
   console.log(`[STARTUP] Total startup time: ${totalTime}ms`);
 

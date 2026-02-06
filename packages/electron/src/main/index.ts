@@ -1,7 +1,7 @@
 import { app, BrowserWindow, dialog, nativeImage, nativeTheme, session } from 'electron';
 import { safeHandle, safeOn } from './utils/ipcRegistry';
 import { markBootComplete } from './utils/bootState';
-import { markStart, markEnd, checkpoint, logSummary } from './utils/startupTiming';
+import { markStart, markEnd, checkpoint, logSummary, getSummary, getTotalStartupTime } from './utils/startupTiming';
 import type { SessionStore } from '@nimbalyst/runtime';
 import * as os from 'os';
 import * as path from 'path';
@@ -620,25 +620,23 @@ app.whenReady().then(async () => {
         }
     }
 
-    // Register all IPC handlers
-    markStart('ipc-handlers');
+    // ================================================================
+    // STARTUP PHASE 1: Register synchronous IPC handlers
+    // These are instant (no I/O) and must be ready before renderer loads
+    // ================================================================
+    markStart('ipc-handlers-sync');
     registerFileHandlers();
     registerWorkspaceHandlers();
     registerWorkspaceWatcherHandlers();
     registerSettingsHandlers();
     registerWindowHandlers();
-    await registerHistoryHandlers();
-    await registerSessionHandlers();
-    await registerSessionStateHandlers();
-    await registerThemeHandlers();
     setupWorkspaceManagerHandlers();
     setupSessionFileHandlers();
     registerSlashCommandHandlers();
-    await registerUsageAnalyticsHandlers();
     registerAttachmentHandlers();
     registerProjectSelectionHandlers();
     registerClaudeCodeHandlers();
-    initializeClaudeCodeSessionHandlers();  // Initialize Claude Code session import
+    initializeClaudeCodeSessionHandlers();
     registerAnalyticsHandlers();
     registerNotificationHandlers();
     registerClaudeUsageHandlers();
@@ -653,213 +651,28 @@ app.whenReady().then(async () => {
     registerDatabaseBrowserHandlers();
     registerTerminalHandlers();
     registerExportHandlers();
-    markEnd('ipc-handlers');
-
-    // Inject MCP config loader into ClaudeCodeProvider
-    // This allows the runtime package to load merged user + workspace MCP configs
-    mcpConfigService = new MCPConfigService();
-
-    // Start watching user-level MCP config for changes
-    mcpConfigService.startWatchingUserConfig();
-
-    // Register change callback to notify all windows when MCP config changes
-    mcpConfigService.onChange((scope, workspacePath) => {
-        logger.mcp.info('[MCP] Config changed:', { scope, workspacePath });
-
-        // Notify all windows
-        BrowserWindow.getAllWindows().forEach(window => {
-            if (!window.isDestroyed()) {
-                window.webContents.send('mcp-config-changed', { scope, workspacePath });
-            }
-        });
-    });
-
-    ClaudeCodeProvider.setMCPConfigLoader(async (workspacePath?: string) => {
-        if (!mcpConfigService) {
-            throw new Error('MCP config service not initialized');
-        }
-        const mergedConfig = await mcpConfigService.getMergedConfig(workspacePath);
-        const allServers = mergedConfig.mcpServers || {};
-
-        // Filter out disabled servers and process for runtime
-        // (On Windows, converts npm/npx/etc commands to .cmd equivalents)
-        const enabledServers: Record<string, any> = {};
-        for (const [name, config] of Object.entries(allServers)) {
-            if (!(config as any).disabled) {
-                enabledServers[name] = mcpConfigService.processServerConfigForRuntime(config as any);
-            }
-        }
-        return enabledServers;
-    });
-
-    // Inject extension plugins loader into ClaudeCodeProvider
-    // This allows extensions to provide Claude SDK plugins with custom commands/agents
-    // Uses main-process-native implementation that reads extension manifests directly
-    ClaudeCodeProvider.setExtensionPluginsLoader(getClaudePluginPaths);
-
-    // Inject Claude Code settings loader
-    // This allows user/project commands to be enabled/disabled via settings
-    ClaudeCodeProvider.setClaudeCodeSettingsLoader(async () => {
-        const { getClaudeCodeSettings } = await import('./utils/store');
-        return getClaudeCodeSettings();
-    });
-
-    // Inject env vars loader to pass ~/.claude/settings.json env vars to the SDK
-    // This ensures experimental flags (e.g., CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS)
-    // are passed directly via the SDK env option for maximum reliability
-    ClaudeCodeProvider.setClaudeSettingsEnvLoader(async () => {
-        const settingsManager = ClaudeSettingsManager.getInstance();
-        return settingsManager.getUserLevelEnv();
-    });
-
-    // Inject additional directories loader
-    // This allows Claude to access SDK docs when working on extension projects
-    ClaudeCodeProvider.setAdditionalDirectoriesLoader(getAdditionalDirectoriesForWorkspace);
-
-    // Inject security logger for agent permission checks (dev mode only)
-    if (process.env.NODE_ENV === 'development') {
-      ClaudeCodeProvider.setSecurityLogger((message, data) => {
-        logger.agentSecurity.info(message, data);
-      });
-    }
-
-    // Inject Claude settings pattern saver
-    // Writes tool patterns to .claude/settings.local.json when user approves with "Always"
-    const claudeSettingsManager = ClaudeSettingsManager.getInstance();
-    ClaudeCodeProvider.setClaudeSettingsPatternSaver(async (workspacePath, pattern) => {
-      await claudeSettingsManager.addAllowedTool(workspacePath, pattern);
-    });
-
-    // Inject Claude settings pattern checker
-    // Checks if a pattern is in the allow list (from all settings sources)
-    ClaudeCodeProvider.setClaudeSettingsPatternChecker(async (workspacePath, pattern) => {
-      const effectiveSettings = await claudeSettingsManager.getEffectiveSettings(workspacePath);
-      return effectiveSettings.permissions.allow.includes(pattern);
-    });
-
-    // Inject trust checker
-    // Checks if a workspace is trusted before allowing tool execution
-    // NOTE: For worktree sessions, AIService pre-resolves the worktree path to the parent
-    // project (worktreeProjectPath) and passes it via documentContext.permissionsPath.
-    // ClaudeCodeProvider then uses permissionsPath for trust checks, ensuring this
-    // checker receives the parent project path, not the worktree path.
-    const permissionService = getPermissionService();
-    ClaudeCodeProvider.setTrustChecker((workspacePath) => {
-      const mode = permissionService.getPermissionMode(workspacePath);
-      return {
-        trusted: mode !== null,
-        mode
-      };
-    });
-
-    // Inject image compressor
-    // Compresses images to fit within Claude API 5MB base64 limit
-    ClaudeCodeProvider.setImageCompressor(async (buffer, mimeType, options) => {
-      const { compressImage } = await import('./services/ImageCompressor');
-      const result = await compressImage(buffer, mimeType, options);
-      return {
-        buffer: result.buffer,
-        mimeType: result.mimeType,
-        wasCompressed: result.wasCompressed
-      };
-    });
-
-    // Inject extension file types loader
-    // Allows planning mode to permit editing extension-registered file types
-    ClaudeCodeProvider.setExtensionFileTypesLoader(getRegisteredExtensions);
-
     registerMockupHandlers();
     registerDataModelHandlers();
     registerExtensionHandlers();
     registerOffscreenEditorHandlers();
 
-    // Initialize extension file types (must happen before file operations)
-    markStart('extension-file-types');
-    await initializeExtensionFileTypes();
-    markEnd('extension-file-types');
-
-    // Initialize AI service
-    markStart('ai-service-init');
-    if (!runtimeSessionStore) {
-        throw new Error('AI session store unavailable after database initialization');
-    }
-    aiService = new AIService(runtimeSessionStore);
-    markEnd('ai-service-init');
-
-    // Initialize Voice Mode handlers
-    // The renderer calls 'voice-mode:init' to trigger initialization
-    safeHandle('voice-mode:init', async () => {
-      return { success: true };
-    });
-    initVoiceModeService();
-    initVoiceModeSettingsHandler();
-    registerWalkthroughHandlers();
-
-    // Initialize Agent service
-    // agentService = new AgentService(aiService);
-
-    // Start MCP SSE server
-    markStart('mcp-servers');
-    try {
-        const result = await startMcpHttpServer(3456);
-        mcpHttpServer = result.httpServer;
-        logger.mcp.info('MCP SSE server started on port', result.port);
-
-        // Store the actual port for providers to use
-        (global as any).mcpServerPort = result.port;
-
-        // Inject the port into ClaudeCodeProvider so it can configure the MCP server
-        ClaudeCodeProvider.setMcpServerPort(result.port);
-    } catch (error) {
-            logger.mcp.error('Failed to start MCP SSE server:', error);
-    }
-
-    // Start session naming MCP server
-    try {
-        const sessionNamingService = SessionNamingService.getInstance();
-        await sessionNamingService.start();
-        // logger.mcp.info('Session naming MCP server started');
-    } catch (error) {
-        logger.mcp.error('Failed to start session naming MCP server:', error);
-    }
-
-    // Start extension dev MCP server (for Extension Developer Kit)
-    try {
-        const extensionDevService = ExtensionDevService.getInstance();
-        await extensionDevService.start();
-        // logger.mcp.info('Extension dev MCP server started');
-    } catch (error) {
-        logger.mcp.error('Failed to start extension dev MCP server:', error);
-    }
-    markEnd('mcp-servers');
-
-    // Set up IPC handler to update document state for MCP
+    // Set up IPC handlers for MCP, theme, and misc events
     safeOn('mcp:updateDocumentState', (event, state) => {
-        // Get the window that sent this message
         const window = BrowserWindow.fromWebContents(event.sender);
         const windowId = window?.id;
-
-        // Register the workspace-to-window mapping for routing
         if (state?.workspacePath && windowId) {
-            // logger.mcp.info(`Registering workspace ${state.workspacePath} -> window ${windowId}`);
             registerWorkspaceWindow(state.workspacePath, windowId);
         } else {
             logger.mcp.warn(`Cannot register workspace: workspacePath=${state?.workspacePath}, windowId=${windowId}`);
         }
-
-        // Update document state with the workspace path (canonical identifier)
         updateDocumentState(state);
     });
-
-    // Set up IPC handler for extension tool registration
     safeOn('mcp:registerExtensionTools', (event, data) => {
         const { workspacePath, tools } = data;
         if (workspacePath && tools) {
             registerExtensionTools(workspacePath, tools);
         }
     });
-
-    // Set up IPC handler for theme changes from renderer
     safeOn('set-theme', (event, theme: AppTheme, isDark?: boolean) => {
         setTheme(theme, isDark);
         updateNativeTheme();
@@ -868,18 +681,21 @@ app.whenReady().then(async () => {
         });
         updateWindowTitleBars();
     });
-
-    // Set up IPC handler for Discord invitation dismissal
     safeOn('dismiss-discord-invitation', (event) => {
         logger.main.info('User dismissed Discord invitation permanently');
         dismissDiscordInvitation();
     });
-
-    // Set up IPC handler for Windows Claude Code warning dismissal
     safeOn('dismiss-claude-code-windows-warning', (event) => {
         logger.main.info('User dismissed Windows Claude Code warning permanently');
         dismissClaudeCodeWindowsWarning();
     });
+    safeHandle('voice-mode:init', async () => {
+      return { success: true };
+    });
+    initVoiceModeService();
+    initVoiceModeSettingsHandler();
+    registerWalkthroughHandlers();
+    markEnd('ipc-handlers-sync');
 
     // Rosetta warning: x64 build running on Apple Silicon via translation
     safeHandle('platform:should-show-rosetta-warning', async () => {
@@ -891,11 +707,98 @@ app.whenReady().then(async () => {
         dismissRosettaWarning();
     });
 
-    // Skip session restoration if opening a specific workspace from CLI
+    // ================================================================
+    // STARTUP PHASE 2: Parallel async initialization
+    // These all need the database but are independent of each other.
+    // Run them concurrently to reduce total startup time.
+    // ================================================================
+    markStart('ipc-handlers-async');
+    await Promise.all([
+        registerHistoryHandlers(),
+        registerSessionHandlers(),
+        registerSessionStateHandlers(),
+        registerThemeHandlers(),
+        registerUsageAnalyticsHandlers(),
+        initializeExtensionFileTypes(),
+    ]);
+    markEnd('ipc-handlers-async');
+
+    // Initialize AI service (needs runtimeSessionStore from Phase 1 DB init)
+    markStart('ai-service-init');
+    if (!runtimeSessionStore) {
+        throw new Error('AI session store unavailable after database initialization');
+    }
+    aiService = new AIService(runtimeSessionStore);
+    markEnd('ai-service-init');
+
+    // ================================================================
+    // STARTUP PHASE 3: Session restore + window creation (critical path)
+    // This is what the user is waiting for - get the window up ASAP
+    // ================================================================
     markStart('session-restore');
     const shouldSkipSessionRestore = !!pendingWorkspacePath;
     const sessionRestored = shouldSkipSessionRestore ? false : await restoreSessionState();
     markEnd('session-restore');
+
+    // Inject all ClaudeCodeProvider loaders (these are lazy - just store callbacks)
+    mcpConfigService = new MCPConfigService();
+    mcpConfigService.startWatchingUserConfig();
+    mcpConfigService.onChange((scope, workspacePath) => {
+        logger.mcp.info('[MCP] Config changed:', { scope, workspacePath });
+        BrowserWindow.getAllWindows().forEach(window => {
+            if (!window.isDestroyed()) {
+                window.webContents.send('mcp-config-changed', { scope, workspacePath });
+            }
+        });
+    });
+    ClaudeCodeProvider.setMCPConfigLoader(async (workspacePath?: string) => {
+        if (!mcpConfigService) {
+            throw new Error('MCP config service not initialized');
+        }
+        const mergedConfig = await mcpConfigService.getMergedConfig(workspacePath);
+        const allServers = mergedConfig.mcpServers || {};
+        const enabledServers: Record<string, any> = {};
+        for (const [name, config] of Object.entries(allServers)) {
+            if (!(config as any).disabled) {
+                enabledServers[name] = mcpConfigService.processServerConfigForRuntime(config as any);
+            }
+        }
+        return enabledServers;
+    });
+    ClaudeCodeProvider.setExtensionPluginsLoader(getClaudePluginPaths);
+    ClaudeCodeProvider.setClaudeCodeSettingsLoader(async () => {
+        const { getClaudeCodeSettings } = await import('./utils/store');
+        return getClaudeCodeSettings();
+    });
+    ClaudeCodeProvider.setClaudeSettingsEnvLoader(async () => {
+        const settingsManager = ClaudeSettingsManager.getInstance();
+        return settingsManager.getUserLevelEnv();
+    });
+    ClaudeCodeProvider.setAdditionalDirectoriesLoader(getAdditionalDirectoriesForWorkspace);
+    if (process.env.NODE_ENV === 'development') {
+      ClaudeCodeProvider.setSecurityLogger((message, data) => {
+        logger.agentSecurity.info(message, data);
+      });
+    }
+    const claudeSettingsManager = ClaudeSettingsManager.getInstance();
+    ClaudeCodeProvider.setClaudeSettingsPatternSaver(async (workspacePath, pattern) => {
+      await claudeSettingsManager.addAllowedTool(workspacePath, pattern);
+    });
+    ClaudeCodeProvider.setClaudeSettingsPatternChecker(async (workspacePath, pattern) => {
+      const effectiveSettings = await claudeSettingsManager.getEffectiveSettings(workspacePath);
+      return effectiveSettings.permissions.allow.includes(pattern);
+    });
+    const permissionService = getPermissionService();
+    ClaudeCodeProvider.setTrustChecker((workspacePath) => {
+      const mode = permissionService.getPermissionMode(workspacePath);
+      return { trusted: mode !== null, mode };
+    });
+    ClaudeCodeProvider.setImageCompressor(async (buffer, mimeType, options) => {
+      const { compressImage } = await import('./services/ImageCompressor');
+      const result = await compressImage(buffer, mimeType, options);
+      return { buffer: result.buffer, mimeType: result.mimeType, wasCompressed: result.wasCompressed };
+    });
+    ClaudeCodeProvider.setExtensionFileTypesLoader(getRegisteredExtensions);
 
     if (pendingWorkspacePath) {
         // Handle workspace path from CLI
@@ -1062,6 +965,36 @@ app.whenReady().then(async () => {
     // Set initial native theme
     updateNativeTheme();
 
+    // ================================================================
+    // STARTUP PHASE 4: Deferred initialization (after window is shown)
+    // MCP servers, auto-updater, and monitoring are not needed until
+    // the user starts a Claude Code session. Start them in the background
+    // so they don't block time-to-interactive.
+    // ================================================================
+    markStart('mcp-servers');
+    try {
+        const result = await startMcpHttpServer(3456);
+        mcpHttpServer = result.httpServer;
+        logger.mcp.info('MCP SSE server started on port', result.port);
+        (global as any).mcpServerPort = result.port;
+        ClaudeCodeProvider.setMcpServerPort(result.port);
+    } catch (error) {
+        logger.mcp.error('Failed to start MCP SSE server:', error);
+    }
+    try {
+        const sessionNamingService = SessionNamingService.getInstance();
+        await sessionNamingService.start();
+    } catch (error) {
+        logger.mcp.error('Failed to start session naming MCP server:', error);
+    }
+    try {
+        const extensionDevService = ExtensionDevService.getInstance();
+        await extensionDevService.start();
+    } catch (error) {
+        logger.mcp.error('Failed to start extension dev MCP server:', error);
+    }
+    markEnd('mcp-servers');
+
     // Initialize auto-updater (only in production)
     if (app.isPackaged) {
         logger.main.info('Starting auto-updater service');
@@ -1076,8 +1009,24 @@ app.whenReady().then(async () => {
     // Mark boot as complete - all critical initialization is done
     markBootComplete();
 
-    // Log startup timing summary (in dev mode or when NIMBALYST_STARTUP_TIMING=true)
+    // Log startup timing summary
     logSummary();
+
+    // Send startup timing analytics
+    try {
+        const summary = getSummary();
+        const durations: Record<string, number> = {};
+        for (const [name, { duration }] of Object.entries(summary)) {
+            durations[name] = duration;
+        }
+        analytics.sendEvent('app_startup_timing', {
+            total_ms: getTotalStartupTime(),
+            ...durations,
+            platform: process.platform,
+        });
+    } catch {
+        // Analytics failure should never block startup
+    }
 
     // Remove periodic menu updates - menus should update on events only
     // This was causing high CPU usage by updating every second
