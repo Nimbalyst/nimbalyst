@@ -7,7 +7,7 @@ import {
   McpError
 } from '@modelcontextprotocol/sdk/types.js';
 import { createServer, IncomingMessage, ServerResponse } from 'http';
-import { BrowserWindow, ipcMain, nativeImage } from 'electron';
+import { BrowserWindow, ipcMain, nativeImage, app } from 'electron';
 import { parse as parseUrl } from 'url';
 import { existsSync } from 'fs';
 import path, { isAbsolute } from 'path';
@@ -638,7 +638,9 @@ async function tryCreateServer(port: number): Promise<any> {
               }
             }
           },
-          {
+          // open_workspace is only available in development mode to prevent
+          // agents from accidentally opening duplicate windows in production
+          ...(!app.isPackaged ? [{
             name: 'open_workspace',
             description: 'Open a workspace (project directory) in Nimbalyst. This allows switching between different projects or opening additional workspaces. The workspace will open in a new window.',
             inputSchema: {
@@ -651,7 +653,7 @@ async function tryCreateServer(port: number): Promise<any> {
               },
               required: ['workspace_path']
             }
-          },
+          }] : []),
           // TODO: Re-enable open_file tool when it's working
           // {
           //   name: 'open_file',
@@ -1279,11 +1281,30 @@ The commit message should follow these guidelines:
             }
 
             try {
-              // Import createWindow dynamically to avoid circular dependencies
-              const { createWindow } = await import('../window/WindowManager');
+              // Import dynamically to avoid circular dependencies
+              const { createWindow, findWindowByWorkspace } = await import('../window/WindowManager');
 
-              // Open the workspace in a new window
-              // createWindow(isOpeningFile, isWorkspaceMode, workspacePath, savedBounds)
+              // Check if workspace is already open - focus it instead of creating a duplicate
+              const existingWindow = findWindowByWorkspace(workspacePathArg);
+              if (existingWindow && !existingWindow.isDestroyed()) {
+                if (existingWindow.isMinimized()) {
+                  existingWindow.restore();
+                }
+                existingWindow.focus();
+                console.log(`[MCP Server] Focused existing workspace window: ${workspacePathArg}`);
+
+                return {
+                  content: [
+                    {
+                      type: 'text',
+                      text: `Workspace already open, brought to foreground: ${workspacePathArg}`
+                    }
+                  ],
+                  isError: false
+                };
+              }
+
+              // No existing window - create a new one
               const newWindow = createWindow(false, true, workspacePathArg);
 
               // Register the workspace immediately
