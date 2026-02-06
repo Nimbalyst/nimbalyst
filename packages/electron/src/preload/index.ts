@@ -446,7 +446,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   aiTestConnection: (provider: string) => ipcRenderer.invoke('ai:testConnection', provider),
   aiGetModels: () => ipcRenderer.invoke('ai:getModels'),
   aiGetAllModels: () => ipcRenderer.invoke('ai:getAllModels'),
-  aiIsStandaloneBinaryAvailable: (): Promise<boolean> => ipcRenderer.invoke('ai:isStandaloneBinaryAvailable'),
   aiClearModelCache: () => ipcRenderer.invoke('ai:clearModelCache'),
   aiRefreshSessionProvider: (sessionId: string) => ipcRenderer.invoke('ai:refreshSessionProvider', sessionId),
 

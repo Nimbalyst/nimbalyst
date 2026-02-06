@@ -28,7 +28,7 @@ import path from 'path';
 import fs from 'fs';
 import { app } from 'electron';
 import { buildClaudeCodeSystemPrompt } from '../../prompt';
-import { setupClaudeCodeEnvironment, getClaudeCodeExecutableOptions, getClaudeCodeSpawnFunction, ClaudeHelperMethod } from '../../../electron/claudeCodeEnvironment';
+import { setupClaudeCodeEnvironment, getClaudeCodeExecutableOptions } from '../../../electron/claudeCodeEnvironment';
 import { SessionManager } from '../SessionManager';
 import { parseBashForFileOps, hasShellChainingOperators, splitOnShellOperators } from './bashUtils';
 import { DEFAULT_EFFORT_LEVEL } from '../effortLevels';
@@ -79,19 +79,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   private slashCommands: string[] = []; // Available slash commands from SDK
   private editedFilesThisTurn: Set<string> = new Set(); // Track files edited in current turn
   private markMessagesAsHidden: boolean = false; // Flag to mark next messages as hidden
-  private helperMethod: ClaudeHelperMethod = 'electron'; // Track which helper method is being used
-
-  // Setting for using standalone binary (injected from electron main process)
-  // When true, use Bun-compiled standalone binary on macOS to hide dock icon
-  private static useStandaloneBinary: boolean = false;
-
-  /**
-   * Set whether to use the standalone binary for spawning Claude Code.
-   * When true on macOS, uses the Bun-compiled binary to avoid dock icons.
-   */
-  public static setUseStandaloneBinary(enabled: boolean): void {
-    ClaudeCodeProvider.useStandaloneBinary = enabled;
-  }
 
   // ExitPlanMode confirmation response type
   private pendingExitPlanModeConfirmations: Map<string, {
@@ -790,19 +777,20 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         const packagedEnv = setupClaudeCodeEnvironment();
         Object.assign(env, packagedEnv);
 
-        // Set executable options (macOS can use standalone binary if enabled)
-        const { options: executableOptions, method } = getClaudeCodeExecutableOptions(
-          ClaudeCodeProvider.useStandaloneBinary,
-          (message, data) => console.log(`[ClaudeCodeProvider] ${message}`, data || '')
-        );
+        // Set executable options
+        const executableOptions = getClaudeCodeExecutableOptions();
         Object.assign(options, executableOptions);
-        this.helperMethod = method;
 
-        // Set custom spawn function (Windows uses windowsHide to hide console)
-        const spawnFunction = getClaudeCodeSpawnFunction();
-        if (spawnFunction) {
-          (options as any).spawnClaudeCodeProcess = spawnFunction;
-        }
+        //   platform: process.platform,
+        //   HOME: env.HOME || env.USERPROFILE,
+        //   USER: env.USER || env.USERNAME,
+        //   SHELL: env.SHELL,
+        //   PATH: env.PATH?.substring(0, 100) + '...',
+        //   NODE_PATH: env.NODE_PATH,
+        //   ELECTRON_RUN_AS_NODE: env.ELECTRON_RUN_AS_NODE,
+        //   executable: options.executable,
+        //   cwd: workspacePath
+        // });
       }
 
       options.env = env;
@@ -3953,7 +3941,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
   /**
    * Get initialization data for analytics tracking
-   * Returns counts for MCP servers, slash commands, agents, skills, plugins, tools, and helper method
+   * Returns counts for MCP servers, slash commands, agents, skills, plugins, and tools
    */
   getInitData(): {
     mcpServerCount: number;
@@ -3962,14 +3950,8 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     skillCount: number;
     pluginCount: number;
     toolCount: number;
-    helperMethod: ClaudeHelperMethod;
   } | null {
-    const baseData = (this as any)._initData;
-    if (!baseData) return null;
-    return {
-      ...baseData,
-      helperMethod: this.helperMethod
-    };
+    return (this as any)._initData || null;
   }
 
   /**

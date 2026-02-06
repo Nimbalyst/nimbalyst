@@ -766,13 +766,6 @@ app.whenReady().then(async () => {
     // Allows planning mode to permit editing extension-registered file types
     ClaudeCodeProvider.setExtensionFileTypesLoader(getRegisteredExtensions);
 
-    // Initialize useStandaloneBinary setting from persisted store
-    // This determines whether macOS uses the Bun-compiled binary to hide dock icons
-    const { store } = await import('./utils/store');
-    const useStandaloneBinary = store.get('useStandaloneBinary', false) as boolean;
-    ClaudeCodeProvider.setUseStandaloneBinary(useStandaloneBinary);
-    logger.main.info('[ClaudeCodeProvider] Initialized useStandaloneBinary setting', { useStandaloneBinary });
-
     registerMockupHandlers();
     registerDataModelHandlers();
     registerExtensionHandlers();

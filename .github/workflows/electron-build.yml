@@ -117,27 +117,6 @@ jobs:
           cd packages/extensions/csv-spreadsheet
           npm run build
 
-      # Install Bun for building Claude helper binary (all platforms)
-      # Pin to specific version for deterministic builds
-      # NOTE: Bun 1.2.4+ is required for macOS code signing support
-      - name: Install Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.3.8
-
-      # Build Claude helper binary for the current platform
-      - name: Build Claude helper binary
-        working-directory: packages/electron
-        run: |
-          if [ "${{ matrix.platform }}" == "mac" ]; then
-            npm run build:claude-helper:mac
-          elif [ "${{ matrix.platform }}" == "win" ]; then
-            npm run build:claude-helper:windows
-          else
-            npm run build:claude-helper:linux
-          fi
-        shell: bash
-
       # macOS specific setup
       - name: Import macOS certificates
         if: startsWith(matrix.os, 'macos')

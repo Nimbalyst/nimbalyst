@@ -48,11 +48,14 @@ export function registerClaudeCodeHandlers() {
       // Build options for query - CRITICAL: pass env to options so SDK can find credentials
       // This is especially important on Intel Macs where HOME may not be set correctly
       // in packaged builds without explicitly passing the environment.
-      const { options: executableOptions } = getClaudeCodeExecutableOptions();
       const options: any = {
-        ...executableOptions,
+        ...getClaudeCodeExecutableOptions(),
         env
       };
+
+      // Pass the environment to the SDK so spawned subprocesses inherit it
+      // This is critical for packaged builds where ELECTRON_RUN_AS_NODE must be set
+      options.env = env;
 
       // Call query with proper signature: { prompt, options }
       // Use empty string prompt - SDK will write it directly without async iteration

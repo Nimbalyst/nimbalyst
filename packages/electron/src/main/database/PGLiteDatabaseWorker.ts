@@ -165,12 +165,10 @@ export class PGLiteDatabaseWorker {
       workerPath = path.join(appPath, 'out', 'worker.bundle.js');
     }
 
-    // Use test-specific userData path to avoid touching production database
-    // NIMBALYST_USER_DATA_PATH: custom path (for manual testing of packaged builds)
-    // PLAYWRIGHT=1: use temp directory (for automated tests)
-    const userDataPath = process.env.NIMBALYST_USER_DATA_PATH
-      || (process.env.PLAYWRIGHT === '1' ? path.join(app.getPath('temp'), 'nimbalyst-test-db') : null)
-      || app.getPath('userData');
+    // Use test-specific userData path for Playwright tests to avoid touching production database
+    const userDataPath = process.env.PLAYWRIGHT === '1'
+      ? path.join(app.getPath('temp'), 'nimbalyst-test-db')
+      : app.getPath('userData');
 
     logger.main.info('[PGLite] createWorker() called', {
       existingWorker: !!this.worker,

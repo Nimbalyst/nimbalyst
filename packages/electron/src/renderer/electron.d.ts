@@ -209,7 +209,6 @@ interface ElectronAPI {
   aiTestConnection: (provider: string) => Promise<any>;
   aiGetModels: () => Promise<{ success: boolean; models: any[]; grouped: Record<string, any[]> }>;
   aiGetAllModels: () => Promise<any>;
-  aiIsStandaloneBinaryAvailable: () => Promise<boolean>;
   aiClearModelCache: () => Promise<void>;
   aiRefreshSessionProvider: (sessionId: string) => Promise<void>;
 
