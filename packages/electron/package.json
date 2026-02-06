@@ -42,7 +42,7 @@
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.32",
     "@anthropic-ai/sdk": "^0.71.2",
-    "@electric-sql/pglite": "^0.3.11",
+    "@electric-sql/pglite": "0.3.14",
     "@electron-toolkit/utils": "^4.0.0",
     "@excalidraw/excalidraw": "0.17.6",
     "@modelcontextprotocol/sdk": "^1.26.0",
