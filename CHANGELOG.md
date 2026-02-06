@@ -20,6 +20,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.55] - 2026-02-06
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+<!-- Bug fixes go here -->
+
+### Removed
+- Removed experimental 'Use Standalone Binary' bun runtime feature for spawning Claude Code sessions
+
 ## [0.52.54] - 2026-02-06
 
 
