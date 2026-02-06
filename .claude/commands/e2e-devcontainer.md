@@ -64,6 +64,7 @@ docker run -d \
   --name "${CONTAINER_NAME}" \
   --shm-size=2g \
   -v "$(pwd):/workspaces/nimbalyst-code" \
+  -v /workspaces/nimbalyst-code/node_modules \
   -e DISPLAY=:99 \
   -e PLAYWRIGHT=1 \
   -e ELECTRON_DISABLE_SECURITY_WARNINGS=1 \

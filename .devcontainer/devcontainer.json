@@ -34,7 +34,8 @@
     "ELECTRON_DISABLE_SECURITY_WARNINGS": "1"
   },
   "mounts": [
-    "source=${localWorkspaceFolder},target=/workspaces/nimbalyst-code,type=bind,consistency=cached"
+    "source=${localWorkspaceFolder},target=/workspaces/nimbalyst-code,type=bind,consistency=cached",
+    "target=/workspaces/nimbalyst-code/node_modules,type=volume"
   ],
   "runArgs": [
     "--shm-size=2g"
