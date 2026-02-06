@@ -20,6 +20,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.60] - 2026-02-06
+
+
+### Added
+- Splash screen displayed during app startup
+
+### Changed
+- Updated @anthropic-ai/claude-agent-sdk 0.2.32 to 0.2.34
+
+### Fixed
+- Normalized file paths in git commit handler for cross-platform compatibility
+- Resolved TypeScript errors breaking CI typecheck
+
 ## [0.52.59] - 2026-02-06
 
 
