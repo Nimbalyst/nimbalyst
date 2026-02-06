@@ -35,7 +35,7 @@ function loadNodePty(): typeof import('node-pty') {
 }
 
 const pty = loadNodePty();
-import { promises as fs } from 'fs';
+import { promises as fs, existsSync } from 'fs';
 import os from 'os';
 import { ShellDetector, type ShellInfo } from './ShellDetector';
 import {
@@ -627,8 +627,11 @@ export class TerminalSessionManager {
     // Get shell info
     const shell = options.shell || ShellDetector.getDefaultShell();
     // Prefer stored CWD (from previous session) over passed CWD, as the stored CWD
-    // reflects where the user actually navigated to (tracked via OSC 7)
-    const cwd = storedMetadata?.cwd || options.cwd || process.cwd();
+    // reflects where the user actually navigated to (tracked via OSC 7).
+    // Validate that the CWD exists — a stale stored CWD (e.g., deleted worktree)
+    // causes posix_spawnp to fail because the kernel can't chdir before exec.
+    const candidateCwd = storedMetadata?.cwd || options.cwd || process.cwd();
+    const cwd = existsSync(candidateCwd) ? candidateCwd : (options.workspacePath || os.homedir());
     const cols = options.cols || 80;
     const rows = options.rows || 30;
     const historyFile = await this.ensureHistoryFile(terminalId, storedMetadata?.historyFile);
