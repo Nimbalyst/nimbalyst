@@ -7,7 +7,17 @@
 import { ipcMain } from 'electron';
 import simpleGit, { SimpleGit } from 'simple-git';
 import log from 'electron-log/main';
+import { existsSync } from 'fs';
+import { join } from 'path';
 import { gitOperationLock } from '../services/GitOperationLock';
+
+function isGitRepository(workspacePath: string): boolean {
+  try {
+    return existsSync(join(workspacePath, '.git'));
+  } catch {
+    return false;
+  }
+}
 
 interface GitStatusResult {
   branch: string;
@@ -37,6 +47,10 @@ export function registerGitHandlers(): void {
       throw new Error('workspacePath is required');
     }
 
+    if (!isGitRepository(workspacePath)) {
+      return { branch: '', ahead: 0, behind: 0, hasUncommitted: false };
+    }
+
     try {
       const git: SimpleGit = simpleGit(workspacePath);
       const status = await git.status();
@@ -62,6 +76,10 @@ export function registerGitHandlers(): void {
     async (_event, workspacePath: string, limit: number = 10): Promise<GitCommit[]> => {
       if (!workspacePath) {
         throw new Error('workspacePath is required');
+      }
+
+      if (!isGitRepository(workspacePath)) {
+        return [];
       }
 
       try {
@@ -94,6 +112,10 @@ export function registerGitHandlers(): void {
         throw new Error('filePath is required');
       }
 
+      if (!isGitRepository(workspacePath)) {
+        return '';
+      }
+
       try {
         const git: SimpleGit = simpleGit(workspacePath);
         const diff = await git.diff(['HEAD', '--', filePath]);
@@ -121,6 +143,10 @@ export function registerGitHandlers(): void {
       }
       if (!message) {
         throw new Error('message is required');
+      }
+
+      if (!isGitRepository(workspacePath)) {
+        return { success: false, error: 'Not a git repository' };
       }
 
       // Use centralized lock to prevent concurrent commit/staging operations

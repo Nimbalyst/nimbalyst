@@ -3,6 +3,7 @@ import { AISessionsRepository } from '@nimbalyst/runtime';
 import { ModelIdentifier, type AIProviderType } from '@nimbalyst/runtime/ai/server/types';
 import type { UpdateSessionMetadataPayload } from '@nimbalyst/runtime/ai/adapters/sessionStore';
 import path from "path";
+import { existsSync } from "fs";
 import { safeHandle, safeOn } from '../utils/ipcRegistry';
 import type { SessionCreateResult } from '../../shared/ipc/types';
 
@@ -87,6 +88,11 @@ export function invalidateSessionFilesCache(workspacePath: string): void {
  * Avoids spawning git status multiple times in rapid succession.
  */
 async function getCachedUncommittedFiles(workspacePath: string): Promise<Set<string>> {
+    // Non-git workspaces have no uncommitted files
+    if (!existsSync(path.join(workspacePath, '.git'))) {
+        return new Set();
+    }
+
     const cached = gitStatusCache.get(workspacePath);
     if (cached && Date.now() - cached.timestamp < GIT_STATUS_CACHE_TTL_MS) {
         return cached.uncommittedFiles;
