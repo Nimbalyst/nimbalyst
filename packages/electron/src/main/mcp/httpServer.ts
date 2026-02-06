@@ -138,6 +138,10 @@ let mcpServer: Server | null = null;
 // Store active SSE transports by session ID
 const activeTransports = new Map<string, SSEServerTransport>();
 
+// Store MCP Server instances by Nimbalyst session ID
+// Used to send notifications (e.g., tools/list_changed) when document state changes
+const serverByNimbalystSession = new Map<string, Server>();
+
 // Map workspace paths to window IDs for routing
 // This is populated when we receive document state updates
 const workspaceToWindowMap = new Map<string, number>();
@@ -318,9 +322,25 @@ export function updateDocumentState(state: any, sessionId?: string) {
   //   stateKeys: Object.keys(state || {})
   // });
 
+  // Check if file path changed - if so, the available editor-scoped tools may have changed
+  const previousState = documentStateBySession.get(sessionId);
+  const filePathChanged = previousState?.filePath !== state?.filePath;
+
   // Store state with sessionId included so handlers can access it from the value
   documentStateBySession.set(sessionId, { ...state, sessionId });
   // console.log(`[MCP Server] Session ${sessionId} associated with workspace: ${state.workspacePath}`);
+
+  // Notify the MCP client that the tool list may have changed
+  // This causes Claude Code to re-fetch tools via ListTools, picking up
+  // any editor-scoped tools that are now available for the new file type
+  if (filePathChanged) {
+    const server = serverByNimbalystSession.get(sessionId);
+    if (server) {
+      server.sendToolListChanged().catch(() => {
+        // Ignore errors - client may have disconnected
+      });
+    }
+  }
 }
 
 /**
@@ -443,6 +463,7 @@ export function cleanupMcpServer() {
     }
   }
   activeTransports.clear();
+  serverByNimbalystSession.clear();
 
   // Clear the MCP server instance
   if (mcpServer) {
@@ -604,7 +625,9 @@ async function tryCreateServer(port: number): Promise<any> {
         },
         {
           capabilities: {
-            tools: {}
+            tools: {
+              listChanged: true
+            }
           }
         }
       );
@@ -2252,6 +2275,11 @@ The commit message should follow these guidelines:
       activeTransports.set(transport.sessionId, transport);
       // console.log('[MCP Server] Created transport with session ID:', transport.sessionId);
 
+      // Store server instance by Nimbalyst session ID for sending notifications later
+      if (sessionId) {
+        serverByNimbalystSession.set(sessionId, server);
+      }
+
       // Connect server to transport
       server.connect(transport).then(() => {
         // console.log('[MCP Server] Client connected successfully');
@@ -2260,10 +2288,16 @@ The commit message should follow these guidelines:
         transport.onclose = () => {
           // console.log('[MCP Server] Client disconnected, session:', transport.sessionId);
           activeTransports.delete(transport.sessionId);
+          if (sessionId) {
+            serverByNimbalystSession.delete(sessionId);
+          }
         };
       }).catch(error => {
         console.error('[MCP Server] Connection error:', error);
         activeTransports.delete(transport.sessionId);
+        if (sessionId) {
+          serverByNimbalystSession.delete(sessionId);
+        }
         if (!res.headersSent) {
           res.writeHead(500);
           res.end();
