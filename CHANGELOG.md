@@ -20,6 +20,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.53] - 2026-02-06
+
+
+### Added
+- Agent Teams support for Claude Code sessions with UI toggle in Settings, teammate metadata parsing, and distinct teammate rendering with progress indicators
+
+### Fixed
+- Terminal no longer crashes when stored CWD points to a deleted directory (e.g., from a removed worktree)
+
 ## [0.52.52] - 2026-02-06
 
 
