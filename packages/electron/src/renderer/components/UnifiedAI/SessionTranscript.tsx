@@ -14,7 +14,7 @@
  * - File edits aggregation (parent handles this)
  */
 
-import React, { useCallback, useRef, useImperativeHandle, forwardRef, useEffect, useState } from 'react';
+import React, { useCallback, useRef, useImperativeHandle, forwardRef, useEffect, useState, useMemo } from 'react';
 import { useAtom, useSetAtom, useAtomValue } from 'jotai';
 import { store, setInteractiveWidgetHost } from '@nimbalyst/runtime/store';
 import { AgentTranscriptPanel, TodoItem, type InteractiveWidgetHost, type PermissionScope } from '@nimbalyst/runtime';
@@ -65,7 +65,8 @@ import {
 } from '../../store';
 import { convertToWorkstreamAtom, sessionPromptAdditionsAtom } from '../../store/atoms/sessions';
 import { usePostHog } from 'posthog-js/react';
-import { setAgentModeSettingsAtom, showPromptAdditionsAtom, hasExternalEditorAtom, externalEditorNameAtom, openInExternalEditorAtom, defaultAgentModelAtom } from '../../store/atoms/appSettings';
+import { setAgentModeSettingsAtom, showPromptAdditionsAtom, hasExternalEditorAtom, externalEditorNameAtom, openInExternalEditorAtom, defaultAgentModelAtom, defaultEffortLevelAtom } from '../../store/atoms/appSettings';
+import { supportsEffortLevel, parseEffortLevel, type EffortLevel } from '../../utils/modelUtils';
 import { buildPlanModeInstructions, PLAN_MODE_DEACTIVATION } from '@nimbalyst/runtime/ai/services/planModePrompts';
 import { resolvePlanFilePath } from '../../utils/pathUtils';
 
@@ -248,9 +249,17 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   const sessionChildren = useAtomValue(sessionChildrenAtom(sessionId));
   const sessionParentId = useAtomValue(sessionParentIdAtom(sessionId));
   const defaultModel = useAtomValue(defaultAgentModelAtom);
+  const defaultEffortLevel = useAtomValue(defaultEffortLevelAtom);
 
   // Still need full sessionData for certain operations (updating, checking loaded state)
   const sessionData = useAtomValue(sessionStoreAtom(sessionId));
+
+  // Effort level: read from session metadata, fall back to global default
+  const showEffortLevel = useMemo(() => supportsEffortLevel(currentModel), [currentModel]);
+  const effortLevel = useMemo(() => {
+    const raw = (sessionData?.metadata as Record<string, unknown> | undefined)?.effortLevel;
+    return raw != null ? parseEffortLevel(raw) : defaultEffortLevel;
+  }, [sessionData?.metadata, defaultEffortLevel]);
 
   // Draft input state via Jotai atoms - only this component re-renders on typing
   const [draftInput, setDraftInput] = useAtom(sessionDraftInputAtom(sessionId));
@@ -901,6 +910,16 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     }
   }, [sessionId, setCurrentModel, setAgentModeSettings]);
 
+  const handleEffortLevelChange = useCallback(async (level: EffortLevel) => {
+    const previousLevel = effortLevel;
+    await updateSessionMetadataField(sessionId, 'effortLevel', level, null, updateSessionStore);
+    setAgentModeSettings({ defaultEffortLevel: level });
+    posthog?.capture('ai_effort_level_changed', {
+      effort_level: level,
+      previous_level: previousLevel,
+    });
+  }, [sessionId, updateSessionStore, setAgentModeSettings, effortLevel, posthog]);
+
   const handleCommandSelect = useCallback((command: string) => {
     setDraftInput(command);
     inputRef.current?.focus();
@@ -1323,6 +1342,9 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
         onModelChange={handleModelChange}
         sessionHasMessages={sessionHasMessages}
         currentProviderType={currentProviderType}
+        effortLevel={effortLevel}
+        onEffortLevelChange={handleEffortLevelChange}
+        showEffortLevel={showEffortLevel}
         tokenUsage={tokenUsage}
         provider={provider}
         onQueue={handleQueue}

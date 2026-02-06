@@ -3,6 +3,7 @@ import { existsSync } from 'fs';
 import * as path from 'path';
 import { RecentItem, SessionState, SessionWindow } from '../types';
 import { logger } from './logger';
+import { type EffortLevel, parseEffortLevel } from '@nimbalyst/runtime/ai/server/effortLevels';
 import type { OnboardingConfig } from '../../shared/types/workspace';
 import { DEFAULT_ONBOARDING_CONFIG } from '../../shared/types/workspace';
 import type { InstalledPackage } from '../../shared/toolPackages';
@@ -1020,6 +1021,17 @@ export function getDefaultAIModel(): string | undefined {
 
 export function setDefaultAIModel(model: string): void {
   getAppStore().set('defaultAIModel', model);
+}
+
+// Default Effort Level Settings (Opus 4.6 adaptive reasoning)
+export function getDefaultEffortLevel(): EffortLevel | undefined {
+  const stored = getAppStore().get('defaultEffortLevel');
+  if (!stored) return undefined;
+  return parseEffortLevel(stored);
+}
+
+export function setDefaultEffortLevel(level: EffortLevel): void {
+  getAppStore().set('defaultEffortLevel', level);
 }
 
 // Analytics Settings

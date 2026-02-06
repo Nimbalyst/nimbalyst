@@ -3,6 +3,7 @@
  */
 
 import type { ToolDefinition } from '../tools';
+import type { EffortLevel } from './effortLevels';
 export type { ToolDefinition } from '../tools';
 export { ModelIdentifier } from './ModelIdentifier';
 
@@ -229,6 +230,7 @@ export interface ProviderConfig {
   temperature?: number;
   baseUrl?: string;
   allowedTools?: string[];  // List of allowed tool names, ['*'] for all tools
+  effortLevel?: EffortLevel;  // Effort level for Opus 4.6 adaptive reasoning (low/medium/high/max)
 }
 
 export interface ProviderCapabilities {

@@ -5,6 +5,8 @@
 import { CLAUDE_MODELS, OPENAI_MODELS } from '@nimbalyst/runtime/ai/modelConstants';
 import { ModelIdentifier } from '@nimbalyst/runtime/ai/server/types';
 
+export { type EffortLevel, EFFORT_LEVELS, DEFAULT_EFFORT_LEVEL, parseEffortLevel } from '@nimbalyst/runtime/ai/server/effortLevels';
+
 interface ModelInfo {
   providerId: string;
   providerName: string;
@@ -26,7 +28,7 @@ const CLAUDE_CODE_VARIANT_VERSIONS: Record<ClaudeCodeVariant, string> = {
  * Extract Claude Code variant from a model ID using ModelIdentifier.
  * Returns the base variant (without suffix) or null if not a valid Claude Code model.
  */
-function extractClaudeCodeVariant(modelId?: string): ClaudeCodeVariant | null {
+export function extractClaudeCodeVariant(modelId?: string): ClaudeCodeVariant | null {
   if (!modelId) return null;
 
   // Try parsing with ModelIdentifier
@@ -220,4 +222,11 @@ export function getModelShortName(provider: string, modelId: string): string {
   // Default truncation for unknown providers
   if (modelId.length > 15) return modelId.substring(0, 12) + '...';
   return modelId;
+}
+
+/**
+ * Check if a model supports effort level configuration (Opus 4.6 only).
+ */
+export function supportsEffortLevel(modelId?: string): boolean {
+  return extractClaudeCodeVariant(modelId) === 'opus';
 }

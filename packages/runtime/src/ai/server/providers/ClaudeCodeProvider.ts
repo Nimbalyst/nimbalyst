@@ -31,6 +31,7 @@ import { buildClaudeCodeSystemPrompt } from '../../prompt';
 import { setupClaudeCodeEnvironment, getClaudeCodeExecutableOptions, getClaudeCodeSpawnFunction, ClaudeHelperMethod } from '../../../electron/claudeCodeEnvironment';
 import { SessionManager } from '../SessionManager';
 import { parseBashForFileOps, hasShellChainingOperators, splitOnShellOperators } from './bashUtils';
+import { DEFAULT_EFFORT_LEVEL } from '../effortLevels';
 
 /**
  * Track changes in the agent-sdk and claude-code itself here:
@@ -735,7 +736,12 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         ...process.env,
         // Enable MCP tool search when MCP tools exceed 10% of context (same as CLI default)
         // Options: 'auto' (10%), 'auto:N' (custom N%), 'true' (always), 'false' (never)
-        ENABLE_TOOL_SEARCH: 'auto:10'
+        ENABLE_TOOL_SEARCH: 'auto:10',
+        // Set effort level for Opus 4.6 adaptive reasoning (same as CLI's /model effort slider)
+        // Only set when not 'high' (the default) to avoid overriding CLI defaults
+        ...(this.config.effortLevel && this.config.effortLevel !== DEFAULT_EFFORT_LEVEL && {
+          CLAUDE_CODE_EFFORT_LEVEL: this.config.effortLevel
+        }),
       };
 
       if (this.config.apiKey) {

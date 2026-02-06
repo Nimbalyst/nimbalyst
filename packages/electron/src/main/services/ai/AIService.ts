@@ -9,6 +9,7 @@ import { SessionManager, ProviderFactory, ModelRegistry, AIProvider, isAskUserQu
 import { getSessionStateManager } from '@nimbalyst/runtime/ai/server/SessionStateManager';
 import { parseContextUsageMessage } from '@nimbalyst/runtime/ai/server/utils/contextUsage';
 import { isBedrockToolSearchError } from '@nimbalyst/runtime/ai/server/utils/errorDetection';
+import { parseEffortLevel } from '@nimbalyst/runtime/ai/server/effortLevels';
 import type { SessionStore } from '@nimbalyst/runtime';
 import {
   CLAUDE_CODE_VARIANTS,
@@ -1494,11 +1495,15 @@ export class AIService {
         initConfig.baseUrl = lmstudioSettings.baseUrl || storedApiKeys['lmstudio_url'] || 'http://127.0.0.1:8234';
       }
 
-      // Pass through allowedTools setting for Claude Code if configured
+      // Pass through allowedTools and effort level settings for Claude Code
       if (provider === 'claude-code') {
         const providerSettings = this.getSettingsStore().get('providerSettings', {}) as any;
         if (providerSettings?.['claude-code']?.allowedTools) {
           initConfig.allowedTools = providerSettings['claude-code'].allowedTools;
+        }
+        // Pass effort level from session metadata (Opus 4.6 adaptive reasoning)
+        if ((session.metadata as any)?.effortLevel) {
+          initConfig.effortLevel = parseEffortLevel((session.metadata as any).effortLevel);
         }
       }
 
@@ -1700,7 +1705,11 @@ export class AIService {
         const reinitConfig: any = {
           apiKey,
           maxTokens: (session.providerConfig as any)?.maxTokens,
-          temperature: (session.providerConfig as any)?.temperature
+          temperature: (session.providerConfig as any)?.temperature,
+          // Pass effort level from session metadata (Opus 4.6 adaptive reasoning)
+          ...((session.metadata as any)?.effortLevel && {
+            effortLevel: parseEffortLevel((session.metadata as any).effortLevel),
+          }),
         };
 
         // Add baseUrl for LMStudio

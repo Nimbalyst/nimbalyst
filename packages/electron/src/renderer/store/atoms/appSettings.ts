@@ -17,6 +17,7 @@
 
 import { atom, type Atom } from 'jotai';
 import posthog from 'posthog-js';
+import { type EffortLevel, DEFAULT_EFFORT_LEVEL, parseEffortLevel } from '@nimbalyst/runtime/ai/server/effortLevels';
 import { AlphaFeatureTag } from '../../../shared/alphaFeatures';
 import { DeveloperFeatureTag, DEVELOPER_FEATURES, getDefaultDeveloperFeatures, enableAllDeveloperFeatures, disableAllDeveloperFeatures, areAllDeveloperFeaturesEnabled } from '../../../shared/developerFeatures';
 
@@ -881,6 +882,8 @@ export async function initAIDebugSettings(): Promise<AIDebugSettings> {
 export interface AgentModeSettings {
   /** The last model selected by the user in agent mode, used as default for new sessions */
   defaultModel: string;
+  /** The effort level for Opus 4.6 adaptive reasoning (low/medium/high/max) */
+  defaultEffortLevel: EffortLevel;
 }
 
 /**
@@ -888,6 +891,7 @@ export interface AgentModeSettings {
  */
 const defaultAgentModeSettings: AgentModeSettings = {
   defaultModel: 'claude-code:opus',
+  defaultEffortLevel: DEFAULT_EFFORT_LEVEL,
 };
 
 /**
@@ -909,12 +913,11 @@ function scheduleAgentModePersist(settings: AgentModeSettings): void {
   if (agentModePersistTimer) {
     clearTimeout(agentModePersistTimer);
   }
-  console.log('[appSettings] Scheduling persist of defaultModel:', settings.defaultModel);
   agentModePersistTimer = setTimeout(async () => {
     agentModePersistTimer = null;
     if (typeof window !== 'undefined' && window.electronAPI) {
-      console.log('[appSettings] Persisting defaultModel to main process:', settings.defaultModel);
       await window.electronAPI.invoke('settings:set-default-ai-model', settings.defaultModel);
+      await window.electronAPI.invoke('settings:set-default-effort-level', settings.defaultEffortLevel);
     }
   }, AGENT_MODE_PERSIST_DEBOUNCE_MS);
 }
@@ -925,6 +928,11 @@ function scheduleAgentModePersist(settings: AgentModeSettings): void {
  * Default model for new agent sessions.
  */
 export const defaultAgentModelAtom = atom((get) => get(agentModeSettingsAtom).defaultModel);
+
+/**
+ * Default effort level for Opus 4.6 adaptive reasoning.
+ */
+export const defaultEffortLevelAtom = atom((get) => get(agentModeSettingsAtom).defaultEffortLevel);
 
 // === Setter atoms ===
 
@@ -954,11 +962,11 @@ export async function initAgentModeSettings(): Promise<AgentModeSettings> {
 
   try {
     const defaultModel = await window.electronAPI.invoke('settings:get-default-ai-model');
-    console.log('[appSettings] initAgentModeSettings: Loaded from main process:', defaultModel);
+    const defaultEffortLevel = await window.electronAPI.invoke('settings:get-default-effort-level');
     const result = {
-      defaultModel: defaultModel || defaultAgentModeSettings.defaultModel,
+      defaultModel: defaultModel ?? defaultAgentModeSettings.defaultModel,
+      defaultEffortLevel: parseEffortLevel(defaultEffortLevel),
     };
-    console.log('[appSettings] initAgentModeSettings: Returning:', result.defaultModel);
     return result;
   } catch (error) {
     console.error('[appSettings] Failed to load agent mode settings:', error);

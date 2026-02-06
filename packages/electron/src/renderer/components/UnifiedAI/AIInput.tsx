@@ -4,9 +4,11 @@ import { GenericTypeahead, TypeaheadOption } from '../Typeahead/GenericTypeahead
 import { extractTriggerMatch, insertAtTrigger, TriggerMatch } from '../Typeahead/typeaheadUtils';
 import type { ChatAttachment } from '@nimbalyst/runtime';
 import type { TokenUsageCategory } from '@nimbalyst/runtime/ai/server/types';
+import type { EffortLevel } from '../../utils/modelUtils';
 import { AttachmentPreviewList } from '../AgenticCoding/AttachmentPreviewList';
 import { ModeTag, AIMode } from './ModeTag';
 import { ModelSelector } from './ModelSelector';
+import { EffortLevelSelector } from './EffortLevelSelector';
 import { VoiceModeButton, registerPendingVoiceCommandSetter } from './VoiceModeButton.tsx';
 import { VoiceTranscriptionDisplay } from './VoiceTranscriptionDisplay';
 import { VoiceContextIndicator } from './VoiceContextIndicator';
@@ -65,6 +67,11 @@ interface AIInputProps {
   onModelChange?: (modelId: string) => void;
   sessionHasMessages?: boolean;  // Whether current session has any messages
   currentProviderType?: 'agent' | 'model' | null;  // Type of current session's provider
+
+  // Effort level support (Opus 4.6 adaptive reasoning)
+  effortLevel?: EffortLevel;
+  onEffortLevelChange?: (level: EffortLevel) => void;
+  showEffortLevel?: boolean;
 
   // Token usage display support (for Claude Code)
   tokenUsage?: {
@@ -127,6 +134,9 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
     onModelChange,
     sessionHasMessages,
     currentProviderType,
+    effortLevel,
+    onEffortLevelChange,
+    showEffortLevel,
     tokenUsage,
     provider,
     onQueue,
@@ -1034,6 +1044,12 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
                   />
                 </span>
               </HelpTooltip>
+            )}
+            {showEffortLevel && onEffortLevelChange && effortLevel && (
+              <EffortLevelSelector
+                level={effortLevel}
+                onLevelChange={onEffortLevelChange}
+              />
             )}
             {/* Show token usage for all providers - displays "--" if no data yet */}
             <ContextUsageDisplay

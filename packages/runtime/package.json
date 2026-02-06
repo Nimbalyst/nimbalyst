@@ -28,6 +28,10 @@
       "import": "./dist/ai/server/types.js",
       "types": "./dist/ai/server/types.d.ts"
     },
+    "./ai/server/effortLevels": {
+      "import": "./dist/ai/server/effortLevels.js",
+      "types": "./dist/ai/server/effortLevels.d.ts"
+    },
     "./ai/types": {
       "import": "./dist/ai/types.js",
       "types": "./dist/ai/types.d.ts"

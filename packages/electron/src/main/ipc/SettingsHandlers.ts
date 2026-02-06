@@ -4,7 +4,7 @@ import * as os from 'os';
 import * as fs from 'fs';
 import * as path from 'path';
 import { app } from 'electron';
-import { getWorkspaceState, updateWorkspaceState, getTheme, getThemeSync, isCompletionSoundEnabled, setCompletionSoundEnabled, getCompletionSoundType, setCompletionSoundType, CompletionSoundType, getReleaseChannel, setReleaseChannel, ReleaseChannel, getRecentItems, getDefaultAIModel, setDefaultAIModel, isAnalyticsEnabled, setAnalyticsEnabled, getSessionSyncConfig, setSessionSyncConfig, SessionSyncConfig, isExtensionDevToolsEnabled, setExtensionDevToolsEnabled, getAppSetting, setAppSetting, getAlphaFeatures, setAlphaFeatures, getEnableAllAlphaFeatures, setEnableAllAlphaFeatures, getDeveloperFeatures, setDeveloperFeatures, isDeveloperFeatureAvailable } from '../utils/store';
+import { getWorkspaceState, updateWorkspaceState, getTheme, getThemeSync, isCompletionSoundEnabled, setCompletionSoundEnabled, getCompletionSoundType, setCompletionSoundType, CompletionSoundType, getReleaseChannel, setReleaseChannel, ReleaseChannel, getRecentItems, getDefaultAIModel, setDefaultAIModel, getDefaultEffortLevel, setDefaultEffortLevel, isAnalyticsEnabled, setAnalyticsEnabled, getSessionSyncConfig, setSessionSyncConfig, SessionSyncConfig, isExtensionDevToolsEnabled, setExtensionDevToolsEnabled, getAppSetting, setAppSetting, getAlphaFeatures, setAlphaFeatures, getEnableAllAlphaFeatures, setEnableAllAlphaFeatures, getDeveloperFeatures, setDeveloperFeatures, isDeveloperFeatureAvailable } from '../utils/store';
 import { getEnhancedPath } from '../services/CLIManager';
 import { logger } from '../utils/logger';
 import { SoundNotificationService } from '../services/SoundNotificationService';
@@ -14,6 +14,7 @@ import { getCredentials, resetCredentials, generateQRPairingPayload, isUsingSecu
 import { onSyncStatusChange } from '../services/SyncManager';
 import * as StytchAuth from '../services/StytchAuthService';
 import { STYTCH_CONFIG } from '@nimbalyst/runtime';
+import { type EffortLevel, parseEffortLevel } from '@nimbalyst/runtime/ai/server/effortLevels';
 
 // Track if we've subscribed to sync status changes
 let syncStatusListenerSetup = false;
@@ -339,6 +340,15 @@ export function registerSettingsHandlers() {
 
     safeHandle('settings:set-default-ai-model', (_event, model: string) => {
         setDefaultAIModel(model);
+    });
+
+    // Default effort level settings (Opus 4.6 adaptive reasoning)
+    safeHandle('settings:get-default-effort-level', () => {
+        return getDefaultEffortLevel();
+    });
+
+    safeHandle('settings:set-default-effort-level', (_event, level: string) => {
+        setDefaultEffortLevel(parseEffortLevel(level));
     });
 
     // Analytics settings
