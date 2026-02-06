@@ -702,6 +702,14 @@ app.whenReady().then(async () => {
         return getClaudeCodeSettings();
     });
 
+    // Inject env vars loader to pass ~/.claude/settings.json env vars to the SDK
+    // This ensures experimental flags (e.g., CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS)
+    // are passed directly via the SDK env option for maximum reliability
+    ClaudeCodeProvider.setClaudeSettingsEnvLoader(async () => {
+        const settingsManager = ClaudeSettingsManager.getInstance();
+        return settingsManager.getUserLevelEnv();
+    });
+
     // Inject additional directories loader
     // This allows Claude to access SDK docs when working on extension projects
     ClaudeCodeProvider.setAdditionalDirectoriesLoader(getAdditionalDirectoriesForWorkspace);

@@ -77,6 +77,9 @@ export function ClaudeCodePanel({
   const [useStandaloneBinary, setUseStandaloneBinaryState] = useState(false);
   const [isStandaloneBinaryAvailable, setIsStandaloneBinaryAvailable] = useState(false);
 
+  // Agent teams toggle (experimental) - stored as env var in ~/.claude/settings.json
+  const [agentTeamsEnabled, setAgentTeamsEnabled] = useState(false);
+
   // Detect Windows platform using navigator.platform (client-side, no IPC needed)
   const isWindowsPlatform = navigator.platform === 'Win32';
 
@@ -89,6 +92,8 @@ export function ClaudeCodePanel({
       setIsLoadingEnv(true);
       const env = await window.electronAPI.claudeCode.getEnv();
       setEnvVars(env);
+      // Sync agent teams toggle from env var
+      setAgentTeamsEnabled(env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS === '1');
     } catch (error) {
       console.error('Failed to load env vars:', error);
     } finally {
@@ -101,12 +106,34 @@ export function ClaudeCodePanel({
     try {
       await window.electronAPI.claudeCode.setEnv(newEnvVars);
       setEnvVars(newEnvVars);
+      // Keep agent teams toggle in sync
+      setAgentTeamsEnabled(newEnvVars.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS === '1');
     } catch (error) {
       console.error('Failed to save env vars:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       alert(`Failed to save environment variables: ${errorMessage}`);
     }
   }, []);
+
+  // Toggle agent teams env var
+  const handleToggleAgentTeams = useCallback(async (enabled: boolean) => {
+    const previousEnvVars = envVars;
+    setAgentTeamsEnabled(enabled);
+    const newEnvVars = { ...envVars };
+    if (enabled) {
+      newEnvVars.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS = '1';
+    } else {
+      delete newEnvVars.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS;
+    }
+    try {
+      await window.electronAPI.claudeCode.setEnv(newEnvVars);
+      setEnvVars(newEnvVars);
+    } catch (error) {
+      console.error('Failed to toggle agent teams:', error);
+      setAgentTeamsEnabled(!enabled);
+      setEnvVars(previousEnvVars);
+    }
+  }, [envVars]);
 
   useEffect(() => {
     // Only check Windows installation status on Windows
@@ -232,7 +259,7 @@ export function ClaudeCodePanel({
               console.log('[ClaudeCodePanel] Toggle changed to:', e.target.checked);
               onToggle(e.target.checked);
             }}
-            className="opacity-0 w-0 h-0 absolute"
+            className="hidden peer"
           />
           <span className="provider-toggle-slider absolute cursor-pointer inset-0 rounded-full transition-all bg-[var(--nim-bg-tertiary)] before:absolute before:content-[''] before:h-5 before:w-5 before:left-0.5 before:bottom-0.5 before:rounded-full before:transition-all before:bg-white before:shadow-sm peer-checked:bg-[var(--nim-primary)] peer-checked:before:translate-x-5"></span>
         </label>
@@ -252,7 +279,7 @@ export function ClaudeCodePanel({
               type="checkbox"
               checked={usageIndicatorEnabled}
               onChange={(e) => setUsageIndicatorEnabled(e.target.checked)}
-              className="opacity-0 w-0 h-0 absolute"
+              className="hidden peer"
             />
             <span className="provider-toggle-slider absolute cursor-pointer inset-0 rounded-full transition-all bg-[var(--nim-bg-tertiary)] before:absolute before:content-[''] before:h-5 before:w-5 before:left-0.5 before:bottom-0.5 before:rounded-full before:transition-all before:bg-white before:shadow-sm peer-checked:bg-[var(--nim-primary)] peer-checked:before:translate-x-5"></span>
           </label>
@@ -274,7 +301,7 @@ export function ClaudeCodePanel({
               type="checkbox"
               checked={useStandaloneBinary}
               onChange={(e) => handleSetUseStandaloneBinary(e.target.checked)}
-              className="opacity-0 w-0 h-0 absolute"
+              className="hidden peer"
             />
             <span className="provider-toggle-slider absolute cursor-pointer inset-0 rounded-full transition-all bg-[var(--nim-bg-tertiary)] before:absolute before:content-[''] before:h-5 before:w-5 before:left-0.5 before:bottom-0.5 before:rounded-full before:transition-all before:bg-white before:shadow-sm peer-checked:bg-[var(--nim-primary)] peer-checked:before:translate-x-5"></span>
           </label>
@@ -286,6 +313,26 @@ export function ClaudeCodePanel({
             </p>
           </div>
         )}
+      </div>
+
+      {/* Agent Teams Toggle (Experimental) */}
+      <div className="provider-enable flex items-center justify-between gap-4 py-4 mb-4 border-b border-[var(--nim-border)]">
+        <div>
+          <span className="provider-enable-label text-sm font-medium text-[var(--nim-text)]">Agent Teams (Experimental)</span>
+          <p className="text-xs text-[var(--nim-text-muted)] mt-1">
+            Allow Claude to coordinate multiple agents working together as a team.
+            Uses more tokens but enables parallel work on complex tasks.
+          </p>
+        </div>
+        <label className="provider-toggle relative inline-block w-11 h-6 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={agentTeamsEnabled}
+            onChange={(e) => handleToggleAgentTeams(e.target.checked)}
+            className="hidden peer"
+          />
+          <span className="provider-toggle-slider absolute cursor-pointer inset-0 rounded-full transition-all bg-[var(--nim-bg-tertiary)] before:absolute before:content-[''] before:h-5 before:w-5 before:left-0.5 before:bottom-0.5 before:rounded-full before:transition-all before:bg-white before:shadow-sm peer-checked:bg-[var(--nim-primary)] peer-checked:before:translate-x-5"></span>
+        </label>
       </div>
 
       { isWindowsPlatform && isCheckingClaudeWindowsStatus && (

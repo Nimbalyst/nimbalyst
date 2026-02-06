@@ -58,6 +58,13 @@ const injectRichTranscriptStyles = () => {
       border-color: color-mix(in srgb, var(--nim-primary) 20%, var(--nim-border));
     }
 
+    /* Agent team teammate styling */
+    .rich-transcript-tool-card.teammate {
+      background-color: color-mix(in srgb, var(--nim-primary) 8%, var(--nim-bg-secondary));
+      border-color: color-mix(in srgb, var(--nim-primary) 30%, var(--nim-border));
+      border-left: 3px solid var(--nim-primary);
+    }
+
     /* VList scrollbar styling */
     .rich-transcript-vlist {
       scrollbar-width: thin;
@@ -836,6 +843,7 @@ export const RichTranscriptView = React.forwardRef<
     const toolId = tool.id || tool.name || `tool-${toolIndex}`;
     const isExpanded = expandedTools.has(toolId);
     const isSubAgent = tool.isSubAgent && tool.name === 'Task';
+    const isTeammate = isSubAgent && !!(tool.teammateName || tool.teamName);
     const hasChildren = tool.childToolCalls && tool.childToolCalls.length > 0;
     // Check for custom widget first
     const CustomWidget = tool.name ? getCustomToolWidget(tool.name) : undefined;
@@ -886,18 +894,23 @@ export const RichTranscriptView = React.forwardRef<
     // Extract result text
     const resultText = tool.result ? extractResultText(tool.result) : null;
 
-    // Special styling for sub-agents
-    const cardClass = isSubAgent
-      ? 'rich-transcript-tool-card sub-agent rounded border border-[var(--nim-border)] overflow-hidden'
-      : depth > 0
-        ? 'rich-transcript-tool-card child-tool rounded border border-[var(--nim-border)] overflow-hidden bg-[var(--nim-bg-tertiary)]'
-        : 'rich-transcript-tool-card rounded border border-[var(--nim-border)] overflow-hidden bg-[var(--nim-bg-secondary)]';
+    // Special styling for sub-agents and teammates
+    const cardClass = isTeammate
+      ? 'rich-transcript-tool-card teammate rounded border border-[var(--nim-border)] overflow-hidden'
+      : isSubAgent
+        ? 'rich-transcript-tool-card sub-agent rounded border border-[var(--nim-border)] overflow-hidden'
+        : depth > 0
+          ? 'rich-transcript-tool-card child-tool rounded border border-[var(--nim-border)] overflow-hidden bg-[var(--nim-bg-tertiary)]'
+          : 'rich-transcript-tool-card rounded border border-[var(--nim-border)] overflow-hidden bg-[var(--nim-bg-secondary)]';
 
     return (
       <div key={`tool-${toolIndex}-${depth}`} className={`rich-transcript-tool-container mb-2 ${depth > 0 ? 'nested ml-0' : ''}`} style={{ marginLeft: depth > 0 ? '1rem' : '0' }}>
         <div className={cardClass}>
           <button onClick={() => toggleToolExpand(toolId)} className="rich-transcript-tool-button w-full py-1 px-2 flex items-center gap-1.5 text-left border-none cursor-pointer text-sm bg-transparent">
-            {isSubAgent ? (
+            {isTeammate ? (
+              // Group icon for team teammates
+              <MaterialSymbol icon="group" size={16} className="rich-transcript-tool-icon sub-agent-icon w-4 h-4 text-[var(--nim-primary)] shrink-0" />
+            ) : isSubAgent ? (
               // Document/clipboard icon for sub-agents
               <MaterialSymbol icon="description" size={16} className="rich-transcript-tool-icon sub-agent-icon w-4 h-4 text-[var(--nim-primary)] shrink-0" />
             ) : (
@@ -905,8 +918,11 @@ export const RichTranscriptView = React.forwardRef<
               <MaterialSymbol icon="build" size={16} className="rich-transcript-tool-icon w-4 h-4 text-[var(--nim-primary)] shrink-0" />
             )}
             <span className="rich-transcript-tool-name font-mono text-sm text-[var(--nim-text)] font-medium" title={tool.name || undefined}>
-              {isSubAgent ? 'Sub-Agent' : toolDisplayName}
-              {isSubAgent && tool.subAgentType && (
+              {isTeammate ? (tool.teammateName || 'Teammate') : isSubAgent ? 'Sub-Agent' : toolDisplayName}
+              {isTeammate && tool.teammateMode && (
+                <span className="rich-transcript-tool-subagent-type text-[var(--nim-text-muted)] font-normal text-xs ml-1">({tool.teammateMode})</span>
+              )}
+              {isSubAgent && !isTeammate && tool.subAgentType && (
                 <span className="rich-transcript-tool-subagent-type text-[var(--nim-primary)] font-semibold"> [{tool.subAgentType}]</span>
               )}
             </span>
@@ -949,6 +965,9 @@ export const RichTranscriptView = React.forwardRef<
             {tool.result && (toolMsg as any).isError && (
               <MaterialSymbol icon="cancel" size={16} className="rich-transcript-tool-error w-4 h-4 text-[var(--nim-error)] shrink-0" />
             )}
+            {isSubAgent && !tool.result && tool.toolProgress && (
+              <span className="inline-block w-3 h-3 border-2 border-[var(--nim-primary)] border-t-transparent rounded-full animate-spin shrink-0" />
+            )}
             <MaterialSymbol icon={isExpanded ? "expand_more" : "chevron_right"} size={16} className="rich-transcript-tool-chevron w-3 h-3 text-[var(--nim-text-faint)]" />
           </button>
 
@@ -983,13 +1002,22 @@ export const RichTranscriptView = React.forwardRef<
               {hasChildren && (
                 <div className="rich-transcript-tool-section mb-1.5">
                   <div className="rich-transcript-tool-section-label text-[var(--nim-text-faint)] mb-0.5 text-xs">
-                    Sub-agent Actions ({tool.childToolCalls!.length}):
+                    {isTeammate ? 'Teammate' : 'Sub-agent'} Actions ({tool.childToolCalls!.length}):
                   </div>
                   <div className="rich-transcript-subagent-children flex flex-col gap-1 mt-2">
                     {tool.childToolCalls!.map((childMsg, childIdx) =>
                       renderToolCard(childMsg, childIdx, depth + 1)
                     )}
                   </div>
+                </div>
+              )}
+
+              {/* Show progress indicator for running sub-agents/teammates */}
+              {isSubAgent && !tool.result && tool.toolProgress && (
+                <div className="rich-transcript-tool-section mb-1.5 flex items-center gap-2 text-xs text-[var(--nim-text-muted)]">
+                  <span className="inline-block w-3 h-3 border-2 border-[var(--nim-primary)] border-t-transparent rounded-full animate-spin" />
+                  <span>Running <span className="font-mono text-[var(--nim-text)]">{tool.toolProgress.toolName}</span></span>
+                  <span>({Math.round(tool.toolProgress.elapsedSeconds)}s)</span>
                 </div>
               )}
 

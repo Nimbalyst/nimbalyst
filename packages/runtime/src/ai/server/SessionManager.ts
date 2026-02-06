@@ -17,6 +17,23 @@ import { SessionData, Message, DocumentContext, AIProviderType } from './types';
 import type { SessionData as ChatSession } from './types';
 import { parseContextUsageMessage } from './utils/contextUsage';
 
+/** Parsed tool_progress event from the agent stream */
+interface ToolProgressEvent {
+  type: 'tool_progress';
+  parent_tool_use_id?: string;
+  tool_name?: string;
+  elapsed_time_seconds?: number;
+}
+
+/** Input arguments for a Task tool invocation */
+interface TaskToolInput {
+  subagent_type?: string;
+  name?: string;
+  team_name?: string;
+  mode?: string;
+  [key: string]: unknown;
+}
+
 function toTimestampMillis(value: unknown): number {
   if (!value) return Date.now();
   if (typeof value === 'number') return value;
@@ -252,6 +269,7 @@ export function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
 
                   const isTaskAgent = block.name === 'Task';
                   const parentToolId = parentToolMap.get(block.id);
+                  const taskInput = (block.input || block.arguments) as TaskToolInput | undefined;
 
                   const toolMessage: Message = {
                     role: 'tool',
@@ -260,11 +278,15 @@ export function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
                     toolCall: {
                       id: block.id,
                       name: block.name,
-                      arguments: block.input || block.arguments,
+                      arguments: taskInput,
                       isSubAgent: isTaskAgent,
-                      subAgentType: isTaskAgent ? String(block.input?.subagent_type || block.arguments?.subagent_type || '') : undefined,
+                      subAgentType: isTaskAgent ? String(taskInput?.subagent_type || '') : undefined,
                       parentToolId: parentToolId,
-                      childToolCalls: []
+                      childToolCalls: [],
+                      // Agent team teammate metadata
+                      teammateName: isTaskAgent ? (taskInput?.name || undefined) : undefined,
+                      teamName: isTaskAgent ? (taskInput?.team_name || undefined) : undefined,
+                      teammateMode: isTaskAgent ? (taskInput?.mode || undefined) : undefined,
                     }
                   };
 
@@ -413,6 +435,19 @@ export function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
                 content: content,
                 timestamp
               });
+            }
+          } else if (parsed.type === 'tool_progress') {
+            // Tool progress update - attach to parent tool to show activity
+            const progress = parsed as ToolProgressEvent;
+            const parentId = progress.parent_tool_use_id;
+            if (parentId) {
+              const parentMsg = allToolMessages.get(parentId);
+              if (parentMsg && parentMsg.toolCall) {
+                parentMsg.toolCall.toolProgress = {
+                  toolName: progress.tool_name || 'unknown',
+                  elapsedSeconds: progress.elapsed_time_seconds || 0,
+                };
+              }
             }
           } else if (parsed.usage) {
             // This is metadata (usage stats), mark last message as complete

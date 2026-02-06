@@ -80,6 +80,15 @@ export interface Message {
     subAgentType?: string;          // e.g., "Explore", "bug-fixer", etc.
     parentToolId?: string;          // ID of parent Task tool
     childToolCalls?: Message[];     // Nested tools executed by sub-agent
+    // Agent team teammate fields (set when task is a team spawn)
+    teammateName?: string;          // Named teammate (e.g., "security-reviewer")
+    teamName?: string;              // Team this teammate belongs to
+    teammateMode?: string;          // Permission mode for teammate (e.g., "plan")
+    // Tool progress tracking (for long-running tools and background tasks)
+    toolProgress?: {
+      toolName: string;             // Name of the tool currently executing
+      elapsedSeconds: number;       // How long it has been running
+    };
   };
   isError?: boolean;
   isAuthError?: boolean; // True when error is an authentication failure (SDK first-class detection)

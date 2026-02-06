@@ -34,6 +34,23 @@ import { parseBashForFileOps, hasShellChainingOperators, splitOnShellOperators }
 import { DEFAULT_EFFORT_LEVEL } from '../effortLevels';
 
 /**
+ * SDK-native tools that are executed by the Claude Code SDK itself (not by Nimbalyst).
+ * AskUserQuestion is included because we handle it in canUseTool (user input, not local execution).
+ * This list is the single source of truth — used for planning-mode filtering, tool_use logging, and tool_result logging.
+ */
+const SDK_NATIVE_TOOLS: readonly string[] = [
+  'Read', 'Write', 'Edit', 'MultiEdit',
+  'Glob', 'Grep', 'LS',
+  'Bash',
+  'WebFetch', 'WebSearch',
+  'Task', 'TaskOutput', 'TaskStop', 'ExitPlanMode', 'AskUserQuestion',
+  'NotebookRead', 'NotebookEdit',
+  'TodoRead', 'TodoWrite',
+  // Agent Teams tools (SDK-internal, executed by CLI subprocess)
+  'TeammateTool', 'SendMessage',
+];
+
+/**
  * Track changes in the agent-sdk and claude-code itself here:
  * https://github.com/anthropics/claude-agent-sdk-typescript/blob/main/CHANGELOG.md
  * https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md
@@ -133,6 +150,10 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   // Returns settings for project/user commands
   private static claudeCodeSettingsLoader: (() => Promise<{ projectCommandsEnabled: boolean; userCommandsEnabled: boolean }>) | null = null;
 
+  // Claude settings env vars loader (injected from electron main process)
+  // Returns env vars from ~/.claude/settings.json to pass directly to the SDK
+  private static claudeSettingsEnvLoader: (() => Promise<Record<string, string>>) | null = null;
+
   // Additional directories loader (injected from electron main process)
   // Returns additional directories Claude should have access to based on workspace context
   // (e.g., SDK docs when working on an extension project)
@@ -227,6 +248,16 @@ export class ClaudeCodeProvider extends BaseAIProvider {
    */
   public static setClaudeCodeSettingsLoader(loader: (() => Promise<{ projectCommandsEnabled: boolean; userCommandsEnabled: boolean }>) | null): void {
     ClaudeCodeProvider.claudeCodeSettingsLoader = loader;
+  }
+
+  /**
+   * Set the env vars loader function (called from electron main process)
+   * Returns env vars from ~/.claude/settings.json to pass directly to the SDK env option.
+   * This ensures experimental feature flags like CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS
+   * are passed both via settings.json AND the SDK env for maximum reliability.
+   */
+  public static setClaudeSettingsEnvLoader(loader: (() => Promise<Record<string, string>>) | null): void {
+    ClaudeCodeProvider.claudeSettingsEnvLoader = loader;
   }
 
   /**
@@ -708,16 +739,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         'TodoRead', 'Task',
         'ExitPlanMode'
       ];
-      const SDK_NATIVE_TOOLS = [
-        'Read', 'Write', 'Edit', 'MultiEdit',
-        'Glob', 'Grep', 'LS',
-        'Bash',
-        'WebFetch', 'WebSearch',
-        'Task', 'ExitPlanMode',
-        'NotebookRead', 'NotebookEdit',
-        'TodoRead', 'TodoWrite'
-      ];
-
       // In planning mode, enforce read-only toolset
       // In agent mode, we do NOT set allowedTools so that tools flow through to canUseTool
       // where our permission system can prompt the user
@@ -732,8 +753,21 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
       // Set up environment variables for the SDK
       // If user has configured a claude-code API key, pass it via environment
+      // Also load env vars from ~/.claude/settings.json to pass directly to the SDK
+      // This ensures experimental flags are available even if the CLI's settings loading has issues
+      let settingsEnv: Record<string, string> = {};
+      if (ClaudeCodeProvider.claudeSettingsEnvLoader) {
+        try {
+          settingsEnv = await ClaudeCodeProvider.claudeSettingsEnvLoader();
+        } catch (error) {
+          console.warn('[CLAUDE-CODE] Failed to load settings env vars:', error);
+        }
+      }
+
       const env: any = {
         ...process.env,
+        // Merge env vars from ~/.claude/settings.json (e.g., CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS)
+        ...settingsEnv,
         // Enable MCP tool search when MCP tools exceed 10% of context (same as CLI default)
         // Options: 'auto' (10%), 'auto:N' (custom N%), 'true' (always), 'false' (never)
         ENABLE_TOOL_SEARCH: 'auto:10',
@@ -1081,10 +1115,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
                   // SDK-native tools that are executed by the Claude Code SDK itself
                   // AskUserQuestion is included because we handle it in canUseTool (user input, not local execution)
-                  const sdkNativeTools = ['Read', 'Write', 'Edit', 'MultiEdit', 'Glob', 'Grep', 'LS', 'Bash',
-                                          'WebFetch', 'WebSearch', 'Task', 'ExitPlanMode', 'AskUserQuestion',
-                                          'NotebookRead', 'NotebookEdit', 'TodoRead', 'TodoWrite'];
-                  const isSdkNativeTool = sdkNativeTools.includes(toolName);
+                  const isSdkNativeTool = SDK_NATIVE_TOOLS.includes(toolName);
 
                   let executionResult: any | undefined;
 
@@ -1255,12 +1286,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             const toolArgs = toolChunk.input;
             const isMcpTool = toolName.startsWith('mcp__');
 
-            // SDK-native tools that are executed by the Claude Code SDK itself
-            // AskUserQuestion is included because we handle it in canUseTool (user input, not local execution)
-            const sdkNativeTools = ['Read', 'Write', 'Edit', 'MultiEdit', 'Glob', 'Grep', 'LS', 'Bash',
-                                    'WebFetch', 'WebSearch', 'Task', 'ExitPlanMode', 'AskUserQuestion',
-                                    'NotebookRead', 'NotebookEdit', 'TodoRead', 'TodoWrite'];
-            const isSdkNativeTool = sdkNativeTools.includes(toolName);
+            const isSdkNativeTool = SDK_NATIVE_TOOLS.includes(toolName);
 
             let executionResult: any | undefined;
 
@@ -1573,6 +1599,10 @@ export class ClaudeCodeProvider extends BaseAIProvider {
               // Warn if API key source is "none" - this means Claude Code didn't find credentials
               if (chunk.apiKeySource === 'none') {
               }
+            } else if (chunk.subtype === 'task_notification') {
+              // Agent team task notification - a teammate completed/failed/stopped a task
+              // These are informational and flow through naturally as part of the team coordination
+              // Don't display as raw text - the tool call hierarchy already shows teammate activity
             } else if (chunk.subtype === 'compact_boundary') {
               // Handle /compact command response
               //   pre_tokens: chunk.compact_metadata?.pre_tokens,
@@ -1767,6 +1797,12 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                 content: displayMessage
               };
             }
+          } else if (chunk.type === 'tool_progress') {
+            // Tool progress updates (elapsed time for long-running tools) - informational only
+            // These are handled visually through the tool call streaming in the transcript
+          } else if (chunk.type === 'tool_use_summary') {
+            // Summary of tool use activity (common in agent teams) - informational only
+            // The individual tool calls are already rendered in the transcript hierarchy
           } else if (chunk.type === 'auth_status') {
             // Handle SDK auth status messages (first-class authentication detection)
             // This is the preferred way to detect auth issues rather than string matching
