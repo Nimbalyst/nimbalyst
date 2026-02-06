@@ -20,6 +20,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.58] - 2026-02-06
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+- Restored 'Use Standalone Binary' option for bun runtime
+
+### Fixed
+<!-- Bug fixes go here -->
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.52.57] - 2026-02-06
 
 
