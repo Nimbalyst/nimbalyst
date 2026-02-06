@@ -73,6 +73,10 @@ export function ClaudeCodePanel({
   const usageIndicatorEnabled = useAtomValue(claudeUsageIndicatorEnabledAtom);
   const setUsageIndicatorEnabled = useSetAtom(setClaudeUsageIndicatorEnabledAtom);
 
+  // Standalone binary setting (macOS only - hides dock icon when spawning Claude Code)
+  const [useStandaloneBinary, setUseStandaloneBinaryState] = useState(false);
+  const [isStandaloneBinaryAvailable, setIsStandaloneBinaryAvailable] = useState(false);
+
   // Agent teams toggle (experimental) - stored as env var in ~/.claude/settings.json
   const [agentTeamsEnabled, setAgentTeamsEnabled] = useState(false);
 
@@ -140,6 +144,9 @@ export function ClaudeCodePanel({
     }
     checkLoginStatus();
     loadEnvVars();
+
+    // Load standalone binary setting and availability
+    loadStandaloneBinarySetting();
   }, [loadEnvVars]);
 
   const checkLoginStatus = async () => {
@@ -175,6 +182,37 @@ export function ClaudeCodePanel({
     }
     return true;
   }
+
+  // Load standalone binary setting and check availability
+  const loadStandaloneBinarySetting = async () => {
+    try {
+      // Check if standalone binary is available in this build
+      const available = await window.electronAPI.aiIsStandaloneBinaryAvailable();
+      setIsStandaloneBinaryAvailable(available);
+
+      // Load current setting
+      const settings = await window.electronAPI.aiGetSettings();
+      setUseStandaloneBinaryState(settings?.useStandaloneBinary ?? false);
+    } catch (error) {
+      console.error('[ClaudeCodePanel] Failed to load standalone binary setting:', error);
+    }
+  };
+
+  // Save standalone binary setting
+  const handleSetUseStandaloneBinary = async (enabled: boolean) => {
+    setUseStandaloneBinaryState(enabled);
+    try {
+      const currentSettings = await window.electronAPI.aiGetSettings();
+      await window.electronAPI.aiSaveSettings({
+        ...currentSettings,
+        useStandaloneBinary: enabled,
+      });
+    } catch (error) {
+      console.error('[ClaudeCodePanel] Failed to save standalone binary setting:', error);
+      // Revert on error
+      setUseStandaloneBinaryState(!enabled);
+    }
+  };
 
   const handleLogin = async () => {
     setIsLoggingIn(true);
@@ -247,6 +285,35 @@ export function ClaudeCodePanel({
           </label>
         </div>
       )}
+
+      {/* Standalone Binary Toggle */}
+      <div className="provider-enable flex flex-col gap-2 py-4 mb-4 border-b border-[var(--nim-border)]">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <span className="provider-enable-label text-sm font-medium text-[var(--nim-text)]">Use Standalone Binary (Experimental)</span>
+            <p className="text-xs text-[var(--nim-text-muted)] mt-1">
+              Use a standalone binary instead of Electron to run Claude Agent
+              {isMacOS && ' (prevents dock icon)'}
+            </p>
+          </div>
+          <label className="provider-toggle relative inline-block w-11 h-6 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={useStandaloneBinary}
+              onChange={(e) => handleSetUseStandaloneBinary(e.target.checked)}
+              className="hidden peer"
+            />
+            <span className="provider-toggle-slider absolute cursor-pointer inset-0 rounded-full transition-all bg-[var(--nim-bg-tertiary)] before:absolute before:content-[''] before:h-5 before:w-5 before:left-0.5 before:bottom-0.5 before:rounded-full before:transition-all before:bg-white before:shadow-sm peer-checked:bg-[var(--nim-primary)] peer-checked:before:translate-x-5"></span>
+          </label>
+        </div>
+        {useStandaloneBinary && !isStandaloneBinaryAvailable && (
+          <div className="p-3 rounded-lg bg-[rgba(245,158,11,0.08)] border border-[rgba(245,158,11,0.2)]">
+            <p className="text-xs text-[var(--nim-warning)]">
+              Standalone binary not found in this build. Claude Agent sessions will fail to start. The standalone binary is included in official release builds.
+            </p>
+          </div>
+        )}
+      </div>
 
       {/* Agent Teams Toggle (Experimental) */}
       <div className="provider-enable flex items-center justify-between gap-4 py-4 mb-4 border-b border-[var(--nim-border)]">

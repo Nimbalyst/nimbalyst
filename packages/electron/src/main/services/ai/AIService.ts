@@ -5,7 +5,7 @@
 import { BrowserWindow } from 'electron';
 import { safeHandle } from '../../utils/ipcRegistry';
 import Store from 'electron-store';
-import { SessionManager, ProviderFactory, ModelRegistry, AIProvider, isAskUserQuestionProvider } from '@nimbalyst/runtime/ai/server';
+import { SessionManager, ProviderFactory, ModelRegistry, AIProvider, isAskUserQuestionProvider, ClaudeCodeProvider } from '@nimbalyst/runtime/ai/server';
 import { getSessionStateManager } from '@nimbalyst/runtime/ai/server/SessionStateManager';
 import { parseContextUsageMessage } from '@nimbalyst/runtime/ai/server/utils/contextUsage';
 import { isBedrockToolSearchError } from '@nimbalyst/runtime/ai/server/utils/errorDetection';
@@ -2592,6 +2592,7 @@ export class AIService {
                     skillCount: initData.skillCount,
                     pluginCount: initData.pluginCount,
                     toolCount: initData.toolCount,
+                    helperMethod: initData.helperMethod,
                     ...(configuredProvider && { configuredProvider })
                   });
                 }
@@ -3457,6 +3458,7 @@ export class AIService {
       const aiDebugLogging = this.getSettingsStore().get('aiDebugLogging', false) as boolean;
       const showPromptAdditions = this.getSettingsStore().get('showPromptAdditions', false) as boolean;
       const showUsageIndicator = this.getSettingsStore().get('showUsageIndicator', false) as boolean;
+      const useStandaloneBinary = this.getSettingsStore().get('useStandaloneBinary', false) as boolean;
 
       return {
         defaultProvider: this.getSettingsStore().get('defaultProvider', 'claude-code'),
@@ -3466,6 +3468,7 @@ export class AIService {
         aiDebugLogging,
         showPromptAdditions,
         showUsageIndicator,
+        useStandaloneBinary,
       };
     });
 
@@ -3528,7 +3531,19 @@ export class AIService {
         this.getSettingsStore().set('showUsageIndicator', settings.showUsageIndicator);
       }
 
+      if (settings.useStandaloneBinary !== undefined) {
+        this.getSettingsStore().set('useStandaloneBinary', settings.useStandaloneBinary);
+        // Update ClaudeCodeProvider immediately so new sessions use the updated setting
+        ClaudeCodeProvider.setUseStandaloneBinary(settings.useStandaloneBinary);
+      }
+
       return { success: true };
+    });
+
+    // Check if standalone binary is available (macOS only, packaged builds only)
+    safeHandle('ai:isStandaloneBinaryAvailable', async () => {
+      const { isStandaloneBinaryAvailable } = await import('@nimbalyst/runtime/electron/claudeCodeEnvironment');
+      return isStandaloneBinaryAvailable();
     });
 
     // Test connection

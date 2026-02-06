@@ -133,7 +133,7 @@ All events include `$session_id` property automatically. Dev users are marked wi
 
 | Event Name | File(s) | Trigger | Properties | First Added (Public) | Significant Changes |
 | --- | --- | --- | --- | --- | --- |
-| `claude_code_session_started` | `AIService.ts:2472` | Claude Code provider initializes session | `mcpServerCount`<br/>`slashCommandCount`<br/>`agentCount`<br/>`skillCount`<br/>`pluginCount`<br/>`toolCount`<br/>`configuredProvider` (optional: anthropic/aws-bedrock/google-vertex/xai/openai/azure-openai/gemini/mistral/groq/cohere) | v0.45.25 (2025-11-14) | (pending release): Added configuredProvider property to track which AI provider is configured via environment variables |
+| `claude_code_session_started` | `AIService.ts:2579` | Claude Code provider initializes session | `mcpServerCount`<br/>`slashCommandCount`<br/>`agentCount`<br/>`skillCount`<br/>`pluginCount`<br/>`toolCount`<br/>`helperMethod` (electron/standalone)<br/>`configuredProvider` (optional: anthropic/aws-bedrock/google-vertex/xai/openai/azure-openai/gemini/mistral/groq/cohere) | v0.45.25 (2025-11-14) | (pending release): Added helperMethod property to track which executable method is used for spawning Claude Code subprocess<br/>(pending release): Added configuredProvider property to track which AI provider is configured via environment variables |
 | `slash_command_suggestion_clicked` | `SlashCommandSuggestions.tsx:117` | User clicks a slash command suggestion pill in empty session | `commandName`<br/>`packageId` | v0.47.2 (2025-12-10) |  |
 
 ### MCP Server Configuration
