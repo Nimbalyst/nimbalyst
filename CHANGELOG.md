@@ -20,6 +20,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.57] - 2026-02-06
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+- Faster app startup via parallel initialization
+
+### Fixed
+- Pinned PGLite to 0.3.14 to prevent regression from 0.3.15
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.52.56] - 2026-02-06
 
 
