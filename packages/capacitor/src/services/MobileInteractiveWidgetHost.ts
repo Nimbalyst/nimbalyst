@@ -192,10 +192,9 @@ export function createMobileInteractiveWidgetHost(
         file_count: files.length,
       });
 
-      // Return pending result - actual commit happens on desktop
-      // The widget will show "Committing..." state
-      // Desktop will broadcast the result back via message sync
-      return { success: false, error: 'Commit pending on desktop' };
+      // Return pending - actual commit happens on desktop
+      // Widget will stay in "Committing..." state until tool result arrives via sync
+      return { success: false, pending: true };
     },
 
     async gitCommitCancel(proposalId: string): Promise<void> {

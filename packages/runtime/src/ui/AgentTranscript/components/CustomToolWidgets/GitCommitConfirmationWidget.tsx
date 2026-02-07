@@ -15,9 +15,11 @@
  */
 
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import { useAtomValue } from 'jotai';
 import { usePostHog } from 'posthog-js/react';
 import { MaterialSymbol } from '../../../..';
 import type { CustomToolWidgetProps } from './index';
+import { interactiveWidgetHostAtom } from '../../../../store/atoms/interactiveWidgetHost';
 
 // ============================================================
 // File Status Types
@@ -180,6 +182,9 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
 }) => {
   const posthog = usePostHog();
 
+  // Get host from atom (set by SessionTranscript or SessionDetailScreen)
+  const host = useAtomValue(interactiveWidgetHostAtom(sessionId));
+
   // Extract data from tool call
   const toolCall = message.toolCall;
   if (!toolCall) {
@@ -214,8 +219,6 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
   );
   const initialCommitMessage: string = args.commitMessage || '';
   const reasoning: string = args.reasoning || '';
-  const commitWorkspacePath = workspacePath;
-
   // Parse the tool result to determine completion state
   // The result can be a string or an array of content blocks [{type: 'text', text: '...'}]
   const rawToolResult = toolCall.result;
@@ -254,7 +257,12 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
 
   // The proposalId is simply the tool call ID - no need for a separate atom
   // The MCP server uses toolUseId (which equals toolCall.id) as the proposalId
-  const proposalId = toolCall.id;
+  const proposalId = toolCall.id || '';
+
+  // If no proposal ID, cannot proceed
+  if (!proposalId) {
+    return null;
+  }
 
   // Widget is interactive if the tool hasn't completed yet
   const isPending = !isCompleted;
@@ -481,107 +489,65 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
   };
 
   const handleConfirm = useCallback(async () => {
-    if (filesToStage.size === 0 || !commitMessage.trim() || !commitWorkspacePath || !isPending) {
+    if (filesToStage.size === 0 || !commitMessage.trim() || !isPending || !host) {
       return;
     }
 
     setIsCommitting(true);
     try {
-      if (window.electronAPI) {
-        // Execute the git commit
-        const result = await window.electronAPI.invoke(
-          'git:commit',
-          commitWorkspacePath,
-          commitMessage,
-          Array.from(filesToStage)
-        ) as { success: boolean; commitHash?: string; error?: string };
+      // Execute the git commit via host (works on both desktop and mobile)
+      const result = await host.gitCommit(
+        proposalId,
+        Array.from(filesToStage),
+        commitMessage
+      );
 
-        setLocalResult(result);
-        setHasResponded(true);
-
-        // Track git commit proposal response
-        const fileCountBucket = filesToStage.size <= 5 ? '1-5' : filesToStage.size <= 10 ? '6-10' : filesToStage.size <= 20 ? '11-20' : '20+';
-        posthog?.capture('git_commit_proposal_response', {
-          action: result.success ? 'committed' : 'error',
-          file_count: fileCountBucket,
-          success: result.success,
-        });
-
-        // Send response via unified IPC channel
-        // Use toolCall.id as proposalId - MCP server uses the same ID
-        if (window.electronAPI?.invoke) {
-          await window.electronAPI.invoke('messages:respond-to-prompt', {
-            sessionId,
-            promptId: proposalId,
-            promptType: 'git_commit_proposal_request' as const,
-            response: {
-              action: result.success ? 'committed' : 'cancelled',
-              commitHash: result.commitHash,
-              error: result.error,
-              filesCommitted: result.success ? Array.from(filesToStage) : undefined,
-              commitMessage: result.success ? commitMessage : undefined,
-            },
-            respondedBy: 'desktop' as const,
-          });
-        }
+      // If pending (mobile sent to desktop), stay in "Committing..." state.
+      // The tool result will arrive via sync and update completedState.
+      if (result.pending) {
+        // Keep isCommitting true - don't reset
+        return;
       }
+
+      setIsCommitting(false);
+      setLocalResult(result);
+      setHasResponded(true);
+
+      // Track git commit proposal response
+      const fileCountBucket = filesToStage.size <= 5 ? '1-5' : filesToStage.size <= 10 ? '6-10' : filesToStage.size <= 20 ? '11-20' : '20+';
+      host.trackEvent('git_commit_proposal_response', {
+        action: result.success ? 'committed' : 'error',
+        file_count: fileCountBucket,
+        success: result.success,
+      });
     } catch (error) {
+      setIsCommitting(false);
       const errorResult = {
         success: false,
         error: error instanceof Error ? error.message : String(error),
       };
       setLocalResult(errorResult);
-
-      // Send error result back via unified IPC
-      if (window.electronAPI?.invoke) {
-        await window.electronAPI.invoke('messages:respond-to-prompt', {
-          sessionId,
-          promptId: proposalId,
-          promptType: 'git_commit_proposal_request' as const,
-          response: {
-            action: 'cancelled',
-            error: errorResult.error,
-          },
-          respondedBy: 'desktop' as const,
-        });
-      }
-    } finally {
-      setIsCommitting(false);
     }
-  }, [sessionId, commitWorkspacePath, filesToStage, commitMessage, isPending, proposalId, posthog]);
+  }, [filesToStage, commitMessage, isPending, proposalId, host]);
 
   const handleCancel = useCallback(() => {
-    if (hasResponded || !isPending) return; // Prevent double-response
+    if (hasResponded || !isPending || !host) return; // Prevent double-response
 
     setLocalResult({ success: false, error: 'Cancelled' });
     setHasResponded(true);
 
     // Track git commit proposal response
     const fileCountBucket = filesToStage.size <= 5 ? '1-5' : filesToStage.size <= 10 ? '6-10' : filesToStage.size <= 20 ? '11-20' : '20+';
-    posthog?.capture('git_commit_proposal_response', {
+    host.trackEvent('git_commit_proposal_response', {
       action: 'cancelled',
       file_count: fileCountBucket,
     });
 
-    // Send cancel response via unified IPC
-    if (window.electronAPI?.invoke) {
-      window.electronAPI.invoke('messages:respond-to-prompt', {
-        sessionId,
-        promptId: proposalId,
-        promptType: 'git_commit_proposal_request' as const,
-        response: {
-          action: 'cancelled',
-        },
-        respondedBy: 'desktop' as const,
-      }).catch(err => {
-        console.error('[GitCommitWidget] Failed to send cancel response:', err);
-      });
-    }
-  }, [sessionId, proposalId, hasResponded, isPending, filesToStage.size, posthog]);
-
-  if (!commitWorkspacePath) {
-    return null;
-  }
+    // Send cancel response via host (works on both desktop and mobile)
+    host.gitCommitCancel(proposalId).catch(err => {
+      console.error('[GitCommitWidget] Failed to send cancel response:', err);
+    });
+  }, [proposalId, hasResponded, isPending, filesToStage.size, host]);
 
   // No loading state needed - atom is reactive and updates when DB changes
 

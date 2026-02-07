@@ -344,40 +344,92 @@ async function handleGitCommitResponse(
 ): Promise<void> {
   log.info('Handling GitCommit response:', promptId, 'action:', response.action);
 
+  // Helper to emit the proposal response to unblock the MCP tool
+  const emitProposalResponse = async (result: {
+    action: 'committed' | 'cancelled';
+    commitHash?: string;
+    error?: string;
+    filesCommitted?: string[];
+    commitMessage?: string;
+  }) => {
+    const { ipcMain } = await import('electron');
+    ipcMain.emit(promptId, null, result);
+  };
+
   if (response.action === 'cancelled') {
-    // Just notify renderer that commit was cancelled
-    notifyAllWindows('ai:gitCommitResponse', {
-      sessionId,
-      promptId,
-      action: 'cancelled',
-      answeredBy: 'mobile',
-    });
+    await emitProposalResponse({ action: 'cancelled' });
     return;
   }
 
   // For 'committed' action, we need to execute the git commit on desktop
-  // and then notify with the result
   if (!response.files || !response.message) {
     log.error('GitCommit response missing files or message');
-    notifyAllWindows('ai:gitCommitResponse', {
-      sessionId,
-      promptId,
-      action: 'error',
-      error: 'Missing files or message',
-      answeredBy: 'mobile',
-    });
+    await emitProposalResponse({ action: 'cancelled', error: 'Missing files or message' });
     return;
   }
 
-  // Notify renderer to execute the commit
-  // The renderer will call the git:commit IPC and respond via messages:respond-to-prompt
-  notifyAllWindows('ai:gitCommitRequest', {
-    sessionId,
-    promptId,
-    files: response.files,
-    message: response.message,
-    answeredBy: 'mobile',
-  });
+  // Look up the session's workspace path
+  try {
+    const { AISessionsRepository } = await import('@nimbalyst/runtime/storage/repositories/AISessionsRepository');
+    const session = await AISessionsRepository.get(sessionId);
+    if (!session) {
+      log.error('GitCommit: session not found:', sessionId);
+      await emitProposalResponse({ action: 'cancelled', error: 'Session not found' });
+      return;
+    }
+
+    const workspacePath = session.workspacePath;
+    if (!workspacePath) {
+      log.error('GitCommit: no workspace path for session:', sessionId);
+      await emitProposalResponse({ action: 'cancelled', error: 'No workspace path' });
+      return;
+    }
+
+    // Execute the git commit
+    const simpleGit = (await import('simple-git')).default;
+    const { gitOperationLock } = await import('../../services/GitOperationLock');
+
+    const commitResult = await gitOperationLock.withLock(workspacePath, 'git:commit', async () => {
+      const git = simpleGit(workspacePath);
+
+      // Stage the files
+      log.info(`[GitCommit mobile] Staging ${response.files!.length} files in ${workspacePath}`);
+
+      // Reset staging area, then add only selected files
+      try {
+        await git.reset(['HEAD']);
+      } catch {
+        // May fail in fresh repo with no commits - that's OK
+      }
+      await git.add(response.files!);
+
+      // Commit
+      const result = await git.commit(response.message!);
+      return result;
+    });
+
+    if (commitResult.commit) {
+      log.info(`[GitCommit mobile] Successfully committed: ${commitResult.commit}`);
+      await emitProposalResponse({
+        action: 'committed',
+        commitHash: commitResult.commit,
+        filesCommitted: response.files,
+        commitMessage: response.message,
+      });
+    } else {
+      log.warn('[GitCommit mobile] Commit returned empty hash');
+      await emitProposalResponse({
+        action: 'cancelled',
+        error: 'No changes were committed',
+      });
+    }
+  } catch (error) {
+    log.error('[GitCommit mobile] Failed to execute commit:', error);
+    await emitProposalResponse({
+      action: 'cancelled',
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 }
 
 /**

@@ -1163,14 +1163,65 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
         refreshPendingPrompts(sessionId);
       },
 
-      // Git commit operations (placeholder - can be wired up later)
-      gitCommit: async (_proposalId: string, _files: string[], _message: string) => {
-        // GitCommitConfirmationWidget currently handles this directly via IPC
-        // This is here for future consolidation
-        return { success: false, error: 'Not implemented via host' };
+      // Git commit operations
+      gitCommit: async (proposalId: string, files: string[], message: string) => {
+        try {
+          // Execute the git commit via IPC
+          const result = await window.electronAPI.invoke(
+            'git:commit',
+            workspacePath,
+            message,
+            files
+          ) as { success: boolean; commitHash?: string; error?: string };
+
+          // Send response via unified IPC channel for the durable prompt
+          await window.electronAPI.invoke('messages:respond-to-prompt', {
+            sessionId,
+            promptId: proposalId,
+            promptType: 'git_commit_proposal_request' as const,
+            response: {
+              action: result.success ? 'committed' : 'cancelled',
+              commitHash: result.commitHash,
+              error: result.error,
+              filesCommitted: result.success ? files : undefined,
+              commitMessage: result.success ? message : undefined,
+            },
+            respondedBy: 'desktop' as const,
+          });
+
+          return result;
+        } catch (error) {
+          const errorResult = {
+            success: false,
+            error: error instanceof Error ? error.message : String(error),
+          };
+
+          // Send error result back via unified IPC
+          await window.electronAPI.invoke('messages:respond-to-prompt', {
+            sessionId,
+            promptId: proposalId,
+            promptType: 'git_commit_proposal_request' as const,
+            response: {
+              action: 'cancelled',
+              error: errorResult.error,
+            },
+            respondedBy: 'desktop' as const,
+          });
+
+          return errorResult;
+        }
       },
-      gitCommitCancel: async (_proposalId: string) => {
-        // GitCommitConfirmationWidget currently handles this directly via IPC
+      gitCommitCancel: async (proposalId: string) => {
+        // Send cancel response via unified IPC
+        await window.electronAPI.invoke('messages:respond-to-prompt', {
+          sessionId,
+          promptId: proposalId,
+          promptType: 'git_commit_proposal_request' as const,
+          response: {
+            action: 'cancelled',
+          },
+          respondedBy: 'desktop' as const,
+        });
       },
 
       // Common operations

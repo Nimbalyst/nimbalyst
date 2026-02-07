@@ -118,14 +118,15 @@ export interface InteractiveWidgetHost {
   // ============================================================
 
   /**
-   * Execute a git commit with the given files and message
-   * Returns the commit result
+   * Execute a git commit with the given files and message.
+   * Returns the commit result. On mobile, returns { pending: true } to indicate
+   * the commit was sent to desktop but hasn't completed yet.
    */
   gitCommit(
     proposalId: string,
     files: string[],
     message: string
-  ): Promise<{ success: boolean; commitHash?: string; error?: string }>;
+  ): Promise<{ success: boolean; commitHash?: string; error?: string; pending?: boolean }>;
 
   /**
    * Cancel a git commit proposal
