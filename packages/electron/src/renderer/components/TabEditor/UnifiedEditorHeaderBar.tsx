@@ -21,6 +21,7 @@ import {
 } from 'rexical';
 import { $generateHtmlFromNodes } from '@lexical/html';
 import { revealFolderAtom } from '../../store';
+import { getDocumentService } from '../../services/RendererDocumentService';
 
 // Tracker type info
 interface TrackerTypeInfo {
@@ -180,6 +181,9 @@ interface UnifiedEditorHeaderBarProps {
 
   // Debug tree toggle (dev mode only)
   onToggleDebugTree?: () => void;
+
+  // Signal that content changed (e.g., frontmatter injected), so document headers re-check
+  onContentChanged?: () => void;
 }
 
 export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
@@ -201,6 +205,7 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
   extensionMenuItems = [],
   onOpenExtensionSettings,
   onToggleDebugTree,
+  onContentChanged,
 }) => {
   // Jotai atom for folder navigation
   const revealFolder = useSetAtom(revealFolderAtom);
@@ -443,6 +448,11 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
     if (!lexicalEditor || typeof lexicalEditor.update !== 'function') return;
 
     try {
+      const defaultData = getDefaultFrontmatterForType(trackerType);
+      let frontmatterKey = 'trackerStatus';
+      if (trackerType === 'plan') frontmatterKey = 'planStatus';
+      else if (trackerType === 'decision') frontmatterKey = 'decisionStatus';
+
       lexicalEditor.update(() => {
         const transformers = getEditorTransformers();
         const markdown = $convertToEnhancedMarkdownString(transformers);
@@ -454,13 +464,20 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
           onDirtyChange(true);
         }
       });
+
+      // Notify DocumentService so tracker UI updates immediately
+      const documentService = getDocumentService();
+      documentService.notifyFrontmatterChanged?.(filePath, { [frontmatterKey]: defaultData });
+
+      // Signal content changed so document header re-checks for frontmatter
+      onContentChanged?.();
     } catch (error) {
       console.error('[UnifiedHeaderBar] Failed to apply document type:', error);
     }
 
     setShowDocTypeSubmenu(false);
     setShowActionsMenu(false);
-  }, [lexicalEditor, onDirtyChange]);
+  }, [lexicalEditor, onDirtyChange, filePath, onContentChanged]);
 
   // Handle remove document type
   const handleRemoveDocumentType = useCallback(() => {
@@ -478,13 +495,20 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
           onDirtyChange(true);
         }
       });
+
+      // Notify DocumentService so tracker UI updates immediately
+      const documentService = getDocumentService();
+      documentService.notifyFrontmatterChanged?.(filePath, {});
+
+      // Signal content changed so document header re-checks for frontmatter
+      onContentChanged?.();
     } catch (error) {
       console.error('[UnifiedHeaderBar] Failed to remove document type:', error);
     }
 
     setShowDocTypeSubmenu(false);
     setShowActionsMenu(false);
-  }, [lexicalEditor, onDirtyChange]);
+  }, [lexicalEditor, onDirtyChange, filePath, onContentChanged]);
 
   // Close dropdowns when clicking outside
   useEffect(() => {

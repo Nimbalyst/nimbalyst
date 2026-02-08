@@ -8,6 +8,7 @@ import { EditorConfig } from '../../EditorConfig';
 import { useRuntimeSettings } from '../../context/RuntimeSettingsContext';
 import {
   getBuiltInFullDocumentTrackerTypes,
+  getDefaultFrontmatterForType,
   applyTrackerTypeToMarkdown,
   removeTrackerTypeFromMarkdown,
   getCurrentTrackerTypeFromMarkdown,
@@ -282,9 +283,22 @@ export default function FloatingDocumentActionsPlugin({
       }
     });
 
+    // Notify DocumentService so tracker UI updates immediately
+    if (filePath) {
+      const docService = (window as any).documentService;
+      if (docService?.notifyFrontmatterChanged) {
+        let frontmatterKey = 'trackerStatus';
+        if (trackerType === 'plan') frontmatterKey = 'planStatus';
+        else if (trackerType === 'decision') frontmatterKey = 'decisionStatus';
+
+        const defaultData = getDefaultFrontmatterForType(trackerType);
+        docService.notifyFrontmatterChanged(filePath, { [frontmatterKey]: defaultData });
+      }
+    }
+
     setShowTrackerTypeSubmenu(false);
     setShowActionsMenu(false);
-  }, [editor, config]);
+  }, [editor, config, filePath]);
 
   const handleRemoveTrackerType = useCallback(() => {
     editor.update(() => {
@@ -304,9 +318,17 @@ export default function FloatingDocumentActionsPlugin({
       }
     });
 
+    // Notify DocumentService so tracker UI updates immediately
+    if (filePath) {
+      const docService = (window as any).documentService;
+      if (docService?.notifyFrontmatterChanged) {
+        docService.notifyFrontmatterChanged(filePath, {});
+      }
+    }
+
     setShowTrackerTypeSubmenu(false);
     setShowActionsMenu(false);
-  }, [editor, config]);
+  }, [editor, config, filePath]);
 
   const formatRelativeTime = (timestamp: number): string => {
     const now = Date.now();

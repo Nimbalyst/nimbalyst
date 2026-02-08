@@ -59,7 +59,7 @@ export function getCurrentTrackerTypeFromMarkdown(markdown: string): string | nu
 /**
  * Get default frontmatter template for a tracker type
  */
-function getDefaultFrontmatterForType(trackerType: string): Record<string, any> {
+export function getDefaultFrontmatterForType(trackerType: string): Record<string, any> {
   const now = new Date().toISOString();
   const today = now.split('T')[0];
 

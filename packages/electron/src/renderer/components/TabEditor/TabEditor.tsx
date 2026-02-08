@@ -2303,6 +2303,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           onOpenSessionInChat={onOpenSessionInChat}
           extensionMenuItems={extensionMenuItems}
           onToggleDebugTree={() => setShowTreeView(prev => !prev)}
+          onContentChanged={() => setReloadVersion(v => v + 1)}
         />
         <FixedTabHeaderContainer
           filePath={filePath}
