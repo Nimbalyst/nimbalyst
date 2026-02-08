@@ -410,6 +410,18 @@ export function DatabaseBrowser() {
     setCopiedCell(false);
   };
 
+  // Close cell modal on Escape key
+  useEffect(() => {
+    if (!expandedCell) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setExpandedCell(null);
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [expandedCell]);
+
   const totalPages = tableData ? Math.ceil(tableData.totalCount / pageSize) : 0;
 
   return (
