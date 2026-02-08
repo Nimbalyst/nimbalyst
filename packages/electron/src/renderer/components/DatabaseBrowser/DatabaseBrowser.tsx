@@ -27,6 +27,113 @@ interface QueryResult {
 
 type ViewTab = 'data' | 'schema';
 
+/**
+ * Try to get a parsed JSON object from a cell value.
+ * Returns the parsed object if the value is valid JSON (object/array), or null otherwise.
+ */
+function tryParseJSON(value: any): object | null {
+  if (value === null || value === undefined) return null;
+  // Already a parsed object/array from the database
+  if (typeof value === 'object') return value;
+  // Try parsing JSON strings
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+      try {
+        return JSON.parse(trimmed);
+      } catch {
+        return null;
+      }
+    }
+  }
+  return null;
+}
+
+/** Inject JSON syntax highlighting styles (theme-aware) */
+const injectDBJsonStyles = () => {
+  const id = 'db-json-syntax-styles';
+  if (document.getElementById(id)) return;
+  const style = document.createElement('style');
+  style.id = id;
+  style.textContent = `
+    .db-json-key { color: #0451A5; font-weight: 500; }
+    .db-json-string { color: #A31515; }
+    .db-json-number { color: #098658; }
+    .db-json-bool { color: #0000FF; font-weight: 600; }
+    .db-json-null { color: #0000FF; font-weight: 600; font-style: italic; }
+    .dark-theme .db-json-key, .crystal-dark-theme .db-json-key { color: #9CDCFE; }
+    .dark-theme .db-json-string, .crystal-dark-theme .db-json-string { color: #CE9178; }
+    .dark-theme .db-json-number, .crystal-dark-theme .db-json-number { color: #B5CEA8; }
+    .dark-theme .db-json-bool, .crystal-dark-theme .db-json-bool { color: #569CD6; }
+    .dark-theme .db-json-null, .crystal-dark-theme .db-json-null { color: #569CD6; }
+  `;
+  document.head.appendChild(style);
+};
+
+/** Render syntax-highlighted JSON as React elements */
+function SyntaxHighlightedJSON({ data }: { data: object }) {
+  useEffect(() => { injectDBJsonStyles(); }, []);
+
+  let keyCounter = 0;
+  const getKey = (prefix: string) => `${prefix}-${keyCounter++}`;
+
+  const renderValue = (value: any, indent: number = 0): JSX.Element[] => {
+    const pad = '  '.repeat(indent);
+    const elements: JSX.Element[] = [];
+
+    if (value === null) {
+      elements.push(<span key={getKey('n')} className="db-json-null">null</span>);
+    } else if (typeof value === 'boolean') {
+      elements.push(<span key={getKey('b')} className="db-json-bool">{String(value)}</span>);
+    } else if (typeof value === 'number') {
+      elements.push(<span key={getKey('d')} className="db-json-number">{value}</span>);
+    } else if (typeof value === 'string') {
+      elements.push(<span key={getKey('s')} className="db-json-string">"{value}"</span>);
+    } else if (Array.isArray(value)) {
+      if (value.length === 0) {
+        elements.push(<span key={getKey('a')}>[]</span>);
+      } else {
+        elements.push(<span key={getKey('ao')} className="text-[var(--nim-text-muted)] font-semibold">[</span>);
+        elements.push(<br key={getKey('br')} />);
+        value.forEach((item, idx) => {
+          elements.push(<span key={getKey('i')}>{pad}  </span>);
+          elements.push(...renderValue(item, indent + 1));
+          if (idx < value.length - 1) elements.push(<span key={getKey('c')} className="text-[var(--nim-text-faint)]">,</span>);
+          elements.push(<br key={getKey('br')} />);
+        });
+        elements.push(<span key={getKey('i')}>{pad}</span>);
+        elements.push(<span key={getKey('ac')} className="text-[var(--nim-text-muted)] font-semibold">]</span>);
+      }
+    } else if (typeof value === 'object') {
+      const keys = Object.keys(value);
+      if (keys.length === 0) {
+        elements.push(<span key={getKey('o')}>{'{}'}</span>);
+      } else {
+        elements.push(<span key={getKey('oo')} className="text-[var(--nim-text-muted)] font-semibold">{'{'}</span>);
+        elements.push(<br key={getKey('br')} />);
+        keys.forEach((key, idx) => {
+          elements.push(<span key={getKey('i')}>{pad}  </span>);
+          elements.push(<span key={getKey('k')} className="db-json-key">"{key}"</span>);
+          elements.push(<span key={getKey('cl')} className="text-[var(--nim-text-faint)]">: </span>);
+          elements.push(...renderValue(value[key], indent + 1));
+          if (idx < keys.length - 1) elements.push(<span key={getKey('c')} className="text-[var(--nim-text-faint)]">,</span>);
+          elements.push(<br key={getKey('br')} />);
+        });
+        elements.push(<span key={getKey('i')}>{pad}</span>);
+        elements.push(<span key={getKey('oc')} className="text-[var(--nim-text-muted)] font-semibold">{'}'}</span>);
+      }
+    }
+
+    return elements;
+  };
+
+  return (
+    <pre className="m-0 whitespace-pre font-mono text-[13px] leading-relaxed text-[var(--nim-text)]">
+      {renderValue(data)}
+    </pre>
+  );
+}
+
 export function DatabaseBrowser() {
   const [tables, setTables] = useState<string[]>([]);
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
@@ -629,7 +736,13 @@ export function DatabaseBrowser() {
               </div>
             </div>
             <div className="cell-modal-content flex-1 overflow-auto p-4 min-h-[100px]">
-              <pre className="m-0 whitespace-pre-wrap break-all font-mono text-[13px] leading-relaxed text-[var(--nim-text)]">{formatCellValue(expandedCell.value)}</pre>
+              {(() => {
+                const jsonData = tryParseJSON(expandedCell.value);
+                if (jsonData) {
+                  return <SyntaxHighlightedJSON data={jsonData} />;
+                }
+                return <pre className="m-0 whitespace-pre-wrap break-all font-mono text-[13px] leading-relaxed text-[var(--nim-text)]">{formatCellValue(expandedCell.value)}</pre>;
+              })()}
             </div>
           </div>
         </div>
