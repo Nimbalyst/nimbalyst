@@ -20,6 +20,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.61] - 2026-02-09
+
+
+### Added
+- Shareable session links via Cloudflare R2
+- Session HTML export and clipboard copy IPC handlers
+- Mobile-to-desktop git commit proposal sync
+- Syntax-highlighted JSON in database browser cell popup
+- New file creation rendered as syntax-highlighted preview instead of all-green diff
+
+### Changed
+- Updated @anthropic-ai/claude-agent-sdk to 0.2.37
+
+### Fixed
+- Claude Code subprocess now receives full shell environment
+- Database browser cell modal closes on Escape key
+- Frontmatter UI now appears immediately after Set Document Type
+- Nimbalyst mockup Style Guide updated with correct color palette and typography
+- Scroll button visibility and behavior in RichTranscriptView
+- "Already has a parent" error when selecting workstream child sessions
+- Excalidraw MCP tools now always visible to Claude Code agents
+- YAML frontmatter stripped from markdown new-file previews; fixed code syntax colors
+- Devcontainer npm install no longer overwrites host node_modules
+
 ## [0.52.60] - 2026-02-06
 
 
