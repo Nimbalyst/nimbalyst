@@ -25,6 +25,10 @@ interface DetectedPaths {
 let cachedDetectedPaths: DetectedPaths | null = null;
 let pathDetectionPromise: Promise<DetectedPaths> | null = null;
 
+// Cache for the full shell environment (populated alongside path detection)
+// Contains all env vars from the user's login shell EXCEPT PATH (which has special handling)
+let cachedShellEnvironment: Record<string, string> | null = null;
+
 interface InstallationStatus {
   installed: boolean;
   version?: string;
@@ -911,6 +915,33 @@ export class CLIManager {
 }
 
 /**
+ * Parse null-byte separated environment output from `env -0`.
+ * Each entry is KEY=VALUE separated by \0.
+ * Handles multiline values safely since \0 is the only delimiter.
+ */
+function parseNullSeparatedEnv(output: string): Record<string, string> {
+  const env: Record<string, string> = {};
+  const entries = output.split('\0');
+
+  for (const entry of entries) {
+    if (!entry) continue;
+
+    const eqIndex = entry.indexOf('=');
+    if (eqIndex <= 0) continue;
+
+    const key = entry.substring(0, eqIndex);
+    const value = entry.substring(eqIndex + 1);
+
+    // Only accept valid env var names
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) continue;
+
+    env[key] = value;
+  }
+
+  return env;
+}
+
+/**
  * Asynchronously detect paths for Homebrew, nvm, npm, yarn, and shell environment.
  * This runs the expensive shell commands once and caches the results.
  */
@@ -919,7 +950,8 @@ async function detectPaths(): Promise<DetectedPaths> {
   const homeDir = os.homedir();
 
   if (process.platform === 'darwin' || process.platform === 'linux') {
-    // Detect shell PATH
+    // Detect full shell environment (PATH + credentials, certificates, etc.)
+    // Uses `env -0` for null-separated output to safely handle multiline values
     try {
       const shell = process.env.SHELL || '/bin/zsh';
       const shellName = path.basename(shell);
@@ -931,25 +963,39 @@ async function detectPaths(): Promise<DetectedPaths> {
           `source ${homeDir}/.zprofile 2>/dev/null || true; ` +
           `source /etc/zshrc 2>/dev/null || true; ` +
           `source ${homeDir}/.zshrc 2>/dev/null || true; `;
-        command = `${shell} -c '${sourceCommand}echo $PATH'`;
+        command = `${shell} -c '${sourceCommand}env -0'`;
       } else if (shellName === 'bash') {
         const sourceCommand =
           `source /etc/profile 2>/dev/null || true; ` +
           `source ${homeDir}/.bash_profile 2>/dev/null || true; ` +
           `source ${homeDir}/.bashrc 2>/dev/null || true; `;
-        command = `${shell} -c '${sourceCommand}echo $PATH'`;
+        command = `${shell} -c '${sourceCommand}env -0'`;
       } else {
-        command = `${shell} -ilc 'echo $PATH' 2>/dev/null`;
+        command = `${shell} -ilc 'env -0' 2>/dev/null`;
       }
 
-      const { stdout } = await execAsync(command, { timeout: 3000, env: { HOME: homeDir } });
-      const shellPath = stdout.trim();
-      if (shellPath && shellPath.length > 0 && !shellPath.includes('command not found')) {
-        console.log(`[detectPaths] Got PATH from ${shellName}: ${shellPath.substring(0, 200)}...`);
-        detected.shellPath = shellPath;
+      const { stdout } = await execAsync(command, {
+        timeout: 5000,
+        env: { HOME: homeDir },
+        maxBuffer: 1024 * 1024,
+      });
+
+      const shellEnv = parseNullSeparatedEnv(stdout);
+
+      if (shellEnv && Object.keys(shellEnv).length > 0) {
+        // Extract PATH for the existing path detection system
+        if (shellEnv.PATH) {
+          console.log(`[detectPaths] Got PATH from ${shellName}: ${shellEnv.PATH.substring(0, 200)}...`);
+          detected.shellPath = shellEnv.PATH;
+        }
+
+        // Cache full environment (excluding PATH which has its own enhanced handling)
+        const { PATH: _path, ...envWithoutPath } = shellEnv;
+        cachedShellEnvironment = envWithoutPath;
+        console.log(`[detectPaths] Captured ${Object.keys(envWithoutPath).length} shell environment variables`);
       }
     } catch (e: any) {
-      console.warn('[detectPaths] Could not get PATH from shell:', e.message || e);
+      console.warn('[detectPaths] Could not get environment from shell:', e.message || e);
     }
 
     // Detect Homebrew (macOS only)
@@ -1084,6 +1130,20 @@ export async function initEnhancedPath(): Promise<void> {
     console.error('[initEnhancedPath] Path detection failed:', e.message || e);
     cachedDetectedPaths = {};
   }
+}
+
+/**
+ * Get the cached shell environment variables detected at startup.
+ * Returns all env vars from the user's login shell EXCEPT PATH
+ * (PATH has its own enhanced handling via getEnhancedPath()).
+ *
+ * This ensures env vars like AWS credentials, NODE_EXTRA_CA_CERTS, etc.
+ * are available even when Nimbalyst is launched from Dock/Finder.
+ *
+ * Returns null if detection hasn't completed or failed.
+ */
+export function getShellEnvironment(): Record<string, string> | null {
+  return cachedShellEnvironment;
 }
 
 /**

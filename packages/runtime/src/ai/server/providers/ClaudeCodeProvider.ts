@@ -154,6 +154,11 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   // Returns env vars from ~/.claude/settings.json to pass directly to the SDK
   private static claudeSettingsEnvLoader: (() => Promise<Record<string, string>>) | null = null;
 
+  // Shell environment loader (injected from electron main process)
+  // Returns full env vars from user's login shell (e.g., AWS_*, NODE_EXTRA_CA_CERTS)
+  // Ensures env vars are available even when launched from Dock/Finder
+  private static shellEnvironmentLoader: (() => Record<string, string> | null) | null = null;
+
   // Additional directories loader (injected from electron main process)
   // Returns additional directories Claude should have access to based on workspace context
   // (e.g., SDK docs when working on an extension project)
@@ -258,6 +263,16 @@ export class ClaudeCodeProvider extends BaseAIProvider {
    */
   public static setClaudeSettingsEnvLoader(loader: (() => Promise<Record<string, string>>) | null): void {
     ClaudeCodeProvider.claudeSettingsEnvLoader = loader;
+  }
+
+  /**
+   * Set the shell environment loader (called from electron main process).
+   * Provides the full set of env vars from the user's login shell (excluding PATH).
+   * This ensures env vars like AWS credentials, NODE_EXTRA_CA_CERTS, etc.
+   * are available to the Claude Code subprocess even when launched from Dock/Finder.
+   */
+  public static setShellEnvironmentLoader(loader: (() => Record<string, string> | null) | null): void {
+    ClaudeCodeProvider.shellEnvironmentLoader = loader;
   }
 
   /**
@@ -755,6 +770,19 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       // If user has configured a claude-code API key, pass it via environment
       // Also load env vars from ~/.claude/settings.json to pass directly to the SDK
       // This ensures experimental flags are available even if the CLI's settings loading has issues
+
+      // Load shell environment vars (AWS credentials, NODE_EXTRA_CA_CERTS, etc.)
+      // These fill in env vars that are missing from Electron's minimal environment
+      // when launched from Dock/Finder instead of terminal
+      let shellEnv: Record<string, string> = {};
+      if (ClaudeCodeProvider.shellEnvironmentLoader) {
+        try {
+          shellEnv = ClaudeCodeProvider.shellEnvironmentLoader() || {};
+        } catch (error) {
+          console.warn('[CLAUDE-CODE] Failed to load shell environment:', error);
+        }
+      }
+
       let settingsEnv: Record<string, string> = {};
       if (ClaudeCodeProvider.claudeSettingsEnvLoader) {
         try {
@@ -766,7 +794,9 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
       const env: any = {
         ...process.env,
-        // Merge env vars from ~/.claude/settings.json (e.g., CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS)
+        // Shell env vars fill in what's missing from Dock-launched Electron
+        ...shellEnv,
+        // ~/.claude/settings.json env vars override shell env (explicit user config wins)
         ...settingsEnv,
         // Enable MCP tool search when MCP tools exceed 10% of context (same as CLI default)
         // Options: 'auto' (10%), 'auto:N' (custom N%), 'true' (always), 'false' (never)

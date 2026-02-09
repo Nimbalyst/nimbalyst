@@ -63,7 +63,7 @@ import { registerTerminalHandlers, shutdownTerminalHandlers } from './ipc/Termin
 import { AIService } from './services/ai/AIService';
 import { detectFileWorkspace, suggestWorkspaceForFile, getAdditionalDirectoriesForWorkspace } from './utils/workspaceDetection';
 // import { AgentService } from './services/agents/AgentService';
-import { cliManager, initEnhancedPath } from './services/CLIManager';
+import { cliManager, initEnhancedPath, getShellEnvironment } from './services/CLIManager';
 import { registerWorkspaceWindow, registerExtensionTools, shutdownHttpServer, startMcpHttpServer, updateDocumentState } from './mcp/httpServer';
 import { SessionNamingService } from './services/SessionNamingService';
 import { ExtensionDevService } from './services/ExtensionDevService';
@@ -717,6 +717,11 @@ app.whenReady().then(async () => {
         const settingsManager = ClaudeSettingsManager.getInstance();
         return settingsManager.getUserLevelEnv();
     });
+
+    // Inject shell environment loader to pass the user's full login shell env vars
+    // (AWS credentials, NODE_EXTRA_CA_CERTS, etc.) to the Claude Code subprocess.
+    // Without this, Dock/Finder-launched Nimbalyst has a minimal environment.
+    ClaudeCodeProvider.setShellEnvironmentLoader(() => getShellEnvironment());
 
     // Inject additional directories loader
     // This allows Claude to access SDK docs when working on extension projects
