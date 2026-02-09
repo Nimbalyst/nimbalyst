@@ -153,6 +153,17 @@ export {
   reparentSessionAtom,
 } from './atoms/sessions';
 
+// Session share state
+export {
+  sessionSharesMapAtom,
+  sharesFetchedAtom,
+  sessionShareAtom,
+  fetchSessionSharesAtom,
+  addSessionShareAtom,
+  removeSessionShareAtom,
+  type ShareInfo,
+} from './atoms/sessionShares';
+
 // File tree atoms (Electron file watcher)
 export {
   fileTreeAtom,

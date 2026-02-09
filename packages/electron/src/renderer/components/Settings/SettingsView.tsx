@@ -17,6 +17,7 @@ import { VoiceModePanel } from './VoiceModePanel';
 import { MCPServersPanel } from '../GlobalSettings/panels/MCPServersPanel';
 import { ClaudeCodePluginsPanel } from '../GlobalSettings/panels/ClaudeCodePluginsPanel';
 import { SyncPanel } from '../GlobalSettings/panels/SyncPanel';
+import { SharedLinksPanel } from '../GlobalSettings/panels/SharedLinksPanel';
 import { ToolPackagesPanel } from './panels/ToolPackagesPanel';
 import { ProjectPermissionsPanel } from './panels/ProjectPermissionsPanel';
 import { ProviderOverrideWrapper } from './panels/ProviderOverrideWrapper';
@@ -551,6 +552,8 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
         );
       case 'sync':
         return <SyncPanel />;
+      case 'shared-links':
+        return <SharedLinksPanel />;
       case 'themes':
         return (
           <ThemesPanel

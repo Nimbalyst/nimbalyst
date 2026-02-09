@@ -2,7 +2,10 @@ import React, { useState, useCallback, useEffect, useRef, memo } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { MaterialSymbol, ProviderIcon } from '@nimbalyst/runtime';
 import { getRelativeTimeString } from '../../utils/dateFormatting';
-import { sessionOrChildProcessingAtom, sessionUnreadAtom, sessionPendingPromptAtom, sessionHasPendingInteractivePromptAtom, reparentSessionAtom, refreshSessionListAtom } from '../../store';
+import { sessionOrChildProcessingAtom, sessionUnreadAtom, sessionPendingPromptAtom, sessionHasPendingInteractivePromptAtom, reparentSessionAtom, refreshSessionListAtom, sessionShareAtom, addSessionShareAtom, removeSessionShareAtom } from '../../store';
+import type { ShareInfo } from '../../store';
+import { useAlphaFeature } from '../../hooks/useAlphaFeature';
+import { errorNotificationService } from '../../services/ErrorNotificationService';
 
 /**
  * Combined status indicator that subscribes to this session's state atoms.
@@ -140,6 +143,12 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
   const reparentSession = useSetAtom(reparentSessionAtom);
   const refreshSessionList = useSetAtom(refreshSessionListAtom);
 
+  // Share state (only available when sync is enabled)
+  const isSyncEnabled = useAlphaFeature('sync');
+  const shareInfo = useAtomValue(sessionShareAtom(id));
+  const addShare = useSetAtom(addSessionShareAtom);
+  const removeShare = useSetAtom(removeSessionShareAtom);
+
   // Determine if this session can be dragged
   // Can drag if: (1) Has a parent (is a child session), OR (2) Is an orphan (no parent, no children)
   const isDraggable = parentSessionId !== null || !isWorkstream;
@@ -185,6 +194,77 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
     e.stopPropagation();
     setShowContextMenu(false);
     navigator.clipboard.writeText(id);
+  };
+
+  const handleExportHtml = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowContextMenu(false);
+    (window as any).electronAPI?.exportSessionToHtml({ sessionId: id });
+  };
+
+  const handleCopyTranscript = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowContextMenu(false);
+    (window as any).electronAPI?.exportSessionToClipboard({ sessionId: id });
+  };
+
+  const [isSharing, setIsSharing] = useState(false);
+
+  const handleShareLink = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowContextMenu(false);
+    setIsSharing(true);
+    try {
+      const result = await (window as any).electronAPI?.shareSessionAsLink({ sessionId: id });
+      if (result?.success && result.shareId) {
+        addShare({
+          shareId: result.shareId,
+          sessionId: id,
+          title: title,
+          sizeBytes: 0,
+          createdAt: new Date().toISOString(),
+          expiresAt: null,
+          viewCount: 0,
+        });
+        errorNotificationService.showInfo(
+          result.isUpdate ? 'Share link updated' : 'Share link copied',
+          result.isUpdate ? 'The shared session has been updated. Link copied to clipboard.' : 'The share link has been copied to your clipboard.',
+          { duration: 3000 }
+        );
+      } else if (result?.error) {
+        errorNotificationService.showError('Share failed', result.error);
+      }
+    } catch (error) {
+      errorNotificationService.showError('Share failed', error instanceof Error ? error.message : 'An unexpected error occurred');
+    } finally {
+      setIsSharing(false);
+    }
+  };
+
+  const handleCopyShareLink = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowContextMenu(false);
+    if (shareInfo) {
+      navigator.clipboard.writeText(`https://share.nimbalyst.com/share/${shareInfo.shareId}`);
+      errorNotificationService.showInfo('Share link copied', 'The share link has been copied to your clipboard.', { duration: 3000 });
+    }
+  };
+
+  const handleUnshare = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowContextMenu(false);
+    if (!shareInfo) return;
+    try {
+      const result = await (window as any).electronAPI?.deleteShare({ shareId: shareInfo.shareId });
+      if (result?.success) {
+        removeShare(id);
+        errorNotificationService.showInfo('Session unshared', 'The share link has been removed.', { duration: 3000 });
+      } else if (result?.error) {
+        errorNotificationService.showError('Unshare failed', result.error);
+      }
+    } catch (error) {
+      errorNotificationService.showError('Unshare failed', error instanceof Error ? error.message : 'An unexpected error occurred');
+    }
   };
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
@@ -455,6 +535,9 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
       {branchedAt && (
         <MaterialSymbol icon="fork_right" size={12} className={`session-list-item-branch-icon shrink-0 -ml-1 opacity-60 ${isActive ? 'text-[var(--nim-primary)] opacity-70' : 'text-[var(--nim-text-faint)]'}`} title="Branched conversation" />
       )}
+      {isSyncEnabled && shareInfo && (
+        <MaterialSymbol icon="link" size={12} className={`session-list-item-share-icon shrink-0 -ml-1 opacity-60 ${isActive ? 'text-[var(--nim-primary)] opacity-70' : 'text-[var(--nim-text-faint)]'}`} title="Shared" />
+      )}
       <div className="session-list-item-content flex-1 min-w-0 overflow-hidden">
         {isRenaming ? (
           <input
@@ -547,6 +630,58 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
           >
             <MaterialSymbol icon="content_copy" size={14} />
             Copy Session ID
+          </button>
+          {isSyncEnabled ? (
+            shareInfo ? (
+              <>
+                <button
+                  className="session-list-item-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
+                  onClick={handleCopyShareLink}
+                >
+                  <MaterialSymbol icon="content_copy" size={14} />
+                  Copy share link
+                </button>
+                <button
+                  className="session-list-item-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
+                  onClick={handleUnshare}
+                >
+                  <MaterialSymbol icon="link_off" size={14} />
+                  Unshare
+                </button>
+              </>
+            ) : (
+              <button
+                className="session-list-item-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
+                onClick={handleShareLink}
+                disabled={isSharing}
+              >
+                <MaterialSymbol icon="link" size={14} />
+                {isSharing ? 'Sharing...' : 'Share link'}
+              </button>
+            )
+          ) : (
+            <button
+              className="session-list-item-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text-disabled)] text-[0.8125rem] text-left transition-colors duration-150 [&_svg]:shrink-0 cursor-default"
+              disabled
+              title="Enable Account & Sync in Settings to share sessions"
+            >
+              <MaterialSymbol icon="link" size={14} />
+              Share link
+            </button>
+          )}
+          <button
+            className="session-list-item-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
+            onClick={handleExportHtml}
+          >
+            <MaterialSymbol icon="download" size={14} />
+            Export as HTML
+          </button>
+          <button
+            className="session-list-item-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
+            onClick={handleCopyTranscript}
+          >
+            <MaterialSymbol icon="assignment" size={14} />
+            Copy transcript
           </button>
           <button
             className="session-list-item-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"

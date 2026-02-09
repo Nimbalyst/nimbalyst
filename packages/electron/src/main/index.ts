@@ -56,6 +56,7 @@ import {
 import { registerMCPConfigHandlers } from './ipc/MCPConfigHandlers';
 import { registerClaudeCodePluginHandlers } from './ipc/ClaudeCodePluginHandlers';
 import { registerExportHandlers } from './ipc/ExportHandlers';
+import { registerShareHandlers } from './ipc/ShareHandlers';
 import { MCPConfigService } from './services/MCPConfigService';
 import { registerDatabaseBrowserHandlers } from './ipc/DatabaseBrowserHandlers';
 import { registerTerminalHandlers, shutdownTerminalHandlers } from './ipc/TerminalHandlers';
@@ -657,6 +658,7 @@ app.whenReady().then(async () => {
     registerDatabaseBrowserHandlers();
     registerTerminalHandlers();
     registerExportHandlers();
+    registerShareHandlers();
     markEnd('ipc-handlers');
 
     // Inject MCP config loader into ClaudeCodeProvider

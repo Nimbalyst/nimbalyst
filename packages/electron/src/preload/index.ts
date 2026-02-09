@@ -253,6 +253,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
     landscape?: boolean;
     margins?: { top?: number; bottom?: number; left?: number; right?: number };
   }) => ipcRenderer.invoke('export:htmlToPdf', options) as Promise<{ success: boolean; error?: string }>,
+  exportSessionToHtml: (options: { sessionId: string }) =>
+    ipcRenderer.invoke('export:sessionToHtml', options) as Promise<{ success: boolean; filePath?: string; error?: string }>,
+  exportSessionToClipboard: (options: { sessionId: string }) =>
+    ipcRenderer.invoke('export:sessionToClipboard', options) as Promise<{ success: boolean; error?: string }>,
+
+  // Share operations
+  shareSessionAsLink: (options: { sessionId: string }) =>
+    ipcRenderer.invoke('share:sessionAsLink', options) as Promise<{ success: boolean; url?: string; shareId?: string; isUpdate?: boolean; error?: string }>,
+  listShares: () =>
+    ipcRenderer.invoke('share:list') as Promise<{ success: boolean; shares?: Array<{ shareId: string; sessionId: string; title: string; sizeBytes: number; createdAt: string; expiresAt: string | null; viewCount: number }>; error?: string }>,
+  deleteShare: (options: { shareId: string }) =>
+    ipcRenderer.invoke('share:delete', options) as Promise<{ success: boolean; error?: string }>,
 
   // Window operations
   setDocumentEdited: (edited: boolean) => ipcRenderer.send('set-document-edited', edited),

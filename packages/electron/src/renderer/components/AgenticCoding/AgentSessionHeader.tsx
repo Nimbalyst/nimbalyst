@@ -9,6 +9,8 @@ import {
   sessionHasTabsAtom,
 } from '../../store';
 import { LayoutControls } from '../UnifiedAI/LayoutControls';
+import { useAlphaFeature } from '../../hooks/useAlphaFeature';
+import { errorNotificationService } from '../../services/ErrorNotificationService';
 
 interface WorktreeWithStatus {
   id: string;
@@ -164,6 +166,30 @@ export const AgentSessionHeader: React.FC<AgentSessionHeaderProps> = ({
     return () => unsubscribe?.();
   }, [sessionData?.worktreeId]);
 
+  const isSyncEnabled = useAlphaFeature('sync');
+  const [isSharing, setIsSharing] = useState(false);
+
+  const handleShareLink = useCallback(async () => {
+    if (!sessionData || isSharing) return;
+    setIsSharing(true);
+    try {
+      const result = await (window as any).electronAPI?.shareSessionAsLink({ sessionId: sessionData.id });
+      if (result?.success) {
+        errorNotificationService.showInfo(
+          result.isUpdate ? 'Share link updated' : 'Share link copied',
+          result.isUpdate ? 'The shared session has been updated. Link copied to clipboard.' : 'The share link has been copied to your clipboard.',
+          { duration: 3000 }
+        );
+      } else if (result?.error) {
+        errorNotificationService.showError('Share failed', result.error);
+      }
+    } catch (error) {
+      errorNotificationService.showError('Share failed', error instanceof Error ? error.message : 'An unexpected error occurred');
+    } finally {
+      setIsSharing(false);
+    }
+  }, [sessionData, isSharing]);
+
   if (!sessionData) {
     return null;
   }
@@ -236,6 +262,25 @@ export const AgentSessionHeader: React.FC<AgentSessionHeaderProps> = ({
             <div className="agent-session-header-spinner w-4 h-4 border-2 border-[var(--nim-border)] border-t-[var(--nim-primary)] rounded-full animate-spin" />
           </div>
         )}
+
+        {/* Share button */}
+        <button
+          className="agent-session-header-share shrink-0 flex items-center justify-center w-7 h-7 rounded-md bg-transparent border-none text-[var(--nim-text-faint)] cursor-pointer transition-colors duration-150 hover:text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)] disabled:opacity-50 disabled:cursor-default"
+          title={!isSyncEnabled ? 'Enable Account & Sync in Settings to share sessions' : isSharing ? 'Sharing...' : 'Share session link'}
+          onClick={handleShareLink}
+          disabled={isSharing || !isSyncEnabled}
+        >
+          <MaterialSymbol icon={isSharing ? 'progress_activity' : 'link'} size={16} className={isSharing ? 'animate-spin' : ''} />
+        </button>
+
+        {/* Export button */}
+        <button
+          className="agent-session-header-export shrink-0 flex items-center justify-center w-7 h-7 rounded-md bg-transparent border-none text-[var(--nim-text-faint)] cursor-pointer transition-colors duration-150 hover:text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]"
+          title="Export session as HTML"
+          onClick={() => (window as any).electronAPI?.exportSessionToHtml({ sessionId: sessionData.id })}
+        >
+          <MaterialSymbol icon="download" size={16} />
+        </button>
 
         {/* Layout controls for non-worktree sessions */}
         {showLayoutControls && (

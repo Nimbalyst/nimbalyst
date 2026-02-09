@@ -21,6 +21,7 @@ export type SettingsCategory =
   | 'mcp-servers'
   | 'installed-extensions'
   | 'claude-plugins'
+  | 'shared-links'
   | 'marketplace'
   | 'installed';
 
@@ -81,6 +82,12 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
           name: 'Account & Sync',
           icon: <MaterialSymbol icon="account_circle" size={16} />,
           hidden: !alphaFeatures.sync, // Only visible when feature is enabled
+        },
+        {
+          id: 'shared-links',
+          name: 'Shared Links',
+          icon: <MaterialSymbol icon="link" size={16} />,
+          hidden: !alphaFeatures.sync, // Only visible when sync is enabled
         },
         {
           id: 'notifications',

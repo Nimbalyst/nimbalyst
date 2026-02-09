@@ -28,15 +28,10 @@ binding = "DB"
 database_name = "nimbalyst-collabv3"
 database_id = "c3b3979d-e20c-4547-a103-91c1a0b32388"
 
-# KV for rate limiting and feature flags (optional)
-# [[kv_namespaces]]
-# binding = "KV"
-# id = "placeholder"
-
-# R2 for attachments (optional, future)
-# [[r2_buckets]]
-# binding = "ATTACHMENTS"
-# bucket_name = "nimbalyst-attachments"
+# R2 for session shares
+[[r2_buckets]]
+binding = "SESSION_SHARES"
+bucket_name = "nimbalyst-session-shares"
 
 # Observability - enables logs, traces, and metrics in Cloudflare dashboard
 [observability]
@@ -57,7 +52,8 @@ ENVIRONMENT = "staging"
 [env.production]
 name = "nimbalyst-collabv3"
 routes = [
-  { pattern = "sync.nimbalyst.com", custom_domain = true }
+  { pattern = "sync.nimbalyst.com", custom_domain = true },
+  { pattern = "share.nimbalyst.com", custom_domain = true }
 ]
 
 # Production Durable Objects
@@ -68,6 +64,11 @@ class_name = "SessionRoom"
 [[env.production.durable_objects.bindings]]
 name = "INDEX_ROOM"
 class_name = "IndexRoom"
+
+# Production R2 for session shares
+[[env.production.r2_buckets]]
+binding = "SESSION_SHARES"
+bucket_name = "nimbalyst-session-shares"
 
 # Production D1 Database
 [[env.production.d1_databases]]

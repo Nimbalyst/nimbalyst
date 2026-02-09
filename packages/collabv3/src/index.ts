@@ -13,6 +13,7 @@ import type { Env } from './types';
 import { SessionRoom } from './SessionRoom';
 import { IndexRoom } from './IndexRoom';
 import { parseAuth as parseAuthJWT, type AuthConfig, type AuthResult } from './auth';
+import { handleShareUpload, handleShareView, handleShareList, handleShareDelete } from './share';
 import { setLogEnvironment, createLogger } from './logger';
 
 const log = createLogger('sync');
@@ -225,6 +226,11 @@ export default {
       return handleAuthRoutes(request, env, url);
     }
 
+    // Share routes
+    if (url.pathname.startsWith('/share')) {
+      return handleShareRoutes(request, env, url);
+    }
+
     return new Response('Not Found', { status: 404 });
   },
 };
@@ -299,6 +305,80 @@ async function handleApiRequest(
     } catch (err) {
       return new Response(`Invalid request body: ${err}`, { status: 400 });
     }
+  }
+
+  return new Response('Not Found', { status: 404, headers: corsHeaders });
+}
+
+/**
+ * Handle share routes for session sharing.
+ * GET /share/{shareId} is public (no auth).
+ * POST /share, GET /shares, DELETE /share/{shareId} require auth.
+ */
+async function handleShareRoutes(
+  request: Request,
+  env: Env,
+  url: URL
+): Promise<Response> {
+  const corsHeaders = getCorsHeaders(request, env);
+
+  // Handle CORS preflight
+  if (request.method === 'OPTIONS') {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        ...corsHeaders,
+        'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
+      },
+    });
+  }
+
+  // GET /share/{shareId} - Public, serve HTML
+  if (url.pathname.startsWith('/share/') && request.method === 'GET') {
+    const shareId = url.pathname.slice('/share/'.length);
+    if (shareId) {
+      return handleShareView(shareId, env);
+    }
+  }
+
+  // POST /share - Upload HTML (authenticated)
+  if (url.pathname === '/share' && request.method === 'POST') {
+    const authConfig = getAuthConfig(env);
+    const auth = await parseAuthJWT(request, authConfig);
+    if (!auth) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    return handleShareUpload(request, env, auth, corsHeaders);
+  }
+
+  // GET /shares - List user's shares (authenticated)
+  if (url.pathname === '/shares' && request.method === 'GET') {
+    const authConfig = getAuthConfig(env);
+    const auth = await parseAuthJWT(request, authConfig);
+    if (!auth) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    return handleShareList(env, auth, corsHeaders);
+  }
+
+  // DELETE /share/{shareId} - Delete share (authenticated)
+  if (url.pathname.startsWith('/share/') && request.method === 'DELETE') {
+    const shareId = url.pathname.slice('/share/'.length);
+    const authConfig = getAuthConfig(env);
+    const auth = await parseAuthJWT(request, authConfig);
+    if (!auth) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    return handleShareDelete(shareId, env, auth, corsHeaders);
   }
 
   return new Response('Not Found', { status: 404, headers: corsHeaders });

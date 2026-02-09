@@ -437,6 +437,7 @@ export interface Env {
   SESSION_ROOM: DurableObjectNamespace;
   INDEX_ROOM: DurableObjectNamespace;
   DB: D1Database;
+  SESSION_SHARES: R2Bucket;
   ENVIRONMENT: string;
   // Stytch auth
   STYTCH_PROJECT_ID?: string;

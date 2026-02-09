@@ -95,6 +95,11 @@ interface ElectronAPI {
   saveFileAs: (content: string) => Promise<{ success: boolean; filePath: string } | null>;
   showErrorDialog: (title: string, message: string) => Promise<void>;
 
+  // Share operations
+  shareSessionAsLink: (options: { sessionId: string }) => Promise<{ success: boolean; url?: string; shareId?: string; error?: string }>;
+  listShares: () => Promise<{ success: boolean; shares?: Array<{ shareId: string; sessionId: string; title: string; sizeBytes: number; createdAt: string; expiresAt: string | null; viewCount: number }>; error?: string }>;
+  deleteShare: (options: { shareId: string }) => Promise<{ success: boolean; error?: string }>;
+
   setDocumentEdited: (edited: boolean) => void;
   setTitle: (title: string) => void;
   setCurrentFile: (filePath: string | null) => void;
