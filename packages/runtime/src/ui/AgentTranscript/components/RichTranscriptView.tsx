@@ -539,16 +539,29 @@ export const RichTranscriptView = React.forwardRef<
 >(({ sessionId, sessionStatus, isProcessing, messages, provider, settings: propsSettings, onSettingsChange, showSettings, documentContext, workspacePath, renderEmptyExtra, readFile, onOpenFile, onCompact, promptAdditions }, ref) => {
   const [collapsedMessages, setCollapsedMessages] = useState<Set<number>>(new Set());
   const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
-  const [showScrollButton, setShowScrollButton] = useState(false);
+  const scrollButtonRef = useRef<HTMLDivElement>(null);
   const [copiedMessageIndex, setCopiedMessageIndex] = useState<number | null>(null);
   const [showSearchBar, setShowSearchBar] = useState(false);
   const [isScrollReady, setIsScrollReady] = useState(false);
-
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const vlistRef = useRef<VListHandle>(null);
   const messageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
 
   const settings = propsSettings || defaultSettings;
+
+  const renderCountRef = useRef(0);
+  renderCountRef.current++;
+  // console.log(`[RichTranscriptView] render #${renderCountRef.current}`, {
+  //   sessionId,
+  //   sessionStatus,
+  //   isProcessing,
+  //   messageCount: messages.length,
+  //   showSearchBar,
+  //   isScrollReady,
+  //   copiedMessageIndex,
+  //   collapsedMessagesSize: collapsedMessages.size,
+  //   expandedToolsSize: expandedTools.size,
+  // });
 
   // Determine if we're waiting for a response (used for scroll behavior and UI)
   const isWaitingForResponse = useMemo(() => {
@@ -1121,6 +1134,7 @@ export const RichTranscriptView = React.forwardRef<
                   ref={vlistRef}
                   className="rich-transcript-vlist !h-full !w-full"
                   style={{ height: '100%' }}
+                  bufferSize={40000}
                   onScroll={(offset) => {
                     // Track if we're at the bottom for auto-scroll using per-session atom
                     if (vlistRef.current) {
@@ -1130,7 +1144,11 @@ export const RichTranscriptView = React.forwardRef<
                       const isAtBottom = distanceFromBottom < 50;
                       // Update the per-session atom - this persists across component remounts
                       setSessionIsAtBottom(sessionId, isAtBottom);
-                      setShowScrollButton(distanceFromBottom > viewportSize);
+                      if (scrollButtonRef.current) {
+                        const show = distanceFromBottom > viewportSize;
+                        scrollButtonRef.current.style.opacity = show ? '1' : '0';
+                        scrollButtonRef.current.style.pointerEvents = show ? '' : 'none';
+                      }
                     }
                   }}
                 >
@@ -1298,18 +1316,16 @@ export const RichTranscriptView = React.forwardRef<
           )}
         </div>
 
-        {/* Scroll to bottom button */}
-        {showScrollButton && (
-          <div className="rich-transcript-scroll-button-container sticky bottom-3 flex justify-center pointer-events-none">
-            <button
-              onClick={scrollToBottom}
-              className="rich-transcript-scroll-button pointer-events-auto p-2 bg-[var(--nim-primary)] text-white rounded-full border-none shadow-lg cursor-pointer transition-all hover:bg-[var(--nim-primary-hover)] hover:scale-110"
-              title="Scroll to bottom"
-            >
-              <MaterialSymbol icon="arrow_downward" size={20} />
-            </button>
-          </div>
-        )}
+        {/* Scroll to bottom button - uses ref + opacity/pointer-events to avoid layout shifts that interfere with text selection */}
+        <div ref={scrollButtonRef} className="rich-transcript-scroll-button-container sticky bottom-3 flex justify-center pointer-events-none opacity-0 transition-opacity" style={{ pointerEvents: 'none' }}>
+          <button
+            onClick={scrollToBottom}
+            className="rich-transcript-scroll-button p-2 bg-[var(--nim-primary)] text-white rounded-full border-none shadow-lg cursor-pointer transition-all hover:bg-[var(--nim-primary-hover)] hover:scale-110"
+            title="Scroll to bottom"
+          >
+            <MaterialSymbol icon="arrow_downward" size={20} />
+          </button>
+        </div>
       </div>
     </div>
   );
