@@ -74,6 +74,7 @@
     "ghostty-web": "^0.4.0",
     "glob": "^11.0.3",
     "heic-decode": "^2.1.0",
+    "highlight.js": "11.11.1",
     "html2canvas": "^1.4.1",
     "jimp": "^1.6.0",
     "jotai": "^2.16.1",

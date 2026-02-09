@@ -1,7 +1,10 @@
-import { dialog, BrowserWindow } from 'electron';
+import { dialog, BrowserWindow, clipboard } from 'electron';
 import { safeHandle } from '../utils/ipcRegistry';
 import { writeFile } from 'fs/promises';
 import { logger } from '../utils/logger';
+import { AISessionsRepository, AgentMessagesRepository, transformAgentMessagesToUI } from '@nimbalyst/runtime';
+import type { SessionData } from '@nimbalyst/runtime/ai/server/types';
+import { exportSessionToHtml, getExportFilename } from '../services/SessionHtmlExporter';
 
 /**
  * Registers IPC handlers for export functionality.
@@ -118,6 +121,143 @@ export function registerExportHandlers() {
         if (hiddenWindow && !hiddenWindow.isDestroyed()) {
           hiddenWindow.close();
         }
+      }
+    }
+  );
+
+  /**
+   * Export an AI session as a self-contained HTML file.
+   * Loads the session, renders it to HTML, shows a save dialog, and writes the file.
+   */
+  safeHandle(
+    'export:sessionToHtml',
+    async (
+      event,
+      options: { sessionId: string }
+    ): Promise<{ success: boolean; filePath?: string; error?: string }> => {
+      const { sessionId } = options;
+
+      if (!sessionId) {
+        return { success: false, error: 'sessionId is required' };
+      }
+
+      try {
+        // Load session and messages directly from repositories
+        // (avoids needing a SessionManager instance with workspace state)
+        const chatSession = await AISessionsRepository.get(sessionId);
+        if (!chatSession) {
+          return { success: false, error: `Session not found: ${sessionId}` };
+        }
+
+        const agentMessages = await AgentMessagesRepository.list(sessionId);
+        const uiMessages = transformAgentMessagesToUI(agentMessages);
+
+        const session: SessionData = {
+          id: chatSession.id,
+          provider: chatSession.provider as any,
+          model: chatSession.model ?? undefined,
+          sessionType: chatSession.sessionType,
+          mode: chatSession.mode,
+          createdAt: new Date(chatSession.createdAt as any).getTime(),
+          updatedAt: new Date(chatSession.updatedAt as any).getTime(),
+          messages: uiMessages,
+          workspacePath: (chatSession.metadata as any)?.workspaceId ?? chatSession.workspacePath ?? '',
+          title: chatSession.title ?? 'New conversation',
+        };
+
+        // Generate HTML
+        const html = exportSessionToHtml(session);
+        const defaultFilename = getExportFilename(session);
+
+        // Show save dialog
+        const window = BrowserWindow.fromWebContents(event.sender);
+        const dialogOptions: Electron.SaveDialogOptions = {
+          title: 'Export Session as HTML',
+          buttonLabel: 'Export',
+          filters: [{ name: 'HTML Files', extensions: ['html'] }],
+          defaultPath: defaultFilename,
+        };
+
+        const result = window
+          ? await dialog.showSaveDialog(window, dialogOptions)
+          : await dialog.showSaveDialog(dialogOptions);
+
+        if (result.canceled || !result.filePath) {
+          return { success: false, error: 'Export cancelled' };
+        }
+
+        // Write the file
+        await writeFile(result.filePath, html, 'utf-8');
+
+        logger.file.info(`[ExportHandlers] Session HTML exported: ${result.filePath}`);
+        return { success: true, filePath: result.filePath };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        logger.file.error(`[ExportHandlers] Session HTML export failed: ${errorMessage}`);
+        return { success: false, error: errorMessage };
+      }
+    }
+  );
+
+  /**
+   * Copy an AI session transcript as plain text to the clipboard.
+   */
+  safeHandle(
+    'export:sessionToClipboard',
+    async (
+      _event,
+      options: { sessionId: string }
+    ): Promise<{ success: boolean; error?: string }> => {
+      const { sessionId } = options;
+
+      if (!sessionId) {
+        return { success: false, error: 'sessionId is required' };
+      }
+
+      try {
+        const chatSession = await AISessionsRepository.get(sessionId);
+        if (!chatSession) {
+          return { success: false, error: `Session not found: ${sessionId}` };
+        }
+
+        const agentMessages = await AgentMessagesRepository.list(sessionId);
+        const uiMessages = transformAgentMessagesToUI(agentMessages);
+
+        const title = chatSession.title ?? 'Untitled Session';
+        const provider = chatSession.provider ?? 'unknown';
+        const model = chatSession.model ?? '';
+        const workspacePath = (chatSession.metadata as any)?.workspaceId ?? chatSession.workspacePath ?? '';
+        const stripPaths = (s: string) => {
+          if (!workspacePath) return s;
+          return s.split(workspacePath + '/').join('').split(workspacePath).join('');
+        };
+
+        const lines: string[] = [];
+        lines.push(`# ${title}`);
+        lines.push(`Provider: ${provider}${model ? ` / ${model}` : ''}`);
+        lines.push('');
+
+        for (const msg of uiMessages) {
+          if (msg.isStreamingStatus) continue;
+          if (msg.role === 'tool') continue;
+
+          const role = msg.role === 'user' ? 'User' : 'Assistant';
+          lines.push(`## ${role}`);
+          if (msg.content?.trim()) {
+            lines.push(stripPaths(msg.content.trim()));
+          }
+          if (msg.toolCall) {
+            const toolName = msg.toolCall.name || 'Unknown tool';
+            lines.push(`[Tool: ${toolName}]`);
+          }
+          lines.push('');
+        }
+
+        clipboard.writeText(lines.join('\n'));
+        return { success: true };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        return { success: false, error: errorMessage };
       }
     }
   );
