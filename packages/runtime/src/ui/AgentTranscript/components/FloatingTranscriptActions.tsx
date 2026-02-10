@@ -112,7 +112,7 @@ export const PromptsMenuButton: React.FC<PromptsMenuButtonProps> = ({
     <div className={className || 'prompts-menu-container relative inline-flex'}>
       <button
         ref={buttonRef}
-        className={buttonClassName || 'floating-transcript-button pointer-events-auto w-9 h-9 rounded-md border border-[var(--nim-border)] bg-[var(--nim-bg)] text-[var(--nim-text)] cursor-pointer flex items-center justify-center transition-all relative shadow-sm hover:bg-[var(--nim-bg-hover)] active:scale-95'}
+        className={buttonClassName || 'floating-transcript-button pointer-events-auto w-9 h-9 rounded-md border border-[var(--nim-border)] bg-[var(--nim-bg)] text-[var(--nim-text)] cursor-pointer flex items-center justify-center transition-all relative shadow-sm hover:bg-[var(--nim-bg-tertiary)] active:scale-95'}
         onClick={() => setShowMenu(!showMenu)}
         aria-label="Prompts Menu"
         title="Show prompts in this session"
@@ -162,7 +162,7 @@ export const FloatingTranscriptActions: React.FC<FloatingTranscriptActionsProps>
       {/* Toggle History Button - only shown if onToggleSidebar is provided */}
       {onToggleSidebar && (
         <button
-          className="floating-transcript-button pointer-events-auto w-9 h-9 rounded-md border border-[var(--nim-border)] bg-[var(--nim-bg)] text-[var(--nim-text)] cursor-pointer flex items-center justify-center transition-all relative shadow-sm hover:bg-[var(--nim-bg-hover)] active:scale-95"
+          className="floating-transcript-button pointer-events-auto w-9 h-9 rounded-md border border-[var(--nim-border)] bg-[var(--nim-bg)] text-[var(--nim-text)] cursor-pointer flex items-center justify-center transition-all relative shadow-sm hover:bg-[var(--nim-bg-tertiary)] active:scale-95"
           onClick={onToggleSidebar}
           aria-label={isSidebarCollapsed ? 'Show file history' : 'Hide file history'}
           title={isSidebarCollapsed ? 'Show file history' : 'Hide file history'}
