@@ -20,6 +20,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.62] - 2026-02-10
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- Resolved all TypeScript typecheck errors across monorepo
+- Fixed per-package typecheck errors matching CI configuration
+- Fixed dark mode variants not applying to descendant elements
+- Added typecheck scripts to all CI-checked extension packages
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.52.61] - 2026-02-09
 
 
