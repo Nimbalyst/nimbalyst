@@ -11,7 +11,11 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "noEmit": true,
-    "types": []
+    "types": [],
+    "paths": {
+      "@nimbalyst/runtime": ["./src/index.ts"],
+      "@nimbalyst/runtime/*": ["./src/*"]
+    }
   },
   "include": ["src", "src/types/optional-deps.d.ts", "src/types/vite.d.ts"],
   "exclude": ["src/ai/server/providers/mcp-stdio-server.ts"]

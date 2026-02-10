@@ -175,7 +175,7 @@ export function createMobileInteractiveWidgetHost(
       proposalId: string,
       files: string[],
       message: string
-    ): Promise<{ success: boolean; commitHash?: string; error?: string }> {
+    ): Promise<{ success: boolean; commitHash?: string; error?: string; pending?: boolean }> {
       // Mobile cannot execute git commands - send approval to desktop
       sendControlMessage(sessionId, 'prompt_response', {
         promptType: 'git_commit',

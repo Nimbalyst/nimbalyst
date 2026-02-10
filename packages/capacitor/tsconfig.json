@@ -18,5 +18,5 @@
       "@nimbalyst/runtime/*": ["../runtime/src/*"]
     }
   },
-  "include": ["src"]
+  "include": ["src", "../electron/src/renderer/electron.d.ts"]
 }
