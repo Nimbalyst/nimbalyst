@@ -61,13 +61,18 @@ export function $convertFromEnhancedMarkdownString(
   extractFrontmatter: boolean = true,
   normalize: boolean | NormalizerConfig = true
 ): EnhancedImportResult {
-  let content = markdown;
+  // Normalize CRLF line endings to LF before any processing.
+  // Files with Windows line endings cause regex failures in Lexical's
+  // multiline transformers (e.g. mermaid, code blocks) because `$` in
+  // regexes doesn't match before `\r`.
+  const normalizedMarkdown = markdown.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  let content = normalizedMarkdown;
   let frontmatter: FrontmatterData | null = null;
   let originalContent: string | undefined;
 
   // Extract and store frontmatter if requested
   if (extractFrontmatter) {
-    const parsed = parseFrontmatter(markdown);
+    const parsed = parseFrontmatter(normalizedMarkdown);
     content = parsed.content;
     frontmatter = parsed.data;
     originalContent = parsed.orig;
