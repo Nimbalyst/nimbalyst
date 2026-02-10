@@ -1,6 +1,8 @@
 # Nimbalyst - UI for Claude Code
 
-[Nimbalyst](https://nimbalyst.com) Nimbalyst is the free, local, WYSIWYG editor & parallel session manager where you iterate with Claude Code on your full context: sessions, markdown docs, mockups, diagrams, data models, MCP, and code
+[Nimbalyst](https://nimbalyst.com) Nimbalyst, https://nimbalyst.com a free, local, interactive visual editor & session manager.
+- Iterate with Claude Code on your sessions, markdown, mockups, diagrams, csv, Excalidraw, data models, MCP, and code. Approve CC's changes in red/green WYSIWYG, edit, annotate, iterate visually. 
+- Manage multiple sessions in parallel, search, resume, link sessions to files and files to sessions. For developers we include git management, AI commit, workstreams, worktrees, and terminal. 
 
 ![Version](https://img.shields.io/github/v/release/nimbalyst/nimbalyst)
 ![Downloads](https://img.shields.io/github/downloads/nimbalyst/nimbalyst/total)
