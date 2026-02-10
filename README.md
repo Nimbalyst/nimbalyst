@@ -1,4 +1,4 @@
-# Nimbalyst - UI for Claude Code
+# Nimbalyst - The Best Way to Work With Claude Code
 
 [Nimbalyst](https://nimbalyst.com) Nimbalyst, https://nimbalyst.com a free, local, interactive visual editor & session manager.
 - Iterate with Claude Code on your sessions, markdown, mockups, diagrams, csv, Excalidraw, data models, MCP, and code. Approve CC's changes in red/green WYSIWYG, edit, annotate, iterate visually. 
