@@ -10,10 +10,24 @@
 
 
 ## Features
-- Edit markdown in a local, WYSIWIG, agentic editor powered by Claude Code. Review AI changes as red/green diffs.
-- Manage agents' work across parallel Claude Code sessions in a UI
-- Iterate with AI on html mockups. Annotate, edit, embed, & use to code.
-- Build your data model with AI based on your code and docs. Use it to write better code.
+- Files Mode: Visual Editor with Claude Code
+  - Edit markdown in a local, WYSIWIG, agentic editor powered by Claude Code. Review AI changes as red/green diffs.
+  - Iterate with AI on html mockups. Annotate, edit, embed, & use to code.
+  - Use Claude Code to build excalidraw drawings and Mermaid diagrams. Visually edit yourself. Ask AI to edit them.
+  - View CSV file, work with Claude Code in the CSV file, track changes.
+  - Build your data model with AI based on your code and docs. Use it to write better code.
+  - Work in a Monaco code editor, see changes, approve them
+- Agents Mode: Manage agents' work across parallel Claude Code sessions in a UI
+  - Link sessions to files and files to sessions
+  - Open files in your sessions. Group files touched by a session
+  - Run parallel sessions
+  - Search and resume sessions
+- Task Mode: Track items and to dos
+- For developers
+  - Manage git state
+  - Use AI to git commit
+  - Use embedded ghostty terminal
+  - Leverage workstrees
 - Open storage of content and status in markdown, workflow in Claude Code / commands, and plain files on disk or in git
 
 ## ScreenShots
@@ -49,7 +63,7 @@ Nimbalyst automatically checks for updates and notifies you when a new version i
 Found a bug or have a feature request? Please [create an issue](https://github.com/nimbalyst/nimbalyst/issues/new/choose).
 
 ## Community
-- [Documentation](https://docs.nimbalyst.com/) - Watch video and read documentation
+- [Documentation](https://docs.nimbalyst.com/) - Watch videos and read documentation
 - [Discord](https://discord.gg/FgD9S2MCYB) - Join the discussion on Discord
 - [Website](https://nimbalyst.com) - Learn more about Nimbalyst on our website
 
