@@ -12,7 +12,7 @@ import type {Transformer} from '@lexical/markdown';
 
 import {TRANSFORMERS} from '@lexical/markdown';
 
-import {applyMarkdownReplace, type TextReplacement} from '../../core/diffUtils';
+import {applyMarkdownReplace, type TextReplacement} from '../../../core/diffUtils';
 import {
   assertApproveProducesTarget,
   assertRejectProducesOriginal,

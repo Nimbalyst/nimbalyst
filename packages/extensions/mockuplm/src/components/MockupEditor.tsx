@@ -21,15 +21,7 @@ import type { DrawingPath, MockupSelection } from '@nimbalyst/runtime';
 // Side effect import to register Window globals
 import '@nimbalyst/runtime';
 
-// Declare window extensions for electron API
-declare global {
-  interface Window {
-    electronAPI: {
-      invoke: (channel: string, ...args: any[]) => Promise<any>;
-      on: (channel: string, callback: (...args: any[]) => void) => () => void;
-    };
-  }
-}
+// electronAPI is declared globally in electron.d.ts
 
 export const MockupEditor = forwardRef<any, EditorHostProps>(function MockupEditor({ host }, ref) {
   const { filePath, fileName, theme, isActive } = host;

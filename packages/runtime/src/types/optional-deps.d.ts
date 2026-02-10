@@ -1,7 +1,7 @@
 // Type declarations for optional dependencies that are dynamically loaded
 
 declare module '@anthropic-ai/claude-agent-sdk' {
-  export function query(params: { prompt: string | AsyncIterable<any>; options?: any }): AsyncGenerator<any, void>;
+  export function query(params: { prompt: string | AsyncIterable<any>; options?: any }): AsyncGenerator<any, void> & { accountInfo(): Promise<any> };
   export function tool(name: string, description: string, inputSchema: any, handler: any): any;
   export function createSdkMcpServer(options: any): any;
   export class AbortError extends Error {}
@@ -19,9 +19,11 @@ declare module '@anthropic-ai/claude-agent-sdk' {
 
 declare module '@modelcontextprotocol/sdk/server/index.js' {
   export class Server {
-    constructor(options: any);
-    setRequestHandler(method: string, handler: any): void;
+    constructor(info: any, options?: any);
+    setRequestHandler(schema: any, handler: any): void;
     connect(transport: any): Promise<void>;
+    close(): Promise<void>;
+    sendToolListChanged(): Promise<void>;
   }
 }
 
@@ -32,7 +34,17 @@ declare module '@modelcontextprotocol/sdk/server/stdio.js' {
 }
 
 declare module '@modelcontextprotocol/sdk/types.js' {
-  export type CallToolRequestSchema = any;
-  export type ListToolsRequestSchema = any;
+  export const CallToolRequestSchema: any;
+  export const ListToolsRequestSchema: any;
+  export const ErrorCode: {
+    InternalError: number;
+    InvalidRequest: number;
+    MethodNotFound: number;
+    InvalidParams: number;
+    [key: string]: number;
+  };
+  export class McpError extends Error {
+    constructor(code: number, message: string);
+  }
   export type Tool = any;
 }

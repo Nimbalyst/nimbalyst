@@ -13,7 +13,7 @@ import type { ExtensionAITool, AIToolContext, ExtensionToolResult } from '@nimba
 const triggerErrorTool: ExtensionAITool = {
   name: 'trigger_error',
   description: 'Deliberately throws an error for testing error handling. Use this to test the extension error console.',
-  scope: 'global',
+
   inputSchema: {
     type: 'object',
     properties: {
@@ -62,7 +62,7 @@ const triggerErrorTool: ExtensionAITool = {
 const triggerWarningTool: ExtensionAITool = {
   name: 'trigger_warning',
   description: 'Logs warnings and info messages to test the extension log console filtering.',
-  scope: 'global',
+
   inputSchema: {
     type: 'object',
     properties: {
@@ -105,7 +105,7 @@ const triggerWarningTool: ExtensionAITool = {
 const triggerTimeoutTool: ExtensionAITool = {
   name: 'trigger_timeout',
   description: 'Simulates a long-running operation that may timeout. Use to test timeout error messages.',
-  scope: 'global',
+
   inputSchema: {
     type: 'object',
     properties: {

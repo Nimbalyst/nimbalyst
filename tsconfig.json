@@ -21,13 +21,13 @@
   "exclude": [
     "**/node_modules",
     "**/dist",
-    "**/*.d.ts",
     "**/e2e/**",
     "packages/capacitor",
     "packages/tauri",
     "packages/playground",
     "packages/collabv3",
     "packages/electron/release",
+    "packages/extension-sdk-docs/examples",
     "worktrees",
     "test-utils"
   ]

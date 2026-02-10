@@ -8,7 +8,7 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any, lexical/no-optional-chaining */
 
-import {type TextReplacement} from '../../core/diffUtils';
+import {type TextReplacement} from '../../../core/diffUtils';
 import {$getRoot} from 'lexical';
 import {$isListNode} from '@lexical/list';
 import {

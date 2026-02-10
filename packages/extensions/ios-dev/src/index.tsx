@@ -1,4 +1,4 @@
-import type { ExtensionContext, ExtensionAITool, ToolResult } from '@nimbalyst/extension-sdk';
+import type { ExtensionContext, ExtensionAITool, AIToolContext, ToolResult } from '@nimbalyst/extension-sdk';
 
 /**
  * iOS Development Tools Extension
@@ -39,7 +39,7 @@ const xcodeGenTool: ExtensionAITool = {
     },
     required: ['action'],
   },
-  handler: async (args: Record<string, unknown>): Promise<ToolResult> => {
+  handler: async (args: Record<string, unknown>, _context: AIToolContext): Promise<any> => {
     const action = args.action as string;
     const projectPath = (args.projectPath as string) || '.';
 
@@ -138,7 +138,7 @@ const simulatorTool: ExtensionAITool = {
     },
     required: ['action'],
   },
-  handler: async (args: Record<string, unknown>): Promise<ToolResult> => {
+  handler: async (args: Record<string, unknown>, _context: AIToolContext): Promise<any> => {
     const action = args.action as string;
     const deviceId = args.deviceId as string;
 
@@ -222,7 +222,7 @@ const buildTool: ExtensionAITool = {
     },
     required: ['action'],
   },
-  handler: async (args: Record<string, unknown>): Promise<ToolResult> => {
+  handler: async (args: Record<string, unknown>, _context: AIToolContext): Promise<any> => {
     const action = args.action as string;
     const projectPath = (args.projectPath as string) || '.';
     const scheme = args.scheme as string;
@@ -298,7 +298,7 @@ const appManagementTool: ExtensionAITool = {
     },
     required: ['action'],
   },
-  handler: async (args: Record<string, unknown>): Promise<ToolResult> => {
+  handler: async (args: Record<string, unknown>, _context: AIToolContext): Promise<any> => {
     const action = args.action as string;
     const deviceId = args.deviceId as string;
     const appPath = args.appPath as string;
@@ -373,7 +373,7 @@ export const aiTools: ExtensionAITool[] = [
 export function activate(context: ExtensionContext) {
   // Register all AI tools via the AI service
   for (const tool of aiTools) {
-    context.subscriptions.push(context.services.ai.registerTool(tool));
+    context.subscriptions.push(context.services.ai!.registerTool(tool));
   }
 
   console.log('iOS Development Tools extension activated');

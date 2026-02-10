@@ -6,14 +6,7 @@
 
 import type { GitCommit } from '../types';
 
-// Type-safe IPC invoke wrapper
-declare global {
-  interface Window {
-    electronAPI?: {
-      invoke: (channel: string, ...args: unknown[]) => Promise<unknown>;
-    };
-  }
-}
+// electronAPI is declared globally in electron.d.ts
 
 /**
  * Get recent commits

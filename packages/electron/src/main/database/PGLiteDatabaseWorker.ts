@@ -350,7 +350,11 @@ export class PGLiteDatabaseWorker {
         }
       }
 
-      logger.main.info('[PGLite Worker] Database initialized in worker thread');
+      if (initResult.initTimeMs) {
+        logger.main.info(`[PGLite Worker] Database initialized in worker thread (${initResult.initTimeMs}ms)`);
+      } else {
+        logger.main.info('[PGLite Worker] Database initialized in worker thread');
+      }
 
       // Create schemas
       logger.main.info('[PGLite Worker] Database schemas created');

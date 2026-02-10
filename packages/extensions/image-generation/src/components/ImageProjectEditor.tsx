@@ -564,7 +564,7 @@ export const ImageProjectEditor = forwardRef<unknown, EditorHostProps>(
       if (project) {
         registerEditor(filePath, {
           getProject: () => project,
-          updateProject,
+          updateProject: updateProject as any,
           generate: handleGenerate,
         });
         return () => {

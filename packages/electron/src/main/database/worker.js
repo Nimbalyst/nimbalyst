@@ -187,6 +187,7 @@ class PGLiteWorker {
   }
 
   async initialize(message) {
+    const initStartTime = performance.now();
     console.log('[PGLite Worker] initialize() called, existing db:', !!this.db, 'dataDir:', this.dataDir);
 
     if (this.db) {
@@ -207,9 +208,15 @@ class PGLiteWorker {
         fs.mkdirSync(parentDir, { recursive: true });
       }
 
+      // Check if this is a fresh database (no existing data directory)
+      const isFreshDb = !fs.existsSync(this.dataDir);
+      console.log('[PGLite Worker] Fresh database:', isFreshDb);
+
       // Acquire our exclusive lock BEFORE touching PGLite
       // This prevents multiple Nimbalyst instances from corrupting the database
+      const lockStartTime = performance.now();
       const lockResult = this.acquireLock();
+      console.log(`[PGLite Worker] Lock acquisition took ${(performance.now() - lockStartTime).toFixed(0)}ms`);
       if (!lockResult.acquired) {
         throw lockResult.error;
       }
@@ -239,15 +246,18 @@ class PGLiteWorker {
           // Create PGlite instance
           // Use file-based storage for persistent data
           console.log('[PGLite Worker] Creating PGlite instance at:', this.dataDir);
+          const constructorStartTime = performance.now();
           this.db = new PGlite({
             dataDir: this.dataDir,
             debug: 0  // Disable PGLite debug logging
           });
+          console.log(`[PGLite Worker] PGlite constructor took ${(performance.now() - constructorStartTime).toFixed(0)}ms`);
 
           console.log('[PGLite Worker] PGlite instance created, waiting for ready...');
           // Wait for database to be ready
+          const waitReadyStartTime = performance.now();
           await this.db.waitReady;
-          console.log('[PGLite Worker] PGlite is ready');
+          console.log(`[PGLite Worker] waitReady took ${(performance.now() - waitReadyStartTime).toFixed(0)}ms (fresh: ${isFreshDb})`);
 
           // If we get here, initialization succeeded
           break;
@@ -288,10 +298,15 @@ class PGLiteWorker {
       }
 
       // Create schemas
+      const schemaStartTime = performance.now();
       await this.createSchemas();
+      console.log(`[PGLite Worker] Schema creation took ${(performance.now() - schemaStartTime).toFixed(0)}ms`);
 
       // Check if we recovered from corruption
       const recovered = initAttempt > 1;
+
+      const totalInitTime = performance.now() - initStartTime;
+      console.log(`[PGLite Worker] Total initialization took ${totalInitTime.toFixed(0)}ms`);
 
       return {
         id: message.id,
@@ -300,7 +315,8 @@ class PGLiteWorker {
           message: recovered ? 'Database recovered from corruption' : 'Database initialized successfully',
           dataDir: this.dataDir,
           recovered: recovered,
-          backupLocation: recovered ? `${this.dataDir}.backup-*` : null
+          backupLocation: recovered ? `${this.dataDir}.backup-*` : null,
+          initTimeMs: Math.round(totalInitTime)
         }
       };
     } catch (error) {

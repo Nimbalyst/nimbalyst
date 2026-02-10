@@ -13,7 +13,7 @@ describe('Mermaid Import', () => {
       B --> C[End]`;
 
     const result = await parseMermaidToExcalidraw(mermaidDiagram, {
-      fontSize: 16,
+      themeVariables: { fontSize: '16px' },
     });
 
     console.log('Mermaid parse result:', JSON.stringify(result, null, 2));
@@ -60,7 +60,7 @@ describe('Mermaid Import', () => {
       Mobile --> API`;
 
     const result = await parseMermaidToExcalidraw(mermaidDiagram, {
-      fontSize: 16,
+      themeVariables: { fontSize: '16px' },
     });
 
     console.log('\n\nSubgraph parse result element count:', result.elements.length);

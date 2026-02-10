@@ -7,7 +7,7 @@
  */
 
 import {setupMarkdownDiffTest} from '../../utils/diffTestUtils';
-import { MARKDOWN_TEST_TRANSFORMERS } from "@/plugins/DiffPlugin/__tests__/utils";
+import { MARKDOWN_TEST_TRANSFORMERS } from "../../utils";
 import {$convertToMarkdownString} from '@lexical/markdown';
 
 describe('Additional Coverage Tests', () => {

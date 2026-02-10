@@ -15,7 +15,7 @@ const config: Config = {
   content: [
     './packages/*/src/**/*.{ts,tsx,js,jsx}',
   ],
-  darkMode: ['class', '[data-theme="dark"]', '[data-theme="crystal-dark"]'],
+  darkMode: ['class', '[data-theme="dark"], [data-theme="crystal-dark"]'],
   theme: {
     extend: {
       colors: {

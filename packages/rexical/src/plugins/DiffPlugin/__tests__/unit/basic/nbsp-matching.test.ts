@@ -6,7 +6,7 @@
  *
  */
 
-import type {TextReplacement} from '../../core/diffUtils';
+import type {TextReplacement} from '../../../core/diffUtils';
 import {$getRoot} from 'lexical';
 import {
   assertApproveProducesTarget,

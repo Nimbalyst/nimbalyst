@@ -182,7 +182,7 @@ export function runDiffTest(
   }
 
   // Phase 4: Accept all changes and verify result matches new markdown
-  $approveDiffs(editor);
+  editor.update(() => { $approveDiffs(); }, { discrete: true });
 
   let afterAccept = '';
   editor.getEditorState().read(() => {
@@ -203,7 +203,7 @@ export function runDiffTest(
   }, { discrete: true });
 
   applyMarkdownDiffToDocument(editor2, oldMarkdown, newMarkdown, transformers);
-  $rejectDiffs(editor2);
+  editor2.update(() => { $rejectDiffs(); }, { discrete: true });
 
   let afterReject = '';
   editor2.getEditorState().read(() => {

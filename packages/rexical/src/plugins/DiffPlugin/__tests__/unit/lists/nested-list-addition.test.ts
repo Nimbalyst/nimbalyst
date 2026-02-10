@@ -10,7 +10,8 @@ import {
 } from '../../../../../markdown/index';
 import {createTestHeadlessEditor, MARKDOWN_TEST_TRANSFORMERS} from '../../utils/testConfig';
 import {$getDiffState} from '../../../core/DiffState';
-import {APPLY_MARKDOWN_REPLACE_COMMAND, applyMarkdownReplace} from '../../../core/exports';
+import {APPLY_MARKDOWN_REPLACE_COMMAND} from '../../..';
+import {applyMarkdownReplace} from '../../../core/exports';
 
 describe('Nested list addition bug', () => {
   it('should show structure of nested list markdown', () => {
@@ -70,8 +71,9 @@ describe('Nested list addition bug', () => {
     // Register the command handler
     editor.registerCommand(
       APPLY_MARKDOWN_REPLACE_COMMAND,
-      (replacements) => {
-        applyMarkdownReplace(editor, oldMarkdown, replacements, MARKDOWN_TEST_TRANSFORMERS);
+      (payload) => {
+        const replacements = Array.isArray(payload) ? payload : payload?.replacements;
+        applyMarkdownReplace(editor, oldMarkdown, replacements as any, MARKDOWN_TEST_TRANSFORMERS);
         return true;
       },
       COMMAND_PRIORITY_EDITOR
@@ -169,7 +171,7 @@ describe('Nested list addition bug', () => {
           // Find the list node
           const listNode = children.find((child: any) => child.getType() === 'list');
           if (listNode) {
-            const listItems = listNode.getChildren();
+            const listItems = (listNode as any).getChildren();
 
             // Collect text from all list items
             listItemTexts = listItems.map((item: any) => item.getTextContent().trim());
@@ -233,8 +235,9 @@ describe('Nested list addition bug', () => {
     // Register the command handler
     editor.registerCommand(
       APPLY_MARKDOWN_REPLACE_COMMAND,
-      (replacements) => {
-        applyMarkdownReplace(editor, oldMarkdown, replacements, MARKDOWN_TEST_TRANSFORMERS);
+      (payload) => {
+        const replacements = Array.isArray(payload) ? payload : payload?.replacements;
+        applyMarkdownReplace(editor, oldMarkdown, replacements as any, MARKDOWN_TEST_TRANSFORMERS);
         return true;
       },
       COMMAND_PRIORITY_EDITOR
@@ -263,7 +266,7 @@ describe('Nested list addition bug', () => {
       const children = root.getChildren();
       const listNode = children.find((child: any) => child.getType() === 'list');
       if (listNode) {
-        const items = listNode.getChildren();
+        const items = (listNode as any).getChildren();
         items.forEach((item: any, i: number) => {
           const directText = item.getChildren().filter((c: any) => c.getType() === 'text')
             .map((c: any) => c.getTextContent()).join('');
@@ -293,7 +296,7 @@ describe('Nested list addition bug', () => {
 
           const listNode = children.find((child: any) => child.getType() === 'list');
           if (listNode) {
-            const listItems = listNode.getChildren();
+            const listItems = (listNode as any).getChildren();
             listItemTexts = listItems.map((item: any) => item.getTextContent().trim());
           }
         });

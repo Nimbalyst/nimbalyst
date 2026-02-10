@@ -11,7 +11,8 @@ import {
 } from '../../../../../markdown';
 import {createTestHeadlessEditor, MARKDOWN_TEST_TRANSFORMERS} from '../../utils/testConfig';
 import {$getDiffState} from '../../../core/DiffState';
-import {APPLY_MARKDOWN_REPLACE_COMMAND, applyMarkdownReplace} from '../../../core/exports';
+import {APPLY_MARKDOWN_REPLACE_COMMAND} from '../../..';
+import {applyMarkdownReplace} from '../../../core/exports';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -33,8 +34,9 @@ describe('Larger document with appended content', () => {
     // Register the command handler
     editor.registerCommand(
       APPLY_MARKDOWN_REPLACE_COMMAND,
-      (replacements) => {
-        applyMarkdownReplace(editor, oldMarkdown, replacements, MARKDOWN_TEST_TRANSFORMERS);
+      (payload) => {
+        const replacements = Array.isArray(payload) ? payload : payload?.replacements;
+        applyMarkdownReplace(editor, oldMarkdown, replacements as any, MARKDOWN_TEST_TRANSFORMERS);
         return true;
       },
       COMMAND_PRIORITY_EDITOR

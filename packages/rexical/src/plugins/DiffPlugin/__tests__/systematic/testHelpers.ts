@@ -10,7 +10,7 @@ import {
   getEditorTransformers,
 } from '../../../../markdown';
 import {applyMarkdownReplace} from '../../core/diffUtils';
-import {$getDiffState} from '../../core/DiffState';
+import {$getDiffState, $clearDiffState} from '../../core/DiffState';
 import {createTestHeadlessEditor} from '../utils/testConfig';
 import {getAllNodes} from '../utils';
 
@@ -135,7 +135,7 @@ export function runDiffTest(testCase: DiffTestCase): DiffTestResult {
             // For modified/added nodes, we keep them (they're already in the tree)
             // For removed nodes, we would delete them, but applyMarkdownReplace
             // doesn't create removed nodes in this test setup
-            child.remove('__diffState');
+            $clearDiffState(child);
           }
         }
       });

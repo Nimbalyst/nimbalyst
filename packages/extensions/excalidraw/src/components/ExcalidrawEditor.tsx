@@ -26,7 +26,7 @@ export const ExcalidrawEditor = forwardRef<any, EditorHostProps>(function Excali
   const defaultBackgroundColor = theme === 'dark' ? '#1e1e1e' : '#ffffff';
   const [initialAppState, setInitialAppState] = useState<Partial<AppState>>({
     viewBackgroundColor: defaultBackgroundColor,
-    collaborators: [],
+    collaborators: new Map(),
   });
   const [initialFiles, setInitialFiles] = useState<BinaryFiles>({});
 
@@ -68,7 +68,7 @@ export const ExcalidrawEditor = forwardRef<any, EditorHostProps>(function Excali
     elements: [],
     appState: {
       viewBackgroundColor: defaultBackgroundColor,
-      collaborators: [],
+      collaborators: new Map(),
     },
     files: {},
   });
@@ -103,7 +103,7 @@ export const ExcalidrawEditor = forwardRef<any, EditorHostProps>(function Excali
         setInitialElements(elements);
         setInitialAppState({
           viewBackgroundColor: defaultBackgroundColor,
-          collaborators: [],
+          collaborators: new Map(),
           ...data.appState,
         });
         setInitialFiles(files);
@@ -341,7 +341,7 @@ export const ExcalidrawEditor = forwardRef<any, EditorHostProps>(function Excali
       <Excalidraw
         key={theme}
         onChange={onChange}
-        excalidrawAPI={setExcalidrawAPI}
+        excalidrawAPI={(api: any) => setExcalidrawAPI(api)}
         initialData={{
           appState: initialAppState,
           elements: initialElements,

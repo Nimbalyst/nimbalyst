@@ -47,7 +47,6 @@ export default defineConfig(({ mode }) => ({
       insertTypesEntry: true,
       include: ['src'],
       exclude: ['src/ai/server/providers/mcp-stdio-server.ts'],
-      logDiagnostics: false
     }),
     copyThemes()
   ],

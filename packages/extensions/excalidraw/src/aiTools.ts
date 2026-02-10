@@ -690,7 +690,7 @@ export const aiTools = [
 
       try {
         const { elements, files } = await parseMermaidToExcalidraw(params.mermaid, {
-          fontSize: 16,
+          themeVariables: { fontSize: '16px' },
         });
 
         // Convert skeleton elements to proper Excalidraw elements

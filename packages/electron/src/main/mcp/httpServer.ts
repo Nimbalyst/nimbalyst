@@ -919,7 +919,7 @@ The commit message should follow these guidelines:
       });
 
       // Tool execution handler
-      server.setRequestHandler(CallToolRequestSchema, async (request) => {
+      server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
         const { name, arguments: args } = request.params;
         // Log _meta to understand what IDs are available for proposal matching
         if (request.params._meta) {

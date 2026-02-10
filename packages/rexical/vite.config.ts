@@ -61,7 +61,6 @@ export default defineConfig(({ mode }) => ({
     dts({
       insertTypesEntry: true,
       include: ['src'],
-      logDiagnostics: false
     }),
     viteStaticCopy({
       targets: [

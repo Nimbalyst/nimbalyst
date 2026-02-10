@@ -263,7 +263,7 @@ export function testComprehensiveDiff(
 
   try {
     applyMarkdownDiffToDocument(editor2, oldMarkdown, newMarkdown, transformers);
-    $approveDiffs(editor2);
+    editor2.update(() => { $approveDiffs(); }, { discrete: true });
   } catch (error) {
     errors.push(`Failed to accept diffs: ${error instanceof Error ? error.message : String(error)}`);
   }
@@ -285,7 +285,7 @@ export function testComprehensiveDiff(
 
   try {
     applyMarkdownDiffToDocument(editor3, oldMarkdown, newMarkdown, transformers);
-    $rejectDiffs(editor3);
+    editor3.update(() => { $rejectDiffs(); }, { discrete: true });
   } catch (error) {
     errors.push(`Failed to reject diffs: ${error instanceof Error ? error.message : String(error)}`);
   }

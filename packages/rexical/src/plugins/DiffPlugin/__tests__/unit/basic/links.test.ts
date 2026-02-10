@@ -16,7 +16,7 @@ import {
   assertRejectProducesOriginal as assertRejectProducesOriginalReplace,
 } from '../../utils/replaceTestUtils';
 import {$getRoot, $isElementNode} from 'lexical';
-import {$getDiffState} from '../../core/DiffState';
+import {$getDiffState} from '../../../core/DiffState';
 
 describe('Markdown Diff - Links', () => {
   test('DEBUG: Examine link matching process', async () => {

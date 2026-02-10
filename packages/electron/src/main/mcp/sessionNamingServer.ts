@@ -205,7 +205,7 @@ async function tryCreateSessionNamingServer(port: number): Promise<any> {
         });
 
         // Tool execution handler - aiSessionId is captured from outer scope
-        server.setRequestHandler(CallToolRequestSchema, async (request) => {
+        server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
           const { name, arguments: args } = request.params;
 
           // Strip MCP server prefix if present

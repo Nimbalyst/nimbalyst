@@ -128,7 +128,7 @@ export async function startStdioMcpServer() {
   });
 
   // Register tool call handler
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
     console.error('[MCP stdio] Tool call:', request.params.name);
 
     const { name, arguments: args } = request.params;
