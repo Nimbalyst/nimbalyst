@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "vite build --watch",
     "build": "vite build",
-    "type-check": "tsc --noEmit"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {},
   "devDependencies": {

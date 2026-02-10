@@ -1306,8 +1306,6 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
   const getColumnHeaderContextMenuItems = useCallback((colIndex: number): ContextMenuItem[] => {
     const colLetter = columnIndexToLetter(colIndex);
     const currentFrozenCount = frozenColumnCount;
-    const _isCurrentlyFrozen = colIndex < currentFrozenCount;
-    const _isAtFrozenBoundary = colIndex === 0 || colIndex === currentFrozenCount;
     const currentFormat = columnFormats[colIndex];
     const formatTypeName = currentFormat ? getColumnTypeName(currentFormat.type) : 'Text';
     const gridOps = gridOpsRef.current;
