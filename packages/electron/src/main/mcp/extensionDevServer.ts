@@ -659,7 +659,7 @@ async function tryCreateExtensionDevServer(port: number): Promise<any> {
               },
               {
                 name: 'restart_nimbalyst',
-                description: 'Restart the Nimbalyst application. Only use this tool when the user explicitly asks you to restart Nimbalyst. This will close all windows and relaunch the app.',
+                description: 'Restart the Nimbalyst application. Only use this tool when the user explicitly asks you to restart Nimbalyst. This will close all windows and relaunch the app. All active AI sessions will automatically continue after restart with a continuation message.',
                 inputSchema: {
                   type: 'object',
                   properties: {},
@@ -1106,6 +1106,35 @@ async function tryCreateExtensionDevServer(port: number): Promise<any> {
               console.log('[Extension Dev MCP] Restarting Nimbalyst...');
 
               const { app } = await import('electron');
+
+              // Get all active agent sessions to continue after restart
+              try {
+                const { getSessionStateManager } = await import('@nimbalyst/runtime/ai/server/SessionStateManager');
+                const stateManager = getSessionStateManager();
+                const activeSessionIds = stateManager.getActiveSessionIds();
+
+                // Filter to only agent sessions that are running or streaming
+                const agentSessionIds: string[] = [];
+                for (const sessionId of activeSessionIds) {
+                  const state = stateManager.getSessionState(sessionId);
+                  if (state && (state.status === 'running' || state.isStreaming)) {
+                    agentSessionIds.push(sessionId);
+                  }
+                }
+
+                if (agentSessionIds.length > 0) {
+                  const userData = app.getPath('userData');
+                  const restartContinuationPath = path.join(userData, 'restart-continuation.json');
+                  const continuationData = {
+                    sessionIds: agentSessionIds,
+                    timestamp: Date.now()
+                  };
+                  fs.writeFileSync(restartContinuationPath, JSON.stringify(continuationData), 'utf8');
+                  console.log(`[Extension Dev MCP] Saved restart continuation for ${agentSessionIds.length} active session(s):`, agentSessionIds);
+                }
+              } catch (error) {
+                console.error('[Extension Dev MCP] Failed to save restart continuation:', error);
+              }
 
               // Check if we're in dev mode (electron-vite spawns both vite and electron)
               const isDev = process.env.NODE_ENV === 'development' || !!process.env.ELECTRON_RENDERER_URL;

@@ -139,6 +139,88 @@ const appStartTime = Date.now();
 const analytics = AnalyticsService.getInstance();
 
 /**
+ * Check for pending restart continuations and queue continuation prompts.
+ * This is called after AIService is initialized on app startup.
+ * If restart_nimbalyst was called, this queues continuation prompts for all
+ * sessions that were active at restart time.
+ */
+async function checkForRestartContinuation(aiService: AIService): Promise<void> {
+    try {
+        const restartContinuationPath = path.join(app.getPath('userData'), 'restart-continuation.json');
+
+        // Check if continuation file exists
+        if (!fs.existsSync(restartContinuationPath)) {
+            return;
+        }
+
+        // Read and parse continuation data
+        const continuationJson = fs.readFileSync(restartContinuationPath, 'utf8');
+        const continuation = JSON.parse(continuationJson);
+
+        // Validate continuation data
+        if (!continuation.sessionIds || !Array.isArray(continuation.sessionIds)) {
+            logger.main.warn('[RestartContinuation] Invalid continuation data, skipping');
+            fs.unlinkSync(restartContinuationPath);
+            return;
+        }
+
+        const { sessionIds, timestamp } = continuation;
+
+        // Check if continuation is stale (older than 5 minutes)
+        const ageMs = Date.now() - (timestamp || 0);
+        if (ageMs > 5 * 60 * 1000) {
+            logger.main.warn(`[RestartContinuation] Continuation is stale (${Math.round(ageMs / 1000)}s old), skipping`);
+            fs.unlinkSync(restartContinuationPath);
+            return;
+        }
+
+        if (sessionIds.length === 0) {
+            logger.main.info('[RestartContinuation] No active sessions to continue');
+            fs.unlinkSync(restartContinuationPath);
+            return;
+        }
+
+        logger.main.info(`[RestartContinuation] Found continuation for ${sessionIds.length} session(s), queueing continuation prompts`);
+
+        // Queue continuation prompts for all sessions
+        const { getQueuedPromptsStore } = await import('./services/RepositoryManager');
+        const queuedPromptsStore = getQueuedPromptsStore();
+
+        let successCount = 0;
+        let errorCount = 0;
+
+        for (const sessionId of sessionIds) {
+            try {
+                await queuedPromptsStore.create({
+                    id: `restart-continuation-${sessionId}-${Date.now()}`,
+                    sessionId,
+                    prompt: 'Nimbalyst has restarted. Please continue with your work.'
+                });
+                successCount++;
+                logger.main.info(`[RestartContinuation] Queued continuation prompt for session ${sessionId}`);
+            } catch (error) {
+                errorCount++;
+                logger.main.error(`[RestartContinuation] Failed to queue continuation prompt for session ${sessionId}:`, error);
+            }
+        }
+
+        logger.main.info(`[RestartContinuation] Continuation complete: ${successCount} succeeded, ${errorCount} failed`);
+
+        // Delete the continuation file after processing
+        fs.unlinkSync(restartContinuationPath);
+    } catch (error) {
+        logger.main.error('[RestartContinuation] Error checking for restart continuation:', error);
+        // Try to clean up the file even on error
+        try {
+            const restartContinuationPath = path.join(app.getPath('userData'), 'restart-continuation.json');
+            if (fs.existsSync(restartContinuationPath)) {
+                fs.unlinkSync(restartContinuationPath);
+            }
+        } catch {}
+    }
+}
+
+/**
  * Check if Claude Code is installed on first app launch.
  * This only runs once ever - on the very first launch of the app.
  * We check for the ~/.claude/ directory which is created when Claude CLI is installed.
@@ -796,6 +878,9 @@ app.whenReady().then(async () => {
     }
     aiService = new AIService(runtimeSessionStore);
     markEnd('ai-service-init');
+
+    // Check for pending restart continuations and queue continuation prompts
+    await checkForRestartContinuation(aiService);
 
     // Initialize Voice Mode handlers
     // The renderer calls 'voice-mode:init' to trigger initialization
