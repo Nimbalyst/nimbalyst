@@ -20,6 +20,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.63] - 2026-02-11
+
+
+### Added
+- OpenAI Codex provider rewritten from CLI spawning to SDK integration
+- Activity History panel (behind alpha flag)
+- Managed teammates for agent teams
+- Auto-continue AI sessions after restart
+
+### Changed
+- Bumped claude-agent-sdk from 0.2.37 to 0.2.39
+
+### Fixed
+- Improved rebase instructions to verify correct stash before restore
+- Sessions with more than 5000 messages now load fully
+- Worktree path used correctly for git commit operations in worktree sessions
+- CRLF line endings normalized in markdown import to fix mermaid/code block parsing
+
 ## [0.52.62] - 2026-02-10
 
 
