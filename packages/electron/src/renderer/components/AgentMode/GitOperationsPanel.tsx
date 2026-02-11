@@ -723,7 +723,8 @@ ${rebaseConflictData.commits.theirs && rebaseConflictData.commits.theirs.length 
 ` : ''}
 **Important Notes:**
 - If there are any uncommitted changes (staged or unstaged), they have been auto-stashed before the rebase attempt
-- After completing the rebase, you'll need to restore the stash with \`git stash pop\`
+- After completing the rebase, you'll need to restore the stash
+- **CRITICAL:** Before restoring the stash, verify it's for THIS worktree by checking \`git stash list\` - look for a stash message mentioning this worktree's name
 - Handle any conflicts that arise when restoring the stash
 
 **What you need to do:**
@@ -732,8 +733,9 @@ ${rebaseConflictData.commits.theirs && rebaseConflictData.commits.theirs.length 
 3. After resolving each conflict, stage the file: \`git add <file>\`
 4. Continue the rebase: \`git rebase --continue\`
 5. Repeat steps 2-4 until the rebase is complete
-6. After the rebase succeeds, restore uncommitted changes: \`git stash pop\`
-7. If there are conflicts when popping the stash, resolve them as well
+6. After the rebase succeeds, **FIRST** check \`git stash list\` to verify which stash is for this worktree
+7. Restore the correct stash: \`git stash pop stash@{N}\` where N is the index of the correct stash
+8. If there are conflicts when popping the stash, resolve them as well
 
 Make sure to preserve the intent of both the worktree changes and the incoming changes from ${baseBranch}.`;
 
