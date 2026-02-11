@@ -1174,7 +1174,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
             gitWorkspacePath,
             message,
             files
-          ) as { success: boolean; commitHash?: string; error?: string };
+          ) as { success: boolean; commitHash?: string; commitDate?: string; error?: string };
 
           // Send response via unified IPC channel for the durable prompt
           await window.electronAPI.invoke('messages:respond-to-prompt', {
@@ -1184,6 +1184,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
             response: {
               action: result.success ? 'committed' : 'cancelled',
               commitHash: result.commitHash,
+              commitDate: result.commitDate,
               error: result.error,
               filesCommitted: result.success ? files : undefined,
               commitMessage: result.success ? message : undefined,

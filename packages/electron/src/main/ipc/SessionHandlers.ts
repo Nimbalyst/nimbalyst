@@ -1192,6 +1192,7 @@ export async function registerSessionHandlers() {
                     proposalId: promptId,
                     action: response.action,
                     commitHash: response.commitHash,
+                    commitDate: response.commitDate,
                     error: response.error,
                     filesCommitted: response.filesCommitted,
                     commitMessage: response.commitMessage,

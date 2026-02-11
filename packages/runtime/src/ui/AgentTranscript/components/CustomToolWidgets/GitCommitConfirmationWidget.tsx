@@ -241,11 +241,13 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
 
     const resultLower = toolResult.toLowerCase();
     if (resultLower.includes('committed') || resultLower.includes('commit hash')) {
-      // Extract commit hash if present
+      // Extract commit hash and date if present
       const hashMatch = toolResult.match(/commit hash[:\s]+([a-f0-9]+)/i);
+      const dateMatch = toolResult.match(/commit date[:\s]+(.+)/i);
       return {
         type: 'committed' as const,
         commitHash: hashMatch?.[1],
+        commitDate: dateMatch?.[1]?.trim(),
       };
     } else if (resultLower.includes('cancelled') || resultLower.includes('canceled')) {
       return { type: 'cancelled' as const };
@@ -276,6 +278,7 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
   const [localResult, setLocalResult] = useState<{
     success: boolean;
     commitHash?: string;
+    commitDate?: string;
     error?: string;
   } | null>(null);
 
@@ -294,6 +297,7 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
   const displayResult = localResult || (completedState ? {
     success: completedState.type === 'committed',
     commitHash: completedState.type === 'committed' ? completedState.commitHash : undefined,
+    commitDate: completedState.type === 'committed' ? completedState.commitDate : undefined,
     error: completedState.type === 'cancelled' ? 'Cancelled' :
            completedState.type === 'error' ? completedState.error : undefined,
   } : null);
@@ -580,14 +584,16 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
       );
     }
 
-    // Format the commit timestamp
-    const commitTimestamp = new Date().toLocaleString(undefined, {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-    });
+    // Format the commit timestamp from the actual git commit date - only show if we have real data
+    const commitTimestamp = result.commitDate
+      ? new Date(result.commitDate).toLocaleString(undefined, {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+        })
+      : null;
 
     return (
       <div
@@ -615,7 +621,7 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
         </div>
         {result.success ? (
           <div className="git-commit-widget__success-content p-2 bg-[color-mix(in_srgb,var(--nim-success)_8%,var(--nim-bg))] flex flex-col gap-2">
-            <div className="text-[0.6875rem] text-[var(--nim-text-faint)]">{commitTimestamp}</div>
+            {commitTimestamp && <div className="text-[0.6875rem] text-[var(--nim-text-faint)]">{commitTimestamp}</div>}
             <div className="text-[0.8125rem] font-medium text-[var(--nim-text)] leading-normal whitespace-pre-wrap font-mono">{commitMessage}</div>
             <div className="mt-1 pt-2 border-t border-[var(--nim-border)]">
               <div className="text-[0.6875rem] font-semibold uppercase tracking-wide text-[var(--nim-text-muted)] mb-1.5">

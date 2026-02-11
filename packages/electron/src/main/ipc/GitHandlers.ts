@@ -167,7 +167,7 @@ export function registerGitHandlers(): void {
       workspacePath: string,
       message: string,
       filesToStage: string[]
-    ): Promise<{ success: boolean; commitHash?: string; error?: string }> => {
+    ): Promise<{ success: boolean; commitHash?: string; commitDate?: string; error?: string }> => {
       if (!workspacePath) {
         throw new Error('workspacePath is required');
       }
@@ -288,9 +288,20 @@ export function registerGitHandlers(): void {
           }
 
           log.info(`[git:commit] Successfully committed: ${result.commit}`);
+
+          // Get the actual commit date from git
+          let commitDate: string | undefined;
+          try {
+            const showResult = await git.show([result.commit, '--no-patch', '--format=%aI']);
+            commitDate = showResult.trim();
+          } catch {
+            // Non-critical - fall through without date
+          }
+
           return {
             success: true,
             commitHash: result.commit,
+            commitDate,
           };
         } catch (error) {
           log.error('[git:commit] Failed to commit:', error);

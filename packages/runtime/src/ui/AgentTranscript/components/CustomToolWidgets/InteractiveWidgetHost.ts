@@ -126,7 +126,7 @@ export interface InteractiveWidgetHost {
     proposalId: string,
     files: string[],
     message: string
-  ): Promise<{ success: boolean; commitHash?: string; error?: string; pending?: boolean }>;
+  ): Promise<{ success: boolean; commitHash?: string; commitDate?: string; error?: string; pending?: boolean }>;
 
   /**
    * Cancel a git commit proposal

@@ -2004,6 +2004,7 @@ The commit message should follow these guidelines:
               ipcMain.once(proposalId, async (_event, result: {
                 action: 'committed' | 'cancelled';
                 commitHash?: string;
+                commitDate?: string;
                 error?: string;
                 filesCommitted?: string[];
                 commitMessage?: string;
@@ -2018,7 +2019,7 @@ The commit message should follow these guidelines:
                     content: [
                       {
                         type: 'text',
-                        text: `User confirmed and committed ${filesCount} file(s).\nCommit hash: ${result.commitHash}\nCommit message: ${result.commitMessage || proposalArgs.commitMessage}`
+                        text: `User confirmed and committed ${filesCount} file(s).\nCommit hash: ${result.commitHash}${result.commitDate ? `\nCommit date: ${result.commitDate}` : ''}\nCommit message: ${result.commitMessage || proposalArgs.commitMessage}`
                       }
                     ],
                     isError: false
