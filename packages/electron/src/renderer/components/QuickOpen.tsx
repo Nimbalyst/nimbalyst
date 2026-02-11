@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { usePostHog } from 'posthog-js/react';
+import { MaterialSymbol } from '@nimbalyst/runtime';
 import { getFileName, getRelativeDir } from '../utils/pathUtils';
 
 interface FileItem {
@@ -26,6 +27,8 @@ interface QuickOpenProps {
   onFileSelect: (filePath: string) => void;
   /** If true, immediately trigger content search mode when opened */
   startInContentSearchMode?: boolean;
+  /** Callback to show sessions that edited a file (opens Session Quick Open with @path) */
+  onShowFileSessions?: (filePath: string) => void;
 }
 
 export const QuickOpen: React.FC<QuickOpenProps> = ({
@@ -35,6 +38,7 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
   currentFilePath,
   onFileSelect,
   startInContentSearchMode = false,
+  onShowFileSessions,
 }) => {
   const posthog = usePostHog();
   const [searchQuery, setSearchQuery] = useState('');
@@ -431,28 +435,32 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
         className="quick-open-modal fixed top-[20%] left-1/2 -translate-x-1/2 w-[90%] max-w-[600px] max-h-[60vh] flex flex-col overflow-hidden rounded-lg z-[99999] bg-nim border border-nim shadow-[0_20px_60px_rgba(0,0,0,0.3)]"
       >
         <div
-          className="quick-open-header relative p-3 border-b border-nim"
+          className="quick-open-header p-3 border-b border-nim"
         >
-          <input
-            ref={searchInputRef}
-            type="text"
-            className="quick-open-search nim-input text-base"
-            placeholder={startInContentSearchMode ? "Search in file contents..." : "Search files..."}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-          {isSearching && (
-            <div
-              className="quick-open-searching absolute right-6 top-1/2 -translate-y-1/2 text-xs text-nim-faint"
-            >
-              {contentSearchTriggered ? 'Searching file contents...' : 'Searching...'}
-            </div>
-          )}
-          {!isSearching && searchQuery && !contentSearchTriggered && !startInContentSearchMode && (
-            <button
-              className="quick-open-content-search-hint absolute right-6 top-1/2 -translate-y-1/2 text-xs flex items-center gap-1 px-2 py-1 rounded cursor-pointer border-none transition-colors duration-150 bg-transparent text-nim-faint hover:bg-[var(--nim-accent-subtle)] hover:text-nim-primary"
-              onClick={() => searchFileContents()}
-              title="Search in file contents"
+          <div className="text-[11px] font-medium text-nim-faint uppercase tracking-wide mb-2">
+            {startInContentSearchMode ? 'Search in Files' : 'Open File'}
+          </div>
+          <div className="relative">
+            <input
+              ref={searchInputRef}
+              type="text"
+              className="quick-open-search nim-input text-base"
+              placeholder={startInContentSearchMode ? "Search in file contents..." : "Search files..."}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            {isSearching && (
+              <div
+                className="quick-open-searching absolute right-3 top-1/2 -translate-y-1/2 text-xs text-nim-faint"
+              >
+                {contentSearchTriggered ? 'Searching file contents...' : 'Searching...'}
+              </div>
+            )}
+            {!isSearching && searchQuery && !contentSearchTriggered && !startInContentSearchMode && (
+              <button
+                className="quick-open-content-search-hint absolute right-3 top-1/2 -translate-y-1/2 text-xs flex items-center gap-1 px-2 py-1 rounded cursor-pointer border-none transition-colors duration-150 bg-transparent text-nim-faint hover:bg-[var(--nim-accent-subtle)] hover:text-nim-primary"
+                onClick={() => searchFileContents()}
+                title="Search in file contents"
             >
               <kbd
                 className="px-1.5 py-0.5 rounded font-mono text-[10px] bg-nim border border-nim text-nim"
@@ -462,6 +470,7 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
               Search in file contents
             </button>
           )}
+          </div>
         </div>
 
         <div className="quick-open-results flex-1 overflow-y-auto min-h-[200px]">
@@ -476,7 +485,7 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
               {displayFiles.map((file, index) => (
                 <li
                   key={`${file.path}-${index}`}
-                  className={`quick-open-item px-4 py-2.5 cursor-pointer border-l-[3px] transition-all duration-100 ${
+                  className={`quick-open-item relative group px-4 py-2.5 cursor-pointer border-l-[3px] transition-all duration-100 ${
                     index === selectedIndex ? 'selected bg-nim-selected border-l-nim-primary' : 'border-transparent hover:bg-nim-hover'
                   } ${file.isContentMatch ? 'content-match' : ''} ${file.isFileNameMatch ? 'name-match' : ''}`}
                   onClick={() => handleFileSelect(file.path)}
@@ -486,6 +495,23 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
                     }
                   }}
                 >
+                  {onShowFileSessions && (
+                    <button
+                      className={`quick-open-show-sessions absolute right-3 top-2.5 p-1 rounded transition-all duration-100 border-none cursor-pointer bg-transparent text-[var(--nim-text-faint)] hover:text-[var(--nim-primary)] hover:bg-[var(--nim-accent-subtle)] ${
+                        index === selectedIndex ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                      }`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const relativePath = file.path.startsWith(workspacePath)
+                          ? file.path.slice(workspacePath.length + 1)
+                          : file.path;
+                        onShowFileSessions(relativePath);
+                      }}
+                      title="Show sessions that edited this file"
+                    >
+                      <MaterialSymbol icon="history" size={16} />
+                    </button>
+                  )}
                   <div
                     className={`quick-open-item-name text-sm font-medium flex items-center gap-2 text-nim ${file.isContentMatch ? 'mb-1' : ''}`}
                   >

@@ -119,6 +119,20 @@ export function NavigationDialogKeyboardHandler({
           currentFilePath: props.currentFilePath,
           onFileSelect: props.onFileSelect,
           startInContentSearchMode: true,
+          onShowFileSessions: (filePath: string) => {
+            dialogs.openSessionQuickOpen({
+              workspacePath: props.workspacePath!,
+              onSessionSelect: props.onSessionSelect,
+              initialSearchQuery: `@${filePath}`,
+              onSwitchToPrompts: (query: string) => {
+                dialogs.openPromptQuickOpen({
+                  workspacePath: props.workspacePath!,
+                  onSessionSelect: props.onPromptSelect,
+                  initialSearchQuery: query,
+                });
+              },
+            });
+          },
         });
         return;
       }
@@ -132,6 +146,20 @@ export function NavigationDialogKeyboardHandler({
           workspacePath: props.workspacePath,
           currentFilePath: props.currentFilePath,
           onFileSelect: props.onFileSelect,
+          onShowFileSessions: (filePath: string) => {
+            dialogs.openSessionQuickOpen({
+              workspacePath: props.workspacePath!,
+              onSessionSelect: props.onSessionSelect,
+              initialSearchQuery: `@${filePath}`,
+              onSwitchToPrompts: (query: string) => {
+                dialogs.openPromptQuickOpen({
+                  workspacePath: props.workspacePath!,
+                  onSessionSelect: props.onPromptSelect,
+                  initialSearchQuery: query,
+                });
+              },
+            });
+          },
         });
         return;
       }
@@ -141,9 +169,19 @@ export function NavigationDialogKeyboardHandler({
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
+        // Carry over search text from Prompt Quick Open if it's currently open
+        const carryQuery = (document.querySelector('.prompt-quick-open-search') as HTMLInputElement)?.value || '';
         dialogs.openSessionQuickOpen({
           workspacePath: props.workspacePath,
           onSessionSelect: props.onSessionSelect,
+          initialSearchQuery: carryQuery || undefined,
+          onSwitchToPrompts: (query: string) => {
+            dialogs.openPromptQuickOpen({
+              workspacePath: props.workspacePath!,
+              onSessionSelect: props.onPromptSelect,
+              initialSearchQuery: query,
+            });
+          },
         });
         return;
       }
@@ -157,9 +195,12 @@ export function NavigationDialogKeyboardHandler({
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
+        // Carry over search text from Session Quick Open if it's currently open
+        const carryQuery = (document.querySelector('.session-quick-open-search') as HTMLInputElement)?.value || '';
         dialogs.openPromptQuickOpen({
           workspacePath: props.workspacePath,
           onSessionSelect: props.onPromptSelect,
+          initialSearchQuery: carryQuery || undefined,
         });
         return;
       }

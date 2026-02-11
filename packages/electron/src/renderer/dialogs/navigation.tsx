@@ -22,16 +22,24 @@ export interface QuickOpenData {
   onFileSelect: (filePath: string) => void;
   /** If true, immediately trigger content search mode when opened */
   startInContentSearchMode?: boolean;
+  /** Callback to show sessions that edited a file (opens Session Quick Open with @path) */
+  onShowFileSessions?: (filePath: string) => void;
 }
 
 export interface SessionQuickOpenData {
   workspacePath: string;
   onSessionSelect: (sessionId: string) => void;
+  /** Pre-fill the search input when the modal opens */
+  initialSearchQuery?: string;
+  /** Callback to switch to Prompt Quick Open with the current search text */
+  onSwitchToPrompts?: (query: string) => void;
 }
 
 export interface PromptQuickOpenData {
   workspacePath: string;
   onSessionSelect: (sessionId: string) => void;
+  /** Pre-fill the search input when the modal opens */
+  initialSearchQuery?: string;
 }
 
 export interface AgentCommandPaletteData {
@@ -61,6 +69,7 @@ function QuickOpenWrapper({
         onClose();
       }}
       startInContentSearchMode={data.startInContentSearchMode}
+      onShowFileSessions={data.onShowFileSessions}
     />
   );
 }
@@ -83,6 +92,8 @@ function SessionQuickOpenWrapper({
         data.onSessionSelect(sessionId);
         onClose();
       }}
+      initialSearchQuery={data.initialSearchQuery}
+      onSwitchToPrompts={data.onSwitchToPrompts}
     />
   );
 }
@@ -105,6 +116,7 @@ function PromptQuickOpenWrapper({
         data.onSessionSelect(sessionId);
         onClose();
       }}
+      initialSearchQuery={data.initialSearchQuery}
     />
   );
 }

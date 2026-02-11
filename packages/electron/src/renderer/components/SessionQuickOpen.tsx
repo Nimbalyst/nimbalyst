@@ -1,8 +1,10 @@
-import React, { useState, useEffect, useRef, useMemo, memo } from 'react';
-import { useAtomValue } from 'jotai';
+import React, { useState, useEffect, useRef, useMemo, useCallback, memo } from 'react';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { ProviderIcon, MaterialSymbol } from '@nimbalyst/runtime';
 import { getRelativeTimeString } from '../utils/dateFormatting';
 import { sessionOrChildProcessingAtom, sessionUnreadAtom, sessionPendingPromptAtom } from '../store';
+import { fileMentionOptionsAtom, searchFileMentionAtom } from '../store/atoms/fileMention';
+import type { TypeaheadOption } from './Typeahead/GenericTypeahead';
 
 interface SessionItem {
   id: string;
@@ -67,6 +69,10 @@ interface SessionQuickOpenProps {
   onClose: () => void;
   workspacePath: string;
   onSessionSelect: (sessionId: string) => void;
+  /** Pre-fill the search input when the modal opens (e.g. from File Quick Open or Cmd+Shift+L) */
+  initialSearchQuery?: string;
+  /** Callback to switch to Prompt Quick Open with the current search text */
+  onSwitchToPrompts?: (query: string) => void;
 }
 
 export const SessionQuickOpen: React.FC<SessionQuickOpenProps> = ({
@@ -74,6 +80,8 @@ export const SessionQuickOpen: React.FC<SessionQuickOpenProps> = ({
   onClose,
   workspacePath,
   onSessionSelect,
+  initialSearchQuery,
+  onSwitchToPrompts,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -82,8 +90,85 @@ export const SessionQuickOpen: React.FC<SessionQuickOpenProps> = ({
   const searchInputRef = useRef<HTMLInputElement>(null);
   const resultsListRef = useRef<HTMLUListElement>(null);
 
-  // Filter sessions in-memory by title (fast, no database query)
+  // @ file search state
+  const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
+  const [fileFilteredSessionIds, setFileFilteredSessionIds] = useState<string[] | null>(null);
+  const [typeaheadIndex, setTypeaheadIndex] = useState(0);
+  const searchDebounceRef = useRef<NodeJS.Timeout>();
+
+  // Detect @ file search mode
+  const isFileSearchMode = searchQuery.startsWith('@');
+  const fileSearchQuery = isFileSearchMode ? searchQuery.slice(1) : '';
+  const showTypeahead = isFileSearchMode && !selectedFilePath;
+
+  // Subscribe to file mention typeahead options
+  const fileOptions = useAtomValue(fileMentionOptionsAtom(workspacePath));
+  const searchFileMention = useSetAtom(searchFileMentionAtom);
+
+  // Update file mention search when in typeahead mode
+  useEffect(() => {
+    if (!isOpen || !showTypeahead) return;
+
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current);
+    }
+    searchDebounceRef.current = setTimeout(() => {
+      searchFileMention({ workspacePath, query: fileSearchQuery });
+    }, 150);
+
+    return () => {
+      if (searchDebounceRef.current) {
+        clearTimeout(searchDebounceRef.current);
+      }
+    };
+  }, [isOpen, showTypeahead, fileSearchQuery, workspacePath]);
+
+  // Query sessions by file when a file is selected
+  useEffect(() => {
+    if (!isOpen || !isFileSearchMode || !selectedFilePath) {
+      setFileFilteredSessionIds(null);
+      return;
+    }
+
+    // Convert relative path to absolute for the IPC call
+    const absolutePath = selectedFilePath.startsWith('/')
+      ? selectedFilePath
+      : `${workspacePath}/${selectedFilePath}`;
+
+    window.electronAPI.invoke('session-files:get-sessions-by-file', workspacePath, absolutePath, 'edited')
+      .then((result: { success: boolean; sessionIds: string[] }) => {
+        if (result.success) {
+          setFileFilteredSessionIds(result.sessionIds);
+        } else {
+          setFileFilteredSessionIds([]);
+        }
+      })
+      .catch(() => {
+        setFileFilteredSessionIds([]);
+      });
+  }, [isOpen, isFileSearchMode, selectedFilePath, workspacePath]);
+
+  // Handle typeahead file selection
+  const handleFileTypeaheadSelect = useCallback((option: TypeaheadOption) => {
+    const filePath = (option.data as any)?.path || option.label;
+    setSelectedFilePath(filePath);
+    setSearchQuery(`@${filePath}`);
+    setSelectedIndex(0);
+  }, []);
+
+  // Filter sessions: either by file (@ mode) or by title (normal mode)
   const displaySessions = useMemo(() => {
+    // File search mode with selected file -- filter by session IDs
+    if (isFileSearchMode && selectedFilePath && fileFilteredSessionIds !== null) {
+      return allSessions.filter(s => fileFilteredSessionIds.includes(s.id));
+    }
+
+    // File search mode but still in typeahead -- show all sessions (typeahead is on top)
+    if (isFileSearchMode) {
+      return allSessions;
+    }
+
+    // Normal title search
     if (!searchQuery.trim()) {
       return allSessions;
     }
@@ -91,7 +176,7 @@ export const SessionQuickOpen: React.FC<SessionQuickOpenProps> = ({
     return allSessions.filter(session =>
       (session.title || 'New conversation').toLowerCase().includes(query)
     );
-  }, [searchQuery, allSessions]);
+  }, [searchQuery, allSessions, isFileSearchMode, selectedFilePath, fileFilteredSessionIds]);
 
   // Load all sessions when modal opens
   useEffect(() => {
@@ -117,9 +202,18 @@ export const SessionQuickOpen: React.FC<SessionQuickOpenProps> = ({
   // Reset state when modal opens/closes
   useEffect(() => {
     if (isOpen) {
-      setSearchQuery('');
+      const query = initialSearchQuery || '';
+      setSearchQuery(query);
       setSelectedIndex(0);
       setMouseHasMoved(false);
+      setTypeaheadIndex(0);
+      // If initialSearchQuery is an @ query with a full path, set it as selected
+      if (query.startsWith('@') && query.length > 1) {
+        setSelectedFilePath(query.slice(1));
+      } else {
+        setSelectedFilePath(null);
+      }
+      setFileFilteredSessionIds(null);
       setTimeout(() => searchInputRef.current?.focus(), 100);
     }
   }, [isOpen]);
@@ -153,6 +247,34 @@ export const SessionQuickOpen: React.FC<SessionQuickOpenProps> = ({
     if (!isOpen) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      // When typeahead is showing, override arrow/enter to navigate the dropdown
+      if (showTypeahead && fileOptions.length > 0) {
+        switch (e.key) {
+          case 'ArrowDown':
+            e.preventDefault();
+            setTypeaheadIndex(prev =>
+              prev < fileOptions.length - 1 ? prev + 1 : prev
+            );
+            return;
+          case 'ArrowUp':
+            e.preventDefault();
+            setTypeaheadIndex(prev => prev > 0 ? prev - 1 : prev);
+            return;
+          case 'Enter':
+            e.preventDefault();
+            if (fileOptions[typeaheadIndex]) {
+              handleFileTypeaheadSelect(fileOptions[typeaheadIndex]);
+            }
+            return;
+          case 'Escape':
+            e.preventDefault();
+            // Clear the @ search and go back to normal mode
+            setSearchQuery('');
+            setSelectedFilePath(null);
+            return;
+        }
+      }
+
       switch (e.key) {
         case 'ArrowDown':
           e.preventDefault();
@@ -170,16 +292,29 @@ export const SessionQuickOpen: React.FC<SessionQuickOpenProps> = ({
             handleSessionSelect(displaySessions[selectedIndex].id);
           }
           break;
+        case 'Tab':
+          e.preventDefault();
+          if (searchQuery && onSwitchToPrompts && !isFileSearchMode) {
+            onSwitchToPrompts(searchQuery);
+          }
+          break;
         case 'Escape':
           e.preventDefault();
-          onClose();
+          if (isFileSearchMode && selectedFilePath) {
+            // Clear file filter, go back to normal mode
+            setSearchQuery('');
+            setSelectedFilePath(null);
+            setFileFilteredSessionIds(null);
+          } else {
+            onClose();
+          }
           break;
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, selectedIndex, displaySessions, onClose]);
+  }, [isOpen, selectedIndex, displaySessions, onClose, searchQuery, onSwitchToPrompts, showTypeahead, fileOptions, typeaheadIndex, handleFileTypeaheadSelect, isFileSearchMode, selectedFilePath]);
 
   const handleSessionSelect = (sessionId: string) => {
     // Pass the session ID to the parent handler
@@ -198,23 +333,103 @@ export const SessionQuickOpen: React.FC<SessionQuickOpenProps> = ({
         onClick={onClose}
       />
       <div className="session-quick-open-modal fixed top-[20%] left-1/2 -translate-x-1/2 w-[90%] max-w-[600px] max-h-[60vh] flex flex-col overflow-hidden rounded-lg z-[99999] bg-[var(--nim-bg)] border border-[var(--nim-border)] shadow-[0_20px_60px_rgba(0,0,0,0.3)]">
-        <div className="session-quick-open-header relative p-3 border-b border-[var(--nim-border)]">
-          <input
-            ref={searchInputRef}
-            type="text"
-            className="session-quick-open-search w-full py-2 px-3 text-base rounded-md outline-none box-border bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] text-[var(--nim-text)] focus:border-[#007aff] focus:shadow-[0_0_0_3px_rgba(0,122,255,0.1)]"
-            placeholder="Search AI sessions by name..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
+        <div className="session-quick-open-header p-3 border-b border-[var(--nim-border)]">
+          <div className="text-[11px] font-medium text-[var(--nim-text-faint)] uppercase tracking-wide mb-2">Sessions</div>
+          <div className="relative">
+            <input
+              ref={searchInputRef}
+              type="text"
+              className="session-quick-open-search w-full py-2 px-3 text-base rounded-md outline-none box-border bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] text-[var(--nim-text)] focus:border-[#007aff] focus:shadow-[0_0_0_3px_rgba(0,122,255,0.1)]"
+              placeholder="Search sessions... (@ to search by file edited)"
+              value={searchQuery}
+              onChange={(e) => {
+                const val = e.target.value;
+                setSearchQuery(val);
+                setSelectedIndex(0);
+                // If user edits away from the confirmed file path, clear the selection
+                if (selectedFilePath && val !== `@${selectedFilePath}`) {
+                  setSelectedFilePath(null);
+                  setFileFilteredSessionIds(null);
+                }
+                // Reset typeahead index when typing
+                if (val.startsWith('@')) {
+                  setTypeaheadIndex(0);
+                }
+              }}
+            />
+            {isFileSearchMode && selectedFilePath && (
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] flex items-center gap-1.5 text-[var(--nim-primary)]">
+                <MaterialSymbol icon="filter_alt" size={14} />
+                File search
+              </span>
+            )}
+            {searchQuery && onSwitchToPrompts && !isFileSearchMode && (
+              <button
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-xs flex items-center gap-1 px-2 py-1 rounded cursor-pointer border-none transition-colors duration-150 bg-transparent text-[var(--nim-text-faint)] hover:bg-[var(--nim-accent-subtle)] hover:text-[var(--nim-primary)]"
+                onClick={() => onSwitchToPrompts(searchQuery)}
+                title="Search in prompts"
+              >
+                <kbd className="px-1.5 py-0.5 rounded font-mono text-[10px] bg-[var(--nim-bg)] border border-[var(--nim-border)] text-[var(--nim-text)]">Tab</kbd>
+                Search prompts
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="session-quick-open-results flex-1 overflow-y-auto min-h-[200px]">
-          {displaySessions.length === 0 ? (
+          {/* File typeahead dropdown */}
+          {showTypeahead && (
+            <ul className="session-quick-open-typeahead list-none m-0 p-0">
+              {fileOptions.length === 0 ? (
+                <li className="py-6 px-4 text-center text-[var(--nim-text-faint)] text-sm">
+                  {fileSearchQuery ? 'No files found' : 'Type to search files...'}
+                </li>
+              ) : (
+                fileOptions.slice(0, 20).map((option, index) => (
+                  <li
+                    key={option.id}
+                    className={`flex items-center gap-3 py-2 px-4 cursor-pointer transition-all duration-100 hover:bg-[var(--nim-bg-hover)] ${
+                      index === typeaheadIndex ? 'bg-[rgba(0,122,255,0.1)]' : ''
+                    }`}
+                    onClick={() => handleFileTypeaheadSelect(option)}
+                    onMouseEnter={() => {
+                      if (mouseHasMoved) {
+                        setTypeaheadIndex(index);
+                      }
+                    }}
+                  >
+                    <span className="shrink-0 flex items-center justify-center w-5 h-5 text-[var(--nim-text-muted)]">
+                      {typeof option.icon === 'string' ? (
+                        <MaterialSymbol icon={option.icon} size={16} />
+                      ) : (
+                        option.icon
+                      )}
+                    </span>
+                    <span className="flex-1 min-w-0">
+                      <span className="text-sm text-[var(--nim-text)] block overflow-hidden text-ellipsis whitespace-nowrap">
+                        {option.label}
+                      </span>
+                      {option.description && (
+                        <span className="text-xs text-[var(--nim-text-faint)] block overflow-hidden text-ellipsis whitespace-nowrap">
+                          {option.description}
+                        </span>
+                      )}
+                    </span>
+                  </li>
+                ))
+              )}
+            </ul>
+          )}
+
+          {/* Session results (hidden when typeahead is showing) */}
+          {!showTypeahead && displaySessions.length === 0 && (
             <div className="session-quick-open-empty p-10 text-center text-[var(--nim-text-faint)]">
-              {searchQuery ? 'No sessions found' : 'No recent sessions'}
+              {isFileSearchMode && selectedFilePath
+                ? `No sessions edited ${selectedFilePath}`
+                : searchQuery ? 'No sessions found' : 'No recent sessions'}
             </div>
-          ) : (
+          )}
+          {!showTypeahead && displaySessions.length > 0 && (
             <ul className="session-quick-open-list list-none m-0 p-0" ref={resultsListRef}>
               {displaySessions.map((session, index) => (
                 <li
@@ -273,15 +488,21 @@ export const SessionQuickOpen: React.FC<SessionQuickOpenProps> = ({
               <kbd className="py-0.5 px-1.5 rounded-[3px] font-mono text-[10px] bg-[var(--nim-bg)] border border-[var(--nim-border)] text-[var(--nim-text)]">Up/Down</kbd> Navigate
             </span>
             <span className="session-quick-open-hint text-[11px] text-[var(--nim-text-faint)] flex items-center gap-1">
-              <kbd className="py-0.5 px-1.5 rounded-[3px] font-mono text-[10px] bg-[var(--nim-bg)] border border-[var(--nim-border)] text-[var(--nim-text)]">Enter</kbd> Open
+              <kbd className="py-0.5 px-1.5 rounded-[3px] font-mono text-[10px] bg-[var(--nim-bg)] border border-[var(--nim-border)] text-[var(--nim-text)]">Enter</kbd> {showTypeahead ? 'Select file' : 'Open'}
             </span>
             <span className="session-quick-open-hint text-[11px] text-[var(--nim-text-faint)] flex items-center gap-1">
-              <kbd className="py-0.5 px-1.5 rounded-[3px] font-mono text-[10px] bg-[var(--nim-bg)] border border-[var(--nim-border)] text-[var(--nim-text)]">Esc</kbd> Close
+              <kbd className="py-0.5 px-1.5 rounded-[3px] font-mono text-[10px] bg-[var(--nim-bg)] border border-[var(--nim-border)] text-[var(--nim-text)]">Esc</kbd> {isFileSearchMode ? 'Clear filter' : 'Close'}
             </span>
           </div>
-          <span className="session-quick-open-hint text-[11px] text-[var(--nim-text-faint)] flex items-center gap-1">
-            <kbd className="py-0.5 px-1.5 rounded-[3px] font-mono text-[10px] bg-[var(--nim-bg)] border border-[var(--nim-border)] text-[var(--nim-text)]">⌘⇧L</kbd> Search prompts
-          </span>
+          {isFileSearchMode && selectedFilePath && fileFilteredSessionIds !== null ? (
+            <span className="session-quick-open-hint text-[11px] text-[var(--nim-primary)] flex items-center gap-1">
+              {displaySessions.length} session{displaySessions.length !== 1 ? 's' : ''} edited this file
+            </span>
+          ) : (
+            <span className="session-quick-open-hint text-[11px] text-[var(--nim-text-faint)] flex items-center gap-1">
+              <kbd className="py-0.5 px-1.5 rounded-[3px] font-mono text-[10px] bg-[var(--nim-bg)] border border-[var(--nim-border)] text-[var(--nim-text)]">⌘⇧L</kbd> Search prompts
+            </span>
+          )}
         </div>
       </div>
     </>

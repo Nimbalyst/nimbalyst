@@ -65,6 +65,8 @@ interface PromptQuickOpenProps {
   onClose: () => void;
   workspacePath: string;
   onSessionSelect: (sessionId: string) => void;
+  /** Pre-fill the search input when the modal opens (e.g. from Session Quick Open Tab switch) */
+  initialSearchQuery?: string;
 }
 
 export const PromptQuickOpen: React.FC<PromptQuickOpenProps> = ({
@@ -72,6 +74,7 @@ export const PromptQuickOpen: React.FC<PromptQuickOpenProps> = ({
   onClose,
   workspacePath,
   onSessionSelect,
+  initialSearchQuery,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -130,7 +133,7 @@ export const PromptQuickOpen: React.FC<PromptQuickOpenProps> = ({
   // Reset state when modal opens/closes
   useEffect(() => {
     if (isOpen) {
-      setSearchQuery('');
+      setSearchQuery(initialSearchQuery || '');
       setSelectedIndex(0);
       setMouseHasMoved(false);
       setTimeout(() => searchInputRef.current?.focus(), 100);
@@ -229,7 +232,8 @@ export const PromptQuickOpen: React.FC<PromptQuickOpenProps> = ({
         onClick={onClose}
       />
       <div className="prompt-quick-open-modal fixed top-[20%] left-1/2 -translate-x-1/2 w-[90%] max-w-[700px] max-h-[60vh] flex flex-col overflow-hidden rounded-lg z-[99999] bg-[var(--nim-bg)] border border-[var(--nim-border)] shadow-[0_20px_60px_rgba(0,0,0,0.3)]">
-        <div className="prompt-quick-open-header p-3 border-b border-[var(--nim-border)] relative">
+        <div className="prompt-quick-open-header p-3 border-b border-[var(--nim-border)]">
+          <div className="text-[11px] font-medium text-[var(--nim-text-faint)] uppercase tracking-wide mb-2">Prompts</div>
           <input
             ref={searchInputRef}
             type="text"
