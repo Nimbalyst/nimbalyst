@@ -80,7 +80,8 @@ export function KeyboardShortcutsDialog({ isOpen, onClose }: KeyboardShortcutsDi
         { label: 'Toggle AI Chat Panel', shortcut: KeyboardShortcuts.view.toggleAIChat }, // shared/KeyboardShortcuts.ts:46 - Cmd+Shift+A
         { label: 'Toggle Bottom Panel', shortcut: KeyboardShortcuts.view.toggleBottomPanel }, // shared/KeyboardShortcuts.ts:47 - Cmd+J
         { label: 'Toggle Terminal Panel', shortcut: KeyboardShortcuts.view.toggleTerminalPanel }, // shared/KeyboardShortcuts.ts:48 - Ctrl+`
-        { label: 'Toggle Sidebar', shortcut: KeyboardShortcuts.view.toggleSidebar }, // shared/KeyboardShortcuts.ts:49 - Cmd+B
+        { label: 'Toggle Tracker Panel', shortcut: KeyboardShortcuts.view.toggleTrackerPanel }, // shared/KeyboardShortcuts.ts:49 - Cmd+T
+        { label: 'Toggle Sidebar', shortcut: KeyboardShortcuts.view.toggleSidebar }, // shared/KeyboardShortcuts.ts:50 - Cmd+B
         { label: 'Navigate Back', shortcut: KeyboardShortcuts.view.navigateBack }, // shared/KeyboardShortcuts.ts:52 - Cmd+[
         { label: 'Navigate Forward', shortcut: KeyboardShortcuts.view.navigateForward }, // shared/KeyboardShortcuts.ts:53 - Cmd+]
         { label: 'Next Tab', shortcut: KeyboardShortcuts.view.nextTab }, // shared/KeyboardShortcuts.ts:56 - Cmd+Option+Right

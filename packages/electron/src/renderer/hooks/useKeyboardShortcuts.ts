@@ -123,9 +123,9 @@ export function useKeyboardShortcuts({
         toggleTrackerPanel();
         setTerminalPanelVisible(false);
       }
-      // Cmd+` (macOS) or Ctrl+` (Windows/Linux) for Terminal panel
+      // Ctrl+` for Terminal panel (Ctrl on all platforms, matching VS Code)
       if (workspaceMode && e.code === 'Backquote' && !e.shiftKey && !e.altKey &&
-          isAppModifier) {
+          e.ctrlKey && !e.metaKey) {
         e.preventDefault();
         e.stopPropagation();
         setTerminalPanelVisible(prev => {

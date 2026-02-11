@@ -274,6 +274,7 @@ export const HelpContent: Record<string, HelpEntry> = {
   'tracker-panel-button': {
     title: 'Trackers',
     body: 'Open the tracker panel to capture tasks, ideas, and notes.',
+    shortcut: KeyboardShortcuts.view.toggleTrackerPanel,
   },
 
   // ============================================================================
