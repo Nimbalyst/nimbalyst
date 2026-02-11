@@ -36,6 +36,7 @@ import { registerGitHandlers } from './ipc/GitHandlers';
 import { registerProjectSelectionHandlers } from './ipc/ProjectSelectionHandlers';
 import { registerUsageAnalyticsHandlers } from './ipc/UsageAnalyticsHandlers';
 import { registerWorktreeHandlers } from './ipc/WorktreeHandlers';
+import { registerActivityHandlers } from './ipc/ActivityHandlers';
 import { registerProjectMigrationHandlers } from './ipc/ProjectMigrationHandlers';
 import {
     type AppTheme,
@@ -734,6 +735,7 @@ app.whenReady().then(async () => {
     registerGitStatusHandlers();
     registerGitHandlers();
     registerWorktreeHandlers();
+    registerActivityHandlers();
     registerProjectMigrationHandlers();
     registerMCPConfigHandlers();
     registerClaudeCodePluginHandlers();

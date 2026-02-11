@@ -49,6 +49,12 @@ export const ALPHA_FEATURES: readonly AlphaFeatureDefinition[] = [
     description: 'Enable card view mode for agent sessions panel.',
     icon: 'grid_view',
   },
+  {
+    tag: 'activity-history',
+    name: 'Activity History',
+    description: 'Enable Activity History panel showing sessions, prompts, and git actions.',
+    icon: 'history',
+  },
 ] as const;
 
 /**
