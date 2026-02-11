@@ -360,8 +360,8 @@ describe('OpenAICodexProvider', () => {
     }
 
     expect(startThread).toHaveBeenCalledTimes(1);
-    const startArgs = startThread.mock.calls[0]?.[0];
-    expect(startArgs?.model).toBe('gpt-5');
+    const startArgs = (startThread.mock.calls as unknown as [Record<string, unknown>][])[0][0];
+    expect(startArgs.model).toBe('gpt-5');
   });
 
   it('supports direct handleToolCall execution through the shared tool handler', async () => {

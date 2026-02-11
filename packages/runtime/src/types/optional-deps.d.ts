@@ -1,7 +1,24 @@
 // Type declarations for optional dependencies that are dynamically loaded
 
 declare module '@anthropic-ai/claude-agent-sdk' {
-  export function query(params: { prompt: string | AsyncIterable<any>; options?: any }): AsyncGenerator<any, void> & { accountInfo(): Promise<any> };
+  export interface Query extends AsyncGenerator<any, void> {
+    interrupt(): Promise<void>;
+    setPermissionMode(mode: any): Promise<void>;
+    setModel(model?: string): Promise<void>;
+    setMaxThinkingTokens(maxThinkingTokens: number | null): Promise<void>;
+    initializationResult(): Promise<any>;
+    supportedCommands(): Promise<any[]>;
+    supportedModels(): Promise<any[]>;
+    mcpServerStatus(): Promise<any[]>;
+    accountInfo(): Promise<any>;
+    rewindFiles(userMessageId: string, options?: { dryRun?: boolean }): Promise<any>;
+    reconnectMcpServer(serverName: string): Promise<void>;
+    toggleMcpServer(serverName: string, enabled: boolean): Promise<void>;
+    setMcpServers(servers: Record<string, any>): Promise<any>;
+    streamInput(stream: AsyncIterable<any>): Promise<void>;
+    close(): void;
+  }
+  export function query(params: { prompt: string | AsyncIterable<any>; options?: any }): Query;
   export function tool(name: string, description: string, inputSchema: any, handler: any): any;
   export function createSdkMcpServer(options: any): any;
   export class AbortError extends Error {}
