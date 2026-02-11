@@ -48,7 +48,6 @@ interface SettingsSidebarProps {
   providerStatus?: Record<string, { enabled: boolean; testStatus?: string }>;
   installedPackageCount?: number;
   totalPackageCount?: number;
-  isProduction?: boolean;
   scope?: SettingsScope;
 }
 
@@ -58,12 +57,11 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
   providerStatus = {},
   installedPackageCount = 0,
   totalPackageCount = 0,
-  isProduction = import.meta.env.PROD,
   scope = 'user',
 }) => {
   // Get release channel and alpha feature flags from Jotai atoms
   const releaseChannel = useAtomValue(releaseChannelAtom);
-  const alphaFeatures = useAlphaFeatures(['sync', 'voice-mode', 'claude-plugins']);
+  const alphaFeatures = useAlphaFeatures(['sync', 'voice-mode', 'claude-plugins', 'openai-codex']);
 
   const getStatusDot = (providerId: string): 'success' | 'warning' | 'error' | undefined => {
     const status = providerStatus[providerId];
@@ -131,7 +129,7 @@ Best for complex coding tasks.`,
           name: 'OpenAI Codex',
           icon: getProviderIcon('openai', { size: 16 }),
           statusDot: getStatusDot('openai-codex'),
-          hidden: isProduction,
+          hidden: !alphaFeatures['openai-codex'],
         },
       ],
     },

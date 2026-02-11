@@ -78,7 +78,7 @@ import { registerClaudeUsageHandlers } from './ipc/ClaudeUsageHandlers';
 import { claudeUsageService } from './services/ClaudeUsageService';
 import { registerExtensionHandlers, getClaudePluginPaths, initializeExtensionFileTypes } from './ipc/ExtensionHandlers';
 import { getRegisteredExtensions } from './extensions/RegisteredFileTypes';
-import { ClaudeCodeProvider } from '@nimbalyst/runtime/ai/server';
+import { ClaudeCodeProvider, OpenAICodexProvider } from '@nimbalyst/runtime/ai/server';
 import { logger, overrideConsole } from './utils/logger';
 import { startPerformanceMonitoring, stopPerformanceMonitoring } from './utils/performanceMonitor';
 import { setupForceQuit } from './utils/forceQuit';
@@ -811,41 +811,43 @@ app.whenReady().then(async () => {
     // This allows Claude to access SDK docs when working on extension projects
     ClaudeCodeProvider.setAdditionalDirectoriesLoader(getAdditionalDirectoriesForWorkspace);
 
-    // Inject security logger for agent permission checks (dev mode only)
-    if (process.env.NODE_ENV === 'development') {
-      ClaudeCodeProvider.setSecurityLogger((message, data) => {
-        logger.agentSecurity.info(message, data);
-      });
-    }
-
-    // Inject Claude settings pattern saver
-    // Writes tool patterns to .claude/settings.local.json when user approves with "Always"
+    // Wire shared permission infrastructure for all agent providers.
+    // Both Claude Code and OpenAI Codex use the same pattern storage,
+    // trust checking, and security logging, just via different setter names.
     const claudeSettingsManager = ClaudeSettingsManager.getInstance();
-    ClaudeCodeProvider.setClaudeSettingsPatternSaver(async (workspacePath, pattern) => {
-      await claudeSettingsManager.addAllowedTool(workspacePath, pattern);
-    });
+    const permissionService = getPermissionService();
 
-    // Inject Claude settings pattern checker
-    // Checks if a pattern is in the allow list (from all settings sources)
-    ClaudeCodeProvider.setClaudeSettingsPatternChecker(async (workspacePath, pattern) => {
+    const patternSaver = async (workspacePath: string, pattern: string) => {
+      await claudeSettingsManager.addAllowedTool(workspacePath, pattern);
+    };
+    const patternChecker = async (workspacePath: string, pattern: string) => {
       const effectiveSettings = await claudeSettingsManager.getEffectiveSettings(workspacePath);
       return effectiveSettings.permissions.allow.includes(pattern);
-    });
-
-    // Inject trust checker
-    // Checks if a workspace is trusted before allowing tool execution
+    };
     // NOTE: For worktree sessions, AIService pre-resolves the worktree path to the parent
     // project (worktreeProjectPath) and passes it via documentContext.permissionsPath.
-    // ClaudeCodeProvider then uses permissionsPath for trust checks, ensuring this
+    // Providers then use permissionsPath for trust checks, ensuring this
     // checker receives the parent project path, not the worktree path.
-    const permissionService = getPermissionService();
-    ClaudeCodeProvider.setTrustChecker((workspacePath) => {
+    const trustChecker = (workspacePath: string) => {
       const mode = permissionService.getPermissionMode(workspacePath);
-      return {
-        trusted: mode !== null,
-        mode
+      return { trusted: mode !== null, mode };
+    };
+
+    if (process.env.NODE_ENV === 'development') {
+      const securityLogger = (message: string, data?: any) => {
+        logger.agentSecurity.info(message, data);
       };
-    });
+      ClaudeCodeProvider.setSecurityLogger(securityLogger);
+      OpenAICodexProvider.setSecurityLogger(securityLogger);
+    }
+
+    ClaudeCodeProvider.setClaudeSettingsPatternSaver(patternSaver);
+    ClaudeCodeProvider.setClaudeSettingsPatternChecker(patternChecker);
+    ClaudeCodeProvider.setTrustChecker(trustChecker);
+
+    OpenAICodexProvider.setPermissionPatternSaver(patternSaver);
+    OpenAICodexProvider.setPermissionPatternChecker(patternChecker);
+    OpenAICodexProvider.setTrustChecker(trustChecker);
 
     // Inject image compressor
     // Compresses images to fit within Claude API 5MB base64 limit

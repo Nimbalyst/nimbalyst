@@ -19,7 +19,7 @@ Agent providers are designed for autonomous coding tasks. They have full access 
 | Provider | Description |
 |----------|-------------|
 | Claude Code | Uses the Claude Agent SDK with full MCP integration |
-| OpenAI Codex | Uses the OpenAI Codex CLI (experimental) |
+| OpenAI Codex | Uses the OpenAI Codex SDK with agent-style streaming and tool support |
 
 ### Claude Code Provider Details
 

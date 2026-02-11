@@ -56,6 +56,15 @@ See `/docs/AI_PROVIDER_TYPES.md` for detailed documentation.
 - **LM Studio**: Local model support for privacy-focused usage
 - **Multiple provider support**: Extensible architecture for adding new AI providers
 
+### OpenAI Codex (SDK Integration)
+- **Provider ID**: `openai-codex`
+- **Implementation**: `src/ai/server/providers/OpenAICodexProvider.ts`
+- **SDK**: Uses `@openai/codex-sdk` for thread-based streaming and tool execution
+- **Features**:
+  - Agent-style streaming event handling
+  - Session resume via persisted provider session IDs
+  - Tool integration through the shared runtime tool registry
+
 ## Provider Implementation Details
 
 ### Key Files for Claude Providers

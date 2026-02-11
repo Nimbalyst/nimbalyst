@@ -48,3 +48,11 @@ declare module '@modelcontextprotocol/sdk/types.js' {
   }
   export type Tool = any;
 }
+
+declare module '@openai/codex-sdk' {
+  export class Codex {
+    constructor(options?: Record<string, unknown>);
+    startThread(options?: Record<string, unknown>): any;
+    resumeThread(threadId: string): any;
+  }
+}

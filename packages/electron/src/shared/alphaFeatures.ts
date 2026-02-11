@@ -55,6 +55,12 @@ export const ALPHA_FEATURES: readonly AlphaFeatureDefinition[] = [
     description: 'Enable Activity History panel showing sessions, prompts, and git actions.',
     icon: 'history',
   },
+  {
+    tag: 'openai-codex',
+    name: 'OpenAI Codex',
+    description: 'Enable OpenAI Codex agent provider (requires OpenAI API key).',
+    icon: 'terminal',
+  },
 ] as const;
 
 /**

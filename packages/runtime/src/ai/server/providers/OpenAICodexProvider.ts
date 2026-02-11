@@ -1,8 +1,8 @@
-import { spawn, ChildProcess } from 'child_process';
-import * as path from 'path';
-import * as os from 'os';
+import path from 'path';
 import { BaseAIProvider } from '../AIProvider';
-import { AIStreamChunk, AIToolCall, AIToolResult } from '../../types';
+import { buildUserMessageAddition } from './documentContextUtils';
+import { DEFAULT_MODELS } from '../../modelConstants';
+import { AIToolCall, AIToolResult } from '../../types';
 import {
   ProviderConfig,
   DocumentContext,
@@ -10,18 +10,76 @@ import {
   Message,
   ProviderCapabilities,
   AIProviderType,
-  ModelIdentifier
+  ModelIdentifier,
 } from '../types';
+import { AgentMessagesRepository } from '../../../storage/repositories/AgentMessagesRepository';
+import {
+  CodexClientLike,
+  CodexSdkModuleLike,
+  CodexThreadLike,
+  getEventsIterable,
+  getThreadIdFromRunResult,
+  loadCodexSdkModule,
+} from './codex/codexSdkLoader';
+import { parseCodexEvent, ParsedCodexUsage } from './codex/codexEventParser';
+import {
+  PermissionMode,
+  ToolPermissionScope,
+  PermissionDecision,
+  TrustChecker,
+  PermissionPatternSaver,
+  PermissionPatternChecker,
+  SecurityLogger,
+  ProviderPermissionMixin,
+} from './ProviderPermissionMixin';
+import { ProviderSessionManager } from './ProviderSessionManager';
+
+interface OpenAICodexProviderDeps {
+  loadSdkModule?: () => Promise<CodexSdkModuleLike>;
+}
 
 export class OpenAICodexProvider extends BaseAIProvider {
+  static readonly DEFAULT_MODEL = DEFAULT_MODELS['openai-codex'];
+  private static readonly CODEX_EXECUTION_PATTERN = 'OpenAICodex(agent-run:*)';
+
+  // Injected from Electron main process.
+  private static trustChecker: TrustChecker | null = null;
+  private static permissionPatternSaver: PermissionPatternSaver | null = null;
+  private static permissionPatternChecker: PermissionPatternChecker | null = null;
+  private static securityLogger: SecurityLogger | null = null;
+
   private apiKey: string;
   private abortController: AbortController | null = null;
-  private activeProcess: ChildProcess | null = null;
-  static readonly DEFAULT_MODEL = 'gpt-5';
+  private codexClient: CodexClientLike | null = null;
+  private codexThreads: Map<string, CodexThreadLike> = new Map();
+  private readonly loadSdkModule: () => Promise<CodexSdkModuleLike>;
 
-  constructor(config?: { apiKey?: string }) {
+  // Shared session ID management via mixin.
+  private readonly sessions = new ProviderSessionManager({ emit: this.emit.bind(this) });
+
+  // Shared permission infrastructure via mixin.
+  private readonly permissions = new ProviderPermissionMixin();
+
+  constructor(config?: { apiKey?: string }, deps?: OpenAICodexProviderDeps) {
     super();
     this.apiKey = config?.apiKey || process.env.OPENAI_API_KEY || '';
+    this.loadSdkModule = deps?.loadSdkModule ?? loadCodexSdkModule;
+  }
+
+  public static setTrustChecker(checker: TrustChecker | null): void {
+    OpenAICodexProvider.trustChecker = checker;
+  }
+
+  public static setPermissionPatternSaver(saver: PermissionPatternSaver | null): void {
+    OpenAICodexProvider.permissionPatternSaver = saver;
+  }
+
+  public static setPermissionPatternChecker(checker: PermissionPatternChecker | null): void {
+    OpenAICodexProvider.permissionPatternChecker = checker;
+  }
+
+  public static setSecurityLogger(logger: SecurityLogger | null): void {
+    OpenAICodexProvider.securityLogger = logger;
   }
 
   async initialize(config: ProviderConfig): Promise<void> {
@@ -29,23 +87,55 @@ export class OpenAICodexProvider extends BaseAIProvider {
     if (config.apiKey) {
       this.apiKey = config.apiKey;
     }
-    console.log('[OpenAICodexProvider] Initialized with config:', {
-      hasApiKey: !!this.apiKey,
-      model: config.model,
-      hasToolHandler: !!this.toolHandler
-    });
   }
 
-  // registerToolHandler is now inherited from BaseAIProvider
+  private static readonly LEGACY_MODEL_ALIASES = new Set([
+    'openai-codex:openai-codex-cli',
+    'openai-codex-cli',
+    'openai-codex:default',
+    'default',
+    'openai-codex:cli',
+    'cli',
+  ]);
+
+  /**
+   * Normalize a single model ID, mapping legacy aliases to the canonical form.
+   */
+  static normalizeModelSelection(modelId: string): string {
+    const normalized = modelId.trim().toLowerCase();
+    if (OpenAICodexProvider.LEGACY_MODEL_ALIASES.has(normalized) || normalized === 'gpt-5') {
+      return 'openai-codex:gpt-5';
+    }
+    return modelId;
+  }
+
+  /**
+   * Normalize an array of model IDs, deduplicating after normalization.
+   */
+  static normalizeModelSelections(models: string[] | undefined): string[] | undefined {
+    if (!Array.isArray(models)) {
+      return models;
+    }
+    const result: string[] = [];
+    for (const modelId of models) {
+      const mapped = OpenAICodexProvider.normalizeModelSelection(modelId);
+      if (!result.includes(mapped)) {
+        result.push(mapped);
+      }
+    }
+    return result;
+  }
 
   static getModels() {
-    return [{
-      id: ModelIdentifier.create('openai-codex', 'openai-codex-cli').combined,
-      name: 'OpenAI Codex CLI',
-      provider: 'openai-codex' as AIProviderType,
-      contextWindow: 272000,
-      maxTokens: 16384
-    }];
+    return [
+      {
+        id: ModelIdentifier.create('openai-codex', 'gpt-5').combined,
+        name: 'GPT-5 (Codex SDK)',
+        provider: 'openai-codex' as AIProviderType,
+        contextWindow: 272000,
+        maxTokens: 16384,
+      },
+    ];
   }
 
   static getDefaultModel() {
@@ -61,442 +151,52 @@ export class OpenAICodexProvider extends BaseAIProvider {
   }
 
   getDescription(): string {
-    return 'OpenAI Codex CLI for advanced code generation';
+    return 'OpenAI Codex SDK agent provider with tool and streaming support';
   }
 
-  private async *executeCodex(
-    prompt: string,
-    options?: {
-      model?: string;
-      temperature?: number;
-      maxTokens?: number;
-      tools?: any[];
-      sessionId?: string;
-      workingDirectory?: string;
-      mcpServerUrl?: string;
-    }
-  ): AsyncIterableIterator<AIStreamChunk> {
-    console.log('[OpenAICodexProvider] executeCodex called with:', {
-      promptLength: prompt.length,
-      workingDir: options?.workingDirectory,
-      model: options?.model,
-      sessionId: options?.sessionId,
-      mcpServerUrl: options?.mcpServerUrl,
-      hasApiKey: !!this.apiKey
-    });
-    const workingDir = options?.workingDirectory || process.cwd();
-    const model = options?.model || 'gpt-5';
-
-    // Build codex command arguments
-    const args = ['exec', '--json', '--skip-git-repo-check'];
-
-    // Add model if specified
-    if (model && model !== 'auto') {
-        // todo its currently pushing made up models
-      // args.push('-m', model);
-    }
-
-    console.log('[OpenAICodexProvider] Executing codex command:', 'codex', args.join(' '));
-    console.log('[OpenAICodexProvider] Prompt:', prompt);
-
-    try {
-      // Find codex executable
-      const codexPath = await this.findCodexExecutable();
-      if (!codexPath) {
-        throw new Error('Codex CLI not found. Please install @openai/codex');
-      }
-
-      // Add configuration arguments
-      const configArgs = [];
-
-      // Disable sandbox mode - it causes issues on macOS with /bin/false
-      // and we need file system access for MCP tools anyway
-      configArgs.push('-c', 'sandbox="off"');
-      console.log('[OpenAICodexProvider] Sandbox mode disabled for MCP tool access');
-
-      // Configure MCP stdio server for tool support
-      // Resolve the path relative to this file's actual location in the source tree
-      // In dev: packages/runtime/src/ai/server/providers/
-      // In prod: packages/electron/out/main/ (after bundling)
-      let mcpServerPath: string;
-
-      // Check if we're in development or production
-      if (process.env.NODE_ENV === 'development' || __dirname.includes('src/ai/server/providers')) {
-        // Development: Use the source path
-        mcpServerPath = path.resolve(__dirname, './mcp-stdio-server.js');
-      } else {
-        // Production: Look for the bundled version
-        // Try to resolve from the runtime package first
-        const runtimePath = path.resolve(__dirname, '../../../../runtime/src/ai/server/providers/mcp-stdio-server.js');
-        const electronPath = path.resolve(__dirname, './mcp-stdio-server.js');
-
-        // Check which one exists
-        if (require('fs').existsSync(runtimePath)) {
-          mcpServerPath = runtimePath;
-        } else {
-          mcpServerPath = electronPath;
-        }
-      }
-
-      console.log('[OpenAICodexProvider] MCP server path resolved to:', mcpServerPath);
-
-      // Configure Codex to use our native stdio MCP server
-      configArgs.push('-c', `mcp_servers.nimbalyst.command="node"`);
-      configArgs.push('-c', `mcp_servers.nimbalyst.args=["${mcpServerPath}"]`);
-      configArgs.push('-c', 'mcp_servers.nimbalyst.name="Nimbalyst Editor"');
-      configArgs.push('-c', 'mcp_servers.nimbalyst.description="Nimbalyst MCP tools for file operations"');
-
-      // Enable debug logging if needed
-      if (process.env.DEBUG_MCP || options?.mcpServerUrl) {
-        process.env.DEBUG_MCP_STDIO = 'true';
-        console.log('[OpenAICodexProvider] MCP stdio server configured:', mcpServerPath);
-      }
-
-      // Spawn codex process
-      const fullArgs = [...args, ...configArgs];
-      console.log('[OpenAICodexProvider] Spawning codex process:', codexPath, fullArgs.join(' '));
-      const codexProcess = spawn(codexPath, fullArgs, {
-        cwd: workingDir,
-        env: {
-          ...process.env,
-          OPENAI_API_KEY: this.apiKey
-        },
-        stdio: ['pipe', 'pipe', 'pipe']
-      });
-
-      // Track the active process so we can abort it if needed
-      this.activeProcess = codexProcess;
-
-      // Set up abort controller for this request
-      this.abortController = new AbortController();
-
-      console.log('[OpenAICodexProvider] Writing prompt to stdin:', prompt.substring(0, 200));
-      // Write prompt to stdin and close it
-      codexProcess.stdin.write(prompt);
-      codexProcess.stdin.end();
-      console.log('[OpenAICodexProvider] Prompt sent, waiting for response...');
-
-      let buffer = '';
-      let hasError = false;
-      let fullText = '';
-      let processExited = false;
-      let exitCode: number | null = null;
-
-      // Set up process exit handler
-      const processExitPromise = new Promise<void>((resolve, reject) => {
-        codexProcess.on('exit', (code) => {
-          console.log('[OpenAICodexProvider] Codex process exited with code:', code);
-          processExited = true;
-          exitCode = code;
-          if (code === 0) {
-            resolve();
-          } else {
-            reject(new Error(`Codex process exited with code ${code}`));
-          }
-        });
-
-        codexProcess.on('error', (error) => {
-          console.error('[OpenAICodexProvider] Codex process error:', error);
-          hasError = true;
-          reject(error);
-        });
-      });
-
-      // Handle stderr (codex outputs informational messages here)
-      codexProcess.stderr.on('data', (data: Buffer) => {
-        const msg = data.toString();
-        console.log('[OpenAICodexProvider] Codex info:', msg);
-        // Don't treat stderr as error unless it contains actual error keywords
-        if (msg.includes('Error:') || msg.includes('error:') || msg.includes('failed')) {
-          hasError = true;
-        }
-      });
-
-      // Handle stdout (JSON messages) and yield chunks as they arrive
-      codexProcess.stdout.on('data', (data: Buffer) => {
-        const chunk = data.toString();
-        console.log('[OpenAICodexProvider] Got stdout chunk:', chunk.substring(0, 200));
-        buffer += chunk;
-      });
-
-      // Poll for messages and yield them as they arrive
-      let chunksYielded = 0;
-      let lastYieldTime = Date.now();
-
-      try {
-        while (!processExited) {
-          // Check for abort signal
-          if (this.abortController?.signal.aborted) {
-            console.log('[OpenAICodexProvider] Processing aborted by user');
-            throw new Error('Operation cancelled');
-          }
-
-          await new Promise(resolve => setTimeout(resolve, 50)); // Poll every 50ms
-
-          // Process any buffered data
-          if (buffer.length > 0) {
-            const lines = buffer.split('\n');
-            buffer = lines[lines.length - 1]; // Keep incomplete line in buffer
-
-            for (let i = 0; i < lines.length - 1; i++) {
-              const line = lines[i].trim();
-              if (!line) continue;
-
-              try {
-                const jsonMessage = JSON.parse(line);
-                console.log('[OpenAICodexProvider] Parsed JSON message type:', jsonMessage.msg?.type || jsonMessage.type);
-
-                let messageText = '';
-                let toolCall = null;
-
-                if (jsonMessage.msg) {
-                  const msg = jsonMessage.msg;
-                  if (msg.type === 'agent_message' && msg.message) {
-                    messageText = msg.message;
-                    console.log('[OpenAICodexProvider] Got agent message:', messageText.substring(0, 100));
-                  } else if (msg.type === 'exec_command_end' && msg.formatted_output) {
-                    messageText = msg.formatted_output;
-                    console.log('[OpenAICodexProvider] Got command output:', messageText.substring(0, 100));
-                  } else if (msg.type === 'tool_use' || msg.type === 'mcp_tool_use') {
-                    // Handle tool calls from Codex via MCP
-                    toolCall = {
-                      name: msg.tool_name || msg.name,
-                      arguments: msg.arguments || msg.input
-                    };
-                    console.log('[OpenAICodexProvider] Got tool call:', toolCall.name);
-                  }
-                } else if (jsonMessage.message) {
-                  messageText = jsonMessage.message;
-                  console.log('[OpenAICodexProvider] Got direct message:', messageText.substring(0, 100));
-                } else if (jsonMessage.tool_use) {
-                  // Alternative tool call format
-                  toolCall = {
-                    name: jsonMessage.tool_use.name,
-                    arguments: jsonMessage.tool_use.arguments
-                  };
-                  console.log('[OpenAICodexProvider] Got tool call (alt format):', toolCall.name);
-                }
-
-                if (messageText) {
-                  fullText += messageText + '\n';
-                  console.log('[OpenAICodexProvider] Yielding text chunk #' + (++chunksYielded) + ':', messageText.substring(0, 100));
-                  const timeSinceLastYield = Date.now() - lastYieldTime;
-                  console.log('[OpenAICodexProvider] Time since last yield:', timeSinceLastYield, 'ms');
-                  lastYieldTime = Date.now();
-
-                  // Yield text chunk immediately
-                  const chunk: AIStreamChunk = {
-                    type: 'text',
-                    content: messageText
-                  };
-                  console.log('[OpenAICodexProvider] Yielding chunk object:', JSON.stringify(chunk));
-                  yield chunk;
-                } else if (toolCall) {
-                  console.log('[OpenAICodexProvider] Yielding tool call chunk:', toolCall.name);
-
-                  let parsedArguments: any = toolCall.arguments;
-                  let executionArgs: any = parsedArguments;
-
-                  if (typeof toolCall.arguments === 'string') {
-                    try {
-                      executionArgs = JSON.parse(toolCall.arguments);
-                      parsedArguments = executionArgs;
-                    } catch (parseError) {
-                      console.error('[OpenAICodexProvider] Failed to parse tool arguments:', parseError);
-                      executionArgs = toolCall.arguments;
-                    }
-                  }
-
-                  let executionResult: any | undefined;
-                  const canExecute = typeof executionArgs !== 'string';
-                  if (this.toolHandler && toolCall.name && canExecute) {
-                    try {
-                      executionResult = await this.executeToolCall(toolCall.name, executionArgs);
-                      console.log(`[OpenAICodexProvider] ${toolCall.name} execution succeeded`);
-                      if (executionResult !== undefined) {
-                        try {
-                          console.log(`[OpenAICodexProvider] ${toolCall.name} result:`, JSON.stringify(executionResult, null, 2));
-                        } catch (stringifyError) {
-                          console.log(`[OpenAICodexProvider] ${toolCall.name} result could not be stringified`, stringifyError);
-                        }
-                      }
-                    } catch (error) {
-                      const errorMessage = error instanceof Error ? error.message : 'Tool execution failed';
-                      const errorResult = (error as any)?.toolResult ?? { success: false, error: errorMessage };
-                      executionResult = errorResult;
-                      console.error('[OpenAICodexProvider] Tool execution failed:', error);
-                      yield {
-                        type: 'tool_error',
-                        toolError: {
-                          name: toolCall.name,
-                          arguments: executionArgs,
-                          error: errorMessage,
-                          result: errorResult
-                        }
-                      };
-                    }
-                  } else if (!this.toolHandler) {
-                    console.warn(`[OpenAICodexProvider] No tool handler registered - skipping execution for ${toolCall.name}`);
-                  } else if (!canExecute) {
-                    console.warn(`[OpenAICodexProvider] Unable to execute ${toolCall.name} - arguments could not be parsed`);
-                  }
-
-                  const chunk: AIStreamChunk = {
-                    type: 'tool_call',
-                    toolCall: {
-                      name: toolCall.name,
-                      arguments: parsedArguments,
-                      ...(executionResult !== undefined ? { result: executionResult } : {})
-                    }
-                  };
-                  yield chunk;
-                }
-              } catch (e) {
-                // Not JSON, skip
-                console.log('[OpenAICodexProvider] Could not parse as JSON:', line.substring(0, 100));
-              }
-            }
-          }
-        }
-
-        console.log('[OpenAICodexProvider] Process has exited, waiting for clean exit...');
-        // Wait for process to exit cleanly (in case there's an error)
-        await processExitPromise.catch(err => {
-          console.error('[OpenAICodexProvider] Process exit error:', err);
-          throw err;
-        });
-
-        // Process any remaining buffer
-        if (buffer.trim()) {
-          try {
-            const jsonMessage = JSON.parse(buffer.trim());
-            let messageText = '';
-
-            if (jsonMessage.msg) {
-              const msg = jsonMessage.msg;
-              if (msg.type === 'agent_message' && msg.message) {
-                messageText = msg.message;
-              } else if (msg.type === 'exec_command_end' && msg.formatted_output) {
-                messageText = msg.formatted_output;
-              }
-            } else if (jsonMessage.message) {
-              messageText = jsonMessage.message;
-            }
-
-            if (messageText) {
-              fullText += messageText;
-              yield {
-                type: 'text',
-                content: messageText  // Changed from 'text' to 'content'
-              };
-            }
-          } catch (e) {
-            // Not JSON, skip
-          }
-        }
-
-        // Send complete chunk
-        console.log('[OpenAICodexProvider] Sending complete chunk with full text:', fullText.substring(0, 100));
-        console.log('[OpenAICodexProvider] Total chunks yielded:', chunksYielded);
-
-        const completeChunk: AIStreamChunk = {
-          type: 'complete',
-          content: fullText,
-          isComplete: true,
-          usage: {
-            promptTokens: 0,
-            completionTokens: 0,
-            totalTokens: 0
-          }
-        };
-        console.log('[OpenAICodexProvider] Yielding complete chunk:', JSON.stringify(completeChunk));
-        yield completeChunk;
-        console.log('[OpenAICodexProvider] Complete chunk yielded successfully');
-      } catch (error) {
-        console.error('[OpenAICodexProvider] Process error:', error);
-        console.error('[OpenAICodexProvider] Error stack:', error instanceof Error ? error.stack : 'No stack');
-        const errorChunk: AIStreamChunk = {
-          type: 'error',
-          error: error instanceof Error ? error.message : String(error)
-        };
-        yield errorChunk;
-      } finally {
-        // Clean up process tracking
-        this.activeProcess = null;
-        this.abortController = null;
-      }
-    } catch (error) {
-      console.error('[OpenAICodexProvider] Error:', error);
-      yield {
-        type: 'error',
-        error: error instanceof Error ? error.message : String(error)
-      };
-    } finally {
-      // Ensure cleanup in case of outer errors
-      this.activeProcess = null;
-      this.abortController = null;
-    }
+  setProviderSessionData(sessionId: string, data: any): void {
+    this.sessions.setProviderSessionData(sessionId, data);
   }
 
-  private async findCodexExecutable(): Promise<string | null> {
-    // Check for custom path in environment
-    if (process.env.CODEX_PATH) {
-      return process.env.CODEX_PATH;
-    }
-
-    // Try to find codex in PATH
-    const { execSync } = require('child_process');
-    try {
-      const result = execSync('which codex', { encoding: 'utf8' }).trim();
-      if (result) {
-        console.log(`[OpenAICodexProvider] Found codex at: ${result}`);
-        return result;
-      }
-    } catch (e) {
-      // Not found in PATH
-    }
-
-    // Check common installation paths
-    const possiblePaths = [
-      path.join(os.homedir(), '.nvm', 'versions', 'node', 'v22.15.1', 'bin', 'codex'),
-      '/usr/local/bin/codex',
-      '/opt/homebrew/bin/codex',
-      path.join(os.homedir(), '.local', 'bin', 'codex'),
-    ];
-
-    const fs = require('fs');
-    for (const codexPath of possiblePaths) {
-      try {
-        fs.accessSync(codexPath, fs.constants.X_OK);
-        console.log(`[OpenAICodexProvider] Found codex at: ${codexPath}`);
-        return codexPath;
-      } catch (e) {
-        // Continue checking other paths
-      }
-    }
-
-    console.warn('[OpenAICodexProvider] Codex CLI not found');
-    return null;
+  getProviderSessionData(sessionId: string): any {
+    const { providerSessionId } = this.sessions.getProviderSessionData(sessionId);
+    return {
+      providerSessionId,
+      codexThreadId: providerSessionId,
+    };
   }
 
   async handleToolCall(
     toolCall: AIToolCall,
-    options?: {
+    _options?: {
       sessionId?: string;
       workingDirectory?: string;
     }
   ): Promise<AIToolResult> {
-    console.log('[OpenAICodexProvider] Tool calls not yet implemented for Codex CLI');
+    if (!toolCall.name) {
+      return {
+        success: false,
+        error: 'Tool name is required',
+      };
+    }
 
-    return {
-      success: false,
-      result: 'Tool calls not supported in Codex CLI mode',
-      error: 'Tool calls not supported in Codex CLI mode'
-    };
+    try {
+      const result = await this.executeToolCall(toolCall.name, toolCall.arguments ?? {});
+      return {
+        success: true,
+        result,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Tool execution failed';
+      return {
+        success: false,
+        error: message,
+        result: (error as any)?.toolResult,
+      };
+    }
   }
 
-  async cancelStream(sessionId?: string): Promise<void> {
-    console.log('[OpenAICodexProvider] Cancel requested');
+  async cancelStream(_sessionId?: string): Promise<void> {
     this.abort();
   }
 
@@ -506,177 +206,720 @@ export class OpenAICodexProvider extends BaseAIProvider {
     sessionId?: string,
     messages?: Message[],
     workspacePath?: string,
-    _attachments?: any[]
+    attachments?: any[]
   ): AsyncIterableIterator<StreamChunk> {
-    console.log('[OpenAICodexProvider] ========== sendMessage START ==========');
-    console.log('[OpenAICodexProvider] sendMessage called:', {
-      message: message.substring(0, 100),
-      hasDocumentContext: !!documentContext,
-      sessionId,
-      previousMessageCount: messages?.length || 0,
-      workspacePath
+    if (!workspacePath) {
+      yield { type: 'error', error: '[OpenAICodexProvider] workspacePath is required but was not provided' };
+      return;
+    }
+
+    if (!this.apiKey) {
+      yield { type: 'error', error: 'OpenAI API key not configured for Codex provider' };
+      return;
+    }
+
+    const systemPrompt = this.buildSystemPrompt(documentContext);
+    const { userMessageAddition, messageWithContext } = buildUserMessageAddition(message, documentContext);
+    const messageWithAttachmentHints = this.appendAttachmentHints(messageWithContext, attachments);
+
+    if (sessionId && (systemPrompt || userMessageAddition || (attachments?.length ?? 0) > 0)) {
+      const attachmentSummaries =
+        attachments?.map((attachment) => ({
+          type: attachment.type,
+          filename: attachment.filename || (attachment.filepath ? path.basename(attachment.filepath) : 'unknown'),
+          mimeType: attachment.mimeType,
+          filepath: attachment.filepath,
+        })) ?? [];
+      this.emit('promptAdditions', {
+        sessionId,
+        systemPromptAddition: systemPrompt || null,
+        userMessageAddition,
+        attachments: attachmentSummaries,
+        timestamp: Date.now(),
+      });
+    }
+
+    const shouldBootstrapFromHistory =
+      !!sessionId &&
+      !this.sessions.getSessionId(sessionId) &&
+      !!messages &&
+      messages.length > 0;
+    const prompt = this.buildCodexPrompt({
+      systemPrompt,
+      message: messageWithAttachmentHints,
+      messages,
+      shouldBootstrapFromHistory,
     });
 
+    if (sessionId) {
+      await this.logAgentMessageBestEffort(sessionId, 'input', prompt);
+    }
+
+    const permissionsPath = documentContext?.permissionsPath || workspacePath;
+    const abortController = new AbortController();
+    this.abortController = abortController;
+
+    let fullText = '';
+    let lastCumulativeText = '';
+    let usage: ParsedCodexUsage | undefined;
+
     try {
-      // Build system prompt with tool descriptions
-      const systemPrompt = this.buildSystemPrompt(documentContext);
-      console.log('[OpenAICodexProvider] System prompt generated:', systemPrompt.substring(0, 300));
+      const permissionResult = await this.ensureCodexTurnPermission(
+        sessionId,
+        workspacePath,
+        permissionsPath,
+        abortController.signal
+      );
+      if (!permissionResult.allowed) {
+        yield {
+          type: 'error',
+          error: permissionResult.message || 'OpenAI Codex turn denied by user',
+        };
+        return;
+      }
 
-      // Build the full prompt for Codex
-      let fullPrompt = '';
+      const codexThread = await this.getOrCreateThread(sessionId, workspacePath);
 
-      // Add system prompt first
-      fullPrompt += `System: ${systemPrompt}\n\n`;
+      const runResult = await codexThread.runStreamed(prompt, {
+        signal: abortController.signal,
+      });
 
-      // Add previous messages if provided
-      if (messages && messages.length > 0) {
-        for (const msg of messages) {
-          if (msg.role === 'user') {
-            fullPrompt += `User: ${msg.content}\n\n`;
-          } else if (msg.role === 'assistant') {
-            fullPrompt += `Assistant: ${msg.content}\n\n`;
+      this.captureAndPersistThreadId(sessionId, codexThread, runResult);
+
+      const events = getEventsIterable(runResult);
+      for await (const event of events) {
+        if (abortController.signal.aborted) {
+          throw new Error('Operation cancelled');
+        }
+
+        const parsedEvents = parseCodexEvent(event);
+        for (const parsedEvent of parsedEvents) {
+          if (parsedEvent.error) {
+            yield {
+              type: 'error',
+              error: parsedEvent.error,
+            };
+            continue;
+          }
+
+          if (parsedEvent.usage) {
+            usage = parsedEvent.usage;
+          }
+
+          if (parsedEvent.toolCall) {
+            yield {
+              type: 'tool_call',
+              toolCall: {
+                name: parsedEvent.toolCall.name,
+                arguments: parsedEvent.toolCall.arguments,
+                ...(parsedEvent.toolCall.result !== undefined ? { result: parsedEvent.toolCall.result } : {}),
+              },
+            };
+            continue;
+          }
+
+          if (parsedEvent.text) {
+            // The SDK may emit cumulative text (each event contains full text so far)
+            // or incremental deltas. Detect cumulative mode by checking if the new text
+            // starts with what we already emitted, and extract only the delta.
+            let delta: string;
+            if (parsedEvent.text.startsWith(lastCumulativeText) && lastCumulativeText.length > 0) {
+              delta = parsedEvent.text.slice(lastCumulativeText.length);
+              lastCumulativeText = parsedEvent.text;
+            } else {
+              delta = parsedEvent.text;
+              lastCumulativeText = parsedEvent.text;
+            }
+            if (delta) {
+              fullText += delta;
+              yield {
+                type: 'text',
+                content: delta,
+              };
+            }
           }
         }
       }
 
-      // Add the current message
-      fullPrompt += `User: ${message}\n\nAssistant:`;
-
-      // Use workspace path as working directory
-      if (!workspacePath) {
-        throw new Error('[OpenAICodexProvider] workspacePath is required but was not provided');
+      if (sessionId && fullText.trim()) {
+        await this.logAgentMessageBestEffort(sessionId, 'output', fullText);
       }
 
-      console.log('[OpenAICodexProvider] Working directory:', workspacePath);
-
-      // Get MCP server URL - hardcoded for now, should be passed from main process
-      const mcpServerUrl = 'http://127.0.0.1:3456/mcp';
-
-      // Use executeCodex to handle the actual streaming
-      console.log('[OpenAICodexProvider] Calling executeCodex with MCP server:', mcpServerUrl);
-      const streamResponse = this.executeCodex(fullPrompt, {
-        sessionId,
-        workingDirectory: workspacePath,
-        mcpServerUrl,
-        model: this.config?.model
-      });
-
-      // Convert the stream response to StreamChunk format
-      console.log('[OpenAICodexProvider] sendMessage: Starting to process stream chunks...');
-      let chunkCount = 0;
-      let totalContent = '';
-      let hasError = false;
-      let hasCompleted = false;
-
-      for await (const chunk of streamResponse) {
-        chunkCount++;
-        console.log(`[OpenAICodexProvider] sendMessage: Received chunk #${chunkCount}`);
-        console.log(`[OpenAICodexProvider] sendMessage: Chunk details:`, JSON.stringify(chunk));
-
-        if (chunk.type === 'text') {
-          const content = chunk.content || '';
-          totalContent += content;
-          console.log(`[OpenAICodexProvider] sendMessage: Yielding content chunk #${chunkCount} with ${content.length} chars`);
-
-          const yieldChunk: StreamChunk = {
-            type: 'text',  // AIService expects 'text' not 'content'!
-            content: content
-          };
-          console.log(`[OpenAICodexProvider] sendMessage: About to yield:`, JSON.stringify(yieldChunk));
-          yield yieldChunk;
-          console.log(`[OpenAICodexProvider] sendMessage: Successfully yielded content chunk #${chunkCount}`);
-        } else if (chunk.type === 'tool_call') {
-          // Forward tool calls from Codex MCP
-          console.log(`[OpenAICodexProvider] sendMessage: Tool call chunk #${chunkCount}:`, chunk.toolCall);
-          yield {
-            type: 'tool_call',
-            toolCall: chunk.toolCall
-          };
-        } else if (chunk.type === 'error') {
-          hasError = true;
-          console.error(`[OpenAICodexProvider] sendMessage: ERROR in chunk #${chunkCount}: ${chunk.error}`);
-          yield {
-            type: 'error',
-            error: chunk.error || 'Unknown error'
-          };
-        } else if (chunk.type === 'complete') {
-          hasCompleted = true;
-          console.log(`[OpenAICodexProvider] sendMessage: Stream complete at chunk #${chunkCount}`);
-          console.log(`[OpenAICodexProvider] sendMessage: Total content received: ${totalContent.length} chars`);
-          console.log(`[OpenAICodexProvider] sendMessage: Yielding complete chunk to AIService`);
-
-          // MUST yield the complete chunk so AIService knows to stop the spinner!
-          yield {
-            type: 'complete',
-            content: chunk.content || totalContent,
-            isComplete: true,
-            usage: chunk.usage
-          };
-          console.log(`[OpenAICodexProvider] sendMessage: Successfully yielded complete chunk`);
-        } else {
-          console.warn(`[OpenAICodexProvider] sendMessage: Unknown chunk type '${chunk.type}' at chunk #${chunkCount}`);
-        }
-      }
-
-      console.log(`[OpenAICodexProvider] sendMessage: Iterator complete. Processed ${chunkCount} chunks, total content: ${totalContent.length} chars`);
-      console.log(`[OpenAICodexProvider] sendMessage: hasError: ${hasError}, hasCompleted: ${hasCompleted}`);
-
-      if (!hasError && chunkCount === 0) {
-        console.error('[OpenAICodexProvider] sendMessage: WARNING - No chunks received from streamChat!');
-        yield {
-          type: 'error',
-          error: 'No response received from Codex'
-        };
-      } else if (!hasError && !hasCompleted && totalContent.length === 0) {
-        console.error('[OpenAICodexProvider] sendMessage: WARNING - No content received despite chunks!');
-        yield {
-          type: 'error',
-          error: 'Empty response from Codex'
-        };
-      }
-    } catch (error) {
-      console.error('[OpenAICodexProvider] sendMessage: FATAL ERROR:', error);
-      console.error('[OpenAICodexProvider] sendMessage: Error stack:', error instanceof Error ? error.stack : 'No stack');
       yield {
-        type: 'error',
-        error: error instanceof Error ? error.message : String(error)
+        type: 'complete',
+        content: fullText,
+        isComplete: true,
+        usage: usage ?? {
+          input_tokens: 0,
+          output_tokens: 0,
+          total_tokens: 0,
+        },
       };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const isAbort = abortController.signal.aborted || /abort|cancel/i.test(errorMessage);
+      if (!isAbort) {
+        // Evict the cached thread so the next message creates a fresh one.
+        if (sessionId) {
+          this.codexThreads.delete(sessionId);
+        }
+        yield {
+          type: 'error',
+          error: errorMessage,
+        };
+      }
     } finally {
-      console.log('[OpenAICodexProvider] ========== sendMessage END ==========');
+      if (this.abortController === abortController) {
+        this.abortController = null;
+      }
     }
   }
 
+  public resolveToolPermission(
+    requestId: string,
+    response: PermissionDecision,
+    sessionId?: string,
+    respondedBy: 'desktop' | 'mobile' = 'desktop'
+  ): void {
+    this.permissions.resolveToolPermission(
+      requestId,
+      response,
+      (_reqId, resp, by) => {
+        if (sessionId) {
+          void this.logAgentMessageBestEffort(
+            sessionId,
+            'output',
+            JSON.stringify({
+              type: 'nimbalyst_tool_result',
+              tool_use_id: _reqId,
+              result: JSON.stringify({
+                decision: resp.decision,
+                scope: resp.scope,
+                respondedAt: Date.now(),
+                respondedBy: by,
+              }),
+            })
+          );
+        }
+      },
+      respondedBy
+    );
+  }
+
+  public rejectToolPermission(requestId: string, error: Error, sessionId?: string): void {
+    this.permissions.rejectToolPermission(requestId, error, (_reqId) => {
+      if (sessionId) {
+        void this.logAgentMessageBestEffort(
+          sessionId,
+          'output',
+          JSON.stringify({
+            type: 'nimbalyst_tool_result',
+            tool_use_id: _reqId,
+            result: JSON.stringify({
+              decision: 'deny',
+              scope: 'once',
+              cancelled: true,
+              respondedAt: Date.now(),
+            }),
+            is_error: true,
+          })
+        );
+      }
+    });
+  }
+
+  public rejectAllPendingPermissions(): void {
+    this.permissions.rejectAllPendingPermissions();
+  }
+
   abort(): void {
-    console.log('[OpenAICodexProvider] Aborting current operation');
-
-    // Kill the active process if any
-    if (this.activeProcess) {
-      console.log('[OpenAICodexProvider] Killing active codex process');
-      this.activeProcess.kill('SIGTERM');
-      this.activeProcess = null;
-    }
-
-    // Signal abort via controller
     if (this.abortController) {
       this.abortController.abort();
       this.abortController = null;
     }
+    this.rejectAllPendingPermissions();
   }
 
   getCapabilities(): ProviderCapabilities {
     return {
       streaming: true,
-      tools: true,  // Via MCP bridge script
-      mcpSupport: true,  // Using stdio-to-HTTP bridge for MCP
+      tools: true,
+      mcpSupport: true,
       edits: true,
-      resumeSession: false,
-      supportsFileTools: true  // Uses MCP tools to access files
+      resumeSession: true,
+      supportsFileTools: true,
     };
   }
 
+  /**
+   * Release resources for a specific session (thread cache, thread ID).
+   * Call this when a session is deleted or no longer needed.
+   */
+  cleanupSession(sessionId: string): void {
+    this.codexThreads.delete(sessionId);
+    this.sessions.deleteSession(sessionId);
+  }
+
   destroy(): void {
-    console.log('[OpenAICodexProvider] Destroying provider');
     this.abort();
+    this.codexThreads.clear();
+    this.sessions.clear();
+    this.codexClient = null;
+    this.permissions.clearSessionCache();
     this.removeAllListeners();
+  }
+
+  private async getCodexClient(): Promise<CodexClientLike> {
+    if (this.codexClient) {
+      return this.codexClient;
+    }
+
+    const sdkModule = await this.loadSdkModule();
+    this.codexClient = new sdkModule.Codex({
+      apiKey: this.apiKey,
+    });
+    return this.codexClient;
+  }
+
+  private static readonly MAX_CACHED_THREADS = 50;
+
+  private async getOrCreateThread(sessionId: string | undefined, workspacePath: string): Promise<CodexThreadLike> {
+    const client = await this.getCodexClient();
+    const threadOptions = this.getThreadOptions(workspacePath);
+
+    if (!sessionId) {
+      return client.startThread(threadOptions);
+    }
+
+    const existingThread = this.codexThreads.get(sessionId);
+    if (existingThread) {
+      return existingThread;
+    }
+
+    // Evict oldest cached threads when the cache exceeds the limit.
+    // Also evict the session ID mapping so resume uses the persisted database value
+    // rather than a stale in-memory reference.
+    if (this.codexThreads.size >= OpenAICodexProvider.MAX_CACHED_THREADS) {
+      const firstKey = this.codexThreads.keys().next().value;
+      if (firstKey !== undefined) {
+        this.codexThreads.delete(firstKey);
+        this.sessions.deleteSession(firstKey);
+      }
+    }
+
+    const existingThreadId = this.sessions.getSessionId(sessionId);
+    const thread = existingThreadId
+      ? client.resumeThread(existingThreadId, threadOptions)
+      : client.startThread(threadOptions);
+
+    this.codexThreads.set(sessionId, thread);
+    this.captureAndPersistThreadId(sessionId, thread);
+    return thread;
+  }
+
+  private getThreadOptions(workspacePath: string): Record<string, unknown> {
+    return {
+      model: this.getConfiguredModel(),
+      workingDirectory: workspacePath,
+      skipGitRepoCheck: true,
+      // Nimbalyst handles approvals via ToolPermission widget flow.
+      approvalPolicy: 'never',
+      sandboxMode: 'workspace-write',
+      modelReasoningEffort: 'high',
+    };
+  }
+
+  private getConfiguredModel(): string {
+    const configured = this.config?.model || OpenAICodexProvider.DEFAULT_MODEL;
+    const parsed = ModelIdentifier.tryParse(configured);
+    const resolved = parsed ? parsed.model : configured.replace(/^openai-codex:/, '');
+    const normalized = resolved.toLowerCase();
+    if (normalized === 'openai-codex-cli' || normalized === 'default' || normalized === 'cli') {
+      return 'gpt-5';
+    }
+    return resolved;
+  }
+
+  private buildCodexPrompt(options: {
+    systemPrompt: string;
+    message: string;
+    messages?: Message[];
+    shouldBootstrapFromHistory: boolean;
+  }): string {
+    const parts: string[] = [];
+
+    if (options.systemPrompt) {
+      parts.push(`<SYSTEM>\n${options.systemPrompt}\n</SYSTEM>`);
+    }
+
+    if (options.shouldBootstrapFromHistory && options.messages && options.messages.length > 0) {
+      const history = options.messages
+        .filter((msg) => (msg.role === 'user' || msg.role === 'assistant' || msg.role === 'system') && !!msg.content?.trim())
+        .map((msg) => `${msg.role.toUpperCase()}: ${OpenAICodexProvider.sanitizeTagContent(msg.content || '')}`)
+        .join('\n\n');
+      if (history) {
+        parts.push(`<CONVERSATION_HISTORY>\n${history}\n</CONVERSATION_HISTORY>`);
+      }
+    }
+
+    parts.push(`USER: ${options.message}`);
+    return parts.join('\n\n');
+  }
+
+  /**
+   * Strip XML-like tags that could break out of structured prompt sections.
+   * This prevents message content from injecting fake </CONVERSATION_HISTORY>,
+   * <SYSTEM>, etc. tags that would alter the prompt structure.
+   *
+   * Handles bare tags, tags with attributes, and self-closing variants:
+   *   <SYSTEM>, </SYSTEM>, <SYSTEM id="x">, <SYSTEM/>, etc.
+   */
+  private static sanitizeTagContent(content: string): string {
+    return content.replace(/<\/?(?:SYSTEM|CONVERSATION_HISTORY|USER)\b[^>]*\/?>/gi, '');
+  }
+
+  private appendAttachmentHints(message: string, attachments?: any[]): string {
+    if (!attachments || attachments.length === 0) {
+      return message;
+    }
+
+    const attachmentList = attachments
+      .map((attachment) => {
+        const displayName =
+          attachment.filename ||
+          (attachment.filepath ? path.basename(attachment.filepath) : attachment.id || 'attachment');
+        return `- ${displayName}${attachment.filepath ? ` (${attachment.filepath})` : ''}`;
+      })
+      .join('\n');
+
+    return `${message}\n\nAttached files:\n${attachmentList}`;
+  }
+
+  private captureAndPersistThreadId(
+    sessionId: string | undefined,
+    thread: CodexThreadLike,
+    runResult?: unknown
+  ): void {
+    if (!sessionId) {
+      return;
+    }
+
+    const threadId = thread.id || getThreadIdFromRunResult(runResult);
+    if (!threadId) {
+      return;
+    }
+
+    // captureSessionId is idempotent - skips emit if same value already stored.
+    this.sessions.captureSessionId(sessionId, threadId);
+  }
+
+  private async ensureCodexTurnPermission(
+    sessionId: string | undefined,
+    workspacePath: string,
+    permissionsPath: string,
+    signal: AbortSignal
+  ): Promise<{ allowed: boolean; message?: string }> {
+    const pathForTrust = permissionsPath || workspacePath;
+    let trustMode: PermissionMode = null;
+
+    if (pathForTrust && OpenAICodexProvider.trustChecker) {
+      const trustStatus = OpenAICodexProvider.trustChecker(pathForTrust);
+      trustMode = trustStatus.mode;
+
+      if (!trustStatus.trusted) {
+        this.logSecurity('[OpenAICodexProvider] Workspace not trusted, denying Codex turn', {
+          workspacePath: pathForTrust,
+        });
+        return {
+          allowed: false,
+          message: 'Workspace is not trusted. Please trust the workspace to use AI tools.',
+        };
+      }
+
+      // Trusted fast-path modes.
+      if (trustStatus.mode === 'bypass-all' || trustStatus.mode === 'allow-all') {
+        return { allowed: true };
+      }
+    }
+
+    // If trust mode is not explicitly "ask", allow by default.
+    // This keeps non-Electron/test environments functional even when loaders aren't injected.
+    if (trustMode !== 'ask') {
+      return { allowed: true };
+    }
+
+    const pattern = OpenAICodexProvider.CODEX_EXECUTION_PATTERN;
+    if (this.permissions.sessionApprovedPatterns.has(pattern)) {
+      this.logSecurity('[OpenAICodexProvider] Pattern already approved this session', { pattern });
+      return { allowed: true };
+    }
+
+    if (workspacePath && OpenAICodexProvider.permissionPatternChecker) {
+      try {
+        const isAllowed = await OpenAICodexProvider.permissionPatternChecker(workspacePath, pattern);
+        if (isAllowed) {
+          this.permissions.sessionApprovedPatterns.add(pattern);
+          this.logSecurity('[OpenAICodexProvider] Pattern already allowed in settings', { pattern });
+          return { allowed: true };
+        }
+      } catch (error) {
+        this.logSecurity('[OpenAICodexProvider] Failed to check persisted pattern', { error });
+      }
+    }
+
+    if (!sessionId) {
+      return {
+        allowed: false,
+        message: 'OpenAI Codex permission request requires an active session.',
+      };
+    }
+
+    const requestId = `tool-${sessionId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const rawCommand = `Allow OpenAI Codex to run agent tools in ${workspacePath}`;
+    const patternDisplayName = 'OpenAI Codex agent runs';
+    const warnings = ['OpenAI Codex may run shell commands, edit files, and fetch web content during this turn.'];
+
+    await this.logAgentMessageBestEffort(
+      sessionId,
+      'output',
+      JSON.stringify({
+        type: 'nimbalyst_tool_use',
+        id: requestId,
+        name: 'ToolPermission',
+        input: {
+          requestId,
+          toolName: 'OpenAICodex',
+          rawCommand,
+          pattern,
+          patternDisplayName,
+          isDestructive: true,
+          warnings,
+          workspacePath,
+        },
+      })
+    );
+
+    const request = {
+      id: requestId,
+      toolName: 'OpenAICodex',
+      rawCommand,
+      actionsNeedingApproval: [{
+        action: {
+          pattern,
+          displayName: patternDisplayName,
+          command: rawCommand,
+          isDestructive: true,
+          referencedPaths: [],
+          hasRedirection: false,
+        },
+        decision: 'ask' as const,
+        reason: 'OpenAI Codex turn requires user approval',
+        isDestructive: true,
+        isRisky: true,
+        warnings,
+        outsidePaths: [],
+        sensitivePaths: [],
+      }],
+      hasDestructiveActions: true,
+      createdAt: Date.now(),
+    };
+
+    const responsePromise = new Promise<{ decision: 'allow' | 'deny'; scope: ToolPermissionScope }>((resolve, reject) => {
+      this.permissions.pendingToolPermissions.set(requestId, {
+        resolve,
+        reject,
+        request,
+      });
+
+      signal.addEventListener('abort', () => {
+        this.permissions.pendingToolPermissions.delete(requestId);
+        reject(new Error('Request aborted'));
+      }, { once: true });
+    });
+
+    this.pollForPermissionResponse(sessionId, requestId, signal).catch(() => {
+      // Polling failure does not block IPC response path.
+    });
+
+    this.emit('toolPermission:pending', {
+      requestId,
+      sessionId,
+      workspacePath,
+      request,
+      timestamp: Date.now(),
+    });
+
+    try {
+      const response = await responsePromise;
+
+      if (response.decision === 'allow' && response.scope !== 'once') {
+        this.permissions.sessionApprovedPatterns.add(pattern);
+      }
+
+      if (
+        response.decision === 'allow' &&
+        (response.scope === 'always' || response.scope === 'always-all') &&
+        workspacePath &&
+        OpenAICodexProvider.permissionPatternSaver
+      ) {
+        try {
+          await OpenAICodexProvider.permissionPatternSaver(workspacePath, pattern);
+        } catch (error) {
+          console.error('[OPENAI-CODEX] Failed to persist permission pattern:', error);
+        }
+      }
+
+      this.emit('toolPermission:resolved', {
+        requestId,
+        sessionId,
+        response,
+        timestamp: Date.now(),
+      });
+
+      if (response.decision === 'allow') {
+        return { allowed: true };
+      }
+
+      return {
+        allowed: false,
+        message: 'OpenAI Codex turn denied by user',
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Permission request cancelled';
+      return {
+        allowed: false,
+        message,
+      };
+    }
+  }
+
+  private async pollForPermissionResponse(
+    sessionId: string,
+    requestId: string,
+    signal: AbortSignal
+  ): Promise<void> {
+    try {
+      AgentMessagesRepository.getStore();
+    } catch {
+      return;
+    }
+
+    const initialPollInterval = 500;
+    const maxPollInterval = 5000;
+    const maxPollTime = 10 * 60 * 1000;
+    const startTime = Date.now();
+    const pollLimit = 50;
+    let currentInterval = initialPollInterval;
+
+    while (!signal.aborted && Date.now() - startTime < maxPollTime) {
+      if (!this.permissions.pendingToolPermissions.has(requestId)) {
+        return;
+      }
+
+      try {
+        const messages = await AgentMessagesRepository.list(sessionId, { limit: pollLimit });
+
+        for (const msg of messages) {
+          // Fast-path: skip messages that can't contain our requestId.
+          if (!msg.content.includes(requestId)) {
+            continue;
+          }
+
+          try {
+            const content = JSON.parse(msg.content);
+
+            if (content.type === 'nimbalyst_tool_result' && content.tool_use_id === requestId) {
+              const result = typeof content.result === 'string' ? JSON.parse(content.result) : content.result;
+              if (!OpenAICodexProvider.isValidPermissionResponse(result)) {
+                this.logSecurity('[OpenAICodexProvider] Invalid permission response shape', { requestId, result });
+                continue;
+              }
+              const pending = this.permissions.pendingToolPermissions.get(requestId);
+              if (pending) {
+                pending.resolve({ decision: result.decision, scope: result.scope });
+                this.permissions.pendingToolPermissions.delete(requestId);
+                this.logSecurity('[OpenAICodexProvider] Found nimbalyst_tool_result response', {
+                  requestId,
+                  decision: result.decision,
+                  scope: result.scope,
+                });
+              }
+              return;
+            }
+
+            // Legacy compatibility for older response message format.
+            if (content.type === 'permission_response' && content.requestId === requestId) {
+              if (!OpenAICodexProvider.isValidPermissionResponse(content)) {
+                this.logSecurity('[OpenAICodexProvider] Invalid legacy permission response shape', { requestId, content });
+                continue;
+              }
+              const pending = this.permissions.pendingToolPermissions.get(requestId);
+              if (pending) {
+                pending.resolve({ decision: content.decision, scope: content.scope });
+                this.permissions.pendingToolPermissions.delete(requestId);
+                this.logSecurity('[OpenAICodexProvider] Found legacy permission_response', {
+                  requestId,
+                  decision: content.decision,
+                  scope: content.scope,
+                });
+              }
+              return;
+            }
+          } catch {
+            // Skip non-JSON messages.
+          }
+        }
+      } catch (error) {
+        this.logSecurity('[OpenAICodexProvider] Error polling for permission response', { error });
+      }
+
+      await new Promise(resolve => setTimeout(resolve, currentInterval));
+      // Exponential backoff: user responses are fast (< 2s) or very slow (manual).
+      currentInterval = Math.min(currentInterval * 1.5, maxPollInterval);
+    }
+
+    // Polling timed out - reject the pending promise so ensureCodexTurnPermission doesn't hang.
+    const pending = this.permissions.pendingToolPermissions.get(requestId);
+    if (pending) {
+      pending.reject(new Error('Permission request timed out'));
+      this.permissions.pendingToolPermissions.delete(requestId);
+    }
+  }
+
+  private static readonly VALID_DECISIONS = new Set(['allow', 'deny']);
+  private static readonly VALID_SCOPES = new Set(['once', 'session', 'always', 'always-all']);
+
+  private static isValidPermissionResponse(value: unknown): value is { decision: 'allow' | 'deny'; scope: ToolPermissionScope } {
+    if (!value || typeof value !== 'object') return false;
+    const record = value as Record<string, unknown>;
+    return (
+      typeof record.decision === 'string' &&
+      OpenAICodexProvider.VALID_DECISIONS.has(record.decision) &&
+      typeof record.scope === 'string' &&
+      OpenAICodexProvider.VALID_SCOPES.has(record.scope)
+    );
+  }
+
+  private logSecurity(message: string, data?: any): void {
+    OpenAICodexProvider.securityLogger?.(message, data);
+  }
+
+  private async logAgentMessageBestEffort(
+    sessionId: string,
+    direction: 'input' | 'output',
+    content: string
+  ): Promise<void> {
+    try {
+      AgentMessagesRepository.getStore();
+    } catch {
+      return;
+    }
+
+    try {
+      await this.logAgentMessage(sessionId, 'openai-codex', direction, content, undefined, false, undefined, true);
+    } catch {
+      // Runtime unit tests and some non-Electron contexts don't provide the AgentMessagesRepository adapter.
+      // Logging is best-effort for this provider and should not fail the request flow.
+    }
   }
 }

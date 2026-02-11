@@ -5,7 +5,7 @@
 import { BrowserWindow } from 'electron';
 import { safeHandle } from '../../utils/ipcRegistry';
 import Store from 'electron-store';
-import { SessionManager, ProviderFactory, ModelRegistry, AIProvider, isAskUserQuestionProvider, ClaudeCodeProvider } from '@nimbalyst/runtime/ai/server';
+import { SessionManager, ProviderFactory, ModelRegistry, AIProvider, isAskUserQuestionProvider, ClaudeCodeProvider, OpenAICodexProvider } from '@nimbalyst/runtime/ai/server';
 import { getSessionStateManager } from '@nimbalyst/runtime/ai/server/SessionStateManager';
 import { parseContextUsageMessage } from '@nimbalyst/runtime/ai/server/utils/contextUsage';
 import { isBedrockToolSearchError } from '@nimbalyst/runtime/ai/server/utils/errorDetection';
@@ -35,7 +35,7 @@ import { windowStates, findWindowByWorkspace } from '../../window/WindowManager'
 import { sessionFileTracker } from '../SessionFileTracker';
 import {AnalyticsService} from "../analytics/AnalyticsService.ts";
 import { historyManager } from '../../HistoryManager';
-import { getAIProviderOverrides, saveAIProviderOverrides, clearAIProviderOverrides, getWorkspaceState } from '../../utils/store';
+import { getAIProviderOverrides, saveAIProviderOverrides, clearAIProviderOverrides, getWorkspaceState, getAlphaFeatures } from '../../utils/store';
 import { mergeAISettings } from '../../utils/aiSettingsMerge';
 import { DocumentContextService, type RawDocumentContext, type PreparedDocumentContext } from '@nimbalyst/runtime';
 import { ALL_PACKAGES } from '../../../shared/toolPackages';
@@ -172,6 +172,13 @@ function extractModelForProvider(
   fullModel: string,
   provider: AIProviderType
 ): string | null {
+  if (provider === 'openai-codex') {
+    const parsed = ModelIdentifier.tryParse(fullModel);
+    const rawModel = parsed ? parsed.model : fullModel;
+    const normalized = OpenAICodexProvider.normalizeModelSelection(rawModel);
+    return normalized.replace(/^openai-codex:/, '');
+  }
+
   // Claude Code keeps the full model ID (including suffix like -1m)
   if (provider === 'claude-code') {
     return fullModel;
@@ -477,6 +484,7 @@ export class AIService {
   private sessionManager: SessionManager;
   private settingsStore: Store<Record<string, unknown>> | null = null;
   private readonly analytics = AnalyticsService.getInstance();
+  private cachedNormalizedProviderSettings: Record<string, any> | null = null;
   // Store reference to sendMessage handler for queue processing
   private sendMessageHandler: ((event: Electron.IpcMainInvokeEvent, message: string, documentContext?: DocumentContext, sessionId?: string, workspacePath?: string) => Promise<{ content: string }>) | null = null;
   // NOTE: Providers are now tracked per-session in ProviderFactory, not per-window
@@ -1456,16 +1464,15 @@ export class AIService {
         initConfig.apiKey = apiKey;
       }
 
-      // Only add model if it exists and provider isn't openai-codex
-      // openai-codex manages its own model selection
+      // Only skip explicit model assignment for claude-code (it manages variants internally)
       // Check both session.model (set via UI) and providerConfig.model (set at creation)
-      if ((session.model || session.providerConfig?.model) && provider !== 'openai-codex') {
+      if ((session.model || session.providerConfig?.model) && provider !== 'claude-code') {
         const fullModel = session.model || session.providerConfig?.model;
         if (fullModel) {
           const modelForProvider = extractModelForProvider(fullModel, provider);
           if (modelForProvider !== null) {
             initConfig.model = modelForProvider;
-          } else if (provider !== 'claude-code') {
+          } else {
             // extractModelForProvider returned null - fall back to default
             const defaultModel = await ModelRegistry.getDefaultModel(provider);
             if (defaultModel) {
@@ -1477,7 +1484,7 @@ export class AIService {
             }
           }
         }
-      } else if (provider !== 'claude-code' && provider !== 'openai-codex') {
+      } else if (provider !== 'claude-code') {
         // No model specified - get default
         const defaultModel = await ModelRegistry.getDefaultModel(provider);
         if (defaultModel) {
@@ -1718,8 +1725,8 @@ export class AIService {
           reinitConfig.baseUrl = providerSettings['lmstudio']?.baseUrl || 'http://127.0.0.1:8234';
         }
 
-        // Only add model if it exists (openai-codex manages selection itself)
-        if ((session.model || session.providerConfig?.model) && session.provider !== 'openai-codex') {
+        // Only skip explicit model assignment for claude-code (it manages variants internally)
+        if ((session.model || session.providerConfig?.model) && !isProviderClaudeCode) {
           const fullModel = session.model || session.providerConfig?.model;
 
           if (fullModel) {
@@ -1738,7 +1745,7 @@ export class AIService {
               }
             }
           }
-        } else if (!isProviderClaudeCode && session.provider !== 'openai-codex') {
+        } else if (!isProviderClaudeCode) {
           // No model specified - get default
           const defaultModel = await ModelRegistry.getDefaultModel(session.provider as AIProviderType);
           if (defaultModel) {
@@ -1789,7 +1796,12 @@ export class AIService {
         // CRITICAL: Restore provider session data from database
         // This is essential for session resumption (e.g., Claude Code sessions)
         if (session.providerSessionId && provider.setProviderSessionData) {
-          provider.setProviderSessionData(session.id, { claudeSessionId: session.providerSessionId });
+          provider.setProviderSessionData(session.id, {
+            providerSessionId: session.providerSessionId,
+            // Backward-compatible keys for existing providers
+            claudeSessionId: session.providerSessionId,
+            codexThreadId: session.providerSessionId,
+          });
         }
 
         // Register tool handler - targetFilePath will be determined dynamically per tool call
@@ -2615,8 +2627,12 @@ export class AIService {
               // This completion-time save is kept as a fallback in case the early save was missed
               if (provider.getProviderSessionData) {
                 const providerData = provider.getProviderSessionData(session.id);
-                if (providerData?.claudeSessionId) {
-                  await this.sessionManager.updateProviderSessionData(session.id, providerData.claudeSessionId);
+                const providerSessionId =
+                  providerData?.providerSessionId ||
+                  providerData?.claudeSessionId ||
+                  providerData?.codexThreadId;
+                if (providerSessionId) {
+                  await this.sessionManager.updateProviderSessionData(session.id, providerSessionId);
                 }
               }
 
@@ -3493,7 +3509,7 @@ export class AIService {
     // Settings handlers
     safeHandle('ai:getSettings', async () => {
       const apiKeys = this.getSettingsStore().get('apiKeys', {}) as Record<string, string>;
-      const providerSettings = this.getSettingsStore().get('providerSettings', {}) as any;
+      const providerSettings = this.getNormalizedProviderSettings();
       const showToolCalls = this.getSettingsStore().get('showToolCalls', false) as boolean;
       const aiDebugLogging = this.getSettingsStore().get('aiDebugLogging', false) as boolean;
       const showPromptAdditions = this.getSettingsStore().get('showPromptAdditions', false) as boolean;
@@ -3552,7 +3568,8 @@ export class AIService {
       }
 
       if (settings.providerSettings) {
-        this.getSettingsStore().set('providerSettings', settings.providerSettings);
+        this.cachedNormalizedProviderSettings = null;
+        this.getSettingsStore().set('providerSettings', this.normalizeProviderSettings(settings.providerSettings));
       }
 
       if (settings.showToolCalls !== undefined) {
@@ -3626,9 +3643,46 @@ export class AIService {
           return { success: models.length > 0, provider };
         }
 
-        // For OpenAI Codex, just check if API key is present (CLI will validate on use)
+        // For OpenAI Codex, run a real SDK request to validate credentials and connectivity
         if (provider === 'openai-codex') {
-          // We already checked for API key above, so just return success
+          const defaultModel = await ModelRegistry.getDefaultModel('openai-codex');
+          const testProvider = new OpenAICodexProvider();
+          const windowState = windowStates.get(event.sender.id);
+          const workspacePath = windowState?.workspacePath || process.cwd();
+
+          await testProvider.initialize({
+            apiKey,
+            model: defaultModel,
+            maxTokens: 256,
+          });
+
+          let sawResponse = false;
+          const response = testProvider.sendMessage(
+            'Reply with exactly "ok".',
+            undefined,
+            undefined,
+            [],
+            workspacePath
+          );
+
+          for await (const chunk of response) {
+            if (!chunk) continue;
+            if (chunk.type === 'error') {
+              throw new Error(chunk.error || 'Unknown Codex error');
+            }
+            if (chunk.type === 'text' && (chunk.content || '').trim().length > 0) {
+              sawResponse = true;
+            }
+            if (chunk.type === 'complete') {
+              break;
+            }
+          }
+
+          testProvider.destroy();
+          if (!sawResponse) {
+            throw new Error('No response content received from Codex SDK');
+          }
+
           return { success: true, provider };
         }
 
@@ -3709,7 +3763,7 @@ export class AIService {
       // Clear cache to get fresh models
       ModelRegistry.clearCache();
 
-      const providerSettings = this.getSettingsStore().get('providerSettings', {}) as Record<AIProviderType, any>;
+      const providerSettings = this.getNormalizedProviderSettings() as Record<AIProviderType, any>;
       const apiKeys = this.getSettingsStore().get('apiKeys', {}) as Record<string, string>;
 
       //   anthropic: !!apiKeys['anthropic'],
@@ -3788,7 +3842,7 @@ export class AIService {
     // Get ENABLED models for actual use
     safeHandle('ai:getModels', async () => {
       console.log('[AIService] ai:getModels called - fetching enabled models');
-      const providerSettings = this.getSettingsStore().get('providerSettings', {}) as Record<AIProviderType, any>;
+      const providerSettings = this.getNormalizedProviderSettings() as Record<AIProviderType, any>;
       const apiKeys = this.getSettingsStore().get('apiKeys', {}) as Record<string, string>;
       const claudeCodeSettings = providerSettings['claude-code'] || {};
 
@@ -3825,8 +3879,8 @@ export class AIService {
           models: providerSettings['openai']?.models
         },
         'openai-codex': {
-          enabled: providerSettings['openai-codex']?.enabled === true && !!(apiKeys['openai'] || process.env.OPENAI_API_KEY),
-          models: providerSettings['openai-codex']?.models
+          enabled: providerSettings['openai-codex']?.enabled === true && !!(apiKeys['openai'] || process.env.OPENAI_API_KEY) && getAlphaFeatures()['openai-codex'] === true,
+          models: OpenAICodexProvider.normalizeModelSelections(providerSettings['openai-codex']?.models)
         },
         'lmstudio': {
           enabled: providerSettings['lmstudio']?.enabled === true,
@@ -3998,8 +4052,49 @@ export class AIService {
     };
   }
 
+  private getNormalizedProviderSettings(): Record<string, any> {
+    if (this.cachedNormalizedProviderSettings) {
+      return this.cachedNormalizedProviderSettings;
+    }
+    const providerSettings = this.getSettingsStore().get('providerSettings', {}) as Record<string, any>;
+    const normalized = this.normalizeProviderSettings(providerSettings);
+    if (normalized !== providerSettings) {
+      this.getSettingsStore().set('providerSettings', normalized);
+    }
+    this.cachedNormalizedProviderSettings = normalized;
+    return normalized;
+  }
+
+  private normalizeProviderSettings(providerSettings: Record<string, any>): Record<string, any> {
+    if (!providerSettings || typeof providerSettings !== 'object') {
+      return providerSettings;
+    }
+
+    const codexModels = providerSettings['openai-codex']?.models;
+    if (!Array.isArray(codexModels)) {
+      return providerSettings;
+    }
+
+    const normalizedCodexModels = OpenAICodexProvider.normalizeModelSelections(codexModels) || codexModels;
+    const hasChanges =
+      normalizedCodexModels.length !== codexModels.length ||
+      normalizedCodexModels.some((modelId, index) => modelId !== codexModels[index]);
+
+    if (!hasChanges) {
+      return providerSettings;
+    }
+
+    return {
+      ...providerSettings,
+      'openai-codex': {
+        ...providerSettings['openai-codex'],
+        models: normalizedCodexModels,
+      },
+    };
+  }
+
   private getProviderSetting(provider: string, key: string): any {
-    const providerSettings = this.getSettingsStore().get('providerSettings', {}) as any;
+    const providerSettings = this.getNormalizedProviderSettings() as any;
     return providerSettings[provider]?.[key];
   }
 

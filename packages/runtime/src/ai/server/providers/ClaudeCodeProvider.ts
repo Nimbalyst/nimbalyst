@@ -34,6 +34,7 @@ import { setupClaudeCodeEnvironment, getClaudeCodeExecutableOptions, getClaudeCo
 import { SessionManager } from '../SessionManager';
 import { parseBashForFileOps, hasShellChainingOperators, splitOnShellOperators } from './bashUtils';
 import { DEFAULT_EFFORT_LEVEL } from '../effortLevels';
+import { ProviderSessionManager } from './ProviderSessionManager';
 
 /**
  * SDK-native tools that are executed by the Claude Code SDK itself (not by Nimbalyst).
@@ -76,7 +77,8 @@ const CLAUDE_CODE_MODEL_LABELS: Record<ClaudeCodeVariant, string> = {
 export class ClaudeCodeProvider extends BaseAIProvider {
   // Single abort controller - each provider instance is per-session via ProviderFactory
   private abortController: AbortController | null = null;
-  private claudeSessionIds: Map<string, string> = new Map(); // Our session ID -> Claude session ID
+  // Shared session ID management via mixin.
+  private readonly sessions = new ProviderSessionManager({ emit: this.emit.bind(this) });
   private currentMode?: 'planning' | 'agent'; // Track session mode for prompt customization and tool filtering
   private slashCommands: string[] = []; // Available slash commands from SDK
   private editedFilesThisTurn: Set<string> = new Set(); // Track files edited in current turn
@@ -888,16 +890,9 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
       // Handle session resumption and branching
       if (sessionId) {
-        const claudeSessionId = this.claudeSessionIds.get(sessionId);
-        // console.log('[CLAUDE-CODE] Session resumption check:', {
-        //   sessionId,
-        //   existingClaudeSessionId: claudeSessionId,
-        //   branchedFromSessionId: (documentContext as any)?.branchedFromSessionId,
-        //   branchedFromProviderSessionId: (documentContext as any)?.branchedFromProviderSessionId,
-        // });
+        const claudeSessionId = this.sessions.getSessionId(sessionId);
         if (claudeSessionId) {
           options.resume = claudeSessionId;
-          // console.log('[CLAUDE-CODE] Resuming existing session:', claudeSessionId);
         } else {
           // Check if this is a branched session (forked from another session)
           const branchedFromSessionId = (documentContext as any)?.branchedFromSessionId;
@@ -906,19 +901,15 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             // Resume from source session's provider session ID and fork it
             options.resume = branchedFromProviderSessionId;
             options.forkSession = true;
-            // console.log('[CLAUDE-CODE] Branching from source session:', branchedFromSessionId, 'with provider session:', branchedFromProviderSessionId);
           } else if (branchedFromSessionId) {
             // Fallback: try the in-memory map (if source was used in this app session)
-            const sourceClaudeSessionId = this.claudeSessionIds.get(branchedFromSessionId);
+            const sourceClaudeSessionId = this.sessions.getSessionId(branchedFromSessionId);
             if (sourceClaudeSessionId) {
               options.resume = sourceClaudeSessionId;
               options.forkSession = true;
-              // console.log('[CLAUDE-CODE] Branching from source session (in-memory):', branchedFromSessionId);
             } else {
               console.warn('[CLAUDE-CODE] Cannot branch: source provider session ID not available. branchedFromSessionId:', branchedFromSessionId);
             }
-          } else {
-            // console.log('[CLAUDE-CODE] Starting new session (no branch source or existing session ID)');
           }
         }
       }
@@ -1137,14 +1128,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             // }
 
             if (chunk.session_id && sessionId) {
-              // Store the claude session ID in memory
-              this.claudeSessionIds.set(sessionId, chunk.session_id);
-              // Emit event to persist immediately - don't wait for completion
-              // This ensures session can be resumed even if interrupted/cancelled
-              this.emit('session:providerSessionReceived', {
-                sessionId,
-                providerSessionId: chunk.session_id
-              });
+              this.sessions.captureSessionId(sessionId, chunk.session_id);
             }
 
             if (chunk.type === 'assistant' && chunk.message) {
@@ -1537,11 +1521,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
               // If it's an expired session error, clear the stored session ID and provide guidance
               if (isExpiredSessionError && sessionId) {
                 console.log(`[CLAUDE-CODE] Detected expired session error for session ${sessionId}, clearing providerSessionId`);
-                // Clear the in-memory session ID mapping
-                this.claudeSessionIds.delete(sessionId);
-                // Emit event to clear the persisted providerSessionId in the database
-                // This ensures the next message starts fresh even after app restart
-                this.emit('session:providerSessionExpired', { sessionId });
+                this.sessions.expireSession(sessionId);
                 // Provide user-friendly error message
                 errorMessage = 'Your previous conversation session has expired and can no longer be resumed. Please send a new message to start a fresh conversation - your chat history is still visible but the AI will start with a clean context.';
               }
@@ -1623,13 +1603,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
             // Store session_id if present
             if (chunk.session_id && sessionId) {
-              this.claudeSessionIds.set(sessionId, chunk.session_id);
-              // Emit event to persist immediately - don't wait for completion
-              // This ensures session can be resumed even if interrupted/cancelled
-              this.emit('session:providerSessionReceived', {
-                sessionId,
-                providerSessionId: chunk.session_id
-              });
+              this.sessions.captureSessionId(sessionId, chunk.session_id);
             }
 
             // System messages like 'init' are informational - don't display to user
@@ -2163,12 +2137,12 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         console.error(`[CLAUDE-CODE] Error occurred`);
 
         // If we were trying to resume a session, check if it's missing
-        const resumeSessionId = sessionId ? this.claudeSessionIds.get(sessionId) : null;
+        const resumeSessionId = sessionId ? this.sessions.getSessionId(sessionId) : null;
         if (resumeSessionId) {
           const sessionExists = await this.checkSessionExists(resumeSessionId);
           if (!sessionExists) {
             console.error(`[CLAUDE-CODE] Session ${resumeSessionId} not found - user needs to create new session`);
-            this.claudeSessionIds.delete(sessionId!);
+            this.sessions.deleteSession(sessionId!);
 
             yield {
               type: 'error',
@@ -2377,15 +2351,13 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   }
 
   setProviderSessionData(sessionId: string, data: any): void {
-    if (data.claudeSessionId) {
-      this.claudeSessionIds.set(sessionId, data.claudeSessionId);
-    }
+    this.sessions.setProviderSessionData(sessionId, data);
   }
 
   getProviderSessionData(sessionId: string): any {
-    const claudeSessionId = this.claudeSessionIds.get(sessionId);
+    const { providerSessionId } = this.sessions.getProviderSessionData(sessionId);
     return {
-      claudeSessionId
+      claudeSessionId: providerSessionId,
     };
   }
 

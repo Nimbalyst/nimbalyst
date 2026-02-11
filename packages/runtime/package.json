@@ -135,6 +135,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@openai/codex-sdk": "^0.98.0",
     "@anthropic-ai/sdk": "^0.71.2",
     "@excalidraw/excalidraw": "0.17.6",
     "@monaco-editor/react": "^4.7.0",

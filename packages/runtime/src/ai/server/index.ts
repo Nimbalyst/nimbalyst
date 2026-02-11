@@ -7,5 +7,6 @@ export * from './providers/ClaudeProvider';
 export * from './providers/ClaudeCodeProvider';
 export * from './providers/OpenAIProvider';
 export * from './providers/OpenAICodexProvider';
+export * from './providers/ProviderPermissionMixin';
 export * from './providers/LMStudioProvider';
 export * from './utils/errorDetection';

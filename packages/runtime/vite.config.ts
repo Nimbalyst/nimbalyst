@@ -67,6 +67,7 @@ export default defineConfig(({ mode }) => ({
         /^@lexical\//,
         '@electric-sql/pglite',
         '@anthropic-ai/sdk',
+        '@openai/codex-sdk',
         'openai',
         'yjs',
         'y-websocket'

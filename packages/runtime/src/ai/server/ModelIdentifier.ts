@@ -141,7 +141,7 @@ export class ModelIdentifier {
     }
 
     if (provider === 'openai-codex') {
-      // Codex manages its own model selection
+      // Codex accepts raw model IDs (e.g., gpt-5) and provider-prefixed IDs.
       return new ModelIdentifier(provider, model || 'default');
     }
 
