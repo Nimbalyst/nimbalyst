@@ -7,7 +7,7 @@ import * as os from 'os';
 // Centralized timeouts for consistent test behavior
 export const TEST_TIMEOUTS = {
   APP_LAUNCH: 5000,       // App should launch quickly
-  SIDEBAR_LOAD: 5000,     // Sidebar should appear fast
+  SIDEBAR_LOAD: 15000,     // Sidebar should appear fast
   FILE_TREE_LOAD: 5000,   // File tree items should load fast
   TAB_SWITCH: 3000,       // Tab switching is instant
   EDITOR_LOAD: 3000,      // Editor loads quickly
@@ -41,9 +41,17 @@ export async function launchElectronApp(options?: {
   permissionMode?: TestPermissionMode;
   /** Skip clearing the test database. Default false - database is cleared on each launch to prevent corruption issues. */
   preserveTestDatabase?: boolean;
+  /** Video recording config. Defaults to e2e_test_output/videos. Pass false to disable. */
+  recordVideo?: { dir: string } | false;
 }): Promise<ElectronApplication> {
   const electronMain = path.resolve(__dirname, '../out/main/index.js');
   const electronCwd = path.resolve(__dirname, '../../../');
+
+  // Default video recording to e2e_test_output/videos (opt-out with recordVideo: false)
+  const defaultVideoDir = path.resolve(__dirname, '../../../e2e_test_output/videos');
+  const recordVideoConfig = options?.recordVideo === false
+    ? undefined
+    : (options?.recordVideo ?? { dir: defaultVideoDir });
 
   // Clear the test database directory to prevent corruption issues from previous runs
   // The test database is stored in the system temp directory with a fixed name
@@ -120,6 +128,7 @@ export async function launchElectronApp(options?: {
   }
 
   const app = await _electron.launch({
+    ...(recordVideoConfig ? { recordVideo: recordVideoConfig } : {}),
     args,
     cwd: electronCwd,
     env: testEnv

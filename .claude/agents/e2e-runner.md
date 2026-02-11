@@ -145,8 +145,8 @@ Users can specify tests in these formats:
 ## Test Output Location
 
 Artifacts are written to `e2e_test_output/` in the workspace:
+- **Video recordings** of every test run at `e2e_test_output/videos/` (WebM, always-on by default)
 - Screenshots on failure
-- Videos on failure
 - Traces for debugging
 - HTML report at `e2e_test_output/playwright-report/`
 

@@ -214,7 +214,11 @@ test.describe('Feature Name', () => {
 });
 ```
 
-### 10. Running Tests
+### 10. Video Recordings
+
+All test runs automatically record WebM videos to `e2e_test_output/videos/`. To disable for a specific test, pass `recordVideo: false` to `launchElectronApp()`.
+
+### 11. Running Tests
 
 ```bash
 # Run specific test file
@@ -232,7 +236,7 @@ npx playwright test e2e/editor/my-test.spec.ts:55
 
 NEVER use parallel execution. NEVER use unnecessarily long timeouts when running tests.
 
-### 11. NEVER Skip or Disable Tests Without Asking
+### 12. NEVER Skip or Disable Tests Without Asking
 
 If a test is failing, FIX IT. Do NOT use `test.skip()`, `test.fixme()`, or `.only()` without explicit user permission.
 

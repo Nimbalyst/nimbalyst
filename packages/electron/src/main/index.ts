@@ -546,7 +546,11 @@ app.whenReady().then(async () => {
     checkpoint('app-ready');
 
     // Show splash screen immediately so the user sees something while we initialize
-    showSplashScreen();
+    // Skip splash in Playwright tests - the splash window would be returned by firstWindow()
+    // instead of the actual workspace window, causing tests to fail
+    if (!process.env.PLAYWRIGHT) {
+        showSplashScreen();
+    }
 
     // Set up permission request handler to control when system permission dialogs appear
     // This prevents microphone permission prompt from appearing on app launch

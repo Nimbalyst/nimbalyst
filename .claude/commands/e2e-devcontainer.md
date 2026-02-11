@@ -122,7 +122,8 @@ The `.devcontainer/run-e2e-tests.sh` script inside the container:
 ## Test Output
 
 Test artifacts are written to the mounted workspace volume:
-- `e2e_test_output/` - screenshots, videos, traces by test name
+- `e2e_test_output/videos/` - WebM video recordings of every test run (always-on by default)
+- `e2e_test_output/` - screenshots, traces by test name
 - `e2e_test_output/playwright-report/` - HTML report
 
 These directories are gitignored and accessible from both host and container.
