@@ -51,6 +51,7 @@ import { registerSessionWorkspace, registerWorktreePath, loadInitialSessionFileS
 import { FilesScopeDropdown } from './FilesScopeDropdown';
 import { GitOperationsPanel } from './GitOperationsPanel';
 import { TodoPanel } from './TodoPanel';
+import { TeammatePanel } from './TeammatePanel';
 
 interface FilesEditedSidebarProps {
   /** The workstream ID (parent session ID) - files from all child sessions will be shown */
@@ -565,6 +566,11 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
       {/* Todo Panel - shows agent's current tasks */}
       {activeSessionId && (
         <TodoPanel sessionId={activeSessionId} />
+      )}
+
+      {/* Teammate Panel - shows agent's current teammates */}
+      {activeSessionId && (
+        <TeammatePanel sessionId={activeSessionId} />
       )}
     </div>
   );

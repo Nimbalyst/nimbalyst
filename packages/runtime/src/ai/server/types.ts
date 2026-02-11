@@ -84,6 +84,8 @@ export interface Message {
     teammateName?: string;          // Named teammate (e.g., "security-reviewer")
     teamName?: string;              // Team this teammate belongs to
     teammateMode?: string;          // Permission mode for teammate (e.g., "plan")
+    teammateAgentId?: string;       // Full agent ID (e.g., "researcher@myteam")
+    teammateColor?: string;         // Color for UI differentiation
     // Tool progress tracking (for long-running tools and background tasks)
     toolProgress?: {
       toolName: string;             // Name of the tool currently executing

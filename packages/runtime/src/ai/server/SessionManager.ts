@@ -114,6 +114,7 @@ export function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
   const uiMessages: Message[] = [];
   const allToolMessages = new Map<string, Message>(); // Map tool ID -> Message
   const parentToolMap = new Map<string, string>(); // Map child tool ID -> parent tool ID
+  const teammateParentMap = new Map<string, string>(); // agentId -> parent tool_use_id
 
   // PASS 1: Build parent-child relationship map
   for (const agentMsg of agentMessages) {
@@ -132,6 +133,25 @@ export function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
               for (const block of content) {
                 if (block.type === 'tool_use' && block.id) {
                   parentToolMap.set(block.id, parentToolId);
+                }
+              }
+            }
+          }
+
+          // Build teammate -> parent Task mapping from synthetic teammate_spawned results
+          if (parsed.type === 'user' && parsed.message?.content) {
+            const content = parsed.message.content;
+            if (Array.isArray(content)) {
+              for (const block of content) {
+                if (block.type === 'tool_result' && block.content) {
+                  try {
+                    const resultContent = typeof block.content === 'string'
+                      ? JSON.parse(block.content)
+                      : block.content;
+                    if (resultContent.status === 'teammate_spawned' && resultContent.agent_id && block.tool_use_id) {
+                      teammateParentMap.set(resultContent.agent_id, block.tool_use_id);
+                    }
+                  } catch { /* not JSON */ }
                 }
               }
             }
@@ -233,6 +253,24 @@ export function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
         try {
           const parsed = JSON.parse(agentMsg.content);
 
+          // MANAGED TEAMMATE OUTPUT: Link teammate tool calls to parent Task card
+          if (parsed._isTeammateOutput && parsed._teammateAgentId) {
+            const teammateAgentId = parsed._teammateAgentId;
+
+            if (parsed.message?.content && Array.isArray(parsed.message.content)) {
+              for (const block of parsed.message.content) {
+                if (block.type === 'tool_use' && block.id) {
+                  const parentTaskId = teammateParentMap.get(teammateAgentId);
+                  if (parentTaskId) {
+                    parentToolMap.set(block.id, parentTaskId);
+                  }
+                }
+              }
+            }
+            // Continue processing -- normal tool_use/tool_result handling will
+            // create the tool messages and link them via parentToolMap
+          }
+
           if (parsed.type === 'text' && parsed.content !== undefined) {
             // Claude Code text chunk: { type: 'text', content: '...' }
             const lastMsg = uiMessages[uiMessages.length - 1];
@@ -287,6 +325,9 @@ export function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
                       teammateName: isTaskAgent ? (taskInput?.name || undefined) : undefined,
                       teamName: isTaskAgent ? (taskInput?.team_name || undefined) : undefined,
                       teammateMode: isTaskAgent ? (taskInput?.mode || undefined) : undefined,
+                      teammateAgentId: isTaskAgent && taskInput?.name && taskInput?.team_name
+                        ? `${taskInput.name}@${taskInput.team_name}` : undefined,
+                      teammateColor: isTaskAgent && taskInput?.team_name ? 'blue' : undefined,
                     }
                   };
 

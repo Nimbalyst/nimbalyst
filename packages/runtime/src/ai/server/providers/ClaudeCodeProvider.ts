@@ -3,7 +3,7 @@
  * Uses bundled SDK from package dependencies
  */
 
-import { query } from '@anthropic-ai/claude-agent-sdk';
+import { query, type Query } from '@anthropic-ai/claude-agent-sdk';
 import { parse as parseShellCommand } from 'shell-quote';
 import type { MessageParam, ImageBlockParam, TextBlockParam, ContentBlockParam, DocumentBlockParam } from '@anthropic-ai/sdk/resources';
 import { BaseAIProvider } from '../AIProvider';
@@ -24,8 +24,10 @@ import {
 } from '../types';
 import { isBedrockToolSearchError } from '../utils/errorDetection';
 import { AgentMessagesRepository } from '../../../storage/repositories/AgentMessagesRepository';
+import { TeammateManager } from './TeammateManager';
 import path from 'path';
 import fs from 'fs';
+import os from 'os';
 import { app } from 'electron';
 import { buildClaudeCodeSystemPrompt } from '../../prompt';
 import { setupClaudeCodeEnvironment, getClaudeCodeExecutableOptions, getClaudeCodeSpawnFunction, ClaudeHelperMethod } from '../../../electron/claudeCodeEnvironment';
@@ -47,7 +49,7 @@ const SDK_NATIVE_TOOLS: readonly string[] = [
   'NotebookRead', 'NotebookEdit',
   'TodoRead', 'TodoWrite',
   // Agent Teams tools (SDK-internal, executed by CLI subprocess)
-  'TeammateTool', 'SendMessage',
+  'TeammateTool', 'SendMessage', 'TeamCreate', 'TeamDelete',
 ];
 
 /**
@@ -81,6 +83,14 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   private markMessagesAsHidden: boolean = false; // Flag to mark next messages as hidden
   private helperMethod: ClaudeHelperMethod = 'electron'; // Track which helper method is being used
 
+  // Lead query reference for interruptWithMessage support
+  private leadQuery: Query | null = null;
+  // Flag: a teammate message is pending; check teammateManager queue for content
+  private hasTeammateInterrupt: boolean = false;
+
+  // Teammate management: spawning, messaging, lifecycle, config I/O
+  private teammateManager: TeammateManager;
+
   // Setting for using standalone binary (injected from electron main process)
   // When true, use Bun-compiled standalone binary on macOS to hide dock icon
   private static useStandaloneBinary: boolean = false;
@@ -91,6 +101,21 @@ export class ClaudeCodeProvider extends BaseAIProvider {
    */
   public static setUseStandaloneBinary(enabled: boolean): void {
     ClaudeCodeProvider.useStandaloneBinary = enabled;
+  }
+
+  constructor() {
+    super();
+    this.teammateManager = new TeammateManager({
+      logNonBlocking: (sessionId, source, direction, content, metadata) =>
+        this.logAgentMessageNonBlocking(sessionId, source, direction, content, metadata),
+      emit: (event, payload) => this.emit(event, payload),
+      createPreToolUseHook: (cwd, sessionId, permissionsPath, context) =>
+        this.createPreToolUseHook(cwd, sessionId, permissionsPath, context),
+      createPostToolUseHook: (cwd, sessionId) =>
+        this.createPostToolUseHook(cwd, sessionId),
+      getAbortSignal: () => this.abortController?.signal,
+      interruptWithMessage: (message) => this.interruptWithMessage(message),
+    });
   }
 
   // ExitPlanMode confirmation response type
@@ -600,11 +625,35 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         }
       }
 
+      // Load env vars from ~/.claude/settings.json early so they're available for both
+      // system prompt building (agent teams flag) and SDK environment setup
+      let settingsEnv: Record<string, string> = {};
+      if (ClaudeCodeProvider.claudeSettingsEnvLoader) {
+        try {
+          settingsEnv = await ClaudeCodeProvider.claudeSettingsEnvLoader();
+        } catch (error) {
+          console.warn('[CLAUDE-CODE] Failed to load settings env vars:', error);
+        }
+      }
+
+      // Load shell environment vars (AWS credentials, NODE_EXTRA_CA_CERTS, etc.)
+      // These fill in env vars that are missing from Electron's minimal environment
+      // when launched from Dock/Finder instead of terminal
+      let shellEnv: Record<string, string> = {};
+      if (ClaudeCodeProvider.shellEnvironmentLoader) {
+        try {
+          shellEnv = ClaudeCodeProvider.shellEnvironmentLoader() || {};
+        } catch (error) {
+          console.warn('[CLAUDE-CODE] Failed to load shell environment:', error);
+        }
+      }
+
       // Build system prompt (no longer contains document context)
       const promptBuildStart = Date.now();
       // console.log('[CLAUDE-CODE] sendMessage - documentContext keys:', documentContext ? Object.keys(documentContext) : 'undefined');
       // console.log('[CLAUDE-CODE] sendMessage - documentContext.sessionType:', (documentContext as any)?.sessionType);
-      const systemPrompt = this.buildSystemPrompt(documentContext);
+      const enableAgentTeams = settingsEnv.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS === '1';
+      const systemPrompt = this.buildSystemPrompt(documentContext, enableAgentTeams);
 
       // Note: Attachments (images/documents) are NOT added to the message text.
       // They're sent as separate content blocks via the API's multimodal format.
@@ -715,6 +764,10 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         // API key is passed via environment variable if configured (see env setup below)
       };
 
+      // Capture lead config for teammate spawning
+      this.teammateManager.lastUsedCwd = workspacePath;
+      this.teammateManager.lastUsedSessionId = sessionId;
+
       // Load extension plugins if available
       // These are Claude SDK plugins bundled with Nimbalyst extensions
       // Also includes CLI-installed plugins from ~/.claude/plugins/
@@ -767,31 +820,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
 
       // Set up environment variables for the SDK
-      // If user has configured a claude-code API key, pass it via environment
-      // Also load env vars from ~/.claude/settings.json to pass directly to the SDK
-      // This ensures experimental flags are available even if the CLI's settings loading has issues
-
-      // Load shell environment vars (AWS credentials, NODE_EXTRA_CA_CERTS, etc.)
-      // These fill in env vars that are missing from Electron's minimal environment
-      // when launched from Dock/Finder instead of terminal
-      let shellEnv: Record<string, string> = {};
-      if (ClaudeCodeProvider.shellEnvironmentLoader) {
-        try {
-          shellEnv = ClaudeCodeProvider.shellEnvironmentLoader() || {};
-        } catch (error) {
-          console.warn('[CLAUDE-CODE] Failed to load shell environment:', error);
-        }
-      }
-
-      let settingsEnv: Record<string, string> = {};
-      if (ClaudeCodeProvider.claudeSettingsEnvLoader) {
-        try {
-          settingsEnv = await ClaudeCodeProvider.claudeSettingsEnvLoader();
-        } catch (error) {
-          console.warn('[CLAUDE-CODE] Failed to load settings env vars:', error);
-        }
-      }
-
+      // shellEnv and settingsEnv were loaded earlier (before system prompt build) and are reused here
       const env: any = {
         ...process.env,
         // Shell env vars fill in what's missing from Dock-launched Electron
@@ -807,6 +836,26 @@ export class ClaudeCodeProvider extends BaseAIProvider {
           CLAUDE_CODE_EFFORT_LEVEL: this.config.effortLevel
         }),
       };
+
+      // Task tools are disabled by default in non-interactive SDK sessions.
+      // Enable them so TeamCreate/TaskCreate/TaskList/TaskUpdate flows work in Nimbalyst.
+      if (enableAgentTeams) {
+        env.CLAUDE_CODE_ENABLE_TASKS = '1';
+      }
+
+      const effectiveTeamContext = enableAgentTeams
+        ? await this.teammateManager.resolveTeamContext(sessionId)
+        : undefined;
+
+      // Preserve team context across lead query turns so TeamDelete/broadcast work
+      // even after the TeamCreate call happened in a previous query process.
+      if (effectiveTeamContext) {
+        env.CLAUDE_CODE_TEAM_NAME = effectiveTeamContext;
+        env.CLAUDE_CODE_TASK_LIST_ID = effectiveTeamContext;
+        env.CLAUDE_CODE_AGENT_ID = `team-lead@${effectiveTeamContext}`;
+        env.CLAUDE_CODE_AGENT_NAME = 'team-lead';
+        env.CLAUDE_CODE_AGENT_TYPE = 'team-lead';
+      }
 
       if (this.config.apiKey) {
         env.ANTHROPIC_API_KEY = this.config.apiKey;
@@ -972,10 +1021,12 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
       // console.log('[CLAUDE-CODE] Calling SDK query() - this spawns the claude process...');
       const queryCallStart = Date.now();
-      const queryIterator = query({
+      const leadQuery = query({
         prompt: promptInput as any,
         options
-      }) as AsyncIterable<any>;
+      });
+      this.leadQuery = leadQuery;
+      const queryIterator = leadQuery as AsyncIterable<any>;
       const queryCallDuration = Date.now() - queryCallStart;
       // console.log(`[CLAUDE-CODE] SDK query() returned iterator in ${queryCallDuration}ms`);
       if (queryCallDuration > 5000) {
@@ -1274,6 +1325,8 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                       toolCall.isError = true;
                     }
 
+                    // Teammate side-effects (shutdown detection, team context tracking)
+                    this.processTeammateToolResult(sessionId, toolCall.name, toolCall.arguments, toolResult, toolCall.isError === true);
 
                     // Log ONLY the tool_result block to database (non-blocking for streaming)
                     // The tool_use block was already logged by raw chunk logging at line 264
@@ -1699,6 +1752,8 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                       toolCall.isError = true;
                     }
 
+                    // Teammate side-effects (shutdown detection, team context tracking)
+                    this.processTeammateToolResult(sessionId, toolCall.name, toolCall.arguments, toolResult, toolCall.isError === true);
 
                     // Log ONLY the tool_result block to database (non-blocking for streaming)
                     // The tool_use block was already logged when the tool was first called
@@ -1930,6 +1985,96 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         throw iterError;
       }
 
+      // ── Process queued teammate messages via streamInput ──────────────
+      // After the main loop exits (naturally or via interrupt()), drain
+      // any pending teammate-to-lead messages. Each is injected as a new
+      // user turn on the existing query via streamInput.
+      while (this.teammateManager.hasPendingTeammateMessages() && this.leadQuery) {
+        const nextMsg = this.teammateManager.drainNextTeammateMessage();
+        if (!nextMsg) break;
+        this.hasTeammateInterrupt = false;
+
+        const formattedMessage = `[Teammate message from "${nextMsg.teammateName}"]\n\n${nextMsg.content}`;
+        console.log(`[CLAUDE-CODE] Processing queued teammate message via streamInput: "${nextMsg.summary}"`);
+
+        // Log the injected user message to the DB so the conversation is complete.
+        // Uses non-blocking since we're mid-turn and don't need to await persistence.
+        if (sessionId) {
+          this.logAgentMessageNonBlocking(
+            sessionId, 'claude-code', 'input',
+            JSON.stringify({ prompt: formattedMessage }),
+            { messageType: 'teammate_message_injected', teammateName: nextMsg.teammateName }
+          );
+        }
+
+        try {
+          await this.leadQuery.streamInput(
+            this.teammateManager.createInjectedUserMessageStream(formattedMessage)
+          );
+        } catch (streamErr) {
+          console.warn('[CLAUDE-CODE] streamInput failed for teammate message:', streamErr);
+          break;
+        }
+
+        // Consume output from the new turn (same chunk processing)
+        try {
+          for await (const rawChunk of (this.leadQuery as AsyncIterable<any>)) {
+            if (this.abortController?.signal.aborted) {
+              console.log('[CLAUDE-CODE] Abort signal detected during teammate message processing');
+              break;
+            }
+            const chunk = typeof rawChunk === 'string' ? rawChunk : rawChunk;
+
+            if (typeof chunk === 'string') {
+              fullContent += chunk;
+              yield { type: 'text', content: chunk };
+            } else if (chunk && typeof chunk === 'object') {
+              if (chunk.type === 'result') {
+                if (chunk.usage) {
+                  usageData = {
+                    ...(usageData || {}),
+                    input_tokens: (usageData?.input_tokens || 0) + (chunk.usage.input_tokens || 0),
+                    output_tokens: (usageData?.output_tokens || 0) + (chunk.usage.output_tokens || 0),
+                  };
+                }
+              } else if (chunk.type === 'assistant' && chunk.message?.content) {
+                for (const block of chunk.message.content) {
+                  if (block.type === 'text' && block.text) {
+                    fullContent += block.text;
+                    yield { type: 'text', content: block.text };
+                  } else if (block.type === 'tool_use') {
+                    toolCallCount++;
+                    if (sessionId) {
+                      this.logAgentMessageNonBlocking(
+                        sessionId, 'claude-code', 'output',
+                        JSON.stringify(block),
+                        { messageType: 'tool_use', toolName: block.name }
+                      );
+                    }
+                  } else if (block.type === 'tool_result') {
+                    if (sessionId) {
+                      this.logAgentMessageNonBlocking(
+                        sessionId, 'claude-code', 'output',
+                        JSON.stringify(block),
+                        { messageType: 'tool_result' }
+                      );
+                    }
+                  }
+                }
+              }
+            }
+          }
+        } catch (iterError) {
+          const errMessage = (iterError as Error).message || '';
+          const isAbort = (iterError as any).name === 'AbortError' || errMessage.includes('aborted');
+          if (!isAbort) {
+            console.error('[CLAUDE-CODE] Error during teammate message iteration:', iterError);
+          }
+          throw iterError;
+        }
+      }
+      this.hasTeammateInterrupt = false;
+
       // Check if this was a slash command that returned no output
       // This helps users understand when a command doesn't exist or failed silently
       // Skip this check if we received a compact_boundary (compact outputs via system message, not fullContent)
@@ -2060,6 +2205,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         };
       }
     } finally {
+      this.leadQuery = null;
       this.abortController = null;
       // Note: markMessagesAsHidden is reset at the START of sendMessage to prevent race conditions
     }
@@ -2079,6 +2225,55 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     this.rejectAllPendingConfirmations();
     this.rejectAllPendingQuestions();
     this.rejectAllPendingPermissions();
+
+    // Abort all managed teammates
+    this.teammateManager.killAll();
+  }
+
+  /**
+   * Interrupt the lead agent's current turn and queue a teammate message
+   * to be delivered as a new user turn via streamInput.
+   *
+   * - If the lead is idle (no active query): stores the message for the next
+   *   sendMessage() call and emits an event so AIService can trigger processing.
+   * - If the lead has running teammates (sub-agents): queues the message to be
+   *   delivered after the current turn completes naturally.
+   * - Otherwise: interrupts the query so the sendMessage() loop can inject the
+   *   message via streamInput.
+   */
+  async interruptWithMessage(message: string): Promise<void> {
+    if (!this.leadQuery) {
+      // Lead is idle - drain the first queued message and emit event so
+      // AIService can trigger a new sendMessage. Any additional messages
+      // will be processed by the while loop in sendMessage after this turn.
+      const firstMsg = this.teammateManager.drainNextTeammateMessage();
+      if (!firstMsg) return;
+
+      const formattedMessage = `[Teammate message from "${firstMsg.teammateName}"]\n\n${firstMsg.content}`;
+      console.log(`[CLAUDE-CODE] interruptWithMessage: lead is idle, triggering sendMessage for "${firstMsg.summary}"`);
+      this.emit('teammate:messageWhileIdle', {
+        sessionId: this.teammateManager.lastUsedSessionId,
+        message: formattedMessage,
+      });
+      return;
+    }
+
+    if (this.teammateManager.hasRunningTeammates()) {
+      // Don't interrupt while sub-agents are running; queue for after turn completes
+      console.log('[CLAUDE-CODE] interruptWithMessage: teammates running, queueing for after turn');
+      this.hasTeammateInterrupt = true;
+      return;
+    }
+
+    // Interrupt the lead query - the sendMessage() loop will detect the
+    // pending messages (via teammateManager queue) and inject via streamInput
+    console.log('[CLAUDE-CODE] interruptWithMessage: interrupting active lead query');
+    this.hasTeammateInterrupt = true;
+    try {
+      await this.leadQuery.interrupt();
+    } catch (err) {
+      console.warn('[CLAUDE-CODE] interruptWithMessage: interrupt() failed:', err);
+    }
   }
 
   /**
@@ -2091,6 +2286,41 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     this.abort();
     // Call base class cleanup (removes event listeners)
     super.destroy();
+  }
+
+  /**
+   * Stop a specific managed teammate by name
+   */
+  public stopManagedTeammate(name: string): boolean {
+    return this.teammateManager.stop(name);
+  }
+
+  /**
+   * Process teammate-related side-effects after a tool_result is received.
+   * Called from both chunk-processing paths to avoid duplication.
+   */
+  private processTeammateToolResult(
+    sessionId: string | undefined,
+    toolName: string,
+    toolArguments: Record<string, unknown> | undefined,
+    toolResult: unknown,
+    isError: boolean,
+  ): void {
+    // Detect shutdown_request results from SDK-handled SendMessage
+    if (toolName === 'SendMessage' && toolArguments?.type === 'shutdown_request') {
+      const shutdownRecipient = toolArguments.recipient;
+      if (typeof shutdownRecipient === 'string' && shutdownRecipient) {
+        this.teammateManager.handleShutdownResult(sessionId, shutdownRecipient);
+      }
+    }
+
+    // Track team context from TeamCreate/TeamDelete results
+    this.teammateManager.updateTeamContextFromToolResult(
+      toolName,
+      toolArguments,
+      toolResult,
+      isError,
+    );
   }
 
   /**
@@ -2903,6 +3133,34 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         return { behavior: 'allow', updatedInput: input };
       }
 
+      // Agent Teams tools should always be allowed without prompts
+      // These are SDK-native tools for team coordination and task management
+      const teamTools = ['SendMessage', 'TaskCreate', 'TaskList', 'TaskUpdate', 'TaskGet', 'TeamCreate', 'TeamDelete', 'TeammateTool', 'TodoRead', 'TodoWrite'];
+      if (teamTools.includes(toolName)) {
+        if (toolName === 'TeamDelete') {
+          const hasExplicitTeam =
+            typeof input?.team_name === 'string' && input.team_name.trim().length > 0;
+
+          // TeamDelete can be called without args and relies on ambient team context.
+          // Rehydrate context and inject team_name when available to avoid no-op deletes.
+          if (!hasExplicitTeam) {
+            const inferredTeam = await this.teammateManager.resolveTeamContext(sessionId);
+            if (inferredTeam) {
+              return {
+                behavior: 'allow',
+                updatedInput: {
+                  ...input,
+                  team_name: inferredTeam,
+                }
+              };
+            }
+          }
+        }
+
+        // this.logSecurity('[canUseTool] Auto-allowing team tool:', { toolName });
+        return { behavior: 'allow', updatedInput: input };
+      }
+
       // Check workspace trust before allowing any tools
       // Use permissionsPath (parent project for worktrees) for trust checks
       if (pathForTrust && ClaudeCodeProvider.trustChecker) {
@@ -3240,15 +3498,32 @@ export class ClaudeCodeProvider extends BaseAIProvider {
    * This hook intercepts Edit/Write/MultiEdit tools, tags the current file state,
    * and tracks files for end-of-turn snapshot creation.
    */
-  private createPreToolUseHook(workspacePath: string, sessionId?: string, permissionsPath?: string) {
+  private createPreToolUseHook(
+    workspacePath: string,
+    sessionId?: string,
+    permissionsPath?: string,
+    context?: { isTeammateSession?: boolean },
+  ) {
     const fs = require('fs');
     const path = require('path');
     // Use permissionsPath for trust checks (parent project for worktrees)
     const pathForTrust = permissionsPath || workspacePath;
+    const isTeammateSession = context?.isTeammateSession === true;
 
     return async (input: any, toolUseID: string | undefined, options: { signal: AbortSignal }) => {
       const toolName = input.tool_name;
       const toolInput = input.tool_input;
+
+      // TeamDelete should be validated by the SDK against active team members.
+      // Do not pre-clean teammates here, or TeamDelete will incorrectly succeed.
+
+      // MANAGED TEAMMATES: Delegate Task-spawn and SendMessage routing to TeammateManager
+      if (!isTeammateSession) {
+        const teammateResult = await this.teammateManager.handlePreToolUse(toolName, toolInput, toolUseID, sessionId);
+        if (teammateResult.handled) {
+          return teammateResult.result;
+        }
+      }
 
       // EXITPLANMODE CONFIRMATION: Intercept ExitPlanMode tool calls in planning mode
       if (toolName === 'ExitPlanMode' && this.currentMode === 'planning') {
@@ -3393,6 +3668,12 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       // like "git add file && rm -rf /". PreToolUse runs BEFORE SDK's allow rules, so we can catch this.
       // See: https://github.com/anthropics/claude-code/issues/4956
       if (toolName === 'Bash') {
+        // Managed teammates run without interactive approval flow.
+        // If we prompt here, the teammate can deadlock indefinitely waiting for a UI response.
+        if (isTeammateSession) {
+          return {};
+        }
+
         // In bypass-all mode, skip compound command checking entirely
         // Use pathForTrust (parent project for worktrees) for trust checks
         if (pathForTrust && ClaudeCodeProvider.trustChecker) {
@@ -3898,7 +4179,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     }
   }
 
-  protected buildSystemPrompt(documentContext?: DocumentContext): string {
+  protected buildSystemPrompt(documentContext?: DocumentContext, enableAgentTeams?: boolean): string {
     const hasSessionNaming = ClaudeCodeProvider.sessionNamingServerPort !== null;
     const worktreePath = documentContext?.worktreePath;
     const isVoiceMode = (documentContext as any)?.isVoiceMode;
@@ -3909,6 +4190,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       worktreePath,
       isVoiceMode,
       voiceModeCodingAgentPrompt,
+      enableAgentTeams,
     });
 
     // console.log('[CLAUDE-CODE] Built system prompt - length:', prompt.length, 'characters');

@@ -45,6 +45,7 @@ export interface ClaudeCodePromptOptions {
     prepend?: string;
     append?: string;
   };
+  enableAgentTeams?: boolean;
   // Legacy fields - kept for backward compatibility but no longer used in prompt building
   /** @deprecated No longer used - prompt is now static for all session types */
   sessionType?: 'chat' | 'coding' | 'planning' | 'terminal';
@@ -67,6 +68,7 @@ export function buildClaudeCodeSystemPrompt(options: ClaudeCodePromptOptions): s
     worktreePath,
     isVoiceMode = false,
     voiceModeCodingAgentPrompt,
+    enableAgentTeams = false,
   } = options;
 
   let prompt = `The following is an addendum to the above. Anything in the addendum supersedes the above.
@@ -122,6 +124,23 @@ IMPORTANT: You are working in a git worktree at ${worktreePath}. This is an isol
 - Do not modify files in the main branch unless explicitly asked by the user
 - All changes you make will be on the worktree's branch, not the main branch
 - The worktree allows you to work on this task without affecting the main codebase`;
+  }
+
+  // Add agent teams instructions if enabled
+  if (enableAgentTeams) {
+    prompt += `
+
+## Nimbalyst Teammate Spawning
+
+When spawning teammates using the Task tool in Nimbalyst:
+
+**CRITICAL: The Task tool returns an "error" status when spawning teammates, even though the spawn succeeds.** This is intentional behavior - the error message confirms the teammate was spawned and warns you not to retry.
+
+**Required behavior:**
+1. **NEVER spawn multiple teammates in parallel** - Each Task call to spawn a teammate returns an "error", which causes all sibling parallel calls to be cancelled with \`<tool_use_error>Sibling tool call errored</tool_use_error>\`
+2. **ALWAYS spawn teammates sequentially** - Make one Task call per message/turn, or separate them into distinct function_calls blocks
+3. **Do not retry** - When you see the spawn confirmation "error", the teammate is already running. Retrying will fail.
+4. **Wait for messages** - Teammates will communicate back via SendMessage when they complete tasks or need input`;
   }
 
   // Add session naming if available

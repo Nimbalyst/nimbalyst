@@ -1926,6 +1926,46 @@ export class AIService {
       provider.removeAllListeners('session:providerSessionReceived');
       provider.on('session:providerSessionReceived', onProviderSessionReceived);
 
+      // Listen for teammate messages when the lead is idle (no active query).
+      // When the lead is active, messages are delivered via interrupt + streamInput
+      // inside ClaudeCodeProvider.sendMessage(). This handler covers the idle case
+      // by triggering a new sendMessage call with the teammate's message.
+      const onTeammateMessageWhileIdle = async (data: {
+        sessionId: string;
+        message: string;
+      }) => {
+        if (!data.sessionId) {
+          logger.main.warn('[AIService] teammate:messageWhileIdle with no sessionId');
+          return;
+        }
+        logger.main.info(`[AIService] Teammate message while lead idle, triggering sendMessage for session ${data.sessionId}`);
+        try {
+          const targetWindow = findWindowByWorkspace(effectiveWorkspacePath);
+          if (targetWindow && !targetWindow.isDestroyed()) {
+            // Create a mock event and call sendMessage directly
+            const mockEvent = {
+              sender: targetWindow.webContents,
+              senderFrame: targetWindow.webContents.mainFrame,
+            } as Electron.IpcMainInvokeEvent;
+
+            if (this.sendMessageHandler) {
+              // Fire-and-forget: sendMessage will stream results to the renderer
+              setImmediate(async () => {
+                try {
+                  await this.sendMessageHandler!(mockEvent, data.message, {} as any, data.sessionId, effectiveWorkspacePath);
+                } catch (err) {
+                  logger.main.error('[AIService] Failed to process teammate message while idle:', err);
+                }
+              });
+            }
+          }
+        } catch (error) {
+          logger.main.error('[AIService] Failed to handle teammate message while idle:', error);
+        }
+      };
+      provider.removeAllListeners('teammate:messageWhileIdle');
+      provider.on('teammate:messageWhileIdle', onTeammateMessageWhileIdle);
+
       // Track user @ mentions in the message
       try {
         await sessionFileTracker.trackUserMessage(

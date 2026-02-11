@@ -17,8 +17,11 @@
  */
 
 import { atom } from 'jotai';
+import { atomFamily } from 'jotai/utils';
 import { store } from '@nimbalyst/runtime/store';
 import { selectedWorkstreamAtom, type WorkstreamType } from './sessions';
+import { sessionStoreAtom } from './sessions';
+import type { TeammateInfo } from '../../components/AgentMode/TeammatePanel';
 
 // ============================================================
 // Types
@@ -45,6 +48,7 @@ export interface AgentModeLayout {
   sessionHistoryLayout: SessionHistoryLayout;
   filesEditedWidth: number;
   todoPanelCollapsed: boolean;
+  teammatePanelCollapsed: boolean;
 }
 
 // ============================================================
@@ -64,6 +68,7 @@ const DEFAULT_LAYOUT: AgentModeLayout = {
   sessionHistoryLayout: DEFAULT_SESSION_HISTORY_LAYOUT,
   filesEditedWidth: 256,
   todoPanelCollapsed: false,
+  teammatePanelCollapsed: false,
 };
 
 /**
@@ -79,8 +84,9 @@ function mergeWithDefaults(persisted: Partial<AgentModeLayout> | undefined): Age
     ...DEFAULT_LAYOUT,
     ...persisted,
     sessionHistoryLayout,
-    // Ensure todoPanelCollapsed has a default if missing from old persisted data
+    // Ensure panel collapse states have defaults if missing from old persisted data
     todoPanelCollapsed: persisted?.todoPanelCollapsed ?? DEFAULT_LAYOUT.todoPanelCollapsed,
+    teammatePanelCollapsed: persisted?.teammatePanelCollapsed ?? DEFAULT_LAYOUT.teammatePanelCollapsed,
   };
 }
 
@@ -131,6 +137,20 @@ export const viewModeAtom = atom(
 /** Whether the todo panel is collapsed */
 export const todoPanelCollapsedAtom = atom(
   (get) => get(agentModeLayoutAtom).todoPanelCollapsed
+);
+
+/** Whether the teammate panel is collapsed */
+export const teammatePanelCollapsedAtom = atom(
+  (get) => get(agentModeLayoutAtom).teammatePanelCollapsed
+);
+
+/** Per-session derived atom for current teammates from session metadata */
+export const sessionTeammatesAtom = atomFamily((sessionId: string) =>
+  atom((get) => {
+    const session = get(sessionStoreAtom(sessionId));
+    const raw = session?.metadata?.currentTeammates;
+    return Array.isArray(raw) ? raw as TeammateInfo[] : [];
+  })
 );
 
 // ============================================================
@@ -275,6 +295,24 @@ export const toggleTodoPanelCollapsedAtom = atom(
   (get, set) => {
     const current = get(agentModeLayoutAtom);
     const newLayout = { ...current, todoPanelCollapsed: !current.todoPanelCollapsed };
+
+    set(agentModeLayoutAtom, newLayout);
+
+    if (!currentWorkspacePath) {
+      throw new Error('[agentMode] Cannot persist layout - initAgentModeLayout not called');
+    }
+    schedulePersist(currentWorkspacePath, newLayout);
+  }
+);
+
+/**
+ * Toggle teammate panel collapsed state.
+ */
+export const toggleTeammatePanelCollapsedAtom = atom(
+  null,
+  (get, set) => {
+    const current = get(agentModeLayoutAtom);
+    const newLayout = { ...current, teammatePanelCollapsed: !current.teammatePanelCollapsed };
 
     set(agentModeLayoutAtom, newLayout);
 
