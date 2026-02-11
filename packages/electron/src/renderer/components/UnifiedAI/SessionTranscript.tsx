@@ -1167,9 +1167,11 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
       gitCommit: async (proposalId: string, files: string[], message: string) => {
         try {
           // Execute the git commit via IPC
+          // Use worktree path for git operations when in a worktree session
+          const gitWorkspacePath = sessionData?.worktreePath || workspacePath;
           const result = await window.electronAPI.invoke(
             'git:commit',
-            workspacePath,
+            gitWorkspacePath,
             message,
             files
           ) as { success: boolean; commitHash?: string; error?: string };
@@ -1243,6 +1245,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     sessionId,
     workspacePath,
     worktreeId,
+    sessionData?.worktreePath,
     handleExitPlanModeApprove,
     handleExitPlanModeStartNewSession,
     handleExitPlanModeDeny,
