@@ -56,6 +56,7 @@ function chatMessageFromServerMessage(msg: any): Message {
     isStreamingStatus: msg.isStreamingStatus,
     streamingData: msg.streamingData,
     attachments: msg.attachments,
+    metadata: msg.metadata,
   };
 }
 
@@ -249,6 +250,17 @@ export function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
           });
         }
       } else if (agentMsg.direction === 'output') {
+        // CODEX RAW EVENTS: Store raw Codex SDK events with metadata for display-time parsing
+        if (agentMsg.metadata?.codexProvider === true && agentMsg.metadata?.eventType) {
+          uiMessages.push({
+            role: 'assistant',
+            content: agentMsg.content,
+            timestamp,
+            metadata: agentMsg.metadata,
+          });
+          continue;
+        }
+
         // Try to parse as JSON
         try {
           const parsed = JSON.parse(agentMsg.content);
