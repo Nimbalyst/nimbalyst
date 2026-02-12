@@ -387,15 +387,6 @@ const extractEditsFromToolMessage = (message: Message): any[] => {
   const edits: any[] = [];
   const visited = new WeakSet<object>();
 
-  // DEBUG: Log the incoming tool message structure
-  // if (tool.name && (tool.name.toLowerCase().includes('edit') || tool.name.toLowerCase().includes('write'))) {
-  //   console.log('[extractEditsFromToolMessage] Processing tool:', tool.name);
-  //   console.log('  fallbackPath:', fallbackPath);
-  //   console.log('  messageHasEdits:', !!message.edits);
-  //   console.log('  toolArguments:', JSON.stringify(tool.arguments, null, 2));
-  //   console.log('  toolResult:', JSON.stringify(tool.result, null, 2));
-  // }
-
   const pushEdit = (raw: any, fallback?: string) => {
     if (!raw || typeof raw !== 'object') return;
     const normalized: any = { ...raw };
@@ -521,15 +512,6 @@ const extractEditsFromToolMessage = (message: Message): any[] => {
   if (tool.result) {
     visit(tool.result);
   }
-
-  // DEBUG: Log extraction results
-  // if (tool.name && (tool.name.toLowerCase().includes('edit') || tool.name.toLowerCase().includes('write'))) {
-  //   console.log('[extractEditsFromToolMessage] Extraction complete:', {
-  //     toolName: tool.name,
-  //     editsFound: edits.length,
-  //     edits: edits.length > 0 ? edits : 'No edits found'
-  //   });
-  // }
 
   return edits;
 };

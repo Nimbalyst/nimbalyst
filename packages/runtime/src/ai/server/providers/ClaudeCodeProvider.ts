@@ -1435,6 +1435,23 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
                       toolCall.isError = true;
                     }
 
+                    // CRITICAL FIX: For Edit tools, ensure diff information is preserved in the result
+                    // The UI extraction function needs old_string/new_string to show red/green diffs
+                    // The SDK returns a simple success message, but we need to preserve the original arguments
+                    if (toolCall.name === 'Edit' && toolCall.arguments && !toolCall.isError) {
+                      const args = toolCall.arguments as any;
+                      if (args.old_string !== undefined || args.new_string !== undefined) {
+                        // Ensure result is an object that includes both the success message and diff fields
+                        const resultMessage = typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult);
+                        toolCall.result = {
+                          message: resultMessage,
+                          file_path: args.file_path,
+                          old_string: args.old_string,
+                          new_string: args.new_string
+                        };
+                      }
+                    }
+
                     // Teammate side-effects (shutdown detection, team context tracking)
                     this.processTeammateToolResult(sessionId, toolCall.name, toolCall.arguments, toolResult, toolCall.isError === true);
 
@@ -1850,6 +1867,23 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
 
                     if (hasErrorFlag || hasErrorContent) {
                       toolCall.isError = true;
+                    }
+
+                    // CRITICAL FIX: For Edit tools, ensure diff information is preserved in the result
+                    // The UI extraction function needs old_string/new_string to show red/green diffs
+                    // The SDK returns a simple success message, but we need to preserve the original arguments
+                    if (toolCall.name === 'Edit' && toolCall.arguments && !toolCall.isError) {
+                      const args = toolCall.arguments as any;
+                      if (args.old_string !== undefined || args.new_string !== undefined) {
+                        // Ensure result is an object that includes both the success message and diff fields
+                        const resultMessage = typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult);
+                        toolCall.result = {
+                          message: resultMessage,
+                          file_path: args.file_path,
+                          old_string: args.old_string,
+                          new_string: args.new_string
+                        };
+                      }
                     }
 
                     // Teammate side-effects (shutdown detection, team context tracking)
