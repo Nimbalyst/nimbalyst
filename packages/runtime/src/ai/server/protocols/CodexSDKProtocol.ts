@@ -95,9 +95,15 @@ export class CodexSDKProtocol implements AgentProtocol {
    * @returns Protocol session
    */
   async resumeSession(sessionId: string, options: SessionOptions): Promise<ProtocolSession> {
+    console.log('[CODEX-PROTOCOL] Resuming thread:', sessionId);
     const client = await this.getCodexClient();
     const threadOptions = this.buildThreadOptions(options);
     const thread = client.resumeThread(sessionId, threadOptions);
+
+    console.log('[CODEX-PROTOCOL] Thread resumed:', {
+      threadId: sessionId,
+      threadObjectId: thread.id
+    });
 
     return {
       id: sessionId,
@@ -192,11 +198,6 @@ export class CodexSDKProtocol implements AgentProtocol {
 
           // Tool call event
           if (parsedEvent.toolCall) {
-            console.log('[CodexSDKProtocol] Emitting tool call event:', {
-              toolName: parsedEvent.toolCall.name,
-              hasRawEvent: !!parsedEvent.rawEvent,
-              rawEventType: parsedEvent.rawEvent ? (parsedEvent.rawEvent as any).type : 'none',
-            });
             yield {
               type: 'tool_call',
               toolCall: {

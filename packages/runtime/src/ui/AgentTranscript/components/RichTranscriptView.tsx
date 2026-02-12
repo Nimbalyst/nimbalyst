@@ -1347,16 +1347,6 @@ export const RichTranscriptView = React.forwardRef<
                             provider={provider}
                           />
                         </div>
-                        {/* Prompt additions debug display - disabled until feature is fixed
-                        {isUser && promptAdditions && index === promptAdditionsTargetIndex && (
-                          <PromptAdditionsInline
-                            systemPromptAddition={promptAdditions.systemPromptAddition}
-                            userMessageAddition={promptAdditions.userMessageAddition}
-                            attachments={promptAdditions.attachments}
-                            timestamp={promptAdditions.timestamp}
-                          />
-                        )}
-                        */}
                       </div>
                     );
                   })}

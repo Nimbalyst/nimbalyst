@@ -65,8 +65,8 @@ export interface ChatAttachment {
 export interface ToolCall {
   id?: string;
   name: string;
-  arguments?: any;
-  result?: any;
+  arguments?: unknown;
+  result?: unknown;
   targetFilePath?: string;  // File path this tool call was executed against
   // Sub-agent specific fields
   isSubAgent?: boolean;           // true for Task tools
@@ -92,7 +92,7 @@ export interface Message {
   timestamp: number;
   mode?: 'planning' | 'agent';  // AI mode when message was sent (user messages only)
   // Additional fields for rich message types
-  edits?: any[];
+  edits?: unknown[];
   toolCall?: ToolCall;
   isError?: boolean;
   isAuthError?: boolean; // True when error is an authentication failure (SDK first-class detection)
@@ -277,21 +277,21 @@ export interface StreamChunk {
   toolCall?: {
     id?: string;
     name: string;
-    arguments?: any;
-    result?: any;
+    arguments?: unknown;
+    result?: unknown;
   };
   toolError?: {
     name: string;
-    arguments?: any;
+    arguments?: unknown;
     error: string;
-    result?: any;
+    result?: unknown;
   };
   error?: string;
   isAuthError?: boolean; // True when error is an authentication failure (SDK first-class detection)
   isBedrockToolError?: boolean; // True when error is a Bedrock tool search error
   isServerError?: boolean; // True when error is a 500/internal server error (Claude may be down)
   isComplete?: boolean;
-  config?: any; // For stream_edit_start
+  config?: unknown; // For stream_edit_start
   usage?: {
     input_tokens: number;
     output_tokens: number;
@@ -328,24 +328,24 @@ export interface ToolHandler {
   // All methods are optional - handlers can implement any subset
   applyDiff?(args: DiffArgs): Promise<DiffResult>;
   // Stream content tool for real-time streaming
-  streamContent?(args: any): Promise<any>;
+  streamContent?(args: unknown): Promise<unknown>;
   // File search tool
-  searchFiles?(args: any): Promise<any>;
+  searchFiles?(args: unknown): Promise<unknown>;
   // List files tool
-  listFiles?(args: any): Promise<any>;
+  listFiles?(args: unknown): Promise<unknown>;
   // Read file tool
-  readFile?(args: any): Promise<any>;
+  readFile?(args: unknown): Promise<unknown>;
   // Write file tool
-  writeFile?(args: any): Promise<any>;
+  writeFile?(args: unknown): Promise<unknown>;
   // Get document content
-  getDocumentContent?(args: any): Promise<any>;
+  getDocumentContent?(args: unknown): Promise<unknown>;
   // Update frontmatter
-  updateFrontmatter?(args: any): Promise<any>;
+  updateFrontmatter?(args: unknown): Promise<unknown>;
   // Dynamic tool execution - for any other tool
   // Note: executeTool has different signature (name, args) so we handle it separately
-  executeTool?(name: string, args: any): Promise<any>;
+  executeTool?(name: string, args: unknown): Promise<unknown>;
   // Dynamic property access for other tools
-  [key: string]: ((args: any) => Promise<any>) | ((name: string, args: any) => Promise<any>) | undefined;
+  [key: string]: ((args: unknown) => Promise<unknown>) | ((name: string, args: unknown) => Promise<unknown>) | undefined;
 }
 
 /**

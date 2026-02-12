@@ -4,6 +4,8 @@ import { MaterialSymbol } from '../../icons/MaterialSymbol';
 import { JSONViewer } from './JSONViewer';
 import { formatToolDisplayName } from '../utils/toolNameFormatter';
 import type { Message, ToolCall } from '../../../ai/server/types';
+import { extractTextFromCodexEvent } from '../../../ai/server/providers/codex/textExtraction';
+import { isCodexSdkEvent } from '../../../ai/server/providers/codex/codexEventParser';
 
 interface CodexOutputRendererProps {
   rawEvents: Message[];
@@ -24,97 +26,68 @@ interface ParsedCodexOutput {
  * message.metadata.eventType indicates 'reasoning' or 'text' etc.
  */
 function parseCodexRawEvents(rawEvents: Message[]): ParsedCodexOutput {
-  console.log('[parseCodexRawEvents] Starting parse with', rawEvents.length, 'events');
   const reasoning: string[] = [];
-  const toolCalls: ToolCall[] = [];
-  let output = '';
+  const toolCallsMap = new Map<string, ToolCall>();
+  const outputParts: string[] = [];
 
   for (const msg of rawEvents) {
     const eventType = msg.metadata?.eventType;
-    console.log('[parseCodexRawEvents] Processing event:', {
-      eventType,
-      contentLength: msg.content?.length,
-      contentPreview: msg.content?.substring(0, 100),
-    });
+
+    if (!msg.content || typeof msg.content !== 'string') {
+      console.error('[parseCodexRawEvents] Invalid message content:', msg);
+      continue;
+    }
 
     try {
       const rawEvent = JSON.parse(msg.content);
-      console.log('[parseCodexRawEvents] Parsed raw event:', {
-        type: rawEvent.type,
-        hasItem: !!rawEvent.item,
-        itemType: rawEvent.item?.type,
-      });
+
+      // Validate the parsed event
+      if (!isCodexSdkEvent(rawEvent)) {
+        console.error('[parseCodexRawEvents] Invalid Codex event structure:', rawEvent);
+        continue;
+      }
 
       // Handle tool_call events
-      if (eventType === 'tool_call' && rawEvent.item) {
-        const item = rawEvent.item;
+      if (eventType === 'tool_call' && 'item' in rawEvent && typeof rawEvent.item === 'object' && rawEvent.item !== null) {
+        const item = rawEvent.item as Record<string, unknown>;
+        const toolCallId = (typeof item.id === 'string' ? item.id : undefined) || `tool-${Date.now()}`;
         const toolCall: ToolCall = {
-          id: item.id || `tool-${Date.now()}`,
-          name: item.command || item.name || item.tool || 'Unknown Tool',
+          id: toolCallId,
+          name: (typeof item.command === 'string' ? item.command :
+                 typeof item.name === 'string' ? item.name :
+                 typeof item.tool === 'string' ? item.tool : 'Unknown Tool'),
           arguments: item.arguments || item.args || {},
         };
 
         // Check if we already have a tool call with this ID (for started/completed pairs)
-        const existingIndex = toolCalls.findIndex(tc => tc.id === toolCall.id);
+        const existingToolCall = toolCallsMap.get(toolCallId);
 
-        if (existingIndex >= 0) {
+        if (existingToolCall) {
           // Update existing tool call with result if this is a completed event
           if (rawEvent.type === 'item.completed' && (item.aggregated_output || item.output || item.result)) {
-            toolCalls[existingIndex].result = item.aggregated_output || item.output || item.result;
+            existingToolCall.result = item.aggregated_output || item.output || item.result;
           }
         } else {
           // Add new tool call
           if (rawEvent.type === 'item.completed' && (item.aggregated_output || item.output || item.result)) {
             toolCall.result = item.aggregated_output || item.output || item.result;
           }
-          toolCalls.push(toolCall);
+          toolCallsMap.set(toolCallId, toolCall);
         }
 
-        console.log('[parseCodexRawEvents] Extracted tool call:', {
-          id: toolCall.id,
-          name: toolCall.name,
-          hasResult: !!toolCall.result,
-        });
         continue;
       }
 
-      // Extract text content from various Codex SDK event structures
-      const getText = (event: any): string | null => {
-        // Handle direct item.text field (Codex SDK format)
-        if (event.item?.text) {
-          return event.item.text;
-        }
-        // Handle item.completed/updated with text in item field
-        if (event.item?.content) {
-          for (const part of event.item.content) {
-            if (part.type === 'text' && part.text) {
-              return part.text;
-            }
-          }
-        }
-        // Handle delta updates with delta.content
-        if (event.delta?.content) {
-          for (const part of event.delta.content) {
-            if (part.type === 'text' && part.text) {
-              return part.text;
-            }
-          }
-        }
-        return null;
-      };
-
-      const text = getText(rawEvent);
-      console.log('[parseCodexRawEvents] Extracted text:', text ? text.substring(0, 50) + '...' : 'null');
+      // Extract text content using shared utility
+      const text = extractTextFromCodexEvent(rawEvent);
 
       if (!text) continue;
 
       // Categorize based on eventType metadata
       if (eventType === 'reasoning') {
-        console.log('[parseCodexRawEvents] Adding to reasoning');
         reasoning.push(text);
       } else if (eventType === 'text') {
-        console.log('[parseCodexRawEvents] Adding to output');
-        output += text;
+        outputParts.push(text);
       }
     } catch (error) {
       // If parsing fails, log but don't crash the UI
@@ -122,12 +95,11 @@ function parseCodexRawEvents(rawEvents: Message[]): ParsedCodexOutput {
     }
   }
 
-  console.log('[parseCodexRawEvents] Parse complete:', {
-    reasoningCount: reasoning.length,
-    toolCallsCount: toolCalls.length,
-    outputLength: output.length,
-    outputPreview: output.substring(0, 100),
-  });
+  // Convert Map to array
+  const toolCalls = Array.from(toolCallsMap.values());
+
+  // Join output parts for efficient string concatenation
+  const output = outputParts.join('');
 
   return { reasoning, output, toolCalls };
 }
@@ -170,7 +142,7 @@ export const CodexOutputRenderer: React.FC<CodexOutputRendererProps> = ({
   const renderToolCall = (tool: ToolCall) => {
     const isExpanded = expandedTools.has(tool.id || tool.name);
     const toolResult = tool.result;
-    const resultDetails = typeof toolResult === 'object' && toolResult !== null ? (toolResult as Record<string, any>) : null;
+    const resultDetails = typeof toolResult === 'object' && toolResult !== null ? (toolResult as Record<string, unknown>) : null;
     const explicitSuccess = resultDetails && 'success' in resultDetails ? resultDetails.success !== false : undefined;
     const derivedErrorMessage = resultDetails && typeof resultDetails.error === 'string' ? (resultDetails.error as string) : undefined;
     const didFail = explicitSuccess === false || !!derivedErrorMessage;
@@ -185,6 +157,8 @@ export const CodexOutputRenderer: React.FC<CodexOutputRendererProps> = ({
         <button
           onClick={() => handleToggleToolExpand(tool.id || tool.name)}
           className="w-full py-2 px-3 bg-nim-secondary flex items-center gap-2 transition-colors text-left border-none cursor-pointer hover:bg-nim-hover"
+          aria-expanded={isExpanded}
+          aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${toolDisplayName} tool call details`}
         >
           <MaterialSymbol icon="build" size={14} className="tool-icon" />
           <span
@@ -274,6 +248,8 @@ export const CodexOutputRenderer: React.FC<CodexOutputRendererProps> = ({
           <button
             onClick={() => setIsThinkingExpanded(!isThinkingExpanded)}
             className="w-full py-2 px-3 flex items-center gap-2 text-left border-none cursor-pointer bg-transparent transition-colors hover:bg-[var(--nim-bg-hover)]"
+            aria-expanded={isThinkingExpanded}
+            aria-label={`${isThinkingExpanded ? 'Collapse' : 'Expand'} reasoning blocks`}
           >
             <MaterialSymbol
               icon={isThinkingExpanded ? 'expand_more' : 'chevron_right'}

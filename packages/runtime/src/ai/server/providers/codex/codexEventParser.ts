@@ -1,7 +1,9 @@
+import { extractTextFromCodexEvent } from './textExtraction';
+
 export interface ParsedCodexToolCall {
   name: string;
-  arguments?: any;
-  result?: any;
+  arguments?: unknown;
+  result?: unknown;
 }
 
 export interface ParsedCodexUsage {
@@ -10,61 +12,41 @@ export interface ParsedCodexUsage {
   total_tokens: number;
 }
 
+/**
+ * Base shape of Codex SDK events
+ *
+ * Codex SDK events are complex objects with varying shapes.
+ * This type captures the minimal common structure we rely on.
+ */
+export interface CodexSdkEvent {
+  /** Event type identifier (e.g., 'error', 'item.completed', 'task_complete') */
+  type?: string;
+  /** Event data varies by type */
+  [key: string]: unknown;
+}
+
+/**
+ * Type guard to check if an unknown value is a CodexSdkEvent
+ */
+export function isCodexSdkEvent(value: unknown): value is CodexSdkEvent {
+  return value !== null && typeof value === 'object';
+}
+
 export interface ParsedCodexEvent {
   text?: string;
   reasoning?: string;
   error?: string;
   toolCall?: ParsedCodexToolCall;
   usage?: ParsedCodexUsage;
-  rawEvent?: unknown; // Preserve original Codex SDK event for storage
+  rawEvent?: CodexSdkEvent; // Preserve original Codex SDK event for storage
 }
 
-function getTextFromContentArray(content: unknown): string | null {
-  if (!Array.isArray(content)) {
-    return null;
-  }
-
-  const textParts = content
-    .map((item) => {
-      if (typeof item === 'string') {
-        return item;
-      }
-      if (item && typeof item === 'object') {
-        const entry = item as Record<string, unknown>;
-        if (typeof entry.text === 'string') return entry.text;
-        if (typeof entry.content === 'string') return entry.content;
-        if (typeof entry.value === 'string') return entry.value;
-      }
-      return '';
-    })
-    .filter(Boolean);
-
-  return textParts.length > 0 ? textParts.join('\n') : null;
-}
-
+/**
+ * Legacy function kept for backward compatibility with existing code.
+ * @deprecated Use extractTextFromCodexEvent from textExtraction.ts instead.
+ */
 function getTextCandidate(value: unknown): string | null {
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    return trimmed.length > 0 ? value : null;
-  }
-
-  if (Array.isArray(value)) {
-    return getTextFromContentArray(value);
-  }
-
-  if (value && typeof value === 'object') {
-    const item = value as Record<string, unknown>;
-    return (
-      getTextCandidate(item.text) ??
-      getTextCandidate(item.message) ??
-      getTextCandidate(item.content) ??
-      getTextCandidate(item.delta) ??
-      getTextCandidate(item.output_text) ??
-      null
-    );
-  }
-
-  return null;
+  return extractTextFromCodexEvent(value);
 }
 
 function getUsageFromRecord(record: Record<string, unknown> | null | undefined): ParsedCodexUsage | undefined {
@@ -125,34 +107,24 @@ function extractToolCallFromRecord(record: Record<string, unknown> | null | unde
 
   return {
     name,
-    arguments: record.arguments ?? record.args ?? record.input ?? record.parameters,
+    arguments: (record.arguments ?? record.args ?? record.input ?? record.parameters) as unknown,
     result:
-      record.result ??
+      (record.result ??
       record.output ??
       record.aggregated_output ?? // Codex uses aggregated_output for command results
       (record.error ? { error: record.error } : undefined) ??
-      (typeof record.exit_code === 'number' ? { exit_code: record.exit_code } : undefined),
+      (typeof record.exit_code === 'number' ? { exit_code: record.exit_code } : undefined)) as unknown,
   };
 }
 
 export function parseCodexEvent(event: unknown): ParsedCodexEvent[] {
-  if (!event || typeof event !== 'object') {
+  if (!isCodexSdkEvent(event)) {
     return [];
   }
 
   const parsed: ParsedCodexEvent[] = [];
   const record = event as Record<string, unknown>;
   const eventType = typeof record.type === 'string' ? record.type : '';
-
-  // Log ALL events to see what we're receiving
-  console.log('[codexEventParser] Received event:', {
-    eventType,
-    hasItem: !!record.item,
-    hasTool: !!record.tool,
-    hasToolCall: !!record.tool_call,
-    itemType: record.item ? (record.item as any).type : undefined,
-    keys: Object.keys(record).join(', '),
-  });
 
   const directError = getTextCandidate(record.error) ?? getTextCandidate(record.message);
   if (eventType === 'error' && directError) {
@@ -171,19 +143,6 @@ export function parseCodexEvent(event: unknown): ParsedCodexEvent[] {
   if (item && typeof item === 'object') {
     const itemRecord = item as Record<string, unknown>;
     const itemType = typeof itemRecord.type === 'string' ? itemRecord.type : '';
-
-    // Log command_execution items to see their structure
-    if (itemType === 'command_execution') {
-      console.log('[codexEventParser] command_execution item:', {
-        itemKeys: Object.keys(itemRecord).join(', '),
-        hasName: 'name' in itemRecord,
-        hasTool: 'tool' in itemRecord,
-        hasCommand: 'command' in itemRecord,
-        name: itemRecord.name,
-        tool: itemRecord.tool,
-        command: itemRecord.command,
-      });
-    }
 
     const itemText = getTextCandidate(itemRecord);
 
@@ -206,12 +165,6 @@ export function parseCodexEvent(event: unknown): ParsedCodexEvent[] {
         eventType === 'item.completed' ||
         eventType === 'item.started')
     ) {
-      console.log('[codexEventParser] Parsed item tool call:', {
-        toolName: itemToolCall.name,
-        itemType,
-        eventType,
-        hasRawEvent: !!event,
-      });
       parsed.push({ toolCall: itemToolCall, rawEvent: event });
     }
   }
@@ -221,11 +174,6 @@ export function parseCodexEvent(event: unknown): ParsedCodexEvent[] {
     extractToolCallFromRecord(record.tool_call as Record<string, unknown> | undefined) ??
     (eventType.includes('tool') ? extractToolCallFromRecord(record) : undefined);
   if (rootToolCall) {
-    console.log('[codexEventParser] Parsed root tool call:', {
-      toolName: rootToolCall.name,
-      eventType,
-      hasRawEvent: !!event,
-    });
     parsed.push({ toolCall: rootToolCall, rawEvent: event });
   }
 

@@ -13,6 +13,7 @@ import {
   ModelIdentifier,
 } from '../types';
 import { CodexSDKProtocol } from '../protocols/CodexSDKProtocol';
+import { ProtocolEvent } from '../protocols/ProtocolInterface';
 import { ToolPermissionService } from '../permissions/ToolPermissionService';
 import { PermissionMode, TrustChecker, PermissionPatternSaver, PermissionPatternChecker, SecurityLogger } from './ProviderPermissionMixin';
 import { CodexSdkModuleLike, loadCodexSdkModule } from './codex/codexSdkLoader';
@@ -246,17 +247,13 @@ export class OpenAICodexProvider extends BaseAgentProvider {
       });
     }
 
-    // Build prompt with system prompt, history (if needed), and user message
-    const shouldBootstrapFromHistory =
-      !!sessionId &&
-      !this.sessions.getSessionId(sessionId) &&
-      !!messages &&
-      messages.length > 0;
+    // Build prompt with system prompt and user message
+    // Note: Never include conversation history when resuming threads - the SDK maintains thread state
     const prompt = this.buildCodexPrompt({
       systemPrompt,
       message: messageWithAttachmentHints,
       messages,
-      shouldBootstrapFromHistory,
+      shouldBootstrapFromHistory: false, // Always false - Codex SDK maintains thread history
     });
 
     if (sessionId) {
@@ -288,6 +285,12 @@ export class OpenAICodexProvider extends BaseAgentProvider {
 
       // Get or create protocol session
       const existingSessionId = this.sessions.getSessionId(sessionId || '');
+      console.log('[CODEX] Session lookup:', {
+        sessionId,
+        existingSessionId,
+        action: existingSessionId ? 'RESUME' : 'CREATE'
+      });
+
       const session = existingSessionId
         ? await this.protocol.resumeSession(existingSessionId, {
             workspacePath,
@@ -306,10 +309,11 @@ export class OpenAICodexProvider extends BaseAgentProvider {
             },
           });
 
-      // Capture session ID for future resume
-      if (sessionId && session.id && session.id !== existingSessionId) {
-        this.sessions.captureSessionId(sessionId, session.id);
-      }
+      console.log('[CODEX] Session after create/resume:', {
+        sessionId,
+        protocolSessionId: session.id,
+        existingSessionId
+      });
 
       // Send message using protocol
       for await (const event of this.protocol.sendMessage(session, { content: prompt })) {
@@ -317,42 +321,9 @@ export class OpenAICodexProvider extends BaseAgentProvider {
           throw new Error('Operation cancelled');
         }
 
-        // Debug logging for tool calls
-        if (event.type === 'tool_call') {
-          console.log('[OpenAICodexProvider] Tool call event:', {
-            type: event.type,
-            hasRawEvent: !!event.metadata?.rawEvent,
-            toolCall: event.toolCall,
-            metadata: event.metadata,
-          });
-        }
-
         // Store EACH raw event immediately as a separate database row
-        if (sessionId && event.metadata?.rawEvent) {
-          console.log('[OpenAICodexProvider] Storing raw event:', {
-            eventType: event.type,
-            hasContent: !!event.content,
-            contentPreview: typeof event.content === 'string' ? event.content.substring(0, 50) : '(not string)',
-          });
-          await this.logAgentMessage(
-            sessionId,
-            this.getProviderName(),
-            'output',
-            JSON.stringify(event.metadata.rawEvent),
-            {
-              eventType: event.type,
-              codexProvider: true,
-            },
-            false, // not hidden
-            undefined, // no provider message ID
-            false // not searchable - raw events are not for search
-          );
-        } else if (sessionId && event.type !== 'complete' && event.type !== 'usage') {
-          console.log('[OpenAICodexProvider] NOT storing event (no rawEvent):', {
-            type: event.type,
-            hasMetadata: !!event.metadata,
-            hasRawEvent: !!event.metadata?.rawEvent,
-          });
+        if (sessionId) {
+          await this.storeRawEventIfPresent(event, sessionId);
         }
 
         // Convert protocol events to stream chunks
@@ -373,6 +344,15 @@ export class OpenAICodexProvider extends BaseAgentProvider {
             usage: event.usage,
           };
         }
+      }
+
+      // Capture session ID after stream completes (thread ID is only available after first run)
+      if (sessionId && session.id && session.id !== existingSessionId) {
+        console.log('[CODEX] Capturing session ID after stream:', {
+          nimbalystSessionId: sessionId,
+          codexThreadId: session.id
+        });
+        this.sessions.captureSessionId(sessionId, session.id);
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -499,6 +479,31 @@ export class OpenAICodexProvider extends BaseAgentProvider {
       .join('\n');
 
     return `${message}\n\nAttached files:\n${attachmentList}`;
+  }
+
+  /**
+   * Store a raw protocol event to the database if present in event metadata.
+   * Each raw event is stored as a separate database row for Codex event tracking.
+   */
+  private async storeRawEventIfPresent(
+    event: ProtocolEvent,
+    sessionId: string
+  ): Promise<void> {
+    if (event.metadata?.rawEvent) {
+      await this.logAgentMessage(
+        sessionId,
+        this.getProviderName(),
+        'output',
+        JSON.stringify(event.metadata.rawEvent),
+        {
+          eventType: event.type,
+          codexProvider: true,
+        },
+        false, // not hidden
+        undefined, // no provider message ID
+        false // not searchable - raw events are not for search
+      );
+    }
   }
 
 
