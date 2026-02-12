@@ -20,6 +20,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.65] - 2026-02-12
+
+
+### Added
+- Codex raw event storage and grouping in database
+- Codex tool calls now render with same widget as Claude Code
+
+### Changed
+- Improved Codex provider code quality and performance
+
+### Fixed
+- Global-scoped extension tools now visible without active file
+- Edit tool now shows red/green diffs after agent refactoring
+- Codex text extraction from item.text field
+- Codex output saving to database
+- TypeScript type errors in AgentToolHooks integration
+
 ## [0.52.64] - 2026-02-12
 
 
