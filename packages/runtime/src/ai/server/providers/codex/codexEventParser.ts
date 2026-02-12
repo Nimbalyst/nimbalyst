@@ -38,6 +38,7 @@ export interface ParsedCodexEvent {
   error?: string;
   toolCall?: ParsedCodexToolCall;
   usage?: ParsedCodexUsage;
+  threadId?: string; // Thread ID from thread.started event
   rawEvent?: CodexSdkEvent; // Preserve original Codex SDK event for storage
 }
 
@@ -125,6 +126,11 @@ export function parseCodexEvent(event: unknown): ParsedCodexEvent[] {
   const parsed: ParsedCodexEvent[] = [];
   const record = event as Record<string, unknown>;
   const eventType = typeof record.type === 'string' ? record.type : '';
+
+  // Capture thread ID from thread.started event
+  if (eventType === 'thread.started' && typeof record.thread_id === 'string' && record.thread_id) {
+    parsed.push({ threadId: record.thread_id, rawEvent: event });
+  }
 
   const directError = getTextCandidate(record.error) ?? getTextCandidate(record.message);
   if (eventType === 'error' && directError) {

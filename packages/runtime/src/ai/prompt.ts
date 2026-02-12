@@ -35,7 +35,7 @@ Call this tool as soon as you understand what the user wants to accomplish. Usua
 }
 
 /**
- * Options for building Claude Code system prompts
+ * Options for building agent system prompts (Claude Code, Codex, etc.)
  */
 export interface ClaudeCodePromptOptions {
   hasSessionNaming?: boolean;
@@ -58,7 +58,7 @@ export interface ClaudeCodePromptOptions {
 }
 
 /**
- * Unified system prompt builder for Claude Code provider
+ * Unified system prompt builder for agent providers (Claude Code, Codex, etc.)
  * Builds a consistent system prompt for all session types with optional sections
  * based on context (worktree, voice mode, session naming).
  */

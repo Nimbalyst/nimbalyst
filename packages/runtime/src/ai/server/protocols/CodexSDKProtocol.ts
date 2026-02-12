@@ -23,7 +23,6 @@ import {
   CodexSdkModuleLike,
   CodexThreadLike,
   getEventsIterable,
-  getThreadIdFromRunResult,
   loadCodexSdkModule,
 } from '../providers/codex/codexSdkLoader';
 import { parseCodexEvent } from '../providers/codex/codexEventParser';
@@ -74,8 +73,9 @@ export class CodexSDKProtocol implements AgentProtocol {
     const threadOptions = this.buildThreadOptions(options);
     const thread = client.startThread(threadOptions);
 
-    // Try to capture thread ID immediately if available
+    // Thread ID is typically empty initially and populated from thread.started event
     const threadId = thread.id || '';
+    console.log('[CODEX-PROTOCOL] Thread created, initial ID:', threadId || '(empty - will be set from thread.started event)');
 
     return {
       id: threadId,
@@ -164,11 +164,7 @@ export class CodexSDKProtocol implements AgentProtocol {
         signal: session.raw?.options?.abortSignal,
       });
 
-      // Capture thread ID from run result
-      const threadId = getThreadIdFromRunResult(runResult);
-      if (threadId && threadId !== session.id) {
-        session.id = threadId;
-      }
+      // Thread ID is captured from thread.started event during streaming (see event loop below)
 
       // Stream events
       const events = getEventsIterable(runResult);
@@ -181,6 +177,26 @@ export class CodexSDKProtocol implements AgentProtocol {
         // Parse Codex event into protocol events
         const parsedEvents = parseCodexEvent(event);
         for (const parsedEvent of parsedEvents) {
+          // Capture thread ID from thread.started event
+          if (parsedEvent.threadId && parsedEvent.threadId !== session.id) {
+            session.id = parsedEvent.threadId;
+            console.log('[CODEX-PROTOCOL] Thread ID captured from thread.started event:', session.id);
+
+            // Yield the raw event for database storage
+            // This ensures thread.started events are preserved in the codex_events table
+            if (parsedEvent.rawEvent) {
+              yield {
+                type: 'text',
+                content: '', // No visible content
+                metadata: {
+                  rawEvent: parsedEvent.rawEvent,
+                  threadStarted: true,
+                  threadId: parsedEvent.threadId
+                },
+              };
+            }
+          }
+
           // Error event
           if (parsedEvent.error) {
             yield {

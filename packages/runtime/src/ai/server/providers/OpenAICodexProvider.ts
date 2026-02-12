@@ -1,6 +1,7 @@
 import path from 'path';
 import { BaseAgentProvider } from './BaseAgentProvider';
 import { buildUserMessageAddition } from './documentContextUtils';
+import { buildClaudeCodeSystemPrompt } from '../../prompt';
 import { DEFAULT_MODELS } from '../../modelConstants';
 import { AIToolCall, AIToolResult } from '../../types';
 import {
@@ -346,13 +347,20 @@ export class OpenAICodexProvider extends BaseAgentProvider {
         }
       }
 
-      // Capture session ID after stream completes (thread ID is only available after first run)
-      if (sessionId && session.id && session.id !== existingSessionId) {
-        console.log('[CODEX] Capturing session ID after stream:', {
-          nimbalystSessionId: sessionId,
-          codexThreadId: session.id
-        });
-        this.sessions.captureSessionId(sessionId, session.id);
+      // Capture session ID after stream completes
+      // The protocol layer captures thread ID from thread.started event during streaming
+      if (sessionId && session.id) {
+        if (session.id !== existingSessionId) {
+          console.log('[CODEX] Saving new thread ID:', {
+            nimbalystSessionId: sessionId,
+            codexThreadId: session.id
+          });
+          this.sessions.captureSessionId(sessionId, session.id);
+        } else {
+          console.log('[CODEX] Thread ID unchanged:', session.id);
+        }
+      } else if (sessionId && !session.id) {
+        console.error('[CODEX] WARNING: Stream completed but thread ID was never captured!');
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -413,6 +421,29 @@ export class OpenAICodexProvider extends BaseAgentProvider {
     this.permissionService.clearSessionCache();
     // Call base class destroy (calls abort, sessions.clear, permissions.clearSessionCache, removeAllListeners)
     super.destroy();
+  }
+
+  /**
+   * Build system prompt for Codex using the same addendum as Claude Code.
+   * Uses buildClaudeCodeSystemPrompt to include Nimbalyst-specific instructions
+   * for visual tools, worktrees, session naming, etc.
+   */
+  protected buildSystemPrompt(documentContext?: DocumentContext): string {
+    // Note: Session naming is not currently supported for Codex, but we could add it later
+    const hasSessionNaming = false;
+    const worktreePath = documentContext?.worktreePath;
+    const isVoiceMode = (documentContext as any)?.isVoiceMode;
+    const voiceModeCodingAgentPrompt = (documentContext as any)?.voiceModeCodingAgentPrompt;
+    // Note: Agent teams are not currently supported for Codex
+    const enableAgentTeams = false;
+
+    return buildClaudeCodeSystemPrompt({
+      hasSessionNaming,
+      worktreePath,
+      isVoiceMode,
+      voiceModeCodingAgentPrompt,
+      enableAgentTeams,
+    });
   }
 
   private getConfiguredModel(): string {
