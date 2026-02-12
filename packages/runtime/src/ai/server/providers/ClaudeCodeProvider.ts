@@ -204,7 +204,31 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
         this.teammateManager.handlePreToolUse(toolName, toolInput, toolUseID, sessionId),
       isTeammateSession,
       permissionsPath,
-      historyManager,
+      historyManager: {
+        createSnapshot: async (filePath: string, content: string, snapshotType: string, message: string, metadata?: any) => {
+          await historyManager.createSnapshot(filePath, content, snapshotType as any, message, metadata);
+        },
+        getPendingTags: async (filePath: string) => {
+          const tags = await historyManager.getPendingTags(filePath);
+          return tags.map(tag => ({
+            id: tag.id,
+            createdAt: tag.createdAt,
+            sessionId: tag.sessionId
+          }));
+        },
+        tagFile: async (filePath: string, tagId: string, content: string, metadata?: any) => {
+          await historyManager.createTag(
+            filePath,
+            tagId,
+            content,
+            metadata?.sessionId || 'unknown',
+            metadata?.toolUseId || ''
+          );
+        },
+        updateTagStatus: async (filePath: string, tagId: string, status: string) => {
+          await historyManager.updateTagStatus(filePath, tagId, status as any);
+        }
+      },
     });
   }
 
@@ -654,7 +678,31 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
         this.teammateManager.handlePreToolUse(toolName, toolInput, toolUseID, sessionId),
       isTeammateSession: false,
       permissionsPath,
-      historyManager,
+      historyManager: {
+        createSnapshot: async (filePath: string, content: string, snapshotType: string, message: string, metadata?: any) => {
+          await historyManager.createSnapshot(filePath, content, snapshotType as any, message, metadata);
+        },
+        getPendingTags: async (filePath: string) => {
+          const tags = await historyManager.getPendingTags(filePath);
+          return tags.map(tag => ({
+            id: tag.id,
+            createdAt: tag.createdAt,
+            sessionId: tag.sessionId
+          }));
+        },
+        tagFile: async (filePath: string, tagId: string, content: string, metadata?: any) => {
+          await historyManager.createTag(
+            filePath,
+            tagId,
+            content,
+            metadata?.sessionId || 'unknown',
+            metadata?.toolUseId || ''
+          );
+        },
+        updateTagStatus: async (filePath: string, tagId: string, status: string) => {
+          await historyManager.updateTagStatus(filePath, tagId, status as any);
+        }
+      },
     });
 
     // Clear edited files tracker for new turn
