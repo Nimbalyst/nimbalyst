@@ -62,6 +62,30 @@ export interface ChatAttachment {
   addedAt: number;
 }
 
+export interface ToolCall {
+  id?: string;
+  name: string;
+  arguments?: any;
+  result?: any;
+  targetFilePath?: string;  // File path this tool call was executed against
+  // Sub-agent specific fields
+  isSubAgent?: boolean;           // true for Task tools
+  subAgentType?: string;          // e.g., "Explore", "bug-fixer", etc.
+  parentToolId?: string;          // ID of parent Task tool
+  childToolCalls?: Message[];     // Nested tools executed by sub-agent
+  // Agent team teammate fields (set when task is a team spawn)
+  teammateName?: string;          // Named teammate (e.g., "security-reviewer")
+  teamName?: string;              // Team this teammate belongs to
+  teammateMode?: string;          // Permission mode for teammate (e.g., "plan")
+  teammateAgentId?: string;       // Full agent ID (e.g., "researcher@myteam")
+  teammateColor?: string;         // Color for UI differentiation
+  // Tool progress tracking (for long-running tools and background tasks)
+  toolProgress?: {
+    toolName: string;             // Name of the tool currently executing
+    elapsedSeconds: number;       // How long it has been running
+  };
+}
+
 export interface Message {
   role: 'user' | 'assistant' | 'tool' | 'system';
   content: string;
@@ -69,29 +93,7 @@ export interface Message {
   mode?: 'planning' | 'agent';  // AI mode when message was sent (user messages only)
   // Additional fields for rich message types
   edits?: any[];
-  toolCall?: {
-    id?: string;
-    name: string;
-    arguments?: any;
-    result?: any;
-    targetFilePath?: string;  // File path this tool call was executed against
-    // Sub-agent specific fields
-    isSubAgent?: boolean;           // true for Task tools
-    subAgentType?: string;          // e.g., "Explore", "bug-fixer", etc.
-    parentToolId?: string;          // ID of parent Task tool
-    childToolCalls?: Message[];     // Nested tools executed by sub-agent
-    // Agent team teammate fields (set when task is a team spawn)
-    teammateName?: string;          // Named teammate (e.g., "security-reviewer")
-    teamName?: string;              // Team this teammate belongs to
-    teammateMode?: string;          // Permission mode for teammate (e.g., "plan")
-    teammateAgentId?: string;       // Full agent ID (e.g., "researcher@myteam")
-    teammateColor?: string;         // Color for UI differentiation
-    // Tool progress tracking (for long-running tools and background tasks)
-    toolProgress?: {
-      toolName: string;             // Name of the tool currently executing
-      elapsedSeconds: number;       // How long it has been running
-    };
-  };
+  toolCall?: ToolCall;
   isError?: boolean;
   isAuthError?: boolean; // True when error is an authentication failure (SDK first-class detection)
   errorMessage?: string;
@@ -109,6 +111,7 @@ export interface Message {
     total_tokens: number;
   };
   attachments?: ChatAttachment[];
+  metadata?: Record<string, unknown>;  // Provider-specific metadata (e.g., Codex raw events)
 }
 
 export type AIProviderType = 'claude' | 'claude-code' | 'openai' | 'openai-codex' | 'lmstudio';

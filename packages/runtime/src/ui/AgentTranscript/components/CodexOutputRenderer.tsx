@@ -1,7 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { MaterialSymbol } from '../../icons/MaterialSymbol';
-import type { Message } from '../../../ai/server/types';
+import { JSONViewer } from './JSONViewer';
+import { formatToolDisplayName } from '../utils/toolNameFormatter';
+import type { Message, ToolCall } from '../../../ai/server/types';
 
 interface CodexOutputRendererProps {
   rawEvents: Message[];
@@ -11,6 +13,7 @@ interface CodexOutputRendererProps {
 interface ParsedCodexOutput {
   reasoning: string[];
   output: string;
+  toolCalls: ToolCall[];
 }
 
 /**
@@ -23,6 +26,7 @@ interface ParsedCodexOutput {
 function parseCodexRawEvents(rawEvents: Message[]): ParsedCodexOutput {
   console.log('[parseCodexRawEvents] Starting parse with', rawEvents.length, 'events');
   const reasoning: string[] = [];
+  const toolCalls: ToolCall[] = [];
   let output = '';
 
   for (const msg of rawEvents) {
@@ -40,6 +44,39 @@ function parseCodexRawEvents(rawEvents: Message[]): ParsedCodexOutput {
         hasItem: !!rawEvent.item,
         itemType: rawEvent.item?.type,
       });
+
+      // Handle tool_call events
+      if (eventType === 'tool_call' && rawEvent.item) {
+        const item = rawEvent.item;
+        const toolCall: ToolCall = {
+          id: item.id || `tool-${Date.now()}`,
+          name: item.command || item.name || item.tool || 'Unknown Tool',
+          arguments: item.arguments || item.args || {},
+        };
+
+        // Check if we already have a tool call with this ID (for started/completed pairs)
+        const existingIndex = toolCalls.findIndex(tc => tc.id === toolCall.id);
+
+        if (existingIndex >= 0) {
+          // Update existing tool call with result if this is a completed event
+          if (rawEvent.type === 'item.completed' && (item.aggregated_output || item.output || item.result)) {
+            toolCalls[existingIndex].result = item.aggregated_output || item.output || item.result;
+          }
+        } else {
+          // Add new tool call
+          if (rawEvent.type === 'item.completed' && (item.aggregated_output || item.output || item.result)) {
+            toolCall.result = item.aggregated_output || item.output || item.result;
+          }
+          toolCalls.push(toolCall);
+        }
+
+        console.log('[parseCodexRawEvents] Extracted tool call:', {
+          id: toolCall.id,
+          name: toolCall.name,
+          hasResult: !!toolCall.result,
+        });
+        continue;
+      }
 
       // Extract text content from various Codex SDK event structures
       const getText = (event: any): string | null => {
@@ -87,11 +124,12 @@ function parseCodexRawEvents(rawEvents: Message[]): ParsedCodexOutput {
 
   console.log('[parseCodexRawEvents] Parse complete:', {
     reasoningCount: reasoning.length,
+    toolCallsCount: toolCalls.length,
     outputLength: output.length,
     outputPreview: output.substring(0, 100),
   });
 
-  return { reasoning, output };
+  return { reasoning, output, toolCalls };
 }
 
 /**
@@ -111,12 +149,113 @@ export const CodexOutputRenderer: React.FC<CodexOutputRendererProps> = ({
   isCollapsed = false,
 }) => {
   const [isThinkingExpanded, setIsThinkingExpanded] = useState(false);
+  const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
 
   // Parse raw events at display time
-  const { reasoning, output } = useMemo(() => parseCodexRawEvents(rawEvents), [rawEvents]);
+  const { reasoning, output, toolCalls } = useMemo(() => parseCodexRawEvents(rawEvents), [rawEvents]);
 
-  // If no reasoning blocks, render as plain markdown
-  if (reasoning.length === 0) {
+  const handleToggleToolExpand = (toolId: string) => {
+    setExpandedTools(prev => {
+      const next = new Set(prev);
+      if (next.has(toolId)) {
+        next.delete(toolId);
+      } else {
+        next.add(toolId);
+      }
+      return next;
+    });
+  };
+
+  // Render tool call widget (same style as Claude Code)
+  const renderToolCall = (tool: ToolCall) => {
+    const isExpanded = expandedTools.has(tool.id || tool.name);
+    const toolResult = tool.result;
+    const resultDetails = typeof toolResult === 'object' && toolResult !== null ? (toolResult as Record<string, any>) : null;
+    const explicitSuccess = resultDetails && 'success' in resultDetails ? resultDetails.success !== false : undefined;
+    const derivedErrorMessage = resultDetails && typeof resultDetails.error === 'string' ? (resultDetails.error as string) : undefined;
+    const didFail = explicitSuccess === false || !!derivedErrorMessage;
+    const statusLabel = didFail ? 'Failed' : 'Succeeded';
+    const statusColor = didFail ? 'var(--nim-error)' : 'var(--nim-success)';
+    const statusBackground = didFail ? 'rgba(239, 68, 68, 0.12)' : 'rgba(16, 185, 129, 0.12)';
+    const hasResult = toolResult !== undefined && toolResult !== null && (typeof toolResult !== 'string' || toolResult.trim().length > 0);
+    const toolDisplayName = formatToolDisplayName(tool.name || '') || tool.name || 'Tool Call';
+
+    return (
+      <div key={tool.id || tool.name} className="rounded-md bg-nim-tertiary overflow-hidden border border-nim my-2">
+        <button
+          onClick={() => handleToggleToolExpand(tool.id || tool.name)}
+          className="w-full py-2 px-3 bg-nim-secondary flex items-center gap-2 transition-colors text-left border-none cursor-pointer hover:bg-nim-hover"
+        >
+          <MaterialSymbol icon="build" size={14} className="tool-icon" />
+          <span
+            className="font-mono text-xs text-nim flex-1"
+            title={tool.name}
+          >
+            {toolDisplayName}
+          </span>
+          <span
+            className="text-[0.7rem] font-semibold py-0.5 px-2 rounded-full uppercase tracking-tight pointer-events-none"
+            style={{
+              color: statusColor,
+              backgroundColor: statusBackground
+            }}
+          >
+            {statusLabel}
+          </span>
+          <MaterialSymbol
+            icon={isExpanded ? "expand_more" : "chevron_right"}
+            size={12}
+            className="chevron-icon"
+          />
+        </button>
+
+        {isExpanded && (
+          <div className="py-2 px-3 text-xs">
+            {typeof tool.arguments === 'object' && tool.arguments !== null && Object.keys(tool.arguments).length > 0 && (
+              <div className="mb-2">
+                <div className="text-nim-faint mb-1">Parameters:</div>
+                <JSONViewer data={tool.arguments} maxHeight="16rem" />
+              </div>
+            )}
+
+            {typeof tool.arguments === 'string' && tool.arguments.trim().length > 0 && (
+              <div className="mb-2">
+                <div className="text-nim-faint mb-1">Parameters (raw):</div>
+                <pre className="text-xs text-nim-muted font-mono overflow-x-auto bg-nim-secondary p-2 rounded">
+                  {tool.arguments}
+                </pre>
+              </div>
+            )}
+
+            <div className="mt-2">
+              <div className="text-nim-faint mb-1">Result:</div>
+              {hasResult ? (
+                typeof toolResult === 'string' ? (
+                  <pre className="text-xs text-nim font-mono overflow-x-auto bg-nim-secondary p-2 rounded max-h-64 overflow-y-auto">
+                    {toolResult}
+                  </pre>
+                ) : (
+                  <JSONViewer data={toolResult} maxHeight="16rem" />
+                )
+              ) : (
+                <div className="text-xs text-nim-faint italic">
+                  Tool did not return a result.
+                </div>
+              )}
+              {derivedErrorMessage && (
+                <div className="mt-2 text-xs text-nim-error">
+                  {derivedErrorMessage}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // If no reasoning blocks and no tool calls, render as plain markdown
+  if (reasoning.length === 0 && toolCalls.length === 0) {
     return (
       <div className={isCollapsed ? 'max-h-20 overflow-hidden relative' : ''}>
         <MarkdownRenderer content={output} isUser={false} />
@@ -165,6 +304,9 @@ export const CodexOutputRenderer: React.FC<CodexOutputRendererProps> = ({
           )}
         </div>
       )}
+
+      {/* Tool calls - rendered with same widget as Claude Code */}
+      {toolCalls.map(renderToolCall)}
 
       {/* Final answer - main content */}
       <div className={`codex-answer ${isCollapsed ? 'max-h-20 overflow-hidden relative' : ''}`}>
