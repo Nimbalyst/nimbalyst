@@ -1,5 +1,5 @@
 import path from 'path';
-import { BaseAIProvider } from '../AIProvider';
+import { BaseAgentProvider } from './BaseAgentProvider';
 import { buildUserMessageAddition } from './documentContextUtils';
 import { DEFAULT_MODELS } from '../../modelConstants';
 import { AIToolCall, AIToolResult } from '../../types';
@@ -12,85 +12,96 @@ import {
   AIProviderType,
   ModelIdentifier,
 } from '../types';
-import { AgentMessagesRepository } from '../../../storage/repositories/AgentMessagesRepository';
-import {
-  CodexClientLike,
-  CodexSdkModuleLike,
-  CodexThreadLike,
-  getEventsIterable,
-  getThreadIdFromRunResult,
-  loadCodexSdkModule,
-} from './codex/codexSdkLoader';
+import { CodexSDKProtocol } from '../protocols/CodexSDKProtocol';
+import { ToolPermissionService } from '../permissions/ToolPermissionService';
+import { PermissionMode, TrustChecker, PermissionPatternSaver, PermissionPatternChecker, SecurityLogger } from './ProviderPermissionMixin';
+import { CodexSdkModuleLike, loadCodexSdkModule } from './codex/codexSdkLoader';
 import { resolvePackagedCodexBinaryPath } from './codex/codexBinaryPath';
-import { parseCodexEvent, ParsedCodexUsage } from './codex/codexEventParser';
-import {
-  PermissionMode,
-  ToolPermissionScope,
-  PermissionDecision,
-  TrustChecker,
-  PermissionPatternSaver,
-  PermissionPatternChecker,
-  SecurityLogger,
-  ProviderPermissionMixin,
-} from './ProviderPermissionMixin';
-import { ProviderSessionManager } from './ProviderSessionManager';
 
 interface OpenAICodexProviderDeps {
+  protocol?: CodexSDKProtocol;
+  permissionService?: ToolPermissionService;
+  // Legacy: for existing tests that mock the SDK loader
   loadSdkModule?: () => Promise<CodexSdkModuleLike>;
   resolveCodexPathOverride?: () => string | undefined;
 }
 
-export class OpenAICodexProvider extends BaseAIProvider {
+export class OpenAICodexProvider extends BaseAgentProvider {
   static readonly DEFAULT_MODEL = DEFAULT_MODELS['openai-codex'];
   private static readonly CODEX_EXECUTION_PATTERN = 'OpenAICodex(agent-run:*)';
 
-  // Injected from Electron main process.
-  private static trustChecker: TrustChecker | null = null;
-  private static permissionPatternSaver: PermissionPatternSaver | null = null;
-  private static permissionPatternChecker: PermissionPatternChecker | null = null;
-  private static securityLogger: SecurityLogger | null = null;
-
-  private apiKey: string;
-  private abortController: AbortController | null = null;
-  private codexClient: CodexClientLike | null = null;
-  private codexThreads: Map<string, CodexThreadLike> = new Map();
-  private readonly loadSdkModule: () => Promise<CodexSdkModuleLike>;
-  private readonly resolveCodexPathOverride: () => string | undefined;
-
-  // Shared session ID management via mixin.
-  private readonly sessions = new ProviderSessionManager({ emit: this.emit.bind(this) });
-
-  // Shared permission infrastructure via mixin.
-  private readonly permissions = new ProviderPermissionMixin();
+  private readonly protocol: CodexSDKProtocol;
+  private readonly permissionService: ToolPermissionService;
 
   constructor(config?: { apiKey?: string }, deps?: OpenAICodexProviderDeps) {
     super();
-    this.apiKey = config?.apiKey || process.env.OPENAI_API_KEY || '';
-    this.loadSdkModule = deps?.loadSdkModule ?? loadCodexSdkModule;
-    this.resolveCodexPathOverride = deps?.resolveCodexPathOverride ?? resolvePackagedCodexBinaryPath;
+    const apiKey = config?.apiKey || process.env.OPENAI_API_KEY || '';
+
+    // Initialize protocol (or use injected for testing)
+    // Support legacy loadSdkModule and resolveCodexPathOverride for existing tests
+    if (deps?.protocol) {
+      this.protocol = deps.protocol;
+    } else if (deps?.loadSdkModule || deps?.resolveCodexPathOverride) {
+      const loadSdk = deps.loadSdkModule ?? loadCodexSdkModule;
+      const resolveCodexPath = deps.resolveCodexPathOverride ?? resolvePackagedCodexBinaryPath;
+      this.protocol = new CodexSDKProtocol(apiKey, loadSdk, resolveCodexPath);
+    } else {
+      this.protocol = new CodexSDKProtocol(apiKey);
+    }
+
+    // Initialize permission service (or use injected for testing)
+    if (deps?.permissionService) {
+      this.permissionService = deps.permissionService;
+    } else {
+      // Validate required dependencies
+      if (!BaseAgentProvider.trustChecker) {
+        throw new Error('[OpenAICodexProvider] trustChecker must be set via setTrustChecker() before creating provider instances');
+      }
+      if (!BaseAgentProvider.permissionPatternSaver) {
+        throw new Error('[OpenAICodexProvider] permissionPatternSaver must be set via setPermissionPatternSaver() before creating provider instances');
+      }
+      if (!BaseAgentProvider.permissionPatternChecker) {
+        throw new Error('[OpenAICodexProvider] permissionPatternChecker must be set via setPermissionPatternChecker() before creating provider instances');
+      }
+      if (!BaseAgentProvider.securityLogger) {
+        throw new Error('[OpenAICodexProvider] securityLogger must be set via setSecurityLogger() before creating provider instances');
+      }
+
+      // TypeScript doesn't understand that the throw statements guarantee non-null here
+      // Use type assertions after validation
+      this.permissionService = new ToolPermissionService({
+        trustChecker: BaseAgentProvider.trustChecker as TrustChecker,
+        patternSaver: BaseAgentProvider.permissionPatternSaver as PermissionPatternSaver,
+        patternChecker: BaseAgentProvider.permissionPatternChecker as PermissionPatternChecker,
+        securityLogger: BaseAgentProvider.securityLogger as SecurityLogger,
+        emit: this.emit.bind(this),
+      });
+    }
+  }
+
+  getProviderName(): string {
+    return 'openai-codex';
   }
 
   public static setTrustChecker(checker: TrustChecker | null): void {
-    OpenAICodexProvider.trustChecker = checker;
+    BaseAgentProvider.setTrustChecker(checker);
   }
 
   public static setPermissionPatternSaver(saver: PermissionPatternSaver | null): void {
-    OpenAICodexProvider.permissionPatternSaver = saver;
+    BaseAgentProvider.setPermissionPatternSaver(saver);
   }
 
   public static setPermissionPatternChecker(checker: PermissionPatternChecker | null): void {
-    OpenAICodexProvider.permissionPatternChecker = checker;
+    BaseAgentProvider.setPermissionPatternChecker(checker);
   }
 
   public static setSecurityLogger(logger: SecurityLogger | null): void {
-    OpenAICodexProvider.securityLogger = logger;
+    BaseAgentProvider.setSecurityLogger(logger);
   }
 
   async initialize(config: ProviderConfig): Promise<void> {
     this.config = config;
-    if (config.apiKey) {
-      this.apiKey = config.apiKey;
-    }
+    // Note: API key is set during construction and managed by the protocol
   }
 
   private static readonly LEGACY_MODEL_ALIASES = new Set([
@@ -158,10 +169,6 @@ export class OpenAICodexProvider extends BaseAIProvider {
     return 'OpenAI Codex SDK agent provider with tool and streaming support';
   }
 
-  setProviderSessionData(sessionId: string, data: any): void {
-    this.sessions.setProviderSessionData(sessionId, data);
-  }
-
   getProviderSessionData(sessionId: string): any {
     const { providerSessionId } = this.sessions.getProviderSessionData(sessionId);
     return {
@@ -217,15 +224,11 @@ export class OpenAICodexProvider extends BaseAIProvider {
       return;
     }
 
-    if (!this.apiKey) {
-      yield { type: 'error', error: 'OpenAI API key not configured for Codex provider' };
-      return;
-    }
-
     const systemPrompt = this.buildSystemPrompt(documentContext);
     const { userMessageAddition, messageWithContext } = buildUserMessageAddition(message, documentContext);
     const messageWithAttachmentHints = this.appendAttachmentHints(messageWithContext, attachments);
 
+    // Emit prompt additions for UI
     if (sessionId && (systemPrompt || userMessageAddition || (attachments?.length ?? 0) > 0)) {
       const attachmentSummaries =
         attachments?.map((attachment) => ({
@@ -243,6 +246,7 @@ export class OpenAICodexProvider extends BaseAIProvider {
       });
     }
 
+    // Build prompt with system prompt, history (if needed), and user message
     const shouldBootstrapFromHistory =
       !!sessionId &&
       !this.sessions.getSessionId(sessionId) &&
@@ -264,109 +268,79 @@ export class OpenAICodexProvider extends BaseAIProvider {
     this.abortController = abortController;
 
     let fullText = '';
-    let lastCumulativeText = '';
-    let usage: ParsedCodexUsage | undefined;
 
     try {
-      const permissionResult = await this.ensureCodexTurnPermission(
+      // Check permission using ToolPermissionService
+      const permissionDecision = await this.requestCodexTurnPermission(
         sessionId,
         workspacePath,
         permissionsPath,
         abortController.signal
       );
-      if (!permissionResult.allowed) {
+
+      if (permissionDecision.decision !== 'allow') {
         yield {
           type: 'error',
-          error: permissionResult.message || 'OpenAI Codex turn denied by user',
+          error: 'OpenAI Codex turn denied by user',
         };
         return;
       }
 
-      const codexThread = await this.getOrCreateThread(sessionId, workspacePath);
+      // Get or create protocol session
+      const existingSessionId = this.sessions.getSessionId(sessionId || '');
+      const session = existingSessionId
+        ? await this.protocol.resumeSession(existingSessionId, {
+            workspacePath,
+            model: this.getConfiguredModel(),
+            raw: {
+              systemPrompt,
+              abortSignal: abortController.signal,
+            },
+          })
+        : await this.protocol.createSession({
+            workspacePath,
+            model: this.getConfiguredModel(),
+            raw: {
+              systemPrompt,
+              abortSignal: abortController.signal,
+            },
+          });
 
-      const runResult = await codexThread.runStreamed(prompt, {
-        signal: abortController.signal,
-      });
+      // Capture session ID for future resume
+      if (sessionId && session.id && session.id !== existingSessionId) {
+        this.sessions.captureSessionId(sessionId, session.id);
+      }
 
-      this.captureAndPersistThreadId(sessionId, codexThread, runResult);
-
-      const events = getEventsIterable(runResult);
-      for await (const event of events) {
+      // Send message using protocol
+      for await (const event of this.protocol.sendMessage(session, { content: prompt })) {
         if (abortController.signal.aborted) {
           throw new Error('Operation cancelled');
         }
 
-        const parsedEvents = parseCodexEvent(event);
-        for (const parsedEvent of parsedEvents) {
-          if (parsedEvent.error) {
-            yield {
-              type: 'error',
-              error: parsedEvent.error,
-            };
-            continue;
+        // Convert protocol events to stream chunks
+        if (event.type === 'error') {
+          yield { type: 'error', error: event.error };
+        } else if (event.type === 'text') {
+          fullText += event.content;
+          yield { type: 'text', content: event.content };
+        } else if (event.type === 'tool_call') {
+          yield { type: 'tool_call', toolCall: event.toolCall };
+        } else if (event.type === 'complete') {
+          if (sessionId && fullText.trim()) {
+            await this.logAgentMessageBestEffort(sessionId, 'output', fullText);
           }
-
-          if (parsedEvent.usage) {
-            usage = parsedEvent.usage;
-          }
-
-          if (parsedEvent.toolCall) {
-            yield {
-              type: 'tool_call',
-              toolCall: {
-                name: parsedEvent.toolCall.name,
-                arguments: parsedEvent.toolCall.arguments,
-                ...(parsedEvent.toolCall.result !== undefined ? { result: parsedEvent.toolCall.result } : {}),
-              },
-            };
-            continue;
-          }
-
-          if (parsedEvent.text) {
-            // The SDK may emit cumulative text (each event contains full text so far)
-            // or incremental deltas. Detect cumulative mode by checking if the new text
-            // starts with what we already emitted, and extract only the delta.
-            let delta: string;
-            if (parsedEvent.text.startsWith(lastCumulativeText) && lastCumulativeText.length > 0) {
-              delta = parsedEvent.text.slice(lastCumulativeText.length);
-              lastCumulativeText = parsedEvent.text;
-            } else {
-              delta = parsedEvent.text;
-              lastCumulativeText = parsedEvent.text;
-            }
-            if (delta) {
-              fullText += delta;
-              yield {
-                type: 'text',
-                content: delta,
-              };
-            }
-          }
+          yield {
+            type: 'complete',
+            content: event.content,
+            isComplete: true,
+            usage: event.usage,
+          };
         }
       }
-
-      if (sessionId && fullText.trim()) {
-        await this.logAgentMessageBestEffort(sessionId, 'output', fullText);
-      }
-
-      yield {
-        type: 'complete',
-        content: fullText,
-        isComplete: true,
-        usage: usage ?? {
-          input_tokens: 0,
-          output_tokens: 0,
-          total_tokens: 0,
-        },
-      };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       const isAbort = abortController.signal.aborted || /abort|cancel/i.test(errorMessage);
       if (!isAbort) {
-        // Evict the cached thread so the next message creates a fresh one.
-        if (sessionId) {
-          this.codexThreads.delete(sessionId);
-        }
         yield {
           type: 'error',
           error: errorMessage,
@@ -379,166 +353,49 @@ export class OpenAICodexProvider extends BaseAIProvider {
     }
   }
 
-  public resolveToolPermission(
+  /**
+   * Resolve a pending tool permission request
+   * Delegates to ToolPermissionService
+   */
+  resolveToolPermission(
     requestId: string,
-    response: PermissionDecision,
+    response: { decision: 'allow' | 'deny'; scope: 'once' | 'session' | 'always' | 'always-all' },
     sessionId?: string,
     respondedBy: 'desktop' | 'mobile' = 'desktop'
   ): void {
-    this.permissions.resolveToolPermission(
-      requestId,
-      response,
-      (_reqId, resp, by) => {
-        if (sessionId) {
-          void this.logAgentMessageBestEffort(
-            sessionId,
-            'output',
-            JSON.stringify({
-              type: 'nimbalyst_tool_result',
-              tool_use_id: _reqId,
-              result: JSON.stringify({
-                decision: resp.decision,
-                scope: resp.scope,
-                respondedAt: Date.now(),
-                respondedBy: by,
-              }),
-            })
-          );
-        }
-      },
-      respondedBy
-    );
-  }
+    // Resolve via service
+    this.permissionService.resolvePermission(requestId, response);
 
-  public rejectToolPermission(requestId: string, error: Error, sessionId?: string): void {
-    this.permissions.rejectToolPermission(requestId, error, (_reqId) => {
-      if (sessionId) {
-        void this.logAgentMessageBestEffort(
-          sessionId,
-          'output',
-          JSON.stringify({
-            type: 'nimbalyst_tool_result',
-            tool_use_id: _reqId,
-            result: JSON.stringify({
-              decision: 'deny',
-              scope: 'once',
-              cancelled: true,
-              respondedAt: Date.now(),
-            }),
-            is_error: true,
-          })
-        );
-      }
-    });
-  }
-
-  public rejectAllPendingPermissions(): void {
-    this.permissions.rejectAllPendingPermissions();
+    // Log result for mobile/cross-device polling
+    if (sessionId) {
+      void this.logAgentMessageBestEffort(
+        sessionId,
+        'output',
+        this.createPermissionResultMessage(requestId, response, respondedBy)
+      );
+    }
   }
 
   abort(): void {
-    if (this.abortController) {
-      this.abortController.abort();
-      this.abortController = null;
-    }
-    this.rejectAllPendingPermissions();
-  }
-
-  getCapabilities(): ProviderCapabilities {
-    return {
-      streaming: true,
-      tools: true,
-      mcpSupport: true,
-      edits: true,
-      resumeSession: true,
-      supportsFileTools: true,
-    };
+    // Reject all pending permissions via service
+    this.permissionService.rejectAllPending();
+    // Call base class abort (handles abortController)
+    super.abort();
   }
 
   /**
-   * Release resources for a specific session (thread cache, thread ID).
+   * Release resources for a specific session.
    * Call this when a session is deleted or no longer needed.
    */
   cleanupSession(sessionId: string): void {
-    this.codexThreads.delete(sessionId);
     this.sessions.deleteSession(sessionId);
   }
 
   destroy(): void {
-    this.abort();
-    this.codexThreads.clear();
-    this.sessions.clear();
-    this.codexClient = null;
-    this.permissions.clearSessionCache();
-    this.removeAllListeners();
-  }
-
-  private async getCodexClient(): Promise<CodexClientLike> {
-    if (this.codexClient) {
-      return this.codexClient;
-    }
-
-    try {
-      const sdkModule = await this.loadSdkModule();
-      const codexPathOverride = this.resolveCodexPathOverride();
-
-      this.codexClient = new sdkModule.Codex({
-        apiKey: this.apiKey,
-        ...(codexPathOverride ? { codexPathOverride } : {}),
-      });
-      return this.codexClient;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      throw new Error(`Failed to initialize Codex SDK client: ${message}`);
-    }
-  }
-
-  private static readonly MAX_CACHED_THREADS = 50;
-
-  private async getOrCreateThread(sessionId: string | undefined, workspacePath: string): Promise<CodexThreadLike> {
-    const client = await this.getCodexClient();
-    const threadOptions = this.getThreadOptions(workspacePath);
-
-    if (!sessionId) {
-      return client.startThread(threadOptions);
-    }
-
-    const existingThread = this.codexThreads.get(sessionId);
-    if (existingThread) {
-      return existingThread;
-    }
-
-    // Evict oldest cached threads when the cache exceeds the limit.
-    // Also evict the session ID mapping so resume uses the persisted database value
-    // rather than a stale in-memory reference.
-    if (this.codexThreads.size >= OpenAICodexProvider.MAX_CACHED_THREADS) {
-      const firstKey = this.codexThreads.keys().next().value;
-      if (firstKey !== undefined) {
-        this.codexThreads.delete(firstKey);
-        this.sessions.deleteSession(firstKey);
-      }
-    }
-
-    const existingThreadId = this.sessions.getSessionId(sessionId);
-    const thread = existingThreadId
-      ? client.resumeThread(existingThreadId, threadOptions)
-      : client.startThread(threadOptions);
-
-    this.codexThreads.set(sessionId, thread);
-    this.captureAndPersistThreadId(sessionId, thread);
-    return thread;
-  }
-
-  private getThreadOptions(workspacePath: string): Record<string, unknown> {
-    return {
-      model: this.getConfiguredModel(),
-      workingDirectory: workspacePath,
-      skipGitRepoCheck: true,
-      // Nimbalyst handles approvals via ToolPermission widget flow.
-      approvalPolicy: 'never',
-      sandboxMode: 'workspace-write',
-      modelReasoningEffort: 'high',
-    };
+    // Clear permission service caches
+    this.permissionService.clearSessionCache();
+    // Call base class destroy (calls abort, sessions.clear, permissions.clearSessionCache, removeAllListeners)
+    super.destroy();
   }
 
   private getConfiguredModel(): string {
@@ -607,90 +464,65 @@ export class OpenAICodexProvider extends BaseAIProvider {
     return `${message}\n\nAttached files:\n${attachmentList}`;
   }
 
-  private captureAndPersistThreadId(
-    sessionId: string | undefined,
-    thread: CodexThreadLike,
-    runResult?: unknown
-  ): void {
-    if (!sessionId) {
-      return;
-    }
 
-    const threadId = thread.id || getThreadIdFromRunResult(runResult);
-    if (!threadId) {
-      return;
-    }
-
-    // captureSessionId is idempotent - skips emit if same value already stored.
-    this.sessions.captureSessionId(sessionId, threadId);
-  }
-
-  private async ensureCodexTurnPermission(
+  /**
+   * Request permission for an OpenAI Codex agent turn
+   *
+   * Uses ToolPermissionService to handle the full permission flow.
+   */
+  private async requestCodexTurnPermission(
     sessionId: string | undefined,
     workspacePath: string,
     permissionsPath: string,
     signal: AbortSignal
-  ): Promise<{ allowed: boolean; message?: string }> {
+  ): Promise<{ decision: 'allow' | 'deny' }> {
     const pathForTrust = permissionsPath || workspacePath;
-    let trustMode: PermissionMode = null;
 
-    if (pathForTrust && OpenAICodexProvider.trustChecker) {
-      const trustStatus = OpenAICodexProvider.trustChecker(pathForTrust);
-      trustMode = trustStatus.mode;
+    // Check trust status
+    if (pathForTrust && BaseAgentProvider.trustChecker) {
+      const trustStatus = BaseAgentProvider.trustChecker(pathForTrust);
 
       if (!trustStatus.trusted) {
         this.logSecurity('[OpenAICodexProvider] Workspace not trusted, denying Codex turn', {
           workspacePath: pathForTrust,
         });
-        return {
-          allowed: false,
-          message: 'Workspace is not trusted. Please trust the workspace to use AI tools.',
-        };
+        return { decision: 'deny' };
       }
 
-      // Trusted fast-path modes.
+      // Trusted fast-path modes
       if (trustStatus.mode === 'bypass-all' || trustStatus.mode === 'allow-all') {
-        return { allowed: true };
+        return { decision: 'allow' };
       }
-    }
 
-    // If trust mode is not explicitly "ask", allow by default.
-    // This keeps non-Electron/test environments functional even when loaders aren't injected.
-    if (trustMode !== 'ask') {
-      return { allowed: true };
+      // If trust mode is not explicitly "ask", allow by default
+      if (trustStatus.mode !== 'ask') {
+        return { decision: 'allow' };
+      }
+    } else {
+      // No trust checker - allow by default (non-Electron environments)
+      return { decision: 'allow' };
     }
 
     const pattern = OpenAICodexProvider.CODEX_EXECUTION_PATTERN;
-    if (this.permissions.sessionApprovedPatterns.has(pattern)) {
-      this.logSecurity('[OpenAICodexProvider] Pattern already approved this session', { pattern });
-      return { allowed: true };
-    }
 
-    if (workspacePath && OpenAICodexProvider.permissionPatternChecker) {
-      try {
-        const isAllowed = await OpenAICodexProvider.permissionPatternChecker(workspacePath, pattern);
-        if (isAllowed) {
-          this.permissions.sessionApprovedPatterns.add(pattern);
-          this.logSecurity('[OpenAICodexProvider] Pattern already allowed in settings', { pattern });
-          return { allowed: true };
-        }
-      } catch (error) {
-        this.logSecurity('[OpenAICodexProvider] Failed to check persisted pattern', { error });
-      }
+    // Check if pattern already approved
+    if (await this.permissionService.isPatternApproved(workspacePath, pattern)) {
+      this.logSecurity('[OpenAICodexProvider] Pattern already approved', { pattern });
+      return { decision: 'allow' };
     }
 
     if (!sessionId) {
-      return {
-        allowed: false,
-        message: 'OpenAI Codex permission request requires an active session.',
-      };
+      this.logSecurity('[OpenAICodexProvider] No session ID for permission request', {});
+      return { decision: 'deny' };
     }
 
+    // Request permission via service
     const requestId = `tool-${sessionId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const rawCommand = `Allow OpenAI Codex to run agent tools in ${workspacePath}`;
     const patternDisplayName = 'OpenAI Codex agent runs';
     const warnings = ['OpenAI Codex may run shell commands, edit files, and fetch web content during this turn.'];
 
+    // Log tool use for UI
     await this.logAgentMessageBestEffort(
       sessionId,
       'output',
@@ -711,6 +543,7 @@ export class OpenAICodexProvider extends BaseAIProvider {
       })
     );
 
+    // Create request structure for UI widget
     const request = {
       id: requestId,
       toolName: 'OpenAICodex',
@@ -736,23 +569,7 @@ export class OpenAICodexProvider extends BaseAIProvider {
       createdAt: Date.now(),
     };
 
-    const responsePromise = new Promise<{ decision: 'allow' | 'deny'; scope: ToolPermissionScope }>((resolve, reject) => {
-      this.permissions.pendingToolPermissions.set(requestId, {
-        resolve,
-        reject,
-        request,
-      });
-
-      signal.addEventListener('abort', () => {
-        this.permissions.pendingToolPermissions.delete(requestId);
-        reject(new Error('Request aborted'));
-      }, { once: true });
-    });
-
-    this.pollForPermissionResponse(sessionId, requestId, signal).catch(() => {
-      // Polling failure does not block IPC response path.
-    });
-
+    // Emit pending event for UI
     this.emit('toolPermission:pending', {
       requestId,
       sessionId,
@@ -762,25 +579,21 @@ export class OpenAICodexProvider extends BaseAIProvider {
     });
 
     try {
-      const response = await responsePromise;
+      // Request permission via service
+      const response = await this.permissionService.requestPermission({
+        requestId,
+        sessionId,
+        workspacePath,
+        permissionsPath,
+        pattern,
+        patternDisplayName,
+        rawCommand,
+        warnings,
+        isDestructive: true,
+        signal,
+      });
 
-      if (response.decision === 'allow' && response.scope !== 'once') {
-        this.permissions.sessionApprovedPatterns.add(pattern);
-      }
-
-      if (
-        response.decision === 'allow' &&
-        (response.scope === 'always' || response.scope === 'always-all') &&
-        workspacePath &&
-        OpenAICodexProvider.permissionPatternSaver
-      ) {
-        try {
-          await OpenAICodexProvider.permissionPatternSaver(workspacePath, pattern);
-        } catch (error) {
-          console.error('[OPENAI-CODEX] Failed to persist permission pattern:', error);
-        }
-      }
-
+      // Emit resolved event for UI
       this.emit('toolPermission:resolved', {
         requestId,
         sessionId,
@@ -788,150 +601,11 @@ export class OpenAICodexProvider extends BaseAIProvider {
         timestamp: Date.now(),
       });
 
-      if (response.decision === 'allow') {
-        return { allowed: true };
-      }
-
-      return {
-        allowed: false,
-        message: 'OpenAI Codex turn denied by user',
-      };
+      return { decision: response.decision };
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Permission request cancelled';
-      return {
-        allowed: false,
-        message,
-      };
+      this.logSecurity('[OpenAICodexProvider] Permission request failed', { error });
+      return { decision: 'deny' };
     }
   }
 
-  private async pollForPermissionResponse(
-    sessionId: string,
-    requestId: string,
-    signal: AbortSignal
-  ): Promise<void> {
-    try {
-      AgentMessagesRepository.getStore();
-    } catch {
-      return;
-    }
-
-    const initialPollInterval = 500;
-    const maxPollInterval = 5000;
-    const maxPollTime = 10 * 60 * 1000;
-    const startTime = Date.now();
-    const pollLimit = 50;
-    let currentInterval = initialPollInterval;
-
-    while (!signal.aborted && Date.now() - startTime < maxPollTime) {
-      if (!this.permissions.pendingToolPermissions.has(requestId)) {
-        return;
-      }
-
-      try {
-        const messages = await AgentMessagesRepository.list(sessionId, { limit: pollLimit });
-
-        for (const msg of messages) {
-          // Fast-path: skip messages that can't contain our requestId.
-          if (!msg.content.includes(requestId)) {
-            continue;
-          }
-
-          try {
-            const content = JSON.parse(msg.content);
-
-            if (content.type === 'nimbalyst_tool_result' && content.tool_use_id === requestId) {
-              const result = typeof content.result === 'string' ? JSON.parse(content.result) : content.result;
-              if (!OpenAICodexProvider.isValidPermissionResponse(result)) {
-                this.logSecurity('[OpenAICodexProvider] Invalid permission response shape', { requestId, result });
-                continue;
-              }
-              const pending = this.permissions.pendingToolPermissions.get(requestId);
-              if (pending) {
-                pending.resolve({ decision: result.decision, scope: result.scope });
-                this.permissions.pendingToolPermissions.delete(requestId);
-                this.logSecurity('[OpenAICodexProvider] Found nimbalyst_tool_result response', {
-                  requestId,
-                  decision: result.decision,
-                  scope: result.scope,
-                });
-              }
-              return;
-            }
-
-            // Legacy compatibility for older response message format.
-            if (content.type === 'permission_response' && content.requestId === requestId) {
-              if (!OpenAICodexProvider.isValidPermissionResponse(content)) {
-                this.logSecurity('[OpenAICodexProvider] Invalid legacy permission response shape', { requestId, content });
-                continue;
-              }
-              const pending = this.permissions.pendingToolPermissions.get(requestId);
-              if (pending) {
-                pending.resolve({ decision: content.decision, scope: content.scope });
-                this.permissions.pendingToolPermissions.delete(requestId);
-                this.logSecurity('[OpenAICodexProvider] Found legacy permission_response', {
-                  requestId,
-                  decision: content.decision,
-                  scope: content.scope,
-                });
-              }
-              return;
-            }
-          } catch {
-            // Skip non-JSON messages.
-          }
-        }
-      } catch (error) {
-        this.logSecurity('[OpenAICodexProvider] Error polling for permission response', { error });
-      }
-
-      await new Promise(resolve => setTimeout(resolve, currentInterval));
-      // Exponential backoff: user responses are fast (< 2s) or very slow (manual).
-      currentInterval = Math.min(currentInterval * 1.5, maxPollInterval);
-    }
-
-    // Polling timed out - reject the pending promise so ensureCodexTurnPermission doesn't hang.
-    const pending = this.permissions.pendingToolPermissions.get(requestId);
-    if (pending) {
-      pending.reject(new Error('Permission request timed out'));
-      this.permissions.pendingToolPermissions.delete(requestId);
-    }
-  }
-
-  private static readonly VALID_DECISIONS = new Set(['allow', 'deny']);
-  private static readonly VALID_SCOPES = new Set(['once', 'session', 'always', 'always-all']);
-
-  private static isValidPermissionResponse(value: unknown): value is { decision: 'allow' | 'deny'; scope: ToolPermissionScope } {
-    if (!value || typeof value !== 'object') return false;
-    const record = value as Record<string, unknown>;
-    return (
-      typeof record.decision === 'string' &&
-      OpenAICodexProvider.VALID_DECISIONS.has(record.decision) &&
-      typeof record.scope === 'string' &&
-      OpenAICodexProvider.VALID_SCOPES.has(record.scope)
-    );
-  }
-
-  private logSecurity(message: string, data?: any): void {
-    OpenAICodexProvider.securityLogger?.(message, data);
-  }
-
-  private async logAgentMessageBestEffort(
-    sessionId: string,
-    direction: 'input' | 'output',
-    content: string
-  ): Promise<void> {
-    try {
-      AgentMessagesRepository.getStore();
-    } catch {
-      return;
-    }
-
-    try {
-      await this.logAgentMessage(sessionId, 'openai-codex', direction, content, undefined, false, undefined, true);
-    } catch {
-      // Runtime unit tests and some non-Electron contexts don't provide the AgentMessagesRepository adapter.
-      // Logging is best-effort for this provider and should not fail the request flow.
-    }
-  }
 }

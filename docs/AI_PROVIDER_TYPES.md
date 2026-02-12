@@ -97,6 +97,30 @@ Direct Anthropic API integration for standard chat:
 
 ## Implementation Details
 
+### Provider Architecture
+
+All AI providers extend from `BaseAIProvider`, which provides common functionality like tool registration, message logging, and event emission. Agent providers further extend from `BaseAgentProvider`, which adds agent-specific infrastructure:
+
+```
+BaseAIProvider (abstract)
+  ├── Chat providers (Claude, OpenAI, LM Studio)
+  └── BaseAgentProvider (agent-specific infrastructure)
+        ├── ClaudeCodeProvider
+        ├── OpenAICodexProvider
+        └── Future agent providers
+```
+
+**BaseAgentProvider** provides shared agent infrastructure:
+- Abort controller management
+- Session ID mapping (Nimbalyst session ID ↔ provider session ID)
+- Permission management (pending requests, session cache, resolve/reject lifecycle)
+- Permission response polling (for cross-device and mobile support)
+- Security logging
+- Best-effort message logging
+- Shared static injections (trust checker, permission pattern persistence)
+
+This architecture ensures all agent providers have consistent behavior for permissions, session management, and lifecycle handling.
+
 ### Provider Detection
 
 The codebase determines provider type using these flags in `ProviderCapabilities`:
@@ -111,9 +135,26 @@ interface ProviderCapabilities {
 
 ### Key Files
 
-- Provider implementations: `packages/runtime/src/ai/server/providers/`
+- Base providers: `packages/runtime/src/ai/server/AIProvider.ts`, `packages/runtime/src/ai/server/providers/BaseAgentProvider.ts`
+- Agent provider implementations: `packages/runtime/src/ai/server/providers/ClaudeCodeProvider.ts`, `OpenAICodexProvider.ts`
+- Chat provider implementations: `packages/runtime/src/ai/server/providers/ClaudeProvider.ts`, etc.
 - Type definitions: `packages/runtime/src/ai/server/types.ts`
 - Provider factory: `packages/runtime/src/ai/server/ProviderFactory.ts`
+
+### Adding New Agent Providers
+
+To add a new agent provider:
+
+1. Extend `BaseAgentProvider` instead of `BaseAIProvider`
+2. Implement required abstract methods:
+   - `getProviderName(): string` - Return the provider identifier
+   - `getProviderSessionData(sessionId: string): any` - Return provider session data with legacy key mapping
+   - `sendMessage(...)` - Implement the provider-specific streaming logic
+   - `initialize(config: ProviderConfig)` - Set up the provider
+3. Override `abort()` and `destroy()` if you need provider-specific cleanup (remember to call `super`)
+4. All shared functionality (permissions, sessions, polling, logging) is inherited automatically
+
+The base class provides default implementations for `getCapabilities()`, `setProviderSessionData()`, `resolveToolPermission()`, `rejectToolPermission()`, etc. Override these only if you need provider-specific behavior.
 
 ## Switching Between Modes
 

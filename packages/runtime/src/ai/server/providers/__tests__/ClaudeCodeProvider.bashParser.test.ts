@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import path from 'path';
-import { parseBashForFileOps } from '../bashUtils';
+import { parseBashForFileOps } from '../../permissions/BashCommandAnalyzer';
 
 /**
  * Unit tests for Bash command file operation parser

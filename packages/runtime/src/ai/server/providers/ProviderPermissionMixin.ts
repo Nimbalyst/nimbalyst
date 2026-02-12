@@ -73,7 +73,7 @@ export class ProviderPermissionMixin {
   resolveToolPermission(
     requestId: string,
     response: PermissionDecision,
-    onPersist?: (requestId: string, response: PermissionDecision, respondedBy: string) => void,
+    onPersist?: (requestId: string, response: PermissionDecision, respondedBy: 'desktop' | 'mobile') => void,
     respondedBy: 'desktop' | 'mobile' = 'desktop'
   ): void {
     const pending = this.pendingToolPermissions.get(requestId);

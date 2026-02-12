@@ -14,7 +14,7 @@ interface Query extends AsyncGenerator<SDKMessage, void> {
 }
 import { parse as parseShellCommand } from 'shell-quote';
 import type { MessageParam, ImageBlockParam, TextBlockParam, ContentBlockParam, DocumentBlockParam } from '@anthropic-ai/sdk/resources';
-import { BaseAIProvider } from '../AIProvider';
+import { BaseAgentProvider } from './BaseAgentProvider';
 import {
   DocumentContext,
   ProviderConfig,
@@ -40,9 +40,13 @@ import { app } from 'electron';
 import { buildClaudeCodeSystemPrompt } from '../../prompt';
 import { setupClaudeCodeEnvironment, getClaudeCodeExecutableOptions, getClaudeCodeSpawnFunction, ClaudeHelperMethod } from '../../../electron/claudeCodeEnvironment';
 import { SessionManager } from '../SessionManager';
-import { parseBashForFileOps, hasShellChainingOperators, splitOnShellOperators } from './bashUtils';
+import { parseBashForFileOps, hasShellChainingOperators, splitOnShellOperators } from '../permissions/BashCommandAnalyzer';
 import { DEFAULT_EFFORT_LEVEL } from '../effortLevels';
-import { ProviderSessionManager } from './ProviderSessionManager';
+import { ToolPermissionService } from '../permissions/ToolPermissionService';
+import { buildToolDescription, generateToolPattern } from '../permissions/toolPermissionHelpers';
+import { AgentToolHooks } from '../permissions/AgentToolHooks';
+import { McpConfigService } from '../services/McpConfigService';
+import { historyManager } from '../../../../../electron/src/main/HistoryManager';
 
 /**
  * SDK-native tools that are executed by the Claude Code SDK itself (not by Nimbalyst).
@@ -82,14 +86,9 @@ const CLAUDE_CODE_MODEL_LABELS: Record<ClaudeCodeVariant, string> = {
   haiku: 'Haiku'
 };
 
-export class ClaudeCodeProvider extends BaseAIProvider {
-  // Single abort controller - each provider instance is per-session via ProviderFactory
-  private abortController: AbortController | null = null;
-  // Shared session ID management via mixin.
-  private readonly sessions = new ProviderSessionManager({ emit: this.emit.bind(this) });
+export class ClaudeCodeProvider extends BaseAgentProvider {
   private currentMode?: 'planning' | 'agent'; // Track session mode for prompt customization and tool filtering
   private slashCommands: string[] = []; // Available slash commands from SDK
-  private editedFilesThisTurn: Set<string> = new Set(); // Track files edited in current turn
   private markMessagesAsHidden: boolean = false; // Flag to mark next messages as hidden
   private helperMethod: ClaudeHelperMethod = 'electron'; // Track which helper method is being used
 
@@ -100,6 +99,15 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
   // Teammate management: spawning, messaging, lifecycle, config I/O
   private teammateManager: TeammateManager;
+
+  // Permission service for tool permission handling
+  private permissionService: ToolPermissionService | null = null;
+
+  // Tool hooks service for pre/post tool execution and file tracking
+  private toolHooksService: AgentToolHooks | null = null;
+
+  // MCP configuration service for loading and processing MCP server configs
+  private mcpConfigService: McpConfigService;
 
   // Setting for using standalone binary (injected from electron main process)
   // When true, use Bun-compiled standalone binary on macOS to hide dock icon
@@ -119,12 +127,84 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       logNonBlocking: (sessionId, source, direction, content, metadata) =>
         this.logAgentMessageNonBlocking(sessionId, source, direction, content, metadata),
       emit: (event, payload) => this.emit(event, payload),
-      createPreToolUseHook: (cwd, sessionId, permissionsPath, context) =>
-        this.createPreToolUseHook(cwd, sessionId, permissionsPath, context),
-      createPostToolUseHook: (cwd, sessionId) =>
-        this.createPostToolUseHook(cwd, sessionId),
+      createPreToolUseHook: (cwd, sessionId, permissionsPath, context) => {
+        // Create AgentToolHooks instance for teammate
+        const teammateHooks = this.createTeammateToolHooksService(cwd, sessionId, permissionsPath, context?.isTeammateSession || false);
+        return teammateHooks.createPreToolUseHook();
+      },
+      createPostToolUseHook: (cwd, sessionId) => {
+        // Create AgentToolHooks instance for teammate
+        const teammateHooks = this.createTeammateToolHooksService(cwd, sessionId, undefined, true);
+        return teammateHooks.createPostToolUseHook();
+      },
       getAbortSignal: () => this.abortController?.signal,
       interruptWithMessage: (message) => this.interruptWithMessage(message),
+    });
+
+    // Initialize permission service if all dependencies are available
+    // For Claude Code, these dependencies are optional since permission handling
+    // can fall back to inline logic if not configured (e.g., in tests)
+    if (
+      BaseAgentProvider.trustChecker &&
+      ClaudeCodeProvider.claudeSettingsPatternSaver &&
+      ClaudeCodeProvider.claudeSettingsPatternChecker &&
+      BaseAgentProvider.securityLogger
+    ) {
+      this.permissionService = new ToolPermissionService({
+        trustChecker: BaseAgentProvider.trustChecker,
+        patternSaver: ClaudeCodeProvider.claudeSettingsPatternSaver,
+        patternChecker: ClaudeCodeProvider.claudeSettingsPatternChecker,
+        securityLogger: BaseAgentProvider.securityLogger,
+        emit: this.emit.bind(this),
+      });
+    }
+
+    // Initialize MCP configuration service
+    this.mcpConfigService = new McpConfigService({
+      mcpServerPort: ClaudeCodeProvider.mcpServerPort,
+      sessionNamingServerPort: ClaudeCodeProvider.sessionNamingServerPort,
+      extensionDevServerPort: ClaudeCodeProvider.extensionDevServerPort,
+      mcpConfigLoader: ClaudeCodeProvider.mcpConfigLoader,
+      extensionPluginsLoader: ClaudeCodeProvider.extensionPluginsLoader,
+      claudeSettingsEnvLoader: ClaudeCodeProvider.claudeSettingsEnvLoader,
+      shellEnvironmentLoader: ClaudeCodeProvider.shellEnvironmentLoader,
+    });
+  }
+
+  getProviderName(): string {
+    return 'claude-code';
+  }
+
+  /**
+   * Create AgentToolHooks service for teammate sessions
+   * Teammates need separate hook instances with isTeammateSession: true
+   */
+  private createTeammateToolHooksService(
+    workspacePath: string,
+    sessionId: string | undefined,
+    permissionsPath: string | undefined,
+    isTeammateSession: boolean
+  ): AgentToolHooks {
+    return new AgentToolHooks({
+      workspacePath,
+      sessionId,
+      emit: this.emit.bind(this),
+      logAgentMessage: this.logAgentMessage.bind(this),
+      logSecurity: this.logSecurity.bind(this),
+      trustChecker: BaseAgentProvider.trustChecker || undefined,
+      patternChecker: ClaudeCodeProvider.claudeSettingsPatternChecker || undefined,
+      patternSaver: ClaudeCodeProvider.claudeSettingsPatternSaver || undefined,
+      extensionFileTypesLoader: ClaudeCodeProvider.extensionFileTypesLoader || undefined,
+      getCurrentMode: () => this.currentMode,
+      setCurrentMode: (mode) => { this.currentMode = mode; },
+      getPendingExitPlanModeConfirmations: () => this.pendingExitPlanModeConfirmations,
+      getSessionApprovedPatterns: () => this.permissions.sessionApprovedPatterns,
+      getPendingToolPermissions: () => this.permissions.pendingToolPermissions,
+      teammatePreToolHandler: async (toolName, toolInput, toolUseID, sessionId) =>
+        this.teammateManager.handlePreToolUse(toolName, toolInput, toolUseID, sessionId),
+      isTeammateSession,
+      permissionsPath,
+      historyManager,
     });
   }
 
@@ -146,19 +226,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       multiSelect: boolean;
     }>;
   }> = new Map();
-
-  // Tool permission requests - stores pending permission resolvers
-  // When a tool requires approval, we block until the UI provides a response via IPC
-  private pendingToolPermissions: Map<string, {
-    resolve: (response: { decision: 'allow' | 'deny'; scope: 'once' | 'session' | 'always' | 'always-all' }) => void;
-    reject: (error: Error) => void;
-    request: any; // PermissionRequest
-  }> = new Map();
-
-  // Session-level permission cache - patterns approved with 'session' or 'always' scope
-  // This prevents re-prompting for the same pattern within a session, since the SDK
-  // doesn't hot-reload settings files mid-session
-  private sessionApprovedPatterns: Set<string> = new Set();
 
   // Shared MCP server port (injected from electron main process)
   // This server provides capture_editor_screenshot tool only.
@@ -199,10 +266,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   // (e.g., SDK docs when working on an extension project)
   private static additionalDirectoriesLoader: ((workspacePath: string) => string[]) | null = null;
 
-  // Security logging callback (injected from electron main process)
-  // Only enabled in dev mode for reviewing agent security checks
-  private static securityLogger: ((message: string, data?: any) => void) | null = null;
-
   // Claude settings pattern saver (injected from electron main process)
   // Writes tool patterns to .claude/settings.local.json when user approves with "Always"
   private static claudeSettingsPatternSaver: ((
@@ -216,14 +279,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     workspacePath: string,
     pattern: string
   ) => Promise<boolean>) | null = null;
-
-  // Trust checker (injected from electron main process)
-  // Checks if a workspace is trusted before allowing tool execution
-  // Modes: 'ask' = prompt for each command, 'allow-all' = auto-approve file edits, 'bypass-all' = auto-approve everything
-  // NOTE: For worktree sessions, pass the parent project path (permissionsPath) instead of workspacePath
-  private static trustChecker: ((
-    workspacePath: string
-  ) => { trusted: boolean; mode: 'ask' | 'allow-all' | 'bypass-all' | null }) | null = null;
 
   // Image compressor (injected from electron main process)
   // Compresses images to fit within API limits before sending
@@ -324,7 +379,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
    * Only enabled in dev mode for reviewing permission decisions
    */
   public static setSecurityLogger(logger: ((message: string, data?: any) => void) | null): void {
-    ClaudeCodeProvider.securityLogger = logger;
+    BaseAgentProvider.setSecurityLogger(logger);
   }
 
   /**
@@ -369,7 +424,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   public static setTrustChecker(checker: ((
     workspacePath: string
   ) => { trusted: boolean; mode: 'ask' | 'allow-all' | 'bypass-all' | null }) | null): void {
-    ClaudeCodeProvider.trustChecker = checker;
+    BaseAgentProvider.setTrustChecker(checker);
   }
 
   /**
@@ -379,15 +434,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
    */
   public static setExtensionFileTypesLoader(loader: (() => Set<string>) | null): void {
     ClaudeCodeProvider.extensionFileTypesLoader = loader;
-  }
-
-  /**
-   * Log a security-related message (only if security logger is configured)
-   */
-  private logSecurity(message: string, data?: any): void {
-    if (ClaudeCodeProvider.securityLogger) {
-      ClaudeCodeProvider.securityLogger(message, data);
-    }
   }
 
   async initialize(config: ProviderConfig): Promise<void> {
@@ -583,8 +629,36 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     // Create abort controller for this request
     this.abortController = new AbortController();
 
-    // Clear edited files tracker for this turn
-    this.editedFilesThisTurn.clear();
+    // For worktree sessions, use the parent project path for permission lookups
+    // This is passed via documentContext.permissionsPath from AIService
+    const permissionsPath = (documentContext as any)?.permissionsPath || workspacePath;
+
+    // Create tool hooks service for this turn
+    // This service manages pre/post hooks, file tagging, and snapshot creation
+    this.toolHooksService = new AgentToolHooks({
+      workspacePath: workspacePath!,
+      sessionId,
+      emit: this.emit.bind(this),
+      logAgentMessage: this.logAgentMessage.bind(this),
+      logSecurity: this.logSecurity.bind(this),
+      trustChecker: BaseAgentProvider.trustChecker || undefined,
+      patternChecker: ClaudeCodeProvider.claudeSettingsPatternChecker || undefined,
+      patternSaver: ClaudeCodeProvider.claudeSettingsPatternSaver || undefined,
+      extensionFileTypesLoader: ClaudeCodeProvider.extensionFileTypesLoader || undefined,
+      getCurrentMode: () => this.currentMode,
+      setCurrentMode: (mode) => { this.currentMode = mode; },
+      getPendingExitPlanModeConfirmations: () => this.pendingExitPlanModeConfirmations,
+      getSessionApprovedPatterns: () => this.permissions.sessionApprovedPatterns,
+      getPendingToolPermissions: () => this.permissions.pendingToolPermissions,
+      teammatePreToolHandler: async (toolName, toolInput, toolUseID, sessionId) =>
+        this.teammateManager.handlePreToolUse(toolName, toolInput, toolUseID, sessionId),
+      isTeammateSession: false,
+      permissionsPath,
+      historyManager,
+    });
+
+    // Clear edited files tracker for new turn
+    this.toolHooksService.clearEditedFiles();
 
     try {
       // Append document context to message using pre-built prompts from DocumentContextService
@@ -696,10 +770,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         throw new Error('[CLAUDE-CODE] workspacePath is required but was not provided');
       }
 
-      // For worktree sessions, use the parent project path for permission lookups
-      // This is passed via documentContext.permissionsPath from AIService
-      const permissionsPath = (documentContext as any)?.permissionsPath || workspacePath;
-
       // Build options for claude-code SDK
 
       // Determine which settings sources to use based on user preferences
@@ -745,7 +815,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         },
         // BREAKING CHANGE: Claude Agent SDK requires explicit settings sources
         settingSources,
-        mcpServers: await this.getMcpServersConfig(sessionId, workspacePath),
+        mcpServers: await this.mcpConfigService.getMcpServersConfig({ sessionId, workspacePath }),
         cwd: workspacePath,
         abortController: this.abortController,
         model: this.resolveModelVariant(),
@@ -762,12 +832,12 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         hooks: {
           'PreToolUse': [
             {
-              hooks: [this.createPreToolUseHook(workspacePath, sessionId, permissionsPath)]
+              hooks: [this.toolHooksService!.createPreToolUseHook()]
             }
           ],
           'PostToolUse': [
             {
-              hooks: [this.createPostToolUseHook(workspacePath, sessionId)]
+              hooks: [this.toolHooksService!.createPostToolUseHook()]
             }
           ]
         },
@@ -2080,10 +2150,8 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       const totalTime = Date.now() - startTime;
 
       // Create snapshots for all files edited during this turn
-
-      if (this.editedFilesThisTurn.size > 0) {
-        await this.createTurnEndSnapshots(workspacePath!, sessionId);
-      } else {
+      if (this.toolHooksService && this.toolHooksService.getEditedFiles().size > 0) {
+        await this.toolHooksService.createTurnEndSnapshots();
       }
 
       // Calculate total input/output tokens from modelUsage if available (more accurate than usageData)
@@ -2195,18 +2263,13 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
   abort(): void {
     console.log('[CLAUDE-CODE] Abort called, abortController:', this.abortController ? 'exists' : 'NULL');
-    if (this.abortController) {
-      console.log('[CLAUDE-CODE] Aborting active request');
-      this.abortController.abort();
-      this.abortController = null;
-    } else {
-      console.warn('[CLAUDE-CODE] No active request to abort - abortController is null!');
-    }
 
-    // Clean up any pending user interactions that will never be answered
+    // Call base class abort (handles abortController and rejectAllPendingPermissions)
+    super.abort();
+
+    // Clean up Claude Code-specific pending user interactions
     this.rejectAllPendingConfirmations();
     this.rejectAllPendingQuestions();
-    this.rejectAllPendingPermissions();
 
     // Abort all managed teammates
     this.teammateManager.killAll();
@@ -2264,9 +2327,15 @@ export class ClaudeCodeProvider extends BaseAIProvider {
    */
   destroy(): void {
     console.log('[CLAUDE-CODE] Destroying provider');
+
+    // Clean up permission service
+    if (this.permissionService) {
+      this.permissionService.clearSessionCache();
+      this.permissionService.rejectAllPending();
+    }
+
     // Abort any active SDK subprocess and reject all pending user interactions
-    this.abort();
-    // Call base class cleanup (removes event listeners)
+    // Base class destroy() calls abort(), sessions.clear(), permissions.clearSessionCache(), and removeAllListeners()
     super.destroy();
   }
 
@@ -2356,10 +2425,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       resumeSession: true,  // Can resume Claude Code sessions
       supportsFileTools: true  // Uses tools to access files (Read, Glob, etc.)
     };
-  }
-
-  setProviderSessionData(sessionId: string, data: any): void {
-    this.sessions.setProviderSessionData(sessionId, data);
   }
 
   getProviderSessionData(sessionId: string): any {
@@ -2520,35 +2585,25 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     sessionId?: string,
     respondedBy: 'desktop' | 'mobile' = 'desktop'
   ): void {
-    const pending = this.pendingToolPermissions.get(requestId);
-    if (pending) {
-      pending.resolve(response);
-      this.pendingToolPermissions.delete(requestId);
-
-      // Persist the response as nimbalyst_tool_result for widget rendering
-      // SessionManager will parse this and attach to the tool call as toolCall.result
-      if (sessionId) {
-        this.logAgentMessage(
-          sessionId,
-          'claude-code',
-          'output',
-          JSON.stringify({
-            type: 'nimbalyst_tool_result',
-            tool_use_id: requestId,
-            result: JSON.stringify({
-              decision: response.decision,
-              scope: response.scope,
-              respondedAt: Date.now(),
-              respondedBy,
-            })
-          })
-        ).catch(err => {
-          console.error('[CLAUDE-CODE] Failed to persist permission response:', err);
-        });
-      }
-    } else {
-      console.warn(`[CLAUDE-CODE] No pending tool permission found for requestId: ${requestId}`);
-    }
+    this.permissions.resolveToolPermission(
+      requestId,
+      response,
+      (_reqId, resp, by) => {
+        // Persist the response as nimbalyst_tool_result for widget rendering
+        // SessionManager will parse this and attach to the tool call as toolCall.result
+        if (sessionId) {
+          this.logAgentMessage(
+            sessionId,
+            'claude-code',
+            'output',
+            this.createPermissionResultMessage(_reqId, resp, by)
+          ).catch(err => {
+            console.error('[CLAUDE-CODE] Failed to persist permission response:', err);
+          });
+        }
+      },
+      respondedBy
+    );
   }
 
   /**
@@ -2556,43 +2611,26 @@ export class ClaudeCodeProvider extends BaseAIProvider {
    * @param sessionId - Session ID for persisting the cancellation message
    */
   public rejectToolPermission(requestId: string, error: Error, sessionId?: string): void {
-    const pending = this.pendingToolPermissions.get(requestId);
-    if (pending) {
-      pending.reject(error);
-      this.pendingToolPermissions.delete(requestId);
-
+    this.permissions.rejectToolPermission(requestId, error, (_reqId) => {
       // Persist cancellation as nimbalyst_tool_result for widget rendering
       if (sessionId) {
         this.logAgentMessage(
           sessionId,
           'claude-code',
           'output',
-          JSON.stringify({
-            type: 'nimbalyst_tool_result',
-            tool_use_id: requestId,
-            result: JSON.stringify({
-              decision: 'deny',
-              scope: 'once',
-              cancelled: true,
-              respondedAt: Date.now(),
-            }),
-            is_error: true
-          })
+          this.createPermissionCancellationMessage(_reqId)
         ).catch(err => {
           console.error('[CLAUDE-CODE] Failed to persist permission cancellation:', err);
         });
       }
-    }
+    });
   }
 
   /**
    * Reject all pending tool permission requests (e.g., on abort)
    */
   public rejectAllPendingPermissions(): void {
-    for (const [requestId, pending] of this.pendingToolPermissions) {
-      pending.reject(new Error('Request aborted'));
-    }
-    this.pendingToolPermissions.clear();
+    this.permissions.rejectAllPendingPermissions();
   }
 
   /**
@@ -2600,7 +2638,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
    * This enables mobile and cross-session responses.
    * When a response is found, it resolves the pending permission promise.
    */
-  private async pollForPermissionResponse(
+  protected async pollForPermissionResponse(
     sessionId: string,
     requestId: string,
     signal: AbortSignal
@@ -2611,7 +2649,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
     while (!signal.aborted && Date.now() - startTime < maxPollTime) {
       // Check if request was already resolved (e.g., via IPC)
-      if (!this.pendingToolPermissions.has(requestId)) {
+      if (!this.permissions.pendingToolPermissions.has(requestId)) {
         return; // Already resolved, stop polling
       }
 
@@ -2627,13 +2665,13 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             if (content.type === 'nimbalyst_tool_result' && content.tool_use_id === requestId) {
               // Found a response - parse the result and resolve
               const result = typeof content.result === 'string' ? JSON.parse(content.result) : content.result;
-              const pending = this.pendingToolPermissions.get(requestId);
+              const pending = this.permissions.pendingToolPermissions.get(requestId);
               if (pending && result.decision) {
                 pending.resolve({
                   decision: result.decision,
                   scope: result.scope
                 });
-                this.pendingToolPermissions.delete(requestId);
+                this.permissions.pendingToolPermissions.delete(requestId);
                 this.logSecurity('[pollForPermissionResponse] Found nimbalyst_tool_result:', {
                   requestId,
                   decision: result.decision,
@@ -2645,13 +2683,13 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             }
             // Legacy: also check for permission_response (for backwards compatibility)
             if (content.type === 'permission_response' && content.requestId === requestId) {
-              const pending = this.pendingToolPermissions.get(requestId);
+              const pending = this.permissions.pendingToolPermissions.get(requestId);
               if (pending) {
                 pending.resolve({
                   decision: content.decision,
                   scope: content.scope
                 });
-                this.pendingToolPermissions.delete(requestId);
+                this.permissions.pendingToolPermissions.delete(requestId);
                 this.logSecurity('[pollForPermissionResponse] Found legacy permission_response:', {
                   requestId,
                   decision: content.decision,
@@ -2749,314 +2787,11 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     this.logSecurity('[pollForAskUserQuestionResponse] Polling timed out:', { questionId });
   }
 
-  private async getMcpServersConfig(sessionId?: string, workspacePath?: string) {
-    // Load MCP servers from user config (~/.config/claude/mcp.json) and workspace config (.mcp.json)
-    // and merge with built-in Nimbalyst MCP servers
-    const config: any = {};
-
-    // Include shared MCP server if it's started (provides capture_editor_screenshot tool only)
-    // applyDiff and streamContent are NOT exposed via MCP - they're only for chat providers via IPC
-    if (ClaudeCodeProvider.mcpServerPort !== null && workspacePath) {
-      let mcpUrl = `http://127.0.0.1:${ClaudeCodeProvider.mcpServerPort}/mcp?workspacePath=${encodeURIComponent(workspacePath)}`;
-      if (sessionId) {
-        mcpUrl += `&sessionId=${encodeURIComponent(sessionId)}`;
-      }
-      config['nimbalyst-mcp'] = {
-        type: 'sse',
-        transport: 'sse',
-        url: mcpUrl
-      };
-    }
-
-    // Include session naming MCP server if it's started
-    if (ClaudeCodeProvider.sessionNamingServerPort !== null && sessionId) {
-      config['nimbalyst-session-naming'] = {
-        type: 'sse',
-        transport: 'sse',
-        url: `http://127.0.0.1:${ClaudeCodeProvider.sessionNamingServerPort}/mcp?sessionId=${encodeURIComponent(sessionId)}`
-      };
-      // console.log('[CLAUDE-CODE] Session naming MCP server configured on port', ClaudeCodeProvider.sessionNamingServerPort, 'for session', sessionId);
-    }
-
-    // Include extension dev MCP server if it's started (provides build, install, reload tools)
-    if (ClaudeCodeProvider.extensionDevServerPort !== null) {
-      const params = workspacePath ? `?workspacePath=${encodeURIComponent(workspacePath)}` : '';
-      config['nimbalyst-extension-dev'] = {
-        type: 'sse',
-        transport: 'sse',
-        url: `http://127.0.0.1:${ClaudeCodeProvider.extensionDevServerPort}/mcp${params}`
-      };
-      // console.log('[CLAUDE-CODE] Extension dev MCP server configured on port', ClaudeCodeProvider.extensionDevServerPort);
-    }
-
-    // Load user and workspace MCP servers using the injected loader (if available)
-    // This merges user-level (global) servers with workspace-level servers
-    if (ClaudeCodeProvider.mcpConfigLoader) {
-      try {
-        const mergedServers = await ClaudeCodeProvider.mcpConfigLoader(workspacePath);
-        // console.log('[CLAUDE-CODE] Loaded MCP servers from config loader:', Object.keys(mergedServers));
-
-        // Process each server config
-        for (const [serverName, serverConfig] of Object.entries(mergedServers)) {
-          const processedConfig = this.processServerConfig(serverName, serverConfig as any);
-          config[serverName] = processedConfig;
-        }
-      } catch (error) {
-        console.error('[CLAUDE-CODE] Failed to load MCP servers from config loader:', error);
-        // Fall back to workspace-only loading
-        await this.loadWorkspaceMcpServers(workspacePath, config);
-      }
-    } else {
-      // Fallback: Load from workspace .mcp.json only (legacy behavior)
-      await this.loadWorkspaceMcpServers(workspacePath, config);
-    }
-
-    return config;
-  }
-
-  /**
-   * Process a single MCP server config, expanding env vars and converting to headers where needed
-   */
-  private processServerConfig(serverName: string, serverConfig: any): any {
-    const processedConfig = { ...serverConfig };
-
-    // Build combined env: process.env + config.env (config.env takes precedence)
-    const combinedEnv: Record<string, string | undefined> = {
-      ...process.env as Record<string, string | undefined>
-    };
-    if (processedConfig.env) {
-      for (const [key, value] of Object.entries(processedConfig.env)) {
-        combinedEnv[key] = this.expandEnvVar(value as string, combinedEnv);
-      }
-    }
-
-    // For stdio transport, expand env vars in args
-    // This is critical for Windows where shell doesn't expand ${VAR} syntax
-    if (processedConfig.type !== 'sse' && processedConfig.args && Array.isArray(processedConfig.args)) {
-      processedConfig.args = processedConfig.args.map((arg: string) =>
-        typeof arg === 'string' ? this.expandEnvVar(arg, combinedEnv) : arg
-      );
-    }
-
-    // For SSE transport, convert env vars to headers (SDK requirement)
-    if (processedConfig.type === 'sse' && processedConfig.env) {
-      processedConfig.headers = processedConfig.headers || {};
-
-      // Convert API keys from env to Authorization headers
-      for (const [key, value] of Object.entries(processedConfig.env)) {
-        if (key.endsWith('_API_KEY')) {
-          // Expand environment variable if needed
-          const expandedValue = this.expandEnvVar(value as string, process.env as Record<string, string | undefined>);
-          if (expandedValue && !expandedValue.startsWith('${')) {
-            processedConfig.headers['Authorization'] = `Bearer ${expandedValue}`;
-          }
-        }
-      }
-
-      // Remove env from SSE config (not used for SSE transport)
-      delete processedConfig.env;
-    }
-
-    return processedConfig;
-  }
-
-  /**
-   * Load MCP servers from workspace .mcp.json only (legacy fallback)
-   */
-  private async loadWorkspaceMcpServers(workspacePath: string | undefined, config: any): Promise<void> {
-    if (!workspacePath) return;
-
-    try {
-      const fs = require('fs');
-      const path = require('path');
-      const mcpJsonPath = path.join(workspacePath, '.mcp.json');
-
-      if (fs.existsSync(mcpJsonPath)) {
-        const mcpJsonContent = fs.readFileSync(mcpJsonPath, 'utf8');
-        const mcpConfig = JSON.parse(mcpJsonContent);
-
-        if (mcpConfig.mcpServers && typeof mcpConfig.mcpServers === 'object') {
-          // Process and merge workspace MCP servers with built-in servers
-          for (const [serverName, serverConfig] of Object.entries(mcpConfig.mcpServers)) {
-            const processedConfig = this.processServerConfig(serverName, serverConfig as any);
-            config[serverName] = processedConfig;
-          }
-        }
-      }
-    } catch (error) {
-      console.error('[CLAUDE-CODE] Failed to load .mcp.json:', error);
-    }
-  }
-
-  /**
-   * Expand environment variable syntax: ${VAR} and ${VAR:-default}
-   */
-  private expandEnvVar(value: string, env: Record<string, string | undefined>): string {
-    return value.replace(/\$\{([^}:]+)(:-([^}]+))?\}/g, (_, varName, __, defaultValue) => {
-      const envValue = env[varName];
-      if (envValue !== undefined) {
-        return envValue;
-      }
-      if (defaultValue !== undefined) {
-        return defaultValue;
-      }
-      // Variable not set and no default - return original
-      return `\${${varName}}`;
-    });
-  }
 
   /**
    * Build a human-readable description of a tool call for permission checking.
    * For Bash, the command itself is used. For other tools, we create a descriptive string.
    */
-  private buildToolDescription(toolName: string, input: any): string {
-    switch (toolName) {
-      case 'Read':
-        return input?.file_path ? `read ${input.file_path}` : '';
-      case 'Write':
-        return input?.file_path ? `write ${input.file_path}` : '';
-      case 'Edit':
-        return input?.file_path ? `edit ${input.file_path}` : '';
-      case 'MultiEdit':
-        return input?.edits?.length ? `multi-edit ${input.edits.length} files` : '';
-      case 'Glob':
-        return input?.pattern ? `glob ${input.pattern}` : '';
-      case 'Grep':
-        return input?.pattern ? `grep ${input.pattern}` : '';
-      case 'Task':
-        return input?.description || input?.prompt?.slice(0, 50) || 'spawn task';
-      case 'WebFetch':
-        return input?.url ? `fetch ${input.url}` : '';
-      case 'WebSearch':
-        return input?.query ? `search "${input.query}"` : '';
-      case 'TodoWrite':
-        return 'update todos';
-      case 'KillShell':
-        return input?.shell_id ? `kill shell ${input.shell_id}` : '';
-      case 'MCPSearch':
-        return input?.query ? `search MCP tools: ${input.query}` : '';
-      default:
-        // For MCP tools (mcp__*) and other unknown tools, create a generic description
-        if (toolName.startsWith('mcp__')) {
-          const parts = toolName.split('__');
-          const serverName = parts[1] || 'unknown';
-          const mcpToolName = parts[2] || 'unknown';
-          return `${serverName}:${mcpToolName}`;
-        }
-        // For completely unknown tools, just return the tool name
-        return toolName;
-    }
-  }
-
-  /**
-   * Generate a tool pattern for Claude Code's allowedTools format.
-   * These patterns are written to .claude/settings.local.json when user approves with "Always".
-   *
-   * Pattern strategy:
-   * - git: include subcommand for granularity (git diff, git commit, etc.)
-   * - npm/npx: include subcommand (npm run, npm test, npx vitest, etc.)
-   * - everything else: just base command (ls, cat, grep, etc.)
-   *
-   * We never include paths/filenames - patterns match any invocation of the command.
-   */
-  private generateToolPattern(toolName: string, input: any): string {
-    switch (toolName) {
-      case 'Bash': {
-        const command = (input?.command as string) || '';
-
-        // Detect compound commands - these should not be cached
-        // because approving "git add" shouldn't auto-approve "git add && git commit"
-        // Use quote-aware detection to avoid false positives on heredocs/quoted strings
-        if (hasShellChainingOperators(command)) {
-          // Return a unique pattern that won't match future commands
-          return `Bash:compound:${Date.now()}`;
-        }
-
-        const words = command.trim().split(/\s+/);
-
-        if (words.length === 0 || !words[0]) {
-          return 'Bash';
-        }
-
-        const baseCommand = words[0];
-
-        // For git, find the subcommand (skip flags like -C, --no-pager)
-        // "git -C /path diff" -> "Bash(git diff:*)"
-        // "git commit -m 'msg'" -> "Bash(git commit:*)"
-        if (baseCommand === 'git') {
-          for (let i = 1; i < words.length; i++) {
-            const word = words[i];
-            if (word.startsWith('-')) {
-              // Skip flags that take arguments
-              if (['-C', '-c', '--git-dir', '--work-tree'].includes(word)) {
-                i++;
-              }
-              continue;
-            }
-            // First non-flag is the subcommand
-            return `Bash(git ${word}:*)`;
-          }
-          return `Bash(git:*)`;
-        }
-
-        // For npm/npx, find the subcommand (skip flags like --prefix)
-        if (baseCommand === 'npm' || baseCommand === 'npx') {
-          for (let i = 1; i < words.length; i++) {
-            const word = words[i];
-            if (word.startsWith('-')) {
-              if (['--prefix', '-w', '--workspace'].includes(word)) {
-                i++;
-              }
-              continue;
-            }
-            return `Bash(${baseCommand} ${word}:*)`;
-          }
-          return `Bash(${baseCommand}:*)`;
-        }
-
-        // For everything else, just the base command
-        // "ls -la /some/path" -> "Bash(ls:*)"
-        // "cat /etc/passwd" -> "Bash(cat:*)"
-        return `Bash(${baseCommand}:*)`;
-      }
-
-      case 'WebFetch': {
-        // Extract domain for pattern matching
-        const url = (input?.url as string) || '';
-        try {
-          const parsedUrl = new URL(url);
-          return `WebFetch(domain:${parsedUrl.hostname})`;
-        } catch {
-          return 'WebFetch';
-        }
-      }
-
-      case 'WebSearch':
-        return 'WebSearch';
-
-      case 'Read':
-      case 'Write':
-      case 'Edit':
-      case 'MultiEdit':
-      case 'Glob':
-      case 'Grep':
-      case 'LS':
-      case 'TodoRead':
-      case 'TodoWrite':
-      case 'Task':
-      case 'NotebookRead':
-      case 'NotebookEdit':
-      case 'ExitPlanMode':
-        return toolName;
-
-      default:
-        // MCP tools: mcp__server__tool - use as-is
-        if (toolName.startsWith('mcp__')) {
-          return toolName;
-        }
-        return toolName;
-    }
-  }
 
   /**
    * Create canUseTool handler for permission requests.
@@ -3143,8 +2878,8 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
       // Check workspace trust before allowing any tools
       // Use permissionsPath (parent project for worktrees) for trust checks
-      if (pathForTrust && ClaudeCodeProvider.trustChecker) {
-        const trustStatus = ClaudeCodeProvider.trustChecker(pathForTrust);
+      if (pathForTrust && BaseAgentProvider.trustChecker) {
+        const trustStatus = BaseAgentProvider.trustChecker(pathForTrust);
         if (!trustStatus.trusted) {
           this.logSecurity('[canUseTool] Workspace not trusted, denying tool:', { toolName });
           return {
@@ -3174,35 +2909,103 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       // The SDK has already evaluated settings.json rules.
       // If we're here, it means the SDK needs user approval for this tool.
 
-      // Check session-level cache first - if user already approved this pattern in this session,
-      // auto-approve without prompting again (SDK doesn't hot-reload settings files mid-session)
-      const pattern = this.generateToolPattern(toolName, input);
-      if (this.sessionApprovedPatterns.has(pattern)) {
+      // Use ToolPermissionService if available, otherwise fall back to inline logic
+      if (this.permissionService && sessionId && workspacePath) {
+        try {
+          const requestId = `tool-${sessionId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+          const pattern = generateToolPattern(toolName, input);
+          const toolDescription = buildToolDescription(toolName, input);
+          const isDestructive = ['Write', 'Edit', 'MultiEdit', 'Bash'].includes(toolName);
+          const patternDisplay = getPatternDisplayName(pattern);
+
+          this.logSecurity('[canUseTool] Requesting permission via ToolPermissionService:', {
+            toolName,
+            pattern,
+            requestId,
+          });
+
+          // Log as nimbalyst_tool_use for UI widget rendering
+          await this.logAgentMessage(
+            sessionId,
+            'claude-code',
+            'output',
+            JSON.stringify({
+              type: 'nimbalyst_tool_use',
+              id: requestId,
+              name: 'ToolPermission',
+              input: {
+                requestId,
+                toolName,
+                rawCommand: toolName === 'Bash' ? input?.command || '' : toolDescription,
+                pattern,
+                patternDisplayName: patternDisplay,
+                isDestructive,
+                warnings: [],
+                workspacePath,
+              }
+            })
+          );
+
+          // Request permission via service
+          const response = await this.permissionService.requestToolPermission({
+            requestId,
+            sessionId,
+            workspacePath,
+            permissionsPath: permissionsPath || workspacePath,
+            toolName,
+            toolInput: input,
+            pattern,
+            patternDisplayName: patternDisplay,
+            toolDescription,
+            isDestructive,
+            warnings: [],
+            signal: options.signal,
+          });
+
+          if (response.decision === 'allow') {
+            return { behavior: 'allow', updatedInput: input };
+          } else {
+            return {
+              behavior: 'deny',
+              message: 'Tool call denied by user'
+            };
+          }
+        } catch (error) {
+          this.logSecurity('[canUseTool] Permission request failed:', {
+            toolName,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          });
+          return {
+            behavior: 'deny',
+            message: error instanceof Error ? error.message : 'Permission request cancelled'
+          };
+        }
+      }
+
+      // Fallback: inline permission logic (for tests or when service not available)
+      // This path is kept for backwards compatibility and testing
+      const pattern = generateToolPattern(toolName, input);
+      if (this.permissions.sessionApprovedPatterns.has(pattern)) {
         this.logSecurity('[canUseTool] Pattern already approved this session:', { pattern, toolName });
         return { behavior: 'allow', updatedInput: input };
       }
-      // Also check for wildcard patterns (e.g., 'WebFetch' matches any WebFetch call)
-      if (toolName === 'WebFetch' && this.sessionApprovedPatterns.has('WebFetch')) {
+      if (toolName === 'WebFetch' && this.permissions.sessionApprovedPatterns.has('WebFetch')) {
         this.logSecurity('[canUseTool] WebFetch wildcard approved this session:', { toolName });
         return { behavior: 'allow', updatedInput: input };
       }
 
-      // Show permission UI and wait for user response.
       const requestId = `tool-${sessionId || 'unknown'}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      const toolDescription = this.buildToolDescription(toolName, input);
+      const toolDescription = buildToolDescription(toolName, input);
       const isDestructive = ['Write', 'Edit', 'MultiEdit', 'Bash'].includes(toolName);
       const rawCommand = toolName === 'Bash' ? input?.command || '' : toolDescription;
       const patternDisplay = getPatternDisplayName(pattern);
 
-      this.logSecurity('[canUseTool] Showing permission prompt:', {
+      this.logSecurity('[canUseTool] Showing permission prompt (fallback):', {
         toolName,
         toolDescription: toolDescription.slice(0, 100),
         requestId,
       });
 
-      // Log as nimbalyst_tool_use - our own message type that won't conflict with SDK messages
-      // SessionManager recognizes this type and creates a toolCall property for widget rendering
-      // The widget will show interactive UI while !toolCall.result, completed UI when answered
       if (sessionId) {
         await this.logAgentMessage(
           sessionId,
@@ -3226,14 +3029,13 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         );
       }
 
-      // Create a simplified permission request for the legacy IPC path (backwards compatibility)
       const request = {
         id: requestId,
         toolName,
         rawCommand,
         actionsNeedingApproval: [{
           action: {
-            pattern, // The actual pattern (e.g., 'Bash(git commit:*)') for display and saving
+            pattern,
             displayName: toolDescription,
             command: toolName === 'Bash' ? input?.command || '' : '',
             isDestructive,
@@ -3252,33 +3054,25 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         createdAt: Date.now(),
       };
 
-      // Create promise that will be resolved when user responds
-      // Response can come from either IPC (desktop) or message polling (mobile/cross-session)
       const responsePromise = new Promise<{ decision: 'allow' | 'deny'; scope: 'once' | 'session' | 'always' | 'always-all' }>((resolve, reject) => {
-        this.pendingToolPermissions.set(requestId, {
+        this.permissions.pendingToolPermissions.set(requestId, {
           resolve,
           reject,
           request
         });
 
-        // Set up abort handler
         if (options.signal) {
           options.signal.addEventListener('abort', () => {
-            this.pendingToolPermissions.delete(requestId);
+            this.permissions.pendingToolPermissions.delete(requestId);
             reject(new Error('Request aborted'));
           }, { once: true });
         }
       });
 
-      // Start polling for message-based responses in parallel with IPC
-      // This enables mobile/cross-session responses
       if (sessionId) {
-        this.pollForPermissionResponse(sessionId, requestId, options.signal).catch(() => {
-          // Polling error - IPC path may still work
-        });
+        this.pollForPermissionResponse(sessionId, requestId, options.signal).catch(() => {});
       }
 
-      // Emit event to notify renderer to show permission UI (legacy IPC path)
       this.emit('toolPermission:pending', {
         requestId,
         sessionId,
@@ -3288,47 +3082,37 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       });
 
       try {
-        // Wait for user to respond (via IPC or message polling)
         const response = await responsePromise;
 
-        this.logSecurity('[canUseTool] User response received:', {
+        this.logSecurity('[canUseTool] User response received (fallback):', {
           toolName,
           decision: response.decision,
           scope: response.scope,
         });
 
-        // Cache approval for this session (for 'session', 'always', and 'always-all' scopes)
-        // This prevents re-prompting since the SDK doesn't hot-reload settings mid-session
-        // Skip caching compound commands - they must be approved each time
         const isCompoundCommand = pattern.startsWith('Bash:compound:');
         if (response.decision === 'allow' && response.scope !== 'once' && !isCompoundCommand) {
           if (response.scope === 'always-all' && toolName === 'WebFetch') {
-            // For "Allow All WebFetches", cache a wildcard pattern
-            this.sessionApprovedPatterns.add('WebFetch');
+            this.permissions.sessionApprovedPatterns.add('WebFetch');
             this.logSecurity('[canUseTool] Added wildcard pattern to session cache:', { pattern: 'WebFetch', scope: response.scope });
           } else {
-            this.sessionApprovedPatterns.add(pattern);
+            this.permissions.sessionApprovedPatterns.add(pattern);
             this.logSecurity('[canUseTool] Added pattern to session cache:', { pattern, scope: response.scope });
           }
         }
 
-        // If user approved with "Always" or "Always All", save the pattern to .claude/settings.local.json
-        // Skip saving compound commands - they can't be meaningfully cached
         if (response.decision === 'allow' && (response.scope === 'always' || response.scope === 'always-all') && workspacePath && !isCompoundCommand) {
           if (ClaudeCodeProvider.claudeSettingsPatternSaver) {
             try {
-              // For "Always All WebFetches", save the wildcard pattern
               const patternToSave = (response.scope === 'always-all' && toolName === 'WebFetch') ? 'WebFetch' : pattern;
               await ClaudeCodeProvider.claudeSettingsPatternSaver(workspacePath, patternToSave);
               this.logSecurity('[canUseTool] Saved pattern to Claude settings:', { pattern: patternToSave });
             } catch (saveError) {
               console.error('[CLAUDE-CODE] Failed to save pattern:', saveError);
-              // Don't fail the tool call if saving fails
             }
           }
         }
 
-        // Emit event so UI can update
         this.emit('toolPermission:resolved', {
           requestId,
           sessionId,
@@ -3345,7 +3129,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
           };
         }
       } catch (error) {
-        this.logSecurity('[canUseTool] Permission request failed:', {
+        this.logSecurity('[canUseTool] Permission request failed (fallback):', {
           toolName,
           error: error instanceof Error ? error.message : 'Unknown error',
         });
@@ -3473,634 +3257,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       }
   }
 
-  /**
-   * PHASE 3: Create PreToolUse hook for tagging file state before edits
-   * This hook intercepts Edit/Write/MultiEdit tools, tags the current file state,
-   * and tracks files for end-of-turn snapshot creation.
-   */
-  private createPreToolUseHook(
-    workspacePath: string,
-    sessionId?: string,
-    permissionsPath?: string,
-    context?: { isTeammateSession?: boolean },
-  ) {
-    const fs = require('fs');
-    const path = require('path');
-    // Use permissionsPath for trust checks (parent project for worktrees)
-    const pathForTrust = permissionsPath || workspacePath;
-    const isTeammateSession = context?.isTeammateSession === true;
-
-    return async (input: any, toolUseID: string | undefined, options: { signal: AbortSignal }) => {
-      const toolName = input.tool_name;
-      const toolInput = input.tool_input;
-
-      // TeamDelete should be validated by the SDK against active team members.
-      // Do not pre-clean teammates here, or TeamDelete will incorrectly succeed.
-
-      // MANAGED TEAMMATES: Delegate Task-spawn and SendMessage routing to TeammateManager
-      if (!isTeammateSession) {
-        const teammateResult = await this.teammateManager.handlePreToolUse(toolName, toolInput, toolUseID, sessionId);
-        if (teammateResult.handled) {
-          return teammateResult.result;
-        }
-      }
-
-      // EXITPLANMODE CONFIRMATION: Intercept ExitPlanMode tool calls in planning mode
-      if (toolName === 'ExitPlanMode' && this.currentMode === 'planning') {
-        // planFilePath is optional - used for "Start new session to implement" option
-        const planFilePath = toolInput?.planFilePath || '';
-
-        // Use the SDK's tool_use ID as the request ID so the widget can match it via toolCall.id
-        const requestId = toolUseID || `exit-plan-${sessionId}-${Date.now()}`;
-        const planSummary = toolInput?.plan || '';
-
-        // Create a promise that will be resolved when user responds
-        const confirmationPromise = new Promise<{ approved: boolean; clearContext?: boolean; feedback?: string }>((resolve, reject) => {
-          this.pendingExitPlanModeConfirmations.set(requestId, { resolve, reject });
-
-          // Set up abort handler
-          if (options.signal) {
-            options.signal.addEventListener('abort', () => {
-              this.pendingExitPlanModeConfirmations.delete(requestId);
-              reject(new Error('Request aborted'));
-            }, { once: true });
-          }
-        });
-
-        // Persist the ExitPlanMode request as a message for durable prompts
-        // This allows the confirmation to survive session switches and app restarts
-        const exitPlanModeContent = {
-          type: 'exit_plan_mode_request' as const,
-          requestId,
-          planSummary,
-          planFilePath,
-          timestamp: Date.now(),
-          status: 'pending' as const,
-        };
-
-        if (sessionId) {
-          await this.logAgentMessage(
-            sessionId,
-            'claude-code',
-            'output',
-            JSON.stringify(exitPlanModeContent),
-            { messageType: 'exit_plan_mode_request' }
-          );
-        }
-
-        // Emit event to notify renderer to show confirmation UI
-        this.emit('exitPlanMode:confirm', {
-          requestId,
-          sessionId,
-          planSummary,
-          planFilePath,
-          timestamp: Date.now()
-        });
-
-        try {
-          const response = await confirmationPromise;
-
-          if (response.approved) {
-            // User approved - update our mode state and allow ExitPlanMode to proceed
-            // TODO: Debug logging - uncomment if needed
-            this.currentMode = 'agent';
-
-            return {
-              hookSpecificOutput: {
-                hookEventName: 'PreToolUse' as const,
-                permissionDecision: 'allow' as const
-              }
-            };
-          } else {
-            // User denied - keep in planning mode
-            // Include feedback in the denial reason if provided
-            const feedbackText = response.feedback
-              ? `\n\nUser feedback: "${response.feedback}"`
-              : '';
-            // TODO: Debug logging - uncomment if needed
-            return {
-              hookSpecificOutput: {
-                hookEventName: 'PreToolUse' as const,
-                permissionDecision: 'deny' as const,
-                permissionDecisionReason: `The user chose to continue planning.${feedbackText}`
-              }
-            };
-          }
-        } catch (error) {
-          // Handle abort or other errors
-          // TODO: Debug logging - uncomment if needed
-          return {
-            hookSpecificOutput: {
-              hookEventName: 'PreToolUse' as const,
-              permissionDecision: 'deny' as const,
-              permissionDecisionReason: `ExitPlanMode was cancelled or interrupted.`
-            }
-          };
-        }
-      }
-
-      // BASH FILE OPERATION TRACKING: Detect file operations in Bash commands FIRST
-      // Parse the command to find files that will be modified, then tag them
-      // This enables local history and session file tracking for Bash edits
-      // IMPORTANT: This must run BEFORE security checks so it works in bypass-all mode
-      if (toolName === 'Bash') {
-        const command = (toolInput?.command as string) || '';
-        const cwd = workspacePath || process.cwd();
-
-        // Parse command to detect file operations
-        const affectedFiles = parseBashForFileOps(command, cwd);
-
-        if (affectedFiles.length > 0) {
-          console.log('[BASH-FILE-OPS] Detected file operations:', JSON.stringify({
-            command: command.slice(0, 100),
-            files: affectedFiles.map(f => path.basename(f)),
-            fullPaths: affectedFiles
-          }, null, 2));
-
-          // Tag each file and track for end-of-turn snapshot
-          for (const filePath of affectedFiles) {
-            // Track this file as edited during this turn
-            this.editedFilesThisTurn.add(filePath);
-            console.log('[BASH-FILE-OPS] Added to editedFilesThisTurn:', filePath);
-            console.log('[BASH-FILE-OPS] Current editedFilesThisTurn size:', this.editedFilesThisTurn.size);
-
-            // Create unique tag ID for this edit
-            const actualToolUseId = toolUseID || `tool-${Date.now()}`;
-
-            try {
-              // Check if file exists
-              fs.readFileSync(filePath, 'utf-8');
-              // File exists - tag with current content
-              console.log('[BASH-FILE-OPS] File exists, tagging:', path.basename(filePath));
-              await this.tagFileBeforeEdit(filePath, workspacePath!, sessionId, actualToolUseId);
-            } catch (error) {
-              // File doesn't exist yet (Bash creating new file)
-              // Create a pre-edit tag with empty content so diff mode shows the full new file
-              console.log('[BASH-FILE-OPS] File is new, tagging as new:', path.basename(filePath));
-              await this.tagFileBeforeEdit(filePath, workspacePath!, sessionId, actualToolUseId, true);
-            }
-          }
-        }
-      }
-
-      // SECURITY: Check each part of compound Bash commands separately
-      // Claude's pattern matching (e.g., Bash(git add:*)) can be bypassed with chained commands
-      // like "git add file && rm -rf /". PreToolUse runs BEFORE SDK's allow rules, so we can catch this.
-      // See: https://github.com/anthropics/claude-code/issues/4956
-      if (toolName === 'Bash') {
-        // Managed teammates run without interactive approval flow.
-        // If we prompt here, the teammate can deadlock indefinitely waiting for a UI response.
-        if (isTeammateSession) {
-          return {};
-        }
-
-        // In bypass-all mode, skip compound command checking entirely
-        // Use pathForTrust (parent project for worktrees) for trust checks
-        if (pathForTrust && ClaudeCodeProvider.trustChecker) {
-          const trustStatus = ClaudeCodeProvider.trustChecker(pathForTrust);
-          if (trustStatus.trusted && trustStatus.mode === 'bypass-all') {
-            // this.logSecurity(`[PreToolUse] Bypass-all mode, skipping compound command check`);
-            return {};
-          }
-        }
-
-        const command = (toolInput?.command as string) || '';
-        // Use quote-aware detection to avoid false positives on heredocs/quoted strings
-        if (hasShellChainingOperators(command)) {
-          this.logSecurity(`[PreToolUse] Compound Bash command detected, checking each part:`, { command: command.slice(0, 100) });
-
-          // Split on unquoted &&, ||, ; while respecting quotes and heredocs
-          const subCommands = splitOnShellOperators(command);
-
-          // Check each sub-command
-          for (const subCommand of subCommands) {
-            const subPattern = this.generateToolPattern('Bash', { command: subCommand });
-
-            // Skip if already approved in session
-            if (this.sessionApprovedPatterns.has(subPattern)) {
-              this.logSecurity(`[PreToolUse] Sub-command already approved in session:`, { subCommand: subCommand.slice(0, 50), pattern: subPattern });
-              continue;
-            }
-
-            // Also check if pattern is in Claude settings file (would be auto-approved by SDK)
-            if (workspacePath && ClaudeCodeProvider.claudeSettingsPatternChecker) {
-              try {
-                const isAllowed = await ClaudeCodeProvider.claudeSettingsPatternChecker(workspacePath, subPattern);
-                if (isAllowed) {
-                  this.logSecurity(`[PreToolUse] Sub-command allowed by Claude settings:`, { subCommand: subCommand.slice(0, 50), pattern: subPattern });
-                  // Add to session cache so we don't check file again
-                  this.sessionApprovedPatterns.add(subPattern);
-                  continue;
-                }
-              } catch (e) {
-                // If check fails, proceed to ask user
-                this.logSecurity(`[PreToolUse] Failed to check Claude settings:`, { error: e });
-              }
-            }
-
-            // Need to check this sub-command - use our permission flow
-            this.logSecurity(`[PreToolUse] Sub-command needs approval:`, { subCommand: subCommand.slice(0, 50), pattern: subPattern });
-
-            const requestId = `compound-${sessionId || 'unknown'}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-            const subDescription = `Part of compound command: ${subCommand.slice(0, 60)}${subCommand.length > 60 ? '...' : ''}`;
-
-            // Create permission request for this sub-command
-            const request = {
-              id: requestId,
-              toolName: 'Bash',
-              rawCommand: subCommand,
-              actionsNeedingApproval: [{
-                action: {
-                  pattern: subPattern,
-                  displayName: subDescription,
-                  command: subCommand,
-                  isDestructive: true,
-                  referencedPaths: [],
-                  hasRedirection: false,
-                },
-                decision: 'ask' as const,
-                reason: 'Sub-command of compound command requires approval',
-                isDestructive: true,
-                isRisky: true,
-                warnings: ['This is part of a compound command - each part is checked separately'],
-                outsidePaths: [],
-                sensitivePaths: [],
-              }],
-              hasDestructiveActions: true,
-              createdAt: Date.now(),
-            };
-
-            // Log as nimbalyst_tool_use so SessionManager creates a toolCall for ToolPermissionWidget rendering
-            if (sessionId) {
-              const patternDisplay = getPatternDisplayName(subPattern);
-              await this.logAgentMessage(
-                sessionId,
-                'claude-code',
-                'output',
-                JSON.stringify({
-                  type: 'nimbalyst_tool_use',
-                  id: requestId,
-                  name: 'ToolPermission',
-                  input: {
-                    requestId,
-                    toolName: 'Bash',
-                    rawCommand: subCommand,
-                    pattern: subPattern,
-                    patternDisplayName: patternDisplay,
-                    isDestructive: true,
-                    warnings: ['This is part of a compound command - each part is checked separately'],
-                    workspacePath,
-                  }
-                })
-              );
-            }
-
-            // Wait for user approval
-            const responsePromise = new Promise<{ decision: 'allow' | 'deny'; scope: 'once' | 'session' | 'always' | 'always-all' }>((resolve, reject) => {
-              this.pendingToolPermissions.set(requestId, { resolve, reject, request });
-            });
-
-            // Emit event to show permission UI
-            this.emit('toolPermission:pending', {
-              requestId,
-              sessionId,
-              workspacePath,
-              request,
-              timestamp: Date.now()
-            });
-
-            try {
-              const response = await responsePromise;
-
-              if (response.decision === 'deny') {
-                this.logSecurity(`[PreToolUse] Sub-command denied:`, { subCommand: subCommand.slice(0, 50) });
-                return {
-                  hookSpecificOutput: {
-                    hookEventName: 'PreToolUse' as const,
-                    permissionDecision: 'deny' as const,
-                    permissionDecisionReason: `Command denied: ${subCommand.slice(0, 50)}`
-                  }
-                };
-              }
-
-              // Cache approval if not 'once'
-              if (response.scope !== 'once') {
-                this.sessionApprovedPatterns.add(subPattern);
-                this.logSecurity(`[PreToolUse] Sub-command approved and cached:`, { pattern: subPattern, scope: response.scope });
-              }
-
-              // Save to settings if 'always'
-              if (response.scope === 'always' && workspacePath && ClaudeCodeProvider.claudeSettingsPatternSaver) {
-                try {
-                  await ClaudeCodeProvider.claudeSettingsPatternSaver(workspacePath, subPattern);
-                } catch (e) {
-                  console.error('[CLAUDE-CODE] Failed to save pattern:', e);
-                }
-              }
-            } catch (error) {
-              this.logSecurity(`[PreToolUse] Sub-command permission failed:`, { error });
-              return {
-                hookSpecificOutput: {
-                  hookEventName: 'PreToolUse' as const,
-                  permissionDecision: 'deny' as const,
-                  permissionDecisionReason: `Permission check failed for: ${subCommand.slice(0, 50)}`
-                }
-              };
-            }
-          }
-
-          // All sub-commands approved, allow the compound command
-          this.logSecurity(`[PreToolUse] All sub-commands approved, allowing compound command`);
-          return {
-            hookSpecificOutput: {
-              hookEventName: 'PreToolUse' as const,
-              permissionDecision: 'allow' as const
-            }
-          };
-        }
-      }
-
-      // WebFetch/WebSearch: Let SDK handle via canUseTool
-      // The SDK reads settings.json and calls canUseTool when permission is needed
-      if (toolName === 'WebFetch' || toolName === 'WebSearch') {
-        this.logSecurity(`[PreToolUse] ${toolName} - deferring to SDK/canUseTool`);
-        return {};
-      }
-
-      // Bash: Continue to canUseTool for permission checking
-      // (File operation tracking happens earlier in this function)
-      if (toolName === 'Bash') {
-        return {};
-      }
-
-      // Handle non-file-editing tools (except ExitPlanMode which is handled above)
-      // Return empty object to let the request continue through permission flow to canUseTool
-      if (toolName !== 'Edit' && toolName !== 'Write' && toolName !== 'MultiEdit') {
-        return {};
-      }
-
-      try {
-        // Extract file paths from tool arguments
-        const filePaths: string[] = [];
-        if (toolName === 'Edit' || toolName === 'Write') {
-          const filePath = toolInput.file_path || toolInput.filePath;
-          if (filePath) {
-            filePaths.push(filePath);
-          }
-        } else if (toolName === 'MultiEdit') {
-          // MultiEdit might have multiple files - tag each one
-          const edits = toolInput.edits || [];
-          for (const edit of edits) {
-            const editFilePath = edit.file_path || edit.filePath;
-            if (editFilePath) {
-              filePaths.push(editFilePath);
-            }
-          }
-        }
-
-        // PLANNING MODE VALIDATION: Restrict file edits to markdown and extension-registered file types
-        if (this.currentMode === 'planning') {
-          // Get extension-registered file types (e.g., .mockup.html, .excalidraw, .datamodel)
-          const extensionFileTypes = ClaudeCodeProvider.extensionFileTypesLoader?.() ?? new Set<string>();
-
-          for (const filePath of filePaths) {
-            // Check if file has extension-registered file type
-            const hasExtensionEditor = Array.from(extensionFileTypes).some(ext =>
-              filePath.toLowerCase().endsWith(ext.toLowerCase())
-            );
-
-            if (!filePath.endsWith('.md') && !hasExtensionEditor) {
-              console.error(`[CLAUDE-CODE] Planning mode validation FAILED: ${toolName} on ${filePath}`);
-              return {
-                hookSpecificOutput: {
-                  hookEventName: 'PreToolUse' as const,
-                  permissionDecision: 'deny' as const,
-                  permissionDecisionReason: `Planning mode restricts file operations to markdown and extension-registered file types. ` +
-                    `Cannot use ${toolName} on '${filePath}'. ` +
-                    `Allowed: .md files or extension types (${Array.from(extensionFileTypes).join(', ') || 'none registered'}).`
-                }
-              };
-            }
-          }
-          // TODO: Debug logging - uncomment if needed for planning mode troubleshooting
-        }
-
-        // Tag each file and track for end-of-turn snapshot
-        for (let filePath of filePaths) {
-          if (!filePath) continue;
-
-          // Make file path absolute if relative
-          if (!path.isAbsolute(filePath)) {
-            filePath = path.join(workspacePath, filePath);
-          }
-
-          // Track this file as edited during this turn
-          this.editedFilesThisTurn.add(filePath);
-
-          // Create unique tag ID for this edit
-          const actualToolUseId = toolUseID || `tool-${Date.now()}`;
-
-          // Read current file content (if file exists)
-          // For new files, we create a pre-edit tag with empty content to enable diff mode
-          try {
-            fs.readFileSync(filePath, 'utf-8');
-            // File exists - tag with current content
-            await this.tagFileBeforeEdit(filePath, workspacePath!, sessionId, actualToolUseId);
-          } catch (error) {
-            // File doesn't exist yet (Write tool creating new file)
-            // Create a pre-edit tag with empty content so diff mode shows the full new file
-            await this.tagFileBeforeEdit(filePath, workspacePath!, sessionId, actualToolUseId, true);
-          }
-        }
-
-      } catch (error) {
-        console.error('[CLAUDE-CODE] PreToolUse hook error:', error);
-        // Don't block the edit if tagging fails
-      }
-
-      // Return empty object to let the request continue through permission flow to canUseTool
-      // This allows our permission engine to check workspace trust and ask for approval
-      return {};
-    };
-  }
-
-  /**
-   * Tag a file's current state before an AI edit
-   * @param isNewFile - If true, the file doesn't exist yet (being created), so use empty content
-   */
-  private async tagFileBeforeEdit(
-    filePath: string,
-    workspacePath: string,
-    sessionId: string | undefined,
-    toolUseId: string,
-    isNewFile: boolean = false
-  ): Promise<void> {
-    const fs = require('fs');
-
-    try {
-      // Import historyManager dynamically if we're in the main process context
-      try {
-        const { historyManager } = await import('../../../../../electron/src/main/HistoryManager');
-
-        // CRITICAL: Check if there are already pending tags for this file
-        // If yes, skip creating a new tag - we want to show ALL edits together as one diff
-        const pendingTags = await historyManager.getPendingTags(filePath);
-        // if (pendingTags && pendingTags.length > 0) {
-        // }
-
-        if (pendingTags && pendingTags.length > 0) {
-          const existingTag = pendingTags[0];
-          const tagAge = Date.now() - existingTag.createdAt.getTime();
-
-          // Check if the pending tag is from the current session
-          if (existingTag.sessionId === sessionId) {
-            // Same session - skip creating another (existing behavior)
-            console.log('[PRE-EDIT SKIP]', JSON.stringify({
-              file: path.basename(filePath),
-              existingTagAge: tagAge + 'ms',
-              existingTagId: existingTag.id,
-              reason: 'same_session_tag',
-            }));
-            return;
-          }
-
-          // Different session - clear the old tag and create a new one
-          // This prevents edits from multiple sessions accumulating into one diff
-          console.log('[PRE-EDIT CLEAR]', JSON.stringify({
-            file: path.basename(filePath),
-            clearedTagId: existingTag.id,
-            clearedSessionId: existingTag.sessionId,
-            newSessionId: sessionId,
-            reason: 'different_session',
-          }));
-          await historyManager.updateTagStatus(filePath, existingTag.id, 'reviewed');
-        }
-
-        // PRODUCTION LOG: Track when new tag is created
-        const tagId = `ai-edit-pending-${sessionId || 'unknown'}-${toolUseId}`;
-        console.log('[PRE-EDIT TAG]', JSON.stringify({
-          file: path.basename(filePath),
-          tagId,
-          isNewFile,
-        }));
-
-        // Get content: empty for new files, current content for existing files
-        const content = isNewFile ? '' : fs.readFileSync(filePath, 'utf-8');
-
-        await historyManager.createTag(
-          filePath,
-          tagId,
-          content,
-          sessionId || 'unknown',
-          toolUseId
-        );
-
-        // Small delay to ensure tag is committed to database before next edit check
-        await new Promise(resolve => setTimeout(resolve, 10));
-      } catch (importError) {
-        // If we're not in the main process, we'll need to use IPC
-        // This will be implemented when we integrate with the IPC layer
-      }
-
-    } catch (error) {
-      // Check if this is a unique constraint violation (expected if tag already exists)
-      const errorStr = String(error);
-      if (errorStr.includes('unique') || errorStr.includes('UNIQUE') || errorStr.includes('duplicate')) {
-        // This is fine - means another rapid edit already created the tag
-        return;
-      }
-      console.error('[CLAUDE-CODE] PreToolUse: Failed to tag file:', error);
-      // Don't throw - allow the edit to proceed even if tagging fails
-    }
-  }
-
-  /**
-   * PostToolUse hook to ensure file watcher detects changes
-   * This doesn't create snapshots - those are created at turn end
-   * It just ensures the file system has flushed the write
-   */
-  private createPostToolUseHook(workspacePath: string, sessionId?: string) {
-    return async (input: any, toolUseID: string | undefined, options: { signal: AbortSignal }) => {
-      const toolName = input.tool_name;
-      const toolInput = input.tool_input;
-
-      // Handle Bash file operations
-      if (toolName === 'Bash') {
-        const command = (toolInput?.command as string) || '';
-        const cwd = workspacePath || process.cwd();
-
-        // Check if this Bash command affected any files
-        const affectedFiles = parseBashForFileOps(command, cwd);
-
-        if (affectedFiles.length > 0) {
-          // Add delay for file watcher to detect changes from Bash operations
-          // Same delay as Edit/Write/MultiEdit to ensure consistent behavior
-          await new Promise(resolve => setTimeout(resolve, 200));
-
-          console.log('[BASH-FILE-OPS] PostToolUse delay complete, files should be visible to watcher:', {
-            count: affectedFiles.length,
-            files: affectedFiles.map((f: string) => path.basename(f))
-          });
-        }
-
-        return {};
-      }
-
-      // Only care about file editing tools
-      if (toolName !== 'Edit' && toolName !== 'Write' && toolName !== 'MultiEdit') {
-        return {};
-      }
-
-
-      // Small delay to ensure file system has flushed the write
-      // This gives chokidar time to detect the change and trigger diff update
-      // Increased from 50ms to 200ms to ensure file watcher can process each edit
-      await new Promise(resolve => setTimeout(resolve, 200));
-
-      return {};
-    };
-  }
-
-  /**
-   * Create 'ai-edit' snapshots for all files edited during this turn
-   * Called at the end of the agent's turn, before yielding completion
-   */
-  private async createTurnEndSnapshots(workspacePath: string, sessionId?: string): Promise<void> {
-    const fs = require('fs');
-    const path = require('path');
-
-
-    for (const filePath of this.editedFilesThisTurn) {
-      try {
-        // Read the final content after all edits this turn
-        let finalContent = '';
-        try {
-          finalContent = fs.readFileSync(filePath, 'utf-8');
-        } catch (error) {
-          console.warn(`[CLAUDE-CODE] Turn-end snapshot: Could not read file:`, filePath);
-          continue;
-        }
-
-        // Save as 'ai-edit' snapshot in history
-        // The sessionId is stored in snapshot metadata so the HistoryDialog can display
-        // which AI session made the edit and provide a clickable link to open that session
-        try {
-          const { historyManager } = await import('../../../../../electron/src/main/HistoryManager');
-          await historyManager.createSnapshot(
-            filePath,
-            finalContent,
-            'ai-edit',
-            `AI edit turn complete (session: ${sessionId || 'unknown'})`,
-            sessionId ? { sessionId } : undefined
-          );
-        } catch (importError) {
-          console.warn('[CLAUDE-CODE] Could not import historyManager:', importError);
-        }
-      } catch (error) {
-        console.error(`[CLAUDE-CODE] Failed to create turn-end snapshot for ${filePath}:`, error);
-      }
-    }
-  }
 
   private async findCliPath(): Promise<string> {
     try {
