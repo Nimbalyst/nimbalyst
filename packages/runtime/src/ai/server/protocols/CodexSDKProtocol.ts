@@ -150,8 +150,8 @@ export class CodexSDKProtocol implements AgentProtocol {
       throw new Error('Invalid session: missing thread');
     }
 
-    // Build the prompt
-    const prompt = this.buildPrompt(message, session.raw?.options);
+    // Build the prompt (system prompt is now in thread options as developer_instructions)
+    const prompt = this.buildPrompt(message);
 
     // Track cumulative text for delta extraction
     let lastCumulativeText = '';
@@ -330,37 +330,35 @@ export class CodexSDKProtocol implements AgentProtocol {
    * Build thread options from session options
    */
   private buildThreadOptions(options: SessionOptions): Record<string, unknown> {
-    return {
+    const baseOptions = {
       model: options.model || 'gpt-5',
       workingDirectory: options.workspacePath,
       skipGitRepoCheck: true,
       approvalPolicy: 'never', // Nimbalyst handles approvals
       sandboxMode: 'workspace-write',
       modelReasoningEffort: 'high',
-      ...options.raw,
+    };
+
+    // Extract systemPrompt from raw options and pass it as developer_instructions
+    // This is the proper Codex SDK way to add custom instructions
+    const { systemPrompt, ...otherRawOptions } = options.raw || {};
+
+    return {
+      ...baseOptions,
+      ...(systemPrompt ? { developer_instructions: systemPrompt } : {}),
+      ...otherRawOptions,
     };
   }
 
   /**
    * Build prompt from message content
    *
-   * For the initial implementation, we just use the message content.
-   * In the future, this could be enhanced to include:
-   * - System prompt
-   * - Conversation history
-   * - Document context
+   * NOTE: System prompts are now passed via developer_instructions in thread options,
+   * not injected into the user message. This is the proper Codex SDK approach.
    */
-  private buildPrompt(message: ProtocolMessage, threadOptions?: Record<string, unknown>): string {
-    const parts: string[] = [];
-
-    // Add system prompt if available
-    if (threadOptions?.systemPrompt) {
-      parts.push(`<SYSTEM>\n${threadOptions.systemPrompt}\n</SYSTEM>`);
-    }
-
-    // Add user message
-    parts.push(`USER: ${message.content}`);
-
-    return parts.join('\n\n');
+  private buildPrompt(message: ProtocolMessage): string {
+    // Just return the message content - no wrapping or injection needed
+    // The system prompt is handled via developer_instructions config option
+    return message.content;
   }
 }

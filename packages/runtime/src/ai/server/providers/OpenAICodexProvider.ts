@@ -463,36 +463,26 @@ export class OpenAICodexProvider extends BaseAgentProvider {
     messages?: Message[];
     shouldBootstrapFromHistory: boolean;
   }): string {
-    const parts: string[] = [];
+    // Note: System prompt is now passed via developer_instructions in thread options.
+    // Codex SDK handles message formatting internally, so we just pass the raw content.
 
-    if (options.systemPrompt) {
-      parts.push(`<SYSTEM>\n${options.systemPrompt}\n</SYSTEM>`);
-    }
+    // For now, conversation history bootstrapping is always disabled (shouldBootstrapFromHistory = false)
+    // because the Codex SDK maintains thread state automatically.
+    // If we need history bootstrapping in the future, we can add it here.
 
-    if (options.shouldBootstrapFromHistory && options.messages && options.messages.length > 0) {
-      const history = options.messages
-        .filter((msg) => (msg.role === 'user' || msg.role === 'assistant' || msg.role === 'system') && !!msg.content?.trim())
-        .map((msg) => `${msg.role.toUpperCase()}: ${OpenAICodexProvider.sanitizeTagContent(msg.content || '')}`)
-        .join('\n\n');
-      if (history) {
-        parts.push(`<CONVERSATION_HISTORY>\n${history}\n</CONVERSATION_HISTORY>`);
-      }
-    }
-
-    parts.push(`USER: ${options.message}`);
-    return parts.join('\n\n');
+    return options.message;
   }
 
   /**
    * Strip XML-like tags that could break out of structured prompt sections.
    * This prevents message content from injecting fake </CONVERSATION_HISTORY>,
-   * <SYSTEM>, etc. tags that would alter the prompt structure.
+   * <USER>, etc. tags that would alter the prompt structure.
    *
    * Handles bare tags, tags with attributes, and self-closing variants:
-   *   <SYSTEM>, </SYSTEM>, <SYSTEM id="x">, <SYSTEM/>, etc.
+   *   <USER>, </USER>, <USER id="x">, <USER/>, etc.
    */
   private static sanitizeTagContent(content: string): string {
-    return content.replace(/<\/?(?:SYSTEM|CONVERSATION_HISTORY|USER)\b[^>]*\/?>/gi, '');
+    return content.replace(/<\/?(?:CONVERSATION_HISTORY|USER)\b[^>]*\/?>/gi, '');
   }
 
   private appendAttachmentHints(message: string, attachments?: any[]): string {
