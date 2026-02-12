@@ -5,7 +5,12 @@
  * Extracted from ClaudeCodeProvider to isolate the teammate subsystem.
  */
 
-import { query, type Query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+import { query, type SDKUserMessage, type SDKMessage } from '@anthropic-ai/claude-agent-sdk';
+
+// Query interface not properly exported by SDK, so we define it inline
+interface Query extends AsyncGenerator<SDKMessage, void> {
+  streamInput(stream: AsyncIterable<any>): Promise<void>;
+}
 import path from 'path';
 import fsp from 'fs/promises';
 import os from 'os';
@@ -1245,7 +1250,7 @@ export class TeammateManager {
 
     const teammate = this.managedTeammates.get(agentId);
     if (teammate) {
-      teammate.query = teammateQuery;
+      teammate.query = teammateQuery as unknown as Query;
     }
 
     let capturedSessionId: string | undefined;
@@ -1262,7 +1267,7 @@ export class TeammateManager {
       }
 
       try {
-        await this.flushPendingMessages(agentId, teammateQuery);
+        await this.flushPendingMessages(agentId, teammateQuery as unknown as Query);
       } catch (error) {
         const reason = error instanceof Error ? error.message : String(error);
         console.warn(`[MANAGED-TEAMMATE] Unexpected flush error for "${agentId}": ${reason}`);

@@ -322,7 +322,7 @@ describe('OpenAICodexProvider', () => {
   });
 
   it('maps legacy codex model ids to gpt-5 when starting a thread', async () => {
-    const startThread = vi.fn(() => ({
+    const startThread = vi.fn((config: { model: string }) => ({
       id: 'thread-legacy',
       runStreamed: async () => ({
         events: createAsyncEventStream([
@@ -360,8 +360,8 @@ describe('OpenAICodexProvider', () => {
     }
 
     expect(startThread).toHaveBeenCalledTimes(1);
-    const startArgs = startThread.mock.calls[0][0];
-    expect(startArgs.model).toBe('gpt-5');
+    const startArgs = startThread.mock.calls[0]?.[0];
+    expect(startArgs?.model).toBe('gpt-5');
   });
 
   it('supports direct handleToolCall execution through the shared tool handler', async () => {

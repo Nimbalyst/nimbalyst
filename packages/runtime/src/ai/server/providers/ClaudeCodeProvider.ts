@@ -3,7 +3,15 @@
  * Uses bundled SDK from package dependencies
  */
 
-import { query, type Query } from '@anthropic-ai/claude-agent-sdk';
+import { query, type SDKMessage } from '@anthropic-ai/claude-agent-sdk';
+
+// Query interface not properly exported by SDK, so we define it inline
+interface Query extends AsyncGenerator<SDKMessage, void> {
+  interrupt(): Promise<void>;
+  setPermissionMode(mode: string): Promise<void>;
+  setModel(model?: string): Promise<void>;
+  streamInput(stream: AsyncIterable<any>): Promise<void>;
+}
 import { parse as parseShellCommand } from 'shell-quote';
 import type { MessageParam, ImageBlockParam, TextBlockParam, ContentBlockParam, DocumentBlockParam } from '@anthropic-ai/sdk/resources';
 import { BaseAIProvider } from '../AIProvider';
@@ -1016,7 +1024,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         prompt: promptInput as any,
         options
       });
-      this.leadQuery = leadQuery;
+      this.leadQuery = leadQuery as unknown as Query;
       const queryIterator = leadQuery as AsyncIterable<any>;
       const queryCallDuration = Date.now() - queryCallStart;
       // console.log(`[CLAUDE-CODE] SDK query() returned iterator in ${queryCallDuration}ms`);
