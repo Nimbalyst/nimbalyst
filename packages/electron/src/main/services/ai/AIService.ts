@@ -2143,13 +2143,14 @@ export class AIService {
           editingInstructions: userMessageAdditions.editingInstructions,
         };
 
-        // Update MCP document state for Claude Code provider so it knows which file-scoped tools to show
-        if (isClaudeCode && contextWithSession?.filePath && effectiveWorkspacePath) {
+        // Update MCP document state for Claude Code provider so it knows which tools to show
+        // Always update with workspacePath, even if no file is open, so global-scoped tools are available
+        if (isClaudeCode && effectiveWorkspacePath) {
           const { updateDocumentState, registerWorkspaceWindow } = await import('../../mcp/httpServer');
           updateDocumentState({
-            filePath: contextWithSession.filePath,
+            filePath: contextWithSession?.filePath,
             workspacePath: effectiveWorkspacePath,
-            fileType: contextWithSession.fileType
+            fileType: contextWithSession?.fileType
           }, session.id);
 
           // Also register the workspace->window mapping so MCP tools can route to the correct window

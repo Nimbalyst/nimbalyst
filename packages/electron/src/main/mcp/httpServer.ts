@@ -266,16 +266,28 @@ export function unregisterExtensionTools(workspacePath: string) {
  * Filters based on scope and file patterns
  */
 function getAvailableExtensionTools(workspacePath: string | undefined, filePath: string | undefined): ExtensionToolDefinition[] {
-  if (!workspacePath) return [];
+  if (!workspacePath) {
+    console.log('[MCP Server] getAvailableExtensionTools: No workspacePath provided, returning empty array');
+    return [];
+  }
 
   const tools = extensionToolsByWorkspace.get(workspacePath) || [];
 
-  return tools.filter(tool => {
+  if (tools.length === 0) {
+    console.log(`[MCP Server] getAvailableExtensionTools: No tools registered for workspace: ${workspacePath}`);
+    return [];
+  }
+
+  const filtered = tools.filter(tool => {
     // Global tools are always available
-    if (tool.scope === 'global') return true;
+    if (tool.scope === 'global') {
+      return true;
+    }
 
     // Editor-scoped tools require a matching file
-    if (!filePath) return false;
+    if (!filePath) {
+      return false;
+    }
 
     // Check if file matches any pattern
     if (!tool.editorFilePatterns || tool.editorFilePatterns.length === 0) {
@@ -293,6 +305,10 @@ function getAvailableExtensionTools(workspacePath: string | undefined, filePath:
       return filePath.toLowerCase().endsWith(pattern.toLowerCase());
     });
   });
+
+  console.log(`[MCP Server] getAvailableExtensionTools: Filtered ${filtered.length}/${tools.length} tools for workspace: ${workspacePath}, filePath: ${filePath || 'none'}`);
+
+  return filtered;
 }
 
 export function updateDocumentState(state: any, sessionId?: string) {
@@ -899,9 +915,11 @@ The commit message should follow these guidelines:
           inputSchema: tool.inputSchema
         }));
 
-        // if (extensionTools.length > 0) {
-        //   console.log(`[MCP Server] Including ${extensionTools.length} extension tools for file: ${currentFilePath}`);
-        // }
+        if (extensionTools.length > 0) {
+          const globalTools = extensionTools.filter(t => t.scope === 'global').length;
+          const editorTools = extensionTools.filter(t => t.scope === 'editor').length;
+          console.log(`[MCP Server] Including ${extensionTools.length} extension tools (${globalTools} global, ${editorTools} editor-scoped) for workspace: ${workspacePath}, file: ${currentFilePath || 'none'}`);
+        }
 
         const allTools = [...builtInTools, ...extensionToolSchemas];
 
