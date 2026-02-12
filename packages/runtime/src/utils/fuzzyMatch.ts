@@ -392,7 +392,7 @@ export function fuzzyFilter<T>(
   const results = items
     .map(item => ({
       item,
-      match: fuzzyMatchPath(getSearchText(item), getSearchText(item)) || fuzzyMatch(query, getSearchText(item)),
+      match: fuzzyMatchPath(query, getSearchText(item)),
     }))
     .filter(r => r.match.matches)
     .sort((a, b) => b.match.score - a.match.score);

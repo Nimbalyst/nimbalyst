@@ -344,9 +344,7 @@ export {
 // File mention atoms (for @ file mentions in AIInput)
 export {
   fileMentionOptionsAtom,
-  fileMentionQueryAtom,
   documentsLoadingAtom,
-  loadDocumentsAtom,
   searchFileMentionAtom,
   selectFileMentionAtom,
   clearFileMentionSearchAtom,

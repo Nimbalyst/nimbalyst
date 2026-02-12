@@ -4,6 +4,9 @@
  * Provides Jotai-based state management for file mentions in AIInput.
  * Components subscribe directly to these atoms instead of receiving props.
  *
+ * Uses the ripgrep-based QuickOpen file cache for searching, which covers
+ * all workspace files without the document service's scan limit.
+ *
  * This approach follows the React State Architecture Guidelines:
  * - No prop drilling through multiple component layers
  * - AIInput subscribes directly to atoms internally
@@ -12,8 +15,7 @@
 
 import { atom } from 'jotai';
 import { atomFamily } from 'jotai/utils';
-import { getDocumentService } from '../../services/RendererDocumentService';
-import { fuzzyFilterDocuments, getFileIcon, type Document } from '@nimbalyst/runtime';
+import { getFileIcon } from '@nimbalyst/runtime';
 import type { TypeaheadOption } from '../../components/Typeahead/GenericTypeahead';
 
 // ============================================================
@@ -27,48 +29,60 @@ export interface FileMentionReference {
   workspace?: string;
 }
 
+interface FileSearchResult {
+  path: string;
+  isFileNameMatch: boolean;
+  matches: unknown[];
+  score: number;
+}
+
 // ============================================================
 // Internal State
 // ============================================================
 
-// Cache for document lists per workspace
-const documentCache = new Map<string, {
-  documents: Document[];
-  timestamp: number;
-}>();
-
-const CACHE_DURATION_MS = 5000; // 5 second cache
+// Track which workspaces have had their QuickOpen cache built
+const cacheBuiltForWorkspace = new Set<string>();
 
 // ============================================================
 // Base Atoms
 // ============================================================
 
 /**
- * All documents for a workspace (cached).
- * Used internally for filtering.
- */
-export const workspaceDocumentsAtom = atomFamily((workspacePath: string) =>
-  atom<Document[]>([])
-);
-
-/**
- * Loading state for document fetching
+ * Loading state for file search
  */
 export const documentsLoadingAtom = atomFamily((workspacePath: string) =>
   atom<boolean>(false)
 );
 
 /**
- * Current search query for file mentions.
- * Workspace-scoped since we search the same file set.
+ * Search results from the ripgrep-based QuickOpen file search.
+ * Stored as TypeaheadOption[] ready for display.
  */
-export const fileMentionQueryAtom = atomFamily((workspacePath: string) =>
-  atom<string>('')
+export const fileMentionOptionsAtom = atomFamily((workspacePath: string) =>
+  atom<TypeaheadOption[]>([])
 );
 
 // ============================================================
-// Derived Atoms
+// Helpers
 // ============================================================
+
+/**
+ * Get the filename from a path
+ */
+function getFileName(filePath: string): string {
+  const parts = filePath.split('/');
+  return parts[parts.length - 1] || filePath;
+}
+
+/**
+ * Get relative path by stripping the workspace prefix.
+ */
+function getRelativePath(absolutePath: string, workspacePath: string): string {
+  if (absolutePath.startsWith(workspacePath)) {
+    return absolutePath.slice(workspacePath.length + 1);
+  }
+  return absolutePath;
+}
 
 /**
  * Truncate a path for display, keeping the most relevant parts visible.
@@ -100,92 +114,83 @@ function getDirectoryPath(fullPath: string): string {
 }
 
 /**
- * File mention options derived from documents and search query.
- * Filtered using fuzzy matching for CamelCase support.
+ * Ensure the ripgrep-based QuickOpen cache is built for a workspace.
  */
-export const fileMentionOptionsAtom = atomFamily((workspacePath: string) =>
-  atom<TypeaheadOption[]>((get) => {
-    const documents = get(workspaceDocumentsAtom(workspacePath));
-    const query = get(fileMentionQueryAtom(workspacePath));
+async function ensureQuickOpenCache(workspacePath: string): Promise<void> {
+  if (cacheBuiltForWorkspace.has(workspacePath)) return;
 
-    // Use fuzzy filtering with CamelCase support
-    const filtered = fuzzyFilterDocuments(documents, query, 50);
+  const api = (window as any).electronAPI || (window as any).electron;
+  if (!api?.buildQuickOpenCache) return;
 
-    return filtered.map(({ item: doc }) => {
-      const isDirectory = doc.type === 'directory';
-      const dirPath = getDirectoryPath(doc.path);
-      const truncatedPath = truncatePath(dirPath);
+  try {
+    await api.buildQuickOpenCache(workspacePath);
+    cacheBuiltForWorkspace.add(workspacePath);
+  } catch (err) {
+    console.error('[fileMention] Failed to build QuickOpen cache:', err);
+  }
+}
 
-      return {
-        id: doc.id,
-        label: isDirectory ? doc.name + '/' : doc.name,
-        description: truncatedPath || undefined,
-        icon: isDirectory ? 'folder' : getFileIcon(doc.name, 18),
-        data: doc
-      };
-    });
-  })
-);
+/**
+ * Convert search results to TypeaheadOption format.
+ */
+function resultsToOptions(results: FileSearchResult[], workspacePath: string): TypeaheadOption[] {
+  return results.map(result => {
+    const relativePath = getRelativePath(result.path, workspacePath);
+    const fileName = getFileName(relativePath);
+    const dirPath = getDirectoryPath(relativePath);
+    const truncatedPath = truncatePath(dirPath);
+
+    return {
+      id: relativePath,
+      label: fileName,
+      description: truncatedPath || undefined,
+      icon: getFileIcon(fileName, 18),
+      data: {
+        id: relativePath,
+        name: fileName,
+        path: relativePath,
+      }
+    };
+  });
+}
 
 // ============================================================
 // Action Atoms
 // ============================================================
 
 /**
- * Load documents for a workspace (with caching).
- * Call this when AIInput mounts or when user starts typing @.
- */
-export const loadDocumentsAtom = atom(
-  null,
-  async (get, set, workspacePath: string) => {
-    // Check cache
-    const cached = documentCache.get(workspacePath);
-    const now = Date.now();
-
-    if (cached && (now - cached.timestamp) < CACHE_DURATION_MS) {
-      // Cache hit - update atom if needed
-      const currentDocs = get(workspaceDocumentsAtom(workspacePath));
-      if (currentDocs.length === 0) {
-        set(workspaceDocumentsAtom(workspacePath), cached.documents);
-      }
-      return;
-    }
-
-    // Cache miss - fetch documents
-    set(documentsLoadingAtom(workspacePath), true);
-
-    try {
-      const documentService = getDocumentService();
-      const docs = await documentService.listDocuments();
-
-      // Update cache
-      documentCache.set(workspacePath, {
-        documents: docs,
-        timestamp: now
-      });
-
-      // Update atom
-      set(workspaceDocumentsAtom(workspacePath), docs);
-    } catch (err) {
-      console.error('[fileMention] Failed to load documents:', err);
-    } finally {
-      set(documentsLoadingAtom(workspacePath), false);
-    }
-  }
-);
-
-/**
- * Search for files matching a query.
- * Updates the search query and ensures documents are loaded.
+ * Search for files matching a query using the ripgrep-based QuickOpen cache.
+ * Results are stored directly in fileMentionOptionsAtom.
  */
 export const searchFileMentionAtom = atom(
   null,
   async (get, set, { workspacePath, query }: { workspacePath: string; query: string }) => {
-    // Update the query immediately
-    set(fileMentionQueryAtom(workspacePath), query);
+    const api = (window as any).electronAPI || (window as any).electron;
+    if (!api?.searchWorkspaceFileNames) return;
 
-    // Ensure documents are loaded
-    await set(loadDocumentsAtom, workspacePath);
+    // Empty query: clear results
+    if (!query.trim()) {
+      set(fileMentionOptionsAtom(workspacePath), []);
+      return;
+    }
+
+    set(documentsLoadingAtom(workspacePath), true);
+
+    try {
+      // Ensure the cache is built (no-op if already done)
+      await ensureQuickOpenCache(workspacePath);
+
+      // Search using the ripgrep-based cache in the main process
+      const results: FileSearchResult[] = await api.searchWorkspaceFileNames(workspacePath, query);
+
+      if (Array.isArray(results)) {
+        set(fileMentionOptionsAtom(workspacePath), resultsToOptions(results, workspacePath));
+      }
+    } catch (err) {
+      console.error('[fileMention] Search failed:', err);
+    } finally {
+      set(documentsLoadingAtom(workspacePath), false);
+    }
   }
 );
 
@@ -196,14 +201,14 @@ export const searchFileMentionAtom = atom(
 export const selectFileMentionAtom = atom(
   null,
   (get, set, option: TypeaheadOption): FileMentionReference | null => {
-    const document = option.data as Document;
-    if (!document) return null;
+    const data = option.data as { id: string; name: string; path: string; workspace?: string } | null;
+    if (!data) return null;
 
     return {
-      documentId: document.id,
-      name: document.name,
-      path: document.path,
-      workspace: document.workspace
+      documentId: data.id,
+      name: data.name,
+      path: data.path,
+      workspace: data.workspace
     };
   }
 );
@@ -214,6 +219,6 @@ export const selectFileMentionAtom = atom(
 export const clearFileMentionSearchAtom = atom(
   null,
   (get, set, workspacePath: string) => {
-    set(fileMentionQueryAtom(workspacePath), '');
+    set(fileMentionOptionsAtom(workspacePath), []);
   }
 );
