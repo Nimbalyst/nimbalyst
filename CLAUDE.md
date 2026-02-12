@@ -2,6 +2,14 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Compatibility with AGENTS.md
+
+- Read `AGENTS.md` first for repo-wide rules (structure, scripts, testing, commit/PR).
+- This file adds Claude Code–specific guidance (MCP tools, DB safety, logs, dev-mode checks) and should not redefine repo conventions.
+- Precedence: `AGENTS.md` for repo conventions; `CLAUDE.md` for Claude tool usage and safety. Prefer the safer rule when in doubt.
+- Package-level `CLAUDE.md` files follow the same precedence.
+
+
 ## CRITICAL: Database Access Rules
 
 **NEVER directly open or query the PGLite database files using Node.js or command-line tools.**

@@ -1,5 +1,21 @@
 # Repository Guidelines
 
+## Session Start
+
+- At the beginning of every AI session, read the root `CLAUDE.md` and any applicable package-level `CLAUDE.md` before taking actions.
+
+
+## Claude Code Compatibility
+
+- Repo-wide rules live in this file. Claude-specific operational and safety rules remain in `CLAUDE.md` (root) and any package-level `CLAUDE.md` files.
+- Precedence:
+  - Repo conventions (structure, scripts, testing, commit/PR requirements) → AGENTS.md is canonical.
+  - Claude tools/guardrails (MCP usage, database access, log tools, dev-mode verification) → CLAUDE.md is canonical.
+  - When unsure, follow the safer instruction.
+- Critical carryover: Never access the PGLite database directly; use `mcp__nimbalyst-extension-dev__database_query`. See `CLAUDE.md` for details.
+- Agents should read AGENTS.md first, then the relevant `CLAUDE.md`.
+
+
 ## Project Structure & Module Organization
 - `packages/rexical/`: Core TypeScript/React editor library (`src/`, `dist/`).
 - `packages/playground/`: Vite demo app for local development.
