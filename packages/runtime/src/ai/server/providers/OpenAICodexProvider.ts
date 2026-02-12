@@ -21,6 +21,7 @@ import {
   getThreadIdFromRunResult,
   loadCodexSdkModule,
 } from './codex/codexSdkLoader';
+import { resolvePackagedCodexBinaryPath } from './codex/codexBinaryPath';
 import { parseCodexEvent, ParsedCodexUsage } from './codex/codexEventParser';
 import {
   PermissionMode,
@@ -36,6 +37,7 @@ import { ProviderSessionManager } from './ProviderSessionManager';
 
 interface OpenAICodexProviderDeps {
   loadSdkModule?: () => Promise<CodexSdkModuleLike>;
+  resolveCodexPathOverride?: () => string | undefined;
 }
 
 export class OpenAICodexProvider extends BaseAIProvider {
@@ -53,6 +55,7 @@ export class OpenAICodexProvider extends BaseAIProvider {
   private codexClient: CodexClientLike | null = null;
   private codexThreads: Map<string, CodexThreadLike> = new Map();
   private readonly loadSdkModule: () => Promise<CodexSdkModuleLike>;
+  private readonly resolveCodexPathOverride: () => string | undefined;
 
   // Shared session ID management via mixin.
   private readonly sessions = new ProviderSessionManager({ emit: this.emit.bind(this) });
@@ -64,6 +67,7 @@ export class OpenAICodexProvider extends BaseAIProvider {
     super();
     this.apiKey = config?.apiKey || process.env.OPENAI_API_KEY || '';
     this.loadSdkModule = deps?.loadSdkModule ?? loadCodexSdkModule;
+    this.resolveCodexPathOverride = deps?.resolveCodexPathOverride ?? resolvePackagedCodexBinaryPath;
   }
 
   public static setTrustChecker(checker: TrustChecker | null): void {
@@ -474,11 +478,19 @@ export class OpenAICodexProvider extends BaseAIProvider {
       return this.codexClient;
     }
 
-    const sdkModule = await this.loadSdkModule();
-    this.codexClient = new sdkModule.Codex({
-      apiKey: this.apiKey,
-    });
-    return this.codexClient;
+    try {
+      const sdkModule = await this.loadSdkModule();
+      const codexPathOverride = this.resolveCodexPathOverride();
+
+      this.codexClient = new sdkModule.Codex({
+        apiKey: this.apiKey,
+        ...(codexPathOverride ? { codexPathOverride } : {}),
+      });
+      return this.codexClient;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to initialize Codex SDK client: ${message}`);
+    }
   }
 
   private static readonly MAX_CACHED_THREADS = 50;

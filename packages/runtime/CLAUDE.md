@@ -65,6 +65,19 @@ See `/docs/AI_PROVIDER_TYPES.md` for detailed documentation.
   - Session resume via persisted provider session IDs
   - Tool integration through the shared runtime tool registry
 
+#### Binary Path Resolution in Packaged Builds
+
+In Electron packaged apps, the Codex SDK binary cannot be executed from within the asar archive (virtual filesystem). The `resolvePackagedCodexBinaryPath()` function handles this by:
+
+1. **Resolving platform-specific binaries**: Maps `process.platform` and `process.arch` to Codex target triples (e.g., `aarch64-apple-darwin` for ARM64 macOS, `x86_64-pc-windows-msvc` for x64 Windows)
+2. **Checking unpacked locations**: Looks for binaries in `app.asar.unpacked/node_modules/@openai/codex-sdk` first (priority location)
+3. **Fallback to node_modules**: Falls back to `node_modules/@openai/codex-sdk` if unpacked path unavailable
+4. **Passing to SDK**: The resolved path is passed to the Codex SDK constructor via `codexPathOverride` parameter
+
+**Related files:**
+- `src/ai/server/providers/codex/codexBinaryPath.ts` - Binary resolution logic
+- `packages/electron/package.json` - Build config includes codex-sdk in `asarUnpack` and `extraResources`
+
 ## Provider Implementation Details
 
 ### Key Files for Claude Providers

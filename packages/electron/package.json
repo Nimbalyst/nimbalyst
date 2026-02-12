@@ -53,6 +53,7 @@
     "@modelcontextprotocol/sdk": "^1.26.0",
     "@monaco-editor/react": "^4.7.0",
     "@nimbalyst/runtime": "*",
+    "@openai/codex-sdk": "^0.98.0",
     "@stytch/vanilla-js": "^5.42.0",
     "@types/glob": "^8.1.0",
     "@types/js-yaml": "^4.0.9",
@@ -163,6 +164,7 @@
     "asarUnpack": [
       "node_modules/**/*.node",
       "node_modules/@anthropic-ai/**/*",
+      "node_modules/@openai/codex-sdk/**/*",
       "node_modules/openai/**/*",
       "node_modules/heic-decode/**/*"
     ],
@@ -176,6 +178,10 @@
       {
         "from": "../../node_modules/node-pty",
         "to": "node-pty"
+      },
+      {
+        "from": "../../node_modules/@openai/codex-sdk",
+        "to": "app.asar.unpacked/node_modules/@openai/codex-sdk"
       },
       {
         "from": "../../node_modules/heic-decode",
@@ -267,7 +273,7 @@
       "artifactName": "${productName}-macOS-${arch}.${ext}",
       "target": [
         {
-          "target": "dir",
+          "target": "dmg",
           "arch": [
             "arm64"
           ]

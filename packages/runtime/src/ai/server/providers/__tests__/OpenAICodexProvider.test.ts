@@ -102,6 +102,126 @@ describe('OpenAICodexProvider', () => {
     });
   });
 
+  it('passes packaged codexPathOverride into SDK construction when available', async () => {
+    let codexConstructorOptions: Record<string, unknown> | undefined;
+
+    const runStreamed = vi.fn(async () => ({
+      threadId: 'thread-override',
+      events: createAsyncEventStream([
+        {
+          type: 'item.completed',
+          item: {
+            type: 'agent_message',
+            text: 'override path works',
+          },
+        },
+      ]),
+    }));
+
+    const provider = new OpenAICodexProvider(
+      { apiKey: 'test-key' },
+      {
+        resolveCodexPathOverride: () => '/tmp/codex-unpacked-bin',
+        loadSdkModule: async () =>
+          ({
+            Codex: class {
+              constructor(options?: Record<string, unknown>) {
+                codexConstructorOptions = options;
+              }
+
+              startThread() {
+                return {
+                  id: 'thread-override',
+                  runStreamed,
+                };
+              }
+
+              resumeThread() {
+                return {
+                  id: 'thread-override',
+                  runStreamed,
+                };
+              }
+            },
+          }) as any,
+      }
+    );
+
+    await provider.initialize({
+      apiKey: 'test-key',
+      model: 'openai-codex:gpt-5',
+    });
+
+    for await (const _chunk of provider.sendMessage('test override', undefined, 'session-override', [], process.cwd())) {
+      // drain
+    }
+
+    expect(codexConstructorOptions).toMatchObject({
+      apiKey: 'test-key',
+      codexPathOverride: '/tmp/codex-unpacked-bin',
+    });
+  });
+
+  it('omits codexPathOverride from SDK options when resolver returns undefined', async () => {
+    let codexConstructorOptions: Record<string, unknown> | undefined;
+
+    const runStreamed = vi.fn(async () => ({
+      threadId: 'thread-no-override',
+      events: createAsyncEventStream([
+        {
+          type: 'item.completed',
+          item: {
+            type: 'agent_message',
+            text: 'no override',
+          },
+        },
+      ]),
+    }));
+
+    const provider = new OpenAICodexProvider(
+      { apiKey: 'test-key' },
+      {
+        resolveCodexPathOverride: () => undefined,
+        loadSdkModule: async () =>
+          ({
+            Codex: class {
+              constructor(options?: Record<string, unknown>) {
+                codexConstructorOptions = options;
+              }
+
+              startThread() {
+                return {
+                  id: 'thread-no-override',
+                  runStreamed,
+                };
+              }
+
+              resumeThread() {
+                return {
+                  id: 'thread-no-override',
+                  runStreamed,
+                };
+              }
+            },
+          }) as any,
+      }
+    );
+
+    await provider.initialize({
+      apiKey: 'test-key',
+      model: 'openai-codex:gpt-5',
+    });
+
+    for await (const _chunk of provider.sendMessage('test no override', undefined, 'session-no-override', [], process.cwd())) {
+      // drain
+    }
+
+    expect(codexConstructorOptions).toEqual({
+      apiKey: 'test-key',
+    });
+    expect(codexConstructorOptions).not.toHaveProperty('codexPathOverride');
+  });
+
   it('emits tool_call chunks from streamed MCP tool events', async () => {
     const runStreamed = vi.fn(async () => ({
       threadId: 'thread-tool',
