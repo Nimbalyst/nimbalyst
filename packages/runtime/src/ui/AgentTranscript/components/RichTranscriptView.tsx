@@ -14,6 +14,7 @@ import { TranscriptSearchBar } from './TranscriptSearchBar';
 import { formatToolDisplayName } from '../utils/toolNameFormatter';
 import { getCustomToolWidget } from './CustomToolWidgets';
 import { setSessionIsAtBottom, getSessionIsAtBottom } from '../../../store/atoms/transcriptScroll';
+import { CodexOutputRenderer } from './CodexOutputRenderer';
 
 // Inject RichTranscriptView styles once (for animations, scrollbar, and complex selectors)
 const injectRichTranscriptStyles = () => {
@@ -1157,6 +1158,63 @@ export const RichTranscriptView = React.forwardRef<
                     const isTool = message.role === 'tool';
                     const isCollapsed = collapsedMessages.has(index);
 
+                    // Check if this is a Codex raw event message
+                    const isCodexRawEvent = message.metadata?.codexProvider === true && message.metadata?.eventType;
+
+                    // If this is a Codex raw event, check if it's the first in a sequence
+                    if (isCodexRawEvent) {
+                      // Check if previous message is also a Codex raw event
+                      const prevMessage = index > 0 ? messages[index - 1] : null;
+                      const prevIsCodexRawEvent = prevMessage?.metadata?.codexProvider === true && prevMessage?.metadata?.eventType;
+
+                      if (prevIsCodexRawEvent) {
+                        // This is a continuation - skip rendering (handled by the first message)
+                        return <div key={`${sessionId}-${index}`} style={{ display: 'none' }} />;
+                      }
+
+                      // This is the first in a sequence - collect all consecutive Codex events
+                      const codexEvents: Message[] = [message];
+                      let checkIdx = index + 1;
+                      while (checkIdx < messages.length) {
+                        const nextMsg = messages[checkIdx];
+                        if (nextMsg.metadata?.codexProvider === true && nextMsg.metadata?.eventType) {
+                          codexEvents.push(nextMsg);
+                          checkIdx++;
+                        } else {
+                          break;
+                        }
+                      }
+
+                      // Render grouped Codex events
+                      return (
+                        <div
+                          key={`${sessionId}-${index}`}
+                          data-message-index={index}
+                          ref={(el) => {
+                            if (el) messageRefs.current.set(index, el);
+                          }}
+                          className="rich-transcript-message rounded-md relative max-w-full overflow-x-hidden break-words mb-2 assistant bg-[var(--nim-bg)] normal p-3"
+                        >
+                          <div className="rich-transcript-message-header flex items-center gap-2 mb-1.5">
+                            <div className="rich-transcript-message-avatar rounded-full p-1 shrink-0 assistant">
+                              {/* No icon for Codex - provider icon handled elsewhere */}
+                            </div>
+                            <div className="rich-transcript-message-meta flex-1 flex items-baseline gap-2">
+                              <span className="rich-transcript-message-time text-xs text-[var(--nim-text-faint)]">
+                                {formatMessageTime(message.timestamp)}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="rich-transcript-message-content relative ml-6">
+                            <CodexOutputRenderer
+                              rawEvents={codexEvents}
+                              isCollapsed={isCollapsed}
+                            />
+                          </div>
+                        </div>
+                      );
+                    }
+
                     // Find tool messages that should be grouped with this message
                     const toolMessagesBefore: { message: Message, index: number }[] = [];
                     if (message.role === 'assistant') {
@@ -1286,6 +1344,7 @@ export const RichTranscriptView = React.forwardRef<
                             isLastMessage={index === messages.length - 1}
                             onOpenFile={onOpenFile}
                             onCompact={onCompact}
+                            provider={provider}
                           />
                         </div>
                         {/* Prompt additions debug display - disabled until feature is fixed

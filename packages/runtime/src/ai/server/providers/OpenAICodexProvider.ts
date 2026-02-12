@@ -317,18 +317,55 @@ export class OpenAICodexProvider extends BaseAgentProvider {
           throw new Error('Operation cancelled');
         }
 
+        // Debug logging for tool calls
+        if (event.type === 'tool_call') {
+          console.log('[OpenAICodexProvider] Tool call event:', {
+            type: event.type,
+            hasRawEvent: !!event.metadata?.rawEvent,
+            toolCall: event.toolCall,
+            metadata: event.metadata,
+          });
+        }
+
+        // Store EACH raw event immediately as a separate database row
+        if (sessionId && event.metadata?.rawEvent) {
+          console.log('[OpenAICodexProvider] Storing raw event:', {
+            eventType: event.type,
+            hasContent: !!event.content,
+            contentPreview: typeof event.content === 'string' ? event.content.substring(0, 50) : '(not string)',
+          });
+          await this.logAgentMessage(
+            sessionId,
+            this.getProviderName(),
+            'output',
+            JSON.stringify(event.metadata.rawEvent),
+            {
+              eventType: event.type,
+              codexProvider: true,
+            },
+            false, // not hidden
+            undefined, // no provider message ID
+            false // not searchable - raw events are not for search
+          );
+        } else if (sessionId && event.type !== 'complete' && event.type !== 'usage') {
+          console.log('[OpenAICodexProvider] NOT storing event (no rawEvent):', {
+            type: event.type,
+            hasMetadata: !!event.metadata,
+            hasRawEvent: !!event.metadata?.rawEvent,
+          });
+        }
+
         // Convert protocol events to stream chunks
         if (event.type === 'error') {
           yield { type: 'error', error: event.error };
+        } else if (event.type === 'reasoning') {
+          // Don't yield reasoning events - they're stored but not part of the visible stream
         } else if (event.type === 'text') {
           fullText += event.content;
           yield { type: 'text', content: event.content };
         } else if (event.type === 'tool_call') {
           yield { type: 'tool_call', toolCall: event.toolCall };
         } else if (event.type === 'complete') {
-          if (sessionId && fullText.trim()) {
-            await this.logAgentMessageBestEffort(sessionId, 'output', fullText);
-          }
           yield {
             type: 'complete',
             content: event.content,

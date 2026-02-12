@@ -25,6 +25,8 @@ interface MessageSegmentProps {
   onOpenFile?: (filePath: string) => void;
   /** Optional: Callback to trigger /compact command */
   onCompact?: () => void;
+  /** Optional: Provider name for provider-specific rendering (e.g., 'openai-codex') */
+  provider?: string;
 }
 
 export const MessageSegment: React.FC<MessageSegmentProps> = ({
@@ -39,7 +41,8 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
   sessionId,
   isLastMessage = false,
   onOpenFile,
-  onCompact
+  onCompact,
+  provider
 }) => {
   const [isDiffExpanded, setDiffExpanded] = useState(false);
   const [enlargedImage, setEnlargedImage] = useState<ChatAttachment | null>(null);
@@ -150,6 +153,9 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
 
     // Strip out system message from user messages
     const displayContent = isUser ? stripSystemMessage(message.content) : message.content;
+
+    // Codex raw events are now rendered directly in RichTranscriptView (grouped together)
+    // This component only handles non-Codex messages
 
     return (
       <div className={isCollapsed ? 'max-h-20 overflow-hidden relative' : ''}>

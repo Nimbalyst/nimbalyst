@@ -86,6 +86,7 @@ export interface ProtocolSession {
  */
 export type ProtocolEventType =
   | 'text'                    // Text content chunk
+  | 'reasoning'               // Thinking/reasoning content (not part of final output)
   | 'tool_call'               // Tool invocation
   | 'tool_result'             // Tool execution result
   | 'error'                   // Error occurred

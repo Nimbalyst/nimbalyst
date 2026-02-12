@@ -12,9 +12,11 @@ export interface ParsedCodexUsage {
 
 export interface ParsedCodexEvent {
   text?: string;
+  reasoning?: string;
   error?: string;
   toolCall?: ParsedCodexToolCall;
   usage?: ParsedCodexUsage;
+  rawEvent?: unknown; // Preserve original Codex SDK event for storage
 }
 
 function getTextFromContentArray(content: unknown): string | null {
@@ -114,6 +116,7 @@ function extractToolCallFromRecord(record: Record<string, unknown> | null | unde
     (typeof record.tool_name === 'string' && record.tool_name) ||
     (typeof record.name === 'string' && record.name) ||
     (typeof record.function_name === 'string' && record.function_name) ||
+    (typeof record.command === 'string' && record.command) || // Codex uses 'command' field
     '';
 
   if (!name) {
@@ -123,7 +126,12 @@ function extractToolCallFromRecord(record: Record<string, unknown> | null | unde
   return {
     name,
     arguments: record.arguments ?? record.args ?? record.input ?? record.parameters,
-    result: record.result ?? record.output ?? (record.error ? { error: record.error } : undefined),
+    result:
+      record.result ??
+      record.output ??
+      record.aggregated_output ?? // Codex uses aggregated_output for command results
+      (record.error ? { error: record.error } : undefined) ??
+      (typeof record.exit_code === 'number' ? { exit_code: record.exit_code } : undefined),
   };
 }
 
@@ -136,6 +144,16 @@ export function parseCodexEvent(event: unknown): ParsedCodexEvent[] {
   const record = event as Record<string, unknown>;
   const eventType = typeof record.type === 'string' ? record.type : '';
 
+  // Log ALL events to see what we're receiving
+  console.log('[codexEventParser] Received event:', {
+    eventType,
+    hasItem: !!record.item,
+    hasTool: !!record.tool,
+    hasToolCall: !!record.tool_call,
+    itemType: record.item ? (record.item as any).type : undefined,
+    keys: Object.keys(record).join(', '),
+  });
+
   const directError = getTextCandidate(record.error) ?? getTextCandidate(record.message);
   if (eventType === 'error' && directError) {
     parsed.push({ error: directError });
@@ -146,7 +164,7 @@ export function parseCodexEvent(event: unknown): ParsedCodexEvent[] {
     getTextCandidate(record.delta) ??
     (eventType === 'task_complete' ? getTextCandidate(record.last_agent_message) : null);
   if (directText) {
-    parsed.push({ text: directText });
+    parsed.push({ text: directText, rawEvent: event });
   }
 
   const item = record.item;
@@ -154,9 +172,26 @@ export function parseCodexEvent(event: unknown): ParsedCodexEvent[] {
     const itemRecord = item as Record<string, unknown>;
     const itemType = typeof itemRecord.type === 'string' ? itemRecord.type : '';
 
+    // Log command_execution items to see their structure
+    if (itemType === 'command_execution') {
+      console.log('[codexEventParser] command_execution item:', {
+        itemKeys: Object.keys(itemRecord).join(', '),
+        hasName: 'name' in itemRecord,
+        hasTool: 'tool' in itemRecord,
+        hasCommand: 'command' in itemRecord,
+        name: itemRecord.name,
+        tool: itemRecord.tool,
+        command: itemRecord.command,
+      });
+    }
+
     const itemText = getTextCandidate(itemRecord);
-    if (itemText && (itemType.includes('message') || eventType === 'item.completed' || eventType === 'item.updated')) {
-      parsed.push({ text: itemText });
+
+    // Separate reasoning items from message items
+    if (itemType === 'reasoning' && itemText) {
+      parsed.push({ reasoning: itemText, rawEvent: event });
+    } else if (itemText && (itemType.includes('message') || eventType === 'item.completed' || eventType === 'item.updated')) {
+      parsed.push({ text: itemText, rawEvent: event });
     }
 
     const itemToolCall =
@@ -166,11 +201,18 @@ export function parseCodexEvent(event: unknown): ParsedCodexEvent[] {
       itemToolCall &&
       (itemType.includes('tool') ||
         itemType.includes('call') ||
+        itemType === 'command_execution' || // Codex uses command_execution for tool calls
         eventType.includes('tool') ||
         eventType === 'item.completed' ||
         eventType === 'item.started')
     ) {
-      parsed.push({ toolCall: itemToolCall });
+      console.log('[codexEventParser] Parsed item tool call:', {
+        toolName: itemToolCall.name,
+        itemType,
+        eventType,
+        hasRawEvent: !!event,
+      });
+      parsed.push({ toolCall: itemToolCall, rawEvent: event });
     }
   }
 
@@ -179,7 +221,12 @@ export function parseCodexEvent(event: unknown): ParsedCodexEvent[] {
     extractToolCallFromRecord(record.tool_call as Record<string, unknown> | undefined) ??
     (eventType.includes('tool') ? extractToolCallFromRecord(record) : undefined);
   if (rootToolCall) {
-    parsed.push({ toolCall: rootToolCall });
+    console.log('[codexEventParser] Parsed root tool call:', {
+      toolName: rootToolCall.name,
+      eventType,
+      hasRawEvent: !!event,
+    });
+    parsed.push({ toolCall: rootToolCall, rawEvent: event });
   }
 
   const usage =
@@ -187,7 +234,7 @@ export function parseCodexEvent(event: unknown): ParsedCodexEvent[] {
     getUsageFromRecord(record.info as Record<string, unknown> | undefined) ??
     getUsageFromRecord(record.token_count as Record<string, unknown> | undefined);
   if (usage) {
-    parsed.push({ usage });
+    parsed.push({ usage, rawEvent: event });
   }
 
   return parsed;

@@ -180,6 +180,7 @@ export class CodexSDKProtocol implements AgentProtocol {
             yield {
               type: 'error',
               error: parsedEvent.error,
+              metadata: { rawEvent: parsedEvent.rawEvent },
             };
             continue;
           }
@@ -191,6 +192,11 @@ export class CodexSDKProtocol implements AgentProtocol {
 
           // Tool call event
           if (parsedEvent.toolCall) {
+            console.log('[CodexSDKProtocol] Emitting tool call event:', {
+              toolName: parsedEvent.toolCall.name,
+              hasRawEvent: !!parsedEvent.rawEvent,
+              rawEventType: parsedEvent.rawEvent ? (parsedEvent.rawEvent as any).type : 'none',
+            });
             yield {
               type: 'tool_call',
               toolCall: {
@@ -200,6 +206,17 @@ export class CodexSDKProtocol implements AgentProtocol {
                   ? { result: parsedEvent.toolCall.result }
                   : {}),
               },
+              metadata: { rawEvent: parsedEvent.rawEvent },
+            };
+            continue;
+          }
+
+          // Reasoning event (thinking blocks - not part of final output)
+          if (parsedEvent.reasoning) {
+            yield {
+              type: 'reasoning',
+              content: parsedEvent.reasoning,
+              metadata: { rawEvent: parsedEvent.rawEvent },
             };
             continue;
           }
@@ -222,6 +239,7 @@ export class CodexSDKProtocol implements AgentProtocol {
               yield {
                 type: 'text',
                 content: delta,
+                metadata: { rawEvent: parsedEvent.rawEvent },
               };
             }
           }
