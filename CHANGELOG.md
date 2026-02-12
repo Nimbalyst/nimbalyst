@@ -20,6 +20,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.64] - 2026-02-12
+
+
+### Added
+- Enhanced quick open dialogs with cross-dialog navigation and file search
+- Binary path resolution for Codex SDK in packaged builds
+
+### Changed
+- Extracted shared agent infrastructure for multi-platform support
+
+### Fixed
+- @ mention file search now finds all workspace files
+- Transcript scroll-to-bottom button not clickable
+- Ctrl+` terminal shortcut not working on macOS and missing tracker tooltip shortcut
+- Git commit widget shows actual commit date instead of render time
+- TypeScript errors for Claude Agent SDK and Codex test
+- Video recording for E2E tests in Docker
+- Query type not exported by claude-agent-sdk
+
 ## [0.52.63] - 2026-02-11
 
 
