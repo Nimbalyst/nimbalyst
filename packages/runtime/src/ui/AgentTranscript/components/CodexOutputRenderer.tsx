@@ -21,17 +21,32 @@ interface ParsedCodexOutput {
  * message.metadata.eventType indicates 'reasoning' or 'text' etc.
  */
 function parseCodexRawEvents(rawEvents: Message[]): ParsedCodexOutput {
+  console.log('[parseCodexRawEvents] Starting parse with', rawEvents.length, 'events');
   const reasoning: string[] = [];
   let output = '';
 
   for (const msg of rawEvents) {
     const eventType = msg.metadata?.eventType;
+    console.log('[parseCodexRawEvents] Processing event:', {
+      eventType,
+      contentLength: msg.content?.length,
+      contentPreview: msg.content?.substring(0, 100),
+    });
 
     try {
       const rawEvent = JSON.parse(msg.content);
+      console.log('[parseCodexRawEvents] Parsed raw event:', {
+        type: rawEvent.type,
+        hasItem: !!rawEvent.item,
+        itemType: rawEvent.item?.type,
+      });
 
       // Extract text content from various Codex SDK event structures
       const getText = (event: any): string | null => {
+        // Handle direct item.text field (Codex SDK format)
+        if (event.item?.text) {
+          return event.item.text;
+        }
         // Handle item.completed/updated with text in item field
         if (event.item?.content) {
           for (const part of event.item.content) {
@@ -52,12 +67,16 @@ function parseCodexRawEvents(rawEvents: Message[]): ParsedCodexOutput {
       };
 
       const text = getText(rawEvent);
+      console.log('[parseCodexRawEvents] Extracted text:', text ? text.substring(0, 50) + '...' : 'null');
+
       if (!text) continue;
 
       // Categorize based on eventType metadata
       if (eventType === 'reasoning') {
+        console.log('[parseCodexRawEvents] Adding to reasoning');
         reasoning.push(text);
       } else if (eventType === 'text') {
+        console.log('[parseCodexRawEvents] Adding to output');
         output += text;
       }
     } catch (error) {
@@ -65,6 +84,12 @@ function parseCodexRawEvents(rawEvents: Message[]): ParsedCodexOutput {
       console.error('[CodexOutputRenderer] Failed to parse raw event:', error, msg.content);
     }
   }
+
+  console.log('[parseCodexRawEvents] Parse complete:', {
+    reasoningCount: reasoning.length,
+    outputLength: output.length,
+    outputPreview: output.substring(0, 100),
+  });
 
   return { reasoning, output };
 }
