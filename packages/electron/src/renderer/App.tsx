@@ -105,12 +105,6 @@ import {
   closeTrackerPanelAtom,
   initTrackerPanelLayout,
 } from './store/atoms/trackers';
-import {
-  isActivityPanelOpenAtom,
-  closeActivityPanelAtom,
-} from './store/atoms/activityPanel';
-import { ActivityBottomPanel } from './components/ActivityBottomPanel/ActivityBottomPanel';
-import { useAlphaFeature } from './hooks/useAlphaFeature';
 
 logger.ui.info('App.tsx loading');
 logger.ui.info('About to import StravuEditor');
@@ -374,11 +368,6 @@ export default function App() {
   const isTrackerPanelOpen = useAtomValue(trackerPanelOpenAtom);
   const toggleTrackerPanel = useSetAtom(toggleTrackerPanelAtom);
   const closeTrackerPanel = useSetAtom(closeTrackerPanelAtom);
-
-  // Activity panel state from atoms (alpha feature)
-  const isActivityHistoryEnabled = useAlphaFeature('activity-history');
-  const isActivityPanelOpen = useAtomValue(isActivityPanelOpenAtom);
-  const closeActivityPanel = useSetAtom(closeActivityPanelAtom);
 
   // Terminal bottom panel state
   const [terminalPanelVisible, setTerminalPanelVisible] = useState<boolean>(false);
@@ -1445,7 +1434,6 @@ export default function App() {
           setTerminalPanelVisible(prev => !prev);
           if (!terminalPanelVisible) {
             closeTrackerPanel(); // Close tracker when opening terminal
-            closeActivityPanel(); // Close activity when opening terminal
           }
         }}
         terminalPanelVisible={terminalPanelVisible}
@@ -1638,14 +1626,6 @@ export default function App() {
             )}
           </div>
         </div>
-
-        {/* Bottom: Activity History Panel - spans width after nav gutter (alpha feature) */}
-        {isActivityHistoryEnabled && isActivityPanelOpen && (
-          <ActivityBottomPanel
-            workspacePath={workspacePath || undefined}
-            onSwitchToAgentMode={() => setActiveMode('agent')}
-          />
-        )}
 
         {/* Bottom: Tracker Bottom Panel - spans width after nav gutter */}
         {isTrackerPanelOpen && (

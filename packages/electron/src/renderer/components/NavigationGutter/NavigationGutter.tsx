@@ -12,17 +12,11 @@ import { ClaudeUsageIndicator } from '../ClaudeUsageIndicator';
 import { useExtensionGutterButtons } from '../../extensions/panels/usePanels';
 import { HelpTooltip } from '../../help';
 import { terminalFeatureAvailableAtom } from '../../store/atoms/appSettings';
-import { useAlphaFeature } from '../../hooks/useAlphaFeature';
 import {
   activeTrackerTypeAtom,
   toggleTrackerPanelAtom,
   closeTrackerPanelAtom,
 } from '../../store/atoms/trackers';
-import {
-  isActivityPanelOpenAtom,
-  toggleActivityPanelAtom,
-  closeActivityPanelAtom,
-} from '../../store/atoms/activityPanel';
 
 export type NavigationMode = 'planning' | 'coding';
 export type SidebarView = 'files' | 'settings';
@@ -90,16 +84,8 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
   const toggleTrackerPanel = useSetAtom(toggleTrackerPanelAtom);
   const closeTrackerPanel = useSetAtom(closeTrackerPanelAtom);
 
-  // Activity panel state from atoms
-  const isActivityPanelOpen = useAtomValue(isActivityPanelOpenAtom);
-  const toggleActivityPanel = useSetAtom(toggleActivityPanelAtom);
-  const closeActivityPanel = useSetAtom(closeActivityPanelAtom);
-
   // Check if terminal feature is available (developer mode + feature enabled)
   const isTerminalAvailable = useAtomValue(terminalFeatureAvailableAtom);
-
-  // Check if activity history alpha feature is enabled
-  const isActivityHistoryEnabled = useAlphaFeature('activity-history');
 
   // Get extension panel buttons from the panel registry
   const extensionPanelButtons = useExtensionGutterButtons();
@@ -131,36 +117,18 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
   // Bottom panel buttons - positioned above settings
   // Terminal button is only shown if the terminal feature is available (developer mode + feature enabled)
   const bottomPanelButtons: NavButton[] = [
-    // Only include activity button if the alpha feature is enabled
-    ...(isActivityHistoryEnabled ? [{
-      id: 'activity',
-      icon: 'history',
-      label: 'Activity History',
-      onClick: () => {
-        if (!isActivityPanelOpen) {
-          closeTrackerPanel(); // Close tracker when opening activity
-        }
-        toggleActivityPanel();
-      },
-    }] : []),
     // Only include terminal button if the feature is available
     ...(isTerminalAvailable ? [{
       id: 'terminal',
       icon: 'terminal',
       label: 'Terminal (Ctrl+`)',
-      onClick: () => {
-        closeActivityPanel(); // Close activity when opening terminal
-        onToggleTerminalPanel?.();
-      },
+      onClick: onToggleTerminalPanel,
     }] : []),
     {
       id: 'tracker',
       icon: 'edit_note',
       label: 'Trackers (Cmd+T)',
       onClick: () => {
-        if (activeTrackerType === null) {
-          closeActivityPanel(); // Close activity when opening tracker
-        }
         toggleTrackerPanel();
       },
     }
@@ -381,9 +349,7 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
         {bottomPanelButtons.map((button) => {
           const isActive = button.id === 'terminal'
             ? terminalPanelVisible
-            : button.id === 'tracker'
-            ? activeTrackerType !== null
-            : button.id === 'activity' && isActivityPanelOpen;
+            : button.id === 'tracker' && activeTrackerType !== null;
           const testId = `${button.id}-panel-button`;
           return (
             <HelpTooltip key={button.id} testId={testId}>
