@@ -40,6 +40,7 @@ import { mergeAISettings } from '../../utils/aiSettingsMerge';
 import { DocumentContextService, type RawDocumentContext, type PreparedDocumentContext } from '@nimbalyst/runtime';
 import { ALL_PACKAGES } from '../../../shared/toolPackages';
 import { getMessageSyncHandler, getSyncProvider } from '../SyncManager';
+import { normalizeCodexProviderConfig, omitModelsField } from '@nimbalyst/runtime/ai/server/utils/modelConfigUtils';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -1254,7 +1255,7 @@ export class AIService {
     // Check if any AI provider is configured with usable models
     safeHandle('ai:hasApiKey', async () => {  // Keeping the name for backward compatibility
       const apiKeys = this.getSettingsStore().get('apiKeys', {}) as Record<string, string>;
-      const providerSettings = this.getSettingsStore().get('providerSettings', {}) as any;
+      const providerSettings = this.getNormalizedProviderSettings() as any;
 
       // Check Claude/Claude Code (needs API key)
       const hasAnthropicKey = !!(apiKeys['anthropic'] || process.env.ANTHROPIC_API_KEY);
@@ -3881,7 +3882,6 @@ export class AIService {
         },
         'openai-codex': {
           enabled: providerSettings['openai-codex']?.enabled === true && !!(apiKeys['openai'] || process.env.OPENAI_API_KEY) && getAlphaFeatures()['openai-codex'] === true,
-          models: OpenAICodexProvider.normalizeModelSelections(providerSettings['openai-codex']?.models)
         },
         'lmstudio': {
           enabled: providerSettings['lmstudio']?.enabled === true,
@@ -3976,11 +3976,13 @@ export class AIService {
         return { success: false, error: 'workspacePath is required' };
       }
 
+      const normalizedOverrides = this.normalizeProjectOverrides(overrides);
+
       // If overrides is null/undefined or empty, clear the overrides
-      if (!overrides || (Object.keys(overrides).length === 0)) {
+      if (!normalizedOverrides || (Object.keys(normalizedOverrides).length === 0)) {
         saveAIProviderOverrides(workspacePath, undefined);
       } else {
-        saveAIProviderOverrides(workspacePath, overrides);
+        saveAIProviderOverrides(workspacePath, normalizedOverrides);
       }
 
       return { success: true };
@@ -4067,31 +4069,33 @@ export class AIService {
   }
 
   private normalizeProviderSettings(providerSettings: Record<string, any>): Record<string, any> {
-    if (!providerSettings || typeof providerSettings !== 'object') {
-      return providerSettings;
+    return normalizeCodexProviderConfig(providerSettings);
+  }
+
+  private normalizeProjectOverrides(overrides: any): any {
+    if (!overrides || typeof overrides !== 'object') {
+      return overrides;
     }
 
-    const codexModels = providerSettings['openai-codex']?.models;
-    if (!Array.isArray(codexModels)) {
-      return providerSettings;
+    const providers = overrides.providers;
+    if (!providers || typeof providers !== 'object') {
+      return overrides;
     }
 
-    const normalizedCodexModels = OpenAICodexProvider.normalizeModelSelections(codexModels) || codexModels;
-    const hasChanges =
-      normalizedCodexModels.length !== codexModels.length ||
-      normalizedCodexModels.some((modelId, index) => modelId !== codexModels[index]);
+    const normalizedProviders = normalizeCodexProviderConfig(providers);
+    const codexConfig = normalizedProviders['openai-codex'];
 
-    if (!hasChanges) {
-      return providerSettings;
+    // Remove empty codex config
+    if (codexConfig && Object.keys(codexConfig).length === 0) {
+      const { 'openai-codex': _removed, ...restProviders } = normalizedProviders;
+      if (Object.keys(restProviders).length === 0) {
+        const { providers: _unusedProviders, ...restOverrides } = overrides;
+        return Object.keys(restOverrides).length > 0 ? restOverrides : undefined;
+      }
+      return { ...overrides, providers: restProviders };
     }
 
-    return {
-      ...providerSettings,
-      'openai-codex': {
-        ...providerSettings['openai-codex'],
-        models: normalizedCodexModels,
-      },
-    };
+    return { ...overrides, providers: normalizedProviders };
   }
 
   private getProviderSetting(provider: string, key: string): any {

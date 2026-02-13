@@ -10,6 +10,7 @@ import { DEFAULT_ONBOARDING_CONFIG } from '../../shared/types/workspace';
 import type { InstalledPackage } from '../../shared/toolPackages';
 import { AlphaFeatureTag, getDefaultAlphaFeatures, enableAllAlphaFeatures, areAllAlphaFeaturesEnabled, ALPHA_FEATURES } from '../../shared/alphaFeatures';
 import { DeveloperFeatureTag, getDefaultDeveloperFeatures, DEVELOPER_FEATURES } from '../../shared/developerFeatures';
+import { normalizeCodexProviderConfig, omitModelsField } from '@nimbalyst/runtime/ai/server/utils/modelConfigUtils';
 
 // Theme can be a built-in theme or an extension theme ID (format: "extensionId:themeId")
 export type AppTheme = 'dark' | 'light' | 'system' | 'auto' | 'crystal-dark' | string;
@@ -852,12 +853,14 @@ export function saveAgentFileScopeMode(workspacePath: string, mode: AgentFileSco
 
 // AI Provider Override State Management
 export function getAIProviderOverrides(workspacePath: string): AIProviderOverrides | undefined {
-  return getWorkspaceState(workspacePath).aiProviderOverrides;
+  const overrides = getWorkspaceState(workspacePath).aiProviderOverrides;
+  return normalizeAIProviderOverrides(overrides);
 }
 
 export function saveAIProviderOverrides(workspacePath: string, overrides: AIProviderOverrides | undefined): void {
+  const normalizedOverrides = normalizeAIProviderOverrides(overrides);
   updateWorkspaceState(workspacePath, workspace => {
-    workspace.aiProviderOverrides = overrides;
+    workspace.aiProviderOverrides = normalizedOverrides;
   });
 }
 
@@ -865,6 +868,40 @@ export function clearAIProviderOverrides(workspacePath: string): void {
   updateWorkspaceState(workspacePath, workspace => {
     delete workspace.aiProviderOverrides;
   });
+}
+
+function normalizeAIProviderOverrides(overrides: AIProviderOverrides | undefined): AIProviderOverrides | undefined {
+  if (!overrides || typeof overrides !== 'object') {
+    return overrides;
+  }
+
+  const providers = overrides.providers;
+  if (!providers || typeof providers !== 'object') {
+    return overrides;
+  }
+
+  const normalizedProviders = normalizeCodexProviderConfig(providers);
+  const codexConfig = normalizedProviders['openai-codex'];
+
+  // Remove empty codex config
+  if (codexConfig && Object.keys(codexConfig).length === 0) {
+    const { 'openai-codex': _removed, ...restProviders } = normalizedProviders;
+    const nextProviders = Object.keys(restProviders).length > 0 ? restProviders : undefined;
+
+    if (!nextProviders && !overrides.defaultProvider) {
+      return undefined;
+    }
+
+    return {
+      ...overrides,
+      ...(nextProviders ? { providers: nextProviders } : {}),
+    };
+  }
+
+  return {
+    ...overrides,
+    providers: normalizedProviders,
+  };
 }
 
 // Discord Invitation Management
@@ -1715,4 +1752,3 @@ export function runMigrations(currentVersion: string): void {
   getAppStore().set('lastKnownVersion', currentVersion);
   logger.store.info('[Migrations] Migrations complete, version updated to:', currentVersion);
 }
-

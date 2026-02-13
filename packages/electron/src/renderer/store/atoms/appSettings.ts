@@ -20,6 +20,7 @@ import posthog from 'posthog-js';
 import { type EffortLevel, DEFAULT_EFFORT_LEVEL, parseEffortLevel } from '@nimbalyst/runtime/ai/server/effortLevels';
 import { AlphaFeatureTag } from '../../../shared/alphaFeatures';
 import { DeveloperFeatureTag, DEVELOPER_FEATURES, getDefaultDeveloperFeatures, enableAllDeveloperFeatures, disableAllDeveloperFeatures, areAllDeveloperFeaturesEnabled } from '../../../shared/developerFeatures';
+import { normalizeCodexProviderConfig, omitModelsField } from '@nimbalyst/runtime/ai/server/utils/modelConfigUtils';
 
 // Voice type - all available OpenAI Realtime voices
 export type VoiceId = 'alloy' | 'ash' | 'ballad' | 'coral' | 'echo' | 'sage' | 'shimmer' | 'verse' | 'marin' | 'cedar';
@@ -1058,6 +1059,14 @@ let aiProviderPersistTimer: ReturnType<typeof setTimeout> | null = null;
 const AI_PROVIDER_PERSIST_DEBOUNCE_MS = 500;
 
 /**
+ * Remove the `models` field from openai-codex provider config before persisting.
+ * Codex uses dynamic model discovery from the API instead of user-configured model selections.
+ */
+function sanitizeProvidersForPersistence(providers: Record<string, ProviderConfig>): Record<string, ProviderConfig> {
+  return normalizeCodexProviderConfig(providers);
+}
+
+/**
  * Persist AI provider settings to main process.
  * Debounced to avoid excessive IPC calls during rapid changes.
  */
@@ -1071,9 +1080,10 @@ function scheduleAIProviderPersist(settings: AIProviderSettings): void {
       try {
         // Get current debug settings to preserve them
         const currentSettings = await window.electronAPI.aiGetSettings();
+        const sanitizedProviders = sanitizeProvidersForPersistence(settings.providers);
         await window.electronAPI.aiSaveSettings({
           apiKeys: settings.apiKeys,
-          providerSettings: settings.providers,
+          providerSettings: sanitizedProviders,
           showToolCalls: currentSettings?.showToolCalls ?? false,
           aiDebugLogging: currentSettings?.aiDebugLogging ?? false,
         });
@@ -1226,13 +1236,15 @@ export async function initAIProviderSettings(): Promise<AIProviderSettings> {
       });
     }
 
+    const sanitizedProviders = sanitizeProvidersForPersistence(providers);
+
     // Merge loaded API keys
     if (settings?.apiKeys) {
       Object.assign(apiKeys, settings.apiKeys);
     }
 
     return {
-      providers,
+      providers: sanitizedProviders,
       apiKeys,
       availableModels: {}, // Models are fetched separately, not persisted
     };

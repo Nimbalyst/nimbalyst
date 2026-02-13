@@ -14,24 +14,93 @@ function createAsyncEventStream(events: any[]): AsyncIterable<any> {
 describe('OpenAICodexProvider', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    OpenAICodexProvider.setTrustChecker(null);
-    OpenAICodexProvider.setPermissionPatternChecker(null);
-    OpenAICodexProvider.setPermissionPatternSaver(null);
-    OpenAICodexProvider.setSecurityLogger(null);
+    OpenAICodexProvider.setTrustChecker(() => ({
+      trusted: true,
+      mode: 'allow-all',
+    }));
+    OpenAICodexProvider.setPermissionPatternChecker(async () => false);
+    OpenAICodexProvider.setPermissionPatternSaver(async () => {});
+    OpenAICodexProvider.setSecurityLogger(() => {});
   });
 
-  it('exposes expected model metadata', async () => {
-    expect(OpenAICodexProvider.DEFAULT_MODEL).toBe('openai-codex:gpt-5');
+  it('returns fallback models when SDK model discovery is unavailable', async () => {
+    expect(OpenAICodexProvider.DEFAULT_MODEL).toBe('openai-codex:gpt-5.3-codex');
 
-    const models = await OpenAICodexProvider.getModels();
-    expect(models).toHaveLength(1);
-    expect(models[0]).toEqual({
-      id: 'openai-codex:gpt-5',
-      name: 'GPT-5 (Codex SDK)',
-      provider: 'openai-codex',
-      contextWindow: 272000,
-      maxTokens: 16384,
+    const models = await OpenAICodexProvider.getModels(undefined, {
+      loadSdkModule: async () => {
+        throw new Error('sdk unavailable');
+      },
     });
+
+    expect(models.length).toBeGreaterThan(1);
+    expect(models).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'openai-codex:gpt-5.3-codex',
+        provider: 'openai-codex',
+      }),
+      expect.objectContaining({
+        id: 'openai-codex:gpt-5.2-codex',
+        provider: 'openai-codex',
+      }),
+    ]));
+  });
+
+  it('uses SDK-provided model discovery when available', async () => {
+    let codexConstructorOptions: Record<string, unknown> | undefined;
+    const listModels = vi.fn(async () => ({
+      data: [
+        {
+          id: 'gpt-5.2-codex',
+          name: 'GPT-5.2 Codex',
+          contextWindow: 400000,
+          maxTokens: 128000,
+        },
+      ],
+    }));
+
+    const models = await OpenAICodexProvider.getModels('test-key', {
+      loadSdkModule: async () =>
+        ({
+          Codex: class {
+            constructor(options?: Record<string, unknown>) {
+              codexConstructorOptions = options;
+            }
+
+            listModels = listModels;
+
+            startThread = vi.fn();
+
+            resumeThread = vi.fn();
+          },
+        }) as any,
+    });
+
+    expect(codexConstructorOptions).toEqual({ apiKey: 'test-key' });
+    expect(listModels).toHaveBeenCalledTimes(1);
+    expect(models).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'openai-codex:gpt-5.3-codex',
+        provider: 'openai-codex',
+      }),
+      expect.objectContaining({
+        id: 'openai-codex:gpt-5.2-codex',
+        name: 'GPT-5.2 Codex',
+        provider: 'openai-codex',
+      }),
+      expect.objectContaining({
+        id: 'openai-codex:gpt-5.1-codex-max',
+        provider: 'openai-codex',
+      }),
+      expect.objectContaining({
+        id: 'openai-codex:gpt-5.2',
+        provider: 'openai-codex',
+      }),
+      expect.objectContaining({
+        id: 'openai-codex:gpt-5.1-codex-mini',
+        provider: 'openai-codex',
+      }),
+    ]));
+    expect(models).toHaveLength(5);
   });
 
   it('streams text and completion usage from Codex SDK events', async () => {
@@ -411,7 +480,7 @@ describe('OpenAICodexProvider', () => {
     expect(errorChunk?.error).toContain('permission mode');
   });
 
-  it('maps legacy codex model ids to gpt-5 when starting a thread', async () => {
+  it('maps legacy codex model ids to gpt-5.3-codex when starting a thread', async () => {
     const startThread = vi.fn((config: { model: string }) => ({
       id: 'thread-legacy',
       runStreamed: async () => ({
@@ -451,7 +520,93 @@ describe('OpenAICodexProvider', () => {
 
     expect(startThread).toHaveBeenCalledTimes(1);
     const startArgs = (startThread.mock.calls as unknown as [Record<string, unknown>][])[0][0];
-    expect(startArgs.model).toBe('gpt-5');
+    expect(startArgs.model).toBe('gpt-5.3-codex');
+  });
+
+  it('maps removed codex aliases to supported model ids', async () => {
+    const startThread = vi.fn((config: { model: string }) => ({
+      id: 'thread-alias',
+      runStreamed: async () => ({
+        events: createAsyncEventStream([
+          {
+            type: 'item.completed',
+            item: {
+              type: 'agent_message',
+              text: 'alias model mapped',
+            },
+          },
+        ]),
+      }),
+    }));
+
+    const provider = new OpenAICodexProvider(
+      { apiKey: 'test-key' },
+      {
+        loadSdkModule: async () =>
+          ({
+            Codex: class {
+              startThread = startThread;
+              resumeThread = vi.fn();
+            },
+          }) as any,
+      }
+    );
+
+    await provider.initialize({
+      apiKey: 'test-key',
+      model: 'openai-codex:codex-mini-latest',
+    });
+
+    for await (const _chunk of provider.sendMessage('alias', undefined, 'session-alias', [], process.cwd())) {
+      // drain
+    }
+
+    expect(startThread).toHaveBeenCalledTimes(1);
+    const startArgs = (startThread.mock.calls as unknown as [Record<string, unknown>][])[0][0];
+    expect(startArgs.model).toBe('gpt-5.1-codex-mini');
+  });
+
+  it('maps removed codex max aliases to supported model ids', async () => {
+    const startThread = vi.fn((config: { model: string }) => ({
+      id: 'thread-alias-max',
+      runStreamed: async () => ({
+        events: createAsyncEventStream([
+          {
+            type: 'item.completed',
+            item: {
+              type: 'agent_message',
+              text: 'alias max model mapped',
+            },
+          },
+        ]),
+      }),
+    }));
+
+    const provider = new OpenAICodexProvider(
+      { apiKey: 'test-key' },
+      {
+        loadSdkModule: async () =>
+          ({
+            Codex: class {
+              startThread = startThread;
+              resumeThread = vi.fn();
+            },
+          }) as any,
+      }
+    );
+
+    await provider.initialize({
+      apiKey: 'test-key',
+      model: 'openai-codex:gpt-5.2-codex-max',
+    });
+
+    for await (const _chunk of provider.sendMessage('alias max', undefined, 'session-alias-max', [], process.cwd())) {
+      // drain
+    }
+
+    expect(startThread).toHaveBeenCalledTimes(1);
+    const startArgs = (startThread.mock.calls as unknown as [Record<string, unknown>][])[0][0];
+    expect(startArgs.model).toBe('gpt-5.2-codex');
   });
 
   it('supports direct handleToolCall execution through the shared tool handler', async () => {

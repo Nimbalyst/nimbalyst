@@ -35,6 +35,7 @@ import {
   type AIModel,
 } from '../../store/atoms/appSettings';
 import { useAlphaFeature } from '../../hooks/useAlphaFeature';
+import { omitModelsField } from '@nimbalyst/runtime/ai/server/utils/modelConfigUtils';
 
 // Re-export ProviderConfig for backward compatibility
 export type { ProviderConfig } from '../../store/atoms/appSettings';
@@ -233,7 +234,7 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
     setProviders(prev => {
       let models = prev[provider]?.models || [];
 
-      if (enabled && (provider === 'claude-code' || provider === 'openai-codex')) {
+      if (enabled && provider === 'claude-code') {
         const providerModels = availableModels[provider] || [];
         if (providerModels.length > 0 && models.length === 0) {
           models = [providerModels[0].id];
@@ -242,9 +243,21 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
 
       posthog?.capture('ai_provider_configured', {
         provider,
-        modelCount: models.length,
+        modelCount: provider === 'openai-codex' ? 0 : models.length,
         action: enabled ? 'enabled' : 'disabled'
       });
+
+      // OpenAI Codex uses dynamic model discovery from the API, not user selection
+      if (provider === 'openai-codex') {
+        const currentProvider = prev[provider] || { enabled: false };
+        return {
+          ...prev,
+          [provider]: {
+            ...omitModelsField(currentProvider),
+            enabled
+          }
+        };
+      }
 
       return {
         ...prev,
@@ -393,6 +406,11 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
       onToggle: (enabled: boolean) => handleProviderToggle(selectedCategory, enabled),
       onApiKeyChange: handleApiKeyChange,
       onModelToggle: (modelId: string, enabled: boolean) => {
+        // OpenAI Codex doesn't support user model selection - models are discovered dynamically
+        if (selectedCategory === 'openai-codex') {
+          return;
+        }
+
         setProviders(prev => {
           const models = prev[selectedCategory]?.models || [];
           const updated = enabled
@@ -415,6 +433,11 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
         debouncedSave();
       },
       onSelectAllModels: (selectAll: boolean) => {
+        // OpenAI Codex doesn't support user model selection - models are discovered dynamically
+        if (selectedCategory === 'openai-codex') {
+          return;
+        }
+
         if (selectAll) {
           const models = availableModels[selectedCategory] || [];
           setProviders(prev => ({

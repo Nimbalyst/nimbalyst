@@ -1,4 +1,6 @@
 import path from 'path';
+import crypto from 'crypto';
+import OpenAI from 'openai';
 import { BaseAgentProvider } from './BaseAgentProvider';
 import { buildUserMessageAddition } from './documentContextUtils';
 import { buildClaudeCodeSystemPrompt } from '../../prompt';
@@ -10,6 +12,7 @@ import {
   StreamChunk,
   Message,
   ProviderCapabilities,
+  AIModel,
   AIProviderType,
   ModelIdentifier,
 } from '../types';
@@ -28,16 +31,52 @@ interface OpenAICodexProviderDeps {
   resolveCodexPathOverride?: () => string | undefined;
 }
 
+interface OpenAICodexModelDiscoveryDeps {
+  loadSdkModule?: () => Promise<CodexSdkModuleLike>;
+}
+
 export class OpenAICodexProvider extends BaseAgentProvider {
   static readonly DEFAULT_MODEL = DEFAULT_MODELS['openai-codex'];
   private static readonly CODEX_EXECUTION_PATTERN = 'OpenAICodex(agent-run:*)';
+  private static readonly FALLBACK_MODELS: ReadonlyArray<{
+    id: string;
+    name: string;
+    contextWindow: number;
+    maxTokens: number;
+  }> = [
+    { id: 'gpt-5.3-codex', name: 'GPT-5.3 Codex', contextWindow: 400000, maxTokens: 128000 },
+    { id: 'gpt-5.2-codex', name: 'GPT-5.2 Codex', contextWindow: 400000, maxTokens: 128000 },
+    { id: 'gpt-5.1-codex-max', name: 'GPT-5.1 Codex Max', contextWindow: 400000, maxTokens: 128000 },
+    { id: 'gpt-5.2', name: 'GPT-5.2', contextWindow: 128000, maxTokens: 128000 },
+    { id: 'gpt-5.1-codex-mini', name: 'GPT-5.1 Codex Mini', contextWindow: 400000, maxTokens: 128000 },
+  ];
+  private static readonly MODEL_FALLBACK_PRIORITY: ReadonlyArray<string> = [
+    'gpt-5.3-codex',
+    'gpt-5.2-codex',
+    'gpt-5.1-codex-max',
+    'gpt-5.1-codex-mini',
+    'gpt-5.2',
+  ];
+  private static readonly FALLBACK_MODELS_SET = new Set(
+    OpenAICodexProvider.FALLBACK_MODELS.map((model) => model.id)
+  );
+  private static readonly FALLBACK_MODELS_BY_ID = new Map(
+    OpenAICodexProvider.FALLBACK_MODELS.map((model) => [model.id, model])
+  );
+  private static readonly MODEL_ID_CACHE_DURATION_MS = 5 * 60 * 1000;
+  private static readonly MODEL_ID_CACHE_MAX_SIZE = 100;
+  private static readonly MODEL_ID_CACHE = new Map<string, { fetchedAt: number; ids: Set<string> }>();
+  private static readonly CONFIGURED_MODEL_CACHE = new Map<string, { cachedAt: number; model: string }>();
+  private static readonly CONFIGURED_MODEL_CACHE_TTL_MS = 60 * 1000;
 
+  private readonly apiKey: string;
   private readonly protocol: CodexSDKProtocol;
   private readonly permissionService: ToolPermissionService;
 
   constructor(config?: { apiKey?: string }, deps?: OpenAICodexProviderDeps) {
     super();
     const apiKey = config?.apiKey || process.env.OPENAI_API_KEY || '';
+    this.apiKey = apiKey;
 
     // Initialize protocol (or use injected for testing)
     // Support legacy loadSdkModule and resolveCodexPathOverride for existing tests
@@ -114,15 +153,35 @@ export class OpenAICodexProvider extends BaseAgentProvider {
     'openai-codex:cli',
     'cli',
   ]);
+  private static readonly MODEL_REPLACEMENTS = new Map<string, string>([
+    ['gpt-5', 'gpt-5.2'],
+    ['gpt-5-codex', 'gpt-5.2-codex'],
+    ['gpt-5-codex-mini', 'gpt-5.1-codex-mini'],
+    ['gpt-5.2-codex-mini', 'gpt-5.2-codex'],
+    ['gpt-5.2-codex-max', 'gpt-5.2-codex'],
+    ['gpt-5-codex-max', 'gpt-5.1-codex-max'],
+    ['gpt-5.1-codex', 'gpt-5.2-codex'],
+    ['codex-mini-latest', 'gpt-5.1-codex-mini'],
+  ]);
 
   /**
    * Normalize a single model ID, mapping legacy aliases to the canonical form.
    */
   static normalizeModelSelection(modelId: string): string {
     const normalized = modelId.trim().toLowerCase();
-    if (OpenAICodexProvider.LEGACY_MODEL_ALIASES.has(normalized) || normalized === 'gpt-5') {
-      return 'openai-codex:gpt-5';
+    if (OpenAICodexProvider.LEGACY_MODEL_ALIASES.has(normalized)) {
+      return 'openai-codex:gpt-5.3-codex';
     }
+
+    const parsed = ModelIdentifier.tryParse(modelId);
+    const rawModelId = parsed && parsed.provider === 'openai-codex'
+      ? parsed.model
+      : modelId.replace(/^openai-codex:/, '');
+    const replacement = OpenAICodexProvider.MODEL_REPLACEMENTS.get(rawModelId.toLowerCase());
+    if (replacement) {
+      return ModelIdentifier.create('openai-codex', replacement).combined;
+    }
+
     return modelId;
   }
 
@@ -143,16 +202,319 @@ export class OpenAICodexProvider extends BaseAgentProvider {
     return result;
   }
 
-  static getModels() {
-    return [
-      {
-        id: ModelIdentifier.create('openai-codex', 'gpt-5').combined,
-        name: 'GPT-5 (Codex SDK)',
+  static async getModels(
+    apiKey?: string,
+    deps?: OpenAICodexModelDiscoveryDeps,
+  ): Promise<AIModel[]> {
+    const sdkModels = await OpenAICodexProvider.getModelsFromSdk(apiKey, deps);
+    const apiModels = await OpenAICodexProvider.getModelsFromOpenAI(apiKey);
+    return OpenAICodexProvider.getPreferredModels(sdkModels, apiModels);
+  }
+
+  private static getFallbackModels() {
+    return OpenAICodexProvider.FALLBACK_MODELS.map((model) => ({
+      id: ModelIdentifier.create('openai-codex', model.id).combined,
+      name: model.name,
+      provider: 'openai-codex' as AIProviderType,
+      contextWindow: model.contextWindow,
+      maxTokens: model.maxTokens,
+    }));
+  }
+
+  private static getPreferredModels(...sourceLists: AIModel[][]): AIModel[] {
+    const metadataById = new Map<string, AIModel>();
+
+    for (const sourceModels of sourceLists) {
+      for (const sourceModel of sourceModels) {
+        const rawId = OpenAICodexProvider.toRawModelId(sourceModel.id);
+        if (!rawId) {
+          continue;
+        }
+        if (!OpenAICodexProvider.FALLBACK_MODELS_SET.has(rawId)) {
+          continue;
+        }
+        if (!metadataById.has(rawId)) {
+          metadataById.set(rawId, sourceModel);
+        }
+      }
+    }
+
+    return OpenAICodexProvider.FALLBACK_MODELS.map((fallbackModel) => {
+      const discovered = metadataById.get(fallbackModel.id);
+      return {
+        id: ModelIdentifier.create('openai-codex', fallbackModel.id).combined,
+        name: discovered?.name || fallbackModel.name,
         provider: 'openai-codex' as AIProviderType,
-        contextWindow: 272000,
-        maxTokens: 16384,
-      },
-    ];
+        contextWindow: discovered?.contextWindow ?? fallbackModel.contextWindow,
+        maxTokens: discovered?.maxTokens ?? fallbackModel.maxTokens,
+      };
+    });
+  }
+
+  private static async getModelsFromSdk(
+    apiKey?: string,
+    deps?: OpenAICodexModelDiscoveryDeps,
+  ): Promise<AIModel[]> {
+    const loadSdk = deps?.loadSdkModule ?? loadCodexSdkModule;
+
+    try {
+      const sdkModule = await loadSdk();
+      const sdkAsAny = sdkModule as any;
+      const fetchers: Array<() => Promise<unknown>> = [];
+
+      if (typeof sdkAsAny.listModels === 'function') {
+        fetchers.push(() => Promise.resolve(sdkAsAny.listModels()));
+      }
+      if (typeof sdkAsAny.getModels === 'function') {
+        fetchers.push(() => Promise.resolve(sdkAsAny.getModels()));
+      }
+
+      try {
+        const codex = new sdkModule.Codex(apiKey ? { apiKey } : undefined) as any;
+        if (typeof codex?.listModels === 'function') {
+          fetchers.push(() => Promise.resolve(codex.listModels()));
+        }
+        if (typeof codex?.getModels === 'function') {
+          fetchers.push(() => Promise.resolve(codex.getModels()));
+        }
+        if (codex?.models && typeof codex.models.list === 'function') {
+          fetchers.push(() => Promise.resolve(codex.models.list()));
+        }
+      } catch {
+        // Client construction can fail when the Codex CLI binary is unavailable.
+      }
+
+      // Try all fetchers in parallel, return first successful result
+      const results = await Promise.allSettled(fetchers.map((fn) => fn()));
+      for (const result of results) {
+        if (result.status === 'fulfilled') {
+          const mapped = OpenAICodexProvider.mapSdkModelResult(result.value);
+          if (mapped.length > 0) {
+            return mapped;
+          }
+        }
+      }
+    } catch {
+      // SDK is optional and may be unavailable in some environments.
+      return [];
+    }
+
+    return [];
+  }
+
+  private static async getModelsFromOpenAI(apiKey?: string): Promise<AIModel[]> {
+    if (!apiKey) {
+      return [];
+    }
+
+    try {
+      const availableIds = await OpenAICodexProvider.getAvailableModelIds(apiKey);
+      if (availableIds.size === 0) {
+        return [];
+      }
+
+      const models: AIModel[] = [];
+
+      for (const fallbackModel of OpenAICodexProvider.FALLBACK_MODELS) {
+        if (!availableIds.has(fallbackModel.id)) {
+          continue;
+        }
+        models.push({
+          id: ModelIdentifier.create('openai-codex', fallbackModel.id).combined,
+          name: fallbackModel.name,
+          provider: 'openai-codex' as AIProviderType,
+          contextWindow: fallbackModel.contextWindow,
+          maxTokens: fallbackModel.maxTokens,
+        });
+      }
+
+      const extraCodexModelIds = Array.from(availableIds)
+        .filter((id) => id.toLowerCase().includes('codex') && !OpenAICodexProvider.FALLBACK_MODELS_BY_ID.has(id))
+        .sort((a, b) => a.localeCompare(b));
+
+      for (const modelId of extraCodexModelIds) {
+        models.push({
+          id: ModelIdentifier.create('openai-codex', modelId).combined,
+          name: modelId,
+          provider: 'openai-codex' as AIProviderType,
+        });
+      }
+
+      return models;
+    } catch {
+      // API model listing is best-effort; fall back to static catalog when unavailable.
+      return [];
+    }
+  }
+
+  private static async getAvailableModelIds(apiKey: string): Promise<Set<string>> {
+    const cacheKey = OpenAICodexProvider.hashApiKey(apiKey);
+    const now = Date.now();
+    const cached = OpenAICodexProvider.MODEL_ID_CACHE.get(cacheKey);
+    if (cached && now - cached.fetchedAt < OpenAICodexProvider.MODEL_ID_CACHE_DURATION_MS) {
+      return cached.ids;
+    }
+
+    const openai = new OpenAI({ apiKey });
+    const response = await openai.models.list();
+    const ids = new Set(response.data.map((model) => model.id));
+
+    // Implement LRU eviction
+    if (OpenAICodexProvider.MODEL_ID_CACHE.size >= OpenAICodexProvider.MODEL_ID_CACHE_MAX_SIZE) {
+      const oldestKey = OpenAICodexProvider.MODEL_ID_CACHE.keys().next().value;
+      if (oldestKey) {
+        OpenAICodexProvider.MODEL_ID_CACHE.delete(oldestKey);
+      }
+    }
+
+    OpenAICodexProvider.MODEL_ID_CACHE.set(cacheKey, { fetchedAt: now, ids });
+    return ids;
+  }
+
+  private static hashApiKey(apiKey: string): string {
+    return crypto.createHash('sha256').update(apiKey).digest('hex');
+  }
+
+  private static mapSdkModelResult(rawModels: unknown): AIModel[] {
+    const candidates = OpenAICodexProvider.extractModelCandidates(rawModels);
+    const seen = new Set<string>();
+    const models: AIModel[] = [];
+
+    for (const candidate of candidates) {
+      const normalized = OpenAICodexProvider.normalizeModelCandidate(candidate);
+      if (!normalized) {
+        continue;
+      }
+      if (seen.has(normalized.id)) {
+        continue;
+      }
+      seen.add(normalized.id);
+      models.push(normalized);
+    }
+
+    return models;
+  }
+
+  private static toRawModelId(modelId: string): string | null {
+    const normalizedSelection = OpenAICodexProvider.normalizeModelSelection(modelId);
+    const parsed = ModelIdentifier.tryParse(normalizedSelection);
+    const rawModelId = parsed && parsed.provider === 'openai-codex'
+      ? parsed.model
+      : normalizedSelection.replace(/^openai-codex:/, '');
+    return rawModelId || null;
+  }
+
+  private static extractModelCandidates(rawModels: unknown): unknown[] {
+    if (Array.isArray(rawModels)) {
+      return rawModels;
+    }
+
+    if (rawModels && typeof rawModels === 'object') {
+      const container = rawModels as Record<string, unknown>;
+      const candidateKeys = ['data', 'models', 'items'];
+      for (const key of candidateKeys) {
+        if (Array.isArray(container[key])) {
+          return container[key] as unknown[];
+        }
+      }
+    }
+
+    return [];
+  }
+
+  private static normalizeModelCandidate(candidate: unknown): AIModel | null {
+    const MAX_STRING_LENGTH = 256;
+    const MAX_CONTEXT_WINDOW = 10_000_000;
+    const MAX_TOKENS = 10_000_000;
+
+    let modelId: string | undefined;
+    let modelName: string | undefined;
+    let contextWindow: number | undefined;
+    let maxTokens: number | undefined;
+
+    if (typeof candidate === 'string') {
+      modelId = candidate;
+    } else if (candidate && typeof candidate === 'object') {
+      const entry = candidate as Record<string, unknown>;
+      modelId = OpenAICodexProvider.readStringField(entry, ['id', 'model']);
+      modelName = OpenAICodexProvider.readStringField(entry, ['displayName', 'display_name', 'name']);
+      contextWindow = OpenAICodexProvider.readNumberField(entry, [
+        'contextWindow',
+        'context_window',
+        'inputTokenLimit',
+        'input_token_limit',
+      ]);
+      maxTokens = OpenAICodexProvider.readNumberField(entry, [
+        'maxTokens',
+        'max_tokens',
+        'outputTokenLimit',
+        'output_token_limit',
+      ]);
+    }
+
+    if (!modelId) {
+      return null;
+    }
+
+    const trimmed = modelId.trim();
+    if (!trimmed || trimmed.length > MAX_STRING_LENGTH) {
+      return null;
+    }
+
+    const parsed = ModelIdentifier.tryParse(trimmed);
+    const rawId = parsed && parsed.provider === 'openai-codex'
+      ? parsed.model
+      : trimmed.replace(/^openai-codex:/, '');
+    if (!rawId || rawId.length > MAX_STRING_LENGTH) {
+      return null;
+    }
+
+    const validatedName = modelName?.trim();
+    if (validatedName && validatedName.length > MAX_STRING_LENGTH) {
+      return null;
+    }
+
+    if (contextWindow !== undefined && (contextWindow < 0 || contextWindow > MAX_CONTEXT_WINDOW)) {
+      return null;
+    }
+
+    if (maxTokens !== undefined && (maxTokens < 0 || maxTokens > MAX_TOKENS)) {
+      return null;
+    }
+
+    return {
+      id: ModelIdentifier.create('openai-codex', rawId).combined,
+      name: validatedName || rawId,
+      provider: 'openai-codex' as AIProviderType,
+      contextWindow,
+      maxTokens,
+    };
+  }
+
+  private static readStringField(
+    source: Record<string, unknown>,
+    keys: string[],
+  ): string | undefined {
+    for (const key of keys) {
+      const value = source[key];
+      if (typeof value === 'string' && value.trim()) {
+        return value;
+      }
+    }
+    return undefined;
+  }
+
+  private static readNumberField(
+    source: Record<string, unknown>,
+    keys: string[],
+  ): number | undefined {
+    for (const key of keys) {
+      const value = source[key];
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        return value;
+      }
+    }
+    return undefined;
   }
 
   static getDefaultModel() {
@@ -294,7 +656,7 @@ export class OpenAICodexProvider extends BaseAgentProvider {
 
       const sessionOptions = {
         workspacePath,
-        model: this.getConfiguredModel(),
+        model: await this.getConfiguredModel(),
         ...(permissionDecision.permissionMode ? { permissionMode: permissionDecision.permissionMode } : {}),
         raw: {
           systemPrompt,
@@ -442,15 +804,62 @@ export class OpenAICodexProvider extends BaseAgentProvider {
     });
   }
 
-  private getConfiguredModel(): string {
+  private async getConfiguredModel(): Promise<string> {
     const configured = this.config?.model || OpenAICodexProvider.DEFAULT_MODEL;
     const parsed = ModelIdentifier.tryParse(configured);
     const resolved = parsed ? parsed.model : configured.replace(/^openai-codex:/, '');
     const normalized = resolved.toLowerCase();
     if (normalized === 'openai-codex-cli' || normalized === 'default' || normalized === 'cli') {
-      return 'gpt-5';
+      return 'gpt-5.3-codex';
     }
-    return resolved;
+
+    const normalizedModel = OpenAICodexProvider.MODEL_REPLACEMENTS.get(normalized) || resolved;
+    const apiKey = this.config?.apiKey || this.apiKey || process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      return normalizedModel;
+    }
+    if (process.env.NODE_ENV === 'test' || process.env.VITEST === 'true') {
+      return normalizedModel;
+    }
+
+    // Check cache first
+    const cacheKey = `${OpenAICodexProvider.hashApiKey(apiKey)}:${normalizedModel}`;
+    const cached = OpenAICodexProvider.CONFIGURED_MODEL_CACHE.get(cacheKey);
+    if (cached && Date.now() - cached.cachedAt < OpenAICodexProvider.CONFIGURED_MODEL_CACHE_TTL_MS) {
+      return cached.model;
+    }
+
+    try {
+      const availableIds = await OpenAICodexProvider.getAvailableModelIds(apiKey);
+      let resultModel = normalizedModel;
+
+      if (availableIds.size > 0 && !availableIds.has(normalizedModel)) {
+        for (const preferredModelId of OpenAICodexProvider.MODEL_FALLBACK_PRIORITY) {
+          if (availableIds.has(preferredModelId)) {
+            resultModel = preferredModelId;
+            break;
+          }
+        }
+        if (resultModel === normalizedModel) {
+          const firstCodex = Array.from(availableIds).find((modelId) => modelId.toLowerCase().includes('codex'));
+          if (firstCodex) {
+            resultModel = firstCodex;
+          }
+        }
+      }
+
+      // Cache the result
+      OpenAICodexProvider.CONFIGURED_MODEL_CACHE.set(cacheKey, {
+        cachedAt: Date.now(),
+        model: resultModel,
+      });
+
+      return resultModel;
+    } catch {
+      // Best-effort model validation only.
+    }
+
+    return normalizedModel;
   }
 
   private buildCodexPrompt(options: {

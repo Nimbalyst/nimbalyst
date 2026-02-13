@@ -54,7 +54,7 @@ export class ModelRegistry {
           break;
         case 'openai-codex':
           const { OpenAICodexProvider } = await import('./providers/OpenAICodexProvider');
-          models = OpenAICodexProvider.getModels();
+          models = await OpenAICodexProvider.getModels(apiKey);
           break;
         case 'lmstudio':
           // Try to fetch models from LMStudio
