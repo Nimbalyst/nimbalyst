@@ -168,6 +168,10 @@ const activeStreamableTransports = new Map<
 // Used to send notifications (e.g., tools/list_changed) when document state changes
 const serverByNimbalystSession = new Map<string, Server>();
 
+// Store MCP Server instances by workspace path
+// Used to send tools/list_changed notifications when extension tools are registered
+const serversByWorkspace = new Map<string, Set<Server>>();
+
 // Map workspace paths to window IDs for routing
 // This is populated when we receive document state updates
 const workspaceToWindowMap = new Map<string, number>();
@@ -275,13 +279,31 @@ interface ExtensionToolDefinition {
 const extensionToolsByWorkspace = new Map<string, ExtensionToolDefinition[]>();
 
 /**
- * Register extension tools from a workspace window
+ * Register extension tools from a workspace window.
+ * Notifies all connected MCP sessions for this workspace to re-fetch their tool list.
+ * This includes sessions connected via worktree paths that resolve to this workspace.
  */
 export function registerExtensionTools(
   workspacePath: string,
   tools: ExtensionToolDefinition[]
 ) {
   extensionToolsByWorkspace.set(workspacePath, tools);
+
+  // Notify connected MCP sessions that the tool list has changed.
+  // We need to check all entries in serversByWorkspace because worktree sessions
+  // connect with their worktree path, but tools are registered under the project path.
+  for (const [connectedPath, servers] of serversByWorkspace) {
+    // Match if the path is the same, or if the connected path is a worktree
+    // that resolves to this workspace path
+    const resolvedPath = resolveExtensionToolsWorkspacePathSync(connectedPath);
+    if (resolvedPath === workspacePath) {
+      for (const server of servers) {
+        server.sendToolListChanged().catch(() => {
+          // Ignore errors - client may have disconnected
+        });
+      }
+    }
+  }
 }
 
 /**
@@ -292,13 +314,74 @@ export function unregisterExtensionTools(workspacePath: string) {
 }
 
 /**
+ * Resolve a workspace path to the path under which extension tools are registered.
+ * In worktree sessions, tools are registered under the main project path,
+ * but the MCP connection uses the worktree path. This function resolves
+ * worktree paths to their parent project path using the cache (sync).
+ */
+function resolveExtensionToolsWorkspacePathSync(
+  workspacePath: string
+): string {
+  // Direct lookup first
+  if (extensionToolsByWorkspace.has(workspacePath)) {
+    return workspacePath;
+  }
+
+  // Check if this is a worktree path that maps to a project path
+  const projectPath = worktreeToProjectPathCache.get(workspacePath);
+  if (projectPath && extensionToolsByWorkspace.has(projectPath)) {
+    return projectPath;
+  }
+
+  return workspacePath;
+}
+
+/**
+ * Resolve a workspace path to the path under which extension tools are registered.
+ * Falls back to async database lookup if the cache doesn't have the mapping yet.
+ */
+async function resolveExtensionToolsWorkspacePath(
+  workspacePath: string
+): Promise<string> {
+  // Try synchronous resolution first (cache hit)
+  const syncResolved = resolveExtensionToolsWorkspacePathSync(workspacePath);
+  if (syncResolved !== workspacePath || extensionToolsByWorkspace.has(workspacePath)) {
+    return syncResolved;
+  }
+
+  // Cache miss - try async DB lookup for worktree resolution
+  // This handles the case where the MCP connection arrives before the cache is populated
+  try {
+    const { getDatabase } = await import("../database/initialize");
+    const { createWorktreeStore } = await import("../services/WorktreeStore");
+    const db = getDatabase();
+    const worktreeStore = createWorktreeStore(db);
+    const worktree = await worktreeStore.getByPath(workspacePath);
+
+    if (worktree) {
+      const projectPath = worktree.projectPath;
+      worktreeToProjectPathCache.set(workspacePath, projectPath);
+      if (extensionToolsByWorkspace.has(projectPath)) {
+        return projectPath;
+      }
+    } else {
+      worktreeToProjectPathCache.set(workspacePath, null);
+    }
+  } catch (error) {
+    // Don't fail tool listing because of DB errors
+  }
+
+  return workspacePath;
+}
+
+/**
  * Get available extension tools for a given file path
  * Filters based on scope and file patterns
  */
-function getAvailableExtensionTools(
+async function getAvailableExtensionTools(
   workspacePath: string | undefined,
   filePath: string | undefined
-): ExtensionToolDefinition[] {
+): Promise<ExtensionToolDefinition[]> {
   if (!workspacePath) {
     console.log(
       "[MCP Server] getAvailableExtensionTools: No workspacePath provided, returning empty array"
@@ -306,11 +389,13 @@ function getAvailableExtensionTools(
     return [];
   }
 
-  const tools = extensionToolsByWorkspace.get(workspacePath) || [];
+  // Resolve worktree paths to the project path where tools are registered
+  const resolvedPath = await resolveExtensionToolsWorkspacePath(workspacePath);
+  const tools = extensionToolsByWorkspace.get(resolvedPath) || [];
 
   if (tools.length === 0) {
     console.log(
-      `[MCP Server] getAvailableExtensionTools: No tools registered for workspace: ${workspacePath}`
+      `[MCP Server] getAvailableExtensionTools: No tools registered for workspace: ${workspacePath}${resolvedPath !== workspacePath ? ` (resolved to: ${resolvedPath})` : ""}`
     );
     return [];
   }
@@ -561,6 +646,7 @@ export async function cleanupMcpServer() {
   }
   activeStreamableTransports.clear();
   serverByNimbalystSession.clear();
+  serversByWorkspace.clear();
 
   // Clear the MCP server instance
   if (mcpServer) {
@@ -994,7 +1080,7 @@ The commit message should follow these guidelines:
     }
 
     // Get extension tools for the current workspace/file
-    const extensionTools = getAvailableExtensionTools(
+    const extensionTools = await getAvailableExtensionTools(
       workspacePath,
       currentFilePath
     );
@@ -2392,7 +2478,7 @@ The commit message should follow these guidelines:
         const currentDocState = sessionId
           ? documentStateBySession.get(sessionId)
           : undefined;
-        const extensionTools = getAvailableExtensionTools(
+        const extensionTools = await getAvailableExtensionTools(
           workspacePath,
           currentDocState?.filePath
         );
@@ -2752,6 +2838,14 @@ async function tryCreateServer(port: number): Promise<any> {
             serverByNimbalystSession.set(sessionId, server);
           }
 
+          // Store server instance by workspace path for extension tool change notifications
+          if (workspacePath) {
+            if (!serversByWorkspace.has(workspacePath)) {
+              serversByWorkspace.set(workspacePath, new Set());
+            }
+            serversByWorkspace.get(workspacePath)!.add(server);
+          }
+
           // Connect server to transport
           server
             .connect(transport)
@@ -2763,6 +2857,9 @@ async function tryCreateServer(port: number): Promise<any> {
                 if (sessionId) {
                   serverByNimbalystSession.delete(sessionId);
                 }
+                if (workspacePath) {
+                  serversByWorkspace.get(workspacePath)?.delete(server);
+                }
               };
             })
             .catch((error) => {
@@ -2770,6 +2867,9 @@ async function tryCreateServer(port: number): Promise<any> {
               activeTransports.delete(transport.sessionId);
               if (sessionId) {
                 serverByNimbalystSession.delete(sessionId);
+              }
+              if (workspacePath) {
+                serversByWorkspace.get(workspacePath)?.delete(server);
               }
               if (!res.headersSent) {
                 res.writeHead(500);
@@ -2866,6 +2966,14 @@ async function tryCreateServer(port: number): Promise<any> {
               workspacePath,
               nimbalystSessionId
             );
+            // Store server instance by workspace path for extension tool change notifications
+            if (workspacePath) {
+              if (!serversByWorkspace.has(workspacePath)) {
+                serversByWorkspace.set(workspacePath, new Set());
+              }
+              serversByWorkspace.get(workspacePath)!.add(server);
+            }
+
             const transport = new StreamableHTTPServerTransport({
               sessionIdGenerator: () => randomUUID(),
               onsessioninitialized: (streamableSessionId) => {
@@ -2886,6 +2994,9 @@ async function tryCreateServer(port: number): Promise<any> {
               }
               if (nimbalystSessionId) {
                 serverByNimbalystSession.delete(nimbalystSessionId);
+              }
+              if (workspacePath) {
+                serversByWorkspace.get(workspacePath)?.delete(server);
               }
             };
 
