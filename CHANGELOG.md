@@ -20,6 +20,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.67] - 2026-02-13
+
+
+### Added
+- Codex file changes now appear in "all session edits" sidebar
+- Show elapsed time at end of completed agent turns
+
+### Fixed
+- Extension MCP tools now load in worktree sessions
+- Prevent double-handling of teammate shutdown requests
+- Multi-agent teammate message delivery and session hang
+- Teammate/background agent output no longer leaks into main transcript
+- Background sub-agents now defer session end like teammates
+- Defer session end while teammates are still active
+- Codex provider crashes in production builds
+
 ## [0.52.66] - 2026-02-13
 
 
