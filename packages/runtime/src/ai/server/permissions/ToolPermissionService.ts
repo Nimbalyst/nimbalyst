@@ -43,9 +43,9 @@ export interface ToolPermissionServiceOptions {
   patternChecker: PermissionPatternChecker;
 
   /**
-   * Security logging function
+   * Security logging function (dev-only, omitted in production to avoid logging sensitive data)
    */
-  securityLogger: SecurityLogger;
+  securityLogger?: SecurityLogger;
 
   /**
    * Event emitter function for notifying about permission events
@@ -144,7 +144,7 @@ export class ToolPermissionService {
     this.trustChecker = options.trustChecker;
     this.patternSaver = options.patternSaver;
     this.patternChecker = options.patternChecker;
-    this.securityLogger = options.securityLogger;
+    this.securityLogger = options.securityLogger ?? (() => {});
     this.emit = options.emit;
   }
 

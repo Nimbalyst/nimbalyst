@@ -147,14 +147,13 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
     if (
       BaseAgentProvider.trustChecker &&
       ClaudeCodeProvider.claudeSettingsPatternSaver &&
-      ClaudeCodeProvider.claudeSettingsPatternChecker &&
-      BaseAgentProvider.securityLogger
+      ClaudeCodeProvider.claudeSettingsPatternChecker
     ) {
       this.permissionService = new ToolPermissionService({
         trustChecker: BaseAgentProvider.trustChecker,
         patternSaver: ClaudeCodeProvider.claudeSettingsPatternSaver,
         patternChecker: ClaudeCodeProvider.claudeSettingsPatternChecker,
-        securityLogger: BaseAgentProvider.securityLogger,
+        securityLogger: BaseAgentProvider.securityLogger ?? undefined,
         emit: this.emit.bind(this),
       });
     }

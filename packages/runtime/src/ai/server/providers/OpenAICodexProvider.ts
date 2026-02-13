@@ -131,17 +131,13 @@ export class OpenAICodexProvider extends BaseAgentProvider {
       if (!BaseAgentProvider.permissionPatternChecker) {
         throw new Error('[OpenAICodexProvider] permissionPatternChecker must be set via setPermissionPatternChecker() before creating provider instances');
       }
-      if (!BaseAgentProvider.securityLogger) {
-        throw new Error('[OpenAICodexProvider] securityLogger must be set via setSecurityLogger() before creating provider instances');
-      }
-
       // TypeScript doesn't understand that the throw statements guarantee non-null here
       // Use type assertions after validation
       this.permissionService = new ToolPermissionService({
         trustChecker: BaseAgentProvider.trustChecker as TrustChecker,
         patternSaver: BaseAgentProvider.permissionPatternSaver as PermissionPatternSaver,
         patternChecker: BaseAgentProvider.permissionPatternChecker as PermissionPatternChecker,
-        securityLogger: BaseAgentProvider.securityLogger as SecurityLogger,
+        securityLogger: BaseAgentProvider.securityLogger ?? undefined,
         emit: this.emit.bind(this),
       });
     }
