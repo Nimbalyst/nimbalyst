@@ -87,6 +87,10 @@ export class TeammateManager {
   private pendingLeadMessages: Map<string, PendingMessage[]> = new Map();
   private pendingLeadMessageFlushes: Set<string> = new Set();
 
+  // tool_use_ids of shutdown_request SendMessage calls already handled by handlePreToolUse
+  // (resumed idle teammate for approval handshake). processTeammateToolResult must skip these.
+  private handledShutdownToolUseIds: Set<string> = new Set();
+
   // Queue of teammate messages waiting to be delivered to the lead agent
   private pendingTeammateToLeadMessages: TeammateToLeadMessage[] = [];
 
@@ -1525,6 +1529,7 @@ export class TeammateManager {
     this.pendingLeadMessages.clear();
     this.pendingLeadMessageFlushes.clear();
     this.completedTeammates.clear();
+    this.handledShutdownToolUseIds.clear();
 
     if (allAgentIds.length > 0 && this.lastUsedSessionId) {
       const overrides = new Map(allAgentIds.map(id => [id, 'errored' as const]));
@@ -1562,6 +1567,12 @@ export class TeammateManager {
       }
     }
     return false;
+  }
+
+  /** Returns true and removes the id if this shutdown was already handled by handlePreToolUse. */
+  consumeHandledShutdown(toolUseId: string | undefined): boolean {
+    if (!toolUseId) return false;
+    return this.handledShutdownToolUseIds.delete(toolUseId);
   }
 
   handleShutdownResult(sessionId: string | undefined, recipientName: string): void {
@@ -1755,6 +1766,10 @@ export class TeammateManager {
           console.warn(`[MANAGED-TEAMMATE] Failed to flush shutdown request to "${recipient}":`, reason);
         }
 
+        // Track that this shutdown was handled via preToolUse so processTeammateToolResult
+        // does not redundantly call handleShutdownResult when the denied tool_result arrives.
+        if (toolUseID) this.handledShutdownToolUseIds.add(toolUseID);
+
         this.logSyntheticToolPair(
           sessionId,
           toolUseID || `send-${Date.now()}`,
@@ -1819,6 +1834,10 @@ export class TeammateManager {
           const shutdownPrompt = this.buildShutdownRequestPrompt(requestId, shutdownMessage);
           console.log(`[MANAGED-TEAMMATE] Shutdown request for idle teammate "${recipient}" - resuming for approval handshake`);
           this.resumeIdleTeammate(sessionId, agentId, idleInfo, shutdownPrompt);
+
+          // Track that this shutdown was handled via preToolUse so processTeammateToolResult
+          // does not redundantly call handleShutdownResult when the denied tool_result arrives.
+          if (toolUseID) this.handledShutdownToolUseIds.add(toolUseID);
 
           this.logSyntheticToolPair(
             sessionId,

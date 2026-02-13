@@ -1454,7 +1454,7 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
                     }
 
                     // Teammate side-effects (shutdown detection, team context tracking)
-                    this.processTeammateToolResult(sessionId, toolCall.name, toolCall.arguments, toolResult, toolCall.isError === true);
+                    this.processTeammateToolResult(sessionId, toolCall.name, toolCall.arguments, toolResult, toolCall.isError === true, toolCall.id);
 
                     // Log ONLY the tool_result block to database (non-blocking for streaming)
                     // The tool_use block was already logged by raw chunk logging at line 264
@@ -1888,7 +1888,7 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
                     }
 
                     // Teammate side-effects (shutdown detection, team context tracking)
-                    this.processTeammateToolResult(sessionId, toolCall.name, toolCall.arguments, toolResult, toolCall.isError === true);
+                    this.processTeammateToolResult(sessionId, toolCall.name, toolCall.arguments, toolResult, toolCall.isError === true, toolCall.id);
 
                     // Log ONLY the tool_result block to database (non-blocking for streaming)
                     // The tool_use block was already logged when the tool was first called
@@ -2472,12 +2472,17 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
     toolArguments: Record<string, unknown> | undefined,
     toolResult: unknown,
     isError: boolean,
+    toolUseId?: string,
   ): void {
-    // Detect shutdown_request results from SDK-handled SendMessage
+    // Detect shutdown_request results from SDK-handled SendMessage.
+    // Skip if handlePreToolUse already handled this shutdown (resumed the teammate
+    // for approval handshake) — otherwise we'd redundantly abort the just-resumed teammate.
     if (toolName === 'SendMessage' && toolArguments?.type === 'shutdown_request') {
-      const shutdownRecipient = toolArguments.recipient;
-      if (typeof shutdownRecipient === 'string' && shutdownRecipient) {
-        this.teammateManager.handleShutdownResult(sessionId, shutdownRecipient);
+      if (!this.teammateManager.consumeHandledShutdown(toolUseId)) {
+        const shutdownRecipient = toolArguments.recipient;
+        if (typeof shutdownRecipient === 'string' && shutdownRecipient) {
+          this.teammateManager.handleShutdownResult(sessionId, shutdownRecipient);
+        }
       }
     }
 
