@@ -40,7 +40,7 @@ function extractFileMentions(message: string): string[] {
  * Determine link type based on tool name
  */
 function getLinkTypeForTool(toolName: string): FileLinkType | null {
-  const editTools = ['Write', 'Edit', 'NotebookEdit', 'writeFile', 'editFile', 'applyDiff', 'streamContent', 'Bash'];
+  const editTools = ['Write', 'Edit', 'NotebookEdit', 'writeFile', 'editFile', 'applyDiff', 'streamContent', 'Bash', 'file_change'];
   const readTools = ['Read', 'Glob', 'Grep', 'readFile', 'searchFiles', 'listFiles', 'getDocumentContent'];
 
   if (editTools.includes(toolName)) {
@@ -106,6 +106,8 @@ function extractEditMetadata(toolName: string, args: any, result: any): EditedFi
     if (args?.command) {
       metadata.bashCommand = args.command.slice(0, 200); // Store first 200 chars
     }
+  } else if (toolName === 'file_change') {
+    metadata.operation = 'edit';
   }
 
   // Try to extract line counts from result
@@ -180,6 +182,21 @@ export class SessionFileTracker {
       if (!linkType) {
         // Tool doesn't interact with files
         // console.log('[SessionFileTracker] Tool does not interact with files');
+        return;
+      }
+
+      // Special handling for Codex file_change events - extract all affected files
+      if (toolName === 'file_change') {
+        const changes = args?.changes;
+        if (!Array.isArray(changes) || changes.length === 0) {
+          logger.main.debug('[SessionFileTracker] No changes found in file_change args');
+          return;
+        }
+        for (const change of changes) {
+          if (change && typeof change.path === 'string') {
+            await this.trackSingleFile(sessionId, workspaceId, change.path, linkType, toolName, args, result, window);
+          }
+        }
         return;
       }
 

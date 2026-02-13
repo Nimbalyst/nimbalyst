@@ -159,6 +159,20 @@ export function parseCodexEvent(event: unknown): ParsedCodexEvent[] {
       parsed.push({ text: itemText, rawEvent: event });
     }
 
+    // Handle file_change items directly (they don't have standard tool name fields)
+    if (itemType === 'file_change') {
+      parsed.push({
+        toolCall: {
+          name: 'file_change',
+          arguments: { changes: itemRecord.changes },
+          ...(eventType === 'item.completed'
+            ? { result: { status: itemRecord.status, changes: itemRecord.changes } }
+            : {}),
+        },
+        rawEvent: event,
+      });
+    }
+
     const itemToolCall =
       extractToolCallFromRecord(itemRecord.tool as Record<string, unknown> | undefined) ??
       extractToolCallFromRecord(itemRecord);
