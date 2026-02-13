@@ -149,7 +149,7 @@ export function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
                     const resultContent = typeof block.content === 'string'
                       ? JSON.parse(block.content)
                       : block.content;
-                    if (resultContent.status === 'teammate_spawned' && resultContent.agent_id && block.tool_use_id) {
+                    if ((resultContent.status === 'teammate_spawned' || resultContent.status === 'background_agent_spawned') && resultContent.agent_id && block.tool_use_id) {
                       teammateParentMap.set(resultContent.agent_id, block.tool_use_id);
                     }
                   } catch { /* not JSON */ }
@@ -283,32 +283,42 @@ export function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
             // create the tool messages and link them via parentToolMap
           }
 
+          // Track whether this chunk is teammate/background agent output
+          // so we can skip text blocks from the main stream
+          const isTeammateOutput = !!(parsed._isTeammateOutput && parsed._teammateAgentId);
+
           if (parsed.type === 'text' && parsed.content !== undefined) {
-            // Claude Code text chunk: { type: 'text', content: '...' }
-            const lastMsg = uiMessages[uiMessages.length - 1];
-            if (lastMsg && lastMsg.role === 'assistant' && !(lastMsg as any).isComplete) {
-              lastMsg.content += parsed.content;
-            } else {
-              uiMessages.push({
-                role: 'assistant',
-                content: parsed.content,
-                timestamp
-              });
+            // Skip teammate/background agent text - stays inside parent Task card
+            if (!isTeammateOutput) {
+              // Claude Code text chunk: { type: 'text', content: '...' }
+              const lastMsg = uiMessages[uiMessages.length - 1];
+              if (lastMsg && lastMsg.role === 'assistant' && !(lastMsg as any).isComplete) {
+                lastMsg.content += parsed.content;
+              } else {
+                uiMessages.push({
+                  role: 'assistant',
+                  content: parsed.content,
+                  timestamp
+                });
+              }
             }
           } else if (parsed.type === 'assistant' && parsed.message) {
             // Full assistant message with structured content
             if (Array.isArray(parsed.message.content)) {
               for (const block of parsed.message.content) {
                 if (block.type === 'text') {
-                  const lastMsg = uiMessages[uiMessages.length - 1];
-                  if (lastMsg && lastMsg.role === 'assistant' && !(lastMsg as any).isComplete) {
-                    lastMsg.content += block.text || '';
-                  } else {
-                    uiMessages.push({
-                      role: 'assistant',
-                      content: block.text || '',
-                      timestamp
-                    });
+                  // Skip teammate/background agent text - stays inside parent Task card
+                  if (!isTeammateOutput) {
+                    const lastMsg = uiMessages[uiMessages.length - 1];
+                    if (lastMsg && lastMsg.role === 'assistant' && !(lastMsg as any).isComplete) {
+                      lastMsg.content += block.text || '';
+                    } else {
+                      uiMessages.push({
+                        role: 'assistant',
+                        content: block.text || '',
+                        timestamp
+                      });
+                    }
                   }
                 } else if (block.type === 'tool_use') {
                   // Tool call - create tool message with sub-agent metadata
