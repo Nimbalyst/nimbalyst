@@ -83,22 +83,8 @@ function createWindowListMenu(): any[] {
             category = 'other';
         } else if (state) {
             if (state.mode === 'workspace' && state.workspacePath) {
-                const workspaceName = basename(state.workspacePath);
-                if (state.filePath) {
-                    const fileName = basename(state.filePath);
-                    title = `${fileName} - ${workspaceName}`;
-                } else {
-                    title = workspaceName;
-                }
+                title = basename(state.workspacePath);
                 category = 'workspace';
-            } else if (state.filePath) {
-                title = basename(state.filePath);
-                category = 'document';
-            }
-
-            // Add dirty indicator
-            if (state.documentEdited) {
-                title = `${title} •`;
             }
         }
 

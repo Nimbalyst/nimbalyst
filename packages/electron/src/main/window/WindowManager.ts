@@ -740,34 +740,3 @@ safeOn('close-window-discard', (event) => {
     }
 });
 
-// Update window title
-export function updateWindowTitle(window: BrowserWindow) {
-    const windowId = getWindowId(window);
-    if (windowId === null) {
-        console.error('[WindowManager] Failed to find custom window ID for title update');
-        return;
-    }
-    const state = windowStates.get(windowId);
-    let title = 'Untitled';
-
-    if (state) {
-        if (state.mode === 'workspace' && state.workspacePath) {
-            const workspaceName = basename(state.workspacePath);
-            if (state.filePath) {
-                const fileName = basename(state.filePath);
-                title = `${fileName} - ${workspaceName}`;
-            } else {
-                title = workspaceName;
-            }
-        } else if (state.filePath) {
-            title = basename(state.filePath);
-        }
-
-        // Add dirty indicator
-        if (state.documentEdited) {
-            title = `${title} •`;
-        }
-    }
-
-    window.setTitle(title);
-}

@@ -102,7 +102,6 @@ interface ElectronAPI {
 
   setDocumentEdited: (edited: boolean) => void;
   setTitle: (title: string) => void;
-  setCurrentFile: (filePath: string | null) => void;
   sendToMainWindow?: (channel: string, data: unknown) => Promise<void>;
   reportUserActivity?: () => void;
 

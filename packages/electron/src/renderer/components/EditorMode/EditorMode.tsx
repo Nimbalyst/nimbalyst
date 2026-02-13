@@ -143,31 +143,9 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
   // Update window title and sync current file with backend when active tab changes
   // This is done imperatively to avoid re-renders in parent components
   useEffect(() => {
-    const updateWindowTitleAndSync = () => {
+    const updateCurrentFileForPlugins = () => {
       const snapshot = tabsActions.getSnapshot();
       const activeTab = snapshot.activeTabId ? snapshot.tabs.get(snapshot.activeTabId) : null;
-
-      // Update window title
-      if (window.electronAPI) {
-        let title = 'Nimbalyst';
-        if (workspaceName) {
-          if (activeTab?.fileName) {
-            title = `${activeTab.fileName} - ${workspaceName} - Nimbalyst`;
-          } else {
-            title = `${workspaceName} - Nimbalyst`;
-          }
-        } else if (activeTab?.fileName) {
-          title = `${activeTab.fileName} - Nimbalyst`;
-        }
-        window.electronAPI.setTitle(title);
-
-        // Sync current file with backend
-        if (activeTab?.filePath) {
-          window.electronAPI.setCurrentFile(activeTab.filePath);
-        } else {
-          window.electronAPI.setCurrentFile(null);
-        }
-      }
 
       // Expose to window for plugins
       if (typeof window !== 'undefined') {
@@ -177,12 +155,12 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
     };
 
     // Initial update
-    updateWindowTitleAndSync();
+    updateCurrentFileForPlugins();
 
     // Subscribe to future changes
-    const unsubscribe = tabsActions.subscribe(updateWindowTitleAndSync);
+    const unsubscribe = tabsActions.subscribe(updateCurrentFileForPlugins);
     return unsubscribe;
-  }, [tabsActions, workspaceName]);
+  }, [tabsActions]);
 
   // Keep activeTabForContextRef in sync with active tab (no re-render)
   useEffect(() => {

@@ -953,16 +953,9 @@ export default function App() {
     // Skip if in agent mode - AgenticPanel manages the title
     if (activeMode === 'agent') return;
 
-    const currentFileName = currentFileNameRef.current;
     let title = 'Nimbalyst';
     if (workspaceMode && workspaceName) {
-      if (currentFileName) {
-        title = `${currentFileName} - ${workspaceName} - Nimbalyst`;
-      } else {
-        title = `${workspaceName} - Nimbalyst`;
-      }
-    } else if (currentFileName) {
-      title = `${currentFileName} - Nimbalyst`;
+      title = `${workspaceName} - Nimbalyst`;
     }
 
     window.electronAPI.setTitle(title);

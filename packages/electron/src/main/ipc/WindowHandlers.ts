@@ -1,7 +1,6 @@
 import { BrowserWindow, shell, nativeImage, app, powerMonitor } from 'electron';
 import { safeHandle, safeOn } from '../utils/ipcRegistry';
 import { windowStates, windows, getWindowId } from '../window/WindowManager';
-import { updateApplicationMenu } from '../menu/ApplicationMenu';
 import { startFileWatcher } from '../file/FileWatcher';
 import { basename, join } from 'path';
 import { getFolderContents } from '../utils/FileTree';
@@ -66,19 +65,7 @@ export function registerWindowHandlers() {
         const window = BrowserWindow.fromWebContents(event.sender);
         if (!window) return;
 
-        const windowId = getWindowId(window);
-        if (windowId === null) {
-            console.error('[SET_DOCUMENT_EDITED] Failed to find custom window ID');
-            return;
-        }
-        const state = windowStates.get(windowId);
-        if (state) {
-            state.documentEdited = edited;
-        }
         window.setDocumentEdited(edited);
-
-        // Update menu to reflect new window state
-        updateApplicationMenu().catch(err => console.error("Error updating menu:", err));
     });
 
     // Set window title
@@ -86,49 +73,9 @@ export function registerWindowHandlers() {
         const window = BrowserWindow.fromWebContents(event.sender);
         if (window) {
             window.setTitle(title);
-            // Update menu to reflect new window title
-            updateApplicationMenu().catch(err => console.error("Error updating menu:", err));
         }
     });
 
-    // Set current file path (for drag-drop)
-    safeOn('set-current-file', (event, filePath: string | null) => {
-        const window = BrowserWindow.fromWebContents(event.sender);
-        if (!window) return;
-
-        const windowId = getWindowId(window);
-        if (windowId === null) {
-            console.error('[SET_CURRENT_FILE] Failed to find custom window ID');
-            return;
-        }
-        const state = windowStates.get(windowId);
-
-        // Only proceed if the file path actually changed
-        if (state?.filePath === filePath) {
-            // console.log('[SET_FILE] SKIPPED - file path unchanged:', basename(filePath || ''), 'windowId:', windowId);
-            return;
-        }
-
-        // console.log('[SET_FILE] File path change for windowId', windowId, 'from', state?.filePath ? basename(state.filePath) : 'null', 'to', filePath ? basename(filePath) : 'null');
-
-        if (state) {
-
-            state.filePath = filePath;
-            // console.log('[SET_FILE] Window state after update:', { windowId, filePath: state.filePath });
-
-            // Update menu to reflect new file
-            updateApplicationMenu().catch(err => console.error("Error updating menu:", err));
-
-            // Start watching the new file
-            if (filePath) {
-                // console.log('[SET_FILE] Starting watcher for file:', basename(filePath), 'windowId:', windowId);
-                startFileWatcher(window, filePath);
-            }
-        } else {
-            console.log('[SET_FILE] WARNING: No window state found for window', windowId);
-        }
-        // console.log('[SET_FILE] Current file path updated from renderer:', filePath);
-    });
 
     // Open image in default application
     safeHandle('image:open-in-default-app', async (event, imagePath: string) => {

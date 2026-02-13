@@ -361,9 +361,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
       currentFileNameRef.current = data.untitledName;
       // setIsDirty(true); // New documents start as dirty
       // NOTE: initialContentRef removed - TabEditor tracks this per-tab
-      // Update the window title immediately
       if (window.electronAPI) {
-        window.electronAPI.setTitle(`${data.untitledName} • - Nimbalyst`);
         window.electronAPI.setDocumentEdited(true);
       }
     }));
@@ -446,10 +444,6 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
       if (currentFilePathRef.current === data.sourcePath) {
         currentFilePathRef.current = data.destinationPath;
         currentFileNameRef.current = getFileName(data.destinationPath);
-
-        if (window.electronAPI.setCurrentFile) {
-          window.electronAPI.setCurrentFile(data.destinationPath);
-        }
       }
     }));
     cleanupFns.push(window.electronAPI.onThemeChange((newTheme) => {

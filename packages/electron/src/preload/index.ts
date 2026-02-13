@@ -269,7 +269,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Window operations
   setDocumentEdited: (edited: boolean) => ipcRenderer.send('set-document-edited', edited),
   setTitle: (title: string) => ipcRenderer.send('set-title', title),
-  setCurrentFile: (filePath: string | null) => ipcRenderer.send('set-current-file', filePath),
   /** Report user activity for sync presence awareness */
   reportUserActivity: () => ipcRenderer.send('user-activity'),
   /** Set the idle threshold for sync presence (in milliseconds). For testing, use 10000 (10 seconds). */
