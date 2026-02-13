@@ -24,11 +24,25 @@ You may use the `e2e-runner` agent to run **targeted E2E tests** related to the 
 - **Prefer specific test files** related to your changes (e.g., `e2e/editors/monaco.spec.ts` when working on Monaco editor)
 - **Use grep patterns** to run specific test cases when only a few tests are relevant
 
+### Test Execution Rules
+
+**CRITICAL**: When fixing E2E tests, follow this workflow:
+1. **Run tests ONCE with `--max-failures=1`** to find the first failure
+2. **Read the error output** - do NOT run tests again to "verify" the error you just saw
+3. **Fix the issue** based on the error
+4. **Run tests ONCE again** to verify the fix
+5. **Repeat** - one test run per fix cycle
+
+**NEVER:**
+- Run tests multiple times when you already have the failure output
+- Run tests to "check" what the error is when you just saw it
+- Run tests without `--max-failures=1` when fixing issues
+
 ### Quick Command Reference
 
 ```bash
-# Run specific test file
-npx playwright test e2e/monaco/file-watcher-updates.spec.ts
+# Run specific test file with max-failures
+npx playwright test e2e/monaco/file-watcher-updates.spec.ts --max-failures=1
 
 # Run tests in a directory
 npx playwright test e2e/monaco/

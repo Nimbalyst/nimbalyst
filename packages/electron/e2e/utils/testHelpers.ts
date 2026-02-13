@@ -31,9 +31,9 @@ export const PLAYWRIGHT_TEST_SELECTORS = {
   filterMenuKnownFiles: '.filter-menu-item:has-text("Known Files")',
   filterMenuShowIcons: '.filter-menu-item:has-text("Show Icons")',
 
-  // Tabs
+  // Tabs (Files mode - document/session tabs at top)
   tab: '.tab',
-  sessionTab: '.tab[data-tab-type="session"]',
+  filesModeSessionTab: '.tab[data-tab-type="session"]', // Chat session tabs in Files mode
   documentTab: '.tab[data-tab-type="document"]',
   tabTitle: '.tab-title',
   tabDirtyIndicator: '.tab-dirty-indicator',
@@ -85,13 +85,14 @@ export const PLAYWRIGHT_TEST_SELECTORS = {
   richTranscriptMessage: '.rich-transcript-message',
   richTranscriptToolContainer: '.rich-transcript-tool-container',
 
-  // Session tabs
-  sessionTabsContainer: '.ai-session-tabs-container',
-  sessionTab: '.ai-session-tabs-container .tab',
+  // Agent mode session tabs (horizontal tabs for multiple sessions)
+  agentModeSessionTabsContainer: '.ai-session-tabs-container',
+  agentModeSessionTab: '.ai-session-tabs-container .tab',
 
   // Session history (agent mode sidebar)
   sessionHistory: '.session-history',
   sessionHistoryItem: '.session-history-item',
+  sessionHistoryList: '.session-history-list',
   sessionHistoryNewButton: '.session-history-new-button', // The dropdown trigger button
   sessionHistoryNewMenu: '.session-history-new-menu', // The dropdown menu itself
   newDropdownButton: '[data-testid="new-dropdown-button"]', // More specific selector for dropdown trigger
@@ -100,19 +101,32 @@ export const PLAYWRIGHT_TEST_SELECTORS = {
   sessionListItem: '.session-list-item',
   sessionListItemTitle: '.session-list-item-title',
 
+  // Agent mode container
+  agentMode: '.agent-mode',
+
   // Workstream session tabs (child sessions within a workstream)
   sessionTabBar: '.session-tab-bar',
   sessionTabInWorkstream: '.session-tab',
   sessionTabActive: '.session-tab.active',
   sessionTabNew: '.session-tab-new',
+  sessionTabTitle: '.session-tab-title',
+  workstreamSessionItem: '.workstream-session-item',
+  workstreamGroupName: '.workstream-group-name',
+  sessionListItemRight: '.session-list-item-right',
+  sessionListItemStatusUnread: '.session-list-item-status.unread',
 
   // Worktree sessions
-  worktreeSingle: '.worktree-single',
+  worktreeGroup: '[data-testid="worktree-group"]',
+  worktreeSingle: '[data-testid="worktree-single"]',
   worktreeSingleActive: '.worktree-single.active',
   worktreeSingleBadge: '.worktree-single-wt-badge',
   worktreeSingleName: '.worktree-single-name',
+  worktreeSingleNameRow: '.worktree-single-name-row',
   worktreeSingleTitle: '.worktree-single-title',
   worktreeSingleMessageCount: '.worktree-single-message-count',
+
+  // Session containers
+  sessionContainer: '[data-session-id]',
 
   // Editor
   contentEditable: '[contenteditable="true"]',
@@ -246,6 +260,9 @@ export async function switchToFilesMode(page: Page): Promise<void> {
   const filesModeButton = page.locator(PLAYWRIGHT_TEST_SELECTORS.filesModeButton);
   await filesModeButton.click();
   await page.waitForTimeout(500);
+
+  // Wait for workspace sidebar to be visible
+  await page.waitForSelector(PLAYWRIGHT_TEST_SELECTORS.workspaceSidebar, { timeout: 3000 });
 }
 
 /**
@@ -260,11 +277,17 @@ export async function switchToEditorMode(page: Page): Promise<void> {
 /**
  * Switch to Agent mode
  * Note: This auto-creates the first session if none exists
+ * Idempotent: safe to call when already in agent mode
  */
 export async function switchToAgentMode(page: Page): Promise<void> {
-  const agentModeButton = page.locator(PLAYWRIGHT_TEST_SELECTORS.agentModeButton);
-  await agentModeButton.click();
-  await page.waitForTimeout(1000); // Wait for mode switch and UI to settle (no auto-session creation)
+  const agentMode = page.locator(PLAYWRIGHT_TEST_SELECTORS.agentMode);
+  const isAlreadyVisible = await agentMode.isVisible().catch(() => false);
+
+  if (!isAlreadyVisible) {
+    const agentModeButton = page.locator(PLAYWRIGHT_TEST_SELECTORS.agentModeButton);
+    await agentModeButton.click();
+    await page.waitForTimeout(1500); // Wait for mode switch, UI to settle, and auto-session selection
+  }
 }
 
 /**
@@ -278,9 +301,13 @@ export async function submitChatPrompt(
 ): Promise<void> {
   const { waitForResponse = false, timeout = 15000 } = options;
 
-  // Find chat input in the active session (data-active="true")
-  const activeSession = page.locator('[data-active="true"]');
-  const chatInput = activeSession.locator(PLAYWRIGHT_TEST_SELECTORS.chatInput);
+  // Find chat input - scope to agent mode if visible (avoids Files mode chat input)
+  const agentMode = page.locator(PLAYWRIGHT_TEST_SELECTORS.agentMode);
+  const isAgentModeVisible = await agentMode.isVisible().catch(() => false);
+
+  const chatInput = isAgentModeVisible
+    ? agentMode.locator(PLAYWRIGHT_TEST_SELECTORS.chatInput)
+    : page.locator(PLAYWRIGHT_TEST_SELECTORS.chatInput).first();
   await chatInput.waitFor({ state: 'visible', timeout: 5000 });
 
   // Fill the message (more reliable than type() for React inputs)
@@ -297,22 +324,35 @@ export async function submitChatPrompt(
 }
 
 /**
+ * Select the first session from session history
+ * Use this after switching to Agent mode to activate an existing session
+ */
+export async function selectFirstSession(page: Page): Promise<void> {
+  const sessionHistory = page.locator(PLAYWRIGHT_TEST_SELECTORS.sessionHistory);
+  const firstSession = sessionHistory.locator(PLAYWRIGHT_TEST_SELECTORS.sessionHistoryItem).first();
+  await firstSession.waitFor({ state: 'visible', timeout: 3000 });
+  await firstSession.click();
+  await page.waitForTimeout(500);
+}
+
+/**
  * Create a new agent session
  * Scopes to session-history sidebar to avoid clicking chat mode button
  */
 export async function createNewAgentSession(page: Page): Promise<void> {
-  // Scope to agent mode sidebar to avoid clicking chat mode button
-  const agentSidebar = page.locator(PLAYWRIGHT_TEST_SELECTORS.sessionHistory);
+  // Scope to agent mode to avoid clicking Files mode elements
+  const agentMode = page.locator(PLAYWRIGHT_TEST_SELECTORS.agentMode);
+  const agentSidebar = agentMode.locator(PLAYWRIGHT_TEST_SELECTORS.sessionHistory);
   const newSessionButton = agentSidebar.locator(PLAYWRIGHT_TEST_SELECTORS.sessionHistoryNewButton);
   await newSessionButton.click({ timeout: 5000 });
   await page.waitForTimeout(500);
 }
 
 /**
- * Switch to a specific session tab by index (0-based)
+ * Switch to a specific Agent mode session tab by index (0-based)
  */
 export async function switchToSessionTab(page: Page, index: number): Promise<void> {
-  const sessionTabs = page.locator(PLAYWRIGHT_TEST_SELECTORS.sessionTab);
+  const sessionTabs = page.locator(PLAYWRIGHT_TEST_SELECTORS.agentModeSessionTab);
   const targetTab = sessionTabs.nth(index);
   await targetTab.click();
   await page.waitForTimeout(500);
@@ -383,10 +423,10 @@ export async function hasMessages(page: Page): Promise<boolean> {
 }
 
 /**
- * Get the number of session tabs
+ * Get the number of Agent mode session tabs
  */
 export async function getSessionTabCount(page: Page): Promise<number> {
-  return await page.locator(PLAYWRIGHT_TEST_SELECTORS.sessionTab).count();
+  return await page.locator(PLAYWRIGHT_TEST_SELECTORS.agentModeSessionTab).count();
 }
 
 /**
@@ -534,8 +574,12 @@ export async function openFileFromTree(
   page: Page,
   fileName: string
 ): Promise<void> {
+  // Wait for file tree to be visible and find the file
+  const fileItem = page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeItem, { hasText: fileName }).first();
+  await fileItem.waitFor({ state: 'visible', timeout: 5000 });
+
   // Click file in tree
-  await page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeItem, { hasText: fileName }).first().click();
+  await fileItem.click();
 
   // Wait for tab to become active
   await expect(page.locator(PLAYWRIGHT_TEST_SELECTORS.tab, { hasText: fileName }))

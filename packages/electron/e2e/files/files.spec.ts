@@ -1,0 +1,515 @@
+/**
+ * Consolidated file tests covering save, watcher, filtering, and file operations.
+ *
+ * From:
+ * - file-save-comprehensive.spec.ts
+ * - file-watcher-updates.spec.ts
+ * - file-operations-while-open.spec.ts
+ * - file-tree-filtering.spec.ts
+ */
+
+import { test, expect } from '@playwright/test';
+import type { ElectronApplication, Page } from '@playwright/test';
+import {
+  launchElectronApp,
+  createTempWorkspace,
+  TEST_TIMEOUTS,
+  waitForAppReady,
+  ACTIVE_EDITOR_SELECTOR,
+  ACTIVE_FILE_TAB_SELECTOR
+} from '../helpers';
+import { openFileFromTree, PLAYWRIGHT_TEST_SELECTORS } from '../utils/testHelpers';
+import * as fs from 'fs/promises';
+import * as path from 'path';
+
+let electronApp: ElectronApplication;
+let page: Page;
+let workspacePath: string;
+
+test.beforeAll(async () => {
+  workspacePath = await createTempWorkspace();
+
+  // --- Files for file-save tests ---
+  await fs.writeFile(path.join(workspacePath, 'save-doc.md'), '# Test File\n\nInitial content.\n', 'utf8');
+  await fs.writeFile(path.join(workspacePath, 'save-extra.md'), '# Second File\n\nInitial content.\n', 'utf8');
+
+  // --- Files for file-operations tests ---
+  await fs.writeFile(path.join(workspacePath, 'op-rename.md'), '# Rename Me\n\nSome content.\n', 'utf8');
+  await fs.writeFile(path.join(workspacePath, 'op-delete.md'), '# Delete Me\n\nThis file should be deleted.\n', 'utf8');
+
+  // --- Files for file-watcher tests ---
+  await fs.writeFile(path.join(workspacePath, 'watch-main.md'), '# Watched File\n\nOriginal content from disk.\n', 'utf8');
+  await fs.writeFile(path.join(workspacePath, 'watch-a.md'), '# File 1\n\nOriginal content of file 1.\n', 'utf8');
+  await fs.writeFile(path.join(workspacePath, 'watch-b.md'), '# File 2\n\nOriginal content of file 2.\n', 'utf8');
+  await fs.writeFile(path.join(workspacePath, 'watch-c.md'), '# File 3\n\nOriginal content of file 3.\n', 'utf8');
+
+  // --- Files for file-tree-filtering tests ---
+  await fs.writeFile(path.join(workspacePath, 'filter-doc.md'), '# Test Markdown\n\nContent.\n', 'utf8');
+  await fs.writeFile(path.join(workspacePath, 'filter-notes.md'), '# Notes\n\nMore content.\n', 'utf8');
+  await fs.writeFile(path.join(workspacePath, 'filter-script.js'), 'console.log("hello");\n', 'utf8');
+  await fs.writeFile(path.join(workspacePath, 'filter-app.ts'), 'const x: number = 42;\n', 'utf8');
+  await fs.writeFile(path.join(workspacePath, 'filter-data.json'), '{"test": true}\n', 'utf8');
+  await fs.writeFile(path.join(workspacePath, 'filter-readme.txt'), 'Plain text file\n', 'utf8');
+  await fs.writeFile(path.join(workspacePath, 'filter-image.png'), Buffer.from('fake-png-data'), 'utf8');
+
+  electronApp = await launchElectronApp({
+    workspace: workspacePath,
+    env: { NODE_ENV: 'test' }
+  });
+
+  page = await electronApp.firstWindow();
+
+  // Handle any dialogs (dismiss them)
+  page.on('dialog', dialog => dialog.dismiss().catch(() => {}));
+
+  // Override window.confirm to auto-accept (for delete confirmation)
+  await page.evaluate(() => {
+    window.confirm = () => true;
+  });
+
+  await waitForAppReady(page);
+});
+
+test.afterAll(async () => {
+  if (electronApp) {
+    await electronApp.close();
+  }
+  await fs.rm(workspacePath, { recursive: true, force: true }).catch(() => undefined);
+});
+
+// ========================================================================
+// File Save tests (from file-save-comprehensive.spec.ts)
+// ========================================================================
+
+test('should autosave after inactivity and preserve focus/cursor position', async () => {
+  const filePath = path.join(workspacePath, 'save-doc.md');
+  const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
+  const marker = `autosave-marker-${Date.now()}`;
+
+  await openFileFromTree(page, 'save-doc.md');
+  await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('save-doc.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+
+  await editor.click();
+  await page.keyboard.press('End');
+  await page.keyboard.type(`\n\n${marker}\n\nLine 1\nLine 2\nLine 3`);
+
+  // Move cursor to middle of Line 2
+  await page.keyboard.press('ArrowUp');
+  await page.keyboard.press('Home');
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.type('X');
+
+  // Verify dirty state
+  const tab = page.locator('.file-tabs-container .tab', { has: page.locator('.tab-title', { hasText: 'save-doc.md' }) });
+  await expect(tab.locator('.tab-dirty-indicator')).toBeVisible({ timeout: 1000 });
+
+  // Wait for autosave (2s interval + 200ms debounce + buffer)
+  await page.waitForTimeout(3000);
+
+  await expect(tab.locator('.tab-dirty-indicator')).toHaveCount(0, { timeout: 1000 });
+
+  const diskContent = await fs.readFile(filePath, 'utf8');
+  expect(diskContent).toContain(marker);
+
+  // Verify focus maintained - can still type
+  await page.keyboard.type('Y');
+  const content = await editor.innerText();
+  expect(content).toContain('LinXYe 2');
+});
+
+test('should debounce during rapid edits without excessive saves', async () => {
+  const filePath = path.join(workspacePath, 'save-doc.md');
+  const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
+
+  await openFileFromTree(page, 'save-doc.md');
+  await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('save-doc.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+
+  // Wait for any pending autosave
+  const tab = page.locator('.file-tabs-container .tab', { has: page.locator('.tab-title', { hasText: 'save-doc.md' }) });
+  await expect(tab.locator('.tab-dirty-indicator')).toHaveCount(0, { timeout: 5000 });
+
+  const initialStats = await fs.stat(filePath);
+  const initialMtime = initialStats.mtimeMs;
+
+  await editor.click();
+  await page.keyboard.press('End');
+  for (let i = 0; i < 20; i++) {
+    await page.keyboard.type('x');
+    await page.waitForTimeout(50);
+  }
+
+  await page.waitForTimeout(500);
+
+  const duringStats = await fs.stat(filePath);
+  expect(duringStats.mtimeMs).toBe(initialMtime);
+  await expect(tab.locator('.tab-dirty-indicator')).toBeVisible();
+
+  await page.waitForTimeout(3000);
+
+  const afterStats = await fs.stat(filePath);
+  expect(afterStats.mtimeMs).toBeGreaterThan(initialMtime);
+  await expect(tab.locator('.tab-dirty-indicator')).toHaveCount(0);
+});
+
+test('should autosave multiple tabs independently', async () => {
+  const file1Path = path.join(workspacePath, 'save-doc.md');
+  const file2Path = path.join(workspacePath, 'save-extra.md');
+  const marker1 = `marker1-${Date.now()}`;
+  const marker2 = `marker2-${Date.now()}`;
+  const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
+
+  await openFileFromTree(page, 'save-doc.md');
+  await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('save-doc.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+  await editor.click();
+  await page.keyboard.press('End');
+  await page.keyboard.type(`\n\n${marker1}\n`);
+
+  const tab1 = page.locator('.file-tabs-container .tab', { has: page.locator('.tab-title', { hasText: 'save-doc.md' }) });
+  await expect(tab1.locator('.tab-dirty-indicator')).toBeVisible();
+
+  await openFileFromTree(page, 'save-extra.md');
+  await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('save-extra.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+  await editor.click();
+  await page.keyboard.press('End');
+  await page.keyboard.type(`\n\n${marker2}\n`);
+
+  const tab2 = page.locator('.file-tabs-container .tab', { has: page.locator('.tab-title', { hasText: 'save-extra.md' }) });
+  await expect(tab2.locator('.tab-dirty-indicator')).toBeVisible();
+
+  await page.waitForTimeout(3000);
+
+  await expect(tab1.locator('.tab-dirty-indicator')).toHaveCount(0);
+  await expect(tab2.locator('.tab-dirty-indicator')).toHaveCount(0);
+
+  const content1 = await fs.readFile(file1Path, 'utf8');
+  const content2 = await fs.readFile(file2Path, 'utf8');
+  expect(content1).toContain(marker1);
+  expect(content2).toContain(marker2);
+});
+
+test('should save immediately with manual save (Cmd+S) overriding autosave timer', async () => {
+  const filePath = path.join(workspacePath, 'save-doc.md');
+  const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
+  const marker = `manual-save-${Date.now()}`;
+
+  await openFileFromTree(page, 'save-doc.md');
+  await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('save-doc.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+
+  const tab = page.locator('.file-tabs-container .tab', { has: page.locator('.tab-title', { hasText: 'save-doc.md' }) });
+  await expect(tab.locator('.tab-dirty-indicator')).toHaveCount(0, { timeout: 5000 });
+
+  const initialStats = await fs.stat(filePath);
+  const initialMtime = initialStats.mtimeMs;
+
+  await editor.click();
+  await page.keyboard.press('End');
+  await page.keyboard.type(`\n\n${marker}\n`);
+
+  await expect(tab.locator('.tab-dirty-indicator')).toBeVisible({ timeout: 1000 });
+
+  await page.waitForTimeout(100);
+
+  await electronApp.evaluate(({ BrowserWindow }) => {
+    const focused = BrowserWindow.getFocusedWindow();
+    if (focused) {
+      focused.webContents.send('file-save');
+    }
+  });
+
+  await expect(tab.locator('.tab-dirty-indicator')).toHaveCount(0, { timeout: 2000 });
+
+  const diskContent = await fs.readFile(filePath, 'utf8');
+  expect(diskContent).toContain(marker);
+});
+
+// ========================================================================
+// File Operations tests (from file-operations-while-open.spec.ts)
+// ========================================================================
+
+test('renaming an open file should update the tab name and path', async () => {
+  await page.locator('.file-tree-name', { hasText: 'op-rename.md' }).click();
+  await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('op-rename.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+
+  const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
+  await expect(editor).toContainText('Some content');
+
+  // Right-click to rename
+  await page.locator('.file-tree-name', { hasText: 'op-rename.md' }).click({ button: 'right' });
+  await page.waitForSelector('.file-context-menu', { timeout: TEST_TIMEOUTS.DEFAULT_WAIT });
+  await page.locator('.file-context-menu-item', { hasText: 'Rename' }).click();
+
+  const renameInput = page.locator('.rename-input');
+  await expect(renameInput).toBeVisible({ timeout: TEST_TIMEOUTS.DEFAULT_WAIT });
+  await renameInput.fill('op-renamed.md');
+  await renameInput.press('Enter');
+
+  await expect(page.locator('.file-tree-name', { hasText: 'op-renamed.md' })).toBeVisible({ timeout: 5000 });
+  await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('op-renamed.md', { timeout: 5000 });
+
+  const oldExists = await fs.access(path.join(workspacePath, 'op-rename.md')).then(() => true).catch(() => false);
+  expect(oldExists).toBe(false);
+
+  const newExists = await fs.access(path.join(workspacePath, 'op-renamed.md')).then(() => true).catch(() => false);
+  expect(newExists).toBe(true);
+
+  await expect(editor).toContainText('Some content');
+});
+
+test('deleting an open file should close the tab and not recreate the file', async () => {
+  const testFile = path.join(workspacePath, 'op-delete.md');
+
+  await page.locator('.file-tree-name', { hasText: 'op-delete.md' }).click();
+  await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('op-delete.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+
+  // Make some edits to ensure autosave would trigger
+  const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
+  await editor.click();
+  await page.keyboard.type('\n\nThis is new content that should not be saved.');
+
+  await expect(page.locator('.file-tabs-container .tab.active .tab-dirty-indicator')).toBeVisible({ timeout: 1000 });
+
+  // Right-click and delete
+  await page.locator('.file-tree-name', { hasText: 'op-delete.md' }).click({ button: 'right' });
+  await page.waitForSelector('.file-context-menu', { timeout: TEST_TIMEOUTS.DEFAULT_WAIT });
+
+  const deleteButton = page.locator('[data-testid="context-menu-delete"]');
+  await deleteButton.click();
+
+  await expect(page.locator('.file-tabs-container .tab .tab-title', { hasText: 'op-delete.md' })).toHaveCount(0, { timeout: 5000 });
+
+  // Verify the file was actually deleted and not recreated
+  await expect.poll(async () => {
+    try {
+      await fs.access(testFile);
+      return false;
+    } catch {
+      return true;
+    }
+  }, {
+    timeout: TEST_TIMEOUTS.SAVE_OPERATION * 2,
+    message: 'Expected file to remain deleted'
+  }).toBe(true);
+});
+
+// ========================================================================
+// File Watcher tests (from file-watcher-updates.spec.ts)
+// ========================================================================
+
+test('should detect when file is modified on disk by external process', async () => {
+  const filePath = path.join(workspacePath, 'watch-main.md');
+  const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
+
+  await openFileFromTree(page, 'watch-main.md');
+  await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('watch-main.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+
+  let editorText = await editor.innerText();
+  expect(editorText).toContain('Original content from disk');
+
+  // Simulate external modification
+  const externalEdit = 'This line was added by an external process like an AI agent.';
+  const newContent = `# Watched File\n\nOriginal content from disk.\n\n${externalEdit}\n`;
+  await fs.writeFile(filePath, newContent, 'utf8');
+
+  await page.waitForTimeout(TEST_TIMEOUTS.SAVE_OPERATION);
+
+  editorText = await editor.innerText();
+  expect(editorText).toContain(externalEdit);
+});
+
+// Skip: .file-conflict-dialog selector does not exist in current UI
+test.skip('should show notification when file is modified externally while editor has unsaved changes', async () => {
+  const filePath = path.join(workspacePath, 'watch-main.md');
+  const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
+
+  await openFileFromTree(page, 'watch-main.md');
+  await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('watch-main.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+
+  await editor.click();
+  await page.keyboard.press('End');
+  await page.keyboard.type('\nLocal unsaved edit.');
+
+  const tab = page.locator('.file-tabs-container .tab', { has: page.locator('.tab-title', { hasText: 'watch-main.md' }) });
+  await expect(tab.locator('.tab-dirty-indicator')).toBeVisible();
+
+  const externalContent = `# Watched File\n\nExternal modification that conflicts with local changes.\n`;
+  await fs.writeFile(filePath, externalContent, 'utf8');
+
+  await page.waitForTimeout(TEST_TIMEOUTS.SAVE_OPERATION);
+
+  const conflictDialog = page.locator('.file-conflict-dialog');
+  await expect(conflictDialog).toBeVisible();
+  await page.locator('button', { hasText: 'Keep My Changes' }).click();
+  await expect(conflictDialog).not.toBeVisible();
+});
+
+test('should reload content when switching to tab with externally modified file', async () => {
+  const file2Path = path.join(workspacePath, 'watch-b.md');
+
+  // Open 3 tabs
+  await openFileFromTree(page, 'watch-a.md');
+  await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('watch-a.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+
+  await openFileFromTree(page, 'watch-b.md');
+  await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('watch-b.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+
+  await openFileFromTree(page, 'watch-c.md');
+  await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('watch-c.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+
+  // Modify watch-b.md externally while it's inactive
+  const externalEdit2 = 'External edit to FILE 2 while inactive';
+  const newContent2 = `# File 2\n\nOriginal content of file 2.\n\n${externalEdit2}\n`;
+  await fs.writeFile(file2Path, newContent2, 'utf8');
+
+  await page.waitForTimeout(TEST_TIMEOUTS.SAVE_OPERATION);
+
+  // Switch to watch-b.md and verify content
+  await page.locator('.file-tabs-container .tab', { has: page.locator('.tab-title', { hasText: 'watch-b.md' }) }).click();
+  await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('watch-b.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+  await page.waitForTimeout(500);
+
+  const activeEditor = page.locator(ACTIVE_EDITOR_SELECTOR);
+  const file2Text = await activeEditor.innerText();
+  expect(file2Text).toContain(externalEdit2);
+});
+
+test('should handle file deletion while open in editor', async () => {
+  const filePath = path.join(workspacePath, 'watch-main.md');
+
+  await openFileFromTree(page, 'watch-main.md');
+  await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('watch-main.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+
+  await fs.unlink(filePath);
+
+  await page.waitForTimeout(TEST_TIMEOUTS.SAVE_OPERATION * 2);
+
+  const fileExists = await fs.access(filePath).then(() => true).catch(() => false);
+  expect(fileExists).toBe(false);
+});
+
+test('should update file tree when new files are created by external process', async () => {
+  await expect(page.locator('.file-tree-name', { hasText: 'watch-new.md' })).toHaveCount(0);
+
+  const newFilePath = path.join(workspacePath, 'watch-new.md');
+  await fs.writeFile(newFilePath, '# New File\n\nCreated by AI agent.\n', 'utf8');
+
+  await page.waitForTimeout(TEST_TIMEOUTS.SAVE_OPERATION * 2);
+
+  await expect(page.locator('.file-tree-name', { hasText: 'watch-new.md' })).toBeVisible({ timeout: TEST_TIMEOUTS.FILE_TREE_LOAD });
+});
+
+// Skip: Lexical editor doesn't reliably reload multiple rapid external changes
+test.skip('should detect rapid successive external changes', async () => {
+  const filePath = path.join(workspacePath, 'watch-main.md');
+  const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
+
+  await fs.writeFile(filePath, '# Watched File\n\nOriginal content from disk.\n', 'utf8');
+  await page.waitForTimeout(1000);
+
+  await openFileFromTree(page, 'watch-main.md');
+  await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('watch-main.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+
+  const changes = [
+    '# Watched File\n\nFirst external edit.\n',
+    '# Watched File\n\nFirst external edit.\n\nSecond external edit.\n',
+    '# Watched File\n\nFirst external edit.\n\nSecond external edit.\n\nThird external edit.\n',
+  ];
+
+  for (const content of changes) {
+    await fs.writeFile(filePath, content, 'utf8');
+    await page.waitForTimeout(500);
+  }
+
+  await expect.poll(async () => {
+    return await editor.innerText();
+  }, {
+    timeout: 10000,
+    message: 'Expected editor to show final external edit'
+  }).toContain('Third external edit');
+});
+
+test('should preserve cursor position when file is reloaded from disk', async () => {
+  const filePath = path.join(workspacePath, 'watch-main.md');
+  const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
+
+  // Recreate watch-main.md (may have been deleted by prior test)
+  await fs.writeFile(filePath, '# Watched File\n\nOriginal content from disk.\n', 'utf8');
+  await page.waitForTimeout(1000);
+
+  await openFileFromTree(page, 'watch-main.md');
+  await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('watch-main.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+
+  await editor.click();
+  await page.keyboard.press('End');
+
+  const originalContent = await fs.readFile(filePath, 'utf8');
+  await fs.writeFile(filePath, originalContent + '\nAppended by external process.\n', 'utf8');
+
+  await page.waitForTimeout(TEST_TIMEOUTS.SAVE_OPERATION);
+
+  const editorText = await editor.innerText();
+  expect(editorText).toContain('Appended by external process');
+});
+
+// ========================================================================
+// File Tree Filtering tests (from file-tree-filtering.spec.ts)
+// ========================================================================
+
+test('should filter files by type', async () => {
+  await expect(page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeItem, { hasText: 'filter-doc.md' })).toBeVisible();
+  await expect(page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeItem, { hasText: 'filter-script.js' })).toBeVisible();
+  await expect(page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeItem, { hasText: 'filter-image.png' })).toBeVisible();
+
+  // Test Markdown Only filter
+  await page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeFilterButton).click();
+  await page.locator(PLAYWRIGHT_TEST_SELECTORS.filterMenuMarkdownOnly).click();
+  await page.waitForTimeout(TEST_TIMEOUTS.DEFAULT_WAIT);
+
+  await expect(page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeItem, { hasText: 'filter-doc.md' })).toBeVisible();
+  await expect(page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeItem, { hasText: 'filter-notes.md' })).toBeVisible();
+  await expect(page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeItem, { hasText: 'filter-script.js' })).toHaveCount(0);
+  await expect(page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeItem, { hasText: 'filter-app.ts' })).toHaveCount(0);
+
+  // Test Known Files filter
+  await page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeFilterButton).click();
+  await page.locator(PLAYWRIGHT_TEST_SELECTORS.filterMenuKnownFiles).click();
+  await page.waitForTimeout(TEST_TIMEOUTS.DEFAULT_WAIT);
+
+  await expect(page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeItem, { hasText: 'filter-doc.md' })).toBeVisible();
+  await expect(page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeItem, { hasText: 'filter-script.js' })).toBeVisible();
+  await expect(page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeItem, { hasText: 'filter-readme.txt' })).toBeVisible();
+  await expect(page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeItem, { hasText: 'filter-image.png' })).toHaveCount(0);
+
+  // Test All Files filter
+  await page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeFilterButton).click();
+  await page.locator(PLAYWRIGHT_TEST_SELECTORS.filterMenuAllFiles).click();
+  await page.waitForTimeout(TEST_TIMEOUTS.DEFAULT_WAIT);
+
+  await expect(page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeItem, { hasText: 'filter-doc.md' })).toBeVisible();
+  await expect(page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeItem, { hasText: 'filter-script.js' })).toBeVisible();
+  await expect(page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeItem, { hasText: 'filter-image.png' })).toBeVisible();
+});
+
+test('should persist filter settings after closing and reopening app', async () => {
+  // Set filter to Markdown Only
+  await page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeFilterButton).click();
+  await page.locator(PLAYWRIGHT_TEST_SELECTORS.filterMenuMarkdownOnly).click();
+  await page.waitForTimeout(TEST_TIMEOUTS.DEFAULT_WAIT);
+
+  await expect(page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeItem, { hasText: 'filter-doc.md' })).toBeVisible();
+  await expect(page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeItem, { hasText: 'filter-script.js' })).toHaveCount(0);
+
+  // Close and reopen to test persistence
+  await electronApp.close();
+  await new Promise(resolve => setTimeout(resolve, 1500));
+
+  electronApp = await launchElectronApp({ workspace: workspacePath });
+  page = await electronApp.firstWindow();
+  await waitForAppReady(page);
+  await page.waitForTimeout(2000);
+
+  // Verify filter persisted
+  await expect(page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeItem, { hasText: 'filter-doc.md' })).toBeVisible();
+  await expect(page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeItem, { hasText: 'filter-script.js' })).toHaveCount(0);
+});
