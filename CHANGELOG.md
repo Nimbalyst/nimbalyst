@@ -20,6 +20,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.68] - 2026-02-13
+
+
+### Added
+- Blitz mode for parallel AI worktree sessions
+- Beta features configuration system with user-facing settings
+
+### Changed
+- Codex now gated behind beta flag only (no longer requires alpha channel)
+- Updated claude-agent-sdk 0.2.39 to 0.2.42 and codex-sdk 0.98.0 to 0.101.0
+
+### Fixed
+- Codex packaged binary path resolution
+- App icon path in packaged builds using app.getAppPath()
+- Blocking prompt icon now clears after commit and shows correctly in groups
+- TypeScript errors after SDK dependency update
+- Clarified beta features and Blitz descriptions
+
+### Removed
+- Activity History panel (reverted)
+
 ## [0.52.67] - 2026-02-13
 
 
