@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useAtomValue } from 'jotai';
 import { MaterialSymbol, getProviderIcon } from '@nimbalyst/runtime';
 import { getClaudeCodeModelLabel } from '../../utils/modelUtils';
+import { betaFeatureEnabledAtom } from '../../store/atoms/appSettings';
 
 interface Model {
   id: string;
@@ -28,6 +30,7 @@ export function ModelSelector({
   const [loading, setLoading] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const isCodexBetaEnabled = useAtomValue(betaFeatureEnabledAtom('codex'));
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -132,8 +135,11 @@ export function ModelSelector({
     return sectionType !== currentProviderType;
   };
 
-  // Group providers by type (agents vs models)
+  // Group providers by type (agents vs models), filtering out disabled beta features
   const groupedProviders = Object.entries(models).reduce((acc, [provider, providerModels]) => {
+    // Hide Codex when beta feature is disabled
+    if (provider === 'openai-codex' && !isCodexBetaEnabled) return acc;
+
     const isAgent = provider === 'claude-code' || provider === 'openai-codex';
     const type = isAgent ? 'agents' : 'models';
     if (!acc[type]) acc[type] = {};

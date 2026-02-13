@@ -19,6 +19,7 @@ import { atom, type Atom } from 'jotai';
 import posthog from 'posthog-js';
 import { type EffortLevel, DEFAULT_EFFORT_LEVEL, parseEffortLevel } from '@nimbalyst/runtime/ai/server/effortLevels';
 import { AlphaFeatureTag } from '../../../shared/alphaFeatures';
+import { BetaFeatureTag } from '../../../shared/betaFeatures';
 import { DeveloperFeatureTag, DEVELOPER_FEATURES, getDefaultDeveloperFeatures, enableAllDeveloperFeatures, disableAllDeveloperFeatures, areAllDeveloperFeaturesEnabled } from '../../../shared/developerFeatures';
 import { normalizeCodexProviderConfig, omitModelsField } from '@nimbalyst/runtime/ai/server/utils/modelConfigUtils';
 
@@ -368,6 +369,10 @@ export interface AdvancedSettings {
   alphaFeatures: Record<AlphaFeatureTag, boolean>;
   // Whether to automatically enable all new alpha features
   enableAllAlphaFeatures: boolean;
+  // Beta feature flags - user-visible beta features
+  betaFeatures: Record<BetaFeatureTag, boolean>;
+  // Whether to automatically enable all new beta features
+  enableAllBetaFeatures: boolean;
   // Custom directories to add to PATH (colon-separated on Unix, semicolon-separated on Windows)
   customPathDirs: string;
 }
@@ -390,6 +395,11 @@ const defaultAdvancedSettings: AdvancedSettings = {
     'card-mode': false,
   } as Record<AlphaFeatureTag, boolean>,
   enableAllAlphaFeatures: false,
+  betaFeatures: {
+    blitz: false,
+    codex: false,
+  } as Record<BetaFeatureTag, boolean>,
+  enableAllBetaFeatures: false,
   customPathDirs: '',
 };
 
@@ -444,6 +454,12 @@ function scheduleAdvancedPersist(
           break;
         case 'enableAllAlphaFeatures':
           await window.electronAPI.invoke('alpha-features:set-enable-all', settings.enableAllAlphaFeatures);
+          break;
+        case 'betaFeatures':
+          await window.electronAPI.invoke('beta-features:set', settings.betaFeatures);
+          break;
+        case 'enableAllBetaFeatures':
+          await window.electronAPI.invoke('beta-features:set-enable-all', settings.enableAllBetaFeatures);
           break;
         case 'customPathDirs':
           await window.electronAPI.invoke('app-settings:set', 'customPathDirs', settings.customPathDirs);
@@ -549,6 +565,23 @@ export const alphaVoiceModeEnabledAtom = alphaFeatureEnabledAtom('voice-mode');
 export const alphaClaudePluginsEnabledAtom = alphaFeatureEnabledAtom('claude-plugins');
 
 /**
+ * Check if a specific beta feature is enabled by tag.
+ * Same atom family pattern as alpha features.
+ */
+const betaFeatureAtomCache = new Map<BetaFeatureTag, Atom<boolean>>();
+
+export function betaFeatureEnabledAtom(tag: BetaFeatureTag): Atom<boolean> {
+  let cached = betaFeatureAtomCache.get(tag);
+  if (!cached) {
+    cached = atom(
+      (get) => get(advancedSettingsAtom).betaFeatures[tag] ?? false
+    );
+    betaFeatureAtomCache.set(tag, cached);
+  }
+  return cached;
+}
+
+/**
  * V8 heap memory limit in MB.
  */
 export const maxHeapSizeMBAtom = atom(
@@ -606,7 +639,7 @@ export async function initAdvancedSettings(): Promise<AdvancedSettings> {
   }
 
   try {
-    const [channel, analyticsEnabled, extensionDevToolsEnabled, walkthroughState, maxHeapSizeMB, alphaFeatures, enableAllAlphaFeatures, customPathDirs] =
+    const [channel, analyticsEnabled, extensionDevToolsEnabled, walkthroughState, maxHeapSizeMB, alphaFeatures, enableAllAlphaFeatures, betaFeatures, enableAllBetaFeatures, customPathDirs] =
       await Promise.all([
         window.electronAPI.invoke('release-channel:get'),
         window.electronAPI.invoke('analytics:is-enabled'),
@@ -615,6 +648,8 @@ export async function initAdvancedSettings(): Promise<AdvancedSettings> {
         window.electronAPI.invoke('app-settings:get', 'maxHeapSizeMB'),
         window.electronAPI.invoke('alpha-features:get'),
         window.electronAPI.invoke('alpha-features:get-enable-all'),
+        window.electronAPI.invoke('beta-features:get'),
+        window.electronAPI.invoke('beta-features:get-enable-all'),
         window.electronAPI.invoke('app-settings:get', 'customPathDirs'),
       ]);
 
@@ -633,6 +668,8 @@ export async function initAdvancedSettings(): Promise<AdvancedSettings> {
       maxHeapSizeMB: maxHeapSizeMB ?? 4096,
       alphaFeatures: alphaFeatures ?? defaultAdvancedSettings.alphaFeatures,
       enableAllAlphaFeatures: enableAllAlphaFeatures ?? false,
+      betaFeatures: betaFeatures ?? defaultAdvancedSettings.betaFeatures,
+      enableAllBetaFeatures: enableAllBetaFeatures ?? false,
       customPathDirs: customPathDirs ?? '',
     };
   } catch (error) {

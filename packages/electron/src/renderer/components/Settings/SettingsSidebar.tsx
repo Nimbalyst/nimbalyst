@@ -4,6 +4,7 @@ import { useAtomValue } from 'jotai';
 import { MaterialSymbol, getProviderIcon } from '@nimbalyst/runtime';
 import { releaseChannelAtom } from '../../store/atoms/appSettings';
 import { useAlphaFeatures } from '../../hooks/useAlphaFeature';
+import { useBetaFeature } from '../../hooks/useBetaFeature';
 
 export type SettingsCategory =
   | 'tool-packages'
@@ -18,6 +19,7 @@ export type SettingsCategory =
   | 'sync'
   | 'themes'
   | 'advanced'
+  | 'beta-features'
   | 'mcp-servers'
   | 'installed-extensions'
   | 'claude-plugins'
@@ -59,9 +61,10 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
   totalPackageCount = 0,
   scope = 'user',
 }) => {
-  // Get release channel and alpha feature flags from Jotai atoms
+  // Get release channel and alpha/beta feature flags from Jotai atoms
   const releaseChannel = useAtomValue(releaseChannelAtom);
   const alphaFeatures = useAlphaFeatures(['sync', 'voice-mode', 'claude-plugins', 'openai-codex']);
+  const isCodexBetaEnabled = useBetaFeature('codex');
 
   const getStatusDot = (providerId: string): 'success' | 'warning' | 'error' | undefined => {
     const status = providerStatus[providerId];
@@ -108,6 +111,11 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
           name: 'Advanced',
           icon: <MaterialSymbol icon="settings" size={16} />,
         },
+        {
+          id: 'beta-features',
+          name: 'Beta Features',
+          icon: <MaterialSymbol icon="science" size={16} />,
+        },
       ],
     },
     {
@@ -129,7 +137,7 @@ Best for complex coding tasks.`,
           name: 'OpenAI Codex',
           icon: getProviderIcon('openai', { size: 16 }),
           statusDot: getStatusDot('openai-codex'),
-          hidden: !alphaFeatures['openai-codex'],
+          hidden: !alphaFeatures['openai-codex'] || !isCodexBetaEnabled,
         },
       ],
     },

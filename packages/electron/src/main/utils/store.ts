@@ -10,6 +10,7 @@ import { DEFAULT_ONBOARDING_CONFIG } from '../../shared/types/workspace';
 import type { InstalledPackage } from '../../shared/toolPackages';
 import { AlphaFeatureTag, getDefaultAlphaFeatures, enableAllAlphaFeatures, areAllAlphaFeaturesEnabled, ALPHA_FEATURES } from '../../shared/alphaFeatures';
 import { DeveloperFeatureTag, getDefaultDeveloperFeatures, DEVELOPER_FEATURES } from '../../shared/developerFeatures';
+import { BetaFeatureTag, getDefaultBetaFeatures, enableAllBetaFeatures as enableAllBetaFeaturesUtil, BETA_FEATURES } from '../../shared/betaFeatures';
 import { normalizeCodexProviderConfig, omitModelsField } from '@nimbalyst/runtime/ai/server/utils/modelConfigUtils';
 
 // Theme can be a built-in theme or an extension theme ID (format: "extensionId:themeId")
@@ -124,6 +125,10 @@ interface AppStoreSchema {
   alphaFeatures?: Record<AlphaFeatureTag, boolean>;
   // Whether to automatically enable all new alpha features
   enableAllAlphaFeatures?: boolean;
+  // Beta feature flags - user-visible beta features that can be individually toggled
+  betaFeatures?: Record<BetaFeatureTag, boolean>;
+  // Whether to automatically enable all new beta features
+  enableAllBetaFeatures?: boolean;
   // Developer feature flags - features only available in developer mode
   // Each feature can be individually toggled when developer mode is enabled
   developerFeatures?: Record<DeveloperFeatureTag, boolean>;
@@ -1644,6 +1649,58 @@ export function setAlphaFeatures(features: Record<AlphaFeatureTag, boolean>): vo
   const current = getAlphaFeatures();
   const merged = { ...current, ...features };
   getAppStore().set('alphaFeatures', merged);
+}
+
+// Beta Feature Flags
+// User-visible beta features that can be individually toggled in Settings > Advanced > Beta Features
+
+/**
+ * Get whether "Enable All Beta Features" is turned on.
+ */
+export function getEnableAllBetaFeatures(): boolean {
+  return getAppStore().get('enableAllBetaFeatures') ?? false;
+}
+
+/**
+ * Set whether "Enable All Beta Features" is turned on.
+ */
+export function setEnableAllBetaFeatures(enabled: boolean): void {
+  getAppStore().set('enableAllBetaFeatures', enabled);
+}
+
+/**
+ * Get the beta feature flags.
+ * Returns all feature flags with defaults for any missing values.
+ *
+ * If "Enable All Beta Features" is turned on, new features are automatically enabled.
+ */
+export function getBetaFeatures(): Record<BetaFeatureTag, boolean> {
+  const stored = getAppStore().get('betaFeatures');
+  const enableAll = getEnableAllBetaFeatures();
+
+  if (!stored) {
+    return getDefaultBetaFeatures();
+  }
+
+  // Ensure all registered features exist in stored object (for new features added later)
+  for (const feature of BETA_FEATURES) {
+    if (!(feature.tag in stored)) {
+      // If "Enable All Beta Features" is on, enable new features automatically
+      stored[feature.tag] = enableAll ? true : false;
+    }
+  }
+
+  return stored;
+}
+
+/**
+ * Set the beta feature flags.
+ * @param features Object containing feature flags (partial updates supported)
+ */
+export function setBetaFeatures(features: Record<BetaFeatureTag, boolean>): void {
+  const current = getBetaFeatures();
+  const merged = { ...current, ...features };
+  getAppStore().set('betaFeatures', merged);
 }
 
 // Developer Feature Flags

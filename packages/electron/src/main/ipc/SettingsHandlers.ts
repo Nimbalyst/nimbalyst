@@ -4,7 +4,7 @@ import * as os from 'os';
 import * as fs from 'fs';
 import * as path from 'path';
 import { app } from 'electron';
-import { getWorkspaceState, updateWorkspaceState, getTheme, getThemeSync, isCompletionSoundEnabled, setCompletionSoundEnabled, getCompletionSoundType, setCompletionSoundType, CompletionSoundType, getReleaseChannel, setReleaseChannel, ReleaseChannel, getRecentItems, getDefaultAIModel, setDefaultAIModel, getDefaultEffortLevel, setDefaultEffortLevel, isAnalyticsEnabled, setAnalyticsEnabled, getSessionSyncConfig, setSessionSyncConfig, SessionSyncConfig, isExtensionDevToolsEnabled, setExtensionDevToolsEnabled, getAppSetting, setAppSetting, getAlphaFeatures, setAlphaFeatures, getEnableAllAlphaFeatures, setEnableAllAlphaFeatures, getDeveloperFeatures, setDeveloperFeatures, isDeveloperFeatureAvailable } from '../utils/store';
+import { getWorkspaceState, updateWorkspaceState, getTheme, getThemeSync, isCompletionSoundEnabled, setCompletionSoundEnabled, getCompletionSoundType, setCompletionSoundType, CompletionSoundType, getReleaseChannel, setReleaseChannel, ReleaseChannel, getRecentItems, getDefaultAIModel, setDefaultAIModel, getDefaultEffortLevel, setDefaultEffortLevel, isAnalyticsEnabled, setAnalyticsEnabled, getSessionSyncConfig, setSessionSyncConfig, SessionSyncConfig, isExtensionDevToolsEnabled, setExtensionDevToolsEnabled, getAppSetting, setAppSetting, getAlphaFeatures, setAlphaFeatures, getEnableAllAlphaFeatures, setEnableAllAlphaFeatures, getBetaFeatures, setBetaFeatures, getEnableAllBetaFeatures, setEnableAllBetaFeatures, getDeveloperFeatures, setDeveloperFeatures, isDeveloperFeatureAvailable } from '../utils/store';
 import { getEnhancedPath } from '../services/CLIManager';
 import { logger } from '../utils/logger';
 import { SoundNotificationService } from '../services/SoundNotificationService';
@@ -267,6 +267,25 @@ export function registerSettingsHandlers() {
     safeHandle('alpha-features:set-enable-all', (_event, enabled: boolean) => {
         setEnableAllAlphaFeatures(enabled);
         logger.store.info('[SettingsHandlers] Enable all alpha features:', enabled);
+    });
+
+    // Beta feature flags
+    safeHandle('beta-features:get', () => {
+        return getBetaFeatures();
+    });
+
+    safeHandle('beta-features:set', (_event, features: Record<string, boolean>) => {
+        setBetaFeatures(features as any);
+        logger.store.info('[SettingsHandlers] Beta features updated:', features);
+    });
+
+    safeHandle('beta-features:get-enable-all', () => {
+        return getEnableAllBetaFeatures();
+    });
+
+    safeHandle('beta-features:set-enable-all', (_event, enabled: boolean) => {
+        setEnableAllBetaFeatures(enabled);
+        logger.store.info('[SettingsHandlers] Enable all beta features:', enabled);
     });
 
     // Developer feature flags (features only available in developer mode)
