@@ -271,7 +271,6 @@ function createSessionNamingMcpServer(aiSessionId: string): Server {
         // The updateSessionTitleFn performs an atomic check-and-set at the database level
         await updateSessionTitleFn!(aiSessionId, sessionName);
 
-        // console.log(`[Session Naming MCP] Updated session ${aiSessionId} to: "${sessionName}"`);
 
         return {
           content: [
@@ -412,9 +411,9 @@ async function tryCreateSessionNamingServer(port: number): Promise<any> {
           // Extract AI session ID from query parameter
           const aiSessionId = parsedUrl.query.sessionId as string;
 
-          if (!aiSessionId) {
+          if (!aiSessionId || typeof aiSessionId !== 'string') {
             res.writeHead(400);
-            res.end("Missing sessionId parameter");
+            res.end("Missing or invalid sessionId parameter");
             return;
           }
 
@@ -433,14 +432,12 @@ async function tryCreateSessionNamingServer(port: number): Promise<any> {
             aiSessionId,
           });
 
-          // console.log(`[Session Naming MCP] New connection for AI session ${aiSessionId}, transport ID: ${transport.sessionId}`);
 
           // Connect server to transport
           server
             .connect(transport)
             .then(() => {
               transport.onclose = () => {
-                // console.log(`[Session Naming MCP] Connection closed for AI session ${aiSessionId}`);
                 activeTransports.delete(transport.sessionId);
               };
             })
@@ -457,6 +454,14 @@ async function tryCreateSessionNamingServer(port: number): Promise<any> {
           const legacyTransportSessionId = parsedUrl.query.sessionId as
             | string
             | undefined;
+
+          // Validate sessionId is a string if provided (could be array if duplicated)
+          if (legacyTransportSessionId !== undefined && typeof legacyTransportSessionId !== 'string') {
+            res.writeHead(400);
+            res.end("Invalid sessionId parameter");
+            return;
+          }
+
           const legacyMetadata = legacyTransportSessionId
             ? activeTransports.get(legacyTransportSessionId)
             : undefined;
@@ -510,9 +515,9 @@ async function tryCreateSessionNamingServer(port: number): Promise<any> {
             }
 
             const aiSessionId = parsedUrl.query.sessionId as string;
-            if (!aiSessionId) {
+            if (!aiSessionId || typeof aiSessionId !== 'string') {
               res.writeHead(400);
-              res.end("Missing sessionId parameter");
+              res.end("Missing or invalid sessionId parameter");
               return;
             }
 

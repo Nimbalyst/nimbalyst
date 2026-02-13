@@ -790,38 +790,6 @@ function createExtensionDevMcpServer(
             required: [],
           },
         },
-        // DISABLED: Testing if file-based logs are sufficient without real-time ring buffer
-        // {
-        //   name: 'extension_get_logs',
-        //   description: 'Get recent logs from the renderer process console output. This captures ALL console.log/error/warn/debug calls from: extension code, core application UI components, custom editors (Monaco, RevoGrid, etc.), and React component lifecycle. Use this for debugging any renderer-side issues, not just extensions.',
-        //   inputSchema: {
-        //     type: 'object',
-        //     properties: {
-        //       extensionId: {
-        //         type: 'string',
-        //         description: 'Filter logs to a specific extension ID (optional)'
-        //       },
-        //       lastSeconds: {
-        //         type: 'number',
-        //         description: 'Get logs from the last N seconds (default: 60, max: 300)'
-        //       },
-        //       logLevel: {
-        //         type: 'string',
-        //         enum: ['error', 'warn', 'info', 'debug', 'all'],
-        //         description: 'Minimum log level to include (default: all)'
-        //       },
-        //       source: {
-        //         type: 'string',
-        //         enum: ['renderer', 'main', 'build', 'all'],
-        //         description: 'Log source to filter (default: all)'
-        //       },
-        //       searchTerm: {
-        //         type: 'string',
-        //         description: 'Filter logs containing this text (case-insensitive)'
-        //       }
-        //     }
-        //   }
-        // },
         {
           name: "extension_get_status",
           description:
@@ -1430,59 +1398,6 @@ function createExtensionDevMcpServer(
           };
         }
       }
-
-      // DISABLED: Testing if file-based logs are sufficient without real-time ring buffer
-      // case 'extension_get_logs': {
-      //   const logService = ExtensionLogService.getInstance();
-      //
-      //   // Parse filter options
-      //   const extensionId = args?.extensionId as string | undefined;
-      //   let lastSeconds = args?.lastSeconds as number | undefined;
-      //   const logLevel = args?.logLevel as 'error' | 'warn' | 'info' | 'debug' | 'all' | undefined;
-      //   const source = args?.source as 'renderer' | 'main' | 'build' | 'all' | undefined;
-      //   const searchTerm = args?.searchTerm as string | undefined;
-      //
-      //   // Validate and cap lastSeconds
-      //   if (lastSeconds !== undefined) {
-      //     lastSeconds = Math.min(Math.max(1, lastSeconds), 300);
-      //   }
-      //
-      //   let logs = logService.getLogs({
-      //     extensionId,
-      //     lastSeconds: lastSeconds || 60,
-      //     logLevel: logLevel || 'all',
-      //     source: source || 'all'
-      //   });
-      //
-      //   // Apply searchTerm filter if provided
-      //   if (searchTerm) {
-      //     const lowerSearchTerm = searchTerm.toLowerCase();
-      //     logs = logs.filter(log => log.message.toLowerCase().includes(lowerSearchTerm));
-      //   }
-      //
-      //   const stats = logService.getStats();
-      //   const formattedLogs = logService.formatLogsForResponse(logs);
-      //
-      //   // Build summary header
-      //   const filterDesc = [
-      //     extensionId ? `extension: ${extensionId}` : null,
-      //     `last ${lastSeconds || 60}s`,
-      //     logLevel && logLevel !== 'all' ? `level: ${logLevel}+` : null,
-      //     source && source !== 'all' ? `source: ${source}` : null,
-      //     searchTerm ? `search: "${searchTerm}"` : null
-      //   ].filter(Boolean).join(', ');
-      //
-      //   const header = `Renderer Console Logs (${filterDesc})\n` +
-      //     `Found ${logs.length} log entries (buffer: ${stats.totalEntries}/${1000})\n` +
-      //     `Errors: ${stats.byLevel.error}, Warnings: ${stats.byLevel.warn}, ` +
-      //     `Info: ${stats.byLevel.info}, Debug: ${stats.byLevel.debug}\n` +
-      //     `---\n`;
-      //
-      //   return {
-      //     content: [{ type: 'text', text: header + formattedLogs }],
-      //     isError: false
-      //   };
-      // }
 
       case "extension_get_status": {
         const extensionId = args?.extensionId as string;
@@ -2172,14 +2087,12 @@ async function tryCreateExtensionDevServer(port: number): Promise<any> {
             workspacePath,
           });
 
-          // console.log(`[Extension Dev MCP] New connection, workspace: ${workspacePath || 'none'}`);
 
           // Connect server to transport
           server
             .connect(transport)
             .then(() => {
               transport.onclose = () => {
-                // console.log(`[Extension Dev MCP] Connection closed`);
                 activeTransports.delete(transport.sessionId);
               };
             })
@@ -2196,6 +2109,14 @@ async function tryCreateExtensionDevServer(port: number): Promise<any> {
           const legacyTransportSessionId = parsedUrl.query.sessionId as
             | string
             | undefined;
+
+          // Validate sessionId is a string if provided (could be array if duplicated)
+          if (legacyTransportSessionId !== undefined && typeof legacyTransportSessionId !== 'string') {
+            res.writeHead(400);
+            res.end("Invalid sessionId parameter");
+            return;
+          }
+
           const legacyMetadata = legacyTransportSessionId
             ? activeTransports.get(legacyTransportSessionId)
             : undefined;

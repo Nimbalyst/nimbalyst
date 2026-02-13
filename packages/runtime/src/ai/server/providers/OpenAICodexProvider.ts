@@ -15,6 +15,7 @@ import {
   AIModel,
   AIProviderType,
   ModelIdentifier,
+  ChatAttachment,
 } from '../types';
 import { CodexSDKProtocol } from '../protocols/CodexSDKProtocol';
 import { ProtocolEvent } from '../protocols/ProtocolInterface';
@@ -23,6 +24,7 @@ import { PermissionMode, TrustChecker, PermissionPatternSaver, PermissionPattern
 import { CodexSdkModuleLike, loadCodexSdkModule } from './codex/codexSdkLoader';
 import { resolvePackagedCodexBinaryPath } from './codex/codexBinaryPath';
 import { McpConfigService } from '../services/McpConfigService';
+import { MCPServerConfig } from '../../../types/MCPServerConfig';
 
 interface OpenAICodexProviderDeps {
   protocol?: CodexSDKProtocol;
@@ -87,7 +89,7 @@ export class OpenAICodexProvider extends BaseAgentProvider {
 
   // MCP config loader (injected from electron main process)
   // Returns merged user + workspace MCP servers
-  private static mcpConfigLoader: ((workspacePath?: string) => Promise<Record<string, any>>) | null = null;
+  private static mcpConfigLoader: ((workspacePath?: string) => Promise<Record<string, MCPServerConfig>>) | null = null;
 
   // Claude settings env vars loader (injected from electron main process)
   // Reused by MCP config expansion logic for ${VAR} interpolation
@@ -186,7 +188,7 @@ export class OpenAICodexProvider extends BaseAgentProvider {
     OpenAICodexProvider.extensionDevServerPort = port;
   }
 
-  public static setMCPConfigLoader(loader: ((workspacePath?: string) => Promise<Record<string, any>>) | null): void {
+  public static setMCPConfigLoader(loader: ((workspacePath?: string) => Promise<Record<string, MCPServerConfig>>) | null): void {
     OpenAICodexProvider.mcpConfigLoader = loader;
   }
 
@@ -639,7 +641,7 @@ export class OpenAICodexProvider extends BaseAgentProvider {
     sessionId?: string,
     messages?: Message[],
     workspacePath?: string,
-    attachments?: any[]
+    attachments?: ChatAttachment[]
   ): AsyncIterableIterator<StreamChunk> {
     if (!workspacePath) {
       yield { type: 'error', error: '[OpenAICodexProvider] workspacePath is required but was not provided' };
@@ -1053,7 +1055,7 @@ export class OpenAICodexProvider extends BaseAgentProvider {
     return content.replace(/<\/?(?:CONVERSATION_HISTORY|USER)\b[^>]*\/?>/gi, '');
   }
 
-  private appendAttachmentHints(message: string, attachments?: any[]): string {
+  private appendAttachmentHints(message: string, attachments?: ChatAttachment[]): string {
     if (!attachments || attachments.length === 0) {
       return message;
     }

@@ -50,14 +50,9 @@ function compressImageIfNeeded(
   const byteSizeMB = byteSize / 1024 / 1024;
   const maxSizeMB = MAX_IMAGE_SIZE_BYTES / 1024 / 1024;
 
-  // console.log(`[MCP Server] Image size check: ${byteSizeMB.toFixed(3)} MB (limit: ${maxSizeMB.toFixed(3)} MB)`);
-
   if (byteSize <= MAX_IMAGE_SIZE_BYTES) {
-    // console.log(`[MCP Server] Image under limit, no compression needed`);
     return { data: base64Data, mimeType, wasCompressed: false };
   }
-
-  // console.log(`[MCP Server] Image size ${byteSizeMB.toFixed(2)} MB exceeds limit of ${maxSizeMB.toFixed(2)} MB, compressing to JPEG...`);
 
   try {
     // Validate base64 data before attempting to decode
@@ -70,7 +65,6 @@ function compressImageIfNeeded(
 
     // Create nativeImage from base64 PNG
     const buffer = Buffer.from(base64Data, "base64");
-    // console.log(`[MCP Server] Created buffer of ${buffer.length} bytes from ${base64Data.length} chars base64`);
 
     // Validate that we actually got a buffer with data
     if (buffer.length === 0) {
@@ -90,20 +84,19 @@ function compressImageIfNeeded(
     }
 
     const originalSize = image.getSize();
-    // console.log(`[MCP Server] Image dimensions: ${originalSize.width}x${originalSize.height}`);
 
     // Quality levels to try
     const qualities = [85, 70, 55, 40, 30, 20];
     // Scale factors to try if quality reduction isn't enough
     const scaleFactors = [1.0, 0.75, 0.5, 0.35, 0.25];
 
+    // Try progressively more aggressive compression, early-exit when target is met
     for (const scale of scaleFactors) {
       // Resize image if scale < 1.0
       let workingImage = image;
       if (scale < 1.0) {
         const newWidth = Math.round(originalSize.width * scale);
         const newHeight = Math.round(originalSize.height * scale);
-        // console.log(`[MCP Server] Resizing to ${scale * 100}%: ${newWidth}x${newHeight}`);
         workingImage = image.resize({
           width: newWidth,
           height: newHeight,
@@ -116,16 +109,9 @@ function compressImageIfNeeded(
         const compressedSize = jpegBuffer.length;
         const compressedSizeMB = compressedSize / 1024 / 1024;
 
-        // if (scale === 1.0) {
-        //   console.log(`[MCP Server] JPEG quality ${quality}: ${compressedSizeMB.toFixed(3)} MB`);
-        // } else {
-        //   console.log(`[MCP Server] Scale ${scale * 100}%, quality ${quality}: ${compressedSizeMB.toFixed(3)} MB`);
-        // }
-
         if (compressedSize <= MAX_IMAGE_SIZE_BYTES) {
           const jpegBase64 = jpegBuffer.toString("base64");
           const finalSize = workingImage.getSize();
-          // console.log(`[MCP Server] SUCCESS: Compressed to ${compressedSizeMB.toFixed(3)} MB (${finalSize.width}x${finalSize.height}, quality ${quality})`);
           return {
             data: jpegBase64,
             mimeType: "image/jpeg",
@@ -133,6 +119,9 @@ function compressImageIfNeeded(
           };
         }
       }
+
+      // Early exit: if we've tried all qualities at this scale and still too large,
+      // move to next scale factor. No point retrying qualities at same scale.
     }
 
     // If even smallest scale and lowest quality doesn't fit, use smallest anyway
@@ -147,8 +136,6 @@ function compressImageIfNeeded(
     });
     const smallestBuffer = smallestImage.toJPEG(lowestQuality);
     const smallestSizeMB = smallestBuffer.length / 1024 / 1024;
-
-    // console.log(`[MCP Server] WARNING: Even smallest (${smallWidth}x${smallHeight}, quality ${lowestQuality}) is ${smallestSizeMB.toFixed(3)} MB, exceeds limit but using anyway`);
 
     return {
       data: smallestBuffer.toString("base64"),
@@ -295,8 +282,6 @@ export function registerExtensionTools(
   tools: ExtensionToolDefinition[]
 ) {
   extensionToolsByWorkspace.set(workspacePath, tools);
-  // console.log(`[MCP Server] Registered ${tools.length} extension tools for workspace: ${workspacePath}`);
-  // tools.forEach(t => console.log(`[MCP Server]   - ${t.name} (${t.scope})`));
 }
 
 /**
@@ -304,7 +289,6 @@ export function registerExtensionTools(
  */
 export function unregisterExtensionTools(workspacePath: string) {
   extensionToolsByWorkspace.delete(workspacePath);
-  // console.log(`[MCP Server] Unregistered extension tools for workspace: ${workspacePath}`);
 }
 
 /**
@@ -394,7 +378,6 @@ export function updateDocumentState(state: any, sessionId?: string) {
   }
 
   // DEFENSIVE LOGGING: Log exactly what we received
-  // console.log(`[MCP Server] Received document state update:`, {
   //   sessionId,
   //   filePath: state.filePath,
   //   workspacePath: state.workspacePath,
@@ -407,7 +390,6 @@ export function updateDocumentState(state: any, sessionId?: string) {
 
   // Store state with sessionId included so handlers can access it from the value
   documentStateBySession.set(sessionId, { ...state, sessionId });
-  // console.log(`[MCP Server] Session ${sessionId} associated with workspace: ${state.workspacePath}`);
 
   // Notify the MCP client that the tool list may have changed
   // This causes Claude Code to re-fetch tools via ListTools, picking up
@@ -431,7 +413,6 @@ export function registerWorkspaceWindow(
   windowId: number
 ) {
   workspaceToWindowMap.set(workspacePath, windowId);
-  // console.log(`[MCP Server] Registered workspace ${workspacePath} -> window ${windowId}`);
 }
 
 // Store the HTTP server instance
@@ -453,7 +434,6 @@ async function findWindowForFilePath(
     );
   }
 
-  // console.log(`[MCP Server] Looking for window with file: ${filePath}`);
 
   // DEFENSIVE: Log ALL document states in detail
   // const stateDetails = Array.from(documentStateBySession.entries()).map(([id, state]) => ({
@@ -464,12 +444,10 @@ async function findWindowForFilePath(
   //   hasWorkspacePath: !!state?.workspacePath,
   //   filePathMatches: state?.filePath === filePath
   // }));
-  // console.log(`[MCP Server] Document states (${stateDetails.length}):`, JSON.stringify(stateDetails, null, 2));
 
   // First, find which workspace this file belongs to
   let targetWorkspacePath: string | undefined;
   for (const [sessionId, state] of documentStateBySession.entries()) {
-    // console.log(`[MCP Server] Checking session ${sessionId}:`, {
     //   stateFilePath: state?.filePath,
     //   targetFilePath: filePath,
     //   matches: state?.filePath === filePath,
@@ -488,7 +466,6 @@ async function findWindowForFilePath(
       }
 
       targetWorkspacePath = state.workspacePath;
-      // console.log(`[MCP Server] File belongs to workspace: ${targetWorkspacePath}`);
       break;
     }
   }
@@ -525,7 +502,6 @@ async function findWindowForFilePath(
     );
   }
 
-  // console.log(`[MCP Server] Found window ${windowId} for workspace: ${targetWorkspacePath}`);
   return window;
 }
 
@@ -540,15 +516,13 @@ export function unregisterWindow(windowId: number) {
   ] of workspaceToWindowMap.entries()) {
     if (mappedWindowId === windowId) {
       workspaceToWindowMap.delete(workspacePath);
-      // console.log(`[MCP Server] Unregistered workspace ${workspacePath} from window ${windowId}`);
     }
   }
 }
 
-export function cleanupMcpServer() {
+export async function cleanupMcpServer() {
   // Close all active SSE transports
   for (const [sessionId, transport] of activeTransports.entries()) {
-    // console.log(`[MCP Server] Closing transport for session ${sessionId}`);
     try {
       // Close the transport
       if (transport.onclose) {
@@ -572,7 +546,7 @@ export function cleanupMcpServer() {
     metadata,
   ] of activeStreamableTransports.entries()) {
     try {
-      void metadata.transport.close().catch((error) => {
+      await metadata.transport.close().catch((error) => {
         console.error(
           `[MCP Server] Error closing streamable transport ${streamableSessionId}:`,
           error
@@ -601,7 +575,6 @@ export function shutdownHttpServer(): Promise<void> {
       return;
     }
 
-    // console.log('[MCP Server] Shutting down HTTP server');
 
     // Track if we've resolved
     let hasResolved = false;
@@ -614,7 +587,7 @@ export function shutdownHttpServer(): Promise<void> {
 
     try {
       // First cleanup transports
-      cleanupMcpServer();
+      await cleanupMcpServer();
     } catch (error) {
       console.error("[MCP Server] Error cleaning up transports:", error);
     }
@@ -680,11 +653,9 @@ export async function startMcpHttpServer(
   while (maxAttempts > 0) {
     try {
       httpServer = await tryCreateServer(port);
-      // console.log(`[MCP Server] Successfully started on port ${port}`);
       break;
     } catch (error: any) {
       if (error.code === "EADDRINUSE") {
-        // console.log(`[MCP Server] Port ${port} is in use, trying ${port + 1}...`);
         port++;
         maxAttempts--;
       } else {
@@ -1078,11 +1049,9 @@ The commit message should follow these guidelines:
         JSON.stringify(request.params._meta)
       );
     }
-    // console.log(`[MCP Server] Tool called: ${name}`, args);
 
     // Strip MCP server prefix if present (Claude Code sends tools as mcp__nimbalyst__toolName)
     const toolName = name.replace(/^mcp__nimbalyst__/, "");
-    // console.log(`[MCP Server] Resolved tool name: ${toolName} (original: ${name})`);
 
     switch (toolName) {
       case "applyDiff": {
@@ -1161,7 +1130,6 @@ The commit message should follow these guidelines:
             });
 
             // Send the request with the result channel and target file path
-            // console.log('[MCP Server] Sending applyDiff to window', targetWindow.id);
             targetWindow.webContents.send("mcp:applyDiff", {
               replacements: typedArgs?.replacements,
               resultChannel,
@@ -1251,15 +1219,6 @@ The commit message should follow these guidelines:
             });
 
             // Send IPC message to renderer with result channel
-            // console.log('[MCP Server] ==========================================');
-            // console.log('[MCP Server] Sending mcp:streamContent IPC to renderer');
-            // console.log('[MCP Server] Target window ID:', targetWindow.id);
-            // console.log('[MCP Server] streamId:', streamId);
-            // console.log('[MCP Server] targetFilePath:', targetFilePath);
-            // console.log('[MCP Server] position:', typedArgs?.position || 'end');
-            // console.log('[MCP Server] content length:', typedArgs?.content?.length);
-            // console.log('[MCP Server] content preview:', typedArgs?.content?.substring(0, 100));
-            // console.log('[MCP Server] ==========================================');
 
             targetWindow.webContents.send("mcp:streamContent", {
               streamId,
@@ -1270,7 +1229,6 @@ The commit message should follow these guidelines:
               resultChannel,
             });
 
-            // console.log('[MCP Server] IPC message sent to window', targetWindow.id);
           });
         }
         return {
@@ -1431,7 +1389,6 @@ The commit message should follow these guidelines:
 
       case "open_workspace": {
         const workspacePathArg = args?.workspace_path as string;
-        // console.log('[MCP Server] open_workspace called with:', { workspace_path: workspacePathArg });
 
         // Validate workspace path
         if (!workspacePathArg || typeof workspacePathArg !== "string") {
@@ -1539,7 +1496,6 @@ The commit message should follow these guidelines:
         const filePath = args?.file_path as string | undefined;
         const selector = args?.selector as string | undefined;
 
-        // console.log('[MCP Server] capture_editor_screenshot called with:', { filePath, selector, workspacePath });
 
         if (!filePath) {
           return {
@@ -1608,7 +1564,6 @@ The commit message should follow these guidelines:
             };
           }
 
-          // console.log(`[MCP Server] Using offscreen editor screenshot for ${filePath}`);
 
           // Use offscreen editor system for screenshot
           // This will mount the editor offscreen if needed, capture, and unmount
@@ -1647,7 +1602,6 @@ The commit message should follow these guidelines:
             };
           }
 
-          // console.log(`[MCP Server] Captured editor screenshot for ${filePath}`);
 
           // Compress image if needed (reuse mockup compression logic)
           const compressed = compressImageIfNeeded(
@@ -1656,7 +1610,6 @@ The commit message should follow these guidelines:
           );
 
           const finalSizeBytes = Math.floor((compressed.data.length * 3) / 4);
-          // console.log(`[MCP Server] Returning editor screenshot: ${(finalSizeBytes / 1024 / 1024).toFixed(3)} MB, mimeType: ${compressed.mimeType}, wasCompressed: ${compressed.wasCompressed}`);
 
           return {
             content: [
@@ -2028,7 +1981,6 @@ The commit message should follow these guidelines:
           }
         }
 
-        // console.log(`[MCP Server] display_to_user: ${typedArgs.items.length} item(s)`);
 
         return {
           content: [
@@ -2074,11 +2026,9 @@ The commit message should follow these guidelines:
         }
 
         // Debug logging - uncomment if needed for troubleshooting voice message routing
-        // console.log('[MCP Server] voice_agent_speak - sending to active voice session:', { sessionId: activeVoiceSessionId });
 
         // Attempt to send message to voice agent
         const success = sendToVoiceAgent(activeVoiceSessionId, message);
-        // console.log('[MCP Server] voice_agent_speak - send result:', { sessionId: activeVoiceSessionId, success, message: message.substring(0, 50) });
 
         if (!success) {
           return {
@@ -2361,7 +2311,6 @@ The commit message should follow these guidelines:
           const getFilePath = (f: FileToStage) =>
             typeof f === "string" ? f : f.path;
 
-          // console.log(`[MCP Server] Waiting for git commit proposal response: ${proposalId}`);
           // Listen for response via unified handler (SessionHandlers persists to DB)
           ipcMain.once(
             proposalId,
@@ -2376,7 +2325,6 @@ The commit message should follow these guidelines:
                 commitMessage?: string;
               }
             ) => {
-              // console.log(`[MCP Server] Received git commit proposal response: ${proposalId}`, result.action);
               clearTimeout(timeout);
 
               if (result.action === "committed" && result.commitHash) {
@@ -2457,7 +2405,6 @@ The commit message should follow these guidelines:
         }
 
         // Execute extension tool via IPC to renderer
-        // console.log(`[MCP Server] Executing extension tool: ${toolName}`);
 
         // workspacePath is REQUIRED - extension tools must be routed to the correct window
         if (!workspacePath) {
@@ -2627,7 +2574,6 @@ The commit message should follow these guidelines:
               responseText = errorParts.join("\n");
             }
 
-            // console.log(`[MCP Server] Extension tool result:`, {
             //   success,
             //   hasError,
             //   extensionId,
@@ -2774,14 +2720,24 @@ async function tryCreateServer(port: number): Promise<any> {
             return;
           }
 
-          // console.log('[MCP Server] SSE connection request');
 
           // Extract workspace path and session ID from query parameters
           const workspacePath = parsedUrl.query.workspacePath as
             | string
             | undefined;
           const sessionId = parsedUrl.query.sessionId as string | undefined;
-          // console.log('[MCP Server] Connection established with workspacePath:', workspacePath, 'sessionId:', sessionId);
+
+          // Validate query parameters are strings if provided (could be arrays if duplicated)
+          if (workspacePath !== undefined && typeof workspacePath !== 'string') {
+            res.writeHead(400);
+            res.end("Invalid workspacePath parameter");
+            return;
+          }
+          if (sessionId !== undefined && typeof sessionId !== 'string') {
+            res.writeHead(400);
+            res.end("Invalid sessionId parameter");
+            return;
+          }
 
           registerWorkspaceMappingForConnection(workspacePath);
 
@@ -2792,7 +2748,6 @@ async function tryCreateServer(port: number): Promise<any> {
 
           // Store the transport by session ID
           activeTransports.set(transport.sessionId, transport);
-          // console.log('[MCP Server] Created transport with session ID:', transport.sessionId);
 
           // Store server instance by Nimbalyst session ID for sending notifications later
           if (sessionId) {
@@ -2803,14 +2758,14 @@ async function tryCreateServer(port: number): Promise<any> {
           server
             .connect(transport)
             .then(() => {
-              // console.log('[MCP Server] Client connected successfully');
 
               // Clean up on disconnect
               transport.onclose = () => {
-                // console.log('[MCP Server] Client disconnected, session:', transport.sessionId);
                 activeTransports.delete(transport.sessionId);
                 if (sessionId) {
                   serverByNimbalystSession.delete(sessionId);
+                  // Clean up document state to prevent memory leak
+                  documentStateBySession.delete(sessionId);
                 }
               };
             })
@@ -2819,6 +2774,8 @@ async function tryCreateServer(port: number): Promise<any> {
               activeTransports.delete(transport.sessionId);
               if (sessionId) {
                 serverByNimbalystSession.delete(sessionId);
+                // Clean up document state to prevent memory leak
+                documentStateBySession.delete(sessionId);
               }
               if (!res.headersSent) {
                 res.writeHead(500);
@@ -2830,6 +2787,14 @@ async function tryCreateServer(port: number): Promise<any> {
           const legacyTransportSessionId = parsedUrl.query.sessionId as
             | string
             | undefined;
+
+          // Validate sessionId is a string if provided (could be array if duplicated)
+          if (legacyTransportSessionId !== undefined && typeof legacyTransportSessionId !== 'string') {
+            res.writeHead(400);
+            res.end("Invalid sessionId parameter");
+            return;
+          }
+
           const legacyTransport = legacyTransportSessionId
             ? activeTransports.get(legacyTransportSessionId)
             : undefined;
@@ -2888,6 +2853,19 @@ async function tryCreateServer(port: number): Promise<any> {
             const nimbalystSessionId = parsedUrl.query.sessionId as
               | string
               | undefined;
+
+            // Validate query parameters are strings if provided (could be arrays if duplicated)
+            if (workspacePath !== undefined && typeof workspacePath !== 'string') {
+              res.writeHead(400);
+              res.end("Invalid workspacePath parameter");
+              return;
+            }
+            if (nimbalystSessionId !== undefined && typeof nimbalystSessionId !== 'string') {
+              res.writeHead(400);
+              res.end("Invalid sessionId parameter");
+              return;
+            }
+
             registerWorkspaceMappingForConnection(workspacePath);
 
             const server = createSharedMcpServer(
@@ -2914,6 +2892,8 @@ async function tryCreateServer(port: number): Promise<any> {
               }
               if (nimbalystSessionId) {
                 serverByNimbalystSession.delete(nimbalystSessionId);
+                // Clean up document state to prevent memory leak
+                documentStateBySession.delete(nimbalystSessionId);
               }
             };
 
@@ -2983,8 +2963,6 @@ async function tryCreateServer(port: number): Promise<any> {
     });
 
     httpServer.on("listening", () => {
-      // console.log(`[MCP Server] Running on http://127.0.0.1:${port}/mcp`);
-      // console.log('[MCP Server] Ready to accept SSE connections and POST messages');
 
       // Unref the server so it doesn't keep the process alive
       httpServer.unref();
