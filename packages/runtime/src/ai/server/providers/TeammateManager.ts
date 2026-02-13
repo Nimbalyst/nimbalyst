@@ -28,6 +28,7 @@ export interface ManagedTeammate {
   color: string;
   agentType: string;
   model?: string;
+  isBackgroundAgent: boolean;  // true for fire-and-forget background sub-agents (no team, no idle)
 }
 
 export interface IdleTeammate {
@@ -92,6 +93,7 @@ export class TeammateManager {
   private static readonly MAX_COMPLETED_TEAMMATES = 100;
   private static readonly TEAMMATE_COLORS = ['blue', 'green', 'yellow', 'purple'];
   private teammateColorIndex: number = 0;
+  private bgAgentCounter: number = 0;
 
   // Debounce state for emitTeammateUpdate
   private pendingStatusOverrides: Map<string, 'running' | 'completed' | 'errored' | 'idle'> = new Map();
@@ -243,6 +245,7 @@ export class TeammateManager {
     const teams = new Set<string>();
     for (const agentId of agentIds) {
       const team = this.extractTeamName(agentId);
+      if (team === '_background') continue;  // Skip background sub-agents
       const sanitized = this.sanitizeTeamNameOrUndefined(team);
       if (sanitized) {
         teams.add(sanitized);
@@ -1101,15 +1104,19 @@ export class TeammateManager {
     idleTemplate: IdleTeammate,
     result: { capturedSessionId: string | undefined; approvedShutdown: boolean },
   ): void {
+    const managed = this.managedTeammates.get(agentId);
+    const isBackground = managed?.isBackgroundAgent ?? false;
+
     this.managedTeammates.delete(agentId);
 
     if (result.approvedShutdown) {
       this.markCompleted(agentId);
       this.clearPendingMessages(agentId);
-      void this.removeTeammateFromConfig(teamName, agentId);
+      if (!isBackground) void this.removeTeammateFromConfig(teamName, agentId);
       console.log(`[MANAGED-TEAMMATE] "${agentId}" shut down (approved)`);
       this.scheduleEmitTeammateUpdate(sessionId, new Map([[agentId, 'completed']]));
-    } else if (result.capturedSessionId) {
+    } else if (result.capturedSessionId && !isBackground) {
+      // Only go idle for real teammates, not background agents
       this.idleTeammates.set(agentId, {
         ...idleTemplate,
         sessionId: result.capturedSessionId,
@@ -1119,8 +1126,9 @@ export class TeammateManager {
     } else {
       this.markCompleted(agentId);
       this.clearPendingMessages(agentId);
-      void this.removeTeammateFromConfig(teamName, agentId);
-      console.log(`[MANAGED-TEAMMATE] "${agentId}" completed (no session ID)`);
+      if (!isBackground) void this.removeTeammateFromConfig(teamName, agentId);
+      const reason = isBackground ? 'background agent completed' : 'no session ID';
+      console.log(`[MANAGED-TEAMMATE] "${agentId}" completed (${reason})`);
       this.scheduleEmitTeammateUpdate(sessionId, new Map([[agentId, 'completed']]));
     }
 
@@ -1137,11 +1145,13 @@ export class TeammateManager {
     teamName: string,
     err: Error,
   ): void {
+    const isBackground = this.managedTeammates.get(agentId)?.isBackgroundAgent ?? false;
+
     this.managedTeammates.delete(agentId);
     this.markCompleted(agentId);
     this.clearPendingMessages(agentId);
     this.idleTeammates.delete(agentId);
-    void this.removeTeammateFromConfig(teamName, agentId);
+    if (!isBackground) void this.removeTeammateFromConfig(teamName, agentId);
     console.warn(`[MANAGED-TEAMMATE] "${agentId}" errored:`, err.message);
     this.scheduleEmitTeammateUpdate(sessionId, new Map([[agentId, 'errored']]));
 
@@ -1187,11 +1197,68 @@ export class TeammateManager {
       color,
       agentType,
       model,
+      isBackgroundAgent: false,
     };
     this.managedTeammates.set(agentId, placeholder);
 
     const streamPromise = this.streamTeammateOutput(
       sessionId, agentId, teamName, name, prompt, agentType, model, color, teammateAbort
+    );
+    placeholder.streamPromise = streamPromise;
+
+    const idleTemplate: IdleTeammate = { teamName, name, sessionId: '', agentType, model, color, cwd, prompt };
+    streamPromise.then((result) => {
+      this.handleStreamCompletion(sessionId, agentId, teamName, idleTemplate, result);
+    }).catch((err) => {
+      this.handleStreamError(sessionId, agentId, teamName, err);
+    });
+  }
+
+  // ─── Background agent helpers ────────────────────────────────────────────
+
+  private sanitizeBackgroundAgentName(description: string): string {
+    return description
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 30) || 'task';
+  }
+
+  private spawnBackgroundAgent(
+    sessionId: string | undefined,
+    agentId: string,
+    name: string,
+    teamName: string,
+    prompt: string,
+    agentType: string,
+    model: string | undefined,
+  ): void {
+    const color = TeammateManager.TEAMMATE_COLORS[this.teammateColorIndex % TeammateManager.TEAMMATE_COLORS.length];
+    this.teammateColorIndex++;
+    const cwd = this.lastUsedCwd || process.cwd();
+
+    // No updateTeamConfig -- background agents have no real team
+
+    const bgAbort = new AbortController();
+
+    const placeholder: ManagedTeammate = {
+      teamName,
+      name,
+      agentId,
+      abort: bgAbort,
+      streamPromise: null as any,
+      query: null,
+      sessionId: undefined,
+      color,
+      agentType,
+      model,
+      isBackgroundAgent: true,
+    };
+    this.managedTeammates.set(agentId, placeholder);
+
+    const streamPromise = this.streamTeammateOutput(
+      sessionId, agentId, teamName, name, prompt, agentType, model, color, bgAbort
     );
     placeholder.streamPromise = streamPromise;
 
@@ -1386,6 +1453,7 @@ export class TeammateManager {
       color: idleInfo.color,
       agentType: idleInfo.agentType,
       model: idleInfo.model,
+      isBackgroundAgent: false,
     });
 
     streamPromise.then((result) => {
@@ -1408,7 +1476,7 @@ export class TeammateManager {
       for (const [agentId, tm] of this.managedTeammates) {
         console.log(`[MANAGED-TEAMMATE] Aborting "${agentId}"`);
         tm.abort.abort();
-        void this.removeTeammateFromConfig(tm.teamName, agentId);
+        if (!tm.isBackgroundAgent) void this.removeTeammateFromConfig(tm.teamName, agentId);
         allAgentIds.push(agentId);
       }
       this.managedTeammates.clear();
@@ -1578,6 +1646,49 @@ export class TeammateManager {
         handled: true,
         result: this.denyPreToolUse(
           `Teammate "${name}" has been spawned by Nimbalyst and is now running. agent_id: ${agentId}. The teammate will communicate via SendMessage. Do NOT retry this Task call -- the teammate is already active.`
+        ),
+      };
+    }
+
+    // ── Background sub-agent interception ────────────────────────────────
+    if (toolName === 'Task' && toolInput?.run_in_background === true && !toolInput?.team_name && !toolInput?.name) {
+      const bgIndex = this.bgAgentCounter++;
+      const sanitizedDesc = this.sanitizeBackgroundAgentName(toolInput.description || `bg-${bgIndex}`);
+      const name = `bg-${bgIndex}-${sanitizedDesc}`;
+      const teamName = '_background';
+      const agentId = `${name}@${teamName}`;
+      const prompt = toolInput.prompt || 'Do your assigned work.';
+      const agentType = toolInput.subagent_type || 'general-purpose';
+      const model = toolInput.model;
+
+      if (sessionId) {
+        this.logSyntheticToolPair(
+          sessionId,
+          toolUseID || `task-bg-${Date.now()}`,
+          'Task',
+          toolInput,
+          {
+            status: 'background_agent_spawned',
+            agent_id: agentId,
+            name,
+            agent_type: agentType,
+            model,
+            color: 'blue',
+          },
+          'background_task'
+        );
+      }
+
+      this.spawnBackgroundAgent(sessionId, agentId, name, teamName, prompt, agentType, model);
+
+      this.emitTeammateUpdate(sessionId).catch(err => {
+        console.error('[CLAUDE-CODE] Failed to emit background agent update:', err);
+      });
+
+      return {
+        handled: true,
+        result: this.denyPreToolUse(
+          `Background agent "${name}" has been spawned by Nimbalyst and is now running. agent_id: ${agentId}. Do NOT retry this Task call -- the agent is already active.`
         ),
       };
     }
