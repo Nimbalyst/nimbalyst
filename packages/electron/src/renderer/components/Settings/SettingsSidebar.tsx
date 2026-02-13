@@ -63,7 +63,7 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
 }) => {
   // Get release channel and alpha/beta feature flags from Jotai atoms
   const releaseChannel = useAtomValue(releaseChannelAtom);
-  const alphaFeatures = useAlphaFeatures(['sync', 'voice-mode', 'claude-plugins', 'openai-codex']);
+  const alphaFeatures = useAlphaFeatures(['sync', 'voice-mode', 'claude-plugins']);
   const isCodexBetaEnabled = useBetaFeature('codex');
 
   const getStatusDot = (providerId: string): 'success' | 'warning' | 'error' | undefined => {
@@ -137,7 +137,7 @@ Best for complex coding tasks.`,
           name: 'OpenAI Codex',
           icon: getProviderIcon('openai', { size: 16 }),
           statusDot: getStatusDot('openai-codex'),
-          hidden: !alphaFeatures['openai-codex'] || !isCodexBetaEnabled,
+          hidden: !isCodexBetaEnabled,
         },
       ],
     },

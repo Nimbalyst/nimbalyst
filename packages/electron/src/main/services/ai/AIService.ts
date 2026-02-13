@@ -35,7 +35,7 @@ import { windowStates, findWindowByWorkspace } from '../../window/WindowManager'
 import { sessionFileTracker } from '../SessionFileTracker';
 import {AnalyticsService} from "../analytics/AnalyticsService.ts";
 import { historyManager } from '../../HistoryManager';
-import { getAIProviderOverrides, saveAIProviderOverrides, clearAIProviderOverrides, getWorkspaceState, getAlphaFeatures } from '../../utils/store';
+import { getAIProviderOverrides, saveAIProviderOverrides, clearAIProviderOverrides, getWorkspaceState, getBetaFeatures } from '../../utils/store';
 import { mergeAISettings } from '../../utils/aiSettingsMerge';
 import { DocumentContextService, type RawDocumentContext, type PreparedDocumentContext } from '@nimbalyst/runtime';
 import { ALL_PACKAGES } from '../../../shared/toolPackages';
@@ -3926,7 +3926,7 @@ export class AIService {
           models: providerSettings['openai']?.models
         },
         'openai-codex': {
-          enabled: providerSettings['openai-codex']?.enabled === true && !!(apiKeys['openai'] || process.env.OPENAI_API_KEY) && getAlphaFeatures()['openai-codex'] === true,
+          enabled: providerSettings['openai-codex']?.enabled === true && !!(apiKeys['openai'] || process.env.OPENAI_API_KEY) && getBetaFeatures()['codex'] === true,
         },
         'lmstudio': {
           enabled: providerSettings['lmstudio']?.enabled === true,

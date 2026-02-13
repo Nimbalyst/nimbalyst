@@ -49,12 +49,6 @@ export const ALPHA_FEATURES: readonly AlphaFeatureDefinition[] = [
     description: 'Enable card view mode for agent sessions panel.',
     icon: 'grid_view',
   },
-  {
-    tag: 'openai-codex',
-    name: 'OpenAI Codex',
-    description: 'Enable OpenAI Codex agent provider (requires OpenAI API key).',
-    icon: 'terminal',
-  },
 ] as const;
 
 /**
