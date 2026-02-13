@@ -65,7 +65,7 @@ test.describe('AI Smoke Test', () => {
     await switchToAgentMode(page);
 
     // Verify chat input is ready
-    const chatInput = page.locator(PLAYWRIGHT_TEST_SELECTORS.chatInput);
+    const chatInput = page.locator(PLAYWRIGHT_TEST_SELECTORS.agentChatInput);
     await expect(chatInput).toBeVisible({ timeout: 5000 });
 
     // Send a simple prompt that requires minimal processing

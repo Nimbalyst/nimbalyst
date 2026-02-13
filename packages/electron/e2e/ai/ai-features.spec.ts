@@ -125,7 +125,7 @@ test('should switch to agent mode without errors', async () => {
     await page.waitForTimeout(1000);
 
     // Verify we're in agent mode (chat input visible)
-    const chatInput = page.locator(PLAYWRIGHT_TEST_SELECTORS.chatInput);
+    const chatInput = page.locator(PLAYWRIGHT_TEST_SELECTORS.agentChatInput);
     await expect(chatInput).toBeVisible({ timeout: 3000 });
   }
 });

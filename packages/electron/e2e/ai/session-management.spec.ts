@@ -84,7 +84,7 @@ test.describe('Agent Mode UI', () => {
     // Session from Files mode should be auto-selected
     // Scope to .agent-mode to avoid strict mode violation (Files mode also has a chat input)
     const agentMode = page.locator(PLAYWRIGHT_TEST_SELECTORS.agentMode);
-    const chatInput = agentMode.locator(PLAYWRIGHT_TEST_SELECTORS.chatInput);
+    const chatInput = page.locator(PLAYWRIGHT_TEST_SELECTORS.agentChatInput);
     await expect(chatInput).toBeVisible({ timeout: 2000 });
 
     const sessionHistory = agentMode.locator(PLAYWRIGHT_TEST_SELECTORS.sessionHistory);
@@ -93,7 +93,7 @@ test.describe('Agent Mode UI', () => {
 
   test('should submit message and clear input', async () => {
     const agentMode = page.locator(PLAYWRIGHT_TEST_SELECTORS.agentMode);
-    const chatInput = agentMode.locator(PLAYWRIGHT_TEST_SELECTORS.chatInput);
+    const chatInput = page.locator(PLAYWRIGHT_TEST_SELECTORS.agentChatInput);
     await expect(chatInput).toBeVisible({ timeout: 2000 });
 
     await submitChatPrompt(page, 'Test message');
@@ -122,13 +122,13 @@ test.describe('Agent Mode UI', () => {
     await sessionItems.first().click();
 
     // Verify chat input is visible after session switch
-    const chatInput = agentMode.locator(PLAYWRIGHT_TEST_SELECTORS.chatInput);
+    const chatInput = page.locator(PLAYWRIGHT_TEST_SELECTORS.agentChatInput);
     await expect(chatInput).toBeVisible({ timeout: 2000 });
   });
 
   test('should persist chat input across mode switches', async () => {
     const agentMode = page.locator(PLAYWRIGHT_TEST_SELECTORS.agentMode);
-    const chatInput = agentMode.locator(PLAYWRIGHT_TEST_SELECTORS.chatInput);
+    const chatInput = page.locator(PLAYWRIGHT_TEST_SELECTORS.agentChatInput);
     await chatInput.fill('Unsent message for persistence test');
     await page.waitForTimeout(200);
 
@@ -145,7 +145,7 @@ test.describe('Agent Mode UI', () => {
 
   test('should show all agent mode interface elements', async () => {
     const agentMode = page.locator(PLAYWRIGHT_TEST_SELECTORS.agentMode);
-    const chatInput = agentMode.locator(PLAYWRIGHT_TEST_SELECTORS.chatInput);
+    const chatInput = page.locator(PLAYWRIGHT_TEST_SELECTORS.agentChatInput);
     const sessionHistory = agentMode.locator(PLAYWRIGHT_TEST_SELECTORS.sessionHistory);
     const newSessionButton = agentMode.locator(PLAYWRIGHT_TEST_SELECTORS.sessionHistoryNewButton);
 
@@ -212,7 +212,7 @@ test.describe('Concurrent Sessions', () => {
     // Send message to session 1
     await sessionHistory.locator(PLAYWRIGHT_TEST_SELECTORS.sessionListItem).nth(0).click();
     await page.waitForTimeout(300);
-    const chatInput1 = agentMode.locator(PLAYWRIGHT_TEST_SELECTORS.chatInput);
+    const chatInput1 = page.locator(PLAYWRIGHT_TEST_SELECTORS.agentChatInput);
     await chatInput1.fill('Message only in session 1');
     await page.keyboard.press('Meta+Enter');
     await page.waitForTimeout(500);
@@ -220,7 +220,7 @@ test.describe('Concurrent Sessions', () => {
     // Send message to session 2
     await sessionHistory.locator(PLAYWRIGHT_TEST_SELECTORS.sessionListItem).nth(1).click();
     await page.waitForTimeout(300);
-    const chatInput2 = agentMode.locator(PLAYWRIGHT_TEST_SELECTORS.chatInput);
+    const chatInput2 = page.locator(PLAYWRIGHT_TEST_SELECTORS.agentChatInput);
     await chatInput2.fill('Message only in session 2');
     await page.keyboard.press('Meta+Enter');
     await page.waitForTimeout(500);
@@ -332,7 +332,7 @@ test.describe('Cross-Mode Session Visibility', () => {
     }
 
     // Send a message in files-mode chat
-    const chatInput = page.locator('textarea').first();
+    const chatInput = page.locator(PLAYWRIGHT_TEST_SELECTORS.filesChatInput);
     await chatInput.waitFor({ state: 'visible', timeout: 2000 });
     await chatInput.fill('Test message in files mode');
     await page.keyboard.press('Enter');
@@ -472,7 +472,7 @@ test.describe('Workstream Sessions', () => {
     await switchToAgentMode(page);
 
     const agentMode = page.locator(PLAYWRIGHT_TEST_SELECTORS.agentMode);
-    const chatInput = agentMode.locator(PLAYWRIGHT_TEST_SELECTORS.chatInput);
+    const chatInput = page.locator(PLAYWRIGHT_TEST_SELECTORS.agentChatInput);
     await expect(chatInput).toBeVisible({ timeout: 5000 });
 
     // Wait for session tab bar to appear (auto-selected session)
@@ -699,7 +699,7 @@ test.describe('Worktree Session Persistence', () => {
     await worktreeElementAfterReload.click();
     await page.waitForTimeout(1000);
 
-    const chatInput = agentModeAfterReload.locator(PLAYWRIGHT_TEST_SELECTORS.chatInput);
+    const chatInput = page.locator(PLAYWRIGHT_TEST_SELECTORS.agentChatInput);
     await expect(chatInput).toBeVisible({ timeout: 5000 });
   });
 });

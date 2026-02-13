@@ -1386,6 +1386,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
       {/* Input area */}
       <AIInput
         ref={inputRef}
+        testId={mode === 'chat' ? 'files-mode-chat-input' : 'agent-mode-chat-input'}
         value={draftInput}
         onChange={handleInputChange}
         onSend={handleSend}

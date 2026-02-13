@@ -375,8 +375,12 @@ export async function sendAIPrompt(page: Page, prompt: string, options?: {
     await page.waitForTimeout(2000); // Wait for session to initialize
   }
 
-  // Find and click the chat input - try multiple selectors
-  const chatInput = page.locator('textarea[placeholder*="Ask"], input[placeholder*="Ask"], [data-testid="ai-chat-input"]').first();
+  // Find and click the chat input using unambiguous data-testid selectors
+  const agentMode = page.locator('[data-testid="agent-mode"]');
+  const isAgentModeVisible = await agentMode.isVisible().catch(() => false);
+  const chatInput = isAgentModeVisible
+    ? page.locator('[data-testid="agent-mode-chat-input"]')
+    : page.locator('[data-testid="files-mode-chat-input"]');
   await chatInput.waitFor({ state: 'visible', timeout: 5000 });
   await chatInput.click();
   await chatInput.fill(prompt);

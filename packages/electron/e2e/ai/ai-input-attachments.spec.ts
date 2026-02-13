@@ -115,7 +115,7 @@ test.describe('Image Attachments', () => {
     await openAIChatWithSession(page);
 
     const aiChatPanel = page.locator(PLAYWRIGHT_TEST_SELECTORS.aiChatPanel);
-    const chatInput = aiChatPanel.locator(PLAYWRIGHT_TEST_SELECTORS.chatInput);
+    const chatInput = page.locator(PLAYWRIGHT_TEST_SELECTORS.filesChatInput);
     await expect(chatInput).toBeVisible();
 
     // Simulate file drop
@@ -141,7 +141,7 @@ test.describe('Image Attachments', () => {
     await openAIChatWithSession(page);
 
     const aiChatPanel = page.locator(PLAYWRIGHT_TEST_SELECTORS.aiChatPanel);
-    const chatInput = aiChatPanel.locator(PLAYWRIGHT_TEST_SELECTORS.chatInput);
+    const chatInput = page.locator(PLAYWRIGHT_TEST_SELECTORS.filesChatInput);
     await expect(chatInput).toBeVisible();
 
     // Add an attachment
@@ -171,7 +171,7 @@ test.describe('Image Attachments', () => {
     await openAIChatWithSession(page);
 
     const aiChatPanel = page.locator(PLAYWRIGHT_TEST_SELECTORS.aiChatPanel);
-    const chatInput = aiChatPanel.locator(PLAYWRIGHT_TEST_SELECTORS.chatInput);
+    const chatInput = page.locator(PLAYWRIGHT_TEST_SELECTORS.filesChatInput);
     await expect(chatInput).toBeVisible();
 
     await chatInput.fill('Look at this image: ');
@@ -195,7 +195,7 @@ test.describe('Image Attachments', () => {
     await openAIChatWithSession(page);
 
     const aiChatPanel = page.locator(PLAYWRIGHT_TEST_SELECTORS.aiChatPanel);
-    const chatInput = aiChatPanel.locator(PLAYWRIGHT_TEST_SELECTORS.chatInput);
+    const chatInput = page.locator(PLAYWRIGHT_TEST_SELECTORS.filesChatInput);
     await expect(chatInput).toBeVisible();
 
     let alertMessage = '';
@@ -222,7 +222,7 @@ test.describe('Image Attachments', () => {
     await openAIChatWithSession(page);
 
     const aiChatPanel = page.locator(PLAYWRIGHT_TEST_SELECTORS.aiChatPanel);
-    const chatInput = aiChatPanel.locator(PLAYWRIGHT_TEST_SELECTORS.chatInput);
+    const chatInput = page.locator(PLAYWRIGHT_TEST_SELECTORS.filesChatInput);
     await expect(chatInput).toBeVisible();
 
     await chatInput.click();
@@ -256,7 +256,7 @@ test.describe('Image Attachments', () => {
     await openAIChatWithSession(page);
 
     const aiChatPanel = page.locator(PLAYWRIGHT_TEST_SELECTORS.aiChatPanel);
-    const chatInput = aiChatPanel.locator(PLAYWRIGHT_TEST_SELECTORS.chatInput);
+    const chatInput = page.locator(PLAYWRIGHT_TEST_SELECTORS.filesChatInput);
     await expect(chatInput).toBeVisible();
 
     const fileBuffer = fsSync.readFileSync(testImagePath);
@@ -293,7 +293,7 @@ test.describe('File Mention Typeahead', () => {
     await switchToAgentMode(page);
     await page.waitForTimeout(300);
 
-    const chatInput = page.locator(PLAYWRIGHT_TEST_SELECTORS.chatInput).first();
+    const chatInput = page.locator(PLAYWRIGHT_TEST_SELECTORS.agentChatInput);
     await chatInput.click();
     await chatInput.fill('@');
     await page.waitForTimeout(300);
@@ -318,7 +318,7 @@ test.describe('File Mention Typeahead', () => {
   });
 
   test('should find nested files by filename in @ mention search', async () => {
-    const chatInput = page.locator(PLAYWRIGHT_TEST_SELECTORS.chatInput).first();
+    const chatInput = page.locator(PLAYWRIGHT_TEST_SELECTORS.agentChatInput);
     await chatInput.click();
     await chatInput.fill('@Button');
     await page.waitForTimeout(300);

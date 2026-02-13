@@ -371,19 +371,23 @@ The app has three modes that control which UI is visible:
 - Visibility is controlled via CSS `display: flex` (visible) or `display: hidden` (hidden)
 - This means elements from hidden modes still exist in the DOM but won't be visible or clickable
 
-**Two different chat interfaces:**
-- **Files mode chat panel** - Right sidebar in Files mode (`[data-testid="ai-chat-panel"]`, `.ai-chat-input-field`)
+**Two different chat interfaces (both always in the DOM):**
+- **Files mode chat panel** - Right sidebar in Files mode
+  - Selector: `PLAYWRIGHT_TEST_SELECTORS.filesChatInput` (`[data-testid="files-mode-chat-input"]`)
   - Appears next to file editors
   - Used for quick AI assistance while editing files
   - Auto-creates a session with title "New Session" when the ChatSidebar component mounts
-- **Agent mode session interface** - Main interface in Agent mode (`.session-history`, chat input in active session)
+- **Agent mode session interface** - Main interface in Agent mode
+  - Selector: `PLAYWRIGHT_TEST_SELECTORS.agentChatInput` (`[data-testid="agent-mode-chat-input"]`)
   - Full-screen AI coding interface
   - Shows session history on left, active session on right
   - Does NOT auto-create sessions - user must create via "New Session" button or it shows empty state
 
+**CRITICAL**: Both chat inputs exist in the DOM simultaneously. Never use an ambiguous selector like `textarea.ai-chat-input-field` that matches both. Always use the specific `data-testid` selector for the mode you are targeting.
+
 When writing tests, be specific about which interface you're testing:
-- For Files mode chat: Use `SELECTORS.aiChatPanel` and ensure you're in Files mode
-- For Agent mode: Use `SELECTORS.sessionHistory` and ensure you're in Agent mode
+- For Files mode chat: Use `PLAYWRIGHT_TEST_SELECTORS.filesChatInput` and ensure you're in Files mode
+- For Agent mode: Use `PLAYWRIGHT_TEST_SELECTORS.agentChatInput` and ensure you're in Agent mode
 - Elements may exist in DOM but be hidden - always check visibility, not just presence
 
 **AI Chat:**
@@ -1097,6 +1101,7 @@ This structure makes it easy to:
 12. **Using excessively long timeouts** - The app is very fast (sub-second for most operations). Use short timeouts (500-1000ms) by default. Long timeouts (5s+) mask real bugs and slow down test failures. Only use longer timeouts for operations that genuinely take time (e.g., AI API calls).
 13. **Using wrong selectors for buttons** - When clicking buttons fails silently, add `data-testid` attributes to the component rather than trying different CSS selectors. Example: `data-testid="diff-keep-all"` is more reliable than `.unified-diff-header-button-accept`.
 14. **Known Lexical table diff bug** - Table diffs in Lexical may require clicking "Keep All" twice. Use a workaround pattern: click once, wait briefly, check if header is still visible, click again if needed.
+15. **NEVER use `.first()` to "fix" ambiguous selectors** - If a locator resolves to multiple elements and you slap `.first()` on it, you are hiding a broken selector. The test will silently target the wrong element when the DOM order changes. **Fix the selector instead.** Add a `data-testid` attribute to the component, scope to a specific parent, or use a more specific selector. The only acceptable use of `.first()` is when you genuinely want the first of a known set (e.g., `messages.first()` to check the first message in a list). If your `.first()` exists because Playwright threw a "strict mode violation", your selector is wrong -- fix it.
 
 ## The Fixture Error Pattern
 

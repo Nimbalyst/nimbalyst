@@ -95,6 +95,9 @@ interface AIInputProps {
   // Mockup annotation indicator support
   currentFilePath?: string;
   lastUserMessageTimestamp?: number | null;
+
+  // Test ID for E2E testing
+  testId?: string;
 }
 
 /**
@@ -142,7 +145,8 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
     onQueue,
     queueCount = 0,
     currentFilePath,
-    lastUserMessageTimestamp
+    lastUserMessageTimestamp,
+    testId,
   }, ref) => {
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const [typeaheadMatch, setTypeaheadMatch] = useState<TriggerMatch | null>(null);
@@ -1083,6 +1087,7 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
         >
           <textarea
             ref={textareaRef}
+            data-testid={testId}
             className="ai-chat-input-field nim-scrollbar-hidden flex-1 min-h-9 py-2 px-3 bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-md text-[var(--nim-text)] text-[13px] font-[inherit] resize-none outline-none transition-colors duration-200 focus:border-[var(--nim-primary)] disabled:opacity-50 disabled:cursor-not-allowed placeholder:text-[var(--nim-text-faint)]"
             value={value}
             onChange={(e) => onChange(e.target.value)}

@@ -49,12 +49,14 @@ export const PLAYWRIGHT_TEST_SELECTORS = {
 
   // AI Chat
   aiChatPanel: '[data-testid="ai-chat-panel"]',
-  chatInput: 'textarea.ai-chat-input-field',
+  chatInput: 'textarea.ai-chat-input-field', // DEPRECATED: ambiguous - matches both Files mode and Agent mode. Use filesChatInput or agentChatInput instead.
+  filesChatInput: '[data-testid="files-mode-chat-input"]',
+  agentChatInput: '[data-testid="agent-mode-chat-input"]',
   newSessionButton: '[data-testid="new-session-button"]',
   noSessionSelected: 'text="No session selected"',
 
-  // Active session (more specific to avoid matching editor tabs)
-  activeSession: '.ai-session-view[data-active="true"]',
+  // Active session panel (contains the transcript and input for the current session)
+  activeSession: '.agent-session-panel',
 
   // Attachments
   attachmentPreview: '.attachment-preview',
@@ -291,8 +293,9 @@ export async function switchToAgentMode(page: Page): Promise<void> {
 }
 
 /**
- * Submit a chat prompt in the currently active session
- * Uses .fill() instead of .type() for better React compatibility
+ * Submit a chat prompt in the currently active session.
+ * Uses data-testid selectors to unambiguously target the correct chat input
+ * (Agent mode vs Files mode), since both are always in the DOM.
  */
 export async function submitChatPrompt(
   page: Page,
@@ -301,13 +304,13 @@ export async function submitChatPrompt(
 ): Promise<void> {
   const { waitForResponse = false, timeout = 15000 } = options;
 
-  // Find chat input - scope to agent mode if visible (avoids Files mode chat input)
+  // Use the correct data-testid selector based on which mode is visible
   const agentMode = page.locator(PLAYWRIGHT_TEST_SELECTORS.agentMode);
   const isAgentModeVisible = await agentMode.isVisible().catch(() => false);
 
   const chatInput = isAgentModeVisible
-    ? agentMode.locator(PLAYWRIGHT_TEST_SELECTORS.chatInput)
-    : page.locator(PLAYWRIGHT_TEST_SELECTORS.chatInput).first();
+    ? page.locator(PLAYWRIGHT_TEST_SELECTORS.agentChatInput)
+    : page.locator(PLAYWRIGHT_TEST_SELECTORS.filesChatInput);
   await chatInput.waitFor({ state: 'visible', timeout: 5000 });
 
   // Fill the message (more reliable than type() for React inputs)
@@ -735,9 +738,8 @@ export async function openAIChatWithSession(page: Page): Promise<void> {
     await page.waitForTimeout(1000);
   }
 
-  // Wait for chat input to be visible in the AI chat panel
-  const aiChatPanel = page.locator(PLAYWRIGHT_TEST_SELECTORS.aiChatPanel);
-  const chatInput = aiChatPanel.locator(PLAYWRIGHT_TEST_SELECTORS.chatInput);
+  // Wait for chat input to be visible in the Files mode AI chat panel
+  const chatInput = page.locator(PLAYWRIGHT_TEST_SELECTORS.filesChatInput);
   await chatInput.waitFor({ state: 'visible', timeout: 3000 });
 }
 
