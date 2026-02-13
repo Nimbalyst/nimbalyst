@@ -42,8 +42,7 @@ const WelcomeModal: React.FC<WelcomeModalProps> = ({
       setIsProcessing(true);
       try {
         // Save plans location configuration
-        // Note: The nimbalyst-local directory and .gitignore are only created
-        // when the user installs tool packages (via PackageService)
+        // Note: The nimbalyst-local directory and .gitignore are created as needed
         const config = await OnboardingService.loadConfig(workspacePath);
         const finalLocation = plansLocation === 'custom' ? customPlansLocation : plansLocation;
         config.plansLocation = finalLocation;

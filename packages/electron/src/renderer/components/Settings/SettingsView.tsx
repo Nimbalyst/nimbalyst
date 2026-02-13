@@ -19,7 +19,6 @@ import { MCPServersPanel } from '../GlobalSettings/panels/MCPServersPanel';
 import { ClaudeCodePluginsPanel } from '../GlobalSettings/panels/ClaudeCodePluginsPanel';
 import { SyncPanel } from '../GlobalSettings/panels/SyncPanel';
 import { SharedLinksPanel } from '../GlobalSettings/panels/SharedLinksPanel';
-import { ToolPackagesPanel } from './panels/ToolPackagesPanel';
 import { ProjectPermissionsPanel } from './panels/ProjectPermissionsPanel';
 import { ProviderOverrideWrapper } from './panels/ProviderOverrideWrapper';
 import { InstalledExtensionsPanel } from './panels/InstalledExtensionsPanel';
@@ -120,16 +119,12 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
   // have been moved to Jotai atoms in appSettings.ts
   // Panels now subscribe directly to atoms - settings are auto-persisted via atom setters
 
-  // Package counts for sidebar badge
-  const [installedPackageCount, setInstalledPackageCount] = useState(0);
-  const [totalPackageCount, setTotalPackageCount] = useState(0);
-
   // Track if workspace has MCP servers (for indicator on Project tab)
   const [hasWorkspaceMcpServers, setHasWorkspaceMcpServers] = useState(false);
   const [workspaceMcpServerCount, setWorkspaceMcpServerCount] = useState(0);
 
   // Valid categories for each scope
-  const projectCategories: SettingsCategory[] = ['tool-packages', 'agent-permissions', 'installed-extensions', 'claude-plugins', 'mcp-servers', 'claude-code', 'claude', 'openai', 'openai-codex', 'lmstudio'];
+  const projectCategories: SettingsCategory[] = ['agent-permissions', 'installed-extensions', 'claude-plugins', 'mcp-servers', 'claude-code', 'claude', 'openai', 'openai-codex', 'lmstudio'];
   const userCategories: SettingsCategory[] = ['claude-code', 'claude', 'openai', 'openai-codex', 'lmstudio', 'sync', 'notifications', 'voice-mode', 'advanced', 'installed-extensions', 'claude-plugins', 'mcp-servers'];
 
   // When initialCategory/initialScope props change, update state (for deep linking)
@@ -169,7 +164,7 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
     const validCategories = scope === 'project' ? projectCategories : userCategories;
     if (!validCategories.includes(selectedCategory)) {
       // Default to first valid category for the scope
-      setSelectedCategory(scope === 'project' ? 'tool-packages' : 'claude-code');
+      setSelectedCategory(scope === 'project' ? 'agent-permissions' : 'claude-code');
     }
   }, [scope]);
 
@@ -376,19 +371,6 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
 
   const renderPanel = () => {
     // Project panels
-    if (selectedCategory === 'tool-packages' && workspacePath) {
-      return (
-        <ToolPackagesPanel
-          workspacePath={workspacePath}
-          workspaceName={workspaceName || 'Project'}
-          onPackagesChange={(installed, total) => {
-            setInstalledPackageCount(installed);
-            setTotalPackageCount(total);
-          }}
-        />
-      );
-    }
-
     if (selectedCategory === 'agent-permissions' && workspacePath) {
       return (
         <ProjectPermissionsPanel
@@ -593,7 +575,7 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
   };
 
   // Categories that are only available in project scope
-  const projectOnlyCategories: SettingsCategory[] = ['tool-packages', 'agent-permissions'];
+  const projectOnlyCategories: SettingsCategory[] = ['agent-permissions'];
 
   // Handle scope changes - preserve selected category when possible
   const handleScopeChange = (newScope: SettingsScope) => {
@@ -662,8 +644,6 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
           selectedCategory={selectedCategory}
           onSelectCategory={setSelectedCategory}
           providerStatus={providerStatus}
-          installedPackageCount={installedPackageCount}
-          totalPackageCount={totalPackageCount}
           scope={scope}
           // releaseChannel now comes from Jotai atom in SettingsSidebar
         />

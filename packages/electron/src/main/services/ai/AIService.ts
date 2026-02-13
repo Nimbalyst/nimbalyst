@@ -38,7 +38,6 @@ import { historyManager } from '../../HistoryManager';
 import { getAIProviderOverrides, saveAIProviderOverrides, clearAIProviderOverrides, getWorkspaceState, getBetaFeatures } from '../../utils/store';
 import { mergeAISettings } from '../../utils/aiSettingsMerge';
 import { DocumentContextService, type RawDocumentContext, type PreparedDocumentContext } from '@nimbalyst/runtime';
-import { ALL_PACKAGES } from '../../../shared/toolPackages';
 import { getMessageSyncHandler, getSyncProvider } from '../SyncManager';
 import { normalizeCodexProviderConfig, omitModelsField } from '@nimbalyst/runtime/ai/server/utils/modelConfigUtils';
 import * as fs from 'fs';
@@ -221,55 +220,15 @@ function extractModelForProvider(
 /**
  * Detect if a message starts with a Nimbalyst package slash command.
  * Returns command info if found, null otherwise.
+ *
+ * NOTE: Tool packages have been replaced by extension-based Claude plugins.
+ * This function now always returns null. Slash commands are handled by extensions.
  */
 function detectNimbalystSlashCommand(
   message: string,
   workspacePath: string | undefined
 ): { commandName: string; packageId: string } | null {
-  // Message must start with a slash command
-  const trimmedMessage = message.trim();
-  if (!trimmedMessage.startsWith('/')) {
-    return null;
-  }
-
-  // Extract the command name (everything after / until whitespace or end)
-  const commandMatch = trimmedMessage.match(/^\/([^\s]+)/);
-  if (!commandMatch) {
-    return null;
-  }
-  const commandName = commandMatch[1];
-
-  // Get installed packages for this workspace
-  let installedPackageIds: string[] = [];
-  if (workspacePath) {
-    try {
-      const workspaceState = getWorkspaceState(workspacePath);
-      installedPackageIds = (workspaceState.installedPackages || [])
-        .filter(pkg => pkg.enabled !== false)
-        .map(pkg => pkg.packageId);
-    } catch (error) {
-      // Workspace state not available, check all packages
-      installedPackageIds = ALL_PACKAGES.map(pkg => pkg.id);
-    }
-  } else {
-    // No workspace, check all packages
-    installedPackageIds = ALL_PACKAGES.map(pkg => pkg.id);
-  }
-
-  // Find the package that contains this command
-  for (const pkg of ALL_PACKAGES) {
-    // Only check installed packages
-    if (!installedPackageIds.includes(pkg.id)) {
-      continue;
-    }
-
-    for (const cmd of pkg.customCommands) {
-      if (cmd.name === commandName) {
-        return { commandName, packageId: pkg.id };
-      }
-    }
-  }
-
+  // Tool packages have been deprecated and replaced by extension-based Claude plugins
   return null;
 }
 

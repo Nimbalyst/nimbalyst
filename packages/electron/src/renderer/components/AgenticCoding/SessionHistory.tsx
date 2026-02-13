@@ -593,6 +593,19 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     setSessions(filtered);
   }, [searchQuery, allSessions, mode]);
 
+  // Auto-select first session when there's no active session
+  // This ensures a session is always selected when switching to Agent mode
+  useEffect(() => {
+    if (!activeSessionId && sessions.length > 0 && onSessionSelect) {
+      // Small delay to ensure AgentMode is fully mounted
+      const timer = setTimeout(() => {
+        console.log('[SessionHistory] Auto-selecting first session:', sessions[0].id);
+        onSessionSelect(sessions[0].id);
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [activeSessionId, sessions, onSessionSelect]);
+
   // Function to trigger content search (database query for message content)
   const searchMessageContents = useCallback(() => {
     if (!searchQuery.trim() || contentSearchTriggered) {

@@ -359,6 +359,12 @@ export default function App() {
           incrementSettingsKey();
           setTimeout(() => setActiveMode('settings'), 0);
         },
+        openSettings: (category?: any, scope?: 'user' | 'project') => {
+          if (category) setSettingsInitialCategory(category);
+          if (scope) setSettingsInitialScope(scope);
+          incrementSettingsKey();
+          setTimeout(() => setActiveMode('settings'), 0);
+        },
       };
       console.log('[App] Test helpers exposed, DEV mode:', import.meta.env.DEV);
     }

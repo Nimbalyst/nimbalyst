@@ -1,13 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { usePostHog } from 'posthog-js/react';
-import PackageService from '../../services/PackageService';
-import type { CustomCommand } from '../../../shared/types/toolPackages';
-
-interface CommandWithPackage {
-  command: CustomCommand;
-  packageId: string;
-  packageName: string;
-}
 
 interface ExtensionPluginCommand {
   extensionId: string;
@@ -44,10 +36,10 @@ function shuffleArray<T>(array: T[]): T[] {
 }
 
 /**
- * SlashCommandSuggestions displays pill buttons for installed Nimbalyst tool packages
+ * SlashCommandSuggestions displays pill buttons for installed extension plugin commands
  * when a Claude Code session is empty.
  *
- * Only shows commands from packages installed via the Tool Packages screen.
+ * Shows commands from enabled extensions via their Claude plugins.
  * Shows a random selection of up to 3 commands initially, with a "(+X)" pill
  * to expand and show all available commands.
  *
@@ -60,7 +52,6 @@ export const SlashCommandSuggestions: React.FC<SlashCommandSuggestionsProps> = (
   onCommandSelect
 }) => {
   const posthog = usePostHog();
-  const [installedCommands, setInstalledCommands] = useState<CommandWithPackage[]>([]);
   const [extensionCommands, setExtensionCommands] = useState<ExtensionPluginCommand[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -68,98 +59,42 @@ export const SlashCommandSuggestions: React.FC<SlashCommandSuggestionsProps> = (
   // Only show for claude-code provider with empty session
   const shouldShow = provider === 'claude-code' && !hasMessages;
 
-  // Fetch commands from installed tool packages and extension plugins
+  // Fetch commands from extension plugins
   useEffect(() => {
     if (!shouldShow || !workspacePath) {
       setIsLoading(false);
       return;
     }
 
-    const fetchAllCommands = async () => {
+    const fetchExtensionCommands = async () => {
       setIsLoading(true);
       try {
-        // Fetch tool package commands and extension plugin commands in parallel
-        const [packageCommands, pluginCommands] = await Promise.all([
-          fetchPackageCommands(),
-          fetchExtensionPluginCommands(),
-        ]);
-
-        setInstalledCommands(packageCommands);
-        setExtensionCommands(pluginCommands);
+        const commands = await window.electronAPI.extensions.getClaudePluginCommands();
+        setExtensionCommands(commands);
       } catch (error) {
-        console.error('[SlashCommandSuggestions] Failed to load commands:', error);
-        setInstalledCommands([]);
+        console.error('[SlashCommandSuggestions] Failed to load extension commands:', error);
         setExtensionCommands([]);
       } finally {
         setIsLoading(false);
       }
     };
 
-    const fetchPackageCommands = async (): Promise<CommandWithPackage[]> => {
-      try {
-        // Set workspace path for PackageService
-        PackageService.setWorkspacePath(workspacePath);
-
-        // Get all packages with their installation status
-        const packagesWithStatus = await PackageService.getAllPackagesWithStatus();
-
-        // Collect commands from installed packages only
-        const commands: CommandWithPackage[] = [];
-        for (const { package: pkg, installed } of packagesWithStatus) {
-          if (installed && pkg.customCommands.length > 0) {
-            for (const cmd of pkg.customCommands) {
-              commands.push({
-                command: cmd,
-                packageId: pkg.id,
-                packageName: pkg.name
-              });
-            }
-          }
-        }
-        return commands;
-      } catch (error) {
-        console.error('[SlashCommandSuggestions] Failed to load installed packages:', error);
-        return [];
-      }
-    };
-
-    const fetchExtensionPluginCommands = async (): Promise<ExtensionPluginCommand[]> => {
-      try {
-        return await window.electronAPI.extensions.getClaudePluginCommands();
-      } catch (error) {
-        console.error('[SlashCommandSuggestions] Failed to load extension plugin commands:', error);
-        return [];
-      }
-    };
-
-    fetchAllCommands();
+    fetchExtensionCommands();
   }, [shouldShow, workspacePath]);
 
   // Unified command type for display
   type UnifiedCommand = {
-    type: 'package' | 'extension';
+    type: 'extension';
     name: string;
     description: string;
     sourceId: string;
     sourceName: string;
   };
 
-  // Combine and shuffle all commands
+  // Convert and shuffle extension commands
   const allCommands = useMemo((): UnifiedCommand[] => {
     const unified: UnifiedCommand[] = [];
 
-    // Add package commands
-    for (const cmd of installedCommands) {
-      unified.push({
-        type: 'package',
-        name: cmd.command.name,
-        description: cmd.command.description,
-        sourceId: cmd.packageId,
-        sourceName: cmd.packageName,
-      });
-    }
-
-    // Add extension plugin commands
     // Extension plugin commands are namespaced: pluginNamespace:commandName
     for (const cmd of extensionCommands) {
       unified.push({
@@ -172,7 +107,7 @@ export const SlashCommandSuggestions: React.FC<SlashCommandSuggestionsProps> = (
     }
 
     return shuffleArray(unified);
-  }, [installedCommands, extensionCommands]);
+  }, [extensionCommands]);
 
   // Get commands to display based on expanded state
   const displayCommands = useMemo(() => {
@@ -188,12 +123,10 @@ export const SlashCommandSuggestions: React.FC<SlashCommandSuggestionsProps> = (
   const handleCommandClick = useCallback((cmd: UnifiedCommand) => {
     // Track the suggestion click in analytics.
     // PRIVACY NOTE: It's safe to send commandName and sourceId because this component
-    // only displays commands from official Nimbalyst packages (defined in ALL_PACKAGES
-    // in packages/electron/src/shared/toolPackages/index.ts) and built-in extensions.
-    // User-created custom commands are never shown here.
+    // only displays commands from built-in extensions.
     posthog?.capture('slash_command_suggestion_clicked', {
       commandName: cmd.name,
-      packageId: cmd.sourceId,
+      extensionId: cmd.sourceId,
       commandType: cmd.type,
     });
 

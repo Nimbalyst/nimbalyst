@@ -12,7 +12,7 @@ const naturalCollator = new Intl.Collator(undefined, {
 // Performance limits to prevent freezing on huge directories
 const MAX_DEPTH = 8;
 const MAX_FILES_PER_DIR = 1000;
-const MAX_TOTAL_ITEMS = 5000;
+const MAX_TOTAL_ITEMS = 10000;
 
 let totalItemCount = 0;
 

@@ -7,7 +7,6 @@ import { useAlphaFeatures } from '../../hooks/useAlphaFeature';
 import { useBetaFeature } from '../../hooks/useBetaFeature';
 
 export type SettingsCategory =
-  | 'tool-packages'
   | 'agent-permissions'
   | 'claude-code'
   | 'claude'
@@ -48,8 +47,6 @@ interface SettingsSidebarProps {
   selectedCategory: SettingsCategory;
   onSelectCategory: (category: SettingsCategory) => void;
   providerStatus?: Record<string, { enabled: boolean; testStatus?: string }>;
-  installedPackageCount?: number;
-  totalPackageCount?: number;
   scope?: SettingsScope;
 }
 
@@ -57,8 +54,6 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
   selectedCategory,
   onSelectCategory,
   providerStatus = {},
-  installedPackageCount = 0,
-  totalPackageCount = 0,
   scope = 'user',
 }) => {
   // Get release channel and alpha/beta feature flags from Jotai atoms
@@ -172,12 +167,6 @@ Best for quick edits and tasks that do not require multi-file operations.`,
     {
       title: 'Project',
       items: [
-        {
-          id: 'tool-packages',
-          name: 'Tool Packages',
-          icon: <MaterialSymbol icon="package_2" size={16} />,
-          badge: totalPackageCount > 0 ? `${installedPackageCount}/${totalPackageCount}` : undefined,
-        },
         {
           id: 'agent-permissions',
           name: 'Agent Permissions',

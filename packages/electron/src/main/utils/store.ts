@@ -7,7 +7,6 @@ import { logger } from './logger';
 import { type EffortLevel, parseEffortLevel } from '@nimbalyst/runtime/ai/server/effortLevels';
 import type { OnboardingConfig } from '../../shared/types/workspace';
 import { DEFAULT_ONBOARDING_CONFIG } from '../../shared/types/workspace';
-import type { InstalledPackage } from '../../shared/toolPackages';
 import { AlphaFeatureTag, getDefaultAlphaFeatures, enableAllAlphaFeatures, areAllAlphaFeaturesEnabled, ALPHA_FEATURES } from '../../shared/alphaFeatures';
 import { DeveloperFeatureTag, getDefaultDeveloperFeatures, DEVELOPER_FEATURES } from '../../shared/developerFeatures';
 import { BetaFeatureTag, getDefaultBetaFeatures, enableAllBetaFeatures as enableAllBetaFeaturesUtil, BETA_FEATURES } from '../../shared/betaFeatures';
@@ -311,8 +310,6 @@ export interface WorkspaceState {
   trackerBottomPanelHeight?: number;
   // Onboarding configuration
   onboarding?: OnboardingConfig;
-  // Installed tool packages
-  installedPackages?: InstalledPackage[];
   // File tree filter state
   fileTreeFilter?: WorkspaceFileTreeFilter;
   // File tree icons visibility
@@ -466,7 +463,6 @@ function createDefaultWorkspaceState(workspacePath: string): WorkspaceState {
     trackerBottomPanel: null,
     trackerBottomPanelHeight: 300,
     onboarding: undefined,
-    installedPackages: undefined,
     fileTreeFilter: undefined,
     showFileIcons: undefined,
     aiProviderOverrides: undefined,

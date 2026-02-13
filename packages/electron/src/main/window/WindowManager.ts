@@ -253,8 +253,7 @@ export function createWindow(
                 // console.log('[MAIN] Restored navigation history for workspace:', workspacePath);
             }
 
-            // Note: nimbalyst-local directory is only created when tool packages are installed
-            // See PackageService.ensureNimbalystLocalDir and OnboardingService.ensureNimbalystLocalDir
+            // Note: nimbalyst-local directory is created as needed by OnboardingService
         }
         windowFocusOrder.set(windowId, ++focusOrderCounter); // Track initial focus order
 

@@ -39,7 +39,7 @@ This document tracks the status of consolidating E2E tests following the pattern
 | onboarding/ | 1 | 1 | 0 | 1 |
 | permissions/ | 7 | 44 | 1 | 6 |
 | plugins/ | 1 | 2 | 1 | 0 |
-| settings/ | 2 | 7 | 0 | 2 |
+| settings/ | 0 | 0 | 0 | 0 |
 | smoke/ | 1 | 1 | 0 | 1 |
 | tabs.spec.ts | 1 | 8 | 1 | 0 |
 | terminal/ | 1 | 1 | 0 | 1 |
@@ -259,20 +259,16 @@ Note: Permission tests may require specific permission modes at launch, limiting
 
 ---
 
-## e2e/settings/ (2 files, 7 tests)
+## e2e/settings/ (REMOVED - Tool packages deprecated)
 
-| File | Tests | Pattern | Status | Notes |
-| --- | --- | --- | --- | --- |
-| package-installation.spec.ts | 4 | beforeEach | pending | Needs consolidation |
-| project-settings.spec.ts | 3 | beforeEach | pending | Needs consolidation |
+**Status: REMOVED** - Tool packages system has been replaced by extension-based Claude plugins.
 
-### Settings Consolidation Candidates
+All tests related to tool packages (package installation, version detection, etc.) have been deleted:
+- ~~settings.spec.ts~~ - Deleted (tested deprecated tool packages)
+- ~~package-installation.spec.ts~~ - Deleted (tested deprecated tool packages)
+- ~~project-settings.spec.ts~~ - Deleted (tested deprecated tool packages)
 
-Merge into single `settings.spec.ts`:
-- `package-installation.spec.ts`
-- `project-settings.spec.ts`
-
-**Savings**: 1 app launch
+The functionality is now provided through the extensions system and Claude plugins panel.
 
 ---
 
