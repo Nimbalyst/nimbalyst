@@ -21,6 +21,7 @@
  */
 
 import type { Page } from '@playwright/test';
+import { PLAYWRIGHT_TEST_SELECTORS } from './testHelpers';
 
 export interface TextReplacement {
   oldText: string;
@@ -201,8 +202,8 @@ export function createTestMarkdown(sections: Record<string, string>): string {
  * Accept all pending diffs in the active editor
  */
 export async function acceptDiffs(page: Page): Promise<void> {
-  // Click the Accept All button using Playwright locator
-  const acceptButton = page.locator('button:has-text("Accept All")').first();
+  // Click the Accept All button using the proper selector
+  const acceptButton = page.locator(PLAYWRIGHT_TEST_SELECTORS.unifiedDiffAcceptAllButton);
 
   try {
     // Wait for the button to appear (it should already be there if there are diffs)
@@ -225,7 +226,10 @@ export async function verifyEditorContains(
   shouldExist = true
 ): Promise<boolean> {
   const editorText = await page.evaluate(() => {
-    const activeEditor = document.querySelector('.multi-editor-instance.active .editor');
+    // Use the canonical active editor selector: visible tab-editor-wrapper's contenteditable
+    const activeEditor = document.querySelector(
+      '.file-tabs-container .tab-editor-wrapper:not([style*="display: none"]) .multi-editor-instance .editor [contenteditable="true"]'
+    );
     return activeEditor?.textContent || '';
   });
 

@@ -48,7 +48,7 @@ export const PLAYWRIGHT_TEST_SELECTORS = {
   apiKeyDialogDismissButton: '.api-key-dialog-button.secondary',
 
   // AI Chat
-  aiChatPanel: '[data-testid="ai-chat-panel"]',
+  aiChatPanel: '[data-testid="chat-sidebar-panel"]',
   chatInput: 'textarea.ai-chat-input-field', // DEPRECATED: ambiguous - matches both Files mode and Agent mode. Use filesChatInput or agentChatInput instead.
   filesChatInput: '[data-testid="files-mode-chat-input"]',
   agentChatInput: '[data-testid="agent-mode-chat-input"]',
@@ -60,21 +60,21 @@ export const PLAYWRIGHT_TEST_SELECTORS = {
 
   // Attachments
   attachmentPreview: '.attachment-preview',
-  attachmentFilename: '.attachment-filename',
-  attachmentRemoveButton: '.attachment-remove',
+  attachmentFilename: '.attachment-preview-filename',
+  attachmentRemoveButton: '.attachment-preview-remove',
 
-  // Diff approval (Lexical/Markdown) - use data-action attributes for reliable targeting
-  diffAcceptButton: 'button[data-action="accept-single"]',
-  diffRejectButton: 'button[data-action="reject-single"]',
-  diffAcceptAllButton: 'button.diff-accept-all-button[data-action="accept-all"]',
-  diffRejectAllButton: 'button.diff-reject-all-button[data-action="reject-all"]',
-  acceptAllButton: 'button.diff-accept-all-button[data-action="accept-all"]', // Alias for compatibility
-  rejectAllButton: 'button.diff-reject-all-button[data-action="reject-all"]', // Alias for compatibility
-  diffApprovalBar: '.diff-approval-bar', // Legacy - Lexical now uses unifiedDiffHeader
-  unifiedDiffHeader: '.unified-diff-header', // Used by Lexical, Monaco, and custom editors
+  // Diff approval (Unified Diff Header - used by Lexical, Monaco, and custom editors)
+  diffAcceptButton: '.unified-diff-header-button-accept-single', // Per-change "Keep" button
+  diffRejectButton: '.unified-diff-header-button-reject-single', // Per-change "Revert" button
+  diffAcceptAllButton: '[data-testid="diff-keep-all"]', // "Keep All" button
+  diffRejectAllButton: '[data-testid="diff-revert-all"]', // "Revert All" button
+  acceptAllButton: '[data-testid="diff-keep-all"]', // Alias for compatibility
+  rejectAllButton: '[data-testid="diff-revert-all"]', // Alias for compatibility
+  diffApprovalBar: '.unified-diff-header', // Unified diff header bar
+  unifiedDiffHeader: '.unified-diff-header', // Same as diffApprovalBar
   unifiedDiffAcceptAllButton: '[data-testid="diff-keep-all"]',
   unifiedDiffRejectAllButton: '[data-testid="diff-revert-all"]',
-  diffChangeCounter: '.diff-change-counter',
+  diffChangeCounter: '.unified-diff-header-change-counter',
 
   // Monaco diff approval (Code files)
   monacoDiffApprovalBar: '.monaco-diff-approval-bar',
@@ -259,12 +259,17 @@ export async function openNewDocument(
  * Switch to Files mode
  */
 export async function switchToFilesMode(page: Page): Promise<void> {
+  // Check if already in Files mode (sidebar visible) to avoid toggling away
+  const sidebarVisible = await page.locator(PLAYWRIGHT_TEST_SELECTORS.workspaceSidebar)
+    .isVisible().catch(() => false);
+  if (sidebarVisible) return;
+
   const filesModeButton = page.locator(PLAYWRIGHT_TEST_SELECTORS.filesModeButton);
   await filesModeButton.click();
   await page.waitForTimeout(500);
 
   // Wait for workspace sidebar to be visible
-  await page.waitForSelector(PLAYWRIGHT_TEST_SELECTORS.workspaceSidebar, { timeout: 3000 });
+  await page.waitForSelector(PLAYWRIGHT_TEST_SELECTORS.workspaceSidebar, { timeout: 5000 });
 }
 
 /**

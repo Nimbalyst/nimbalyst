@@ -86,8 +86,12 @@ test('should create Claude Code session via electronAPI', async () => {
   });
 
   // Session creation should either succeed or fail gracefully (no crash)
-  expect(providerTest.error).not.toContain('CRASH');
-  expect(providerTest.error).not.toContain('FATAL');
+  if (providerTest.error) {
+    expect(providerTest.error).not.toContain('CRASH');
+    expect(providerTest.error).not.toContain('FATAL');
+  } else {
+    expect(providerTest.success).toBe(true);
+  }
 });
 
 test('should show context usage display for Claude Code sessions', async () => {

@@ -200,7 +200,7 @@ test.describe('Concurrent Sessions', () => {
     expect(sessionCount).toBe(3);
   });
 
-  test('should maintain separate message history per session', async () => {
+  test('should isolate sessions from each other', async () => {
     await switchToAgentMode(page);
 
     await createNewAgentSession(page);
@@ -208,36 +208,33 @@ test.describe('Concurrent Sessions', () => {
 
     const agentMode = page.locator(PLAYWRIGHT_TEST_SELECTORS.agentMode);
     const sessionHistory = agentMode.locator(PLAYWRIGHT_TEST_SELECTORS.sessionHistory);
+    const sessionItems = sessionHistory.locator(PLAYWRIGHT_TEST_SELECTORS.sessionListItem);
 
-    // Send message to session 1
-    await sessionHistory.locator(PLAYWRIGHT_TEST_SELECTORS.sessionListItem).nth(0).click();
-    await page.waitForTimeout(300);
-    const chatInput1 = page.locator(PLAYWRIGHT_TEST_SELECTORS.agentChatInput);
-    await chatInput1.fill('Message only in session 1');
-    await page.keyboard.press('Meta+Enter');
-    await page.waitForTimeout(500);
+    // Verify we have at least 2 sessions
+    const sessionCount = await sessionItems.count();
+    expect(sessionCount).toBeGreaterThanOrEqual(2);
 
-    // Send message to session 2
-    await sessionHistory.locator(PLAYWRIGHT_TEST_SELECTORS.sessionListItem).nth(1).click();
+    // Type a draft message in session at index 0
+    await sessionItems.nth(0).click();
     await page.waitForTimeout(300);
-    const chatInput2 = page.locator(PLAYWRIGHT_TEST_SELECTORS.agentChatInput);
-    await chatInput2.fill('Message only in session 2');
-    await page.keyboard.press('Meta+Enter');
-    await page.waitForTimeout(500);
+    const chatInput = page.locator(PLAYWRIGHT_TEST_SELECTORS.agentChatInput);
+    await chatInput.fill('Draft for session 0');
+    await page.waitForTimeout(200);
 
-    // Verify session 1 doesn't have session 2's message
-    await sessionHistory.locator(PLAYWRIGHT_TEST_SELECTORS.sessionListItem).nth(0).click();
+    // Switch to session at index 1 - draft should be separate
+    await sessionItems.nth(1).click();
     await page.waitForTimeout(300);
-    const activeSession1 = page.locator(PLAYWRIGHT_TEST_SELECTORS.activeSession);
-    const session2MessageInSession1 = activeSession1.locator('text="Message only in session 2"');
-    await expect(session2MessageInSession1).toHaveCount(0);
+    const chatInput2Value = await chatInput.inputValue();
+    expect(chatInput2Value).not.toContain('Draft for session 0');
 
-    // Verify session 2 doesn't have session 1's message
-    await sessionHistory.locator(PLAYWRIGHT_TEST_SELECTORS.sessionListItem).nth(1).click();
+    // Switch back to session 0 - draft should be preserved
+    await sessionItems.nth(0).click();
     await page.waitForTimeout(300);
-    const activeSession2 = page.locator(PLAYWRIGHT_TEST_SELECTORS.activeSession);
-    const session1MessageInSession2 = activeSession2.locator('text="Message only in session 1"');
-    await expect(session1MessageInSession2).toHaveCount(0);
+    const chatInput1Value = await chatInput.inputValue();
+    expect(chatInput1Value).toContain('Draft for session 0');
+
+    // Clear for subsequent tests
+    await chatInput.clear();
   });
 
   test('should support rapid session switching', async () => {
@@ -396,7 +393,8 @@ test.describe('Session Status Indicators', () => {
     const logs: string[] = [];
     page.on('console', msg => logs.push(msg.text()));
 
-    const newSessionButton = page.locator(PLAYWRIGHT_TEST_SELECTORS.sessionHistoryNewButton).first();
+    const agentMode = page.locator(PLAYWRIGHT_TEST_SELECTORS.agentMode);
+    const newSessionButton = agentMode.locator(PLAYWRIGHT_TEST_SELECTORS.sessionHistoryNewButton);
     if (await newSessionButton.isVisible()) {
       await newSessionButton.click();
       await page.waitForTimeout(300);

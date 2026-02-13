@@ -7,7 +7,7 @@ import {
   ACTIVE_EDITOR_SELECTOR,
   waitForAppReady
 } from '../helpers';
-import { openFileFromTree } from '../utils/testHelpers';
+import { openFileFromTree, PLAYWRIGHT_TEST_SELECTORS } from '../utils/testHelpers';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
@@ -230,7 +230,7 @@ test('Typing in AI input should not re-render file editor components', async () 
   const logs: string[] = [];
   page.on('console', msg => logs.push(msg.text()));
 
-  const aiInput = page.locator('.ai-chat-input-field');
+  const aiInput = page.locator(PLAYWRIGHT_TEST_SELECTORS.filesChatInput);
 
   const aiToggle = page.locator('.ai-chat-toggle-button');
   if (await aiToggle.isVisible()) {

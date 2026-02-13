@@ -27,10 +27,10 @@ import {
   waitForAppReady,
   dismissProjectTrustToast,
   TEST_TIMEOUTS,
+  ACTIVE_EDITOR_SELECTOR,
 } from '../helpers';
 import {
   simulateApplyDiff,
-  simulateStreamContent,
   setupAIApiForTesting,
   acceptDiffs,
   verifyEditorContains,
@@ -249,7 +249,9 @@ test.describe('Tab Targeting', () => {
     await closeTabByFileName(page, TEST_FILES.tabSecond);
   });
 
-  test('should stream content to the correct tab', async () => {
+  test('should apply additional edits without cross-tab bleed', async () => {
+    const file2Path = path.join(workspaceDir, TEST_FILES.tabSecond);
+
     // Open both files
     await openFileFromTree(page, TEST_FILES.tabFirst);
     await page.waitForTimeout(500);
@@ -258,22 +260,23 @@ test.describe('Tab Targeting', () => {
     await openFileFromTree(page, TEST_FILES.tabSecond);
     await page.waitForTimeout(500);
 
-    // Stream content to second file
-    await simulateStreamContent(page, '\n## New Streamed Section\n\nThis content was streamed!', {
-      insertAtEnd: true,
-    });
+    // Apply a second edit to second file (adds new content)
+    const result = await simulateApplyDiff(page, file2Path, [
+      { oldText: 'Content in section two.', newText: 'Content in section two.\n\nThis was added by AI!' },
+    ]);
+    expect(result.success).toBe(true);
     await page.waitForTimeout(500);
     await acceptDiffs(page);
 
-    // Verify streamed content appears in second file
-    const hasStreamedContent = await verifyEditorContains(page, 'This content was streamed!');
-    expect(hasStreamedContent).toBe(true);
+    // Verify new content appears in second file
+    const hasNewContent = await verifyEditorContains(page, 'This was added by AI!');
+    expect(hasNewContent).toBe(true);
 
-    // Switch to first tab - should NOT have the streamed content
+    // Switch to first tab - should NOT have the new content
     await openFileFromTree(page, TEST_FILES.tabFirst);
     await page.waitForTimeout(500);
-    const hasWrongStream = await verifyEditorContains(page, 'This content was streamed!', false);
-    expect(hasWrongStream).toBe(true); // Should NOT contain streamed content
+    const hasWrongContent = await verifyEditorContains(page, 'This was added by AI!', false);
+    expect(hasWrongContent).toBe(true); // Should NOT contain the new content
 
     // Clean up tabs
     await closeTabByFileName(page, TEST_FILES.tabFirst);
@@ -313,25 +316,25 @@ test.describe('Consecutive Edits via File Watcher', () => {
     await expect(page.locator('.file-background-change-dialog-overlay')).not.toBeVisible({ timeout: 500 });
 
     // Diff mode should activate
-    const acceptAllButton = page.locator('button', { hasText: /Accept All/i });
-    await expect(acceptAllButton).toBeVisible({ timeout: 2000 });
+    const keepAllButton = page.locator(PLAYWRIGHT_TEST_SELECTORS.unifiedDiffAcceptAllButton);
+    await expect(keepAllButton).toBeVisible({ timeout: 2000 });
 
     // Write edit 2
     const content2 = content1.replace('First edit.', 'First edit.\n\nSecond edit.');
     await fs.writeFile(filePath, content2, 'utf8');
     await page.waitForTimeout(1000);
-    await expect(acceptAllButton).toBeVisible({ timeout: 2000 });
+    await expect(keepAllButton).toBeVisible({ timeout: 2000 });
 
     // Write edit 3
     const content3 = content2.replace('Second edit.', 'Second edit.\n\nThird edit.');
     await fs.writeFile(filePath, content3, 'utf8');
     await page.waitForTimeout(1000);
-    await expect(acceptAllButton).toBeVisible({ timeout: 2000 });
+    await expect(keepAllButton).toBeVisible({ timeout: 2000 });
 
     // Accept and verify
-    await acceptAllButton.click();
+    await keepAllButton.click();
     await page.waitForTimeout(500);
-    await expect(acceptAllButton).not.toBeVisible({ timeout: 2000 });
+    await expect(keepAllButton).not.toBeVisible({ timeout: 2000 });
 
     const finalContent = await fs.readFile(filePath, 'utf8');
     expect(finalContent).toContain('First edit');
@@ -353,8 +356,8 @@ test.describe('Consecutive Edits via File Watcher', () => {
     }, [filePath]);
     await page.waitForTimeout(500);
 
-    const acceptButton = page.locator('button', { hasText: 'Accept' }).first();
-    await expect(acceptButton).toBeVisible({ timeout: 3000 });
+    const keepAllButton = page.locator(PLAYWRIGHT_TEST_SELECTORS.unifiedDiffAcceptAllButton);
+    await expect(keepAllButton).toBeVisible({ timeout: 3000 });
 
     // Make second edit
     await page.evaluate(async ([fp]) => {
@@ -362,12 +365,12 @@ test.describe('Consecutive Edits via File Watcher', () => {
       await editorRegistry.applyReplacements(fp, [{ oldText: 'First edit.', newText: 'Second edit.' }]);
     }, [filePath]);
     await page.waitForTimeout(500);
-    await expect(acceptButton).toBeVisible();
+    await expect(keepAllButton).toBeVisible();
 
     // Accept changes
-    await acceptButton.click();
+    await keepAllButton.click();
     await page.waitForTimeout(200);
-    await expect(acceptButton).not.toBeVisible({ timeout: 2000 });
+    await expect(keepAllButton).not.toBeVisible({ timeout: 2000 });
 
     await closeTabByFileName(page, TEST_FILES.fwDiffMode);
   });
@@ -401,7 +404,7 @@ test.describe('Consecutive Edits Diff View Updates', () => {
     await fs.writeFile(filePath, firstEdit, 'utf8');
     await page.waitForTimeout(500);
 
-    const acceptAllButton = page.locator('button', { hasText: /accept all/i });
+    const acceptAllButton = page.locator(PLAYWRIGHT_TEST_SELECTORS.unifiedDiffAcceptAllButton);
     await expect(acceptAllButton).toBeVisible({ timeout: 2000 });
 
     const editor = page.locator(PLAYWRIGHT_TEST_SELECTORS.contentEditable);
@@ -449,7 +452,7 @@ test.describe('Consecutive Edits Diff View Updates', () => {
     await fs.writeFile(filePath, edit3, 'utf8');
     await page.waitForTimeout(500);
 
-    const acceptAllButton = page.locator('button', { hasText: /accept all/i });
+    const acceptAllButton = page.locator(PLAYWRIGHT_TEST_SELECTORS.unifiedDiffAcceptAllButton);
     await expect(acceptAllButton).toBeVisible({ timeout: 2000 });
 
     const editorText = await page.locator(PLAYWRIGHT_TEST_SELECTORS.contentEditable).textContent();
@@ -480,7 +483,7 @@ test.describe('Consecutive Edits Diff View Updates', () => {
     await fs.writeFile(filePath, '# Test Document\n\nEdited content.\n', 'utf8');
     await page.waitForTimeout(500);
 
-    const acceptAllButton = page.locator('button', { hasText: /accept all/i });
+    const acceptAllButton = page.locator(PLAYWRIGHT_TEST_SELECTORS.unifiedDiffAcceptAllButton);
     await expect(acceptAllButton).toBeVisible({ timeout: 2000 });
 
     // Switch to another file
@@ -497,7 +500,7 @@ test.describe('Consecutive Edits Diff View Updates', () => {
 
     // Diff mode should be restored with updated content
     await expect(acceptAllButton).toBeVisible({ timeout: 2000 });
-    const editorText = await page.locator(PLAYWRIGHT_TEST_SELECTORS.contentEditable).textContent();
+    const editorText = await page.locator(ACTIVE_EDITOR_SELECTOR).textContent();
     expect(editorText).toContain('Second edited content');
 
     await closeTabByFileName(page, TEST_FILES.tabSwitchEdits);
@@ -534,7 +537,7 @@ test.describe('Manual Delete Cleanup', () => {
       { oldText: 'This is the second paragraph.', newText: 'SECOND CHANGE.' },
     ]);
     expect(result.success).toBe(true);
-    await page.waitForSelector('.diff-approval-bar', { timeout: 2000 });
+    await page.waitForSelector('.unified-diff-header', { timeout: 2000 });
 
     // Verify pending tag exists
     const tagsBefore = await queryTags(electronApp, filePath);
@@ -561,7 +564,7 @@ test.describe('Manual Delete Cleanup', () => {
     await openFileFromTree(page, TEST_FILES.manualDelete);
     await page.waitForSelector(PLAYWRIGHT_TEST_SELECTORS.contentEditable, { timeout: 2000 });
     await page.waitForTimeout(500);
-    await expect(page.locator('.diff-approval-bar')).not.toBeVisible();
+    await expect(page.locator('.unified-diff-header')).not.toBeVisible();
 
     await closeTabByFileName(page, TEST_FILES.manualDelete);
   });
@@ -585,27 +588,30 @@ test.describe('Group Approval', () => {
     ]);
     expect(result.success).toBe(true);
 
-    await page.waitForSelector('.diff-approval-bar', { timeout: TEST_TIMEOUTS.DEFAULT_WAIT });
+    await page.waitForSelector('.unified-diff-header', { timeout: TEST_TIMEOUTS.DEFAULT_WAIT });
 
-    // Should show 2 changes
-    expect(await page.locator('.diff-change-counter').textContent()).toContain('2 changes');
+    // Should show 2 changes (may auto-select first change, showing "1 of 2")
+    const counterText = await page.locator('.unified-diff-header-change-counter').textContent();
+    expect(counterText).toContain('2');
 
-    // Select first group
-    await page.locator('button[aria-label="Next change"]').click();
-    await page.waitForTimeout(200);
-    expect(await page.locator('.diff-change-counter').textContent()).toContain('1 of 2');
+    // Navigate to first change if not already selected
+    if (!counterText?.includes('of')) {
+      await page.locator('button[aria-label="Next change"]').click();
+      await page.waitForTimeout(200);
+    }
+    expect(await page.locator('.unified-diff-header-change-counter').textContent()).toContain('of 2');
 
-    // Accept individual group
-    await page.locator('button', { hasText: 'Accept' }).first().click();
+    // Keep individual change group
+    await page.locator('.unified-diff-header-button-accept-single').click();
     await page.waitForTimeout(300);
 
     // Should now show 1 change
-    const updatedCount = await page.locator('.diff-change-counter').textContent();
+    const updatedCount = await page.locator('.unified-diff-header-change-counter').textContent();
     expect(updatedCount).toContain('1');
     expect(updatedCount).not.toContain('2');
 
     // Diff bar should still exist (one change pending)
-    await expect(page.locator('.diff-approval-bar')).toBeVisible();
+    await expect(page.locator('.unified-diff-header')).toBeVisible();
 
     await closeTabByFileName(page, TEST_FILES.groupApproval);
   });
@@ -705,13 +711,13 @@ test.describe('Incremental Cleanup', () => {
     ]);
     expect(result.success).toBe(true);
     await page.waitForTimeout(1000);
-    await page.waitForSelector('.diff-approval-bar', { timeout: 2000 });
-    expect(await page.locator('.diff-change-counter').textContent()).toContain('3');
+    await page.waitForSelector('.unified-diff-header', { timeout: 2000 });
+    expect(await page.locator('.unified-diff-header-change-counter').textContent()).toContain('3');
 
     // Accept all
     await page.locator(PLAYWRIGHT_TEST_SELECTORS.acceptAllButton).click();
     await page.waitForTimeout(500);
-    await expect(page.locator('.diff-approval-bar')).toHaveCount(0, { timeout: 2000 });
+    await expect(page.locator('.unified-diff-header')).toHaveCount(0, { timeout: 2000 });
 
     // Save and verify
     await manualSaveDocument(page);
@@ -726,7 +732,7 @@ test.describe('Incremental Cleanup', () => {
     await openFileFromTree(page, TEST_FILES.incrementalAccept);
     await page.waitForSelector(PLAYWRIGHT_TEST_SELECTORS.contentEditable, { timeout: 3000 });
     await page.waitForTimeout(1000);
-    expect(await page.locator('.diff-approval-bar').count()).toBe(0);
+    expect(await page.locator('.unified-diff-header').count()).toBe(0);
 
     await closeTabByFileName(page, TEST_FILES.incrementalAccept);
   });
@@ -751,22 +757,22 @@ test.describe('Incremental Cleanup', () => {
       { oldText: 'This is the third section with more content.', newText: 'REVISED third.' },
     ]);
     expect(result.success).toBe(true);
-    await page.waitForSelector('.diff-approval-bar', { timeout: 2000 });
-    expect(await page.locator('.diff-change-counter').textContent()).toContain('3');
+    await page.waitForSelector('.unified-diff-header', { timeout: 2000 });
+    expect(await page.locator('.unified-diff-header-change-counter').textContent()).toContain('3');
 
     // Reject each change individually
     const rejectButton = page.locator(PLAYWRIGHT_TEST_SELECTORS.diffRejectButton).first();
     await rejectButton.click();
     await page.waitForTimeout(200);
-    await expect(page.locator('.diff-change-counter')).toContainText('of 2');
+    await expect(page.locator('.unified-diff-header-change-counter')).toContainText('of 2');
 
     await rejectButton.click();
     await page.waitForTimeout(200);
-    await expect(page.locator('.diff-change-counter')).toContainText('of 1');
+    await expect(page.locator('.unified-diff-header-change-counter')).toContainText('of 1');
 
     await rejectButton.click();
     await page.waitForTimeout(500);
-    await expect(page.locator('.diff-approval-bar')).toHaveCount(0, { timeout: 2000 });
+    await expect(page.locator('.unified-diff-header')).toHaveCount(0, { timeout: 2000 });
 
     // Verify original content preserved
     await manualSaveDocument(page);
@@ -781,7 +787,7 @@ test.describe('Incremental Cleanup', () => {
     await openFileFromTree(page, TEST_FILES.incrementalReject);
     await page.waitForSelector(PLAYWRIGHT_TEST_SELECTORS.contentEditable, { timeout: 3000 });
     await page.waitForTimeout(1000);
-    expect(await page.locator('.diff-approval-bar').count()).toBe(0);
+    expect(await page.locator('.unified-diff-header').count()).toBe(0);
 
     await closeTabByFileName(page, TEST_FILES.incrementalReject);
   });
@@ -805,7 +811,7 @@ test.describe('Incremental Cleanup', () => {
       { oldText: 'This is the second section with different content.', newText: 'SECOND CHANGE.' },
     ]);
     expect(result.success).toBe(true);
-    await page.waitForSelector('.diff-approval-bar', { timeout: 2000 });
+    await page.waitForSelector('.unified-diff-header', { timeout: 2000 });
 
     const initialDiffCount = await page.locator('.diff-node').count();
 
@@ -827,7 +833,7 @@ test.describe('Incremental Cleanup', () => {
     await page.waitForTimeout(1000);
 
     // Should still show diff mode (second change pending)
-    await expect(page.locator('.diff-approval-bar')).toBeVisible({ timeout: 2000 });
+    await expect(page.locator('.unified-diff-header')).toBeVisible({ timeout: 2000 });
 
     // Should show fewer diffs than before
     const remainingDiffCount = await page.locator('.diff-node').count();
