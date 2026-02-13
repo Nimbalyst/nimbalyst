@@ -114,7 +114,11 @@ export class OpenAICodexProvider extends BaseAgentProvider {
       const resolveCodexPath = deps.resolveCodexPathOverride ?? resolvePackagedCodexBinaryPath;
       this.protocol = new CodexSDKProtocol(apiKey, loadSdk, resolveCodexPath);
     } else {
-      this.protocol = new CodexSDKProtocol(apiKey);
+      this.protocol = new CodexSDKProtocol(
+        apiKey,
+        loadCodexSdkModule,
+        resolvePackagedCodexBinaryPath
+      );
     }
 
     // Initialize permission service (or use injected for testing)

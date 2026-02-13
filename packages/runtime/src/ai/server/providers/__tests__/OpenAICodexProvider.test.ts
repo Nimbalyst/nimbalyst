@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { OpenAICodexProvider } from '../OpenAICodexProvider';
+import * as codexBinaryPath from '../codex/codexBinaryPath';
+import * as codexSdkLoader from '../codex/codexSdkLoader';
 
 function createAsyncEventStream(events: any[]): AsyncIterable<any> {
   return {
@@ -232,6 +234,70 @@ describe('OpenAICodexProvider', () => {
     expect(codexConstructorOptions).toMatchObject({
       apiKey: 'test-key',
       codexPathOverride: '/tmp/codex-unpacked-bin',
+    });
+  });
+
+  it('wires packaged codex resolver in default provider construction path', async () => {
+    OpenAICodexProvider.setTrustChecker(() => ({ trusted: true, mode: 'allow-all' as any }));
+    OpenAICodexProvider.setPermissionPatternChecker(async () => false);
+    OpenAICodexProvider.setPermissionPatternSaver(async () => {});
+    OpenAICodexProvider.setSecurityLogger(() => {});
+
+    const resolvedBinaryPath = '/tmp/codex-resolved-by-default';
+    const resolveSpy = vi
+      .spyOn(codexBinaryPath, 'resolvePackagedCodexBinaryPath')
+      .mockReturnValue(resolvedBinaryPath);
+
+    let codexConstructorOptions: Record<string, unknown> | undefined;
+    const runStreamed = vi.fn(async () => ({
+      threadId: 'thread-default-resolver',
+      events: createAsyncEventStream([
+        {
+          type: 'item.completed',
+          item: {
+            type: 'agent_message',
+            text: 'default resolver wired',
+          },
+        },
+      ]),
+    }));
+
+    vi.spyOn(codexSdkLoader, 'loadCodexSdkModule').mockResolvedValue({
+      Codex: class {
+        constructor(options?: Record<string, unknown>) {
+          codexConstructorOptions = options;
+        }
+
+        startThread() {
+          return {
+            id: 'thread-default-resolver',
+            runStreamed,
+          };
+        }
+
+        resumeThread() {
+          return {
+            id: 'thread-default-resolver',
+            runStreamed,
+          };
+        }
+      },
+    } as any);
+
+    const provider = new OpenAICodexProvider({ apiKey: 'test-key' });
+    await provider.initialize({
+      apiKey: 'test-key',
+      model: 'openai-codex:gpt-5',
+    });
+
+    for await (const _chunk of provider.sendMessage('test default resolver', undefined, 'session-default-resolver', [], process.cwd())) {
+      // drain
+    }
+
+    expect(resolveSpy).toHaveBeenCalled();
+    expect(codexConstructorOptions).toMatchObject({
+      apiKey: 'test-key',
+      codexPathOverride: resolvedBinaryPath,
     });
   });
 

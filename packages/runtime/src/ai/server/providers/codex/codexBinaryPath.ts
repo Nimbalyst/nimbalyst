@@ -39,6 +39,30 @@ export interface CodexBinaryPathResolutionOptions {
   existsSync?: (candidatePath: string) => boolean;
 }
 
+function getResourcesRoots(resourcesPath: string): string[] {
+  const roots = new Set<string>();
+  const normalized = path.normalize(resourcesPath);
+  roots.add(normalized);
+
+  const asarSuffix = `${path.sep}app.asar`;
+  if (normalized.endsWith(asarSuffix)) {
+    roots.add(normalized.slice(0, -asarSuffix.length));
+  }
+
+  const asarUnpackedSuffix = `${path.sep}app.asar.unpacked`;
+  if (normalized.endsWith(asarUnpackedSuffix)) {
+    roots.add(normalized.slice(0, -asarUnpackedSuffix.length));
+  }
+
+  const asarUnpackedMarker = `${path.sep}app.asar.unpacked${path.sep}`;
+  const asarUnpackedIndex = normalized.indexOf(asarUnpackedMarker);
+  if (asarUnpackedIndex >= 0) {
+    roots.add(normalized.slice(0, asarUnpackedIndex));
+  }
+
+  return Array.from(roots);
+}
+
 /**
  * Resolve a packaged-app-safe Codex binary path.
  * In Electron packaged apps, SDK module resolution may point inside app.asar,
@@ -62,19 +86,28 @@ export function resolvePackagedCodexBinaryPath(
   }
 
   const binaryName = platform === 'win32' ? 'codex.exe' : 'codex';
-  const relativeBinaryPath = path.join(
-    '@openai',
-    'codex-sdk',
-    'vendor',
-    targetTriple,
-    'codex',
-    binaryName
-  );
+  const resourcesRoots = getResourcesRoots(resourcesPath);
 
-  const candidates = [
-    path.join(resourcesPath, 'app.asar.unpacked', 'node_modules', relativeBinaryPath),
-    path.join(resourcesPath, 'node_modules', relativeBinaryPath),
+  const packageRelativeRoots = [
+    path.join('app.asar.unpacked', 'node_modules', '@openai', 'codex-sdk'),
+    path.join('node_modules', '@openai', 'codex-sdk'),
+    path.join('app.asar.unpacked', '@openai', 'codex-sdk'),
   ];
+
+  const binaryRelativePaths = [
+    path.join('vendor', targetTriple, 'codex', binaryName),
+    path.join('vendor', targetTriple, binaryName),
+  ];
+
+  const candidatesSet = new Set<string>();
+  for (const root of resourcesRoots) {
+    for (const packageRelativeRoot of packageRelativeRoots) {
+      for (const binaryRelativePath of binaryRelativePaths) {
+        candidatesSet.add(path.join(root, packageRelativeRoot, binaryRelativePath));
+      }
+    }
+  }
+  const candidates = Array.from(candidatesSet);
 
   for (const candidate of candidates) {
     if (existsSync(candidate)) {

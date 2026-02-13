@@ -63,4 +63,51 @@ describe('codexBinaryPath', () => {
 
     expect(resolved).toBe(fallbackBinary);
   });
+
+  it('normalizes resourcesPath when it points to app.asar', () => {
+    const resourcesPath = '/Applications/Nimbalyst.app/Contents/Resources/app.asar';
+    const normalizedBinary = path.join(
+      '/Applications/Nimbalyst.app/Contents/Resources',
+      'app.asar.unpacked',
+      'node_modules',
+      '@openai',
+      'codex-sdk',
+      'vendor',
+      'aarch64-apple-darwin',
+      'codex',
+      'codex'
+    );
+
+    const resolved = resolvePackagedCodexBinaryPath({
+      resourcesPath,
+      platform: 'darwin',
+      arch: 'arm64',
+      existsSync: (candidate) => candidate === normalizedBinary,
+    });
+
+    expect(resolved).toBe(normalizedBinary);
+  });
+
+  it('supports flattened vendor binary layout', () => {
+    const resourcesPath = '/Applications/Nimbalyst.app/Contents/Resources';
+    const flattenedBinary = path.join(
+      resourcesPath,
+      'app.asar.unpacked',
+      'node_modules',
+      '@openai',
+      'codex-sdk',
+      'vendor',
+      'aarch64-apple-darwin',
+      'codex'
+    );
+
+    const resolved = resolvePackagedCodexBinaryPath({
+      resourcesPath,
+      platform: 'darwin',
+      arch: 'arm64',
+      existsSync: (candidate) => candidate === flattenedBinary,
+    });
+
+    expect(resolved).toBe(flattenedBinary);
+  });
 });
