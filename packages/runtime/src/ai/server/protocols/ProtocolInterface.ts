@@ -143,7 +143,7 @@ export interface ProtocolEvent {
   toolCall?: {
     id?: string;
     name: string;
-    arguments?: unknown;
+    arguments?: Record<string, any>;
     result?: ToolResult | string;
   };
 

@@ -2300,7 +2300,7 @@ export class AIService {
 
                   const edit = {
                     type: 'diff',
-                    replacements: chunk.toolCall.arguments.replacements,
+                    replacements: chunk.toolCall.arguments?.replacements,
                     // MCP edits are applied automatically by the MCP server
                     applied: toolName?.endsWith('__applyDiff')
                   };
@@ -2389,7 +2389,7 @@ export class AIService {
               safeSend(event, 'ai:streamEditStart', {
                 sessionId: session.id,
                 targetFilePath: documentContext?.filePath,
-                ...chunk.config
+                ...(chunk.config as Record<string, unknown> ?? {})
               });
               hasStreamingContent = true;  // Mark that we're doing streaming
               break;

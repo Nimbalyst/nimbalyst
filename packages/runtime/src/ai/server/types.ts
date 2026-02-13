@@ -67,7 +67,7 @@ export interface ChatAttachment {
 export interface ToolCall {
   id?: string;
   name: string;
-  arguments?: unknown;
+  arguments?: Record<string, any>;
   result?: ToolResult | string;
   targetFilePath?: string;  // File path this tool call was executed against
   // Sub-agent specific fields
@@ -279,14 +279,14 @@ export interface StreamChunk {
   toolCall?: {
     id?: string;
     name: string;
-    arguments?: unknown;
-    result?: unknown;
+    arguments?: Record<string, any>;
+    result?: ToolResult | string;
   };
   toolError?: {
     name: string;
-    arguments?: unknown;
+    arguments?: Record<string, any>;
     error: string;
-    result?: unknown;
+    result?: ToolResult | string;
   };
   error?: string;
   isAuthError?: boolean; // True when error is an authentication failure (SDK first-class detection)
@@ -347,7 +347,7 @@ export interface ToolHandler {
   // Note: executeTool has different signature (name, args) so we handle it separately
   executeTool?(name: string, args: unknown): Promise<unknown>;
   // Dynamic property access for other tools
-  [key: string]: ((args: unknown) => Promise<unknown>) | ((name: string, args: unknown) => Promise<unknown>) | undefined;
+  [key: string]: ((...args: any[]) => Promise<any>) | undefined;
 }
 
 /**

@@ -31,6 +31,7 @@ import {
   ErrorBar
 } from 'recharts';
 import type { CustomToolWidgetProps } from './index';
+import type { ToolCall } from '../../../../ai/server/types';
 import { isDarkThemeAtom } from '../../../../store/atoms/theme';
 
 // Theme-aware color palettes
@@ -137,12 +138,6 @@ interface DisplayItem {
 
 interface DisplayArgs {
   items: DisplayItem[];
-}
-
-interface ToolCall {
-  name: string;
-  arguments?: Record<string, unknown>;
-  result?: unknown;
 }
 
 /**

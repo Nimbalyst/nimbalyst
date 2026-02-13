@@ -146,10 +146,13 @@ export class CodexSDKProtocol implements AgentProtocol {
     session: ProtocolSession,
     message: ProtocolMessage
   ): AsyncIterable<ProtocolEvent> {
-    const thread: CodexThreadLike = session.raw?.thread;
+    const thread = session.raw?.thread as CodexThreadLike | undefined;
     if (!thread) {
       throw new Error('Invalid session: missing thread');
     }
+
+    // Extract typed options from raw session data
+    const rawOptions = session.raw?.options as { abortSignal?: AbortSignal } | undefined;
 
     // Build the prompt (system prompt is now in thread options as developer_instructions)
     const prompt = this.buildPrompt(message);
@@ -162,7 +165,7 @@ export class CodexSDKProtocol implements AgentProtocol {
     try {
       // Run the thread with streaming
       const runResult = await thread.runStreamed(prompt, {
-        signal: session.raw?.options?.abortSignal,
+        signal: rawOptions?.abortSignal,
       });
 
       // Thread ID is captured from thread.started event during streaming (see event loop below)
@@ -171,7 +174,7 @@ export class CodexSDKProtocol implements AgentProtocol {
       const events = getEventsIterable(runResult);
       for await (const event of events) {
         // Check for abort
-        if (session.raw?.options?.abortSignal?.aborted) {
+        if (rawOptions?.abortSignal?.aborted) {
           throw new Error('Operation cancelled');
         }
 
@@ -212,9 +215,9 @@ export class CodexSDKProtocol implements AgentProtocol {
               type: 'tool_call',
               toolCall: {
                 name: parsedEvent.toolCall.name,
-                arguments: parsedEvent.toolCall.arguments,
-                ...(parsedEvent.toolCall.result !== undefined
-                  ? { result: parsedEvent.toolCall.result }
+                arguments: parsedEvent.toolCall.arguments as Record<string, any> | undefined,
+                ...(parsedEvent.toolCall.result != null
+                  ? { result: parsedEvent.toolCall.result as import('./ProtocolInterface').ToolResult | string }
                   : {}),
               },
               metadata: { rawEvent: parsedEvent.rawEvent },
@@ -270,7 +273,7 @@ export class CodexSDKProtocol implements AgentProtocol {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       const isAbort =
-        session.raw?.options?.abortSignal?.aborted || /abort|cancel/i.test(errorMessage);
+        rawOptions?.abortSignal?.aborted || /abort|cancel/i.test(errorMessage);
 
       if (!isAbort) {
         yield {
