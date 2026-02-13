@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef, memo, useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import { MaterialSymbol, ProviderIcon } from '@nimbalyst/runtime';
-import { sessionProcessingAtom, sessionUnreadAtom, sessionPendingPromptAtom, groupSessionStatusAtom } from '../../store';
+import { sessionProcessingAtom, sessionUnreadAtom, sessionPendingPromptAtom, sessionHasPendingInteractivePromptAtom, groupSessionStatusAtom } from '../../store';
 import { getRelativeTimeString } from '../../utils/dateFormatting';
 
 /**
@@ -19,9 +19,17 @@ const WorkstreamGroupStatusIndicator: React.FC<{ sessionIds: string[] }> = memo(
   const sessionIdsKey = useMemo(() => JSON.stringify([...sessionIds].sort()), [sessionIds]);
 
   // Subscribe to the aggregated status atom - this properly reacts to state changes
-  const { hasProcessing, hasPendingPrompt, hasUnread } = useAtomValue(groupSessionStatusAtom(sessionIdsKey));
+  const { hasPendingInteractivePrompt, hasProcessing, hasPendingPrompt, hasUnread } = useAtomValue(groupSessionStatusAtom(sessionIdsKey));
 
-  // Priority: processing > pending prompt > unread (same as GroupCardStatus)
+  // Priority: interactive prompt > processing > pending prompt > unread
+  if (hasPendingInteractivePrompt) {
+    return (
+      <div className="workstream-group-status-indicator waiting-for-input flex items-center justify-center text-[var(--nim-warning)] animate-pulse" title="Waiting for your response">
+        <MaterialSymbol icon="contact_support" size={12} />
+      </div>
+    );
+  }
+
   if (hasProcessing) {
     return (
       <div className="workstream-group-status-indicator processing flex items-center justify-center text-[var(--nim-primary)]" title="Processing">
@@ -630,11 +638,20 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
  * Subscribes to Jotai atoms for real-time processing/unread/pending state.
  */
 const WorkstreamSessionStatusIndicator = memo<{ sessionId: string; uncommittedCount?: number }>(({ sessionId, uncommittedCount }) => {
+  const hasPendingInteractivePrompt = useAtomValue(sessionHasPendingInteractivePromptAtom(sessionId));
   const isProcessing = useAtomValue(sessionProcessingAtom(sessionId));
   const hasPendingPrompt = useAtomValue(sessionPendingPromptAtom(sessionId));
   const hasUnread = useAtomValue(sessionUnreadAtom(sessionId));
 
-  // Priority: processing > pending prompt > unread > uncommitted count
+  // Priority: interactive prompt > processing > pending prompt > unread > uncommitted count
+  if (hasPendingInteractivePrompt) {
+    return (
+      <div className="workstream-session-item-status waiting-for-input flex items-center justify-center text-[var(--nim-warning)] animate-pulse" title="Waiting for your response">
+        <MaterialSymbol icon="contact_support" size={12} />
+      </div>
+    );
+  }
+
   if (isProcessing) {
     return (
       <div className="workstream-session-item-status processing flex items-center justify-center text-[var(--nim-primary)] animate-spin" title="Processing...">

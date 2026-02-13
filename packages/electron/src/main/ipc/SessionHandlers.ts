@@ -1216,9 +1216,11 @@ export async function registerSessionHandlers() {
             );
 
             // For git_commit_proposal, also emit to httpServer's legacy listener
+            // and notify renderer to clear the pending interactive prompt indicator
             if (promptType === 'git_commit_proposal_request') {
                 const { ipcMain } = await import('electron');
                 ipcMain.emit(promptId, null, response);
+                event.sender.send('ai:gitCommitProposalResolved', { sessionId, proposalId: promptId });
             }
 
             return { success: true, responseContent };

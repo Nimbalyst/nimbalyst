@@ -195,9 +195,17 @@ const GroupCardStatus: React.FC<{ sessionIds: string[] }> = ({ sessionIds }) => 
   const sessionIdsKey = useMemo(() => JSON.stringify([...sessionIds].sort()), [sessionIds]);
 
   // Subscribe to the aggregated status atom - this properly reacts to state changes
-  const { hasProcessing, hasPendingPrompt, hasUnread } = useAtomValue(groupSessionStatusAtom(sessionIdsKey));
+  const { hasPendingInteractivePrompt, hasProcessing, hasPendingPrompt, hasUnread } = useAtomValue(groupSessionStatusAtom(sessionIdsKey));
 
-  // Priority: processing > pending prompt > unread (same as SessionListItem)
+  // Priority: interactive prompt > processing > pending prompt > unread (same as SessionListItem)
+  if (hasPendingInteractivePrompt) {
+    return (
+      <div className="session-card-status-indicator waiting-for-input flex items-center justify-center text-[var(--nim-warning)] animate-pulse" title="Waiting for your response">
+        <MaterialSymbol icon="contact_support" size={14} />
+      </div>
+    );
+  }
+
   if (hasProcessing) {
     return (
       <div className="session-card-status-indicator processing flex items-center justify-center text-[var(--nim-primary)]" title="Processing">

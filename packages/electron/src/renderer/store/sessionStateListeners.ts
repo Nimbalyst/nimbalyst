@@ -273,6 +273,16 @@ export function initSessionStateListeners(): () => void {
   };
 
   /**
+   * Handle GitCommitProposal resolved events globally.
+   * Clears pending interactive prompt indicator.
+   */
+  const handleGitCommitProposalResolved = (data: { sessionId: string; proposalId: string }) => {
+    const { sessionId } = data;
+    if (!sessionId) return;
+    store.set(sessionHasPendingInteractivePromptAtom(sessionId), false);
+  };
+
+  /**
    * Handle notification click events.
    * Switches to the session that was clicked in the OS notification.
    * If the session is a child of a workstream, selects the parent instead.
@@ -354,6 +364,7 @@ export function initSessionStateListeners(): () => void {
   let cleanupToolPermission: (() => void) | undefined;
   let cleanupToolPermissionResolved: (() => void) | undefined;
   let cleanupGitCommitProposal: (() => void) | undefined;
+  let cleanupGitCommitProposalResolved: (() => void) | undefined;
   let cleanupNotificationClicked: (() => void) | undefined;
   if (window.electronAPI?.on) {
     cleanupMessageLogged = window.electronAPI.on('ai:message-logged', handleMessageLogged);
@@ -366,6 +377,7 @@ export function initSessionStateListeners(): () => void {
     cleanupToolPermission = window.electronAPI.on('ai:toolPermission', handleToolPermission);
     cleanupToolPermissionResolved = window.electronAPI.on('ai:toolPermissionResolved', handleToolPermissionResolved);
     cleanupGitCommitProposal = window.electronAPI.on('ai:gitCommitProposal', handleGitCommitProposal);
+    cleanupGitCommitProposalResolved = window.electronAPI.on('ai:gitCommitProposalResolved', handleGitCommitProposalResolved);
     cleanupNotificationClicked = window.electronAPI.on('notification-clicked', handleNotificationClicked);
   }
 
@@ -383,6 +395,7 @@ export function initSessionStateListeners(): () => void {
     cleanupToolPermission?.();
     cleanupToolPermissionResolved?.();
     cleanupGitCommitProposal?.();
+    cleanupGitCommitProposalResolved?.();
     cleanupNotificationClicked?.();
   };
 }

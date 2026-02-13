@@ -354,6 +354,8 @@ async function handleGitCommitResponse(
   }) => {
     const { ipcMain } = await import('electron');
     ipcMain.emit(promptId, null, result);
+    // Notify renderer to clear the pending interactive prompt indicator
+    notifyAllWindows('ai:gitCommitProposalResolved', { sessionId, proposalId: promptId });
   };
 
   if (response.action === 'cancelled') {
