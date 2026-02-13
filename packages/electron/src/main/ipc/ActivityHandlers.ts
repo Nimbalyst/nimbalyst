@@ -109,7 +109,7 @@ export function registerActivityHandlers(): void {
           }
         }
 
-        // Source B: User prompts
+        // Source B: User prompts (exclude hidden messages like automatic /context calls)
         const { rows: messages } = await database.query<{
           id: string;
           session_id: string;
@@ -120,7 +120,7 @@ export function registerActivityHandlers(): void {
           `SELECT m.id, m.session_id, m.created_at, m.content, s.title as session_title
            FROM ai_agent_messages m
            JOIN ai_sessions s ON m.session_id = s.id
-           WHERE s.workspace_id = $1 AND m.direction = 'input'
+           WHERE s.workspace_id = $1 AND m.direction = 'input' AND m.hidden = FALSE
            ORDER BY m.created_at DESC`,
           [workspacePath]
         );
