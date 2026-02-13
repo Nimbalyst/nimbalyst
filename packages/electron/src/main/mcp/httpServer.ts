@@ -2762,8 +2762,6 @@ async function tryCreateServer(port: number): Promise<any> {
                 activeTransports.delete(transport.sessionId);
                 if (sessionId) {
                   serverByNimbalystSession.delete(sessionId);
-                  // Clean up document state to prevent memory leak
-                  documentStateBySession.delete(sessionId);
                 }
               };
             })
@@ -2772,8 +2770,6 @@ async function tryCreateServer(port: number): Promise<any> {
               activeTransports.delete(transport.sessionId);
               if (sessionId) {
                 serverByNimbalystSession.delete(sessionId);
-                // Clean up document state to prevent memory leak
-                documentStateBySession.delete(sessionId);
               }
               if (!res.headersSent) {
                 res.writeHead(500);
@@ -2890,8 +2886,6 @@ async function tryCreateServer(port: number): Promise<any> {
               }
               if (nimbalystSessionId) {
                 serverByNimbalystSession.delete(nimbalystSessionId);
-                // Clean up document state to prevent memory leak
-                documentStateBySession.delete(nimbalystSessionId);
               }
             };
 
