@@ -29,7 +29,7 @@ export const BETA_FEATURES: readonly BetaFeatureDefinition[] = [
   {
     tag: 'blitz',
     name: 'Blitz',
-    description: 'Enable Blitz for rapid AI-powered coding sessions with isolated git worktrees.',
+    description: 'Run the same prompt on multiple isolated worktrees to make more than one attempt at a task.',
     icon: 'bolt',
   },
   {

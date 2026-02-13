@@ -31,7 +31,7 @@ export function BetaFeaturesPanel() {
           Beta Features
         </h3>
         <p className="provider-panel-description text-sm leading-relaxed text-[var(--nim-text-muted)]">
-          Try out new features before they are generally available. Beta features may change or be removed.
+          Try out new features before they are generally available. Beta features may not be fully complete or polished, and may be removed in the future.
         </p>
       </div>
 
