@@ -20,10 +20,10 @@ describe('OpenAICodexProvider', () => {
     OpenAICodexProvider.setSecurityLogger(null);
   });
 
-  it('exposes expected model metadata', () => {
+  it('exposes expected model metadata', async () => {
     expect(OpenAICodexProvider.DEFAULT_MODEL).toBe('openai-codex:gpt-5');
 
-    const models = OpenAICodexProvider.getModels();
+    const models = await OpenAICodexProvider.getModels();
     expect(models).toHaveLength(1);
     expect(models[0]).toEqual({
       id: 'openai-codex:gpt-5',
@@ -372,28 +372,8 @@ describe('OpenAICodexProvider', () => {
     expect(errorChunk?.error).toContain('denied');
   });
 
-  it('uses Nimbalyst ToolPermission flow in ask mode before running Codex', async () => {
-    // TODO: This test needs to be updated for the new ToolPermissionService architecture
-    // The polling mechanism in ToolPermissionService requires AgentMessagesRepository setup
-    // For now, skip this test until we can properly mock the service
-    return;
-    const runStreamed = vi.fn(async () => ({
-      threadId: 'thread-ask',
-      events: createAsyncEventStream([
-        {
-          type: 'item.completed',
-          item: {
-            type: 'agent_message',
-            text: 'approved and executed',
-          },
-        },
-      ]),
-    }));
-
-    const startThread = vi.fn(() => ({
-      id: 'thread-ask',
-      runStreamed,
-    }));
+  it('denies Codex in ask mode (tool-level permissions not supported)', async () => {
+    const startThread = vi.fn();
 
     const provider = new OpenAICodexProvider(
       { apiKey: 'test-key' },
@@ -419,30 +399,16 @@ describe('OpenAICodexProvider', () => {
       model: 'openai-codex:gpt-5',
     });
 
-    const pendingPromise = new Promise<any>((resolve) => {
-      provider.once('toolPermission:pending', resolve);
-    });
+    const chunks: any[] = [];
+    for await (const chunk of provider.sendMessage('test message', undefined, 'session-ask', [], process.cwd())) {
+      chunks.push(chunk);
+    }
 
-    const chunksPromise = (async () => {
-      const chunks: any[] = [];
-      for await (const chunk of provider.sendMessage('needs approval', undefined, 'session-ask', [], process.cwd())) {
-        chunks.push(chunk);
-      }
-      return chunks;
-    })();
-
-    const pending = await pendingPromise;
-    expect(pending.requestId).toBeDefined();
-    provider.resolveToolPermission(
-      pending.requestId,
-      { decision: 'allow', scope: 'once' },
-      'session-ask'
-    );
-
-    const chunks = await chunksPromise;
-    expect(startThread).toHaveBeenCalledTimes(1);
-    expect(chunks.some((chunk) => chunk.type === 'text' && chunk.content.includes('approved and executed'))).toBe(true);
-    expect(chunks.some((chunk) => chunk.type === 'complete')).toBe(true);
+    // Should be denied because Codex doesn't support tool-level permissions
+    expect(startThread).not.toHaveBeenCalled();
+    const errorChunk = chunks.find((chunk) => chunk.type === 'error');
+    expect(errorChunk?.error).toContain('Allow Edits');
+    expect(errorChunk?.error).toContain('permission mode');
   });
 
   it('maps legacy codex model ids to gpt-5 when starting a thread', async () => {

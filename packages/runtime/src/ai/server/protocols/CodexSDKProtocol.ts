@@ -330,12 +330,19 @@ export class CodexSDKProtocol implements AgentProtocol {
    * Build thread options from session options
    */
   private buildThreadOptions(options: SessionOptions): Record<string, unknown> {
+    // Determine sandboxMode based on permission mode
+    // - 'bypass-all' (Allow All) -> 'danger-full-access' (unrestricted file system access)
+    // - 'allow-all' (Allow Edits) or default -> 'workspace-write' (scoped to workspace)
+    const sandboxMode = options.permissionMode === 'bypass-all'
+      ? 'danger-full-access'
+      : 'workspace-write';
+
     const baseOptions = {
       model: options.model || 'gpt-5',
       workingDirectory: options.workspacePath,
       skipGitRepoCheck: true,
       approvalPolicy: 'never', // Nimbalyst handles approvals
-      sandboxMode: 'workspace-write',
+      sandboxMode,
       modelReasoningEffort: 'high',
     };
 

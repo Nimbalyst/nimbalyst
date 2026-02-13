@@ -279,7 +279,7 @@ export class OpenAICodexProvider extends BaseAgentProvider {
       if (permissionDecision.decision !== 'allow') {
         yield {
           type: 'error',
-          error: 'OpenAI Codex turn denied by user',
+          error: permissionDecision.reason || 'OpenAI Codex turn denied',
         };
         return;
       }
@@ -292,23 +292,19 @@ export class OpenAICodexProvider extends BaseAgentProvider {
         action: existingSessionId ? 'RESUME' : 'CREATE'
       });
 
+      const sessionOptions = {
+        workspacePath,
+        model: this.getConfiguredModel(),
+        ...(permissionDecision.permissionMode ? { permissionMode: permissionDecision.permissionMode } : {}),
+        raw: {
+          systemPrompt,
+          abortSignal: abortController.signal,
+        },
+      };
+
       const session = existingSessionId
-        ? await this.protocol.resumeSession(existingSessionId, {
-            workspacePath,
-            model: this.getConfiguredModel(),
-            raw: {
-              systemPrompt,
-              abortSignal: abortController.signal,
-            },
-          })
-        : await this.protocol.createSession({
-            workspacePath,
-            model: this.getConfiguredModel(),
-            raw: {
-              systemPrompt,
-              abortSignal: abortController.signal,
-            },
-          });
+        ? await this.protocol.resumeSession(existingSessionId, sessionOptions)
+        : await this.protocol.createSession(sessionOptions);
 
       console.log('[CODEX] Session after create/resume:', {
         sessionId,
@@ -538,7 +534,7 @@ export class OpenAICodexProvider extends BaseAgentProvider {
     workspacePath: string,
     permissionsPath: string,
     signal: AbortSignal
-  ): Promise<{ decision: 'allow' | 'deny' }> {
+  ): Promise<{ decision: 'allow' | 'deny'; reason?: string; permissionMode?: PermissionMode }> {
     const pathForTrust = permissionsPath || workspacePath;
 
     // Check trust status
@@ -549,126 +545,33 @@ export class OpenAICodexProvider extends BaseAgentProvider {
         this.logSecurity('[OpenAICodexProvider] Workspace not trusted, denying Codex turn', {
           workspacePath: pathForTrust,
         });
-        return { decision: 'deny' };
+        return {
+          decision: 'deny',
+          reason: 'Workspace is not trusted. Please trust this workspace to use OpenAI Codex.'
+        };
       }
 
-      // Trusted fast-path modes
+      // IMPORTANT: Codex can only be used in "allow-all" or "bypass-all" mode
+      // The Codex SDK does not support tool-level permission checks (no canUseTool callback)
+      // We can only approve/deny entire turns, not individual tools
+      // Therefore, we require users to explicitly opt-in to unrestricted mode
       if (trustStatus.mode === 'bypass-all' || trustStatus.mode === 'allow-all') {
-        return { decision: 'allow' };
+        return { decision: 'allow', permissionMode: trustStatus.mode };
       }
 
-      // If trust mode is not explicitly "ask", allow by default
-      if (trustStatus.mode !== 'ask') {
-        return { decision: 'allow' };
-      }
-    } else {
-      // No trust checker - allow by default (non-Electron environments)
-      return { decision: 'allow' };
-    }
-
-    const pattern = OpenAICodexProvider.CODEX_EXECUTION_PATTERN;
-
-    // Check if pattern already approved
-    if (await this.permissionService.isPatternApproved(workspacePath, pattern)) {
-      this.logSecurity('[OpenAICodexProvider] Pattern already approved', { pattern });
-      return { decision: 'allow' };
-    }
-
-    if (!sessionId) {
-      this.logSecurity('[OpenAICodexProvider] No session ID for permission request', {});
-      return { decision: 'deny' };
-    }
-
-    // Request permission via service
-    const requestId = `tool-${sessionId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const rawCommand = `Allow OpenAI Codex to run agent tools in ${workspacePath}`;
-    const patternDisplayName = 'OpenAI Codex agent runs';
-    const warnings = ['OpenAI Codex may run shell commands, edit files, and fetch web content during this turn.'];
-
-    // Log tool use for UI
-    await this.logAgentMessageBestEffort(
-      sessionId,
-      'output',
-      JSON.stringify({
-        type: 'nimbalyst_tool_use',
-        id: requestId,
-        name: 'ToolPermission',
-        input: {
-          requestId,
-          toolName: 'OpenAICodex',
-          rawCommand,
-          pattern,
-          patternDisplayName,
-          isDestructive: true,
-          warnings,
-          workspacePath,
-        },
-      })
-    );
-
-    // Create request structure for UI widget
-    const request = {
-      id: requestId,
-      toolName: 'OpenAICodex',
-      rawCommand,
-      actionsNeedingApproval: [{
-        action: {
-          pattern,
-          displayName: patternDisplayName,
-          command: rawCommand,
-          isDestructive: true,
-          referencedPaths: [],
-          hasRedirection: false,
-        },
-        decision: 'ask' as const,
-        reason: 'OpenAI Codex turn requires user approval',
-        isDestructive: true,
-        isRisky: true,
-        warnings,
-        outsidePaths: [],
-        sensitivePaths: [],
-      }],
-      hasDestructiveActions: true,
-      createdAt: Date.now(),
-    };
-
-    // Emit pending event for UI
-    this.emit('toolPermission:pending', {
-      requestId,
-      sessionId,
-      workspacePath,
-      request,
-      timestamp: Date.now(),
-    });
-
-    try {
-      // Request permission via service
-      const response = await this.permissionService.requestPermission({
-        requestId,
-        sessionId,
-        workspacePath,
-        permissionsPath,
-        pattern,
-        patternDisplayName,
-        rawCommand,
-        warnings,
-        isDestructive: true,
-        signal,
+      // Deny Codex in "ask" mode - tool-level permissions are not supported
+      this.logSecurity('[OpenAICodexProvider] Codex requires "Allow Edits" permission mode', {
+        currentMode: trustStatus.mode,
+        workspacePath: pathForTrust,
       });
-
-      // Emit resolved event for UI
-      this.emit('toolPermission:resolved', {
-        requestId,
-        sessionId,
-        response,
-        timestamp: Date.now(),
-      });
-
-      return { decision: response.decision };
-    } catch (error) {
-      this.logSecurity('[OpenAICodexProvider] Permission request failed', { error });
-      return { decision: 'deny' };
+      return {
+        decision: 'deny',
+        reason: 'OpenAI Codex requires "Allow Edits" permission mode in Nimbalyst. Please change the permission mode in workspace settings to use Codex.'
+      };
     }
+
+    // No trust checker - allow by default (non-Electron environments)
+    return { decision: 'allow' };
   }
 
 }
