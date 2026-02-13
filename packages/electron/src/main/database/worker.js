@@ -1104,6 +1104,50 @@ class PGLiteWorker {
       console.error('[PGLite Worker] Failed to migrate timestamp columns:', error);
       // Non-fatal for existing installs
     }
+
+    // Blitzes table - first-class entity for running same prompt across multiple worktrees
+    try {
+      await this.db.exec(`
+        CREATE TABLE IF NOT EXISTS blitzes (
+          id TEXT PRIMARY KEY,
+          workspace_id TEXT NOT NULL,
+          prompt TEXT NOT NULL,
+          model_config JSONB NOT NULL,
+          display_name TEXT,
+          is_pinned BOOLEAN DEFAULT FALSE,
+          is_archived BOOLEAN DEFAULT FALSE,
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_blitzes_workspace ON blitzes(workspace_id);
+        CREATE INDEX IF NOT EXISTS idx_blitzes_archived ON blitzes(is_archived);
+      `);
+      console.log('[PGLite Worker] blitzes table created successfully');
+    } catch (error) {
+      console.error('[PGLite Worker] Failed to create blitzes table:', error);
+      throw error;
+    }
+
+    // Add blitz_id column to worktrees (migration)
+    try {
+      await this.db.exec(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'worktrees' AND column_name = 'blitz_id'
+          ) THEN
+            ALTER TABLE worktrees ADD COLUMN blitz_id TEXT;
+            CREATE INDEX IF NOT EXISTS idx_worktrees_blitz ON worktrees(blitz_id);
+          END IF;
+        END $$;
+      `);
+      console.log('[PGLite Worker] blitz_id column added to worktrees');
+    } catch (error) {
+      console.error('[PGLite Worker] Failed to add blitz_id column to worktrees:', error);
+      throw error;
+    }
   }
 
   async query(message) {

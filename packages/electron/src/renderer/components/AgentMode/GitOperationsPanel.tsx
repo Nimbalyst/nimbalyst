@@ -32,6 +32,7 @@ import { MergeConflictDialog } from './MergeConflictDialog';
 import { MergeConfirmDialog } from './MergeConfirmDialog';
 import { UntrackedFilesConflictDialog } from './UntrackedFilesConflictDialog';
 import { ArchiveWorktreeDialog } from './ArchiveWorktreeDialog';
+import { ArchiveBlitzDialog } from './ArchiveBlitzDialog';
 import { SquashCommitModal } from './SquashCommitModal';
 import { BadGitStateDialog } from './BadGitStateDialog';
 import { HelpTooltip } from '../../help';
@@ -144,6 +145,9 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
     const [badGitStateError, setBadGitStateError] = useState<{ message: string; conflictedFiles?: string[] } | null>(null);
     const [worktreeName, setWorktreeName] = useState<string>('');
     const [showArchiveDialog, setShowArchiveDialog] = useState(false);
+    const [showArchiveBlitzDialog, setShowArchiveBlitzDialog] = useState(false);
+    const [blitzId, setBlitzId] = useState<string | null>(null);
+    const [blitzName, setBlitzName] = useState<string>('');
     const [showMergeConfirmDialog, setShowMergeConfirmDialog] = useState(false);
     const [showSquashModal, setShowSquashModal] = useState(false);
     const [selectedCommits, setSelectedCommits] = useState<Set<string>>(new Set());
@@ -585,6 +589,21 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
           if (statusResult.success && statusResult.status?.hasUncommittedChanges) {
             // Don't show archive dialog - user has uncommitted changes
           } else {
+            // Check if this worktree belongs to a blitz - if so, offer to archive the whole blitz
+            if (worktreeId) {
+              try {
+                const wtResult = await window.electronAPI.invoke('worktree:get', worktreeId);
+                if (wtResult?.worktree?.blitzId) {
+                  const blitzResult = await window.electronAPI.invoke('blitz:get', wtResult.worktree.blitzId);
+                  setBlitzId(wtResult.worktree.blitzId);
+                  setBlitzName(blitzResult?.blitz?.displayName || blitzResult?.blitz?.prompt?.slice(0, 60) || 'Blitz');
+                  setShowArchiveBlitzDialog(true);
+                  return;
+                }
+              } catch (err) {
+                console.error('[GitOperationsPanel] Failed to check blitz membership:', err);
+              }
+            }
             setShowArchiveDialog(true);
           }
         } else {
@@ -607,7 +626,7 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
       } finally {
         setWorktreeIsMerging(false);
       }
-    }, [worktreePath, workspacePath, loadWorktreeChangedFiles, loadWorktreeCommits, loadWorktreeStatus]);
+    }, [worktreePath, workspacePath, worktreeId, loadWorktreeChangedFiles, loadWorktreeCommits, loadWorktreeStatus]);
 
     // Show merge confirmation dialog
     const handleWorktreeMerge = useCallback(() => {
@@ -897,6 +916,41 @@ Please proceed with this strategy.`;
     // Handle keep worktree (dismiss dialog)
     const handleKeepWorktree = useCallback(() => {
       setShowArchiveDialog(false);
+    }, []);
+
+    // Handle archive entire blitz after merge
+    const handleArchiveBlitz = useCallback(async () => {
+      if (!blitzId) return;
+
+      try {
+        await window.electronAPI.invoke('blitz:archive', blitzId, workspacePath);
+        setShowArchiveBlitzDialog(false);
+        if (onWorktreeArchived) {
+          onWorktreeArchived();
+        }
+      } catch (err) {
+        console.error('[GitOperationsPanel] Failed to archive blitz:', err);
+      }
+    }, [blitzId, workspacePath, onWorktreeArchived]);
+
+    // Handle archive just this worktree (from blitz dialog)
+    const handleArchiveWorktreeOnly = useCallback(async () => {
+      if (!worktreeId) return;
+
+      try {
+        await window.electronAPI.worktreeArchive(worktreeId, workspacePath);
+        setShowArchiveBlitzDialog(false);
+        if (onWorktreeArchived) {
+          onWorktreeArchived();
+        }
+      } catch (err) {
+        console.error('[GitOperationsPanel] Failed to archive worktree:', err);
+      }
+    }, [worktreeId, workspacePath, onWorktreeArchived]);
+
+    // Handle keep all (dismiss blitz archive dialog)
+    const handleKeepAll = useCallback(() => {
+      setShowArchiveBlitzDialog(false);
     }, []);
 
     // Squash commits
@@ -1508,6 +1562,17 @@ Please proceed with this strategy.`;
             contextMessage="Merge successful!"
             hasUncommittedChanges={worktreeHasUncommittedChanges}
             uncommittedFileCount={worktreeChangedFiles.length}
+          />
+        )}
+
+        {/* Archive blitz dialog (shown after merge when worktree belongs to a blitz) */}
+        {showArchiveBlitzDialog && (
+          <ArchiveBlitzDialog
+            blitzName={blitzName}
+            worktreeName={worktreeName}
+            onArchiveBlitz={handleArchiveBlitz}
+            onArchiveWorktreeOnly={handleArchiveWorktreeOnly}
+            onKeep={handleKeepAll}
           />
         )}
 

@@ -43,6 +43,9 @@ export const DIALOG_IDS = {
 
   // Developer group
   SESSION_IMPORT: 'session-import',
+
+  // Creation group
+  BLITZ_CREATE: 'blitz-create',
 } as const;
 
 export type DialogId = (typeof DIALOG_IDS)[keyof typeof DIALOG_IDS];

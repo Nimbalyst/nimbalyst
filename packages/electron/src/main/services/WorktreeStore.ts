@@ -24,6 +24,7 @@ export interface Worktree {
   updatedAt?: number;
   isPinned?: boolean; // Whether this worktree is pinned to the top of the list
   isArchived?: boolean; // Whether this worktree is archived
+  blitzId?: string; // Associated blitz ID if this worktree was created as part of a blitz
 }
 
 /**
@@ -41,6 +42,7 @@ interface WorktreeRow {
   updated_at: Date | string | number;
   is_pinned?: boolean;
   is_archived?: boolean;
+  blitz_id?: string;
 }
 
 /**
@@ -112,9 +114,9 @@ export function createWorktreeStore(db: PGliteLike, ensureDbReady?: EnsureReadyF
 
       await db.query(
         `INSERT INTO worktrees (
-          id, workspace_id, name, path, branch, base_branch, created_at, updated_at
+          id, workspace_id, name, path, branch, base_branch, created_at, updated_at, blitz_id
         ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8
+          $1, $2, $3, $4, $5, $6, $7, $8, $9
         )`,
         [
           worktree.id,
@@ -125,6 +127,7 @@ export function createWorktreeStore(db: PGliteLike, ensureDbReady?: EnsureReadyF
           worktree.baseBranch,
           createdAt,
           updatedAt,
+          worktree.blitzId || null,
         ]
       );
 
@@ -162,6 +165,7 @@ export function createWorktreeStore(db: PGliteLike, ensureDbReady?: EnsureReadyF
         updatedAt: toMillis(row.updated_at),
         isPinned: row.is_pinned ?? false,
         isArchived: row.is_archived ?? false,
+        blitzId: row.blitz_id ?? undefined,
       };
 
       return worktree;
@@ -198,6 +202,7 @@ export function createWorktreeStore(db: PGliteLike, ensureDbReady?: EnsureReadyF
         updatedAt: toMillis(row.updated_at),
         isPinned: row.is_pinned ?? false,
         isArchived: row.is_archived ?? false,
+        blitzId: row.blitz_id ?? undefined,
       };
 
       return worktree;
@@ -232,6 +237,7 @@ export function createWorktreeStore(db: PGliteLike, ensureDbReady?: EnsureReadyF
         updatedAt: toMillis(row.updated_at),
         isPinned: row.is_pinned ?? false,
         isArchived: row.is_archived ?? false,
+        blitzId: row.blitz_id ?? undefined,
       }));
 
       logger.info('Found worktrees', { count: worktrees.length });
@@ -411,6 +417,35 @@ export function createWorktreeStore(db: PGliteLike, ensureDbReady?: EnsureReadyF
       );
 
       logger.info('Worktree archived status updated', { id, isArchived });
+    },
+
+    /**
+     * List all worktrees belonging to a blitz
+     */
+    async listByBlitz(blitzId: string): Promise<Worktree[]> {
+      await ensureReady();
+
+      logger.info('Listing worktrees for blitz', { blitzId });
+
+      const { rows } = await db.query<WorktreeRow>(
+        `SELECT * FROM worktrees WHERE blitz_id = $1 ORDER BY created_at ASC`,
+        [blitzId]
+      );
+
+      return rows.map(row => ({
+        id: row.id,
+        name: row.name,
+        displayName: row.display_name ?? undefined,
+        path: row.path,
+        branch: row.branch,
+        baseBranch: row.base_branch,
+        projectPath: row.workspace_id,
+        createdAt: toMillis(row.created_at),
+        updatedAt: toMillis(row.updated_at),
+        isPinned: row.is_pinned ?? false,
+        isArchived: row.is_archived ?? false,
+        blitzId: row.blitz_id ?? undefined,
+      }));
     },
 
     /**

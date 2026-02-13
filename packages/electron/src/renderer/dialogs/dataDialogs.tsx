@@ -12,6 +12,7 @@ import { ProjectSelectionDialog } from '../components/ProjectSelectionDialog/Pro
 import { ErrorDialog } from '../components/ErrorDialog/ErrorDialog';
 import { ConfirmDialog } from '../components/ConfirmDialog/ConfirmDialog';
 import { SessionImportDialog } from '../components/AgenticCoding/SessionImportDialog';
+import { BlitzDialog } from '../components/BlitzDialog/BlitzDialog';
 import { DIALOG_IDS } from './registry';
 
 // Type definitions for dialog data
@@ -32,6 +33,11 @@ export interface ErrorDialogData {
 
 export interface SessionImportData {
   workspacePath: string;
+}
+
+export interface BlitzDialogData {
+  workspacePath: string;
+  onCreated: (result: any) => void;
 }
 
 export interface ConfirmDialogData {
@@ -146,6 +152,28 @@ function SessionImportWrapper({
   );
 }
 
+function BlitzDialogWrapper({
+  isOpen,
+  onClose,
+  data,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  data: BlitzDialogData;
+}) {
+  return (
+    <BlitzDialog
+      isOpen={isOpen}
+      onClose={onClose}
+      onCreated={(result) => {
+        data.onCreated(result);
+        onClose();
+      }}
+      workspacePath={data.workspacePath}
+    />
+  );
+}
+
 // Register all data-carrying dialogs
 export function registerDataDialogs() {
   registerDialog<ProjectSelectionData>({
@@ -175,5 +203,12 @@ export function registerDataDialogs() {
     group: 'system',
     component: SessionImportWrapper as DialogConfig<SessionImportData>['component'],
     priority: 200,
+  });
+
+  registerDialog<BlitzDialogData>({
+    id: DIALOG_IDS.BLITZ_CREATE,
+    group: 'system',
+    component: BlitzDialogWrapper as DialogConfig<BlitzDialogData>['component'],
+    priority: 100,
   });
 }

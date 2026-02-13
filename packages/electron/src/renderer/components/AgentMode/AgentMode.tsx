@@ -13,7 +13,7 @@
 
 import React, { forwardRef, useImperativeHandle, useEffect, useCallback, useMemo, useRef, useState } from 'react';
 import { atom, useAtomValue, useSetAtom } from 'jotai';
-import { defaultAgentModelAtom, worktreesFeatureAvailableAtom } from '../../store/atoms/appSettings';
+import { defaultAgentModelAtom, worktreesFeatureAvailableAtom, betaFeatureEnabledAtom } from '../../store/atoms/appSettings';
 import { ResizablePanel } from '../AgenticCoding/ResizablePanel';
 import { SessionHistory } from '../AgenticCoding/SessionHistory';
 import { AgentWorkstreamPanel, type AgentWorkstreamPanelRef } from './AgentWorkstreamPanel';
@@ -52,6 +52,7 @@ import { initSessionTranscriptListeners } from '../../store/listeners/sessionTra
 import { initClaudeUsageListeners } from '../../store/listeners/claudeUsageListeners';
 import { fetchSessionSharesAtom } from '../../store';
 import type { WorktreeCreateResult, SessionCreateResult } from '../../../shared/ipc/types';
+import { BlitzDialog } from '../BlitzDialog/BlitzDialog';
 
 export interface AgentModeRef {
   createNewSession: () => Promise<void>;
@@ -96,8 +97,14 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
   // Git repo status for worktree feature
   const [isGitRepo, setIsGitRepo] = useState(false);
 
+  // Blitz dialog state
+  const [showBlitzDialog, setShowBlitzDialog] = useState(false);
+
   // Check if worktrees feature is available (developer mode + feature enabled)
   const isWorktreesAvailable = useAtomValue(worktreesFeatureAvailableAtom);
+  // Blitz requires both worktrees and the blitz beta feature
+  const isBlitzBetaEnabled = useAtomValue(betaFeatureEnabledAtom('blitz'));
+  const isBlitzAvailable = isWorktreesAvailable && isBlitzBetaEnabled;
 
   // Layout state from atoms
   const historyWidth = useAtomValue(sessionHistoryWidthAtom);
@@ -415,6 +422,76 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
     }
   }, [createWorktreeSessionCore]);
 
+  // Session management atoms (declared early so blitz handler can reference refreshSessions)
+  const refreshSessions = useSetAtom(refreshSessionListAtom);
+  const removeSessionFromAtom = useSetAtom(removeSessionFullAtom);
+  const updateSessionStore = useSetAtom(updateSessionStoreAtom);
+
+  // Create new blitz - opens the blitz dialog
+  const createNewBlitz = useCallback(() => {
+    if (!isWorktreesAvailable || !isGitRepo) return;
+    setShowBlitzDialog(true);
+  }, [isWorktreesAvailable, isGitRepo]);
+
+  // Handle blitz creation result
+  const handleBlitzCreated = useCallback(async (result: any) => {
+    if (!result.success) return;
+
+    const { worktrees: worktreeResults, sessionIds } = result;
+
+    // Add each session to the session registry
+    if (worktreeResults && sessionIds) {
+      for (let i = 0; i < worktreeResults.length; i++) {
+        const wResult = worktreeResults[i];
+        if (!wResult.success || !wResult.worktree) continue;
+
+        const sessionId = sessionIds[i];
+        if (!sessionId) continue;
+
+        const worktree = wResult.worktree;
+
+        addSession({
+          id: sessionId,
+          name: `Blitz: ${worktree.name}`,
+          title: `Blitz: ${worktree.name}`,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          provider: 'claude-code',
+          model: defaultModel,
+          sessionType: 'coding',
+          messageCount: 0,
+          projectPath: workspacePath,
+          worktreeId: worktree.id,
+        });
+
+        // Initialize workstream state with worktree type
+        store.set(workstreamStateAtom(sessionId), {
+          type: 'worktree',
+          worktreeId: worktree.id,
+        });
+      }
+
+      // Select the first session
+      if (sessionIds[0]) {
+        setSelectedWorkstream({
+          workspacePath,
+          selection: { type: 'worktree', id: sessionIds[0] },
+        });
+      }
+
+      // Refresh session list to pick up the new sessions
+      refreshSessions();
+
+      // Trigger queue processing for all sessions so they start immediately
+      for (const sessionId of sessionIds) {
+        window.electronAPI.invoke('ai:triggerQueueProcessing', sessionId, workspacePath)
+          .catch(error => {
+            console.error('[AgentMode] Failed to trigger blitz session queue processing:', error);
+          });
+      }
+    }
+  }, [workspacePath, addSession, setSelectedWorkstream, defaultModel, refreshSessions]);
+
   // Open session by ID
   const openSessionInTab = useCallback(async (sessionId: string) => {
     console.log('[AgentMode] openSessionInTab called with:', sessionId);
@@ -599,11 +676,6 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
     });
   }, [workspacePath, setSelectedWorkstream, handleChildSessionSelect]);
 
-  // Session management atoms
-  const refreshSessions = useSetAtom(refreshSessionListAtom);
-  const removeSessionFromAtom = useSetAtom(removeSessionFullAtom);
-  const updateSessionStore = useSetAtom(updateSessionStoreAtom);
-
   // Branch a session - creates a fork at the current message
   const handleSessionBranch = useCallback(async (sessionId: string) => {
     try {
@@ -755,6 +827,7 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
       onSessionBranch={handleSessionBranch}
       onNewSession={createNewSession}
       onNewWorktreeSession={isWorktreesAvailable ? createNewWorktreeSession : undefined}
+      onNewBlitz={isBlitzAvailable ? createNewBlitz : undefined}
       onAddSessionToWorktree={isWorktreesAvailable ? addSessionToWorktree : undefined}
       isGitRepo={isGitRepo}
       collapsedGroups={collapsedGroups}
@@ -776,6 +849,12 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
         maxWidth={500}
         onWidthChange={(width) => setHistoryWidth(width)}
         collapsed={historyCollapsed}
+      />
+      <BlitzDialog
+        isOpen={showBlitzDialog}
+        onClose={() => setShowBlitzDialog(false)}
+        onCreated={handleBlitzCreated}
+        workspacePath={workspacePath}
       />
     </div>
   );

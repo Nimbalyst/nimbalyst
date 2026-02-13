@@ -3,6 +3,7 @@ import { useAtomValue, useSetAtom } from 'jotai';
 import { CollapsibleGroup } from './CollapsibleGroup';
 import { SessionListItem } from './SessionListItem';
 import { WorkstreamGroup } from './WorkstreamGroup';
+import { BlitzGroup } from './BlitzGroup';
 import { ArchiveProgress } from './ArchiveProgress';
 import { IndexBuildDialog } from './IndexBuildDialog';
 import { ArchiveWorktreeDialog } from '../AgentMode/ArchiveWorktreeDialog';
@@ -67,6 +68,16 @@ interface WorktreeData {
   createdAt?: number;
   isPinned?: boolean; // Whether this worktree is pinned to the top
   isArchived?: boolean; // Whether this worktree is archived
+  blitzId?: string; // Associated blitz ID if this worktree was created as part of a blitz
+}
+
+interface BlitzData {
+  id: string;
+  prompt: string;
+  displayName?: string;
+  isPinned?: boolean;
+  isArchived?: boolean;
+  createdAt?: number;
 }
 
 interface WorktreeWithStatus extends WorktreeData {
@@ -122,6 +133,7 @@ interface SessionHistoryProps {
   onNewSession?: () => void;
   onNewTerminal?: () => void; // Callback for creating a new terminal session
   onNewWorktreeSession?: () => void; // Callback for creating new worktree session
+  onNewBlitz?: () => void; // Callback for creating a new blitz (multi-worktree prompt)
   isGitRepo?: boolean; // Whether the workspace is a git repository (needed for worktree feature)
   onAddSessionToWorktree?: (worktreeId: string) => void; // Callback for adding session to existing worktree
   onAddTerminalToWorktree?: (worktreeId: string) => void; // Callback for adding terminal to existing worktree
@@ -249,6 +261,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   onNewSession,
   onNewTerminal,
   onNewWorktreeSession,
+  onNewBlitz,
   isGitRepo = false,
   onAddSessionToWorktree,
   onAddTerminalToWorktree,
@@ -326,6 +339,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   const [lastSelectedId, setLastSelectedId] = useState<string | null>(null); // For shift+click range selection
   const [worktreeCache, setWorktreeCache] = useState<Map<string, WorktreeWithStatus>>(new Map()); // Cache worktree data
   const [workstreamChildrenCache, setWorkstreamChildrenCache] = useState<Map<string, SessionItem[]>>(new Map()); // Cache workstream children
+  const [blitzCache, setBlitzCache] = useState<Map<string, BlitzData>>(new Map()); // Cache blitz data
 
   // View mode persisted via agentMode atoms
   const viewMode = useAtomValue(viewModeAtom);
@@ -699,6 +713,31 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     return () => unsubscribe?.();
   }, [workspacePath]);
 
+  // Listen for blitz display name updates from main process
+  // This handles automatic blitz naming when first session in any blitz worktree is named
+  useEffect(() => {
+    if (!workspacePath) return;
+
+    const unsubscribe = window.electronAPI?.on?.('blitz:display-name-updated',
+      (data: { blitzId: string; displayName: string }) => {
+        setBlitzCache(prev => {
+          const existing = prev.get(data.blitzId);
+          if (existing) {
+            const updated = new Map(prev);
+            updated.set(data.blitzId, {
+              ...existing,
+              displayName: data.displayName
+            });
+            return updated;
+          }
+          return prev;
+        });
+      }
+    );
+
+    return () => unsubscribe?.();
+  }, [workspacePath]);
+
   // Update session timestamp when updated (efficient update without database reload)
   useEffect(() => {
     if (updatedSession) {
@@ -965,6 +1004,89 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     }
   }, []);
 
+  // Rename a blitz
+  const handleBlitzRename = useCallback(async (blitzId: string, newName: string) => {
+    try {
+      await window.electronAPI.invoke('blitz:update-display-name', blitzId, newName);
+      setBlitzCache(prev => {
+        const updated = new Map(prev);
+        const blitz = updated.get(blitzId);
+        if (blitz) {
+          updated.set(blitzId, { ...blitz, displayName: newName });
+        }
+        return updated;
+      });
+    } catch (error) {
+      console.error('[SessionHistory] Failed to rename blitz:', error);
+    }
+  }, []);
+
+  // Toggle pin status for a blitz
+  const handleBlitzPinToggle = useCallback(async (blitzId: string, isPinned: boolean) => {
+    try {
+      await window.electronAPI.invoke('blitz:update-pinned', blitzId, isPinned);
+      setBlitzCache(prev => {
+        const updated = new Map(prev);
+        const blitz = updated.get(blitzId);
+        if (blitz) {
+          updated.set(blitzId, { ...blitz, isPinned });
+        }
+        return updated;
+      });
+    } catch (error) {
+      console.error('[SessionHistory] Failed to toggle blitz pin:', error);
+    }
+  }, []);
+
+  // Archive a blitz and all its worktrees
+  const handleBlitzArchive = useCallback(async (blitzId: string) => {
+    try {
+      await window.electronAPI.invoke('blitz:archive', blitzId, workspacePath);
+      setBlitzCache(prev => {
+        const updated = new Map(prev);
+        const blitz = updated.get(blitzId);
+        if (blitz) {
+          updated.set(blitzId, { ...blitz, isArchived: true });
+        }
+        return updated;
+      });
+    } catch (error) {
+      console.error('[SessionHistory] Failed to archive blitz:', error);
+    }
+  }, [workspacePath]);
+
+  // Archive all worktrees in a blitz except the one to keep
+  const handleArchiveOtherBlitzWorktrees = useCallback(async (blitzId: string, keepWorktreeId: string) => {
+    try {
+      // Find all worktrees belonging to this blitz
+      const blitzWorktreeIds: string[] = [];
+      for (const [worktreeId, wtData] of worktreeCache) {
+        if (wtData.blitzId === blitzId && worktreeId !== keepWorktreeId && !wtData.isArchived) {
+          blitzWorktreeIds.push(worktreeId);
+        }
+      }
+
+      // Archive each one
+      for (const worktreeId of blitzWorktreeIds) {
+        await window.electronAPI.worktreeArchive(worktreeId, workspacePath);
+      }
+
+      // Update worktree cache to mark them as archived
+      setWorktreeCache(prev => {
+        const updated = new Map(prev);
+        for (const worktreeId of blitzWorktreeIds) {
+          const wt = updated.get(worktreeId);
+          if (wt) {
+            updated.set(worktreeId, { ...wt, isArchived: true });
+          }
+        }
+        return updated;
+      });
+    } catch (error) {
+      console.error('[SessionHistory] Failed to archive other blitz worktrees:', error);
+    }
+  }, [worktreeCache, workspacePath]);
+
   const toggleSortDropdown = () => {
     setSortDropdownOpen(!sortDropdownOpen);
   };
@@ -990,7 +1112,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
 
   // Handle new button click - if only one option available, trigger it directly
   const handleNewButtonClick = (e: React.MouseEvent<HTMLButtonElement>) => {
-    const availableOptions = [onNewSession, onNewWorktreeSession, onNewTerminal].filter(Boolean);
+    const availableOptions = [onNewSession, onNewWorktreeSession, onNewBlitz, onNewTerminal].filter(Boolean);
     if (availableOptions.length === 1) {
       // Only one option available, trigger it directly
       if (onNewSession) onNewSession();
@@ -1255,11 +1377,12 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     return Array.from(worktreeGroupsData.keys());
   }, [worktreeGroupsData]);
 
-  // Create unified list items that can be a session, workstream, or worktree group
+  // Create unified list items that can be a session, workstream, worktree group, or blitz group
   type UnifiedListItem =
     | { type: 'session'; session: SessionItem; timestamp: number; isWorktreeSession?: boolean }
     | { type: 'workstream'; session: SessionItem; sessions: SessionItem[]; timestamp: number }
-    | { type: 'worktree'; worktreeId: string; sessions: SessionItem[]; timestamp: number };
+    | { type: 'worktree'; worktreeId: string; sessions: SessionItem[]; timestamp: number }
+    | { type: 'blitz'; blitzId: string; worktrees: { worktreeId: string; sessions: SessionItem[] }[]; timestamp: number };
 
   // Build unified time-grouped data with both sessions and worktrees interleaved
   const groupedItems = useMemo(() => {
@@ -1306,9 +1429,46 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
       }
     }
 
-    // Add worktree groups as single items (only if they have 2+ sessions)
-    // Single-session worktrees are displayed as flat session items
+    // Group blitz worktrees by blitzId, keep standalone worktrees separate
+    const blitzWorktrees = new Map<string, { worktreeId: string; sessions: SessionItem[] }[]>();
+    const standaloneWorktrees: [string, { sessions: SessionItem[]; timestamp: number }][] = [];
+
     for (const [worktreeId, data] of worktreeGroupsData) {
+      const worktreeData = worktreeCache.get(worktreeId);
+      if (worktreeData?.blitzId) {
+        // This worktree belongs to a blitz
+        const existing = blitzWorktrees.get(worktreeData.blitzId) || [];
+        existing.push({ worktreeId, sessions: data.sessions });
+        blitzWorktrees.set(worktreeData.blitzId, existing);
+      } else {
+        standaloneWorktrees.push([worktreeId, data]);
+      }
+    }
+
+    // Add blitz groups
+    for (const [blitzId, worktrees] of blitzWorktrees) {
+      const blitzData = blitzCache.get(blitzId);
+      // Use the most recent session timestamp for the blitz group
+      const allSessions = worktrees.flatMap(w => w.sessions);
+      let timestamp = Math.max(...allSessions.map(s =>
+        timestampField === 'updatedAt' ? (s.updatedAt || s.createdAt) : s.createdAt
+      ));
+      if (sortBy === 'created' && blitzData?.createdAt) {
+        timestamp = blitzData.createdAt;
+      }
+
+      const item = { type: 'blitz' as const, blitzId, worktrees, timestamp };
+
+      if (blitzData?.isPinned) {
+        pinnedItems.push(item);
+      } else {
+        items.push(item);
+      }
+    }
+
+    // Add standalone worktree groups as single items (only if they have 2+ sessions)
+    // Single-session worktrees are displayed as flat session items
+    for (const [worktreeId, data] of standaloneWorktrees) {
       if (data.sessions.length === 1) {
         // Single session in worktree - display as a regular session item (flat, not grouped)
         // but with the worktree icon to indicate it's a worktree session
@@ -1378,7 +1538,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     }
 
     return result as Record<TimeGroupKey | 'Pinned', UnifiedListItem[]>;
-  }, [sessions, worktreeGroupsData, sortBy, worktreeCache, workstreamChildrenCache]);
+  }, [sessions, worktreeGroupsData, sortBy, worktreeCache, workstreamChildrenCache, blitzCache]);
 
   const groupKeys = Object.keys(groupedItems) as (TimeGroupKey | 'Pinned')[];
 
@@ -1411,6 +1571,44 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
 
     fetchBatch();
   }, [sortedWorktreeIds, worktreeCache]);
+
+  // Fetch blitz data when worktree cache has blitz IDs we haven't loaded yet
+  useEffect(() => {
+    const blitzIds = new Set<string>();
+    for (const worktree of worktreeCache.values()) {
+      if (worktree.blitzId && !blitzCache.has(worktree.blitzId)) {
+        blitzIds.add(worktree.blitzId);
+      }
+    }
+
+    if (blitzIds.size === 0) return;
+
+    const fetchBlitzes = async () => {
+      try {
+        const result = await window.electronAPI.invoke('blitz:list', workspacePath);
+        if (result.success && result.blitzes) {
+          setBlitzCache(prev => {
+            const updated = new Map(prev);
+            for (const blitz of result.blitzes) {
+              updated.set(blitz.id, {
+                id: blitz.id,
+                prompt: blitz.prompt,
+                displayName: blitz.displayName,
+                isPinned: blitz.isPinned,
+                isArchived: blitz.isArchived,
+                createdAt: blitz.createdAt,
+              });
+            }
+            return updated;
+          });
+        }
+      } catch (err) {
+        console.error('[SessionHistory] Failed to fetch blitzes:', err);
+      }
+    };
+
+    fetchBlitzes();
+  }, [worktreeCache, blitzCache, workspacePath]);
 
   // Fetch children for expanded workstreams
   useEffect(() => {
@@ -1959,6 +2157,34 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
               {groupKeys.map(groupKey => {
                 const items = groupedItems[groupKey];
                 return items.map(item => {
+                  if (item.type === 'blitz') {
+                    // Blitz card - show as a card with lightning icon
+                    const blitzData = blitzCache.get(item.blitzId);
+                    const allSessions = item.worktrees.flatMap(w => w.sessions);
+                    const firstSession = allSessions[0];
+                    if (!firstSession) return null;
+                    const isBlitzActive = allSessions.some(s => s.id === activeSessionId);
+
+                    return (
+                      <div
+                        key={`blitz-card-${item.blitzId}`}
+                        className={`session-history-card p-4 rounded-xl border border-[var(--nim-border)] cursor-pointer transition-all duration-150 hover:border-[var(--nim-primary)]/40 hover:shadow-[0_0_0_1px_var(--nim-primary)]/20 ${isBlitzActive ? 'bg-[var(--nim-primary)]/10 border-[var(--nim-primary)]/30' : 'bg-[var(--nim-bg-secondary)]'}`}
+                        onClick={() => onSessionSelect(firstSession.id)}
+                      >
+                        <div className="flex items-center gap-2 mb-2">
+                          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" className="text-[var(--nim-primary)] shrink-0">
+                            <path d="M9 2L4 9h4l-1 5 5-7H8l1-5z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                          <span className="text-[13px] font-medium text-[var(--nim-text)] truncate">
+                            {blitzData?.displayName || blitzData?.prompt?.slice(0, 40) || 'Blitz'}
+                          </span>
+                        </div>
+                        <div className="text-[12px] text-[var(--nim-text-faint)]">
+                          {item.worktrees.length} worktree{item.worktrees.length !== 1 ? 's' : ''}
+                        </div>
+                      </div>
+                    );
+                  }
                   if (item.type === 'worktree') {
                     // Worktree card - click to select first session
                     const worktreeData = worktreeCache.get(item.worktreeId);
@@ -2152,6 +2378,43 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                   count={items.length}
                 >
                   {items.map(item => {
+                    if (item.type === 'blitz') {
+                      // Blitz group - collapsible group containing multiple worktrees
+                      const blitzData = blitzCache.get(item.blitzId);
+                      const isBlitzExpanded = !collapsedGroups.includes(`blitz:${item.blitzId}`);
+                      const allSessionIds = item.worktrees.flatMap(w => w.sessions.map(s => s.id));
+                      const isBlitzActive = allSessionIds.includes(activeSessionId || '');
+
+                      return (
+                        <BlitzGroup
+                          key={`blitz-${item.blitzId}`}
+                          blitzId={item.blitzId}
+                          title={blitzData?.displayName || (blitzData?.prompt ? blitzData.prompt.slice(0, 60) + (blitzData.prompt.length > 60 ? '...' : '') : 'Loading...')}
+                          isExpanded={isBlitzExpanded}
+                          isActive={isBlitzActive}
+                          isPinned={blitzData?.isPinned}
+                          isArchived={blitzData?.isArchived}
+                          onToggle={() => handleToggleGroup(`blitz:${item.blitzId}`)}
+                          worktrees={item.worktrees.map(w => ({
+                            worktreeId: w.worktreeId,
+                            sessions: w.sessions,
+                            worktreeData: worktreeCache.get(w.worktreeId),
+                          }))}
+                          activeSessionId={activeSessionId}
+                          onSessionSelect={onSessionSelect}
+                          worktreeCache={worktreeCache}
+                          collapsedGroups={collapsedGroups}
+                          onToggleWorktreeGroup={handleToggleGroup}
+                          onBlitzRename={handleBlitzRename}
+                          onBlitzPinToggle={handleBlitzPinToggle}
+                          onBlitzArchive={handleBlitzArchive}
+                          onArchiveOtherWorktrees={handleArchiveOtherBlitzWorktrees}
+                          onWorktreeRename={handleWorktreeRename}
+                          onWorktreeArchive={handleArchiveWorktree}
+                          onSessionRename={onSessionRename}
+                        />
+                      );
+                    }
                     if (item.type === 'worktree') {
                       // Worktree group - use new unified WorkstreamGroup
                       const worktreeData = worktreeCache.get(item.worktreeId);
@@ -2501,6 +2764,20 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
               <span className="session-history-new-option-shortcut flex-none text-[11px] text-[var(--nim-text-muted)] opacity-70">{getShortcutDisplay(KeyboardShortcuts.window.newWorktree)}</span>
             </button>
           )}
+          {onNewBlitz && (
+            <button
+              className={`session-history-new-option flex items-center w-full px-3 py-2 text-[13px] bg-transparent border-none text-[var(--nim-text)] cursor-pointer transition-colors duration-150 text-left gap-2 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0 [&_svg]:text-[var(--nim-text-muted)] [&>span]:flex-1 ${!isGitRepo ? 'opacity-50 cursor-not-allowed hover:bg-transparent' : ''}`}
+              data-testid="new-blitz-button"
+              onClick={() => { if (isGitRepo) { onNewBlitz(); setNewDropdownOpen(false); setNewDropdownPosition(null); } }}
+              disabled={!isGitRepo}
+              title={!isGitRepo ? 'Blitz requires a git repository' : undefined}
+            >
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M9 2L4 9h4l-1 5 5-7H8l1-5z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              <span>New Blitz</span>
+            </button>
+          )}
           {onNewTerminal && (
             <button
               className="session-history-new-option flex items-center w-full px-3 py-2 text-[13px] bg-transparent border-none text-[var(--nim-text)] cursor-pointer transition-colors duration-150 text-left gap-2 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0 [&_svg]:text-[var(--nim-text-muted)] [&>span]:flex-1"
@@ -2555,8 +2832,9 @@ export const SessionHistory = React.memo(SessionHistoryComponent, (prevProps, ne
   const nextUpdated = nextProps.updatedSession;
   if (prevUpdated?.id !== nextUpdated?.id || prevUpdated?.timestamp !== nextUpdated?.timestamp) return false;
 
-  // Callback functions are assumed stable (wrapped in useCallback at parent)
-  // If they're equal by reference, that's a bonus, but we don't require it
+  // Callback presence changes (function vs undefined) affect rendered UI
+  if (Boolean(prevProps.onNewBlitz) !== Boolean(nextProps.onNewBlitz)) return false;
+  if (Boolean(prevProps.onNewWorktreeSession) !== Boolean(nextProps.onNewWorktreeSession)) return false;
 
   return true; // Props are equal, skip re-render
 });

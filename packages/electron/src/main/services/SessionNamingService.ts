@@ -8,6 +8,7 @@ import {
 } from '../mcp/sessionNamingServer';
 import { getDatabase } from '../database/initialize';
 import { createWorktreeStore } from './WorktreeStore';
+import { createBlitzStore } from './BlitzStore';
 
 /**
  * Service to manage the session naming MCP server
@@ -54,41 +55,75 @@ export class SessionNamingService {
         // This is called once at startup and captures sessionManager in the closure
         const sessionManager = this.sessionManager;
         setUpdateSessionTitleFn(async (sessionId: string, title: string) => {
-          // Update the session title in the database (atomic check-and-set)
-          await sessionManager.updateSessionTitle(sessionId, title);
-
-          // Notify all windows that the session title has changed
           const windows = BrowserWindow.getAllWindows();
-          for (const window of windows) {
-            window.webContents.send('session:title-updated', { sessionId, title });
-          }
 
-          // console.log(`[SessionNamingService] Updated session ${sessionId} to: "${title}"`);
+          // Check if this session belongs to a blitz worktree before updating the session title.
+          // For blitz sessions, we keep the numbered title (e.g. "Session 1") and only
+          // propagate the name to the worktree and blitz display names.
+          let isBlitzSession = false;
+          let worktreeId: string | undefined;
+          let blitzId: string | undefined;
 
-          // If this session belongs to a worktree, update the worktree's display name
-          // (only if it hasn't been set yet - first session named wins)
           try {
             const session = await AISessionsRepository.get(sessionId);
             if (session?.worktreeId) {
+              worktreeId = session.worktreeId;
               const db = getDatabase();
               if (db) {
                 const worktreeStore = createWorktreeStore(db);
-                const updated = await worktreeStore.updateDisplayNameIfEmpty(session.worktreeId, title);
-                if (updated) {
-                  console.log(`[SessionNamingService] Updated worktree ${session.worktreeId} display name to: "${title}"`);
-                  // Notify all windows that the worktree display name has changed
-                  for (const window of windows) {
-                    window.webContents.send('worktree:display-name-updated', {
-                      worktreeId: session.worktreeId,
-                      displayName: title
-                    });
-                  }
+                const worktree = await worktreeStore.get(session.worktreeId);
+                if (worktree?.blitzId) {
+                  isBlitzSession = true;
+                  blitzId = worktree.blitzId;
                 }
               }
             }
           } catch (error) {
-            // Log but don't fail the session naming if worktree update fails
-            console.error('[SessionNamingService] Failed to update worktree display name:', error);
+            console.error('[SessionNamingService] Failed to check blitz membership:', error);
+          }
+
+          if (!isBlitzSession) {
+            // Non-blitz session: update the session title as usual
+            await sessionManager.updateSessionTitle(sessionId, title);
+            for (const window of windows) {
+              window.webContents.send('session:title-updated', { sessionId, title });
+            }
+          }
+
+          // Propagate to worktree and blitz display names regardless
+          if (worktreeId) {
+            try {
+              const db = getDatabase();
+              if (db) {
+                const worktreeStore = createWorktreeStore(db);
+                const updated = await worktreeStore.updateDisplayNameIfEmpty(worktreeId, title);
+                if (updated) {
+                  console.log(`[SessionNamingService] Updated worktree ${worktreeId} display name to: "${title}"`);
+                  for (const window of windows) {
+                    window.webContents.send('worktree:display-name-updated', {
+                      worktreeId,
+                      displayName: title
+                    });
+                  }
+                }
+
+                if (blitzId) {
+                  const blitzStore = createBlitzStore(db);
+                  const blitzUpdated = await blitzStore.updateDisplayNameIfEmpty(blitzId, title);
+                  if (blitzUpdated) {
+                    console.log(`[SessionNamingService] Updated blitz ${blitzId} display name to: "${title}"`);
+                    for (const window of windows) {
+                      window.webContents.send('blitz:display-name-updated', {
+                        blitzId,
+                        displayName: title
+                      });
+                    }
+                  }
+                }
+              }
+            } catch (error) {
+              console.error('[SessionNamingService] Failed to update worktree/blitz display name:', error);
+            }
           }
         });
 
