@@ -568,14 +568,19 @@ export async function cleanupMcpServer() {
   }
 }
 
-export function shutdownHttpServer(): Promise<void> {
+export async function shutdownHttpServer(): Promise<void> {
+  if (!httpServerInstance) {
+    return;
+  }
+
+  try {
+    // First cleanup transports
+    await cleanupMcpServer();
+  } catch (error) {
+    console.error("[MCP Server] Error cleaning up transports:", error);
+  }
+
   return new Promise((resolve) => {
-    if (!httpServerInstance) {
-      resolve();
-      return;
-    }
-
-
     // Track if we've resolved
     let hasResolved = false;
     const safeResolve = () => {
@@ -584,13 +589,6 @@ export function shutdownHttpServer(): Promise<void> {
         resolve();
       }
     };
-
-    try {
-      // First cleanup transports
-      await cleanupMcpServer();
-    } catch (error) {
-      console.error("[MCP Server] Error cleaning up transports:", error);
-    }
 
     try {
       // Force close all connections
