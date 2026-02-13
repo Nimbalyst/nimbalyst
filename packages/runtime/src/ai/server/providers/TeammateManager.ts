@@ -122,6 +122,11 @@ export class TeammateManager {
     return this.managedTeammates.size > 0;
   }
 
+  /** Check if any teammates are active (running or idle). */
+  hasActiveTeammates(): boolean {
+    return this.managedTeammates.size > 0 || this.idleTeammates.size > 0;
+  }
+
   /**
    * Create an async iterable yielding a single SDKUserMessage.
    * Public so ClaudeCodeProvider can use it for streamInput injection.
@@ -1118,6 +1123,12 @@ export class TeammateManager {
       console.log(`[MANAGED-TEAMMATE] "${agentId}" completed (no session ID)`);
       this.scheduleEmitTeammateUpdate(sessionId, new Map([[agentId, 'completed']]));
     }
+
+    // If no more active teammates remain, notify the host so the session can end
+    if (!this.hasActiveTeammates()) {
+      console.log(`[MANAGED-TEAMMATE] All teammates completed/errored, emitting teammates:allCompleted`);
+      this.deps.emit('teammates:allCompleted', { sessionId });
+    }
   }
 
   private handleStreamError(
@@ -1133,6 +1144,12 @@ export class TeammateManager {
     void this.removeTeammateFromConfig(teamName, agentId);
     console.warn(`[MANAGED-TEAMMATE] "${agentId}" errored:`, err.message);
     this.scheduleEmitTeammateUpdate(sessionId, new Map([[agentId, 'errored']]));
+
+    // If no more active teammates remain, notify the host so the session can end
+    if (!this.hasActiveTeammates()) {
+      console.log(`[MANAGED-TEAMMATE] All teammates completed/errored, emitting teammates:allCompleted`);
+      this.deps.emit('teammates:allCompleted', { sessionId });
+    }
   }
 
   // ─── Lifecycle: spawn ───────────────────────────────────────────────────

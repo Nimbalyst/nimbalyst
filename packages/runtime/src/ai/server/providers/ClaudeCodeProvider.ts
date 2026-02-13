@@ -2428,6 +2428,14 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
   }
 
   /**
+   * Check if any teammates are still active (running or idle).
+   * Used by AIService to decide whether to defer endSession().
+   */
+  public hasActiveTeammates(): boolean {
+    return this.teammateManager.hasActiveTeammates();
+  }
+
+  /**
    * Process teammate-related side-effects after a tool_result is received.
    * Called from both chunk-processing paths to avoid duplication.
    */

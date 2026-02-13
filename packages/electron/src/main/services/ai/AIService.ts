@@ -1990,6 +1990,24 @@ export class AIService {
       provider.removeAllListeners('teammate:messageWhileIdle');
       provider.on('teammate:messageWhileIdle', onTeammateMessageWhileIdle);
 
+      // Listen for all teammates completing. When the lead finished but teammates
+      // were still active, endSession was deferred. Now that all teammates are
+      // done, end the session and play the completion sound.
+      const onTeammatesAllCompleted = async (data: { sessionId: string }) => {
+        if (!data.sessionId) return;
+        // Only end the session if it's still tracked as active (lead deferred ending)
+        if (stateManager.isSessionActive(data.sessionId)) {
+          logger.main.info(`[AIService] All teammates completed for session ${data.sessionId}, ending deferred session`);
+          await stateManager.endSession(data.sessionId);
+
+          // Play completion sound now that the session is truly done
+          const soundService = SoundNotificationService.getInstance();
+          soundService.playCompletionSound(workspacePath);
+        }
+      };
+      provider.removeAllListeners('teammates:allCompleted');
+      provider.on('teammates:allCompleted', onTeammatesAllCompleted);
+
       // Track user @ mentions in the message
       try {
         await sessionFileTracker.trackUserMessage(
@@ -2675,36 +2693,44 @@ export class AIService {
                 autoContextPending: session.provider === 'claude-code'
               });
 
-              // Mark session as complete immediately so UI shows agent is ready
-              // This must happen before auto-context so the UI updates right away
-              await stateManager.endSession(session.id);
+              // Mark session as complete so UI shows agent is ready.
+              // Skip if teammates are still active - the session will be ended
+              // when the last teammate completes (via teammates:allCompleted event).
+              const hasTeammates = session.provider === 'claude-code'
+                && typeof (provider as any).hasActiveTeammates === 'function'
+                && (provider as any).hasActiveTeammates();
+              if (hasTeammates) {
+                logger.main.info(`[AIService] Deferring endSession for ${session.id} - teammates still active`);
+              } else {
+                await stateManager.endSession(session.id);
 
-              // Play completion sound if enabled
-              const soundService = SoundNotificationService.getInstance();
-              soundService.playCompletionSound(workspacePath);
+                // Play completion sound if enabled
+                const soundService = SoundNotificationService.getInstance();
+                soundService.playCompletionSound(workspacePath);
 
-              // Show OS notification if enabled and window not focused
-              // Use lastTextSection (text after last tool call) for more relevant notification content
-              const notificationText = lastTextSection.trim() || fullResponse;
-              const notificationBody = notificationText.length > 0
-                ? notificationText.substring(0, 100) + (notificationText.length > 100 ? '...' : '')
-                : 'Response complete';
+                // Show OS notification if enabled and window not focused
+                // Use lastTextSection (text after last tool call) for more relevant notification content
+                const notificationText = lastTextSection.trim() || fullResponse;
+                const notificationBody = notificationText.length > 0
+                  ? notificationText.substring(0, 100) + (notificationText.length > 100 ? '...' : '')
+                  : 'Response complete';
 
-              await notificationService.showNotification({
-                title: 'Nimbalyst AI Response Ready',
-                body: `${session.provider}: ${notificationBody}`,
-                sessionId: session.id,
-                workspacePath: workspacePath,
-                provider: session.provider
-              });
+                await notificationService.showNotification({
+                  title: 'Nimbalyst AI Response Ready',
+                  body: `${session.provider}: ${notificationBody}`,
+                  sessionId: session.id,
+                  workspacePath: workspacePath,
+                  provider: session.provider
+                });
 
-              // Request mobile push notification for agent completion
-              if (syncProvider) {
-                syncProvider.requestMobilePush?.(
-                  session.id,
-                  session.title || 'AI Session',
-                  notificationBody
-                );
+                // Request mobile push notification for agent completion
+                if (syncProvider) {
+                  syncProvider.requestMobilePush?.(
+                    session.id,
+                    session.title || 'AI Session',
+                    notificationBody
+                  );
+                }
               }
 
               // AUTO-FETCH CONTEXT USAGE: For claude-code provider, automatically send /context to get accurate token usage.
@@ -2842,8 +2868,16 @@ export class AIService {
             status: 'error'
           });
 
-          // End the session to remove it from active sessions
-          await stateManager.endSession(session.id);
+          // End the session to remove it from active sessions.
+          // Skip if teammates are still active - deferred to teammates:allCompleted.
+          const hasTeammatesOnError = session.provider === 'claude-code'
+            && typeof (provider as any).hasActiveTeammates === 'function'
+            && (provider as any).hasActiveTeammates();
+          if (hasTeammatesOnError) {
+            logger.main.info(`[AIService] Deferring endSession for ${session.id} on error - teammates still active`);
+          } else {
+            await stateManager.endSession(session.id);
+          }
 
           // Clear executing flag for mobile sync on error
           if (syncProvider) {
