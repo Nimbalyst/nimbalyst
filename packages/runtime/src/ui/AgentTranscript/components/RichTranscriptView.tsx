@@ -6,7 +6,7 @@ import { MessageSegment } from './MessageSegment';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { ProviderIcon } from '../../icons/ProviderIcons';
 import { MaterialSymbol } from '../../icons/MaterialSymbol';
-import { formatMessageTime } from '../../../utils/dateUtils';
+import { formatMessageTime, formatDuration } from '../../../utils/dateUtils';
 import { JSONViewer } from './JSONViewer';
 import { formatToolArguments, extractFilePathFromArgs } from '../utils/pathResolver';
 import { EditToolResultCard } from './EditToolResultCard';
@@ -1329,6 +1329,34 @@ export const RichTranscriptView = React.forwardRef<
                             provider={provider}
                           />
                         </div>
+
+                        {/* Show elapsed time at the end of a completed assistant turn */}
+                        {!isUser && (() => {
+                          // Check if this is the last message in the assistant group
+                          let nextNonToolIdx = index + 1;
+                          while (nextNonToolIdx < messages.length && messages[nextNonToolIdx].role === 'tool') {
+                            nextNonToolIdx++;
+                          }
+                          const isEndOfGroup = nextNonToolIdx >= messages.length || messages[nextNonToolIdx].role !== 'assistant';
+                          if (!isEndOfGroup) return null;
+                          // Don't show for the last assistant group if still streaming
+                          if (isWaitingForResponse && nextNonToolIdx >= messages.length) return null;
+                          // Find the preceding user message that triggered this turn
+                          let startIdx = index - 1;
+                          while (startIdx >= 0 && messages[startIdx].role !== 'user') {
+                            startIdx--;
+                          }
+                          if (startIdx < 0) return null; // No preceding user message
+                          const startTimestamp = messages[startIdx].timestamp;
+                          const endTimestamp = message.timestamp;
+                          const duration = formatDuration(startTimestamp, endTimestamp);
+                          if (!duration || duration === '0ms') return null;
+                          return (
+                            <div className="rich-transcript-turn-elapsed text-xs text-[var(--nim-text-faint)] mt-2 ml-6">
+                              Finished in {duration}
+                            </div>
+                          );
+                        })()}
                       </div>
                     );
                   })}
