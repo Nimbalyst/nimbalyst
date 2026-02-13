@@ -100,24 +100,9 @@ export function createWindow(
     try {
         // console.log('[MAIN] Creating window at', new Date().toISOString());
 
-        // Set up icon path based on platform
-        // In dev mode, use icon from package root; in production, use from resources
-        // Use app.getAppPath() for dev mode (not __dirname) because bundled chunks may be in nested directories
-        let iconPath: string | undefined;
-
-        if (process.platform === 'darwin') {
-            iconPath = app.isPackaged
-                ? join(__dirname, '../../resources/icon.png')
-                : join(app.getAppPath(), 'icon.png');
-        } else if (process.platform === 'win32') {
-            iconPath = app.isPackaged
-                ? join(__dirname, '../../resources/icon.png')
-                : join(app.getAppPath(), 'icon.png');
-        } else {
-            iconPath = app.isPackaged
-                ? join(__dirname, '../../resources/icon.png')
-                : join(app.getAppPath(), 'icon.png');
-        }
+        // Set up icon path - icon.png is at the package root in both dev and packaged builds
+        // (included in electron-builder's `files` array, so it's inside the ASAR at the root)
+        let iconPath: string | undefined = join(app.getAppPath(), 'icon.png');
 
         // Check if icon exists
         if (!existsSync(iconPath)) {

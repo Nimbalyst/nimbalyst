@@ -24,9 +24,7 @@ function isDark(): boolean {
  */
 function getIconDataUrl(): string | null {
     try {
-        const iconPath = app.isPackaged
-            ? join(__dirname, '../../resources/icon.png')
-            : join(app.getAppPath(), 'icon.png');
+        const iconPath = join(app.getAppPath(), 'icon.png');
 
         if (existsSync(iconPath)) {
             const iconData = readFileSync(iconPath);

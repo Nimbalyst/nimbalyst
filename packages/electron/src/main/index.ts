@@ -696,11 +696,9 @@ app.whenReady().then(async () => {
 
     // Set dock icon for macOS
     if (process.platform === 'darwin' && app.dock) {
-        // In dev mode, use icon from package root; in production, use from resources
-        // Use app.getAppPath() for dev mode (not __dirname) because bundled chunks may be in nested directories
-        const iconPath = app.isPackaged
-            ? join(__dirname, '../../resources/icon.png')
-            : join(app.getAppPath(), 'icon.png');
+        // icon.png is at the package root in both dev and packaged builds
+        // (included in electron-builder's `files` array, so it's inside the ASAR at the root)
+        const iconPath = join(app.getAppPath(), 'icon.png');
 
         if (existsSync(iconPath)) {
             const dockIcon = nativeImage.createFromPath(iconPath);
