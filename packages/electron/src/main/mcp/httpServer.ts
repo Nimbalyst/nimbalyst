@@ -1,21 +1,33 @@
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
+import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
+  isInitializeRequest,
   ErrorCode,
-  McpError
-} from '@modelcontextprotocol/sdk/types.js';
-import { createServer, IncomingMessage, ServerResponse } from 'http';
-import { BrowserWindow, ipcMain, nativeImage, app } from 'electron';
-import { parse as parseUrl } from 'url';
-import { existsSync } from 'fs';
-import path, { isAbsolute } from 'path';
-import { isVoiceModeActive, sendToVoiceAgent, getActiveVoiceSessionId, stopVoiceSession } from '../services/voice/VoiceModeService';
-import { findWindowByWorkspace } from '../window/WindowManager';
-import { SessionFilesRepository, AgentMessagesRepository, AISessionsRepository } from '@nimbalyst/runtime';
-import { notificationService } from '../services/NotificationService';
-import { isFileInWorkspaceOrWorktree } from '../utils/workspaceDetection';
+  McpError,
+} from "@modelcontextprotocol/sdk/types.js";
+import { createServer, IncomingMessage, ServerResponse } from "http";
+import { BrowserWindow, ipcMain, nativeImage, app } from "electron";
+import { parse as parseUrl } from "url";
+import { existsSync } from "fs";
+import { randomUUID } from "crypto";
+import path, { isAbsolute } from "path";
+import {
+  isVoiceModeActive,
+  sendToVoiceAgent,
+  getActiveVoiceSessionId,
+  stopVoiceSession,
+} from "../services/voice/VoiceModeService";
+import { findWindowByWorkspace } from "../window/WindowManager";
+import {
+  SessionFilesRepository,
+  AgentMessagesRepository,
+  AISessionsRepository,
+} from "@nimbalyst/runtime";
+import { notificationService } from "../services/NotificationService";
+import { isFileInWorkspaceOrWorktree } from "../utils/workspaceDetection";
 
 /**
  * Compress a base64 image to JPEG if it exceeds 0.28 MB.
@@ -50,24 +62,30 @@ function compressImageIfNeeded(
   try {
     // Validate base64 data before attempting to decode
     if (!base64Data || base64Data.length === 0) {
-      console.error('[MCP Server] Empty base64 data provided to compressImageIfNeeded');
+      console.error(
+        "[MCP Server] Empty base64 data provided to compressImageIfNeeded"
+      );
       return { data: base64Data, mimeType, wasCompressed: false };
     }
 
     // Create nativeImage from base64 PNG
-    const buffer = Buffer.from(base64Data, 'base64');
+    const buffer = Buffer.from(base64Data, "base64");
     // console.log(`[MCP Server] Created buffer of ${buffer.length} bytes from ${base64Data.length} chars base64`);
 
     // Validate that we actually got a buffer with data
     if (buffer.length === 0) {
-      console.error('[MCP Server] Buffer is empty after decoding base64, data may be corrupted');
+      console.error(
+        "[MCP Server] Buffer is empty after decoding base64, data may be corrupted"
+      );
       return { data: base64Data, mimeType, wasCompressed: false };
     }
 
     const image = nativeImage.createFromBuffer(buffer);
 
     if (image.isEmpty()) {
-      console.warn('[MCP Server] Failed to create image from base64 (image is empty), buffer may be corrupted. Returning original without compression.');
+      console.warn(
+        "[MCP Server] Failed to create image from base64 (image is empty), buffer may be corrupted. Returning original without compression."
+      );
       return { data: base64Data, mimeType, wasCompressed: false };
     }
 
@@ -86,7 +104,11 @@ function compressImageIfNeeded(
         const newWidth = Math.round(originalSize.width * scale);
         const newHeight = Math.round(originalSize.height * scale);
         // console.log(`[MCP Server] Resizing to ${scale * 100}%: ${newWidth}x${newHeight}`);
-        workingImage = image.resize({ width: newWidth, height: newHeight, quality: 'better' });
+        workingImage = image.resize({
+          width: newWidth,
+          height: newHeight,
+          quality: "better",
+        });
       }
 
       for (const quality of qualities) {
@@ -101,10 +123,14 @@ function compressImageIfNeeded(
         // }
 
         if (compressedSize <= MAX_IMAGE_SIZE_BYTES) {
-          const jpegBase64 = jpegBuffer.toString('base64');
+          const jpegBase64 = jpegBuffer.toString("base64");
           const finalSize = workingImage.getSize();
           // console.log(`[MCP Server] SUCCESS: Compressed to ${compressedSizeMB.toFixed(3)} MB (${finalSize.width}x${finalSize.height}, quality ${quality})`);
-          return { data: jpegBase64, mimeType: 'image/jpeg', wasCompressed: true };
+          return {
+            data: jpegBase64,
+            mimeType: "image/jpeg",
+            wasCompressed: true,
+          };
         }
       }
     }
@@ -114,19 +140,23 @@ function compressImageIfNeeded(
     const lowestQuality = qualities[qualities.length - 1];
     const smallWidth = Math.round(originalSize.width * smallestScale);
     const smallHeight = Math.round(originalSize.height * smallestScale);
-    const smallestImage = image.resize({ width: smallWidth, height: smallHeight, quality: 'better' });
+    const smallestImage = image.resize({
+      width: smallWidth,
+      height: smallHeight,
+      quality: "better",
+    });
     const smallestBuffer = smallestImage.toJPEG(lowestQuality);
     const smallestSizeMB = smallestBuffer.length / 1024 / 1024;
 
     // console.log(`[MCP Server] WARNING: Even smallest (${smallWidth}x${smallHeight}, quality ${lowestQuality}) is ${smallestSizeMB.toFixed(3)} MB, exceeds limit but using anyway`);
 
     return {
-      data: smallestBuffer.toString('base64'),
-      mimeType: 'image/jpeg',
-      wasCompressed: true
+      data: smallestBuffer.toString("base64"),
+      mimeType: "image/jpeg",
+      wasCompressed: true,
     };
   } catch (error) {
-    console.error('[MCP Server] Failed to compress image:', error);
+    console.error("[MCP Server] Failed to compress image:", error);
     return { data: base64Data, mimeType, wasCompressed: false };
   }
 }
@@ -137,6 +167,15 @@ let mcpServer: Server | null = null;
 
 // Store active SSE transports by session ID
 const activeTransports = new Map<string, SSEServerTransport>();
+
+interface StreamableTransportMetadata {
+  transport: StreamableHTTPServerTransport;
+  nimbalystSessionId?: string;
+}
+const activeStreamableTransports = new Map<
+  string,
+  StreamableTransportMetadata
+>();
 
 // Store MCP Server instances by Nimbalyst session ID
 // Used to send notifications (e.g., tools/list_changed) when document state changes
@@ -160,7 +199,9 @@ const worktreeToProjectPathCache = new Map<string, string | null>();
  * @param workspacePath The workspace path (may be a worktree path or regular workspace)
  * @returns The window ID if found, or null if no window is found
  */
-async function findWindowIdForWorkspacePath(workspacePath: string): Promise<number | null> {
+async function findWindowIdForWorkspacePath(
+  workspacePath: string
+): Promise<number | null> {
   // First try direct lookup - this works for regular workspaces
   let windowId = workspaceToWindowMap.get(workspacePath);
   if (windowId !== undefined) {
@@ -196,8 +237,8 @@ async function findWindowIdForWorkspacePath(workspacePath: string): Promise<numb
 
   // Query the database to check if this is a worktree path
   try {
-    const { getDatabase } = await import('../database/initialize');
-    const { createWorktreeStore } = await import('../services/WorktreeStore');
+    const { getDatabase } = await import("../database/initialize");
+    const { createWorktreeStore } = await import("../services/WorktreeStore");
     const db = getDatabase();
     const worktreeStore = createWorktreeStore(db);
     const worktree = await worktreeStore.getByPath(workspacePath);
@@ -206,7 +247,9 @@ async function findWindowIdForWorkspacePath(workspacePath: string): Promise<numb
       // It's a worktree - use the project path
       const projectPath = worktree.projectPath;
       worktreeToProjectPathCache.set(workspacePath, projectPath);
-      console.log(`[MCP Server] Resolved worktree path ${workspacePath} -> project path ${projectPath}`);
+      console.log(
+        `[MCP Server] Resolved worktree path ${workspacePath} -> project path ${projectPath}`
+      );
 
       windowId = workspaceToWindowMap.get(projectPath);
       if (windowId !== undefined) {
@@ -222,7 +265,7 @@ async function findWindowIdForWorkspacePath(workspacePath: string): Promise<numb
       worktreeToProjectPathCache.set(workspacePath, null);
     }
   } catch (error) {
-    console.warn('[MCP Server] Error checking worktree path:', error);
+    console.warn("[MCP Server] Error checking worktree path:", error);
     // Don't cache errors - they might be transient
   }
 
@@ -234,12 +277,12 @@ interface ExtensionToolDefinition {
   name: string;
   description: string;
   inputSchema: {
-    type: 'object';
+    type: "object";
     properties: Record<string, any>;
     required?: string[];
   };
   extensionId: string;
-  scope: 'global' | 'editor';
+  scope: "global" | "editor";
   editorFilePatterns?: string[];
 }
 const extensionToolsByWorkspace = new Map<string, ExtensionToolDefinition[]>();
@@ -247,7 +290,10 @@ const extensionToolsByWorkspace = new Map<string, ExtensionToolDefinition[]>();
 /**
  * Register extension tools from a workspace window
  */
-export function registerExtensionTools(workspacePath: string, tools: ExtensionToolDefinition[]) {
+export function registerExtensionTools(
+  workspacePath: string,
+  tools: ExtensionToolDefinition[]
+) {
   extensionToolsByWorkspace.set(workspacePath, tools);
   // console.log(`[MCP Server] Registered ${tools.length} extension tools for workspace: ${workspacePath}`);
   // tools.forEach(t => console.log(`[MCP Server]   - ${t.name} (${t.scope})`));
@@ -265,22 +311,29 @@ export function unregisterExtensionTools(workspacePath: string) {
  * Get available extension tools for a given file path
  * Filters based on scope and file patterns
  */
-function getAvailableExtensionTools(workspacePath: string | undefined, filePath: string | undefined): ExtensionToolDefinition[] {
+function getAvailableExtensionTools(
+  workspacePath: string | undefined,
+  filePath: string | undefined
+): ExtensionToolDefinition[] {
   if (!workspacePath) {
-    console.log('[MCP Server] getAvailableExtensionTools: No workspacePath provided, returning empty array');
+    console.log(
+      "[MCP Server] getAvailableExtensionTools: No workspacePath provided, returning empty array"
+    );
     return [];
   }
 
   const tools = extensionToolsByWorkspace.get(workspacePath) || [];
 
   if (tools.length === 0) {
-    console.log(`[MCP Server] getAvailableExtensionTools: No tools registered for workspace: ${workspacePath}`);
+    console.log(
+      `[MCP Server] getAvailableExtensionTools: No tools registered for workspace: ${workspacePath}`
+    );
     return [];
   }
 
-  const filtered = tools.filter(tool => {
+  const filtered = tools.filter((tool) => {
     // Global tools are always available
-    if (tool.scope === 'global') {
+    if (tool.scope === "global") {
       return true;
     }
 
@@ -294,10 +347,10 @@ function getAvailableExtensionTools(workspacePath: string | undefined, filePath:
       return false;
     }
 
-    const fileExtension = filePath.substring(filePath.lastIndexOf('.'));
-    return tool.editorFilePatterns.some(pattern => {
+    const fileExtension = filePath.substring(filePath.lastIndexOf("."));
+    return tool.editorFilePatterns.some((pattern) => {
       // Handle "*.ext" patterns
-      if (pattern.startsWith('*.')) {
+      if (pattern.startsWith("*.")) {
         const patternExt = pattern.substring(1); // ".ext"
         return fileExtension.toLowerCase() === patternExt.toLowerCase();
       }
@@ -306,7 +359,11 @@ function getAvailableExtensionTools(workspacePath: string | undefined, filePath:
     });
   });
 
-  console.log(`[MCP Server] getAvailableExtensionTools: Filtered ${filtered.length}/${tools.length} tools for workspace: ${workspacePath}, filePath: ${filePath || 'none'}`);
+  console.log(
+    `[MCP Server] getAvailableExtensionTools: Filtered ${filtered.length}/${
+      tools.length
+    } tools for workspace: ${workspacePath}, filePath: ${filePath || "none"}`
+  );
 
   return filtered;
 }
@@ -314,12 +371,16 @@ function getAvailableExtensionTools(workspacePath: string | undefined, filePath:
 export function updateDocumentState(state: any, sessionId?: string) {
   if (!sessionId) {
     // console.warn('[MCP Server] No sessionId provided for document state update - using "default"');
-    sessionId = 'default';
+    sessionId = "default";
   }
 
   // CRITICAL: Workspace path is REQUIRED for routing
   if (!state?.workspacePath) {
-    const error = new Error(`[MCP Server] CRITICAL: No workspacePath in document state for session ${sessionId}! Cannot route MCP tools without workspace path. State keys: ${Object.keys(state || {}).join(', ')}`);
+    const error = new Error(
+      `[MCP Server] CRITICAL: No workspacePath in document state for session ${sessionId}! Cannot route MCP tools without workspace path. State keys: ${Object.keys(
+        state || {}
+      ).join(", ")}`
+    );
     console.error(error.message);
     throw error;
   }
@@ -327,7 +388,9 @@ export function updateDocumentState(state: any, sessionId?: string) {
   // filePath is optional - if missing, only global-scoped extension tools will be available
   // This is normal for agent mode sessions without a specific file open
   if (!state?.filePath) {
-    console.log(`[MCP Server] No filePath in document state for session ${sessionId} - only global tools will be available`);
+    console.log(
+      `[MCP Server] No filePath in document state for session ${sessionId} - only global tools will be available`
+    );
   }
 
   // DEFENSIVE LOGGING: Log exactly what we received
@@ -363,7 +426,10 @@ export function updateDocumentState(state: any, sessionId?: string) {
  * Register a workspace path to window mapping
  * This should be called from the main process when document state is updated
  */
-export function registerWorkspaceWindow(workspacePath: string, windowId: number) {
+export function registerWorkspaceWindow(
+  workspacePath: string,
+  windowId: number
+) {
   workspaceToWindowMap.set(workspacePath, windowId);
   // console.log(`[MCP Server] Registered workspace ${workspacePath} -> window ${windowId}`);
 }
@@ -378,9 +444,13 @@ let httpServerInstance: any = null;
  * Uses workspace path as the canonical identifier since it's stable across app restarts,
  * unlike windowId which changes every time.
  */
-async function findWindowForFilePath(filePath: string | undefined): Promise<BrowserWindow | null> {
+async function findWindowForFilePath(
+  filePath: string | undefined
+): Promise<BrowserWindow | null> {
   if (!filePath) {
-    throw new Error('[MCP Server] CRITICAL: No file path provided to findWindowForFilePath, cannot determine target window');
+    throw new Error(
+      "[MCP Server] CRITICAL: No file path provided to findWindowForFilePath, cannot determine target window"
+    );
   }
 
   // console.log(`[MCP Server] Looking for window with file: ${filePath}`);
@@ -410,7 +480,11 @@ async function findWindowForFilePath(filePath: string | undefined): Promise<Brow
     if (state?.filePath === filePath) {
       if (!state?.workspacePath) {
         // This should never happen because updateDocumentState throws if workspacePath is missing
-        throw new Error(`[MCP Server] CRITICAL: Found matching file ${filePath} but NO WORKSPACE PATH in state! This should be impossible - updateDocumentState should have thrown. State keys: ${Object.keys(state || {}).join(', ')}`);
+        throw new Error(
+          `[MCP Server] CRITICAL: Found matching file ${filePath} but NO WORKSPACE PATH in state! This should be impossible - updateDocumentState should have thrown. State keys: ${Object.keys(
+            state || {}
+          ).join(", ")}`
+        );
       }
 
       targetWorkspacePath = state.workspacePath;
@@ -420,19 +494,25 @@ async function findWindowForFilePath(filePath: string | undefined): Promise<Brow
   }
 
   if (!targetWorkspacePath) {
-    const availableSessions = Array.from(documentStateBySession.entries()).map(([id, state]) =>
-      `${id}: ${state?.filePath || 'NO FILE'}`
-    ).join(', ');
-    throw new Error(`[MCP Server] CRITICAL: Could not determine workspace for file: ${filePath}. Available sessions (${documentStateBySession.size}): ${availableSessions}`);
+    const availableSessions = Array.from(documentStateBySession.entries())
+      .map(([id, state]) => `${id}: ${state?.filePath || "NO FILE"}`)
+      .join(", ");
+    throw new Error(
+      `[MCP Server] CRITICAL: Could not determine workspace for file: ${filePath}. Available sessions (${documentStateBySession.size}): ${availableSessions}`
+    );
   }
 
   // Look up the window ID for this workspace path (resolves worktree paths to parent project)
   const windowId = await findWindowIdForWorkspacePath(targetWorkspacePath);
   if (!windowId) {
-    const availableWorkspaces = Array.from(workspaceToWindowMap.entries()).map(([path, id]) =>
-      `${path} -> window ${id}`
-    ).join(', ');
-    throw new Error(`[MCP Server] CRITICAL: No window registered for workspace: ${targetWorkspacePath}. Available workspaces: ${availableWorkspaces || 'NONE'}`);
+    const availableWorkspaces = Array.from(workspaceToWindowMap.entries())
+      .map(([path, id]) => `${path} -> window ${id}`)
+      .join(", ");
+    throw new Error(
+      `[MCP Server] CRITICAL: No window registered for workspace: ${targetWorkspacePath}. Available workspaces: ${
+        availableWorkspaces || "NONE"
+      }`
+    );
   }
 
   // Get the window by ID
@@ -440,7 +520,9 @@ async function findWindowForFilePath(filePath: string | undefined): Promise<Brow
   if (!window) {
     // Clean up stale mapping
     workspaceToWindowMap.delete(targetWorkspacePath);
-    throw new Error(`[MCP Server] CRITICAL: Window ${windowId} for workspace ${targetWorkspacePath} no longer exists (window was closed)`);
+    throw new Error(
+      `[MCP Server] CRITICAL: Window ${windowId} for workspace ${targetWorkspacePath} no longer exists (window was closed)`
+    );
   }
 
   // console.log(`[MCP Server] Found window ${windowId} for workspace: ${targetWorkspacePath}`);
@@ -452,7 +534,10 @@ async function findWindowForFilePath(filePath: string | undefined): Promise<Brow
  */
 export function unregisterWindow(windowId: number) {
   // Find and remove any workspace mappings for this window
-  for (const [workspacePath, mappedWindowId] of workspaceToWindowMap.entries()) {
+  for (const [
+    workspacePath,
+    mappedWindowId,
+  ] of workspaceToWindowMap.entries()) {
     if (mappedWindowId === windowId) {
       workspaceToWindowMap.delete(workspacePath);
       // console.log(`[MCP Server] Unregistered workspace ${workspacePath} from window ${windowId}`);
@@ -475,10 +560,32 @@ export function cleanupMcpServer() {
         res.end();
       }
     } catch (error) {
-      console.error(`[MCP Server] Error closing transport ${sessionId}:`, error);
+      console.error(
+        `[MCP Server] Error closing transport ${sessionId}:`,
+        error
+      );
     }
   }
   activeTransports.clear();
+  for (const [
+    streamableSessionId,
+    metadata,
+  ] of activeStreamableTransports.entries()) {
+    try {
+      void metadata.transport.close().catch((error) => {
+        console.error(
+          `[MCP Server] Error closing streamable transport ${streamableSessionId}:`,
+          error
+        );
+      });
+    } catch (error) {
+      console.error(
+        `[MCP Server] Error closing streamable transport ${streamableSessionId}:`,
+        error
+      );
+    }
+  }
+  activeStreamableTransports.clear();
   serverByNimbalystSession.clear();
 
   // Clear the MCP server instance
@@ -509,24 +616,30 @@ export function shutdownHttpServer(): Promise<void> {
       // First cleanup transports
       cleanupMcpServer();
     } catch (error) {
-      console.error('[MCP Server] Error cleaning up transports:', error);
+      console.error("[MCP Server] Error cleaning up transports:", error);
     }
 
     try {
       // Force close all connections
-      if (httpServerInstance && typeof httpServerInstance.closeAllConnections === 'function') {
+      if (
+        httpServerInstance &&
+        typeof httpServerInstance.closeAllConnections === "function"
+      ) {
         httpServerInstance.closeAllConnections();
       }
     } catch (error) {
-      console.error('[MCP Server] Error closing connections:', error);
+      console.error("[MCP Server] Error closing connections:", error);
     }
 
     try {
       // Close the server
-      if (httpServerInstance && typeof httpServerInstance.close === 'function') {
+      if (
+        httpServerInstance &&
+        typeof httpServerInstance.close === "function"
+      ) {
         httpServerInstance.close((err?: Error) => {
           if (err) {
-            console.error('[MCP Server] Error closing HTTP server:', err);
+            console.error("[MCP Server] Error closing HTTP server:", err);
           }
           httpServerInstance = null;
           safeResolve();
@@ -536,19 +649,19 @@ export function shutdownHttpServer(): Promise<void> {
         safeResolve();
       }
     } catch (error) {
-      console.error('[MCP Server] Error in server close:', error);
+      console.error("[MCP Server] Error in server close:", error);
       httpServerInstance = null;
       safeResolve();
     }
 
     // More aggressive timeout for production
-    const isProduction = process.env.NODE_ENV === 'production';
+    const isProduction = process.env.NODE_ENV === "production";
     const timeout = isProduction ? 300 : 1000;
 
     // Timeout to ensure we don't hang
     setTimeout(() => {
       if (httpServerInstance) {
-        console.log('[MCP Server] Force destroying HTTP server after timeout');
+        console.log("[MCP Server] Force destroying HTTP server after timeout");
         httpServerInstance = null;
       }
       safeResolve();
@@ -556,7 +669,9 @@ export function shutdownHttpServer(): Promise<void> {
   });
 }
 
-export async function startMcpHttpServer(startPort: number = 3456): Promise<{ httpServer: any; port: number }> {
+export async function startMcpHttpServer(
+  startPort: number = 3456
+): Promise<{ httpServer: any; port: number }> {
   // Try to find an available port starting from the given port
   let port = startPort;
   let httpServer: any = null;
@@ -568,7 +683,7 @@ export async function startMcpHttpServer(startPort: number = 3456): Promise<{ ht
       // console.log(`[MCP Server] Successfully started on port ${port}`);
       break;
     } catch (error: any) {
-      if (error.code === 'EADDRINUSE') {
+      if (error.code === "EADDRINUSE") {
         // console.log(`[MCP Server] Port ${port} is in use, trying ${port + 1}...`);
         port++;
         maxAttempts--;
@@ -580,7 +695,9 @@ export async function startMcpHttpServer(startPort: number = 3456): Promise<{ ht
   }
 
   if (!httpServer) {
-    throw new Error(`[MCP Server] Could not find an available port after trying ${100} ports starting from ${startPort}`);
+    throw new Error(
+      `[MCP Server] Could not find an available port after trying ${100} ports starting from ${startPort}`
+    );
   }
 
   // Store the instance for cleanup
@@ -589,269 +706,263 @@ export async function startMcpHttpServer(startPort: number = 3456): Promise<{ ht
   return { httpServer, port };
 }
 
-async function tryCreateServer(port: number): Promise<any> {
-  return new Promise((resolve, reject) => {
-    const httpServer = createServer(async (req: IncomingMessage, res: ServerResponse) => {
-    const parsedUrl = parseUrl(req.url || '', true);
-    const pathname = parsedUrl.pathname;
-
-    // Handle CORS preflight
-    if (req.method === 'OPTIONS') {
-      res.writeHead(200, {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type'
-      });
-      res.end();
-      return;
-    }
-
-    // Handle SSE GET request to establish connection
-    if (pathname === '/mcp' && req.method === 'GET') {
-      // console.log('[MCP Server] SSE connection request');
-
-      // Extract workspace path and session ID from query parameters
-      const workspacePath = parsedUrl.query.workspacePath as string | undefined;
-      const sessionId = parsedUrl.query.sessionId as string | undefined;
-      // console.log('[MCP Server] Connection established with workspacePath:', workspacePath, 'sessionId:', sessionId);
-
-      // Register workspace-to-window mapping at connection time
-      // This ensures extension tools can route to the correct window
-      // Note: For worktree sessions, the workspacePath is the worktree directory,
-      // but the window is registered under the parent project path.
-      // We use findWindowIdForWorkspacePath which resolves worktrees to their parent.
-      if (workspacePath) {
-        // Async registration - don't await, just fire and forget
-        // The mapping will be ready by the time tool calls need it
-        findWindowIdForWorkspacePath(workspacePath).then(windowId => {
-          if (windowId) {
-            workspaceToWindowMap.set(workspacePath, windowId);
-            // console.log(`[MCP Server] Registered workspace ${workspacePath} -> window ${windowId}`);
-          }
-        }).catch(err => {
-          console.warn(`[MCP Server] Failed to register workspace window mapping:`, err);
-        });
-      }
-
-      // Create a new MCP server instance for this connection
-      const server = new Server(
-        {
-          name: 'nimbalyst-mcp',
-          version: '1.0.0'
+function createSharedMcpServer(
+  workspacePath: string | undefined,
+  sessionId: string | undefined
+): Server {
+  // Create a new MCP server instance for this connection
+  const server = new Server(
+    {
+      name: "nimbalyst-mcp",
+      version: "1.0.0",
+    },
+    {
+      capabilities: {
+        tools: {
+          listChanged: true,
         },
-        {
-          capabilities: {
-            tools: {
-              listChanged: true
-            }
-          }
-        }
-      );
+      },
+    }
+  );
 
-      // Register tool handlers
-      server.setRequestHandler(ListToolsRequestSchema, async () => {
-        // Get current document state to determine which extension tools to show
-        const currentDocState = sessionId ? documentStateBySession.get(sessionId) : undefined;
-        const currentFilePath = currentDocState?.filePath;
+  // Register tool handlers
+  server.setRequestHandler(ListToolsRequestSchema, async () => {
+    // Get current document state to determine which extension tools to show
+    const currentDocState = sessionId
+      ? documentStateBySession.get(sessionId)
+      : undefined;
+    const currentFilePath = currentDocState?.filePath;
 
-        // Built-in tools exposed via MCP (for Claude Code / agent mode)
-        // NOTE: applyDiff and streamContent are intentionally NOT exposed here.
-        // They are only available through chat providers via direct IPC, not through
-        // Claude Code MCP. This was the original design - see commit af94ef47.
-        // The agent should use native Edit/Write tools with file-watcher diff approval.
-        const builtInTools: Array<{ name: string; description: string; inputSchema: any }> = [
-          {
-            name: 'capture_editor_screenshot',
-            description: 'Capture a screenshot of any editor view. Works with all file types including custom editors (Excalidraw, CSV, mockups), markdown, code, etc. Use this to visually verify UI, diagrams, or any editor content.',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                file_path: {
-                  type: 'string',
-                  description: 'The absolute path to the file being edited (optional, uses active file if not specified)'
-                },
-                selector: {
-                  type: 'string',
-                  description: 'CSS selector to capture a specific element (optional, captures full editor area if not specified)'
-                }
-              }
-            }
+    // Built-in tools exposed via MCP (for Claude Code / agent mode)
+    // NOTE: applyDiff and streamContent are intentionally NOT exposed here.
+    // They are only available through chat providers via direct IPC, not through
+    // Claude Code MCP. This was the original design - see commit af94ef47.
+    // The agent should use native Edit/Write tools with file-watcher diff approval.
+    const builtInTools: Array<{
+      name: string;
+      description: string;
+      inputSchema: any;
+    }> = [
+      {
+        name: "capture_editor_screenshot",
+        description:
+          "Capture a screenshot of any editor view. Works with all file types including custom editors (Excalidraw, CSV, mockups), markdown, code, etc. Use this to visually verify UI, diagrams, or any editor content.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            file_path: {
+              type: "string",
+              description:
+                "The absolute path to the file being edited (optional, uses active file if not specified)",
+            },
+            selector: {
+              type: "string",
+              description:
+                "CSS selector to capture a specific element (optional, captures full editor area if not specified)",
+            },
           },
-          // open_workspace is only available in development mode to prevent
-          // agents from accidentally opening duplicate windows in production
-          ...(!app.isPackaged ? [{
-            name: 'open_workspace',
-            description: 'Open a workspace (project directory) in Nimbalyst. This allows switching between different projects or opening additional workspaces. The workspace will open in a new window.',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                workspace_path: {
-                  type: 'string',
-                  description: 'The absolute path to the workspace directory to open'
-                }
-              },
-              required: ['workspace_path']
-            }
-          }] : []),
-          // TODO: Re-enable open_file tool when it's working
-          // {
-          //   name: 'open_file',
-          //   description: 'Open a file in the Nimbalyst editor. The file will open in a new tab in the current window.',
-          //   inputSchema: {
-          //     type: 'object',
-          //     properties: {
-          //       file_path: {
-          //         type: 'string',
-          //         description: 'The absolute path to the file to open'
-          //       }
-          //     },
-          //     required: ['file_path']
-          //   }
-          // }
-        ];
-
-        builtInTools.push({
-          name: 'display_to_user',
-          description: 'Display visual content inline in the conversation. Use this to show images or charts to the user. Provide an array of items, where each item has a description and exactly one content type: either "image" (for displaying a LOCAL file) or "chart" (for data visualizations). IMPORTANT: For images, you must provide an ABSOLUTE path to a LOCAL file on disk (e.g., "/Users/name/project/image.png"). URLs and relative paths are NOT supported. If a file does not exist, that specific image will show an error while other valid images still display.',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              items: {
-                type: 'array',
-                description: 'Array of visual items to display. Each item must have a description and exactly one content type (image or chart).',
-                minItems: 1,
-                items: {
-                  type: 'object',
-                  properties: {
-                    description: {
-                      type: 'string',
-                      description: 'Brief description of what this visual content shows'
-                    },
-                    image: {
-                      type: 'object',
-                      description: 'Display a LOCAL image file from disk. Provide this OR chart, not both. The file must exist locally.',
-                      properties: {
-                        path: {
-                          type: 'string',
-                          description: 'ABSOLUTE path to a LOCAL image file on disk (e.g., "/Users/name/project/screenshot.png"). URLs and relative paths are NOT supported. The file must exist.'
-                        }
-                      },
-                      required: ['path']
-                    },
-                    chart: {
-                      type: 'object',
-                      description: 'Display a data chart. Provide this OR image, not both.',
-                      properties: {
-                        chartType: {
-                          type: 'string',
-                          enum: ['bar', 'line', 'pie', 'area', 'scatter'],
-                          description: 'The type of chart to render'
-                        },
-                        data: {
-                          type: 'array',
-                          items: { type: 'object' },
-                          description: 'Array of data objects with keys matching xAxisKey and yAxisKey'
-                        },
-                        xAxisKey: {
-                          type: 'string',
-                          description: 'Key in data objects for x-axis labels (or pie chart segment names)'
-                        },
-                        yAxisKey: {
-                          oneOf: [
-                            { type: 'string' },
-                            { type: 'array', items: { type: 'string' } }
-                          ],
-                          description: 'Key(s) in data objects for y-axis values. String for single series, array for multi-series'
-                        },
-                        colors: {
-                          type: 'array',
-                          items: { type: 'string' },
-                          description: 'Optional colors for chart series (hex codes or CSS color names)'
-                        },
-                        errorBars: {
-                          type: 'object',
-                          description: 'Optional error bars configuration. Supports bar, line, area, and scatter charts.',
-                          properties: {
-                            dataKey: {
-                              type: 'string',
-                              description: 'Key in data objects for the y-axis series to add error bars to (required when yAxisKey is an array)'
-                            },
-                            errorKey: {
-                              type: 'string',
-                              description: 'Key in data objects containing error values (symmetric errors)'
-                            },
-                            errorKeyLower: {
-                              type: 'string',
-                              description: 'Key in data objects for lower error values (asymmetric errors)'
-                            },
-                            errorKeyUpper: {
-                              type: 'string',
-                              description: 'Key in data objects for upper error values (asymmetric errors)'
-                            },
-                            strokeWidth: {
-                              type: 'number',
-                              description: 'Width of error bar lines (default: 2)'
-                            }
-                          }
-                        }
-                      },
-                      required: ['chartType', 'data', 'xAxisKey', 'yAxisKey']
-                    }
+        },
+      },
+      // open_workspace is only available in development mode to prevent
+      // agents from accidentally opening duplicate windows in production
+      ...(!app.isPackaged
+        ? [
+            {
+              name: "open_workspace",
+              description:
+                "Open a workspace (project directory) in Nimbalyst. This allows switching between different projects or opening additional workspaces. The workspace will open in a new window.",
+              inputSchema: {
+                type: "object",
+                properties: {
+                  workspace_path: {
+                    type: "string",
+                    description:
+                      "The absolute path to the workspace directory to open",
                   },
-                  required: ['description']
-                }
-              }
+                },
+                required: ["workspace_path"],
+              },
             },
-            required: ['items']
-          }
-        });
+          ]
+        : []),
+      // TODO: Re-enable open_file tool when it's working
+      // {
+      //   name: 'open_file',
+      //   description: 'Open a file in the Nimbalyst editor. The file will open in a new tab in the current window.',
+      //   inputSchema: {
+      //     type: 'object',
+      //     properties: {
+      //       file_path: {
+      //         type: 'string',
+      //         description: 'The absolute path to the file to open'
+      //       }
+      //     },
+      //     required: ['file_path']
+      //   }
+      // }
+    ];
 
-        // Always add voice_agent_speak tool so it's discoverable
-        // The handler will return a non-error response if voice mode is not active
-        builtInTools.push({
-          name: 'voice_agent_speak',
-          description: 'Send a message to the voice agent to be spoken aloud to the user. This tool serves as a communication bridge between the coding agent and the voice agent, enabling the coding agent to provide spoken updates, task completion notifications, or responses to the user during voice mode sessions. Use this when you want to inform the user about progress or results while they are interacting via voice. If voice mode is not active, this tool will return a non-error response indicating voice is unavailable. Keep messages concise and conversational.',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              message: {
-                type: 'string',
-                description: 'The message for the voice agent to speak to the user. Be concise and natural. This enables the coding agent to communicate with the user through the voice agent.'
-              }
+    builtInTools.push({
+      name: "display_to_user",
+      description:
+        'Display visual content inline in the conversation. Use this to show images or charts to the user. Provide an array of items, where each item has a description and exactly one content type: either "image" (for displaying a LOCAL file) or "chart" (for data visualizations). IMPORTANT: For images, you must provide an ABSOLUTE path to a LOCAL file on disk (e.g., "/Users/name/project/image.png"). URLs and relative paths are NOT supported. If a file does not exist, that specific image will show an error while other valid images still display.',
+      inputSchema: {
+        type: "object",
+        properties: {
+          items: {
+            type: "array",
+            description:
+              "Array of visual items to display. Each item must have a description and exactly one content type (image or chart).",
+            minItems: 1,
+            items: {
+              type: "object",
+              properties: {
+                description: {
+                  type: "string",
+                  description:
+                    "Brief description of what this visual content shows",
+                },
+                image: {
+                  type: "object",
+                  description:
+                    "Display a LOCAL image file from disk. Provide this OR chart, not both. The file must exist locally.",
+                  properties: {
+                    path: {
+                      type: "string",
+                      description:
+                        'ABSOLUTE path to a LOCAL image file on disk (e.g., "/Users/name/project/screenshot.png"). URLs and relative paths are NOT supported. The file must exist.',
+                    },
+                  },
+                  required: ["path"],
+                },
+                chart: {
+                  type: "object",
+                  description:
+                    "Display a data chart. Provide this OR image, not both.",
+                  properties: {
+                    chartType: {
+                      type: "string",
+                      enum: ["bar", "line", "pie", "area", "scatter"],
+                      description: "The type of chart to render",
+                    },
+                    data: {
+                      type: "array",
+                      items: { type: "object" },
+                      description:
+                        "Array of data objects with keys matching xAxisKey and yAxisKey",
+                    },
+                    xAxisKey: {
+                      type: "string",
+                      description:
+                        "Key in data objects for x-axis labels (or pie chart segment names)",
+                    },
+                    yAxisKey: {
+                      oneOf: [
+                        { type: "string" },
+                        { type: "array", items: { type: "string" } },
+                      ],
+                      description:
+                        "Key(s) in data objects for y-axis values. String for single series, array for multi-series",
+                    },
+                    colors: {
+                      type: "array",
+                      items: { type: "string" },
+                      description:
+                        "Optional colors for chart series (hex codes or CSS color names)",
+                    },
+                    errorBars: {
+                      type: "object",
+                      description:
+                        "Optional error bars configuration. Supports bar, line, area, and scatter charts.",
+                      properties: {
+                        dataKey: {
+                          type: "string",
+                          description:
+                            "Key in data objects for the y-axis series to add error bars to (required when yAxisKey is an array)",
+                        },
+                        errorKey: {
+                          type: "string",
+                          description:
+                            "Key in data objects containing error values (symmetric errors)",
+                        },
+                        errorKeyLower: {
+                          type: "string",
+                          description:
+                            "Key in data objects for lower error values (asymmetric errors)",
+                        },
+                        errorKeyUpper: {
+                          type: "string",
+                          description:
+                            "Key in data objects for upper error values (asymmetric errors)",
+                        },
+                        strokeWidth: {
+                          type: "number",
+                          description: "Width of error bar lines (default: 2)",
+                        },
+                      },
+                    },
+                  },
+                  required: ["chartType", "data", "xAxisKey", "yAxisKey"],
+                },
+              },
+              required: ["description"],
             },
-            required: ['message']
-          }
-        });
+          },
+        },
+        required: ["items"],
+      },
+    });
 
-        // Add voice_agent_stop tool to allow AI to end voice sessions
-        builtInTools.push({
-          name: 'voice_agent_stop',
-          description: 'Stop the current voice mode session. Use this to end voice interactions when the conversation is complete, when the user requests to stop, or when transitioning away from voice mode. This will disconnect from the voice service and clean up resources. Returns success if a session was stopped, or indicates if no session was active.',
-          inputSchema: {
-            type: 'object',
-            properties: {},
-            required: []
-          }
-        });
+    // Always add voice_agent_speak tool so it's discoverable
+    // The handler will return a non-error response if voice mode is not active
+    builtInTools.push({
+      name: "voice_agent_speak",
+      description:
+        "Send a message to the voice agent to be spoken aloud to the user. This tool serves as a communication bridge between the coding agent and the voice agent, enabling the coding agent to provide spoken updates, task completion notifications, or responses to the user during voice mode sessions. Use this when you want to inform the user about progress or results while they are interacting via voice. If voice mode is not active, this tool will return a non-error response indicating voice is unavailable. Keep messages concise and conversational.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          message: {
+            type: "string",
+            description:
+              "The message for the voice agent to speak to the user. Be concise and natural. This enables the coding agent to communicate with the user through the voice agent.",
+          },
+        },
+        required: ["message"],
+      },
+    });
 
-        // Add session files tool if sessionId is available
-        if (sessionId) {
-          builtInTools.push({
-            name: 'get_session_edited_files',
-            description: 'Get the list of files that were edited during this AI session. Use this when you need to know which files have been modified as part of the current session, for example when preparing a git commit. Returns file paths relative to the workspace.',
-            inputSchema: {
-              type: 'object',
-              properties: {},
-              required: []
-            }
-          });
+    // Add voice_agent_stop tool to allow AI to end voice sessions
+    builtInTools.push({
+      name: "voice_agent_stop",
+      description:
+        "Stop the current voice mode session. Use this to end voice interactions when the conversation is complete, when the user requests to stop, or when transitioning away from voice mode. This will disconnect from the voice service and clean up resources. Returns success if a session was stopped, or indicates if no session was active.",
+      inputSchema: {
+        type: "object",
+        properties: {},
+        required: [],
+      },
+    });
 
-          // Git commit proposal tool - must be built-in (not from extension) because:
-          // 1. The built-in handler waits for user confirmation before returning to Claude
-          // 2. Extension tools return immediately, which doesn't allow Claude to see the result
-          builtInTools.push({
-            name: 'developer_git_commit_proposal',
-            description: `Propose files and commit message for a git commit.
+    // Add session files tool if sessionId is available
+    if (sessionId) {
+      builtInTools.push({
+        name: "get_session_edited_files",
+        description:
+          "Get the list of files that were edited during this AI session. Use this when you need to know which files have been modified as part of the current session, for example when preparing a git commit. Returns file paths relative to the workspace.",
+        inputSchema: {
+          type: "object",
+          properties: {},
+          required: [],
+        },
+      });
+
+      // Git commit proposal tool - must be built-in (not from extension) because:
+      // 1. The built-in handler waits for user confirmation before returning to Claude
+      // 2. Extension tools return immediately, which doesn't allow Claude to see the result
+      builtInTools.push({
+        name: "developer_git_commit_proposal",
+        description: `Propose files and commit message for a git commit.
 
 IMPORTANT: Before calling this tool, you MUST:
 1. Call get_session_edited_files to get ALL files edited in this session
@@ -869,1503 +980,2009 @@ The commit message should follow these guidelines:
 - Keep lines under 72 characters
 - No emojis
 - Lead with problem solved or capability added, not technique used`,
-            inputSchema: {
-              type: 'object',
-              properties: {
-                filesToStage: {
-                  type: 'array',
-                  items: {
-                    oneOf: [
-                      { type: 'string' },
-                      {
-                        type: 'object',
-                        properties: {
-                          path: { type: 'string', description: 'File path relative to workspace root' },
-                          status: {
-                            type: 'string',
-                            enum: ['added', 'modified', 'deleted'],
-                            description: 'Git status of the file'
-                          }
-                        },
-                        required: ['path', 'status']
-                      }
-                    ]
+        inputSchema: {
+          type: "object",
+          properties: {
+            filesToStage: {
+              type: "array",
+              items: {
+                oneOf: [
+                  { type: "string" },
+                  {
+                    type: "object",
+                    properties: {
+                      path: {
+                        type: "string",
+                        description: "File path relative to workspace root",
+                      },
+                      status: {
+                        type: "string",
+                        enum: ["added", "modified", "deleted"],
+                        description: "Git status of the file",
+                      },
+                    },
+                    required: ["path", "status"],
                   },
-                  description: 'Array of file paths (strings) or file objects with path and status (added/modified/deleted)',
-                },
-                commitMessage: {
-                  type: 'string',
-                  description: 'Proposed commit message following the guidelines above',
-                },
-                reasoning: {
-                  type: 'string',
-                  description: 'Explanation of why these files were selected and why this commit message is appropriate',
-                },
+                ],
               },
-              required: ['filesToStage', 'commitMessage', 'reasoning']
-            }
+              description:
+                "Array of file paths (strings) or file objects with path and status (added/modified/deleted)",
+            },
+            commitMessage: {
+              type: "string",
+              description:
+                "Proposed commit message following the guidelines above",
+            },
+            reasoning: {
+              type: "string",
+              description:
+                "Explanation of why these files were selected and why this commit message is appropriate",
+            },
+          },
+          required: ["filesToStage", "commitMessage", "reasoning"],
+        },
+      });
+    }
+
+    // Get extension tools for the current workspace/file
+    const extensionTools = getAvailableExtensionTools(
+      workspacePath,
+      currentFilePath
+    );
+    const extensionToolSchemas = extensionTools.map((tool) => ({
+      name: tool.name,
+      description: tool.description,
+      inputSchema: tool.inputSchema,
+    }));
+
+    if (extensionTools.length > 0) {
+      const globalTools = extensionTools.filter(
+        (t) => t.scope === "global"
+      ).length;
+      const editorTools = extensionTools.filter(
+        (t) => t.scope === "editor"
+      ).length;
+      console.log(
+        `[MCP Server] Including ${
+          extensionTools.length
+        } extension tools (${globalTools} global, ${editorTools} editor-scoped) for workspace: ${workspacePath}, file: ${
+          currentFilePath || "none"
+        }`
+      );
+    }
+
+    const allTools = [...builtInTools, ...extensionToolSchemas];
+
+    // Check for duplicate tool names
+    const toolNames = allTools.map((t) => t.name);
+    const duplicates = toolNames.filter(
+      (name, idx) => toolNames.indexOf(name) !== idx
+    );
+    if (duplicates.length > 0) {
+      console.error("[MCP Server] DUPLICATE TOOL NAMES DETECTED:", duplicates);
+      console.error("[MCP Server] All tool names:", toolNames.join(", "));
+    }
+
+    return {
+      tools: allTools,
+    };
+  });
+
+  // Tool execution handler
+  server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
+    const { name, arguments: args } = request.params;
+    // Log _meta to understand what IDs are available for proposal matching
+    if (request.params._meta) {
+      console.log(
+        `[MCP Server] Tool called: ${name}, _meta:`,
+        JSON.stringify(request.params._meta)
+      );
+    }
+    // console.log(`[MCP Server] Tool called: ${name}`, args);
+
+    // Strip MCP server prefix if present (Claude Code sends tools as mcp__nimbalyst__toolName)
+    const toolName = name.replace(/^mcp__nimbalyst__/, "");
+    // console.log(`[MCP Server] Resolved tool name: ${toolName} (original: ${name})`);
+
+    switch (toolName) {
+      case "applyDiff": {
+        const typedArgs = args as
+          | { filePath?: string; replacements?: any[] }
+          | undefined;
+        const targetFilePath = typedArgs?.filePath;
+
+        if (!targetFilePath) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: "Error: filePath is required for applyDiff",
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        // Find the correct window for this file
+        const targetWindow = await findWindowForFilePath(targetFilePath);
+        if (targetWindow) {
+          // Validate that the file is a markdown file
+          if (!targetFilePath.endsWith(".md")) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Error: applyDiff can only modify markdown files (.md). Attempted to modify: ${targetFilePath}`,
+                },
+              ],
+              isError: true,
+            };
+          }
+
+          // Create a unique channel for the result
+          const resultChannel = `mcp-result-${Date.now()}-${Math.random()}`;
+
+          // Set up a one-time listener for the result
+          return new Promise((resolve) => {
+            const timeout = setTimeout(() => {
+              ipcMain.removeHandler(resultChannel);
+
+              resolve({
+                content: [
+                  {
+                    type: "text",
+                    text: "Timed out while waiting for diff to apply. The operation may still be in progress.",
+                  },
+                ],
+                isError: true,
+              });
+            }, 30000);
+
+            ipcMain.once(resultChannel, (event, result) => {
+              clearTimeout(timeout);
+
+              const success = result?.success ?? false;
+              const error = result?.error;
+
+              // Use the targetFilePath we determined earlier
+              const filePath = targetFilePath || "untitled";
+
+              resolve({
+                content: [
+                  {
+                    type: "text",
+                    text: success
+                      ? `Successfully applied diff to ${filePath}`
+                      : `Failed to apply diff: ${error || "Unknown error"}`,
+                  },
+                ],
+                isError: !success,
+              });
+            });
+
+            // Send the request with the result channel and target file path
+            // console.log('[MCP Server] Sending applyDiff to window', targetWindow.id);
+            targetWindow.webContents.send("mcp:applyDiff", {
+              replacements: typedArgs?.replacements,
+              resultChannel,
+              targetFilePath: targetFilePath,
+            });
           });
         }
+        return {
+          content: [
+            {
+              type: "text",
+              text: "Error: No window available for target file",
+            },
+          ],
+          isError: true,
+        };
+      }
 
-        // Get extension tools for the current workspace/file
-        const extensionTools = getAvailableExtensionTools(workspacePath, currentFilePath);
-        const extensionToolSchemas = extensionTools.map(tool => ({
-          name: tool.name,
-          description: tool.description,
-          inputSchema: tool.inputSchema
-        }));
+      case "streamContent": {
+        const typedArgs = args as
+          | {
+              filePath?: string;
+              content?: string;
+              position?: string;
+              insertAfter?: string;
+            }
+          | undefined;
+        const targetFilePath = typedArgs?.filePath;
 
-        if (extensionTools.length > 0) {
-          const globalTools = extensionTools.filter(t => t.scope === 'global').length;
-          const editorTools = extensionTools.filter(t => t.scope === 'editor').length;
-          console.log(`[MCP Server] Including ${extensionTools.length} extension tools (${globalTools} global, ${editorTools} editor-scoped) for workspace: ${workspacePath}, file: ${currentFilePath || 'none'}`);
+        if (!targetFilePath) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: "Error: filePath is required for streamContent",
+              },
+            ],
+            isError: true,
+          };
         }
 
-        const allTools = [...builtInTools, ...extensionToolSchemas];
+        // Find the correct window for this file
+        const targetWindow = await findWindowForFilePath(targetFilePath);
+        if (targetWindow) {
+          // Generate a unique stream ID
+          const streamId = `mcp-stream-${Date.now()}-${Math.random()}`;
 
-        // Check for duplicate tool names
-        const toolNames = allTools.map(t => t.name);
-        const duplicates = toolNames.filter((name, idx) => toolNames.indexOf(name) !== idx);
-        if (duplicates.length > 0) {
-          console.error('[MCP Server] DUPLICATE TOOL NAMES DETECTED:', duplicates);
-          console.error('[MCP Server] All tool names:', toolNames.join(', '));
+          // Create a unique channel for the result
+          const resultChannel = `mcp-result-${Date.now()}-${Math.random()}`;
+
+          // Set up a one-time listener for the result
+          return new Promise((resolve) => {
+            const timeout = setTimeout(() => {
+              ipcMain.removeHandler(resultChannel);
+
+              resolve({
+                content: [
+                  {
+                    type: "text",
+                    text: "Timed out while waiting for content to stream. The operation may still be in progress.",
+                  },
+                ],
+                isError: true,
+              });
+            }, 30000);
+
+            ipcMain.once(resultChannel, (event, result) => {
+              clearTimeout(timeout);
+
+              const success = result?.success ?? false;
+              const error = result?.error;
+
+              // Use the targetFilePath we determined earlier
+              const filePath = targetFilePath || "untitled";
+
+              resolve({
+                content: [
+                  {
+                    type: "text",
+                    text: success
+                      ? `Successfully streamed content to ${filePath}`
+                      : `Failed to stream content: ${error || "Unknown error"}`,
+                  },
+                ],
+                isError: !success,
+              });
+            });
+
+            // Send IPC message to renderer with result channel
+            // console.log('[MCP Server] ==========================================');
+            // console.log('[MCP Server] Sending mcp:streamContent IPC to renderer');
+            // console.log('[MCP Server] Target window ID:', targetWindow.id);
+            // console.log('[MCP Server] streamId:', streamId);
+            // console.log('[MCP Server] targetFilePath:', targetFilePath);
+            // console.log('[MCP Server] position:', typedArgs?.position || 'end');
+            // console.log('[MCP Server] content length:', typedArgs?.content?.length);
+            // console.log('[MCP Server] content preview:', typedArgs?.content?.substring(0, 100));
+            // console.log('[MCP Server] ==========================================');
+
+            targetWindow.webContents.send("mcp:streamContent", {
+              streamId,
+              content: typedArgs?.content,
+              position: typedArgs?.position || "end",
+              insertAfter: typedArgs?.insertAfter,
+              targetFilePath: targetFilePath,
+              resultChannel,
+            });
+
+            // console.log('[MCP Server] IPC message sent to window', targetWindow.id);
+          });
+        }
+        return {
+          content: [
+            {
+              type: "text",
+              text: "Error: No window available for target file",
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      // TODO: Re-enable open_file case handler when the tool is working
+      // case 'open_file': {
+      //   const filePathArg = args?.file_path as string;
+      //   // console.log('[MCP Server] open_file called with:', { file_path: filePathArg });
+
+      //   // Validate file path
+      //   if (!filePathArg || typeof filePathArg !== 'string') {
+      //     return {
+      //       content: [
+      //         {
+      //           type: 'text',
+      //           text: 'Error: file_path is required and must be a string'
+      //         }
+      //       ],
+      //       isError: true
+      //     };
+      //   }
+
+      //   // Validate it's an absolute path
+      //   if (!isAbsolute(filePathArg)) {
+      //     return {
+      //       content: [
+      //         {
+      //           type: 'text',
+      //           text: `Error: file_path must be an absolute path. Got: ${filePathArg}`
+      //         }
+      //       ],
+      //       isError: true
+      //     };
+      //   }
+
+      //   // Validate file exists
+      //   if (!existsSync(filePathArg)) {
+      //     return {
+      //       content: [
+      //         {
+      //           type: 'text',
+      //           text: `Error: File does not exist: ${filePathArg}`
+      //         }
+      //       ],
+      //       isError: true
+      //     };
+      //   }
+
+      //   try {
+      //     // Find which workspace contains this file
+      //     // This is worktree-aware: checks both direct path matching and worktree/project relationships
+      //     let fileWorkspacePath: string | undefined;
+
+      //     // Check registered workspaces first
+      //     for (const wsPath of workspaceToWindowMap.keys()) {
+      //       if (isFileInWorkspaceOrWorktree(filePathArg, wsPath)) {
+      //         if (!fileWorkspacePath || wsPath.length > fileWorkspacePath.length) {
+      //           fileWorkspacePath = wsPath;
+      //         }
+      //       }
+      //     }
+
+      //     // Fallback to session workspaces
+      //     if (!fileWorkspacePath) {
+      //       for (const state of documentStateBySession.values()) {
+      //         const wsPath = state.workspacePath;
+      //         if (wsPath && isFileInWorkspaceOrWorktree(filePathArg, wsPath)) {
+      //           if (!fileWorkspacePath || wsPath.length > fileWorkspacePath.length) {
+      //             fileWorkspacePath = wsPath;
+      //           }
+      //         }
+      //       }
+      //     }
+
+      //     if (!fileWorkspacePath) {
+      //       return {
+      //         content: [
+      //           {
+      //             type: 'text',
+      //             text: `Error: File "${filePathArg}" does not belong to any open workspace. Please open the workspace first.`
+      //           }
+      //         ],
+      //         isError: true
+      //       };
+      //     }
+
+      //     // Find the window for this workspace (resolves worktree paths to parent project)
+      //     const windowId = await findWindowIdForWorkspacePath(fileWorkspacePath);
+      //     if (!windowId) {
+      //       return {
+      //         content: [
+      //           {
+      //             type: 'text',
+      //             text: `Error: No window found for workspace "${fileWorkspacePath}"`
+      //           }
+      //         ],
+      //         isError: true
+      //       };
+      //     }
+
+      //     const targetWindow = BrowserWindow.fromId(windowId);
+      //     if (!targetWindow || targetWindow.isDestroyed()) {
+      //       return {
+      //         content: [
+      //           {
+      //             type: 'text',
+      //             text: `Error: Window no longer exists for workspace "${fileWorkspacePath}"`
+      //           }
+      //         ],
+      //         isError: true
+      //       };
+      //     }
+
+      //     // Register the workspace if not already registered
+      //     if (!workspaceToWindowMap.has(fileWorkspacePath)) {
+      //       workspaceToWindowMap.set(fileWorkspacePath, targetWindow.id);
+      //       // console.log(`[MCP Server] Registered workspace ${fileWorkspacePath} -> window ${targetWindow.id}`);
+      //     }
+
+      //     // Send IPC to open the file
+      //     targetWindow.webContents.send('file:open', { filePath: filePathArg });
+
+      //     // console.log(`[MCP Server] Opened file: ${filePathArg} in window ${targetWindow.id}`);
+
+      //     return {
+      //       content: [
+      //         {
+      //           type: 'text',
+      //           text: `Successfully opened file: ${filePathArg}`
+      //         }
+      //       ],
+      //       isError: false
+      //     };
+      //   } catch (error) {
+      //     console.error('[MCP Server] Failed to open file:', error);
+      //     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+      //     return {
+      //       content: [
+      //         {
+      //           type: 'text',
+      //           text: `Error opening file: ${errorMessage}`
+      //         }
+      //       ],
+      //       isError: true
+      //     };
+      //   }
+      // }
+
+      case "open_workspace": {
+        const workspacePathArg = args?.workspace_path as string;
+        // console.log('[MCP Server] open_workspace called with:', { workspace_path: workspacePathArg });
+
+        // Validate workspace path
+        if (!workspacePathArg || typeof workspacePathArg !== "string") {
+          return {
+            content: [
+              {
+                type: "text",
+                text: "Error: workspace_path is required and must be a string",
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        // Validate it's an absolute path
+        if (!isAbsolute(workspacePathArg)) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Error: workspace_path must be an absolute path. Got: ${workspacePathArg}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        // Validate directory exists
+        if (!existsSync(workspacePathArg)) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Error: Workspace directory does not exist: ${workspacePathArg}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        try {
+          // Import dynamically to avoid circular dependencies
+          const { createWindow, findWindowByWorkspace } = await import(
+            "../window/WindowManager"
+          );
+
+          // Check if workspace is already open - focus it instead of creating a duplicate
+          const existingWindow = findWindowByWorkspace(workspacePathArg);
+          if (existingWindow && !existingWindow.isDestroyed()) {
+            if (existingWindow.isMinimized()) {
+              existingWindow.restore();
+            }
+            existingWindow.focus();
+            console.log(
+              `[MCP Server] Focused existing workspace window: ${workspacePathArg}`
+            );
+
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Workspace already open, brought to foreground: ${workspacePathArg}`,
+                },
+              ],
+              isError: false,
+            };
+          }
+
+          // No existing window - create a new one
+          const newWindow = createWindow(false, true, workspacePathArg);
+
+          // Register the workspace immediately
+          workspaceToWindowMap.set(workspacePathArg, newWindow.id);
+          console.log(
+            `[MCP Server] Opened workspace: ${workspacePathArg}, registered as window ${newWindow.id}`
+          );
+
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Successfully opened workspace: ${workspacePathArg}`,
+              },
+            ],
+            isError: false,
+          };
+        } catch (error) {
+          console.error("[MCP Server] Failed to open workspace:", error);
+          const errorMessage =
+            error instanceof Error ? error.message : "Unknown error";
+
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Error opening workspace: ${errorMessage}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+
+      case "capture_editor_screenshot": {
+        const filePath = args?.file_path as string | undefined;
+        const selector = args?.selector as string | undefined;
+
+        // console.log('[MCP Server] capture_editor_screenshot called with:', { filePath, selector, workspacePath });
+
+        if (!filePath) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: "Error: file_path is required for capture_editor_screenshot",
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        try {
+          // Find which workspace contains this file path
+          // This is worktree-aware: checks both direct path matching and worktree/project relationships
+          let fileWorkspacePath: string | undefined;
+
+          for (const wsPath of workspaceToWindowMap.keys()) {
+            if (isFileInWorkspaceOrWorktree(filePath, wsPath)) {
+              if (
+                !fileWorkspacePath ||
+                wsPath.length > fileWorkspacePath.length
+              ) {
+                fileWorkspacePath = wsPath;
+              }
+            }
+          }
+
+          // Fallback: Check all session workspaces
+          if (!fileWorkspacePath) {
+            for (const state of documentStateBySession.values()) {
+              const wsPath = state.workspacePath;
+              if (wsPath && isFileInWorkspaceOrWorktree(filePath, wsPath)) {
+                if (
+                  !fileWorkspacePath ||
+                  wsPath.length > fileWorkspacePath.length
+                ) {
+                  fileWorkspacePath = wsPath;
+                }
+              }
+            }
+          }
+
+          if (!fileWorkspacePath) {
+            const registeredWorkspaces = Array.from(
+              workspaceToWindowMap.keys()
+            );
+            const sessionWorkspaces = Array.from(
+              documentStateBySession.values()
+            )
+              .map((s) => s.workspacePath)
+              .filter(Boolean);
+            const allWorkspaces = [
+              ...new Set([...registeredWorkspaces, ...sessionWorkspaces]),
+            ];
+            const availableWorkspaces = allWorkspaces.join(", ") || "none";
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Error: File "${filePath}" does not belong to any open workspace. Available workspaces: ${availableWorkspaces}`,
+                },
+              ],
+              isError: true,
+            };
+          }
+
+          // console.log(`[MCP Server] Using offscreen editor screenshot for ${filePath}`);
+
+          // Use offscreen editor system for screenshot
+          // This will mount the editor offscreen if needed, capture, and unmount
+          const { OffscreenEditorManager } = await import(
+            "../services/OffscreenEditorManager"
+          );
+          const manager = OffscreenEditorManager.getInstance();
+
+          const imageBuffer = await manager.captureScreenshot(
+            filePath,
+            fileWorkspacePath,
+            selector
+          );
+          const imageBase64 = imageBuffer.toString("base64");
+
+          const result = {
+            success: true,
+            imageBase64,
+            mimeType: "image/png",
+          };
+
+          // Validate that we actually got image data
+          // This prevents the API error: "image cannot be empty"
+          if (!result.imageBase64 || result.imageBase64.length === 0) {
+            console.error(
+              "[MCP Server] Editor screenshot returned empty base64 data"
+            );
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: "Error: Screenshot capture returned empty image data. The editor element may not have rendered properly or the capture failed silently.",
+                },
+              ],
+              isError: true,
+            };
+          }
+
+          // console.log(`[MCP Server] Captured editor screenshot for ${filePath}`);
+
+          // Compress image if needed (reuse mockup compression logic)
+          const compressed = compressImageIfNeeded(
+            result.imageBase64,
+            result.mimeType || "image/png"
+          );
+
+          const finalSizeBytes = Math.floor((compressed.data.length * 3) / 4);
+          // console.log(`[MCP Server] Returning editor screenshot: ${(finalSizeBytes / 1024 / 1024).toFixed(3)} MB, mimeType: ${compressed.mimeType}, wasCompressed: ${compressed.wasCompressed}`);
+
+          return {
+            content: [
+              {
+                type: "image",
+                data: compressed.data,
+                mimeType: compressed.mimeType,
+              },
+            ],
+            isError: false,
+          };
+        } catch (error) {
+          console.error(
+            "[MCP Server] Failed to capture editor screenshot:",
+            error
+          );
+          const errorMessage =
+            error instanceof Error ? error.message : "Unknown error";
+
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Error capturing editor screenshot: ${errorMessage}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+
+      case "display_to_user": {
+        // Types for the new array-based schema
+        type ImageContent = {
+          path: string;
+        };
+
+        type ErrorBarsConfig = {
+          dataKey?: string;
+          errorKey?: string;
+          errorKeyLower?: string;
+          errorKeyUpper?: string;
+          strokeWidth?: number;
+        };
+
+        type ChartContent = {
+          chartType: "bar" | "line" | "pie" | "area" | "scatter";
+          data: Record<string, unknown>[];
+          xAxisKey: string;
+          yAxisKey: string | string[];
+          colors?: string[];
+          errorBars?: ErrorBarsConfig;
+        };
+
+        type DisplayItem = {
+          description: string;
+          image?: ImageContent;
+          chart?: ChartContent;
+        };
+
+        type DisplayArgs = {
+          items: DisplayItem[];
+        };
+
+        const typedArgs = args as DisplayArgs | undefined;
+
+        // Validate items array exists
+        if (!typedArgs?.items) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: 'Error: "items" array is required. Provide an array of display items, each with a description and either an "image" or "chart" object.',
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        if (!Array.isArray(typedArgs.items)) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: 'Error: "items" must be an array of display items.',
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        if (typedArgs.items.length === 0) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: 'Error: "items" array must contain at least one item.',
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        // Validate each item
+        const validChartTypes = ["bar", "line", "pie", "area", "scatter"];
+        const displayedItems: string[] = [];
+
+        for (let i = 0; i < typedArgs.items.length; i++) {
+          const item = typedArgs.items[i];
+          const itemPrefix = `items[${i}]`;
+
+          // Validate description
+          if (!item.description || typeof item.description !== "string") {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Error: ${itemPrefix} is missing required "description" field.`,
+                },
+              ],
+              isError: true,
+            };
+          }
+
+          // Check that exactly one content type is provided
+          const hasImage = !!item.image;
+          const hasChart = !!item.chart;
+
+          if (!hasImage && !hasChart) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Error: ${itemPrefix} must have either an "image" or "chart" object. Description: "${item.description}"`,
+                },
+              ],
+              isError: true,
+            };
+          }
+
+          if (hasImage && hasChart) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Error: ${itemPrefix} has both "image" and "chart" - provide only one content type per item.`,
+                },
+              ],
+              isError: true,
+            };
+          }
+
+          // Validate image content
+          if (hasImage) {
+            if (!item.image!.path || typeof item.image!.path !== "string") {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: `Error: ${itemPrefix}.image.path is required and must be a string.`,
+                  },
+                ],
+                isError: true,
+              };
+            }
+
+            const imagePath = item.image!.path;
+
+            // Check if path looks like a URL (common mistake)
+            if (
+              imagePath.startsWith("http://") ||
+              imagePath.startsWith("https://") ||
+              imagePath.startsWith("data:")
+            ) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: `Error: ${itemPrefix}.image.path must be a LOCAL file path, not a URL. Got: "${imagePath.substring(
+                      0,
+                      100
+                    )}${
+                      imagePath.length > 100 ? "..." : ""
+                    }". Download the image to a local file first, then provide the absolute path to that file.`,
+                  },
+                ],
+                isError: true,
+              };
+            }
+
+            // Validate path is absolute (prevents relative path traversal)
+            if (!isAbsolute(imagePath)) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: `Error: ${itemPrefix}.image.path must be an ABSOLUTE local file path (e.g., "/Users/name/image.png"), not a relative path. Got: "${imagePath}"`,
+                  },
+                ],
+                isError: true,
+              };
+            }
+
+            // Normalize and resolve path (prevents path traversal attacks)
+            // Note: Using path.resolve() explicitly to avoid shadowing from Promise resolve callbacks
+            const normalizedPath = path.resolve(imagePath);
+
+            // Note: We intentionally do NOT check if the file exists here.
+            // The widget handles missing files gracefully per-image, showing an error
+            // for that specific image while still displaying other valid images.
+            // Failing the entire request for one missing file is poor UX.
+
+            displayedItems.push(`image: ${item.description}`);
+          }
+
+          // Validate chart content
+          if (hasChart) {
+            const chart = item.chart!;
+
+            if (!chart.chartType) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: `Error: ${itemPrefix}.chart.chartType is required.`,
+                  },
+                ],
+                isError: true,
+              };
+            }
+
+            if (!validChartTypes.includes(chart.chartType)) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: `Error: ${itemPrefix}.chart.chartType must be one of: ${validChartTypes.join(
+                      ", "
+                    )}. Got: "${chart.chartType}"`,
+                  },
+                ],
+                isError: true,
+              };
+            }
+
+            if (
+              !chart.data ||
+              !Array.isArray(chart.data) ||
+              chart.data.length === 0
+            ) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: `Error: ${itemPrefix}.chart.data must be a non-empty array.`,
+                  },
+                ],
+                isError: true,
+              };
+            }
+
+            if (!chart.xAxisKey || typeof chart.xAxisKey !== "string") {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: `Error: ${itemPrefix}.chart.xAxisKey is required.`,
+                  },
+                ],
+                isError: true,
+              };
+            }
+
+            if (!chart.yAxisKey) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: `Error: ${itemPrefix}.chart.yAxisKey is required.`,
+                  },
+                ],
+                isError: true,
+              };
+            }
+
+            // Validate error bars if provided
+            if (chart.errorBars) {
+              const errorBars = chart.errorBars as Record<string, unknown>;
+
+              // Check that we have either symmetric or asymmetric error data
+              const hasSymmetric = typeof errorBars.errorKey === "string";
+              const hasAsymmetric =
+                typeof errorBars.errorKeyLower === "string" &&
+                typeof errorBars.errorKeyUpper === "string";
+
+              if (!hasSymmetric && !hasAsymmetric) {
+                return {
+                  content: [
+                    {
+                      type: "text",
+                      text: `Error: ${itemPrefix}.chart.errorBars must have either "errorKey" (for symmetric errors) or both "errorKeyLower" and "errorKeyUpper" (for asymmetric errors).`,
+                    },
+                  ],
+                  isError: true,
+                };
+              }
+
+              if (hasSymmetric && hasAsymmetric) {
+                return {
+                  content: [
+                    {
+                      type: "text",
+                      text: `Error: ${itemPrefix}.chart.errorBars cannot have both "errorKey" and "errorKeyLower"/"errorKeyUpper". Use one or the other.`,
+                    },
+                  ],
+                  isError: true,
+                };
+              }
+
+              // Validate strokeWidth if provided
+              if (
+                errorBars.strokeWidth !== undefined &&
+                typeof errorBars.strokeWidth !== "number"
+              ) {
+                return {
+                  content: [
+                    {
+                      type: "text",
+                      text: `Error: ${itemPrefix}.chart.errorBars.strokeWidth must be a number.`,
+                    },
+                  ],
+                  isError: true,
+                };
+              }
+
+              // Validate dataKey if provided (used for multi-series charts)
+              if (
+                errorBars.dataKey !== undefined &&
+                typeof errorBars.dataKey !== "string"
+              ) {
+                return {
+                  content: [
+                    {
+                      type: "text",
+                      text: `Error: ${itemPrefix}.chart.errorBars.dataKey must be a string.`,
+                    },
+                  ],
+                  isError: true,
+                };
+              }
+
+              // Pie charts don't support error bars
+              if (chart.chartType === "pie") {
+                return {
+                  content: [
+                    {
+                      type: "text",
+                      text: `Error: ${itemPrefix}.chart.errorBars is not supported for pie charts.`,
+                    },
+                  ],
+                  isError: true,
+                };
+              }
+            }
+
+            displayedItems.push(
+              `${chart.chartType} chart: ${item.description}`
+            );
+          }
+        }
+
+        // console.log(`[MCP Server] display_to_user: ${typedArgs.items.length} item(s)`);
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Displayed ${
+                typedArgs.items.length
+              } item(s):\n${displayedItems.map((d) => `- ${d}`).join("\n")}`,
+            },
+          ],
+          isError: false,
+        };
+      }
+
+      case "voice_agent_speak": {
+        const message = args?.message as string | undefined;
+
+        if (!message || typeof message !== "string") {
+          return {
+            content: [
+              {
+                type: "text",
+                text: "Error: message parameter is required and must be a string",
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        // Get the active voice session directly - works regardless of document state
+        const activeVoiceSessionId = getActiveVoiceSessionId();
+
+        if (!activeVoiceSessionId) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: "Voice mode is not currently active. The message cannot be spoken aloud. You can still respond to the user via text in the normal way.",
+              },
+            ],
+            isError: false, // Not a hard error - just means voice mode isn't active
+          };
+        }
+
+        // Debug logging - uncomment if needed for troubleshooting voice message routing
+        // console.log('[MCP Server] voice_agent_speak - sending to active voice session:', { sessionId: activeVoiceSessionId });
+
+        // Attempt to send message to voice agent
+        const success = sendToVoiceAgent(activeVoiceSessionId, message);
+        // console.log('[MCP Server] voice_agent_speak - send result:', { sessionId: activeVoiceSessionId, success, message: message.substring(0, 50) });
+
+        if (!success) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Failed to send message to voice agent. The voice connection may have been lost or disconnected. You can still respond to the user via text in the normal way.`,
+              },
+            ],
+            isError: false, // Not a hard error - voice agent just isn't reachable
+          };
         }
 
         return {
-          tools: allTools
+          content: [
+            {
+              type: "text",
+              text: `Message queued for voice agent: "${message.substring(
+                0,
+                100
+              )}${message.length > 100 ? "..." : ""}"`,
+            },
+          ],
+          isError: false,
         };
-      });
+      }
 
-      // Tool execution handler
-      server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
-        const { name, arguments: args } = request.params;
-        // Log _meta to understand what IDs are available for proposal matching
-        if (request.params._meta) {
-          console.log(`[MCP Server] Tool called: ${name}, _meta:`, JSON.stringify(request.params._meta));
+      case "voice_agent_stop": {
+        // Stop the active voice session
+        const wasActive = stopVoiceSession();
+
+        if (wasActive) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: "Voice mode session has been stopped successfully.",
+              },
+            ],
+            isError: false,
+          };
+        } else {
+          return {
+            content: [
+              {
+                type: "text",
+                text: "No active voice mode session to stop.",
+              },
+            ],
+            isError: false, // Not a hard error - just means no session was active
+          };
         }
-        // console.log(`[MCP Server] Tool called: ${name}`, args);
+      }
 
-        // Strip MCP server prefix if present (Claude Code sends tools as mcp__nimbalyst__toolName)
-        const toolName = name.replace(/^mcp__nimbalyst__/, '');
-        // console.log(`[MCP Server] Resolved tool name: ${toolName} (original: ${name})`);
+      case "get_session_edited_files": {
+        // Return the list of files edited during this session
+        if (!sessionId) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: "Error: No session ID available. This tool is only available during an active AI session.",
+              },
+            ],
+            isError: true,
+          };
+        }
 
-        switch (toolName) {
-          case 'applyDiff': {
-            const typedArgs = args as { filePath?: string; replacements?: any[] } | undefined;
-            const targetFilePath = typedArgs?.filePath;
+        try {
+          const files = await SessionFilesRepository.getFilesBySession(
+            sessionId,
+            "edited"
+          );
+          const filePaths = files.map((f) => f.filePath);
 
-            if (!targetFilePath) {
-              return {
-                content: [{ type: 'text', text: 'Error: filePath is required for applyDiff' }],
-                isError: true
-              };
-            }
-
-            // Find the correct window for this file
-            const targetWindow = await findWindowForFilePath(targetFilePath);
-            if (targetWindow) {
-
-              // Validate that the file is a markdown file
-              if (!targetFilePath.endsWith('.md')) {
-                return {
-                  content: [
-                    {
-                      type: 'text',
-                      text: `Error: applyDiff can only modify markdown files (.md). Attempted to modify: ${targetFilePath}`
-                    }
-                  ],
-                  isError: true
-                };
-              }
-
-              // Create a unique channel for the result
-              const resultChannel = `mcp-result-${Date.now()}-${Math.random()}`;
-
-              // Set up a one-time listener for the result
-              return new Promise((resolve) => {
-                const timeout = setTimeout(() => {
-                  ipcMain.removeHandler(resultChannel);
-
-                  resolve({
-                    content: [
-                      {
-                        type: 'text',
-                        text: 'Timed out while waiting for diff to apply. The operation may still be in progress.'
-                      }
-                    ],
-                    isError: true
-                  });
-                }, 30000);
-
-                ipcMain.once(resultChannel, (event, result) => {
-                  clearTimeout(timeout);
-
-                  const success = result?.success ?? false;
-                  const error = result?.error;
-
-                  // Use the targetFilePath we determined earlier
-                  const filePath = targetFilePath || 'untitled';
-
-                  resolve({
-                    content: [
-                      {
-                        type: 'text',
-                        text: success
-                          ? `Successfully applied diff to ${filePath}`
-                          : `Failed to apply diff: ${error || 'Unknown error'}`
-                      }
-                    ],
-                    isError: !success
-                  });
-                });
-
-                // Send the request with the result channel and target file path
-                // console.log('[MCP Server] Sending applyDiff to window', targetWindow.id);
-                targetWindow.webContents.send('mcp:applyDiff', {
-                  replacements: typedArgs?.replacements,
-                  resultChannel,
-                  targetFilePath: targetFilePath
-                });
-              });
-            }
+          if (filePaths.length === 0) {
             return {
               content: [
                 {
-                  type: 'text',
-                  text: 'Error: No window available for target file'
-                }
+                  type: "text",
+                  text: "No files have been edited in this session yet.",
+                },
               ],
-              isError: true
+              isError: false,
             };
           }
 
-          case 'streamContent': {
-            const typedArgs = args as { filePath?: string; content?: string; position?: string; insertAfter?: string } | undefined;
-            const targetFilePath = typedArgs?.filePath;
-
-            if (!targetFilePath) {
-              return {
-                content: [{ type: 'text', text: 'Error: filePath is required for streamContent' }],
-                isError: true
-              };
-            }
-
-            // Find the correct window for this file
-            const targetWindow = await findWindowForFilePath(targetFilePath);
-            if (targetWindow) {
-
-              // Generate a unique stream ID
-              const streamId = `mcp-stream-${Date.now()}-${Math.random()}`;
-
-              // Create a unique channel for the result
-              const resultChannel = `mcp-result-${Date.now()}-${Math.random()}`;
-
-              // Set up a one-time listener for the result
-              return new Promise((resolve) => {
-                const timeout = setTimeout(() => {
-                  ipcMain.removeHandler(resultChannel);
-
-                  resolve({
-                    content: [
-                      {
-                        type: 'text',
-                        text: 'Timed out while waiting for content to stream. The operation may still be in progress.'
-                      }
-                    ],
-                    isError: true
-                  });
-                }, 30000);
-
-                ipcMain.once(resultChannel, (event, result) => {
-                  clearTimeout(timeout);
-
-                  const success = result?.success ?? false;
-                  const error = result?.error;
-
-                  // Use the targetFilePath we determined earlier
-                  const filePath = targetFilePath || 'untitled';
-
-                  resolve({
-                    content: [
-                      {
-                        type: 'text',
-                        text: success
-                          ? `Successfully streamed content to ${filePath}`
-                          : `Failed to stream content: ${error || 'Unknown error'}`
-                      }
-                    ],
-                    isError: !success
-                  });
-                });
-
-                // Send IPC message to renderer with result channel
-                // console.log('[MCP Server] ==========================================');
-                // console.log('[MCP Server] Sending mcp:streamContent IPC to renderer');
-                // console.log('[MCP Server] Target window ID:', targetWindow.id);
-                // console.log('[MCP Server] streamId:', streamId);
-                // console.log('[MCP Server] targetFilePath:', targetFilePath);
-                // console.log('[MCP Server] position:', typedArgs?.position || 'end');
-                // console.log('[MCP Server] content length:', typedArgs?.content?.length);
-                // console.log('[MCP Server] content preview:', typedArgs?.content?.substring(0, 100));
-                // console.log('[MCP Server] ==========================================');
-
-                targetWindow.webContents.send('mcp:streamContent', {
-                  streamId,
-                  content: typedArgs?.content,
-                  position: typedArgs?.position || 'end',
-                  insertAfter: typedArgs?.insertAfter,
-                  targetFilePath: targetFilePath,
-                  resultChannel
-                });
-
-                // console.log('[MCP Server] IPC message sent to window', targetWindow.id);
-              });
-            }
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: 'Error: No window available for target file'
-                }
-              ],
-              isError: true
-            };
-          }
-
-
-          // TODO: Re-enable open_file case handler when the tool is working
-          // case 'open_file': {
-          //   const filePathArg = args?.file_path as string;
-          //   // console.log('[MCP Server] open_file called with:', { file_path: filePathArg });
-
-          //   // Validate file path
-          //   if (!filePathArg || typeof filePathArg !== 'string') {
-          //     return {
-          //       content: [
-          //         {
-          //           type: 'text',
-          //           text: 'Error: file_path is required and must be a string'
-          //         }
-          //       ],
-          //       isError: true
-          //     };
-          //   }
-
-          //   // Validate it's an absolute path
-          //   if (!isAbsolute(filePathArg)) {
-          //     return {
-          //       content: [
-          //         {
-          //           type: 'text',
-          //           text: `Error: file_path must be an absolute path. Got: ${filePathArg}`
-          //         }
-          //       ],
-          //       isError: true
-          //     };
-          //   }
-
-          //   // Validate file exists
-          //   if (!existsSync(filePathArg)) {
-          //     return {
-          //       content: [
-          //         {
-          //           type: 'text',
-          //           text: `Error: File does not exist: ${filePathArg}`
-          //         }
-          //       ],
-          //       isError: true
-          //     };
-          //   }
-
-          //   try {
-          //     // Find which workspace contains this file
-          //     // This is worktree-aware: checks both direct path matching and worktree/project relationships
-          //     let fileWorkspacePath: string | undefined;
-
-          //     // Check registered workspaces first
-          //     for (const wsPath of workspaceToWindowMap.keys()) {
-          //       if (isFileInWorkspaceOrWorktree(filePathArg, wsPath)) {
-          //         if (!fileWorkspacePath || wsPath.length > fileWorkspacePath.length) {
-          //           fileWorkspacePath = wsPath;
-          //         }
-          //       }
-          //     }
-
-          //     // Fallback to session workspaces
-          //     if (!fileWorkspacePath) {
-          //       for (const state of documentStateBySession.values()) {
-          //         const wsPath = state.workspacePath;
-          //         if (wsPath && isFileInWorkspaceOrWorktree(filePathArg, wsPath)) {
-          //           if (!fileWorkspacePath || wsPath.length > fileWorkspacePath.length) {
-          //             fileWorkspacePath = wsPath;
-          //           }
-          //         }
-          //       }
-          //     }
-
-          //     if (!fileWorkspacePath) {
-          //       return {
-          //         content: [
-          //           {
-          //             type: 'text',
-          //             text: `Error: File "${filePathArg}" does not belong to any open workspace. Please open the workspace first.`
-          //           }
-          //         ],
-          //         isError: true
-          //       };
-          //     }
-
-          //     // Find the window for this workspace (resolves worktree paths to parent project)
-          //     const windowId = await findWindowIdForWorkspacePath(fileWorkspacePath);
-          //     if (!windowId) {
-          //       return {
-          //         content: [
-          //           {
-          //             type: 'text',
-          //             text: `Error: No window found for workspace "${fileWorkspacePath}"`
-          //           }
-          //         ],
-          //         isError: true
-          //       };
-          //     }
-
-          //     const targetWindow = BrowserWindow.fromId(windowId);
-          //     if (!targetWindow || targetWindow.isDestroyed()) {
-          //       return {
-          //         content: [
-          //           {
-          //             type: 'text',
-          //             text: `Error: Window no longer exists for workspace "${fileWorkspacePath}"`
-          //           }
-          //         ],
-          //         isError: true
-          //       };
-          //     }
-
-          //     // Register the workspace if not already registered
-          //     if (!workspaceToWindowMap.has(fileWorkspacePath)) {
-          //       workspaceToWindowMap.set(fileWorkspacePath, targetWindow.id);
-          //       // console.log(`[MCP Server] Registered workspace ${fileWorkspacePath} -> window ${targetWindow.id}`);
-          //     }
-
-          //     // Send IPC to open the file
-          //     targetWindow.webContents.send('file:open', { filePath: filePathArg });
-
-          //     // console.log(`[MCP Server] Opened file: ${filePathArg} in window ${targetWindow.id}`);
-
-          //     return {
-          //       content: [
-          //         {
-          //           type: 'text',
-          //           text: `Successfully opened file: ${filePathArg}`
-          //         }
-          //       ],
-          //       isError: false
-          //     };
-          //   } catch (error) {
-          //     console.error('[MCP Server] Failed to open file:', error);
-          //     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-
-          //     return {
-          //       content: [
-          //         {
-          //           type: 'text',
-          //           text: `Error opening file: ${errorMessage}`
-          //         }
-          //       ],
-          //       isError: true
-          //     };
-          //   }
-          // }
-
-          case 'open_workspace': {
-            const workspacePathArg = args?.workspace_path as string;
-            // console.log('[MCP Server] open_workspace called with:', { workspace_path: workspacePathArg });
-
-            // Validate workspace path
-            if (!workspacePathArg || typeof workspacePathArg !== 'string') {
-              return {
-                content: [
-                  {
-                    type: 'text',
-                    text: 'Error: workspace_path is required and must be a string'
-                  }
-                ],
-                isError: true
-              };
-            }
-
-            // Validate it's an absolute path
-            if (!isAbsolute(workspacePathArg)) {
-              return {
-                content: [
-                  {
-                    type: 'text',
-                    text: `Error: workspace_path must be an absolute path. Got: ${workspacePathArg}`
-                  }
-                ],
-                isError: true
-              };
-            }
-
-            // Validate directory exists
-            if (!existsSync(workspacePathArg)) {
-              return {
-                content: [
-                  {
-                    type: 'text',
-                    text: `Error: Workspace directory does not exist: ${workspacePathArg}`
-                  }
-                ],
-                isError: true
-              };
-            }
-
-            try {
-              // Import dynamically to avoid circular dependencies
-              const { createWindow, findWindowByWorkspace } = await import('../window/WindowManager');
-
-              // Check if workspace is already open - focus it instead of creating a duplicate
-              const existingWindow = findWindowByWorkspace(workspacePathArg);
-              if (existingWindow && !existingWindow.isDestroyed()) {
-                if (existingWindow.isMinimized()) {
-                  existingWindow.restore();
-                }
-                existingWindow.focus();
-                console.log(`[MCP Server] Focused existing workspace window: ${workspacePathArg}`);
-
-                return {
-                  content: [
-                    {
-                      type: 'text',
-                      text: `Workspace already open, brought to foreground: ${workspacePathArg}`
-                    }
-                  ],
-                  isError: false
-                };
-              }
-
-              // No existing window - create a new one
-              const newWindow = createWindow(false, true, workspacePathArg);
-
-              // Register the workspace immediately
-              workspaceToWindowMap.set(workspacePathArg, newWindow.id);
-              console.log(`[MCP Server] Opened workspace: ${workspacePathArg}, registered as window ${newWindow.id}`);
-
-              return {
-                content: [
-                  {
-                    type: 'text',
-                    text: `Successfully opened workspace: ${workspacePathArg}`
-                  }
-                ],
-                isError: false
-              };
-            } catch (error) {
-              console.error('[MCP Server] Failed to open workspace:', error);
-              const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-
-              return {
-                content: [
-                  {
-                    type: 'text',
-                    text: `Error opening workspace: ${errorMessage}`
-                  }
-                ],
-                isError: true
-              };
-            }
-          }
-
-          case 'capture_editor_screenshot': {
-            const filePath = args?.file_path as string | undefined;
-            const selector = args?.selector as string | undefined;
-
-            // console.log('[MCP Server] capture_editor_screenshot called with:', { filePath, selector, workspacePath });
-
-            if (!filePath) {
-              return {
-                content: [{ type: 'text', text: 'Error: file_path is required for capture_editor_screenshot' }],
-                isError: true
-              };
-            }
-
-            try {
-              // Find which workspace contains this file path
-              // This is worktree-aware: checks both direct path matching and worktree/project relationships
-              let fileWorkspacePath: string | undefined;
-
-              for (const wsPath of workspaceToWindowMap.keys()) {
-                if (isFileInWorkspaceOrWorktree(filePath, wsPath)) {
-                  if (!fileWorkspacePath || wsPath.length > fileWorkspacePath.length) {
-                    fileWorkspacePath = wsPath;
-                  }
-                }
-              }
-
-              // Fallback: Check all session workspaces
-              if (!fileWorkspacePath) {
-                for (const state of documentStateBySession.values()) {
-                  const wsPath = state.workspacePath;
-                  if (wsPath && isFileInWorkspaceOrWorktree(filePath, wsPath)) {
-                    if (!fileWorkspacePath || wsPath.length > fileWorkspacePath.length) {
-                      fileWorkspacePath = wsPath;
-                    }
-                  }
-                }
-              }
-
-              if (!fileWorkspacePath) {
-                const registeredWorkspaces = Array.from(workspaceToWindowMap.keys());
-                const sessionWorkspaces = Array.from(documentStateBySession.values())
-                  .map(s => s.workspacePath)
-                  .filter(Boolean);
-                const allWorkspaces = [...new Set([...registeredWorkspaces, ...sessionWorkspaces])];
-                const availableWorkspaces = allWorkspaces.join(', ') || 'none';
-                return {
-                  content: [
-                    {
-                      type: 'text',
-                      text: `Error: File "${filePath}" does not belong to any open workspace. Available workspaces: ${availableWorkspaces}`
-                    }
-                  ],
-                  isError: true
-                };
-              }
-
-              // console.log(`[MCP Server] Using offscreen editor screenshot for ${filePath}`);
-
-              // Use offscreen editor system for screenshot
-              // This will mount the editor offscreen if needed, capture, and unmount
-              const { OffscreenEditorManager } = await import('../services/OffscreenEditorManager');
-              const manager = OffscreenEditorManager.getInstance();
-
-              const imageBuffer = await manager.captureScreenshot(filePath, fileWorkspacePath, selector);
-              const imageBase64 = imageBuffer.toString('base64');
-
-              const result = {
-                success: true,
-                imageBase64,
-                mimeType: 'image/png'
-              };
-
-              // Validate that we actually got image data
-              // This prevents the API error: "image cannot be empty"
-              if (!result.imageBase64 || result.imageBase64.length === 0) {
-                console.error('[MCP Server] Editor screenshot returned empty base64 data');
-                return {
-                  content: [
-                    {
-                      type: 'text',
-                      text: 'Error: Screenshot capture returned empty image data. The editor element may not have rendered properly or the capture failed silently.'
-                    }
-                  ],
-                  isError: true
-                };
-              }
-
-              // console.log(`[MCP Server] Captured editor screenshot for ${filePath}`);
-
-              // Compress image if needed (reuse mockup compression logic)
-              const compressed = compressImageIfNeeded(
-                result.imageBase64,
-                result.mimeType || 'image/png'
-              );
-
-              const finalSizeBytes = Math.floor((compressed.data.length * 3) / 4);
-              // console.log(`[MCP Server] Returning editor screenshot: ${(finalSizeBytes / 1024 / 1024).toFixed(3)} MB, mimeType: ${compressed.mimeType}, wasCompressed: ${compressed.wasCompressed}`);
-
-              return {
-                content: [
-                  {
-                    type: 'image',
-                    data: compressed.data,
-                    mimeType: compressed.mimeType
-                  }
-                ],
-                isError: false
-              };
-            } catch (error) {
-              console.error('[MCP Server] Failed to capture editor screenshot:', error);
-              const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-
-              return {
-                content: [
-                  {
-                    type: 'text',
-                    text: `Error capturing editor screenshot: ${errorMessage}`
-                  }
-                ],
-                isError: true
-              };
-            }
-          }
-
-          case 'display_to_user': {
-            // Types for the new array-based schema
-            type ImageContent = {
-              path: string;
-            };
-
-            type ErrorBarsConfig = {
-              dataKey?: string;
-              errorKey?: string;
-              errorKeyLower?: string;
-              errorKeyUpper?: string;
-              strokeWidth?: number;
-            };
-
-            type ChartContent = {
-              chartType: 'bar' | 'line' | 'pie' | 'area' | 'scatter';
-              data: Record<string, unknown>[];
-              xAxisKey: string;
-              yAxisKey: string | string[];
-              colors?: string[];
-              errorBars?: ErrorBarsConfig;
-            };
-
-            type DisplayItem = {
-              description: string;
-              image?: ImageContent;
-              chart?: ChartContent;
-            };
-
-            type DisplayArgs = {
-              items: DisplayItem[];
-            };
-
-            const typedArgs = args as DisplayArgs | undefined;
-
-            // Validate items array exists
-            if (!typedArgs?.items) {
-              return {
-                content: [{ type: 'text', text: 'Error: "items" array is required. Provide an array of display items, each with a description and either an "image" or "chart" object.' }],
-                isError: true
-              };
-            }
-
-            if (!Array.isArray(typedArgs.items)) {
-              return {
-                content: [{ type: 'text', text: 'Error: "items" must be an array of display items.' }],
-                isError: true
-              };
-            }
-
-            if (typedArgs.items.length === 0) {
-              return {
-                content: [{ type: 'text', text: 'Error: "items" array must contain at least one item.' }],
-                isError: true
-              };
-            }
-
-            // Validate each item
-            const validChartTypes = ['bar', 'line', 'pie', 'area', 'scatter'];
-            const displayedItems: string[] = [];
-
-            for (let i = 0; i < typedArgs.items.length; i++) {
-              const item = typedArgs.items[i];
-              const itemPrefix = `items[${i}]`;
-
-              // Validate description
-              if (!item.description || typeof item.description !== 'string') {
-                return {
-                  content: [{ type: 'text', text: `Error: ${itemPrefix} is missing required "description" field.` }],
-                  isError: true
-                };
-              }
-
-              // Check that exactly one content type is provided
-              const hasImage = !!item.image;
-              const hasChart = !!item.chart;
-
-              if (!hasImage && !hasChart) {
-                return {
-                  content: [{ type: 'text', text: `Error: ${itemPrefix} must have either an "image" or "chart" object. Description: "${item.description}"` }],
-                  isError: true
-                };
-              }
-
-              if (hasImage && hasChart) {
-                return {
-                  content: [{ type: 'text', text: `Error: ${itemPrefix} has both "image" and "chart" - provide only one content type per item.` }],
-                  isError: true
-                };
-              }
-
-              // Validate image content
-              if (hasImage) {
-                if (!item.image!.path || typeof item.image!.path !== 'string') {
-                  return {
-                    content: [{ type: 'text', text: `Error: ${itemPrefix}.image.path is required and must be a string.` }],
-                    isError: true
-                  };
-                }
-
-                const imagePath = item.image!.path;
-
-                // Check if path looks like a URL (common mistake)
-                if (imagePath.startsWith('http://') || imagePath.startsWith('https://') || imagePath.startsWith('data:')) {
-                  return {
-                    content: [{ type: 'text', text: `Error: ${itemPrefix}.image.path must be a LOCAL file path, not a URL. Got: "${imagePath.substring(0, 100)}${imagePath.length > 100 ? '...' : ''}". Download the image to a local file first, then provide the absolute path to that file.` }],
-                    isError: true
-                  };
-                }
-
-                // Validate path is absolute (prevents relative path traversal)
-                if (!isAbsolute(imagePath)) {
-                  return {
-                    content: [{ type: 'text', text: `Error: ${itemPrefix}.image.path must be an ABSOLUTE local file path (e.g., "/Users/name/image.png"), not a relative path. Got: "${imagePath}"` }],
-                    isError: true
-                  };
-                }
-
-                // Normalize and resolve path (prevents path traversal attacks)
-                // Note: Using path.resolve() explicitly to avoid shadowing from Promise resolve callbacks
-                const normalizedPath = path.resolve(imagePath);
-
-                // Note: We intentionally do NOT check if the file exists here.
-                // The widget handles missing files gracefully per-image, showing an error
-                // for that specific image while still displaying other valid images.
-                // Failing the entire request for one missing file is poor UX.
-
-                displayedItems.push(`image: ${item.description}`);
-              }
-
-              // Validate chart content
-              if (hasChart) {
-                const chart = item.chart!;
-
-                if (!chart.chartType) {
-                  return {
-                    content: [{ type: 'text', text: `Error: ${itemPrefix}.chart.chartType is required.` }],
-                    isError: true
-                  };
-                }
-
-                if (!validChartTypes.includes(chart.chartType)) {
-                  return {
-                    content: [{ type: 'text', text: `Error: ${itemPrefix}.chart.chartType must be one of: ${validChartTypes.join(', ')}. Got: "${chart.chartType}"` }],
-                    isError: true
-                  };
-                }
-
-                if (!chart.data || !Array.isArray(chart.data) || chart.data.length === 0) {
-                  return {
-                    content: [{ type: 'text', text: `Error: ${itemPrefix}.chart.data must be a non-empty array.` }],
-                    isError: true
-                  };
-                }
-
-                if (!chart.xAxisKey || typeof chart.xAxisKey !== 'string') {
-                  return {
-                    content: [{ type: 'text', text: `Error: ${itemPrefix}.chart.xAxisKey is required.` }],
-                    isError: true
-                  };
-                }
-
-                if (!chart.yAxisKey) {
-                  return {
-                    content: [{ type: 'text', text: `Error: ${itemPrefix}.chart.yAxisKey is required.` }],
-                    isError: true
-                  };
-                }
-
-                // Validate error bars if provided
-                if (chart.errorBars) {
-                  const errorBars = chart.errorBars as Record<string, unknown>;
-
-                  // Check that we have either symmetric or asymmetric error data
-                  const hasSymmetric = typeof errorBars.errorKey === 'string';
-                  const hasAsymmetric = typeof errorBars.errorKeyLower === 'string' && typeof errorBars.errorKeyUpper === 'string';
-
-                  if (!hasSymmetric && !hasAsymmetric) {
-                    return {
-                      content: [{ type: 'text', text: `Error: ${itemPrefix}.chart.errorBars must have either "errorKey" (for symmetric errors) or both "errorKeyLower" and "errorKeyUpper" (for asymmetric errors).` }],
-                      isError: true
-                    };
-                  }
-
-                  if (hasSymmetric && hasAsymmetric) {
-                    return {
-                      content: [{ type: 'text', text: `Error: ${itemPrefix}.chart.errorBars cannot have both "errorKey" and "errorKeyLower"/"errorKeyUpper". Use one or the other.` }],
-                      isError: true
-                    };
-                  }
-
-                  // Validate strokeWidth if provided
-                  if (errorBars.strokeWidth !== undefined && typeof errorBars.strokeWidth !== 'number') {
-                    return {
-                      content: [{ type: 'text', text: `Error: ${itemPrefix}.chart.errorBars.strokeWidth must be a number.` }],
-                      isError: true
-                    };
-                  }
-
-                  // Validate dataKey if provided (used for multi-series charts)
-                  if (errorBars.dataKey !== undefined && typeof errorBars.dataKey !== 'string') {
-                    return {
-                      content: [{ type: 'text', text: `Error: ${itemPrefix}.chart.errorBars.dataKey must be a string.` }],
-                      isError: true
-                    };
-                  }
-
-                  // Pie charts don't support error bars
-                  if (chart.chartType === 'pie') {
-                    return {
-                      content: [{ type: 'text', text: `Error: ${itemPrefix}.chart.errorBars is not supported for pie charts.` }],
-                      isError: true
-                    };
-                  }
-                }
-
-                displayedItems.push(`${chart.chartType} chart: ${item.description}`);
-              }
-            }
-
-            // console.log(`[MCP Server] display_to_user: ${typedArgs.items.length} item(s)`);
-
-            return {
-              content: [{
-                type: 'text',
-                text: `Displayed ${typedArgs.items.length} item(s):\n${displayedItems.map(d => `- ${d}`).join('\n')}`
-              }],
-              isError: false
-            };
-          }
-
-          case 'voice_agent_speak': {
-            const message = args?.message as string | undefined;
-
-            if (!message || typeof message !== 'string') {
-              return {
-                content: [
-                  {
-                    type: 'text',
-                    text: 'Error: message parameter is required and must be a string'
-                  }
-                ],
-                isError: true
-              };
-            }
-
-            // Get the active voice session directly - works regardless of document state
-            const activeVoiceSessionId = getActiveVoiceSessionId();
-
-            if (!activeVoiceSessionId) {
-              return {
-                content: [
-                  {
-                    type: 'text',
-                    text: 'Voice mode is not currently active. The message cannot be spoken aloud. You can still respond to the user via text in the normal way.'
-                  }
-                ],
-                isError: false // Not a hard error - just means voice mode isn't active
-              };
-            }
-
-            // Debug logging - uncomment if needed for troubleshooting voice message routing
-            // console.log('[MCP Server] voice_agent_speak - sending to active voice session:', { sessionId: activeVoiceSessionId });
-
-            // Attempt to send message to voice agent
-            const success = sendToVoiceAgent(activeVoiceSessionId, message);
-            // console.log('[MCP Server] voice_agent_speak - send result:', { sessionId: activeVoiceSessionId, success, message: message.substring(0, 50) });
-
-            if (!success) {
-              return {
-                content: [
-                  {
-                    type: 'text',
-                    text: `Failed to send message to voice agent. The voice connection may have been lost or disconnected. You can still respond to the user via text in the normal way.`
-                  }
-                ],
-                isError: false // Not a hard error - voice agent just isn't reachable
-              };
-            }
-
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: `Message queued for voice agent: "${message.substring(0, 100)}${message.length > 100 ? '...' : ''}"`
-                }
-              ],
-              isError: false
-            };
-          }
-
-          case 'voice_agent_stop': {
-            // Stop the active voice session
-            const wasActive = stopVoiceSession();
-
-            if (wasActive) {
-              return {
-                content: [
-                  {
-                    type: 'text',
-                    text: 'Voice mode session has been stopped successfully.'
-                  }
-                ],
-                isError: false
-              };
-            } else {
-              return {
-                content: [
-                  {
-                    type: 'text',
-                    text: 'No active voice mode session to stop.'
-                  }
-                ],
-                isError: false // Not a hard error - just means no session was active
-              };
-            }
-          }
-
-          case 'get_session_edited_files': {
-            // Return the list of files edited during this session
-            if (!sessionId) {
-              return {
-                content: [
-                  {
-                    type: 'text',
-                    text: 'Error: No session ID available. This tool is only available during an active AI session.'
-                  }
-                ],
-                isError: true
-              };
-            }
-
-            try {
-              const files = await SessionFilesRepository.getFilesBySession(sessionId, 'edited');
-              const filePaths = files.map(f => f.filePath);
-
-              if (filePaths.length === 0) {
-                return {
-                  content: [
-                    {
-                      type: 'text',
-                      text: 'No files have been edited in this session yet.'
-                    }
-                  ],
-                  isError: false
-                };
-              }
-
-              return {
-                content: [
-                  {
-                    type: 'text',
-                    text: `Files edited in this session (${filePaths.length}):\n${filePaths.map(p => `- ${p}`).join('\n')}`
-                  }
-                ],
-                isError: false
-              };
-            } catch (error) {
-              console.error('[MCP Server] Failed to get session edited files:', error);
-              return {
-                content: [
-                  {
-                    type: 'text',
-                    text: `Error getting session files: ${error instanceof Error ? error.message : String(error)}`
-                  }
-                ],
-                isError: true
-              };
-            }
-          }
-
-          case 'developer_git_commit_proposal':
-          case 'developer.git_commit_proposal': {
-            // Git commit proposal tool - waits for user confirmation before returning
-            // This allows Claude to see the final result (committed/cancelled)
-            type FileToStage = string | { path: string; status: 'added' | 'modified' | 'deleted' };
-            const proposalArgs = args as {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Files edited in this session (${
+                  filePaths.length
+                }):\n${filePaths.map((p) => `- ${p}`).join("\n")}`,
+              },
+            ],
+            isError: false,
+          };
+        } catch (error) {
+          console.error(
+            "[MCP Server] Failed to get session edited files:",
+            error
+          );
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Error getting session files: ${
+                  error instanceof Error ? error.message : String(error)
+                }`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+
+      case "developer_git_commit_proposal":
+      case "developer.git_commit_proposal": {
+        // Git commit proposal tool - waits for user confirmation before returning
+        // This allows Claude to see the final result (committed/cancelled)
+        type FileToStage =
+          | string
+          | { path: string; status: "added" | "modified" | "deleted" };
+        const proposalArgs = args as
+          | {
               filesToStage?: FileToStage[];
               commitMessage?: string;
               reasoning?: string;
-            } | undefined;
-
-            if (!proposalArgs?.filesToStage || !proposalArgs?.commitMessage) {
-              return {
-                content: [
-                  {
-                    type: 'text',
-                    text: 'Error: filesToStage and commitMessage are required'
-                  }
-                ],
-                isError: true
-              };
             }
+          | undefined;
 
-            if (!workspacePath) {
-              return {
-                content: [
-                  {
-                    type: 'text',
-                    text: 'Error: workspacePath is required for git commit proposal'
-                  }
-                ],
-                isError: true
-              };
-            }
+        if (!proposalArgs?.filesToStage || !proposalArgs?.commitMessage) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: "Error: filesToStage and commitMessage are required",
+              },
+            ],
+            isError: true,
+          };
+        }
 
-            // Find the target window (resolves worktree paths to parent project)
-            const commitWindowId = await findWindowIdForWorkspacePath(workspacePath);
-            if (!commitWindowId) {
-              return {
-                content: [
-                  {
-                    type: 'text',
-                    text: `Error: No window found for workspace: ${workspacePath}`
-                  }
-                ],
-                isError: true
-              };
-            }
+        if (!workspacePath) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: "Error: workspacePath is required for git commit proposal",
+              },
+            ],
+            isError: true,
+          };
+        }
 
-            const commitWindow = BrowserWindow.fromId(commitWindowId);
-            if (!commitWindow || commitWindow.isDestroyed()) {
-              return {
-                content: [
-                  {
-                    type: 'text',
-                    text: 'Error: Window no longer exists'
-                  }
-                ],
-                isError: true
-              };
-            }
+        // Find the target window (resolves worktree paths to parent project)
+        const commitWindowId = await findWindowIdForWorkspacePath(
+          workspacePath
+        );
+        if (!commitWindowId) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Error: No window found for workspace: ${workspacePath}`,
+              },
+            ],
+            isError: true,
+          };
+        }
 
-            // Use Claude's tool_use ID as the proposal ID for proper matching
-            // This ID is passed via _meta by Claude Code SDK
-            const toolUseId = (request.params._meta as any)?.['claudecode/toolUseId'];
-            const proposalId = toolUseId || `git-commit-proposal-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+        const commitWindow = BrowserWindow.fromId(commitWindowId);
+        if (!commitWindow || commitWindow.isDestroyed()) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: "Error: Window no longer exists",
+              },
+            ],
+            isError: true,
+          };
+        }
 
-            // Persist the proposal to database for durability
-            const targetSessionId = sessionId || 'unknown';
+        // Use Claude's tool_use ID as the proposal ID for proper matching
+        // This ID is passed via _meta by Claude Code SDK
+        const toolUseId = (request.params._meta as any)?.[
+          "claudecode/toolUseId"
+        ];
+        const proposalId =
+          toolUseId ||
+          `git-commit-proposal-${Date.now()}-${Math.random()
+            .toString(36)
+            .substring(7)}`;
 
-            try {
-              const now = new Date();
-              await AgentMessagesRepository.create({
-                sessionId: targetSessionId,
-                source: 'mcp',
-                direction: 'output',
-                content: JSON.stringify({
-                  type: 'git_commit_proposal',
-                  proposalId,
-                  toolUseId,  // Store for matching with widget's toolCall.id
-                  filesToStage: proposalArgs.filesToStage,
-                  commitMessage: proposalArgs.commitMessage,
-                  reasoning: proposalArgs.reasoning,
-                  workspacePath,
-                  timestamp: now.getTime(),
-                  status: 'pending',
-                }),
-                hidden: false,
-                createdAt: now,
-              });
-              // Notify renderer to refresh pending prompts
-              console.log(`[MCP Server] Persisted git commit proposal: ${proposalId}, notifying renderer for session: ${targetSessionId}`);
-              if (commitWindow) {
-                commitWindow.webContents.send('ai:gitCommitProposal', {
-                  sessionId: targetSessionId,
-                  proposalId,
-                });
-              } else {
-                console.warn('[MCP Server] No commitWindow found to send IPC event');
-              }
-            } catch (error) {
-              console.error('[MCP Server] Failed to persist git commit proposal:', error);
-              // Continue anyway - worst case is no durability
-            }
+        // Persist the proposal to database for durability
+        const targetSessionId = sessionId || "unknown";
 
-            // Show OS notification if app is backgrounded
-            // Get session title for notification body
-            let sessionTitle = 'AI Session';
-            try {
-              const session = await AISessionsRepository.get(targetSessionId);
-              if (session?.title) {
-                sessionTitle = session.title;
-              }
-            } catch {
-              // Ignore - use default title
-            }
-            notificationService.showBlockedNotification(
-              targetSessionId,
-              sessionTitle,
-              'git_commit',
-              workspacePath
+        try {
+          const now = new Date();
+          await AgentMessagesRepository.create({
+            sessionId: targetSessionId,
+            source: "mcp",
+            direction: "output",
+            content: JSON.stringify({
+              type: "git_commit_proposal",
+              proposalId,
+              toolUseId, // Store for matching with widget's toolCall.id
+              filesToStage: proposalArgs.filesToStage,
+              commitMessage: proposalArgs.commitMessage,
+              reasoning: proposalArgs.reasoning,
+              workspacePath,
+              timestamp: now.getTime(),
+              status: "pending",
+            }),
+            hidden: false,
+            createdAt: now,
+          });
+          // Notify renderer to refresh pending prompts
+          console.log(
+            `[MCP Server] Persisted git commit proposal: ${proposalId}, notifying renderer for session: ${targetSessionId}`
+          );
+          if (commitWindow) {
+            commitWindow.webContents.send("ai:gitCommitProposal", {
+              sessionId: targetSessionId,
+              proposalId,
+            });
+          } else {
+            console.warn(
+              "[MCP Server] No commitWindow found to send IPC event"
             );
+          }
+        } catch (error) {
+          console.error(
+            "[MCP Server] Failed to persist git commit proposal:",
+            error
+          );
+          // Continue anyway - worst case is no durability
+        }
 
-            // Wait for user confirmation (with a longer timeout since user interaction is involved)
-            const GIT_COMMIT_TIMEOUT_MS = 300000; // 5 minutes
+        // Show OS notification if app is backgrounded
+        // Get session title for notification body
+        let sessionTitle = "AI Session";
+        try {
+          const session = await AISessionsRepository.get(targetSessionId);
+          if (session?.title) {
+            sessionTitle = session.title;
+          }
+        } catch {
+          // Ignore - use default title
+        }
+        notificationService.showBlockedNotification(
+          targetSessionId,
+          sessionTitle,
+          "git_commit",
+          workspacePath
+        );
 
-            return new Promise((resolve) => {
-              const timeout = setTimeout(() => {
-                ipcMain.removeAllListeners(proposalId);
+        // Wait for user confirmation (with a longer timeout since user interaction is involved)
+        const GIT_COMMIT_TIMEOUT_MS = 300000; // 5 minutes
 
-                resolve({
-                  content: [
-                    {
-                      type: 'text',
-                      text: 'Git commit proposal timed out waiting for user confirmation.'
-                    }
-                  ],
-                  isError: true
-                });
-              }, GIT_COMMIT_TIMEOUT_MS);
+        return new Promise((resolve) => {
+          const timeout = setTimeout(() => {
+            ipcMain.removeAllListeners(proposalId);
 
-              // Listen for the user's response
-              // Helper to extract file path from string or object
-              const getFilePath = (f: FileToStage) => typeof f === 'string' ? f : f.path;
+            resolve({
+              content: [
+                {
+                  type: "text",
+                  text: "Git commit proposal timed out waiting for user confirmation.",
+                },
+              ],
+              isError: true,
+            });
+          }, GIT_COMMIT_TIMEOUT_MS);
 
-              // console.log(`[MCP Server] Waiting for git commit proposal response: ${proposalId}`);
-              // Listen for response via unified handler (SessionHandlers persists to DB)
-              ipcMain.once(proposalId, async (_event, result: {
-                action: 'committed' | 'cancelled';
+          // Listen for the user's response
+          // Helper to extract file path from string or object
+          const getFilePath = (f: FileToStage) =>
+            typeof f === "string" ? f : f.path;
+
+          // console.log(`[MCP Server] Waiting for git commit proposal response: ${proposalId}`);
+          // Listen for response via unified handler (SessionHandlers persists to DB)
+          ipcMain.once(
+            proposalId,
+            async (
+              _event,
+              result: {
+                action: "committed" | "cancelled";
                 commitHash?: string;
                 commitDate?: string;
                 error?: string;
                 filesCommitted?: string[];
                 commitMessage?: string;
-              }) => {
-                // console.log(`[MCP Server] Received git commit proposal response: ${proposalId}`, result.action);
-                clearTimeout(timeout);
+              }
+            ) => {
+              // console.log(`[MCP Server] Received git commit proposal response: ${proposalId}`, result.action);
+              clearTimeout(timeout);
 
-                if (result.action === 'committed' && result.commitHash) {
-                  // Only report success if we have a valid commit hash
-                  const filesCount = result.filesCommitted?.length || proposalArgs.filesToStage!.map(getFilePath).length;
-                  resolve({
-                    content: [
-                      {
-                        type: 'text',
-                        text: `User confirmed and committed ${filesCount} file(s).\nCommit hash: ${result.commitHash}${result.commitDate ? `\nCommit date: ${result.commitDate}` : ''}\nCommit message: ${result.commitMessage || proposalArgs.commitMessage}`
-                      }
-                    ],
-                    isError: false
-                  });
-                } else if (result.action === 'committed' && !result.commitHash) {
-                  // Widget reported committed but no hash - something went wrong
-                  resolve({
-                    content: [
-                      {
-                        type: 'text',
-                        text: `Commit failed: No commit hash returned. The files may not have been staged correctly.`
-                      }
-                    ],
-                    isError: true
-                  });
-                } else {
-                  resolve({
-                    content: [
-                      {
-                        type: 'text',
-                        text: result.error
-                          ? `Commit failed: ${result.error}`
-                          : 'User cancelled the commit proposal.'
-                      }
-                    ],
-                    isError: result.error ? true : false
-                  });
-                }
-              });
-
-              // Send the proposal to the renderer
-              // IMPORTANT: sessionId is required to properly scope proposals when multiple sessions are running
-              commitWindow.webContents.send('mcp:gitCommitProposal', {
-                proposalId,
-                workspacePath,
-                sessionId: sessionId || 'unknown',  // Must include sessionId for proper scoping
-                filesToStage: proposalArgs.filesToStage,
-                commitMessage: proposalArgs.commitMessage,
-                reasoning: proposalArgs.reasoning,
-              });
-            });
-          }
-
-          default: {
-            // Check if this is an extension tool - use session-specific state
-            const currentDocState = sessionId ? documentStateBySession.get(sessionId) : undefined;
-            const extensionTools = getAvailableExtensionTools(workspacePath, currentDocState?.filePath);
-
-            const extensionTool = extensionTools.find(t => t.name === toolName);
-            if (!extensionTool) {
-              throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
-            }
-
-            // Execute extension tool via IPC to renderer
-            // console.log(`[MCP Server] Executing extension tool: ${toolName}`);
-
-            // workspacePath is REQUIRED - extension tools must be routed to the correct window
-            if (!workspacePath) {
-              return {
-                content: [
-                  {
-                    type: 'text',
-                    text: `Error: workspacePath is required to execute extension tools`
-                  }
-                ],
-                isError: true
-              };
-            }
-
-            // Find the correct window for this workspace (resolves worktree paths to parent project)
-            const windowId = await findWindowIdForWorkspacePath(workspacePath);
-            if (!windowId) {
-              return {
-                content: [
-                  {
-                    type: 'text',
-                    text: `Error: No window found for workspace: ${workspacePath}`
-                  }
-                ],
-                isError: true
-              };
-            }
-
-            const targetWindow = BrowserWindow.fromId(windowId);
-            if (!targetWindow) {
-              return {
-                content: [
-                  {
-                    type: 'text',
-                    text: `Error: Window no longer exists`
-                  }
-                ],
-                isError: true
-              };
-            }
-
-            // Create a unique channel for the result
-            const resultChannel = `mcp-extension-result-${Date.now()}-${Math.random()}`;
-
-            // activeFilePath comes from currentDocState declared at the start of this block
-            const activeFilePath = currentDocState?.filePath;
-
-            return new Promise((resolve) => {
-              const TOOL_TIMEOUT_MS = 30000;
-              const timeout = setTimeout(() => {
-                ipcMain.removeAllListeners(resultChannel);
-
-                console.error(`[MCP Server] Extension tool timed out:`, {
-                  toolName,
-                  timeoutMs: TOOL_TIMEOUT_MS,
-                  activeFilePath,
-                });
-
-                const timeoutMessage = [
-                  `Extension Tool Timeout`,
-                  `  Tool: ${toolName}`,
-                  `  Timeout: ${TOOL_TIMEOUT_MS / 1000}s`,
-                  ``,
-                  `The tool did not respond in time. This could mean:`,
-                  `1. The tool is performing a long-running operation`,
-                  `2. The tool is stuck in an infinite loop`,
-                  `3. There was a silent error in the tool handler`,
-                  ``,
-                  `Check the extension logs for more details.`,
-                ].join('\n');
-
+              if (result.action === "committed" && result.commitHash) {
+                // Only report success if we have a valid commit hash
+                const filesCount =
+                  result.filesCommitted?.length ||
+                  proposalArgs.filesToStage!.map(getFilePath).length;
                 resolve({
                   content: [
                     {
-                      type: 'text',
-                      text: timeoutMessage
-                    }
+                      type: "text",
+                      text: `User confirmed and committed ${filesCount} file(s).\nCommit hash: ${
+                        result.commitHash
+                      }${
+                        result.commitDate
+                          ? `\nCommit date: ${result.commitDate}`
+                          : ""
+                      }\nCommit message: ${
+                        result.commitMessage || proposalArgs.commitMessage
+                      }`,
+                    },
                   ],
-                  isError: true
+                  isError: false,
                 });
-              }, TOOL_TIMEOUT_MS);
-
-              ipcMain.once(resultChannel, (_event, result) => {
-                clearTimeout(timeout);
-
-                // Handle different result formats:
-                // 1. { success: true/false, message?, data?, error? } - explicit format
-                // 2. { error: "message" } - error format
-                // 3. { ...data } - implicit success (any object without error field)
-                const hasExplicitSuccess = typeof result?.success === 'boolean';
-                const hasError = !!result?.error;
-                const success = hasExplicitSuccess ? result.success : !hasError;
-
-                // Extract enhanced error details if available
-                const extensionId = result?.extensionId;
-                const resultToolName = result?.toolName;
-                const stack = result?.stack;
-                const errorContext = result?.errorContext;
-
-                // For successful results without explicit message, show the data
-                let responseText: string;
-                if (success) {
-                  if (result?.message) {
-                    responseText = result.message;
-                    if (result?.data) {
-                      responseText += '\n\nData: ' + JSON.stringify(result.data, null, 2);
-                    }
-                  } else {
-                    // No explicit message - the result itself is the data
-                    // Filter out metadata fields
-                    const dataToShow = { ...result };
-                    delete dataToShow.success;
-                    delete dataToShow.message;
-                    delete dataToShow.extensionId;
-                    delete dataToShow.toolName;
-                    delete dataToShow.stack;
-                    delete dataToShow.errorContext;
-                    responseText = JSON.stringify(dataToShow, null, 2);
-                  }
-                } else {
-                  // Build detailed error message for Claude Code
-                  const errorParts: string[] = [];
-
-                  // Header with extension and tool info
-                  if (extensionId || resultToolName) {
-                    errorParts.push(`Extension Tool Error`);
-                    if (extensionId) errorParts.push(`  Extension: ${extensionId}`);
-                    if (resultToolName) errorParts.push(`  Tool: ${resultToolName}`);
-                    errorParts.push('');
-                  }
-
-                  // Main error message
-                  errorParts.push(`Error: ${result?.error || result?.message || 'Tool execution failed'}`);
-
-                  // Stack trace (truncated to avoid overwhelming the response)
-                  if (stack) {
-                    const truncatedStack = stack.split('\n').slice(0, 8).join('\n');
-                    errorParts.push('');
-                    errorParts.push('Stack trace:');
-                    errorParts.push(truncatedStack);
-                    if (stack.split('\n').length > 8) {
-                      errorParts.push('  ... (truncated)');
-                    }
-                  }
-
-                  // Additional context
-                  if (errorContext && Object.keys(errorContext).length > 0) {
-                    errorParts.push('');
-                    errorParts.push('Context:');
-                    for (const [key, value] of Object.entries(errorContext)) {
-                      if (value !== undefined && value !== null) {
-                        const valueStr = typeof value === 'object' ? JSON.stringify(value) : String(value);
-                        errorParts.push(`  ${key}: ${valueStr}`);
-                      }
-                    }
-                  }
-
-                  responseText = errorParts.join('\n');
-                }
-
-                // console.log(`[MCP Server] Extension tool result:`, {
-                //   success,
-                //   hasError,
-                //   extensionId,
-                //   toolName: resultToolName,
-                //   result: JSON.stringify(result).substring(0, 200)
-                // });
-
+              } else if (result.action === "committed" && !result.commitHash) {
+                // Widget reported committed but no hash - something went wrong
                 resolve({
                   content: [
                     {
-                      type: 'text',
-                      text: responseText
-                    }
+                      type: "text",
+                      text: `Commit failed: No commit hash returned. The files may not have been staged correctly.`,
+                    },
                   ],
-                  isError: !success
+                  isError: true,
                 });
-              });
+              } else {
+                resolve({
+                  content: [
+                    {
+                      type: "text",
+                      text: result.error
+                        ? `Commit failed: ${result.error}`
+                        : "User cancelled the commit proposal.",
+                    },
+                  ],
+                  isError: result.error ? true : false,
+                });
+              }
+            }
+          );
 
-              // Send IPC to renderer to execute the tool
-              targetWindow.webContents.send('mcp:executeExtensionTool', {
-                toolName,
-                args: args || {},
-                resultChannel,
-                context: {
-                  workspacePath,
-                  activeFilePath
-                }
-              });
+          // Send the proposal to the renderer
+          // IMPORTANT: sessionId is required to properly scope proposals when multiple sessions are running
+          commitWindow.webContents.send("mcp:gitCommitProposal", {
+            proposalId,
+            workspacePath,
+            sessionId: sessionId || "unknown", // Must include sessionId for proper scoping
+            filesToStage: proposalArgs.filesToStage,
+            commitMessage: proposalArgs.commitMessage,
+            reasoning: proposalArgs.reasoning,
+          });
+        });
+      }
+
+      default: {
+        // Check if this is an extension tool - use session-specific state
+        const currentDocState = sessionId
+          ? documentStateBySession.get(sessionId)
+          : undefined;
+        const extensionTools = getAvailableExtensionTools(
+          workspacePath,
+          currentDocState?.filePath
+        );
+
+        const extensionTool = extensionTools.find((t) => t.name === toolName);
+        if (!extensionTool) {
+          throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
+        }
+
+        // Execute extension tool via IPC to renderer
+        // console.log(`[MCP Server] Executing extension tool: ${toolName}`);
+
+        // workspacePath is REQUIRED - extension tools must be routed to the correct window
+        if (!workspacePath) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Error: workspacePath is required to execute extension tools`,
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        // Find the correct window for this workspace (resolves worktree paths to parent project)
+        const windowId = await findWindowIdForWorkspacePath(workspacePath);
+        if (!windowId) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Error: No window found for workspace: ${workspacePath}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        const targetWindow = BrowserWindow.fromId(windowId);
+        if (!targetWindow) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Error: Window no longer exists`,
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        // Create a unique channel for the result
+        const resultChannel = `mcp-extension-result-${Date.now()}-${Math.random()}`;
+
+        // activeFilePath comes from currentDocState declared at the start of this block
+        const activeFilePath = currentDocState?.filePath;
+
+        return new Promise((resolve) => {
+          const TOOL_TIMEOUT_MS = 30000;
+          const timeout = setTimeout(() => {
+            ipcMain.removeAllListeners(resultChannel);
+
+            console.error(`[MCP Server] Extension tool timed out:`, {
+              toolName,
+              timeoutMs: TOOL_TIMEOUT_MS,
+              activeFilePath,
             });
-          }
-        }
-      });
 
-      // Create SSE transport - it will handle headers
-      const transport = new SSEServerTransport('/mcp', res);
+            const timeoutMessage = [
+              `Extension Tool Timeout`,
+              `  Tool: ${toolName}`,
+              `  Timeout: ${TOOL_TIMEOUT_MS / 1000}s`,
+              ``,
+              `The tool did not respond in time. This could mean:`,
+              `1. The tool is performing a long-running operation`,
+              `2. The tool is stuck in an infinite loop`,
+              `3. There was a silent error in the tool handler`,
+              ``,
+              `Check the extension logs for more details.`,
+            ].join("\n");
 
-      // Store the transport by session ID
-      activeTransports.set(transport.sessionId, transport);
-      // console.log('[MCP Server] Created transport with session ID:', transport.sessionId);
+            resolve({
+              content: [
+                {
+                  type: "text",
+                  text: timeoutMessage,
+                },
+              ],
+              isError: true,
+            });
+          }, TOOL_TIMEOUT_MS);
 
-      // Store server instance by Nimbalyst session ID for sending notifications later
-      if (sessionId) {
-        serverByNimbalystSession.set(sessionId, server);
+          ipcMain.once(resultChannel, (_event, result) => {
+            clearTimeout(timeout);
+
+            // Handle different result formats:
+            // 1. { success: true/false, message?, data?, error? } - explicit format
+            // 2. { error: "message" } - error format
+            // 3. { ...data } - implicit success (any object without error field)
+            const hasExplicitSuccess = typeof result?.success === "boolean";
+            const hasError = !!result?.error;
+            const success = hasExplicitSuccess ? result.success : !hasError;
+
+            // Extract enhanced error details if available
+            const extensionId = result?.extensionId;
+            const resultToolName = result?.toolName;
+            const stack = result?.stack;
+            const errorContext = result?.errorContext;
+
+            // For successful results without explicit message, show the data
+            let responseText: string;
+            if (success) {
+              if (result?.message) {
+                responseText = result.message;
+                if (result?.data) {
+                  responseText +=
+                    "\n\nData: " + JSON.stringify(result.data, null, 2);
+                }
+              } else {
+                // No explicit message - the result itself is the data
+                // Filter out metadata fields
+                const dataToShow = { ...result };
+                delete dataToShow.success;
+                delete dataToShow.message;
+                delete dataToShow.extensionId;
+                delete dataToShow.toolName;
+                delete dataToShow.stack;
+                delete dataToShow.errorContext;
+                responseText = JSON.stringify(dataToShow, null, 2);
+              }
+            } else {
+              // Build detailed error message for Claude Code
+              const errorParts: string[] = [];
+
+              // Header with extension and tool info
+              if (extensionId || resultToolName) {
+                errorParts.push(`Extension Tool Error`);
+                if (extensionId) errorParts.push(`  Extension: ${extensionId}`);
+                if (resultToolName)
+                  errorParts.push(`  Tool: ${resultToolName}`);
+                errorParts.push("");
+              }
+
+              // Main error message
+              errorParts.push(
+                `Error: ${
+                  result?.error || result?.message || "Tool execution failed"
+                }`
+              );
+
+              // Stack trace (truncated to avoid overwhelming the response)
+              if (stack) {
+                const truncatedStack = stack.split("\n").slice(0, 8).join("\n");
+                errorParts.push("");
+                errorParts.push("Stack trace:");
+                errorParts.push(truncatedStack);
+                if (stack.split("\n").length > 8) {
+                  errorParts.push("  ... (truncated)");
+                }
+              }
+
+              // Additional context
+              if (errorContext && Object.keys(errorContext).length > 0) {
+                errorParts.push("");
+                errorParts.push("Context:");
+                for (const [key, value] of Object.entries(errorContext)) {
+                  if (value !== undefined && value !== null) {
+                    const valueStr =
+                      typeof value === "object"
+                        ? JSON.stringify(value)
+                        : String(value);
+                    errorParts.push(`  ${key}: ${valueStr}`);
+                  }
+                }
+              }
+
+              responseText = errorParts.join("\n");
+            }
+
+            // console.log(`[MCP Server] Extension tool result:`, {
+            //   success,
+            //   hasError,
+            //   extensionId,
+            //   toolName: resultToolName,
+            //   result: JSON.stringify(result).substring(0, 200)
+            // });
+
+            resolve({
+              content: [
+                {
+                  type: "text",
+                  text: responseText,
+                },
+              ],
+              isError: !success,
+            });
+          });
+
+          // Send IPC to renderer to execute the tool
+          targetWindow.webContents.send("mcp:executeExtensionTool", {
+            toolName,
+            args: args || {},
+            resultChannel,
+            context: {
+              workspacePath,
+              activeFilePath,
+            },
+          });
+        });
       }
-
-      // Connect server to transport
-      server.connect(transport).then(() => {
-        // console.log('[MCP Server] Client connected successfully');
-
-        // Clean up on disconnect
-        transport.onclose = () => {
-          // console.log('[MCP Server] Client disconnected, session:', transport.sessionId);
-          activeTransports.delete(transport.sessionId);
-          if (sessionId) {
-            serverByNimbalystSession.delete(sessionId);
-          }
-        };
-      }).catch(error => {
-        console.error('[MCP Server] Connection error:', error);
-        activeTransports.delete(transport.sessionId);
-        if (sessionId) {
-          serverByNimbalystSession.delete(sessionId);
-        }
-        if (!res.headersSent) {
-          res.writeHead(500);
-          res.end();
-        }
-      });
-
-    // Handle POST requests for sending messages
-    } else if (pathname === '/mcp' && req.method === 'POST') {
-      const sessionId = parsedUrl.query.sessionId as string;
-      // console.log('[MCP Server] POST message for session:', sessionId);
-
-      if (!sessionId) {
-        res.writeHead(400);
-        res.end('Missing sessionId');
-        return;
-      }
-
-      const transport = activeTransports.get(sessionId);
-      if (!transport) {
-        console.error('[MCP Server] No transport found for session:', sessionId);
-        res.writeHead(404);
-        res.end('Session not found');
-        return;
-      }
-
-      // Let the transport handle the POST message
-      try {
-        await transport.handlePostMessage(req, res);
-      } catch (error) {
-        console.error('[MCP Server] Error handling POST message:', error);
-        if (!res.headersSent) {
-          res.writeHead(500);
-          res.end('Internal server error');
-        }
-      }
-    } else {
-      res.writeHead(404);
-      res.end('Not found');
     }
+  });
+
+  return server;
+}
+
+function registerWorkspaceMappingForConnection(
+  workspacePath: string | undefined
+): void {
+  if (!workspacePath) {
+    return;
+  }
+
+  // Async registration - don't await, just fire and forget.
+  findWindowIdForWorkspacePath(workspacePath)
+    .then((windowId) => {
+      if (windowId) {
+        workspaceToWindowMap.set(workspacePath, windowId);
+      }
+    })
+    .catch((err) => {
+      console.warn(
+        "[MCP Server] Failed to register workspace window mapping:",
+        err
+      );
     });
+}
+
+function getMcpSessionIdHeader(req: IncomingMessage): string | undefined {
+  const headerValue = req.headers["mcp-session-id"];
+  if (Array.isArray(headerValue)) {
+    return headerValue[0];
+  }
+  if (typeof headerValue === "string" && headerValue.length > 0) {
+    return headerValue;
+  }
+  return undefined;
+}
+
+async function readJsonBody(
+  req: IncomingMessage
+): Promise<unknown | undefined> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  if (chunks.length === 0) {
+    return undefined;
+  }
+  const rawBody = Buffer.concat(chunks).toString("utf8").trim();
+  if (!rawBody) {
+    return undefined;
+  }
+  try {
+    return JSON.parse(rawBody);
+  } catch {
+    return undefined;
+  }
+}
+
+function isInitializePayload(payload: unknown): boolean {
+  if (!payload) {
+    return false;
+  }
+  if (Array.isArray(payload)) {
+    return payload.some((entry) => isInitializeRequest(entry));
+  }
+  return isInitializeRequest(payload);
+}
+
+async function tryCreateServer(port: number): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const httpServer = createServer(
+      async (req: IncomingMessage, res: ServerResponse) => {
+        const parsedUrl = parseUrl(req.url || "", true);
+        const pathname = parsedUrl.pathname;
+        const mcpSessionIdHeader = getMcpSessionIdHeader(req);
+
+        // Handle CORS preflight
+        if (req.method === "OPTIONS") {
+          res.writeHead(200, {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers":
+              "Content-Type, mcp-session-id, mcp-protocol-version",
+          });
+          res.end();
+          return;
+        }
+
+        // Handle SSE GET request to establish connection
+        if (pathname === "/mcp" && req.method === "GET") {
+          // Streamable HTTP GET (session established, uses Mcp-Session-Id header)
+          if (mcpSessionIdHeader) {
+            const metadata = activeStreamableTransports.get(mcpSessionIdHeader);
+            if (!metadata) {
+              res.writeHead(404);
+              res.end("Streamable session not found");
+              return;
+            }
+
+            try {
+              await metadata.transport.handleRequest(req, res);
+            } catch (error) {
+              console.error(
+                "[MCP Server] Error handling streamable GET request:",
+                error
+              );
+              if (!res.headersSent) {
+                res.writeHead(500);
+                res.end("Internal server error");
+              }
+            }
+            return;
+          }
+
+          // console.log('[MCP Server] SSE connection request');
+
+          // Extract workspace path and session ID from query parameters
+          const workspacePath = parsedUrl.query.workspacePath as
+            | string
+            | undefined;
+          const sessionId = parsedUrl.query.sessionId as string | undefined;
+          // console.log('[MCP Server] Connection established with workspacePath:', workspacePath, 'sessionId:', sessionId);
+
+          registerWorkspaceMappingForConnection(workspacePath);
+
+          const server = createSharedMcpServer(workspacePath, sessionId);
+
+          // Create SSE transport - it will handle headers
+          const transport = new SSEServerTransport("/mcp", res);
+
+          // Store the transport by session ID
+          activeTransports.set(transport.sessionId, transport);
+          // console.log('[MCP Server] Created transport with session ID:', transport.sessionId);
+
+          // Store server instance by Nimbalyst session ID for sending notifications later
+          if (sessionId) {
+            serverByNimbalystSession.set(sessionId, server);
+          }
+
+          // Connect server to transport
+          server
+            .connect(transport)
+            .then(() => {
+              // console.log('[MCP Server] Client connected successfully');
+
+              // Clean up on disconnect
+              transport.onclose = () => {
+                // console.log('[MCP Server] Client disconnected, session:', transport.sessionId);
+                activeTransports.delete(transport.sessionId);
+                if (sessionId) {
+                  serverByNimbalystSession.delete(sessionId);
+                }
+              };
+            })
+            .catch((error) => {
+              console.error("[MCP Server] Connection error:", error);
+              activeTransports.delete(transport.sessionId);
+              if (sessionId) {
+                serverByNimbalystSession.delete(sessionId);
+              }
+              if (!res.headersSent) {
+                res.writeHead(500);
+                res.end();
+              }
+            });
+        } else if (pathname === "/mcp" && req.method === "POST") {
+          // Legacy SSE POST flow: route to existing SSE transport if found
+          const legacyTransportSessionId = parsedUrl.query.sessionId as
+            | string
+            | undefined;
+          const legacyTransport = legacyTransportSessionId
+            ? activeTransports.get(legacyTransportSessionId)
+            : undefined;
+
+          if (legacyTransport && !mcpSessionIdHeader) {
+            try {
+              await legacyTransport.handlePostMessage(req, res);
+            } catch (error) {
+              console.error(
+                "[MCP Server] Error handling legacy SSE POST message:",
+                error
+              );
+              if (!res.headersSent) {
+                res.writeHead(500);
+                res.end("Internal server error");
+              }
+            }
+            return;
+          }
+
+          // Streamable HTTP flow (initialize or existing session)
+          const parsedBody = await readJsonBody(req);
+
+          if (
+            !mcpSessionIdHeader &&
+            legacyTransportSessionId &&
+            !isInitializePayload(parsedBody)
+          ) {
+            // Preserve legacy behavior for unknown SSE sessions.
+            res.writeHead(404);
+            res.end("Session not found");
+            return;
+          }
+
+          let streamableMetadata: StreamableTransportMetadata | undefined =
+            mcpSessionIdHeader
+              ? activeStreamableTransports.get(mcpSessionIdHeader)
+              : undefined;
+
+          if (mcpSessionIdHeader && !streamableMetadata) {
+            res.writeHead(404);
+            res.end("Streamable session not found");
+            return;
+          }
+
+          if (!streamableMetadata) {
+            if (!isInitializePayload(parsedBody)) {
+              res.writeHead(400);
+              res.end("Missing sessionId");
+              return;
+            }
+
+            const workspacePath = parsedUrl.query.workspacePath as
+              | string
+              | undefined;
+            const nimbalystSessionId = parsedUrl.query.sessionId as
+              | string
+              | undefined;
+            registerWorkspaceMappingForConnection(workspacePath);
+
+            const server = createSharedMcpServer(
+              workspacePath,
+              nimbalystSessionId
+            );
+            const transport = new StreamableHTTPServerTransport({
+              sessionIdGenerator: () => randomUUID(),
+              onsessioninitialized: (streamableSessionId) => {
+                activeStreamableTransports.set(streamableSessionId, {
+                  transport,
+                  nimbalystSessionId,
+                });
+                if (nimbalystSessionId) {
+                  serverByNimbalystSession.set(nimbalystSessionId, server);
+                }
+              },
+            });
+
+            transport.onclose = () => {
+              const streamableSessionId = transport.sessionId;
+              if (streamableSessionId) {
+                activeStreamableTransports.delete(streamableSessionId);
+              }
+              if (nimbalystSessionId) {
+                serverByNimbalystSession.delete(nimbalystSessionId);
+              }
+            };
+
+            transport.onerror = (error) => {
+              console.error("[MCP Server] Streamable transport error:", error);
+            };
+
+            await server.connect(transport);
+            streamableMetadata = { transport, nimbalystSessionId };
+          }
+
+          try {
+            await streamableMetadata.transport.handleRequest(
+              req,
+              res,
+              parsedBody
+            );
+          } catch (error) {
+            console.error(
+              "[MCP Server] Error handling streamable POST request:",
+              error
+            );
+            if (!res.headersSent) {
+              res.writeHead(500);
+              res.end("Internal server error");
+            }
+          }
+        } else if (pathname === "/mcp" && req.method === "DELETE") {
+          // Streamable HTTP session termination
+          if (!mcpSessionIdHeader) {
+            res.writeHead(400);
+            res.end("Missing mcp-session-id header");
+            return;
+          }
+
+          const metadata = activeStreamableTransports.get(mcpSessionIdHeader);
+          if (!metadata) {
+            res.writeHead(404);
+            res.end("Streamable session not found");
+            return;
+          }
+
+          try {
+            await metadata.transport.handleRequest(req, res);
+          } catch (error) {
+            console.error(
+              "[MCP Server] Error handling streamable DELETE request:",
+              error
+            );
+            if (!res.headersSent) {
+              res.writeHead(500);
+              res.end("Internal server error");
+            }
+          }
+        } else {
+          res.writeHead(404);
+          res.end("Not found");
+        }
+      }
+    );
 
     // Try to listen on the port
-    httpServer.listen(port, '127.0.0.1', (err?: Error) => {
+    httpServer.listen(port, "127.0.0.1", (err?: Error) => {
       if (err) {
         reject(err);
       }
     });
 
-    httpServer.on('listening', () => {
+    httpServer.on("listening", () => {
       // console.log(`[MCP Server] Running on http://127.0.0.1:${port}/mcp`);
       // console.log('[MCP Server] Ready to accept SSE connections and POST messages');
 
@@ -2375,7 +2992,7 @@ The commit message should follow these guidelines:
       resolve(httpServer);
     });
 
-    httpServer.on('error', (err: any) => {
+    httpServer.on("error", (err: any) => {
       reject(err);
     });
   });

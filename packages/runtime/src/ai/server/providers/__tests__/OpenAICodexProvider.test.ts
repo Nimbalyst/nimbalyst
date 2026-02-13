@@ -14,13 +14,17 @@ function createAsyncEventStream(events: any[]): AsyncIterable<any> {
 describe('OpenAICodexProvider', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    OpenAICodexProvider.setTrustChecker(() => ({
-      trusted: true,
-      mode: 'allow-all',
-    }));
-    OpenAICodexProvider.setPermissionPatternChecker(async () => false);
-    OpenAICodexProvider.setPermissionPatternSaver(async () => {});
-    OpenAICodexProvider.setSecurityLogger(() => {});
+    // Reset all static configuration to null for clean test isolation
+    OpenAICodexProvider.setTrustChecker(null);
+    OpenAICodexProvider.setPermissionPatternChecker(null);
+    OpenAICodexProvider.setPermissionPatternSaver(null);
+    OpenAICodexProvider.setSecurityLogger(null);
+    OpenAICodexProvider.setMcpServerPort(null);
+    OpenAICodexProvider.setSessionNamingServerPort(null);
+    OpenAICodexProvider.setExtensionDevServerPort(null);
+    OpenAICodexProvider.setMCPConfigLoader(null);
+    OpenAICodexProvider.setClaudeSettingsEnvLoader(null);
+    OpenAICodexProvider.setShellEnvironmentLoader(null);
   });
 
   it('returns fallback models when SDK model discovery is unavailable', async () => {
@@ -289,6 +293,114 @@ describe('OpenAICodexProvider', () => {
       apiKey: 'test-key',
     });
     expect(codexConstructorOptions).not.toHaveProperty('codexPathOverride');
+  });
+
+  it('passes runtime MCP servers into Codex config overrides', async () => {
+    let codexConstructorOptions: Record<string, any> | undefined;
+    const workspacePath = process.cwd();
+
+    OpenAICodexProvider.setTrustChecker(() => ({ trusted: true, mode: 'allow-all' as any }));
+    OpenAICodexProvider.setPermissionPatternChecker(async () => false);
+    OpenAICodexProvider.setPermissionPatternSaver(async () => {});
+    OpenAICodexProvider.setSecurityLogger(() => {});
+    OpenAICodexProvider.setMcpServerPort(41001);
+    OpenAICodexProvider.setSessionNamingServerPort(41002);
+    OpenAICodexProvider.setExtensionDevServerPort(41003);
+    OpenAICodexProvider.setMCPConfigLoader(async () => ({
+      custom_stdio: {
+        command: 'npx',
+        args: ['-y', '@acme/mcp'],
+        env: { API_TOKEN: 'token-value' },
+      },
+      custom_http: {
+        type: 'http',
+        url: 'https://mcp.example.com',
+        headers: {
+          Authorization: 'Bearer abc123',
+          'X-Tenant': 'nimbalyst',
+        },
+      },
+    }));
+
+    const runStreamed = vi.fn(async () => ({
+      threadId: 'thread-mcp-config',
+      events: createAsyncEventStream([
+        {
+          type: 'item.completed',
+          item: {
+            type: 'agent_message',
+            text: 'mcp configured',
+          },
+        },
+      ]),
+    }));
+
+    const provider = new OpenAICodexProvider(
+      { apiKey: 'test-key' },
+      {
+        loadSdkModule: async () =>
+          ({
+            Codex: class {
+              constructor(options?: Record<string, unknown>) {
+                codexConstructorOptions = options as Record<string, any>;
+              }
+              startThread() {
+                return {
+                  id: 'thread-mcp-config',
+                  runStreamed,
+                };
+              }
+              resumeThread() {
+                return {
+                  id: 'thread-mcp-config',
+                  runStreamed,
+                };
+              }
+            },
+          }) as any,
+      }
+    );
+
+    await provider.initialize({
+      apiKey: 'test-key',
+      model: 'openai-codex:gpt-5',
+    });
+
+    for await (const _chunk of provider.sendMessage('mcp setup', undefined, 'session-mcp', [], workspacePath)) {
+      // drain
+    }
+
+    const mcpServers = codexConstructorOptions?.config?.mcp_servers as Record<string, any>;
+    expect(mcpServers).toBeDefined();
+    expect(Object.keys(mcpServers)).toEqual(
+      expect.arrayContaining([
+        'nimbalyst-mcp',
+        'nimbalyst-session-naming',
+        'nimbalyst-extension-dev',
+        'custom_stdio',
+        'custom_http',
+      ])
+    );
+
+    expect(mcpServers['nimbalyst-mcp'].url).toContain('http://127.0.0.1:41001/mcp');
+    expect(mcpServers['nimbalyst-mcp'].url).toContain(`workspacePath=${encodeURIComponent(workspacePath)}`);
+    expect(mcpServers['nimbalyst-session-naming'].url).toContain('http://127.0.0.1:41002/mcp');
+    expect(mcpServers['nimbalyst-session-naming'].url).toContain('sessionId=session-mcp');
+    expect(mcpServers['nimbalyst-extension-dev'].url).toContain('http://127.0.0.1:41003/mcp');
+    expect(mcpServers['nimbalyst-extension-dev'].url).toContain(`workspacePath=${encodeURIComponent(workspacePath)}`);
+
+    expect(mcpServers.custom_stdio).toEqual({
+      command: 'npx',
+      args: ['-y', '@acme/mcp'],
+      env: { API_TOKEN: 'token-value' },
+    });
+    expect(mcpServers.custom_http).toEqual({
+      url: 'https://mcp.example.com',
+      http_headers: {
+        Authorization: 'Bearer abc123',
+        'X-Tenant': 'nimbalyst',
+      },
+    });
   });
 
   it('emits tool_call chunks from streamed MCP tool events', async () => {

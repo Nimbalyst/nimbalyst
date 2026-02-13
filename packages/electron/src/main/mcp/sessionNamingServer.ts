@@ -1,13 +1,16 @@
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
+import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
+  isInitializeRequest,
   ErrorCode,
-  McpError
-} from '@modelcontextprotocol/sdk/types.js';
-import { createServer, IncomingMessage, ServerResponse } from 'http';
-import { parse as parseUrl } from 'url';
+  McpError,
+} from "@modelcontextprotocol/sdk/types.js";
+import { createServer, IncomingMessage, ServerResponse } from "http";
+import { parse as parseUrl } from "url";
+import { randomUUID } from "crypto";
 
 // Store active SSE transports and their metadata
 interface TransportMetadata {
@@ -16,16 +19,29 @@ interface TransportMetadata {
 }
 const activeTransports = new Map<string, TransportMetadata>();
 
+interface StreamableTransportMetadata {
+  transport: StreamableHTTPServerTransport;
+  aiSessionId: string;
+}
+const activeStreamableTransports = new Map<
+  string,
+  StreamableTransportMetadata
+>();
+
 // Store the HTTP server instance
 let httpServerInstance: any = null;
 
 // Store reference to the session manager functions (set once at startup)
-let updateSessionTitleFn: ((sessionId: string, title: string) => Promise<void>) | null = null;
+let updateSessionTitleFn:
+  | ((sessionId: string, title: string) => Promise<void>)
+  | null = null;
 
 /**
  * Set the update function for session titles (called once at startup)
  */
-export function setUpdateSessionTitleFn(updateTitleFn: (sessionId: string, title: string) => Promise<void>) {
+export function setUpdateSessionTitleFn(
+  updateTitleFn: (sessionId: string, title: string) => Promise<void>
+) {
   updateSessionTitleFn = updateTitleFn;
 }
 
@@ -41,10 +57,33 @@ export function cleanupSessionNamingServer() {
         res.end();
       }
     } catch (error) {
-      console.error(`[Session Naming MCP] Error closing transport ${transportId}:`, error);
+      console.error(
+        `[Session Naming MCP] Error closing transport ${transportId}:`,
+        error
+      );
     }
   }
   activeTransports.clear();
+
+  for (const [
+    streamableTransportId,
+    metadata,
+  ] of activeStreamableTransports.entries()) {
+    try {
+      void metadata.transport.close().catch((error) => {
+        console.error(
+          `[Session Naming MCP] Error closing streamable transport ${streamableTransportId}:`,
+          error
+        );
+      });
+    } catch (error) {
+      console.error(
+        `[Session Naming MCP] Error closing streamable transport ${streamableTransportId}:`,
+        error
+      );
+    }
+  }
+  activeStreamableTransports.clear();
 }
 
 export function shutdownSessionNamingHttpServer(): Promise<void> {
@@ -65,22 +104,34 @@ export function shutdownSessionNamingHttpServer(): Promise<void> {
     try {
       cleanupSessionNamingServer();
     } catch (error) {
-      console.error('[Session Naming MCP] Error cleaning up transports:', error);
+      console.error(
+        "[Session Naming MCP] Error cleaning up transports:",
+        error
+      );
     }
 
     try {
-      if (httpServerInstance && typeof httpServerInstance.closeAllConnections === 'function') {
+      if (
+        httpServerInstance &&
+        typeof httpServerInstance.closeAllConnections === "function"
+      ) {
         httpServerInstance.closeAllConnections();
       }
     } catch (error) {
-      console.error('[Session Naming MCP] Error closing connections:', error);
+      console.error("[Session Naming MCP] Error closing connections:", error);
     }
 
     try {
-      if (httpServerInstance && typeof httpServerInstance.close === 'function') {
+      if (
+        httpServerInstance &&
+        typeof httpServerInstance.close === "function"
+      ) {
         httpServerInstance.close((err?: Error) => {
           if (err) {
-            console.error('[Session Naming MCP] Error closing HTTP server:', err);
+            console.error(
+              "[Session Naming MCP] Error closing HTTP server:",
+              err
+            );
           }
           httpServerInstance = null;
           safeResolve();
@@ -90,7 +141,7 @@ export function shutdownSessionNamingHttpServer(): Promise<void> {
         safeResolve();
       }
     } catch (error) {
-      console.error('[Session Naming MCP] Error in server close:', error);
+      console.error("[Session Naming MCP] Error in server close:", error);
       httpServerInstance = null;
       safeResolve();
     }
@@ -98,7 +149,9 @@ export function shutdownSessionNamingHttpServer(): Promise<void> {
     // Timeout to ensure we don't hang
     setTimeout(() => {
       if (httpServerInstance) {
-        console.log('[Session Naming MCP] Force destroying HTTP server after timeout');
+        console.log(
+          "[Session Naming MCP] Force destroying HTTP server after timeout"
+        );
         httpServerInstance = null;
       }
       safeResolve();
@@ -106,7 +159,9 @@ export function shutdownSessionNamingHttpServer(): Promise<void> {
   });
 }
 
-export async function startSessionNamingServer(startPort: number = 3457): Promise<{ httpServer: any; port: number }> {
+export async function startSessionNamingServer(
+  startPort: number = 3457
+): Promise<{ httpServer: any; port: number }> {
   let port = startPort;
   let httpServer: any = null;
   let maxAttempts = 100;
@@ -117,7 +172,7 @@ export async function startSessionNamingServer(startPort: number = 3457): Promis
       console.log(`[Session Naming MCP] Successfully started on port ${port}`);
       break;
     } catch (error: any) {
-      if (error.code === 'EADDRINUSE') {
+      if (error.code === "EADDRINUSE") {
         port++;
         maxAttempts--;
       } else {
@@ -127,235 +182,437 @@ export async function startSessionNamingServer(startPort: number = 3457): Promis
   }
 
   if (!httpServer) {
-    throw new Error(`[Session Naming MCP] Could not find an available port after trying 100 ports starting from ${startPort}`);
+    throw new Error(
+      `[Session Naming MCP] Could not find an available port after trying 100 ports starting from ${startPort}`
+    );
   }
 
   httpServerInstance = httpServer;
   return { httpServer, port };
 }
 
-async function tryCreateSessionNamingServer(port: number): Promise<any> {
-  return new Promise((resolve, reject) => {
-    const httpServer = createServer(async (req: IncomingMessage, res: ServerResponse) => {
-      const parsedUrl = parseUrl(req.url || '', true);
-      const pathname = parsedUrl.pathname;
+function createSessionNamingMcpServer(aiSessionId: string): Server {
+  // Create a new MCP Server instance for this connection
+  // This allows us to capture the aiSessionId in the closure
+  const server = new Server(
+    {
+      name: "nimbalyst-session-naming",
+      version: "1.0.0",
+    },
+    {
+      capabilities: {
+        tools: {},
+      },
+    }
+  );
 
-      // Handle CORS preflight
-      if (req.method === 'OPTIONS') {
-        res.writeHead(200, {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type'
-        });
-        res.end();
-        return;
+  // Register tool handlers with aiSessionId captured in closure
+  server.setRequestHandler(ListToolsRequestSchema, async () => {
+    return {
+      tools: [
+        {
+          name: "name_session",
+          description:
+            "Set a concise, descriptive name for the current AI chat session. This should be called ONCE at the start of the conversation after understanding the user's task. The name should be 2-5 words with the descriptive part FIRST and action word LAST (noun-phrase style for easier scanning).",
+          inputSchema: {
+            type: "object",
+            properties: {
+              name: {
+                type: "string",
+                description:
+                  'A concise session name (2-5 words) with descriptive part first. Examples: "Authentication bug fix", "Dark mode implementation", "Database layer refactor", "Crash report analysis"',
+              },
+            },
+            required: ["name"],
+          },
+        },
+      ],
+    };
+  });
+
+  // Tool execution handler - aiSessionId is captured from outer scope
+  server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
+    const { name, arguments: args } = request.params;
+
+    // Strip MCP server prefix if present
+    const toolName = name.replace(/^mcp__nimbalyst-session-naming__/, "");
+
+    if (toolName === "name_session") {
+      const sessionName = args?.name;
+
+      // Validate session name
+      if (!sessionName || typeof sessionName !== "string") {
+        return {
+          content: [
+            {
+              type: "text",
+              text: 'Error: The "name" parameter is required and must be a string. Example: { "name": "Database layer refactor" }',
+            },
+          ],
+          isError: true,
+        };
       }
 
-      // Handle SSE GET request to establish connection
-      if (pathname === '/mcp' && req.method === 'GET') {
-        // Extract AI session ID from query parameter
-        const aiSessionId = parsedUrl.query.sessionId as string;
+      // Validate length (max 100 chars as per database schema)
+      if (sessionName.length > 100) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Error: Session name too long (${sessionName.length} chars, max 100)`,
+            },
+          ],
+          isError: true,
+        };
+      }
 
-        if (!aiSessionId) {
-          res.writeHead(400);
-          res.end('Missing sessionId parameter');
-          return;
-        }
+      try {
+        // Use the aiSessionId captured in the closure
+        // The updateSessionTitleFn performs an atomic check-and-set at the database level
+        await updateSessionTitleFn!(aiSessionId, sessionName);
 
-        if (!updateSessionTitleFn) {
-          res.writeHead(500);
-          res.end('Session naming service not initialized');
-          return;
-        }
+        // console.log(`[Session Naming MCP] Updated session ${aiSessionId} to: "${sessionName}"`);
 
-        // Create a new MCP Server instance for this connection
-        // This allows us to capture the aiSessionId in the closure
-        const server = new Server(
-          {
-            name: 'nimbalyst-session-naming',
-            version: '1.0.0'
-          },
-          {
-            capabilities: {
-              tools: {}
-            }
-          }
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Successfully named session: "${sessionName}"`,
+            },
+          ],
+          isError: false,
+        };
+      } catch (error) {
+        console.error(
+          "[Session Naming MCP] Failed to update session title:",
+          error
         );
 
-        // Register tool handlers with aiSessionId captured in closure
-        server.setRequestHandler(ListToolsRequestSchema, async () => {
+        // Check if this is the "already named" error
+        const errorMessage =
+          error instanceof Error ? error.message : "Unknown error";
+        if (errorMessage.includes("already been named")) {
           return {
-            tools: [
+            content: [
               {
-                name: 'name_session',
-                description: 'Set a concise, descriptive name for the current AI chat session. This should be called ONCE at the start of the conversation after understanding the user\'s task. The name should be 2-5 words with the descriptive part FIRST and action word LAST (noun-phrase style for easier scanning).',
-                inputSchema: {
-                  type: 'object',
-                  properties: {
-                    name: {
-                      type: 'string',
-                      description: 'A concise session name (2-5 words) with descriptive part first. Examples: "Authentication bug fix", "Dark mode implementation", "Database layer refactor", "Crash report analysis"'
-                    }
-                  },
-                  required: ['name']
-                }
-              }
-            ]
+                type: "text",
+                text: `Error: This session has already been named. The name_session tool can only be called once per session.`,
+              },
+            ],
+            isError: true,
           };
-        });
+        }
 
-        // Tool execution handler - aiSessionId is captured from outer scope
-        server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
-          const { name, arguments: args } = request.params;
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Error updating session title: ${errorMessage}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    } else {
+      throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
+    }
+  });
 
-          // Strip MCP server prefix if present
-          const toolName = name.replace(/^mcp__nimbalyst-session-naming__/, '');
+  return server;
+}
 
-          if (toolName === 'name_session') {
-            const sessionName = args?.name;
+function getMcpSessionIdHeader(req: IncomingMessage): string | undefined {
+  const headerValue = req.headers["mcp-session-id"];
+  if (Array.isArray(headerValue)) {
+    return headerValue[0];
+  }
+  if (typeof headerValue === "string" && headerValue.length > 0) {
+    return headerValue;
+  }
+  return undefined;
+}
 
-            // Validate session name
-            if (!sessionName || typeof sessionName !== 'string') {
-              return {
-                content: [
-                  {
-                    type: 'text',
-                    text: 'Error: The "name" parameter is required and must be a string. Example: { "name": "Database layer refactor" }'
-                  }
-                ],
-                isError: true
-              };
-            }
+async function readJsonBody(
+  req: IncomingMessage
+): Promise<unknown | undefined> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  if (chunks.length === 0) {
+    return undefined;
+  }
+  const rawBody = Buffer.concat(chunks).toString("utf8").trim();
+  if (!rawBody) {
+    return undefined;
+  }
+  try {
+    return JSON.parse(rawBody);
+  } catch {
+    return undefined;
+  }
+}
 
-            // Validate length (max 100 chars as per database schema)
-            if (sessionName.length > 100) {
-              return {
-                content: [
-                  {
-                    type: 'text',
-                    text: `Error: Session name too long (${sessionName.length} chars, max 100)`
-                  }
-                ],
-                isError: true
-              };
+function isInitializePayload(payload: unknown): boolean {
+  if (!payload) {
+    return false;
+  }
+  if (Array.isArray(payload)) {
+    return payload.some((entry) => isInitializeRequest(entry));
+  }
+  return isInitializeRequest(payload);
+}
+
+async function tryCreateSessionNamingServer(port: number): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const httpServer = createServer(
+      async (req: IncomingMessage, res: ServerResponse) => {
+        const parsedUrl = parseUrl(req.url || "", true);
+        const pathname = parsedUrl.pathname;
+        const mcpSessionIdHeader = getMcpSessionIdHeader(req);
+
+        // Handle CORS preflight
+        if (req.method === "OPTIONS") {
+          res.writeHead(200, {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers":
+              "Content-Type, mcp-session-id, mcp-protocol-version",
+          });
+          res.end();
+          return;
+        }
+
+        // Handle SSE GET request to establish connection
+        if (pathname === "/mcp" && req.method === "GET") {
+          // Streamable HTTP GET (session established, uses Mcp-Session-Id header)
+          if (mcpSessionIdHeader) {
+            const metadata = activeStreamableTransports.get(mcpSessionIdHeader);
+            if (!metadata) {
+              res.writeHead(404);
+              res.end("Streamable session not found");
+              return;
             }
 
             try {
-              // Use the aiSessionId captured in the closure
-              // The updateSessionTitleFn performs an atomic check-and-set at the database level
-              await updateSessionTitleFn!(aiSessionId, sessionName);
-
-              // console.log(`[Session Naming MCP] Updated session ${aiSessionId} to: "${sessionName}"`);
-
-              return {
-                content: [
-                  {
-                    type: 'text',
-                    text: `Successfully named session: "${sessionName}"`
-                  }
-                ],
-                isError: false
-              };
+              await metadata.transport.handleRequest(req, res);
             } catch (error) {
-              console.error('[Session Naming MCP] Failed to update session title:', error);
-
-              // Check if this is the "already named" error
-              const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-              if (errorMessage.includes('already been named')) {
-                return {
-                  content: [
-                    {
-                      type: 'text',
-                      text: `Error: This session has already been named. The name_session tool can only be called once per session.`
-                    }
-                  ],
-                  isError: true
-                };
+              console.error(
+                "[Session Naming MCP] Error handling streamable GET request:",
+                error
+              );
+              if (!res.headersSent) {
+                res.writeHead(500);
+                res.end("Internal server error");
               }
-
-              return {
-                content: [
-                  {
-                    type: 'text',
-                    text: `Error updating session title: ${errorMessage}`
-                  }
-                ],
-                isError: true
-              };
             }
-          } else {
-            throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
+            return;
           }
-        });
 
-        // Create SSE transport
-        const transport = new SSEServerTransport('/mcp', res);
-        activeTransports.set(transport.sessionId, {
-          transport,
-          aiSessionId
-        });
+          // Extract AI session ID from query parameter
+          const aiSessionId = parsedUrl.query.sessionId as string;
 
-        // console.log(`[Session Naming MCP] New connection for AI session ${aiSessionId}, transport ID: ${transport.sessionId}`);
+          if (!aiSessionId) {
+            res.writeHead(400);
+            res.end("Missing sessionId parameter");
+            return;
+          }
 
-        // Connect server to transport
-        server.connect(transport).then(() => {
-          transport.onclose = () => {
-            // console.log(`[Session Naming MCP] Connection closed for AI session ${aiSessionId}`);
-            activeTransports.delete(transport.sessionId);
-          };
-        }).catch(error => {
-          console.error('[Session Naming MCP] Connection error:', error);
-          activeTransports.delete(transport.sessionId);
-          if (!res.headersSent) {
+          if (!updateSessionTitleFn) {
             res.writeHead(500);
-            res.end();
+            res.end("Session naming service not initialized");
+            return;
           }
-        });
 
-      } else if (pathname === '/mcp' && req.method === 'POST') {
-        // The MCP client sends POST messages with the transport session ID
-        const transportSessionId = parsedUrl.query.sessionId as string;
+          const server = createSessionNamingMcpServer(aiSessionId);
 
-        if (!transportSessionId) {
-          res.writeHead(400);
-          res.end('Missing sessionId');
-          return;
-        }
+          // Create SSE transport
+          const transport = new SSEServerTransport("/mcp", res);
+          activeTransports.set(transport.sessionId, {
+            transport,
+            aiSessionId,
+          });
 
-        const metadata = activeTransports.get(transportSessionId);
-        if (!metadata) {
+          // console.log(`[Session Naming MCP] New connection for AI session ${aiSessionId}, transport ID: ${transport.sessionId}`);
+
+          // Connect server to transport
+          server
+            .connect(transport)
+            .then(() => {
+              transport.onclose = () => {
+                // console.log(`[Session Naming MCP] Connection closed for AI session ${aiSessionId}`);
+                activeTransports.delete(transport.sessionId);
+              };
+            })
+            .catch((error) => {
+              console.error("[Session Naming MCP] Connection error:", error);
+              activeTransports.delete(transport.sessionId);
+              if (!res.headersSent) {
+                res.writeHead(500);
+                res.end();
+              }
+            });
+        } else if (pathname === "/mcp" && req.method === "POST") {
+          // Legacy SSE POST flow: route to existing SSE transport if found
+          const legacyTransportSessionId = parsedUrl.query.sessionId as
+            | string
+            | undefined;
+          const legacyMetadata = legacyTransportSessionId
+            ? activeTransports.get(legacyTransportSessionId)
+            : undefined;
+
+          if (legacyMetadata && !mcpSessionIdHeader) {
+            try {
+              await legacyMetadata.transport.handlePostMessage(req, res);
+            } catch (error) {
+              console.error(
+                "[Session Naming MCP] Error handling legacy SSE POST message:",
+                error
+              );
+              if (!res.headersSent) {
+                res.writeHead(500);
+                res.end("Internal server error");
+              }
+            }
+            return;
+          }
+
+          // Streamable HTTP flow (initialize or existing session)
+          const parsedBody = await readJsonBody(req);
+
+          if (
+            !mcpSessionIdHeader &&
+            legacyTransportSessionId &&
+            !isInitializePayload(parsedBody)
+          ) {
+            // Preserve legacy behavior for unknown SSE sessions.
+            res.writeHead(404);
+            res.end("Transport session not found");
+            return;
+          }
+
+          let streamableMetadata: StreamableTransportMetadata | undefined =
+            mcpSessionIdHeader
+              ? activeStreamableTransports.get(mcpSessionIdHeader)
+              : undefined;
+
+          if (mcpSessionIdHeader && !streamableMetadata) {
+            res.writeHead(404);
+            res.end("Streamable session not found");
+            return;
+          }
+
+          if (!streamableMetadata) {
+            if (!isInitializePayload(parsedBody)) {
+              res.writeHead(400);
+              res.end("Missing sessionId");
+              return;
+            }
+
+            const aiSessionId = parsedUrl.query.sessionId as string;
+            if (!aiSessionId) {
+              res.writeHead(400);
+              res.end("Missing sessionId parameter");
+              return;
+            }
+
+            if (!updateSessionTitleFn) {
+              res.writeHead(500);
+              res.end("Session naming service not initialized");
+              return;
+            }
+
+            const server = createSessionNamingMcpServer(aiSessionId);
+            const transport = new StreamableHTTPServerTransport({
+              sessionIdGenerator: () => randomUUID(),
+              onsessioninitialized: (streamableSessionId) => {
+                activeStreamableTransports.set(streamableSessionId, {
+                  transport,
+                  aiSessionId,
+                });
+              },
+            });
+
+            transport.onclose = () => {
+              const streamableSessionId = transport.sessionId;
+              if (streamableSessionId) {
+                activeStreamableTransports.delete(streamableSessionId);
+              }
+            };
+
+            transport.onerror = (error) => {
+              console.error(
+                "[Session Naming MCP] Streamable transport error:",
+                error
+              );
+            };
+
+            await server.connect(transport);
+            streamableMetadata = { transport, aiSessionId };
+          }
+
+          try {
+            await streamableMetadata.transport.handleRequest(
+              req,
+              res,
+              parsedBody
+            );
+          } catch (error) {
+            console.error(
+              "[Session Naming MCP] Error handling streamable POST request:",
+              error
+            );
+            if (!res.headersSent) {
+              res.writeHead(500);
+              res.end("Internal server error");
+            }
+          }
+        } else if (pathname === "/mcp" && req.method === "DELETE") {
+          // Streamable HTTP session termination
+          if (!mcpSessionIdHeader) {
+            res.writeHead(400);
+            res.end("Missing mcp-session-id header");
+            return;
+          }
+
+          const metadata = activeStreamableTransports.get(mcpSessionIdHeader);
+          if (!metadata) {
+            res.writeHead(404);
+            res.end("Streamable session not found");
+            return;
+          }
+
+          try {
+            await metadata.transport.handleRequest(req, res);
+          } catch (error) {
+            console.error(
+              "[Session Naming MCP] Error handling streamable DELETE request:",
+              error
+            );
+            if (!res.headersSent) {
+              res.writeHead(500);
+              res.end("Internal server error");
+            }
+          }
+        } else {
           res.writeHead(404);
-          res.end('Transport session not found');
-          return;
+          res.end("Not found");
         }
-
-        try {
-          await metadata.transport.handlePostMessage(req, res);
-        } catch (error) {
-          console.error('[Session Naming MCP] Error handling POST message:', error);
-          if (!res.headersSent) {
-            res.writeHead(500);
-            res.end('Internal server error');
-          }
-        }
-      } else {
-        res.writeHead(404);
-        res.end('Not found');
       }
-    });
+    );
 
-    httpServer.listen(port, '127.0.0.1', (err?: Error) => {
+    httpServer.listen(port, "127.0.0.1", (err?: Error) => {
       if (err) {
         reject(err);
       }
     });
 
-    httpServer.on('listening', () => {
+    httpServer.on("listening", () => {
       httpServer.unref();
       resolve(httpServer);
     });
 
-    httpServer.on('error', (err: any) => {
+    httpServer.on("error", (err: any) => {
       reject(err);
     });
   });

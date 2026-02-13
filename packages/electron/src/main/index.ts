@@ -785,6 +785,21 @@ app.whenReady().then(async () => {
         }
         return enabledServers;
     });
+    OpenAICodexProvider.setMCPConfigLoader(async (workspacePath?: string) => {
+        if (!mcpConfigService) {
+            throw new Error('MCP config service not initialized');
+        }
+        const mergedConfig = await mcpConfigService.getMergedConfig(workspacePath);
+        const allServers = mergedConfig.mcpServers || {};
+
+        const enabledServers: Record<string, any> = {};
+        for (const [name, config] of Object.entries(allServers)) {
+            if (!(config as any).disabled) {
+                enabledServers[name] = mcpConfigService.processServerConfigForRuntime(config as any);
+            }
+        }
+        return enabledServers;
+    });
 
     // Inject extension plugins loader into ClaudeCodeProvider
     // This allows extensions to provide Claude SDK plugins with custom commands/agents
@@ -805,11 +820,16 @@ app.whenReady().then(async () => {
         const settingsManager = ClaudeSettingsManager.getInstance();
         return settingsManager.getUserLevelEnv();
     });
+    OpenAICodexProvider.setClaudeSettingsEnvLoader(async () => {
+        const settingsManager = ClaudeSettingsManager.getInstance();
+        return settingsManager.getUserLevelEnv();
+    });
 
     // Inject shell environment loader to pass the user's full login shell env vars
     // (AWS credentials, NODE_EXTRA_CA_CERTS, etc.) to the Claude Code subprocess.
     // Without this, Dock/Finder-launched Nimbalyst has a minimal environment.
     ClaudeCodeProvider.setShellEnvironmentLoader(() => getShellEnvironment());
+    OpenAICodexProvider.setShellEnvironmentLoader(() => getShellEnvironment());
 
     // Inject additional directories loader
     // This allows Claude to access SDK docs when working on extension projects
@@ -914,6 +934,7 @@ app.whenReady().then(async () => {
 
         // Inject the port into ClaudeCodeProvider so it can configure the MCP server
         ClaudeCodeProvider.setMcpServerPort(result.port);
+        OpenAICodexProvider.setMcpServerPort(result.port);
     } catch (error) {
             logger.mcp.error('Failed to start MCP SSE server:', error);
     }

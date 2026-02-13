@@ -22,6 +22,7 @@ import { ToolPermissionService } from '../permissions/ToolPermissionService';
 import { PermissionMode, TrustChecker, PermissionPatternSaver, PermissionPatternChecker, SecurityLogger } from './ProviderPermissionMixin';
 import { CodexSdkModuleLike, loadCodexSdkModule } from './codex/codexSdkLoader';
 import { resolvePackagedCodexBinaryPath } from './codex/codexBinaryPath';
+import { McpConfigService } from '../services/McpConfigService';
 
 interface OpenAICodexProviderDeps {
   protocol?: CodexSDKProtocol;
@@ -72,6 +73,29 @@ export class OpenAICodexProvider extends BaseAgentProvider {
   private readonly apiKey: string;
   private readonly protocol: CodexSDKProtocol;
   private readonly permissionService: ToolPermissionService;
+  private readonly mcpConfigService: McpConfigService;
+
+  // Shared MCP server port (injected from electron main process)
+  // This server provides capture_editor_screenshot tool.
+  private static mcpServerPort: number | null = null;
+
+  // Session naming MCP server port (injected from electron main process)
+  private static sessionNamingServerPort: number | null = null;
+
+  // Extension dev MCP server port (injected from electron main process)
+  private static extensionDevServerPort: number | null = null;
+
+  // MCP config loader (injected from electron main process)
+  // Returns merged user + workspace MCP servers
+  private static mcpConfigLoader: ((workspacePath?: string) => Promise<Record<string, any>>) | null = null;
+
+  // Claude settings env vars loader (injected from electron main process)
+  // Reused by MCP config expansion logic for ${VAR} interpolation
+  private static claudeSettingsEnvLoader: (() => Promise<Record<string, string>>) | null = null;
+
+  // Shell environment loader (injected from electron main process)
+  // Reused by MCP config expansion logic for ${VAR} interpolation
+  private static shellEnvironmentLoader: (() => Record<string, string> | null) | null = null;
 
   constructor(config?: { apiKey?: string }, deps?: OpenAICodexProviderDeps) {
     super();
@@ -118,6 +142,16 @@ export class OpenAICodexProvider extends BaseAgentProvider {
         emit: this.emit.bind(this),
       });
     }
+
+    this.mcpConfigService = new McpConfigService({
+      mcpServerPort: OpenAICodexProvider.mcpServerPort,
+      sessionNamingServerPort: OpenAICodexProvider.sessionNamingServerPort,
+      extensionDevServerPort: OpenAICodexProvider.extensionDevServerPort,
+      mcpConfigLoader: OpenAICodexProvider.mcpConfigLoader,
+      extensionPluginsLoader: null,
+      claudeSettingsEnvLoader: OpenAICodexProvider.claudeSettingsEnvLoader,
+      shellEnvironmentLoader: OpenAICodexProvider.shellEnvironmentLoader,
+    });
   }
 
   getProviderName(): string {
@@ -138,6 +172,30 @@ export class OpenAICodexProvider extends BaseAgentProvider {
 
   public static setSecurityLogger(logger: SecurityLogger | null): void {
     BaseAgentProvider.setSecurityLogger(logger);
+  }
+
+  public static setMcpServerPort(port: number | null): void {
+    OpenAICodexProvider.mcpServerPort = port;
+  }
+
+  public static setSessionNamingServerPort(port: number | null): void {
+    OpenAICodexProvider.sessionNamingServerPort = port;
+  }
+
+  public static setExtensionDevServerPort(port: number | null): void {
+    OpenAICodexProvider.extensionDevServerPort = port;
+  }
+
+  public static setMCPConfigLoader(loader: ((workspacePath?: string) => Promise<Record<string, any>>) | null): void {
+    OpenAICodexProvider.mcpConfigLoader = loader;
+  }
+
+  public static setClaudeSettingsEnvLoader(loader: (() => Promise<Record<string, string>>) | null): void {
+    OpenAICodexProvider.claudeSettingsEnvLoader = loader;
+  }
+
+  public static setShellEnvironmentLoader(loader: (() => Record<string, string> | null) | null): void {
+    OpenAICodexProvider.shellEnvironmentLoader = loader;
   }
 
   async initialize(config: ProviderConfig): Promise<void> {
@@ -654,13 +712,17 @@ export class OpenAICodexProvider extends BaseAgentProvider {
         action: existingSessionId ? 'RESUME' : 'CREATE'
       });
 
+      const mcpServers = await this.mcpConfigService.getMcpServersConfig({ sessionId, workspacePath });
+
       const sessionOptions = {
         workspacePath,
         model: await this.getConfiguredModel(),
         ...(permissionDecision.permissionMode ? { permissionMode: permissionDecision.permissionMode } : {}),
+        mcpServers,
         raw: {
           systemPrompt,
           abortSignal: abortController.signal,
+          codexConfigOverrides: this.buildCodexConfigOverrides(mcpServers),
         },
       };
 
@@ -787,8 +849,7 @@ export class OpenAICodexProvider extends BaseAgentProvider {
    * for visual tools, worktrees, session naming, etc.
    */
   protected buildSystemPrompt(documentContext?: DocumentContext): string {
-    // Note: Session naming is not currently supported for Codex, but we could add it later
-    const hasSessionNaming = false;
+    const hasSessionNaming = OpenAICodexProvider.sessionNamingServerPort !== null;
     const worktreePath = documentContext?.worktreePath;
     const isVoiceMode = (documentContext as any)?.isVoiceMode;
     const voiceModeCodingAgentPrompt = (documentContext as any)?.voiceModeCodingAgentPrompt;
@@ -876,6 +937,108 @@ export class OpenAICodexProvider extends BaseAgentProvider {
     // If we need history bootstrapping in the future, we can add it here.
 
     return options.message;
+  }
+
+  private buildCodexConfigOverrides(
+    mcpServers: Record<string, unknown>
+  ): Record<string, unknown> | undefined {
+    const codexMcpServers: Record<string, Record<string, unknown>> = {};
+
+    for (const [serverName, serverConfig] of Object.entries(mcpServers)) {
+      const converted = this.convertServerConfigToCodex(serverConfig as Record<string, unknown>);
+      if (converted) {
+        codexMcpServers[serverName] = converted;
+      }
+    }
+
+    if (Object.keys(codexMcpServers).length === 0) {
+      return undefined;
+    }
+
+    return {
+      mcp_servers: codexMcpServers,
+    };
+  }
+
+  private convertServerConfigToCodex(serverConfig: Record<string, unknown>): Record<string, unknown> | null {
+    const configTypeRaw = typeof serverConfig.type === 'string'
+      ? serverConfig.type.toLowerCase()
+      : (typeof serverConfig.transport === 'string' ? serverConfig.transport.toLowerCase() : '');
+
+    const isRemoteServer = configTypeRaw === 'sse' || configTypeRaw === 'http' || typeof serverConfig.url === 'string';
+    if (isRemoteServer) {
+      if (typeof serverConfig.url !== 'string' || serverConfig.url.length === 0) {
+        return null;
+      }
+
+      const remoteConfig: Record<string, unknown> = {
+        url: serverConfig.url,
+      };
+
+      const headers = this.toCodexStringMap((serverConfig.http_headers ?? serverConfig.headers) as unknown);
+      if (headers && Object.keys(headers).length > 0) {
+        remoteConfig.http_headers = headers;
+      }
+
+      if (typeof serverConfig.bearer_token_env_var === 'string' && serverConfig.bearer_token_env_var.length > 0) {
+        remoteConfig.bearer_token_env_var = serverConfig.bearer_token_env_var;
+      }
+
+      if (typeof serverConfig.startup_timeout_sec === 'number') {
+        remoteConfig.startup_timeout_sec = serverConfig.startup_timeout_sec;
+      }
+
+      if (typeof serverConfig.tool_timeout_sec === 'number') {
+        remoteConfig.tool_timeout_sec = serverConfig.tool_timeout_sec;
+      }
+
+      return remoteConfig;
+    }
+
+    if (typeof serverConfig.command !== 'string' || serverConfig.command.length === 0) {
+      return null;
+    }
+
+    const stdioConfig: Record<string, unknown> = {
+      command: serverConfig.command,
+    };
+
+    if (Array.isArray(serverConfig.args)) {
+      stdioConfig.args = serverConfig.args.filter((arg): arg is string => typeof arg === 'string');
+    }
+
+    const env = this.toCodexStringMap(serverConfig.env as unknown);
+    if (env && Object.keys(env).length > 0) {
+      stdioConfig.env = env;
+    }
+
+    if (typeof serverConfig.cwd === 'string' && serverConfig.cwd.length > 0) {
+      stdioConfig.cwd = serverConfig.cwd;
+    }
+
+    if (typeof serverConfig.startup_timeout_sec === 'number') {
+      stdioConfig.startup_timeout_sec = serverConfig.startup_timeout_sec;
+    }
+
+    if (typeof serverConfig.tool_timeout_sec === 'number') {
+      stdioConfig.tool_timeout_sec = serverConfig.tool_timeout_sec;
+    }
+
+    return stdioConfig;
+  }
+
+  private toCodexStringMap(value: unknown): Record<string, string> | null {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return null;
+    }
+
+    const result: Record<string, string> = {};
+    for (const [key, entryValue] of Object.entries(value)) {
+      if (typeof entryValue === 'string') {
+        result[key] = entryValue;
+      }
+    }
+    return result;
   }
 
   /**

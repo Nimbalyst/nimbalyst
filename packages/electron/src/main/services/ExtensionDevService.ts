@@ -1,4 +1,4 @@
-import { ClaudeCodeProvider } from '@nimbalyst/runtime/ai/server';
+import { ClaudeCodeProvider, OpenAICodexProvider } from '@nimbalyst/runtime/ai/server';
 import { BrowserWindow } from 'electron';
 import {
   startExtensionDevServer,
@@ -32,7 +32,7 @@ export class ExtensionDevService {
   }
 
   /**
-   * Start the extension dev MCP server and configure ClaudeCodeProvider.
+   * Start the extension dev MCP server and configure agent providers.
    * Only starts if extension dev tools are enabled in settings.
    */
   public async start(): Promise<void> {
@@ -147,8 +147,9 @@ export class ExtensionDevService {
         this.serverPort = port;
         console.log(`[ExtensionDevService] MCP server started on port ${port}`);
 
-        // Inject the port into ClaudeCodeProvider so it can configure the MCP server
+        // Inject the port into agent providers so they can configure the MCP server
         ClaudeCodeProvider.setExtensionDevServerPort(port);
+        OpenAICodexProvider.setExtensionDevServerPort(port);
 
         this.started = true;
       } catch (error) {
@@ -173,6 +174,7 @@ export class ExtensionDevService {
     try {
       await shutdownExtensionDevServer();
       ClaudeCodeProvider.setExtensionDevServerPort(null);
+      OpenAICodexProvider.setExtensionDevServerPort(null);
       this.serverPort = null;
       this.started = false;
       console.log('[ExtensionDevService] Shutdown complete');

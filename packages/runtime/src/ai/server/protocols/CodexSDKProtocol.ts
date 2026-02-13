@@ -44,6 +44,7 @@ export class CodexSDKProtocol implements AgentProtocol {
 
   private apiKey: string;
   private codexClient: CodexClientLike | null = null;
+  private codexClientOptionsKey: string | null = null;
   private readonly loadSdkModule: () => Promise<CodexSdkModuleLike>;
   private readonly resolveCodexPathOverride: () => string | undefined;
 
@@ -69,7 +70,7 @@ export class CodexSDKProtocol implements AgentProtocol {
    * @returns Protocol session with thread ID
    */
   async createSession(options: SessionOptions): Promise<ProtocolSession> {
-    const client = await this.getCodexClient();
+    const client = await this.getCodexClient(options);
     const threadOptions = this.buildThreadOptions(options);
     const thread = client.startThread(threadOptions);
 
@@ -96,7 +97,7 @@ export class CodexSDKProtocol implements AgentProtocol {
    */
   async resumeSession(sessionId: string, options: SessionOptions): Promise<ProtocolSession> {
     console.log('[CODEX-PROTOCOL] Resuming thread:', sessionId);
-    const client = await this.getCodexClient();
+    const client = await this.getCodexClient(options);
     const threadOptions = this.buildThreadOptions(options);
     const thread = client.resumeThread(sessionId, threadOptions);
 
@@ -311,18 +312,23 @@ export class CodexSDKProtocol implements AgentProtocol {
   /**
    * Get or initialize the Codex client
    */
-  private async getCodexClient(): Promise<CodexClientLike> {
-    if (this.codexClient) {
+  private async getCodexClient(options: SessionOptions): Promise<CodexClientLike> {
+    const sdkModule = await this.loadSdkModule();
+    const codexPathOverride = this.resolveCodexPathOverride();
+    const codexConfigOverrides = this.getCodexConfigOverrides(options);
+    const codexClientOptions: Record<string, unknown> = {
+      apiKey: this.apiKey,
+      ...(codexPathOverride ? { codexPathOverride } : {}),
+      ...(codexConfigOverrides ? { config: codexConfigOverrides } : {}),
+    };
+    const optionsKey = JSON.stringify(codexClientOptions);
+
+    if (this.codexClient && this.codexClientOptionsKey === optionsKey) {
       return this.codexClient;
     }
 
-    const sdkModule = await this.loadSdkModule();
-    const codexPathOverride = this.resolveCodexPathOverride();
-
-    this.codexClient = new sdkModule.Codex({
-      apiKey: this.apiKey,
-      ...(codexPathOverride ? { codexPathOverride } : {}),
-    });
+    this.codexClient = new sdkModule.Codex(codexClientOptions);
+    this.codexClientOptionsKey = optionsKey;
     return this.codexClient;
   }
 
@@ -348,13 +354,21 @@ export class CodexSDKProtocol implements AgentProtocol {
 
     // Extract systemPrompt from raw options and pass it as developer_instructions
     // This is the proper Codex SDK way to add custom instructions
-    const { systemPrompt, ...otherRawOptions } = options.raw || {};
+    const { systemPrompt, codexConfigOverrides: _codexConfigOverrides, ...otherRawOptions } = options.raw || {};
 
     return {
       ...baseOptions,
       ...(systemPrompt ? { developer_instructions: systemPrompt } : {}),
       ...otherRawOptions,
     };
+  }
+
+  private getCodexConfigOverrides(options: SessionOptions): Record<string, unknown> | undefined {
+    const rawOverrides = options.raw?.codexConfigOverrides;
+    if (!rawOverrides || typeof rawOverrides !== 'object' || Array.isArray(rawOverrides)) {
+      return undefined;
+    }
+    return rawOverrides as Record<string, unknown>;
   }
 
   /**
