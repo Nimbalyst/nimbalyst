@@ -4,8 +4,10 @@
 
 import type { ToolDefinition } from '../tools';
 import type { EffortLevel } from './effortLevels';
+import type { ToolResult } from './protocols/ProtocolInterface';
 export type { ToolDefinition } from '../tools';
 export { ModelIdentifier } from './ModelIdentifier';
+export type { ToolResult } from './protocols/ProtocolInterface';
 
 export interface DocumentContext {
   filePath?: string;
@@ -66,7 +68,7 @@ export interface ToolCall {
   id?: string;
   name: string;
   arguments?: unknown;
-  result?: unknown;
+  result?: ToolResult | string;
   targetFilePath?: string;  // File path this tool call was executed against
   // Sub-agent specific fields
   isSubAgent?: boolean;           // true for Task tools

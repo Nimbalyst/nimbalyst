@@ -16,6 +16,39 @@
 import type { ChatAttachment } from '../types';
 
 /**
+ * MCP server configuration
+ */
+export interface MCPServerConfig {
+  command: string;
+  args?: string[];
+  env?: Record<string, string>;
+  [key: string]: unknown;
+}
+
+/**
+ * Platform-specific session data for internal use
+ */
+export interface RawProtocolSession {
+  [key: string]: unknown;
+}
+
+/**
+ * Structured result from tool execution
+ */
+export interface ToolResult {
+  success: boolean;
+  result?: unknown;
+  output?: unknown;
+  error?: string | unknown;
+  status?: string;
+  // command_execution specific
+  command?: string;
+  exit_code?: number;
+  // file_change specific
+  changes?: unknown;
+}
+
+/**
  * Options for creating or resuming a session
  */
 export interface SessionOptions {
@@ -35,7 +68,7 @@ export interface SessionOptions {
   permissionMode?: string;
 
   /** MCP server configurations */
-  mcpServers?: Record<string, any>;
+  mcpServers?: Record<string, MCPServerConfig>;
 
   /** Environment variables for the session */
   env?: Record<string, string>;
@@ -47,7 +80,7 @@ export interface SessionOptions {
   disallowedTools?: string[];
 
   /** Platform-specific options that don't fit the common schema */
-  raw?: Record<string, any>;
+  raw?: Record<string, unknown>;
 }
 
 /**
@@ -78,13 +111,14 @@ export interface ProtocolSession {
   platform: string;
 
   /** Platform-specific session data (for internal use) */
-  raw?: any;
+  raw?: RawProtocolSession;
 }
 
 /**
  * Event types emitted during message streaming
  */
 export type ProtocolEventType =
+  | 'raw_event'               // Raw SDK event (for persistence/audit)
   | 'text'                    // Text content chunk
   | 'reasoning'               // Thinking/reasoning content (not part of final output)
   | 'tool_call'               // Tool invocation
@@ -109,15 +143,15 @@ export interface ProtocolEvent {
   toolCall?: {
     id?: string;
     name: string;
-    arguments?: any;
-    result?: any;
+    arguments?: unknown;
+    result?: ToolResult | string;
   };
 
   /** Tool result data (for 'tool_result' events) */
   toolResult?: {
     id?: string;
     name: string;
-    result?: any;
+    result?: ToolResult | string;
   };
 
   /** Error message (for 'error' events) */
@@ -131,7 +165,7 @@ export interface ProtocolEvent {
   };
 
   /** Additional metadata */
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 /**

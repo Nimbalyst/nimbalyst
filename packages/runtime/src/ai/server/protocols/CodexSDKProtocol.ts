@@ -175,6 +175,13 @@ export class CodexSDKProtocol implements AgentProtocol {
           throw new Error('Operation cancelled');
         }
 
+        // Emit raw SDK event so callers can persist every Codex output,
+        // even when it doesn't map to a known parsed event shape yet.
+        yield {
+          type: 'raw_event',
+          metadata: { rawEvent: event },
+        };
+
         // Parse Codex event into protocol events
         const parsedEvents = parseCodexEvent(event);
         for (const parsedEvent of parsedEvents) {
@@ -182,20 +189,6 @@ export class CodexSDKProtocol implements AgentProtocol {
           if (parsedEvent.threadId && parsedEvent.threadId !== session.id) {
             session.id = parsedEvent.threadId;
             console.log('[CODEX-PROTOCOL] Thread ID captured from thread.started event:', session.id);
-
-            // Yield the raw event for database storage
-            // This ensures thread.started events are preserved in the codex_events table
-            if (parsedEvent.rawEvent) {
-              yield {
-                type: 'text',
-                content: '', // No visible content
-                metadata: {
-                  rawEvent: parsedEvent.rawEvent,
-                  threadStarted: true,
-                  threadId: parsedEvent.threadId
-                },
-              };
-            }
           }
 
           // Error event

@@ -129,7 +129,7 @@ function renderMarkdown(raw: string, workspacePath: string): string {
 function toolStatus(message: Message): { didFail: boolean; label: string } {
   const result = message.toolCall?.result;
   const resultObj =
-    typeof result === 'object' && result !== null ? (result as Record<string, unknown>) : null;
+    typeof result === 'object' && result !== null && typeof result !== 'string' ? (result as unknown as Record<string, unknown>) : null;
   const explicitSuccess =
     resultObj && 'success' in resultObj ? resultObj.success !== false : undefined;
   const derivedError =

@@ -25,6 +25,7 @@ import { CodexSdkModuleLike, loadCodexSdkModule } from './codex/codexSdkLoader';
 import { resolvePackagedCodexBinaryPath } from './codex/codexBinaryPath';
 import { McpConfigService } from '../services/McpConfigService';
 import { MCPServerConfig } from '../../../types/MCPServerConfig';
+import { safeJSONSerialize } from '../../../utils/serialization';
 
 interface OpenAICodexProviderDeps {
   protocol?: CodexSDKProtocol;
@@ -752,6 +753,8 @@ export class OpenAICodexProvider extends BaseAgentProvider {
         // Convert protocol events to stream chunks
         if (event.type === 'error') {
           yield { type: 'error', error: event.error };
+        } else if (event.type === 'raw_event') {
+          // Raw SDK events are persisted for audit/history but not rendered directly.
         } else if (event.type === 'reasoning') {
           // Don't yield reasoning events - they're stored but not part of the visible stream
         } else if (event.type === 'text') {
@@ -1080,21 +1083,55 @@ export class OpenAICodexProvider extends BaseAgentProvider {
     event: ProtocolEvent,
     sessionId: string
   ): Promise<void> {
-    if (event.metadata?.rawEvent) {
-      await this.logAgentMessage(
-        sessionId,
-        this.getProviderName(),
-        'output',
-        JSON.stringify(event.metadata.rawEvent),
-        {
-          eventType: event.type,
-          codexProvider: true,
-        },
-        false, // not hidden
-        undefined, // no provider message ID
-        false // not searchable - raw events are not for search
-      );
+    if (event.type !== 'raw_event' || !event.metadata?.rawEvent) {
+      return;
     }
+
+    const { content, usedFallback } = this.serializeRawCodexEvent(event.metadata.rawEvent);
+    const rawEventType = this.getRawEventType(event.metadata.rawEvent);
+
+    await this.logAgentMessage(
+      sessionId,
+      this.getProviderName(),
+      'output',
+      content,
+      {
+        eventType: rawEventType,
+        codexProvider: true,
+        rawEventSerializationFallback: usedFallback,
+      },
+      false, // not hidden
+      undefined, // no provider message ID
+      false // not searchable - raw events are not for search
+    );
+  }
+
+  private getRawEventType(rawEvent: unknown): string {
+    if (rawEvent && typeof rawEvent === 'object') {
+      const eventType = (rawEvent as Record<string, unknown>).type;
+      if (typeof eventType === 'string' && eventType.trim().length > 0) {
+        return eventType;
+      }
+    }
+    return 'unknown';
+  }
+
+  private serializeRawCodexEvent(rawEvent: unknown): { content: string; usedFallback: boolean } {
+    const result = safeJSONSerialize(rawEvent);
+
+    // If the generic fallback was used, enhance it with the raw event type
+    if (result.usedFallback) {
+      return {
+        content: JSON.stringify({
+          type: this.getRawEventType(rawEvent),
+          valueType: typeof rawEvent,
+          fallback: true,
+        }),
+        usedFallback: true,
+      };
+    }
+
+    return result;
   }
 
 
