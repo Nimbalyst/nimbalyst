@@ -345,6 +345,33 @@ test('should restore previous version', async () => {
 - `switchToAgentMode(page)` - Switch to agent mode
 - `switchToFilesMode(page)` - Switch to files mode
 
+**IMPORTANT: Understanding Mode Architecture**
+
+The app has three modes that control which UI is visible:
+1. **Files mode** - Shows `EditorMode` component (file tree, tabs, editors, right-side AI chat panel)
+2. **Agent mode** - Shows `AgentMode` component (session history sidebar, main chat interface)
+3. **Settings mode** - Shows settings UI
+
+**Critical implementation detail for tests:**
+- All mode components (`EditorMode`, `AgentMode`) are **always rendered** in the DOM
+- Visibility is controlled via CSS `display: flex` (visible) or `display: hidden` (hidden)
+- This means elements from hidden modes still exist in the DOM but won't be visible or clickable
+
+**Two different chat interfaces:**
+- **Files mode chat panel** - Right sidebar in Files mode (`[data-testid="ai-chat-panel"]`, `.ai-chat-input-field`)
+  - Appears next to file editors
+  - Used for quick AI assistance while editing files
+  - Auto-creates a session with title "New Session" when the ChatSidebar component mounts
+- **Agent mode session interface** - Main interface in Agent mode (`.session-history`, chat input in active session)
+  - Full-screen AI coding interface
+  - Shows session history on left, active session on right
+  - Does NOT auto-create sessions - user must create via "New Session" button or it shows empty state
+
+When writing tests, be specific about which interface you're testing:
+- For Files mode chat: Use `SELECTORS.aiChatPanel` and ensure you're in Files mode
+- For Agent mode: Use `SELECTORS.sessionHistory` and ensure you're in Agent mode
+- Elements may exist in DOM but be hidden - always check visibility, not just presence
+
 **AI Chat:**
 - `submitChatPrompt(page, prompt, options)` - Submit AI chat message
 - `createNewAgentSession(page)` - Create new AI session

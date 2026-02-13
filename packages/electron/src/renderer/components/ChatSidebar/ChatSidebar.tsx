@@ -146,7 +146,7 @@ export const ChatSidebar = forwardRef<ChatSidebarRef, ChatSidebarProps>(({
               id: newSessionId,
               provider,
               model: defaultModel,
-              title: 'Chat',
+              title: 'New Session',
             },
             workspaceId: workspacePath,
           }

@@ -92,10 +92,11 @@ export const PLAYWRIGHT_TEST_SELECTORS = {
   // Session history (agent mode sidebar)
   sessionHistory: '.session-history',
   sessionHistoryItem: '.session-history-item',
-  sessionHistoryNewButton: '.session-history-new-button',
-  sessionHistoryNewMenu: '.session-history-new-menu',
-  newSessionButton: '[data-testid="new-session-button"]',
-  newWorktreeSessionButton: '[data-testid="new-worktree-session-button"]',
+  sessionHistoryNewButton: '.session-history-new-button', // The dropdown trigger button
+  sessionHistoryNewMenu: '.session-history-new-menu', // The dropdown menu itself
+  newDropdownButton: '[data-testid="new-dropdown-button"]', // More specific selector for dropdown trigger
+  newSessionButton: '[data-testid="new-session-button"]', // Menu item for new session
+  newWorktreeSessionButton: '[data-testid="new-worktree-session-button"]', // Menu item for new worktree
   sessionListItem: '.session-list-item',
   sessionListItemTitle: '.session-list-item-title',
 
@@ -263,7 +264,7 @@ export async function switchToEditorMode(page: Page): Promise<void> {
 export async function switchToAgentMode(page: Page): Promise<void> {
   const agentModeButton = page.locator(PLAYWRIGHT_TEST_SELECTORS.agentModeButton);
   await agentModeButton.click();
-  await page.waitForTimeout(1000); // Wait for mode switch and auto-session creation
+  await page.waitForTimeout(1000); // Wait for mode switch and UI to settle (no auto-session creation)
 }
 
 /**
