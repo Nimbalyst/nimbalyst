@@ -20,6 +20,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.66] - 2026-02-13
+
+
+### Added
+- MCP support to OpenAI Codex provider
+- Codex SDK to update-libs command
+
+### Changed
+- Improved code quality in MCP servers and OpenAI Codex provider
+- Improved Codex model discovery security and performance
+- Restricted Codex to Allow Edits mode and use permission-based sandbox
+- Made shutdownHttpServer async to await transport cleanup
+
+### Fixed
+- Claude Code model selection not respected when initializing provider
+- Exclude hidden messages from activity history
+- Use proper Codex SDK system prompt configuration
+- Capture Codex thread IDs from thread.started events for proper session resumption
+- Persist all SDK events as raw_event for audit trail
+- Remove incorrect documentStateBySession cleanup on disconnect
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.52.65] - 2026-02-12
 
 
