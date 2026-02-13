@@ -96,6 +96,8 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
   private leadQuery: Query | null = null;
   // Flag: a teammate message is pending; check teammateManager queue for content
   private hasTeammateInterrupt: boolean = false;
+  // Flag: set when streamInput fails due to dead transport, used in finally block
+  private transportDied: boolean = false;
 
   // Teammate management: spawning, messaging, lifecycle, config I/O
   private teammateManager: TeammateManager;
@@ -2146,6 +2148,10 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
           );
         } catch (streamErr) {
           console.warn('[CLAUDE-CODE] streamInput failed for teammate message:', streamErr);
+          // Lead transport is dead. Re-queue the message so the finally block
+          // can re-trigger delivery via a fresh sendMessage call.
+          this.teammateManager.requeueTeammateMessage(nextMsg);
+          this.transportDied = true;
           break;
         }
 
@@ -2339,6 +2345,27 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
       this.leadQuery = null;
       this.abortController = null;
       // Note: markMessagesAsHidden is reset at the START of sendMessage to prevent race conditions
+
+      // If teammate messages are still queued (e.g. streamInput failed for a drained
+      // message), re-trigger delivery now that leadQuery is null. This mirrors the
+      // "lead is idle" path in interruptWithMessage.
+      if (this.teammateManager.hasPendingTeammateMessages()) {
+        const firstMsg = this.teammateManager.drainNextTeammateMessage();
+        if (firstMsg) {
+          const formatted = `[Teammate message from "${firstMsg.teammateName}"]\n\n${firstMsg.content}`;
+          console.log(`[CLAUDE-CODE] Re-triggering teammate message delivery after sendMessage exit: "${firstMsg.summary}"`);
+          this.emit('teammate:messageWhileIdle', {
+            sessionId: this.teammateManager.lastUsedSessionId,
+            message: formatted,
+          });
+        }
+      } else if (this.transportDied) {
+        // Transport died and no pending messages to re-trigger.
+        // Abandon idle teammates since they can't be resumed.
+        this.teammateManager.abandonIdleTeammates(sessionId);
+      }
+
+      this.transportDied = false;
     }
   }
 

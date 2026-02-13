@@ -119,6 +119,11 @@ export class TeammateManager {
     return this.pendingTeammateToLeadMessages.shift();
   }
 
+  /** Re-queue a message at the front (used when streamInput fails). */
+  requeueTeammateMessage(msg: TeammateToLeadMessage): void {
+    this.pendingTeammateToLeadMessages.unshift(msg);
+  }
+
   /** Check if any managed teammates are currently running (not idle). */
   hasRunningTeammates(): boolean {
     return this.managedTeammates.size > 0;
@@ -127,6 +132,31 @@ export class TeammateManager {
   /** Check if any teammates are active (running or idle). */
   hasActiveTeammates(): boolean {
     return this.managedTeammates.size > 0 || this.idleTeammates.size > 0;
+  }
+
+  /**
+   * Abandon all idle teammates (mark completed, clear from idle map).
+   * Called when the lead's transport dies and idle teammates can no longer
+   * be resumed. Emits teammates:allCompleted if no running teammates remain.
+   */
+  abandonIdleTeammates(sessionId: string | undefined): void {
+    if (this.idleTeammates.size === 0) return;
+
+    const overrides = new Map<string, 'running' | 'completed' | 'errored' | 'idle'>();
+    for (const agentId of this.idleTeammates.keys()) {
+      this.markCompleted(agentId);
+      this.clearPendingMessages(agentId);
+      overrides.set(agentId, 'completed');
+      console.log(`[MANAGED-TEAMMATE] Abandoning idle teammate "${agentId}" (lead transport dead)`);
+    }
+    this.idleTeammates.clear();
+
+    this.scheduleEmitTeammateUpdate(sessionId, overrides);
+
+    if (!this.hasActiveTeammates()) {
+      console.log(`[MANAGED-TEAMMATE] All teammates completed after idle abandon, emitting teammates:allCompleted`);
+      this.deps.emit('teammates:allCompleted', { sessionId });
+    }
   }
 
   /**
