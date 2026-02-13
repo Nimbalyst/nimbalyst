@@ -1726,33 +1726,44 @@ export class AIService {
           reinitConfig.baseUrl = providerSettings['lmstudio']?.baseUrl || 'http://127.0.0.1:8234';
         }
 
-        // Only skip explicit model assignment for claude-code (it manages variants internally)
-        if ((session.model || session.providerConfig?.model) && !isProviderClaudeCode) {
+        // Pass model to provider config for all providers including claude-code
+        // Claude Code uses the model field to select variants (opus/sonnet/haiku)
+        if (session.model || session.providerConfig?.model) {
           const fullModel = session.model || session.providerConfig?.model;
 
           if (fullModel) {
-            const modelForProvider = extractModelForProvider(fullModel, session.provider as AIProviderType);
-            if (modelForProvider !== null) {
-              reinitConfig.model = modelForProvider;
-            } else if (!isProviderClaudeCode) {
-              // extractModelForProvider returned null - fall back to default
-              const defaultModel = await ModelRegistry.getDefaultModel(session.provider as AIProviderType);
-              if (defaultModel) {
-                const defaultModelForProvider = extractModelForProvider(defaultModel, session.provider as AIProviderType);
-                if (defaultModelForProvider !== null) {
-                  reinitConfig.model = defaultModelForProvider;
-                  logger.main.info(`[AIService] Fell back to default model "${defaultModel}" for provider ${session.provider}`);
+            // For claude-code, pass the full model ID (e.g., "claude-code:opus")
+            // For other providers, extract the model-only part
+            if (isProviderClaudeCode) {
+              reinitConfig.model = fullModel;
+            } else {
+              const modelForProvider = extractModelForProvider(fullModel, session.provider as AIProviderType);
+              if (modelForProvider !== null) {
+                reinitConfig.model = modelForProvider;
+              } else {
+                // extractModelForProvider returned null - fall back to default
+                const defaultModel = await ModelRegistry.getDefaultModel(session.provider as AIProviderType);
+                if (defaultModel) {
+                  const defaultModelForProvider = extractModelForProvider(defaultModel, session.provider as AIProviderType);
+                  if (defaultModelForProvider !== null) {
+                    reinitConfig.model = defaultModelForProvider;
+                    logger.main.info(`[AIService] Fell back to default model "${defaultModel}" for provider ${session.provider}`);
+                  }
                 }
               }
             }
           }
-        } else if (!isProviderClaudeCode) {
+        } else {
           // No model specified - get default
           const defaultModel = await ModelRegistry.getDefaultModel(session.provider as AIProviderType);
           if (defaultModel) {
-            const defaultModelForProvider = extractModelForProvider(defaultModel, session.provider as AIProviderType);
-            if (defaultModelForProvider !== null) {
-              reinitConfig.model = defaultModelForProvider;
+            if (isProviderClaudeCode) {
+              reinitConfig.model = defaultModel;
+            } else {
+              const defaultModelForProvider = extractModelForProvider(defaultModel, session.provider as AIProviderType);
+              if (defaultModelForProvider !== null) {
+                reinitConfig.model = defaultModelForProvider;
+              }
             }
           }
         }
