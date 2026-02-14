@@ -181,47 +181,84 @@ export const BlitzDialog: React.FC<BlitzDialogProps> = ({
       onKeyDown={handleKeyDown}
     >
       <div
-        className="nim-modal w-[90%] max-w-[520px] animate-[worktree-modal-appear_0.2s_ease]"
+        className="nim-modal w-[90vw] max-w-[560px] animate-[worktree-modal-appear_0.2s_ease]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center gap-3 px-6 pt-5 pb-4 border-b border-[var(--nim-border)]">
-          <svg width="20" height="20" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-[var(--nim-primary)]">
-            <path d="M9 2L4 9h4l-1 5 5-7H8l1-5z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="currentColor" fillOpacity="0.15"/>
-          </svg>
-          <h2 className="m-0 text-[18px] font-semibold text-[var(--nim-text)]">New Blitz</h2>
+        <div className="nim-modal-header relative overflow-hidden bg-[linear-gradient(180deg,var(--nim-bg-secondary),var(--nim-bg))]">
+          <div
+            className="absolute -top-12 -right-12 h-28 w-28 rounded-full bg-[color-mix(in_srgb,var(--nim-primary)_20%,transparent)] blur-2xl"
+            aria-hidden="true"
+          />
+          <div className="flex items-start gap-3">
+            <div className="h-10 w-10 rounded-xl bg-nim-primary/15 text-nim-primary flex items-center justify-center border border-nim">
+              <svg width="18" height="18" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M9 2L4 9h4l-1 5 5-7H8l1-5z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="currentColor" fillOpacity="0.15"/>
+              </svg>
+            </div>
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-2">
+                <h2 className="m-0 text-[18px] font-semibold text-nim">New Blitz</h2>
+                <span className="text-[10px] uppercase tracking-wide text-nim-faint border border-nim rounded-full px-2 py-0.5">
+                  Beta
+                </span>
+              </div>
+              <p className="m-0 text-[12px] text-nim-muted max-w-[24rem]">
+                Run a single prompt across multiple worktrees and compare the outcomes side-by-side.
+              </p>
+            </div>
+          </div>
+          <span className="text-[11px] text-nim-faint px-2.5 py-1 rounded-full border border-nim bg-nim-tertiary">
+            Max 10 worktrees
+          </span>
         </div>
 
         {/* Body */}
-        <div className="px-6 py-5 flex flex-col gap-5">
+        <div className="nim-modal-body flex flex-col gap-5">
           {/* Prompt */}
-          <div className="flex flex-col gap-2">
-            <label className="text-[13px] font-medium text-[var(--nim-text-muted)]">Prompt</label>
+          <div className="flex flex-col gap-2 rounded-xl border border-nim bg-nim-secondary p-4">
+            <div className="flex items-center justify-between gap-2">
+              <label className="text-[13px] font-medium text-nim">Prompt</label>
+              <span className="text-[11px] text-nim-faint">Cmd+Enter to start</span>
+            </div>
             <textarea
               ref={textareaRef}
-              className="w-full p-3 text-[14px] bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded-lg text-[var(--nim-text)] resize-none outline-none focus:border-[var(--nim-primary)] transition-colors placeholder:text-[var(--nim-text-faint)]"
+              className="w-full p-3 text-[14px] bg-nim border border-nim rounded-lg text-nim resize-none outline-none focus:border-nim-focus transition-colors placeholder:text-nim-faint"
               rows={4}
               placeholder="Enter the prompt to run across all sessions..."
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               disabled={creating}
             />
+            <div className="text-[11px] text-nim-faint">
+              Tip: Be explicit about scope and acceptance criteria.
+            </div>
           </div>
 
           {/* Models */}
-          <div className="flex flex-col gap-2">
-            <label className="text-[13px] font-medium text-[var(--nim-text-muted)]">Models</label>
+          <div className="flex flex-col gap-3 rounded-xl border border-nim bg-nim-secondary p-4">
+            <div className="flex items-center justify-between gap-2">
+              <label className="text-[13px] font-medium text-nim">Models</label>
+              {selectedModels.length > 0 && (
+                <div className={`text-[11px] ${totalWorktrees > 10 ? 'text-nim-error' : 'text-nim-faint'}`}>
+                  Total: {totalWorktrees} worktree{totalWorktrees !== 1 ? 's' : ''}
+                  {totalWorktrees > 10 && ' (maximum 10)'}
+                </div>
+              )}
+            </div>
             {loading ? (
-              <div className="text-[13px] text-[var(--nim-text-faint)] py-3">Loading models...</div>
+              <div className="text-[13px] text-nim-faint py-3">Loading models...</div>
             ) : modelSelections.length === 0 ? (
-              <div className="text-[13px] text-[var(--nim-text-faint)] py-3">No agent models available. Configure API keys in Settings.</div>
+              <div className="text-[13px] text-nim-faint py-3">No agent models available. Configure API keys in Settings.</div>
             ) : (
-              <div className="flex flex-col gap-1 border border-[var(--nim-border)] rounded-lg overflow-hidden">
+              <div className="flex flex-col gap-2">
                 {modelSelections.map(model => (
                   <label
                     key={model.id}
-                    className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors ${
-                      model.checked ? 'bg-[var(--nim-bg-secondary)]' : 'hover:bg-[var(--nim-bg-hover)]'
+                    className={`grid grid-cols-[auto_auto_1fr_auto] items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors rounded-lg border border-nim bg-nim ${
+                      model.checked
+                        ? 'bg-nim-selected border-l-2 border-l-[var(--nim-primary)]'
+                        : 'hover:bg-nim-hover border-l-2 border-l-transparent'
                     } ${creating ? 'opacity-50 pointer-events-none' : ''}`}
                   >
                     <input
@@ -232,7 +269,7 @@ export const BlitzDialog: React.FC<BlitzDialogProps> = ({
                       disabled={creating}
                     />
                     <span className="shrink-0">{getProviderIcon(model.provider, { size: 14 })}</span>
-                    <span className="flex-1 text-[13px] text-[var(--nim-text)] truncate">{getModelDisplayName(model)}</span>
+                    <span className="text-[13px] text-nim truncate">{getModelDisplayName(model)}</span>
                     <input
                       type="number"
                       min={1}
@@ -240,7 +277,7 @@ export const BlitzDialog: React.FC<BlitzDialogProps> = ({
                       value={model.count}
                       onChange={(e) => updateCount(model.id, parseInt(e.target.value) || 1)}
                       disabled={!model.checked || creating}
-                      className={`w-12 px-1.5 py-1 text-center text-[13px] bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded text-[var(--nim-text)] outline-none ${
+                      className={`w-14 px-2 py-1 text-center text-[13px] bg-nim-secondary border border-nim rounded text-nim outline-none focus:border-nim-focus ${
                         !model.checked ? 'opacity-30' : ''
                       }`}
                     />
@@ -248,24 +285,21 @@ export const BlitzDialog: React.FC<BlitzDialogProps> = ({
                 ))}
               </div>
             )}
-
-            {/* Total count */}
-            {selectedModels.length > 0 && (
-              <div className={`text-[12px] mt-1 ${totalWorktrees > 10 ? 'text-[var(--nim-error)]' : 'text-[var(--nim-text-faint)]'}`}>
-                Total: {totalWorktrees} worktree{totalWorktrees !== 1 ? 's' : ''}
-                {totalWorktrees > 10 && ' (maximum 10)'}
-              </div>
-            )}
+            <div className="text-[11px] text-nim-faint">
+              Choose up to 5 sessions per model.
+            </div>
           </div>
 
           {/* Error */}
           {error && (
-            <div className="text-[13px] text-[var(--nim-error)] p-3 bg-[var(--nim-error)]/10 rounded-lg">{error}</div>
+            <div className="text-[13px] text-nim-error p-3 bg-nim-error/10 border border-nim-error/30 rounded-lg select-text">
+              {error}
+            </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="flex justify-end gap-3 px-6 py-4 border-t border-[var(--nim-border)]">
+        <div className="nim-modal-footer">
           <button
             className="nim-btn-secondary px-5 py-2 text-sm font-medium rounded-lg"
             onClick={onClose}
