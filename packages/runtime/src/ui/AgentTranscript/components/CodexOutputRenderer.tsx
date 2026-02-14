@@ -3,6 +3,7 @@ import { MarkdownRenderer } from './MarkdownRenderer';
 import { MaterialSymbol } from '../../icons/MaterialSymbol';
 import { JSONViewer } from './JSONViewer';
 import { formatToolDisplayName } from '../utils/toolNameFormatter';
+import { getCustomToolWidget } from './CustomToolWidgets';
 import {
   extractStringField,
   extractNumberField,
@@ -20,6 +21,9 @@ const TOOL_ITEM_TYPES = new Set(['mcp_tool_call', 'command_execution', 'file_cha
 interface CodexOutputRendererProps {
   rawEvents: Message[];
   isCollapsed?: boolean;
+  sessionId: string;
+  workspacePath?: string;
+  readFile?: (filePath: string) => Promise<{ success: boolean; content?: string; error?: string }>;
 }
 
 interface ParsedCodexOutput {
@@ -300,6 +304,9 @@ export function parseCodexRawEvents(rawEvents: Message[]): ParsedCodexOutput {
 export const CodexOutputRenderer: React.FC<CodexOutputRendererProps> = ({
   rawEvents,
   isCollapsed = false,
+  sessionId,
+  workspacePath,
+  readFile,
 }) => {
   const [isThinkingExpanded, setIsThinkingExpanded] = useState(false);
   const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
@@ -320,8 +327,9 @@ export const CodexOutputRenderer: React.FC<CodexOutputRendererProps> = ({
   };
 
   // Render tool call widget (same style as Claude Code)
-  const renderToolCall = (tool: ToolCall) => {
-    const isExpanded = expandedTools.has(tool.id || tool.name);
+  const renderToolCall = (tool: ToolCall, toolIndex: number) => {
+    const toolId = tool.id || tool.name || `tool-${toolIndex}`;
+    const isExpanded = expandedTools.has(toolId);
     const toolResult = tool.result;
     const resultDetails = typeof toolResult === 'object' && toolResult !== null && typeof toolResult !== 'string' ? (toolResult as unknown as Record<string, unknown>) : null;
     const explicitSuccess = resultDetails && 'success' in resultDetails ? resultDetails.success !== false : undefined;
@@ -333,10 +341,34 @@ export const CodexOutputRenderer: React.FC<CodexOutputRendererProps> = ({
     const hasResult = toolResult !== undefined && toolResult !== null && (typeof toolResult !== 'string' || toolResult.trim().length > 0);
     const toolDisplayName = formatToolDisplayName(tool.name || '') || tool.name || 'Tool Call';
 
+    const CustomWidget = tool.name ? getCustomToolWidget(tool.name) : undefined;
+    if (CustomWidget) {
+      const toolMessage: Message = {
+        role: 'tool',
+        content: '',
+        timestamp: Date.now(),
+        toolCall: tool,
+        ...(didFail ? { isError: true } : {}),
+      };
+
+      return (
+        <div key={toolId} className="my-2">
+          <CustomWidget
+            message={toolMessage}
+            isExpanded={isExpanded}
+            onToggle={() => handleToggleToolExpand(toolId)}
+            workspacePath={workspacePath}
+            sessionId={sessionId}
+            readFile={readFile}
+          />
+        </div>
+      );
+    }
+
     return (
-      <div key={tool.id || tool.name} className="rounded-md bg-nim-tertiary overflow-hidden border border-nim my-2">
+      <div key={toolId} className="rounded-md bg-nim-tertiary overflow-hidden border border-nim my-2">
         <button
-          onClick={() => handleToggleToolExpand(tool.id || tool.name)}
+          onClick={() => handleToggleToolExpand(toolId)}
           className="w-full py-2 px-3 bg-nim-secondary flex items-center gap-2 transition-colors text-left border-none cursor-pointer hover:bg-nim-hover"
           aria-expanded={isExpanded}
           aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${toolDisplayName} tool call details`}

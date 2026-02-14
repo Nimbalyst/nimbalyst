@@ -85,10 +85,31 @@ function extractOutputText(result: any): string | null {
   }
 
   // Handle output field
-  if (result.output && typeof result.output === 'string') {
-    return result.output;
+  if (result.output) {
+    if (typeof result.output === 'string') {
+      return result.output;
+    }
+    if (Array.isArray(result.output)) {
+      const textParts: string[] = [];
+      for (const block of result.output) {
+        if (block.type === 'text' && typeof block.text === 'string') {
+          textParts.push(block.text);
+        }
+      }
+      return textParts.length > 0 ? textParts.join('\n') : null;
+    }
   }
 
+  return null;
+}
+
+/**
+ * Normalize exit code field names
+ */
+function getExitCode(result: any): number | null {
+  if (!result) return null;
+  if (typeof result.exitCode === 'number') return result.exitCode;
+  if (typeof result.exit_code === 'number') return result.exit_code;
   return null;
 }
 
@@ -98,7 +119,10 @@ function extractOutputText(result: any): string | null {
 function isToolError(result: any, message: any): boolean {
   if (message.isError) return true;
   if (result?.isError === true) return true;
-  if (result?.exitCode && result.exitCode !== 0) return true;
+  if (typeof result?.success === 'boolean' && result.success === false) return true;
+  const exitCode = getExitCode(result);
+  if (typeof exitCode === 'number' && exitCode !== 0) return true;
+  if (result?.status === 'failed') return true;
   return false;
 }
 

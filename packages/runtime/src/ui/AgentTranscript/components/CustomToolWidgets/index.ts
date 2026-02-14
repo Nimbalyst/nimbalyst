@@ -118,6 +118,7 @@ export const CUSTOM_TOOL_WIDGETS: CustomToolWidgetRegistry = {
 
   // Bash tool - terminal-style display for shell commands
   'Bash': BashWidget,
+  'command_execution': BashWidget,
 
   // Git commit proposal tool - interactive commit confirmation widget
   'git_commit_proposal': GitCommitConfirmationWidget,

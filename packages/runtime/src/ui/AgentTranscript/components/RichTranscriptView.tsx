@@ -1191,6 +1191,9 @@ export const RichTranscriptView = React.forwardRef<
                             <CodexOutputRenderer
                               rawEvents={codexEvents}
                               isCollapsed={isCollapsed}
+                              sessionId={sessionId}
+                              workspacePath={workspacePath}
+                              readFile={readFile}
                             />
                           </div>
                         </div>
