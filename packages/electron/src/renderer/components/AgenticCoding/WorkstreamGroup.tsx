@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef, memo, useMemo } from 'react';
-import { useAtomValue } from 'jotai';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { MaterialSymbol, ProviderIcon } from '@nimbalyst/runtime';
-import { sessionProcessingAtom, sessionUnreadAtom, sessionPendingPromptAtom, sessionHasPendingInteractivePromptAtom, groupSessionStatusAtom } from '../../store';
+import { sessionProcessingAtom, sessionUnreadAtom, sessionPendingPromptAtom, sessionHasPendingInteractivePromptAtom, groupSessionStatusAtom, reparentSessionAtom, refreshSessionListAtom } from '../../store';
 import { getRelativeTimeString } from '../../utils/dateFormatting';
 
 /**
@@ -116,6 +116,9 @@ interface WorkstreamGroupProps {
   isArchived?: boolean;
   childCount?: number;
 
+  // Drag-drop support
+  projectPath?: string; // Workspace path for drag-drop validation
+
   // Workstream-specific
   onWorkstreamArchive?: (sessionId: string) => void;
   onWorkstreamPinToggle?: (sessionId: string, isPinned: boolean) => void;
@@ -155,6 +158,7 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
   isPinned,
   isArchived,
   childCount,
+  projectPath,
   worktree,
   gitStatus,
   onWorkstreamArchive,
@@ -172,6 +176,66 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
   const [adjustedContextMenuPosition, setAdjustedContextMenuPosition] = useState<{ x: number; y: number } | null>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
+
+  // Drag-drop state and handlers for workstream groups
+  const [isValidDropTarget, setIsValidDropTarget] = useState(false);
+  const reparentSession = useSetAtom(reparentSessionAtom);
+  const refreshSessionList = useSetAtom(refreshSessionListAtom);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    if (type !== 'workstream' || !projectPath) return;
+    const hasSessionData = e.dataTransfer.types.includes('application/x-nimbalyst-session');
+    if (!hasSessionData) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setIsValidDropTarget(true);
+  }, [type, projectPath]);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    const relatedTarget = e.relatedTarget as HTMLElement;
+    if (!e.currentTarget.contains(relatedTarget)) {
+      setIsValidDropTarget(false);
+    }
+  }, []);
+
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsValidDropTarget(false);
+
+    const dataStr = e.dataTransfer.getData('application/x-nimbalyst-session');
+    if (!dataStr || !projectPath) return;
+
+    try {
+      const { sessionId, parentId, workspacePath } = JSON.parse(dataStr);
+
+      if (workspacePath !== projectPath) return;
+      if (sessionId === id) return;
+      if (parentId === id) return;
+
+      const success = await reparentSession({
+        sessionId,
+        oldParentId: parentId,
+        newParentId: id,
+        workspacePath: projectPath,
+      });
+
+      if (success) {
+        await refreshSessionList();
+        if (window.electronAPI) {
+          await window.electronAPI.invoke('analytics:track', {
+            event: 'session_reparented',
+            properties: {
+              had_previous_parent: parentId !== null,
+              workspace_path: projectPath,
+            },
+          });
+        }
+      }
+    } catch (error) {
+      console.error('[WorkstreamGroup] Failed to handle drop:', error);
+    }
+  }, [projectPath, id, reparentSession, refreshSessionList]);
 
   // Worktree rename state
   const [isRenamingWorktree, setIsRenamingWorktree] = useState(false);
@@ -356,8 +420,11 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
       <div
         className={`workstream-group-header flex items-center gap-0 text-[0.8125rem] text-[var(--nim-text)] transition-colors duration-150 rounded-md mx-2 w-[calc(100%-1rem)] ${
           isActive ? 'bg-[var(--nim-bg-selected)]' : 'hover:bg-[var(--nim-bg-hover)]'
-        }`}
+        } ${isValidDropTarget ? 'bg-[rgba(83,89,93,0.4)] border-2 border-dashed border-[var(--nim-primary)]' : ''}`}
         onContextMenu={handleContextMenu}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
       >
         {/* Chevron - separate click target for expand/collapse */}
         <button

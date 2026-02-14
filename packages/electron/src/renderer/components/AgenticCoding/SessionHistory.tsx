@@ -2634,6 +2634,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                       isPinned={session.isPinned}
                       isArchived={session.isArchived}
                       childCount={session.childCount}
+                      projectPath={session.projectPath}
                       onWorkstreamArchive={handleArchiveSession}
                       onWorkstreamPinToggle={handleSessionPinToggle}
                     />

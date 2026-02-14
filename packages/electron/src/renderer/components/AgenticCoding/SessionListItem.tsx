@@ -153,8 +153,9 @@ export const SessionListItem = memo<SessionListItemProps>(({
   // Can drag if: (1) Has a parent (is a child session), OR (2) Is an orphan (no parent, no children)
   const isDraggable = parentSessionId !== null || !isWorkstream;
 
-  // Determine if this session can accept drops (only workstreams can be drop targets)
-  const isDropTarget = isWorkstream;
+  // Determine if this session can accept drops
+  // Workstreams and standalone root sessions can be drop targets (dropping creates a workstream)
+  const isDropTarget = isWorkstream || parentSessionId === null;
 
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();

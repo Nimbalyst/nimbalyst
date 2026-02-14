@@ -527,21 +527,9 @@ export async function registerSessionHandlers() {
                     return { success: false, error: 'Parent session is in a different workspace' };
                 }
 
-                // Validate parent is a workstream (has children)
-                const { database } = await import('../database/PGLiteDatabaseWorker');
-                const { rows } = await database.query<{ count: number }>(
-                    'SELECT COUNT(*) as count FROM ai_sessions WHERE parent_session_id = $1',
-                    [newParentId]
-                );
-                const childCount = parseInt(String(rows[0]?.count || '0'));
-
-                // Parent must already have children to be a valid drop target
-                // (or be explicitly marked as a workstream root in metadata)
-                const parentMetadata = parent.metadata || {};
-                const isWorkstreamRoot = (parentMetadata as any).isWorkstreamRoot === true;
-
-                if (childCount === 0 && !isWorkstreamRoot) {
-                    return { success: false, error: 'Parent session must be a workstream (have children)' };
+                // Parent must not itself be a child session (no nested workstreams)
+                if (parent.parentSessionId) {
+                    return { success: false, error: 'Cannot nest workstreams: parent is already a child session' };
                 }
             }
 
