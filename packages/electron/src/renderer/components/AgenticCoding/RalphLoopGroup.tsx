@@ -332,6 +332,17 @@ export const RalphLoopGroup: React.FC<RalphLoopGroupProps> = memo(({
     }
   }, [loopId]);
 
+  const handleForceResume = useCallback(async () => {
+    try {
+      await window.electronAPI.invoke('ralph:force-resume', loopId, {
+        bumpMaxIterations: 5,
+        resetCompletionSignal: true,
+      });
+    } catch (err) {
+      console.error('[RalphLoopGroup] Failed to force-resume loop:', err);
+    }
+  }, [loopId]);
+
   // Display title: user-set title, or first line of task description
   const displayTitle = useMemo(() => {
     if (loop.title) return loop.title;
@@ -580,6 +591,15 @@ export const RalphLoopGroup: React.FC<RalphLoopGroupProps> = memo(({
                 title="Start"
               >
                 <MaterialSymbol icon="play_arrow" size={14} />
+              </button>
+            )}
+            {(loop.status === 'completed' || loop.status === 'failed' || loop.status === 'blocked') && (
+              <button
+                onClick={handleForceResume}
+                className="p-1 rounded hover:bg-[var(--nim-bg-secondary)] text-[var(--nim-text-faint)] hover:text-green-500 transition-colors"
+                title="Resume loop"
+              >
+                <MaterialSymbol icon="replay" size={14} />
               </button>
             )}
           </div>

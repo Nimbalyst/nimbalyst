@@ -79,6 +79,36 @@ export class RalphLoopService {
     return { ralphStore: this.ralphStore, worktreeStore: this.worktreeStore };
   }
 
+  /**
+   * Recover ralph loops that were interrupted by app restart.
+   * Called once at startup after handlers are registered.
+   * Running loops -> paused, orphaned running iterations -> failed.
+   */
+  async recoverStaleLoopState(): Promise<void> {
+    try {
+      const { ralphStore } = await this.ensureStores();
+      const activeLoops = await ralphStore.getActiveLoops();
+
+      if (activeLoops.length === 0) {
+        return;
+      }
+
+      logger.info('Recovering stale ralph loops', { count: activeLoops.length });
+
+      for (const loop of activeLoops) {
+        if (loop.status === 'running') {
+          await ralphStore.updateLoopStatus(loop.id, 'paused', 'Interrupted by app restart');
+          logger.info('Recovered stale running loop -> paused', { id: loop.id });
+        }
+        await ralphStore.failOrphanedIterations(loop.id);
+      }
+
+      logger.info('Stale ralph loop recovery complete');
+    } catch (error) {
+      logger.error('Failed to recover stale ralph loop state', { error });
+    }
+  }
+
   // ========================================
   // Ralph Loop Lifecycle
   // ========================================
@@ -212,7 +242,7 @@ export class RalphLoopService {
         const sessionResolver = sessionCompleteResolvers.get(runner.currentSessionId);
         if (sessionResolver) {
           sessionCompleteResolvers.delete(runner.currentSessionId);
-          sessionResolver();
+          sessionResolver({ success: false });
         }
       }
 
@@ -269,13 +299,56 @@ export class RalphLoopService {
       userFeedback: userFeedback.trim(),
     };
 
-    const progressPath = path.join(worktree.path, '.ralph', 'progress.json');
-    await fs.promises.writeFile(progressPath, JSON.stringify(updatedProgress, null, 2), 'utf-8');
+    await this.writeProgressFile(worktree.path, updatedProgress);
 
     // Reset loop status to pending so startLoop can run
     await ralphStore.updateLoopStatus(ralphId, 'pending');
 
     // Start the loop
+    await this.startLoop(ralphId);
+  }
+
+  /**
+   * Force-resume a completed/failed/blocked loop
+   */
+  async forceResumeLoop(
+    ralphId: string,
+    options?: { bumpMaxIterations?: number; resetCompletionSignal?: boolean }
+  ): Promise<void> {
+    logger.info('Force-resuming ralph loop', { ralphId, options });
+
+    const { ralphStore, worktreeStore } = await this.ensureStores();
+
+    const loop = await ralphStore.getLoop(ralphId);
+    if (!loop) {
+      throw new Error(`Ralph loop not found: ${ralphId}`);
+    }
+
+    if (loop.status === 'running') {
+      throw new Error('Loop is already running');
+    }
+
+    const worktree = await worktreeStore.get(loop.worktreeId);
+    if (!worktree) {
+      throw new Error(`Worktree not found: ${loop.worktreeId}`);
+    }
+
+    if (options?.bumpMaxIterations && options.bumpMaxIterations > 0) {
+      await ralphStore.updateMaxIterations(ralphId, loop.maxIterations + options.bumpMaxIterations);
+    }
+
+    if (options?.resetCompletionSignal) {
+      const progress = await this.readProgressFile(worktree.path);
+      if (progress && progress.completionSignal) {
+        await this.writeProgressFile(worktree.path, {
+          ...progress,
+          completionSignal: false,
+          status: 'running',
+        });
+      }
+    }
+
+    await ralphStore.updateLoopStatus(ralphId, 'pending');
     await this.startLoop(ralphId);
   }
 
@@ -474,33 +547,47 @@ export class RalphLoopService {
 
     // Wait for the session to complete
     // The renderer will call back when the session is done
-    await this.waitForSessionComplete(sessionId);
+    const result = await this.waitForSessionComplete(sessionId);
 
-    // Mark iteration as completed
-    await ralphStore.updateIterationStatus(iterationId, 'completed');
+    if (result.success) {
+      // Mark iteration as completed
+      await ralphStore.updateIterationStatus(iterationId, 'completed');
 
-    this.emitEvent({
-      type: 'iteration-completed',
-      ralphId,
-      iterationId,
-      iterationNumber
-    });
+      this.emitEvent({
+        type: 'iteration-completed',
+        ralphId,
+        iterationId,
+        iterationNumber
+      });
+    } else {
+      // Session was interrupted (window closed, user stopped, etc.)
+      await ralphStore.updateIterationStatus(iterationId, 'failed', 'Session interrupted');
+
+      this.emitEvent({
+        type: 'iteration-failed',
+        ralphId,
+        iterationId,
+        iterationNumber,
+        error: 'Session interrupted'
+      });
+
+      throw new Error('Session interrupted');
+    }
   }
 
   /**
    * Wait for a session to complete
    * No timeout - iterations can run as long as needed
    */
-  private waitForSessionComplete(sessionId: string): Promise<void> {
+  private waitForSessionComplete(sessionId: string): Promise<{ success: boolean }> {
     logger.info('Waiting for session complete', {
       sessionId,
       pendingResolvers: sessionCompleteResolvers.size,
     });
     return new Promise((resolve) => {
-      // Store the resolver so it can be called when the session completes
-      sessionCompleteResolvers.set(sessionId, () => {
-        logger.info('Session complete resolver called', { sessionId });
-        resolve();
+      sessionCompleteResolvers.set(sessionId, (result: { success: boolean }) => {
+        logger.info('Session complete resolver called', { sessionId, success: result.success });
+        resolve(result);
       });
     });
   }
@@ -508,15 +595,16 @@ export class RalphLoopService {
   /**
    * Called when a session completes (from renderer)
    */
-  notifySessionComplete(sessionId: string): void {
+  notifySessionComplete(sessionId: string, success: boolean = true): void {
     const resolver = sessionCompleteResolvers.get(sessionId);
     if (resolver) {
       logger.info('Resolving session complete', {
         sessionId,
+        success,
         remainingResolvers: sessionCompleteResolvers.size - 1,
       });
       sessionCompleteResolvers.delete(sessionId);
-      resolver();
+      resolver({ success });
     } else {
       logger.warn('No resolver found for session complete', {
         sessionId,
@@ -594,8 +682,7 @@ export class RalphLoopService {
     };
     await fs.promises.writeFile(configPath, JSON.stringify(config, null, 2), 'utf-8');
 
-    // Write initial progress.json
-    const progressPath = path.join(ralphDir, 'progress.json');
+    // Write initial progress.json (atomic write with backup)
     const progress: RalphProgressFile = {
       currentIteration: 0,
       phase: 'planning',
@@ -604,7 +691,7 @@ export class RalphLoopService {
       learnings: [],
       blockers: [],
     };
-    await fs.promises.writeFile(progressPath, JSON.stringify(progress, null, 2), 'utf-8');
+    await this.writeProgressFile(worktreePath, progress);
 
     // Create empty IMPLEMENTATION_PLAN.md
     const planPath = path.join(ralphDir, 'IMPLEMENTATION_PLAN.md');
@@ -641,21 +728,62 @@ export class RalphLoopService {
   }
 
   /**
-   * Read the progress file
+   * Read the progress file with fallback to backup on corruption
    */
   private async readProgressFile(worktreePath: string): Promise<RalphProgressFile | null> {
     const progressPath = path.join(worktreePath, '.ralph', 'progress.json');
+    const backupPath = progressPath + '.bak';
 
     try {
       const content = await fs.promises.readFile(progressPath, 'utf-8');
       return JSON.parse(content) as RalphProgressFile;
     } catch (error) {
-      // ENOENT is expected when file doesn't exist yet
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        logger.warn('Failed to read progress file', { worktreePath, error });
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return null;
       }
+
+      if (error instanceof SyntaxError) {
+        logger.warn('Corrupt progress.json, trying backup', { worktreePath, error: error.message });
+        try {
+          const backupContent = await fs.promises.readFile(backupPath, 'utf-8');
+          return JSON.parse(backupContent) as RalphProgressFile;
+        } catch {
+          logger.warn('Backup progress.json also unavailable, using default', { worktreePath });
+          return {
+            currentIteration: 0,
+            phase: 'building',
+            status: 'running',
+            completionSignal: false,
+            learnings: [],
+            blockers: [],
+          };
+        }
+      }
+
+      logger.warn('Failed to read progress file', { worktreePath, error });
       return null;
     }
+  }
+
+  /**
+   * Atomically write progress.json with backup
+   */
+  private async writeProgressFile(worktreePath: string, progress: RalphProgressFile): Promise<void> {
+    const progressPath = path.join(worktreePath, '.ralph', 'progress.json');
+    const tmpPath = progressPath + '.tmp';
+    const backupPath = progressPath + '.bak';
+
+    const data = JSON.stringify(progress, null, 2);
+
+    await fs.promises.writeFile(tmpPath, data, 'utf-8');
+
+    try {
+      await fs.promises.copyFile(progressPath, backupPath);
+    } catch {
+      // Original may not exist on first write
+    }
+
+    await fs.promises.rename(tmpPath, progressPath);
   }
 
   // ========================================
@@ -795,8 +923,7 @@ If you are BLOCKED and cannot make progress, set \`"status": "blocked"\` in \`.r
     const target = windows.find(w => !w.isDestroyed() && w.isFocused())
       || windows.find(w => !w.isDestroyed());
     if (!target) {
-      logger.error('No window available to send iteration prompt', { ralphId, sessionId });
-      return;
+      throw new Error('No window available to send iteration prompt');
     }
     logger.info('Sending iteration prompt to window', {
       ralphId,
@@ -905,7 +1032,7 @@ If you are BLOCKED and cannot make progress, set \`"status": "blocked"\` in \`.r
 }
 
 // Session completion resolvers (for waiting on sessions to complete)
-const sessionCompleteResolvers = new Map<string, () => void>();
+const sessionCompleteResolvers = new Map<string, (result: { success: boolean }) => void>();
 
 // Pause resolvers (for event-driven pause waiting)
 const pauseResolvers = new Map<string, () => void>();
@@ -915,12 +1042,12 @@ const pauseResolvers = new Map<string, () => void>();
 // can arrive, so resolve all pending promises to unblock runLoop.
 app.on('window-all-closed', () => {
   if (sessionCompleteResolvers.size > 0) {
-    logger.warn('All windows closed with pending session resolvers, resolving', {
+    logger.warn('All windows closed with pending session resolvers, resolving as interrupted', {
       count: sessionCompleteResolvers.size,
     });
     for (const [sessionId, resolver] of sessionCompleteResolvers) {
       sessionCompleteResolvers.delete(sessionId);
-      resolver();
+      resolver({ success: false });
     }
   }
 });

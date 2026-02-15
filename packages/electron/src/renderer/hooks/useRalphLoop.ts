@@ -92,7 +92,12 @@ export function useRalphLoopControls(loopId: string) {
     return result.success;
   }, [loopId]);
 
-  return { start, pause, stop, delete: deleteLoop };
+  const forceResume = useCallback(async (options?: { bumpMaxIterations?: number; resetCompletionSignal?: boolean }) => {
+    const result = await window.electronAPI.invoke('ralph:force-resume', loopId, options);
+    return result.success;
+  }, [loopId]);
+
+  return { start, pause, stop, delete: deleteLoop, forceResume };
 }
 
 /**

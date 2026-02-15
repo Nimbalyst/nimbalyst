@@ -482,6 +482,42 @@ export function createRalphLoopStore(db: PGliteLike, ensureDbReady?: EnsureReady
 
       return loops;
     },
+
+    /**
+     * Mark all running iterations for a loop as failed (startup recovery)
+     */
+    async failOrphanedIterations(ralphLoopId: string): Promise<number> {
+      await ensureReady();
+
+      const { rows } = await db.query<{ id: string }>(
+        `UPDATE ralph_iterations
+         SET status = 'failed', exit_reason = 'Interrupted by app restart', completed_at = CURRENT_TIMESTAMP
+         WHERE ralph_loop_id = $1 AND status = 'running'
+         RETURNING id`,
+        [ralphLoopId]
+      );
+
+      if (rows.length > 0) {
+        logger.info('Failed orphaned iterations', { ralphLoopId, count: rows.length });
+      }
+      return rows.length;
+    },
+
+    /**
+     * Update the max iterations for a loop
+     */
+    async updateMaxIterations(id: string, maxIterations: number): Promise<void> {
+      await ensureReady();
+
+      logger.info('Updating max iterations', { id, maxIterations });
+
+      await db.query(
+        `UPDATE ralph_loops
+         SET max_iterations = $2, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1`,
+        [id, maxIterations]
+      );
+    },
   };
 }
 

@@ -122,9 +122,9 @@ export function initRalphLoopListeners(): () => void {
         // Wait for the stream to complete
         await streamCompletePromise;
 
-        // Notify main process that session completed
+        // Notify main process that session completed successfully
         console.log('[ralphLoopListeners] Notifying session complete:', data.sessionId);
-        window.electronAPI.send('ralph:session-complete', data.sessionId);
+        window.electronAPI.send('ralph:session-complete', data.sessionId, true);
       } catch (err) {
         console.error('[ralphLoopListeners] Failed to process iteration prompt:', err);
         // Clean up any pending listeners
@@ -134,7 +134,7 @@ export function initRalphLoopListeners(): () => void {
           pendingSessionCleanups.delete(data.sessionId);
         }
         // Still notify completion so the loop can continue/handle error
-        window.electronAPI.send('ralph:session-complete', data.sessionId);
+        window.electronAPI.send('ralph:session-complete', data.sessionId, false);
       }
     })
   );

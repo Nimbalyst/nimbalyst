@@ -222,6 +222,33 @@ export function registerRalphLoopHandlers(): void {
   });
 
   /**
+   * Force-resume a completed/failed/blocked Ralph Loop
+   */
+  safeHandle('ralph:force-resume', async (
+    _event,
+    ralphId: string,
+    options?: { bumpMaxIterations?: number; resetCompletionSignal?: boolean }
+  ) => {
+    try {
+      if (!ralphId) {
+        throw new Error('ralphId is required');
+      }
+
+      logger.info('Force-resuming ralph loop', { ralphId, options });
+
+      await ralphService.forceResumeLoop(ralphId, options);
+
+      return { success: true };
+    } catch (error) {
+      logger.error('Failed to force-resume ralph loop:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to force-resume ralph loop',
+      };
+    }
+  });
+
+  /**
    * Get a Ralph Loop by ID
    */
   safeHandle('ralph:get', async (_event, ralphId: string) => {
@@ -441,9 +468,9 @@ export function registerRalphLoopHandlers(): void {
   /**
    * Notify that a session has completed (called from renderer)
    */
-  safeOn('ralph:session-complete', async (_event, sessionId: string) => {
-    logger.info('Ralph session complete notification', { sessionId });
-    ralphService.notifySessionComplete(sessionId);
+  safeOn('ralph:session-complete', async (_event, sessionId: string, success?: boolean) => {
+    logger.info('Ralph session complete notification', { sessionId, success });
+    ralphService.notifySessionComplete(sessionId, success ?? true);
   });
 
   handlersRegistered = true;
