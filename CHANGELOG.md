@@ -20,6 +20,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.70] - 2026-02-15
+
+
+### Added
+- Super Loop iterations now carry learnings forward via progress.json
+- Super Loop progress.json snapshots visible in chat transcript with dedicated widget
+- Super Loop progress panel in files sidebar showing phase, iteration count, learnings, and blockers
+- Super Loop auto-commits .superloop to .gitignore in worktrees
+- Super Loop state hardening: startup recovery, session completion signaling, progress file resilience, force-resume for completed/failed/blocked loops
+- Force-resume dropdown with configurable iteration options (0/5/10/20)
+- Auto-approve commits option for git commit proposals with toggle in settings and widget
+- Virtualized session list for faster startup with many sessions
+- Codex file changes now show a rich widget with content preview
+
+### Changed
+- Renamed Ralph Loops to Super Loops (files, types, IPC channels, DB tables, UI)
+
+### Fixed
+- Restored Virtuoso virtualization in SessionHistory after accidental removal
+- Super Loop review fixes: pauseResolvers memory leak, forceResumeLoop atomicity
+- Codex blocking widgets no longer time out (removed MCP tool timeout for interactive widgets)
+- Session list items no longer re-render unnecessarily (React.memo + memoized date formatting)
+- Session list no longer slows down with many sessions (O(1) parent-to-children index)
+- Super Loop icon alignment in new menu
+- Added detailed logging to git commit staging for debugging
+
 ## [0.52.69] - 2026-02-14
 
 
