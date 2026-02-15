@@ -1615,13 +1615,14 @@ export const markSessionReadAtom = atom(null, (get, set, sessionId: string) => {
   // Only persist if actually changing from unread to read
   const wasUnread = get(sessionUnreadAtom(sessionId));
 
+  const now = Date.now();
   set(sessionUnreadAtom(sessionId), false);
-  set(sessionLastReadAtom(sessionId), Date.now());
+  set(sessionLastReadAtom(sessionId), now);
 
-  // Persist to database metadata for cross-device sync
+  // Persist to database metadata and push lastReadAt through sync for cross-device read state
   if (wasUnread) {
     window.electronAPI?.invoke('ai:updateSessionMetadata', sessionId, {
-      metadata: { hasUnread: false },
+      metadata: { hasUnread: false, lastReadAt: now },
     }).catch((err: Error) => {
       console.error('[sessions] Failed to persist unread state:', err);
     });

@@ -744,7 +744,6 @@ export class AIService {
     }
 
     try {
-      const { getSyncProvider } = await import('../SyncManager');
       const syncProvider = getSyncProvider();
 
       if (!syncProvider) {
@@ -767,6 +766,15 @@ export class AIService {
                     workspacePath: cachedEntry.project_id,
                     sessionId
                   });
+
+                  // Forward lastReadAt from sync for cross-device read state
+                  if (entry.lastReadAt) {
+                    targetWindow.webContents.send('sessions:sync-read-state', {
+                      sessionId,
+                      lastReadAt: entry.lastReadAt,
+                      lastMessageAt: entry.last_message_at,
+                    });
+                  }
                 }
               }
             }
@@ -2722,14 +2730,16 @@ export class AIService {
                   provider: session.provider
                 });
 
-                // Request mobile push notification for agent completion
-                if (syncProvider) {
-                  syncProvider.requestMobilePush?.(
-                    session.id,
-                    session.title || 'AI Session',
-                    notificationBody
-                  );
-                }
+              // Request mobile push notification for agent completion
+              if (syncProvider) {
+                logger.main.info('[AIService] Requesting mobile push for session:', session.id, 'hasMethod:', !!syncProvider.requestMobilePush);
+                syncProvider.requestMobilePush?.(
+                  session.id,
+                  session.title || 'AI Session',
+                  notificationBody
+                );
+              } else {
+                logger.main.info('[AIService] No syncProvider for mobile push');
               }
 
               // AUTO-FETCH CONTEXT USAGE: For claude-code provider, automatically send /context to get accurate token usage.
@@ -3057,6 +3067,19 @@ export class AIService {
     ) => {
       const { AISessionsRepository } = await import('@nimbalyst/runtime/storage/repositories/AISessionsRepository');
       await AISessionsRepository.updateMetadata(sessionId, { metadata });
+
+      // If lastReadAt is being updated, also push through sync for cross-device read state
+      const syncProvider = getSyncProvider();
+      if (metadata.metadata?.lastReadAt && syncProvider) {
+        syncProvider.pushChange(sessionId, {
+          type: 'metadata_updated',
+          metadata: {
+            lastReadAt: metadata.metadata.lastReadAt,
+            updatedAt: Date.now(),
+          },
+        });
+      }
+
       return { success: true };
     });
 

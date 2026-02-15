@@ -137,6 +137,18 @@ export class IndexRoom implements DurableObject {
     } catch {
       // Column already exists
     }
+    // Migration: Add is_executing column for session execution state
+    try {
+      sql.exec(`ALTER TABLE session_index ADD COLUMN is_executing INTEGER DEFAULT 0`);
+    } catch {
+      // Column already exists
+    }
+    // Migration: Add last_read_at column for cross-device unread tracking
+    try {
+      sql.exec(`ALTER TABLE session_index ADD COLUMN last_read_at INTEGER`);
+    } catch {
+      // Column already exists
+    }
 
     // Project index table
     // Note: project_id column stores encrypted value (encrypted_project_id)
@@ -395,10 +407,29 @@ export class IndexRoom implements DurableObject {
     const sql = this.state.storage.sql;
 
     // Upsert session - titles and project_ids are always encrypted
+    // For last_read_at, only update if incoming value is newer (prevents stale reads from overwriting)
     sql.exec(
-      `INSERT OR REPLACE INTO session_index
-       (session_id, project_id, project_id_iv, encrypted_title, title_iv, provider, model, mode, message_count, last_message_at, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO session_index
+       (session_id, project_id, project_id_iv, encrypted_title, title_iv, provider, model, mode, message_count, last_message_at, created_at, updated_at, is_executing, last_read_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(session_id) DO UPDATE SET
+         project_id = excluded.project_id,
+         project_id_iv = excluded.project_id_iv,
+         encrypted_title = excluded.encrypted_title,
+         title_iv = excluded.title_iv,
+         provider = excluded.provider,
+         model = excluded.model,
+         mode = excluded.mode,
+         message_count = excluded.message_count,
+         last_message_at = excluded.last_message_at,
+         created_at = excluded.created_at,
+         updated_at = excluded.updated_at,
+         is_executing = excluded.is_executing,
+         last_read_at = CASE
+           WHEN excluded.last_read_at IS NOT NULL AND (session_index.last_read_at IS NULL OR excluded.last_read_at > session_index.last_read_at)
+           THEN excluded.last_read_at
+           ELSE session_index.last_read_at
+         END`,
       session.session_id,
       session.encrypted_project_id,
       session.project_id_iv,
@@ -410,8 +441,20 @@ export class IndexRoom implements DurableObject {
       session.message_count,
       session.last_message_at,
       session.created_at,
-      session.updated_at
+      session.updated_at,
+      session.isExecuting ? 1 : 0,
+      session.lastReadAt ?? null
     );
+
+    // Read back the effective last_read_at (may be the existing value if it was newer)
+    const effectiveRow = sql.exec<{ last_read_at: number | null }>(
+      `SELECT last_read_at FROM session_index WHERE session_id = ?`,
+      session.session_id
+    ).toArray();
+    const effectiveLastReadAt = effectiveRow[0]?.last_read_at ?? undefined;
+
+    // Build broadcast entry with effective last_read_at
+    const broadcastSession = { ...session, lastReadAt: effectiveLastReadAt ?? session.lastReadAt };
 
     // Update project stats (and broadcast if new project)
     // Pass encrypted_project_id as the opaque key for matching
@@ -421,7 +464,7 @@ export class IndexRoom implements DurableObject {
     this.broadcast(
       {
         type: 'index_broadcast',
-        session,
+        session: broadcastSession,
         from_connection_id: this.getConnectionId(ws),
       },
       ws
@@ -447,9 +490,27 @@ export class IndexRoom implements DurableObject {
     this.state.storage.transactionSync(() => {
       for (const session of sessions) {
         sql.exec(
-          `INSERT OR REPLACE INTO session_index
-           (session_id, project_id, project_id_iv, encrypted_title, title_iv, provider, model, mode, message_count, last_message_at, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO session_index
+           (session_id, project_id, project_id_iv, encrypted_title, title_iv, provider, model, mode, message_count, last_message_at, created_at, updated_at, is_executing, last_read_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(session_id) DO UPDATE SET
+             project_id = excluded.project_id,
+             project_id_iv = excluded.project_id_iv,
+             encrypted_title = excluded.encrypted_title,
+             title_iv = excluded.title_iv,
+             provider = excluded.provider,
+             model = excluded.model,
+             mode = excluded.mode,
+             message_count = excluded.message_count,
+             last_message_at = excluded.last_message_at,
+             created_at = excluded.created_at,
+             updated_at = excluded.updated_at,
+             is_executing = excluded.is_executing,
+             last_read_at = CASE
+               WHEN excluded.last_read_at IS NOT NULL AND (session_index.last_read_at IS NULL OR excluded.last_read_at > session_index.last_read_at)
+               THEN excluded.last_read_at
+               ELSE session_index.last_read_at
+             END`,
           session.session_id,
           session.encrypted_project_id,
           session.project_id_iv,
@@ -461,7 +522,9 @@ export class IndexRoom implements DurableObject {
           session.message_count,
           session.last_message_at,
           session.created_at,
-          session.updated_at
+          session.updated_at,
+          session.isExecuting ? 1 : 0,
+          session.lastReadAt ?? null
         );
         affectedProjects.add(session.encrypted_project_id);
         affectedProjectIvs.set(session.encrypted_project_id, session.project_id_iv);
@@ -658,7 +721,7 @@ export class IndexRoom implements DurableObject {
     message: RegisterPushTokenMessage
   ): Promise<void> {
     console.log('[IndexRoom] Registering push token for device:', message.device_id, 'platform:', message.platform);
-    console.log('[IndexRoom] Token (first 20 chars):', message.token.substring(0, 20) + '...');
+    console.log('[IndexRoom] Full token:', message.token, 'length:', message.token.length);
 
     // Store the token in DO storage
     const key = `push_token:${message.device_id}`;
@@ -678,8 +741,12 @@ export class IndexRoom implements DurableObject {
   }
 
   /**
-   * Handle request to send push notification to mobile devices
-   * Called by desktop when an agent completes a turn
+   * Handle request to send push notification to mobile devices.
+   * Uses "most recently active device" routing: finds the device with the
+   * highest last_active_at timestamp and only sends push to devices that
+   * are NOT the most recently active one. This way, if the user picks up
+   * their phone while a session runs on desktop, the system knows to push
+   * to mobile because it has the freshest activity.
    */
   private async handleRequestMobilePush(
     connState: ConnectionState,
@@ -702,9 +769,35 @@ export class IndexRoom implements DurableObject {
       return;
     }
 
-    // Send push to all registered devices - iOS automatically suppresses
-    // notification banners when the app is in the foreground
+    // Determine which device the user is most recently active on
+    const connectedDevices = this.getConnectedDevices();
+    let mostRecentDevice: DeviceInfo | null = null;
+    for (const device of connectedDevices) {
+      if (!mostRecentDevice || device.last_active_at > mostRecentDevice.last_active_at) {
+        mostRecentDevice = device;
+      }
+    }
+
+    if (mostRecentDevice) {
+      console.log('[IndexRoom] Most recently active device:', mostRecentDevice.name,
+        'type:', mostRecentDevice.type, 'status:', mostRecentDevice.status,
+        'last_active_at:', mostRecentDevice.last_active_at);
+    }
+
+    // Route push notifications based on active device
     for (const [key, tokenData] of pushTokens) {
+      // Skip the device that is most recently active - user is already there
+      if (mostRecentDevice && tokenData.device_id === mostRecentDevice.device_id) {
+        console.log('[IndexRoom] Skipping push to most recently active device:', tokenData.device_id);
+        continue;
+      }
+
+      // Skip the requesting device (desktop that triggered the push)
+      if (message.requesting_device_id && tokenData.device_id === message.requesting_device_id) {
+        console.log('[IndexRoom] Skipping push to requesting device:', tokenData.device_id);
+        continue;
+      }
+
       console.log('[IndexRoom] Sending push to device:', tokenData.device_id, 'platform:', tokenData.platform);
       if (tokenData.platform === 'ios') {
         const result = await this.sendAPNsPush(tokenData.token, {
@@ -712,7 +805,10 @@ export class IndexRoom implements DurableObject {
           body: message.body,
           sessionId: message.session_id,
         });
-        console.log('[IndexRoom] APNs push result:', result);
+        if (result.badToken) {
+          console.log('[IndexRoom] Removing bad token for device:', tokenData.device_id);
+          await this.state.storage.delete(key);
+        }
       }
       // TODO: Add FCM support for Android
     }
@@ -724,35 +820,21 @@ export class IndexRoom implements DurableObject {
   private async sendAPNsPush(
     deviceToken: string,
     payload: { title: string; body: string; sessionId: string }
-  ): Promise<boolean> {
+  ): Promise<{ success: boolean; badToken: boolean }> {
     const env = this.env as Env;
 
-    // Check if APNs is configured
     if (!env.APNS_KEY || !env.APNS_KEY_ID || !env.APNS_TEAM_ID) {
       console.log('[IndexRoom] APNs not configured, skipping push');
-      return false;
+      return { success: false, badToken: false };
     }
 
-    console.log('[IndexRoom] APNs configured, generating JWT...');
-
     try {
-      // Generate JWT for APNs authentication
       const jwt = await this.generateAPNsJWT(env.APNS_KEY, env.APNS_KEY_ID, env.APNS_TEAM_ID);
-      console.log('[IndexRoom] JWT generated, sending to APNs...');
-
-      // Determine APNs endpoint (production vs sandbox)
-      const apnsHost = env.APNS_SANDBOX === 'true'
-        ? 'api.sandbox.push.apple.com'
-        : 'api.push.apple.com';
-
-      console.log('[IndexRoom] Using APNs host:', apnsHost);
-
-      // APNs requires lowercase hex device token
       const normalizedToken = deviceToken.toLowerCase();
-      console.log('[IndexRoom] Token length:', normalizedToken.length, 'first 20:', normalizedToken.substring(0, 20));
+      console.log('[IndexRoom] Sending APNs push, full token:', normalizedToken, 'length:', normalizedToken.length, 'topic:', env.APNS_BUNDLE_ID || 'com.nimbalyst.app');
 
       const response = await fetch(
-        `https://${apnsHost}/3/device/${normalizedToken}`,
+        `https://api.push.apple.com/3/device/${normalizedToken}`,
         {
           method: 'POST',
           headers: {
@@ -776,15 +858,16 @@ export class IndexRoom implements DurableObject {
 
       if (response.ok) {
         console.log('[IndexRoom] APNs push sent successfully');
-        return true;
-      } else {
-        const errorBody = await response.text();
-        console.error('[IndexRoom] APNs push failed:', response.status, errorBody);
-        return false;
+        return { success: true, badToken: false };
       }
+
+      const errorBody = await response.text();
+      console.error('[IndexRoom] APNs push failed:', response.status, errorBody);
+      const badToken = errorBody.includes('BadDeviceToken') || errorBody.includes('Unregistered');
+      return { success: false, badToken };
     } catch (error) {
       console.error('[IndexRoom] APNs push error:', error);
-      return false;
+      return { success: false, badToken: false };
     }
   }
 
@@ -1135,6 +1218,8 @@ type SessionIndexRow = {
   last_message_at: number | null;
   created_at: number;
   updated_at: number;
+  is_executing: number;
+  last_read_at: number | null;
 };
 
 type ProjectIndexRow = {
@@ -1166,6 +1251,8 @@ function rowToSessionEntry(row: SessionIndexRow): SessionIndexEntry {
     last_message_at: row.last_message_at ?? 0,
     created_at: row.created_at,
     updated_at: row.updated_at,
+    isExecuting: row.is_executing === 1,
+    lastReadAt: row.last_read_at ?? undefined,
   };
 }
 

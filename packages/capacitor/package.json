@@ -6,10 +6,12 @@
   "scripts": {
     "dev": "vite --host",
     "build": "vite build",
+    "build:transcript": "vite build --config vite.config.transcript.ts",
     "build:check": "tsc -b && vite build",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview",
     "clean": "rm -rf dist node_modules/.vite",
+    "test:transcript": "./scripts/test-transcript-integration.sh",
     "cap:sync": "npm run build && eval \"$(rbenv init - zsh)\" && npx cap sync",
     "cap:open:ios": "npx cap open ios",
     "ios:dev": "npm run build && eval \"$(rbenv init - zsh)\" && npx cap sync ios && npx cap open ios",

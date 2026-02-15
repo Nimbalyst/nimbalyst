@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { fileURLToPath, URL } from 'node:url';
+import { resolve } from 'node:path';
 
 export default defineConfig({
   plugins: [
@@ -24,6 +25,15 @@ export default defineConfig({
     alias: {
       '@nimbalyst/runtime': fileURLToPath(new URL('../runtime/src', import.meta.url)),
       'rexical': fileURLToPath(new URL('../rexical/src', import.meta.url)),
+    },
+  },
+  base: './',
+  build: {
+    rollupOptions: {
+      input: {
+        main: resolve(__dirname, 'index.html'),
+        transcript: resolve(__dirname, 'transcript.html'),
+      },
     },
   },
 });

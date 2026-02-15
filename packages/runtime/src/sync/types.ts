@@ -301,6 +301,8 @@ export interface SyncedSessionMetadata {
     tokens: number;         // Current tokens in context window
     contextWindow: number;  // Max context window size
   };
+  /** Unix timestamp ms when this session was last read by any device */
+  lastReadAt?: number;
 }
 
 /**
@@ -335,6 +337,8 @@ export interface SessionIndexEntry {
     tokens: number;         // Current tokens in context window
     contextWindow: number;  // Max context window size
   };
+  /** Unix timestamp ms when this session was last read by any device */
+  lastReadAt?: number;
 }
 
 /**

@@ -1,0 +1,54 @@
+name: NimbalystApp
+options:
+  bundleIdPrefix: com.nimbalyst
+  deploymentTarget:
+    iOS: "18.0"
+  xcodeVersion: "16.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    DEVELOPMENT_TEAM: "X8S24QHAT9"
+packages:
+  NimbalystNative:
+    path: ../NimbalystNative
+targets:
+  NimbalystApp:
+    type: application
+    platform: iOS
+    sources:
+      - Sources
+      - path: Resources/Assets.xcassets
+        buildPhase: resources
+      - path: Resources/transcript-dist
+        type: folder
+        buildPhase: resources
+        optional: true
+    dependencies:
+      - package: NimbalystNative
+        product: NimbalystNative
+    entitlements:
+      path: Sources/NimbalystApp.entitlements
+      properties:
+        aps-environment: production
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.nimbalyst.app
+        INFOPLIST_FILE: Sources/Info.plist
+        CODE_SIGN_STYLE: Automatic
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    preBuildScripts:
+      - name: Build Transcript Web Bundle
+        script: |
+          cd "${SRCROOT}/.."
+          if [ -f "node_modules/.bin/vite" ]; then
+            npx vite build --config vite.config.transcript.ts 2>&1 || echo "Warning: Vite build failed, using existing dist"
+          fi
+          # Copy transcript dist to Resources (clean first to remove stale hashed assets)
+          rm -rf "${SRCROOT}/Resources/transcript-dist"
+          mkdir -p "${SRCROOT}/Resources/transcript-dist"
+          if [ -d "dist-transcript" ]; then
+            cp dist-transcript/transcript.html "${SRCROOT}/Resources/transcript-dist/"
+            cp -R dist-transcript/assets "${SRCROOT}/Resources/transcript-dist/"
+          fi
+        basedOnDependencyAnalysis: false

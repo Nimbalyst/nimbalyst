@@ -31,6 +31,7 @@ import {
   selectedWorkstreamAtom,
   setSelectedWorkstreamAtom,
   sessionUnreadAtom,
+  sessionLastReadAtom,
   sessionHasPendingInteractivePromptAtom,
   sessionRegistryAtom,
   sessionStoreAtom,
@@ -325,6 +326,21 @@ export function initSessionStateListeners(): () => void {
     });
   };
 
+  /**
+   * Handle cross-device read state from sync.
+   * When another device (e.g. mobile) reads a session, update the unread atom.
+   */
+  const handleSyncReadState = (data: { sessionId: string; lastReadAt: number; lastMessageAt: number }) => {
+    const { sessionId, lastReadAt, lastMessageAt } = data;
+    if (!sessionId) return;
+
+    // If the session was read after the last message, mark it as read
+    if (lastReadAt >= lastMessageAt) {
+      store.set(sessionUnreadAtom(sessionId), false);
+      store.set(sessionLastReadAtom(sessionId), lastReadAt);
+    }
+  };
+
   // First, subscribe to the session state manager (IPC call to register this window)
   window.electronAPI.sessionState.subscribe()
     .then((result: any) => {
@@ -366,6 +382,7 @@ export function initSessionStateListeners(): () => void {
   let cleanupGitCommitProposal: (() => void) | undefined;
   let cleanupGitCommitProposalResolved: (() => void) | undefined;
   let cleanupNotificationClicked: (() => void) | undefined;
+  let cleanupSyncReadState: (() => void) | undefined;
   if (window.electronAPI?.on) {
     cleanupMessageLogged = window.electronAPI.on('ai:message-logged', handleMessageLogged);
     cleanupTitleUpdated = window.electronAPI.on('session:title-updated', handleTitleUpdated);
@@ -379,6 +396,7 @@ export function initSessionStateListeners(): () => void {
     cleanupGitCommitProposal = window.electronAPI.on('ai:gitCommitProposal', handleGitCommitProposal);
     cleanupGitCommitProposalResolved = window.electronAPI.on('ai:gitCommitProposalResolved', handleGitCommitProposalResolved);
     cleanupNotificationClicked = window.electronAPI.on('notification-clicked', handleNotificationClicked);
+    cleanupSyncReadState = window.electronAPI.on('sessions:sync-read-state', handleSyncReadState);
   }
 
   // Return cleanup function
@@ -397,5 +415,6 @@ export function initSessionStateListeners(): () => void {
     cleanupGitCommitProposal?.();
     cleanupGitCommitProposalResolved?.();
     cleanupNotificationClicked?.();
+    cleanupSyncReadState?.();
   };
 }

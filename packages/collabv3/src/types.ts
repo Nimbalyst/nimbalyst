@@ -164,6 +164,8 @@ export interface RequestMobilePushMessage {
   session_id: string;
   title: string;
   body: string;
+  /** Device ID of the requesting device, used for active-device routing */
+  requesting_device_id?: string;
 }
 
 /** Sync encrypted settings to other devices */
@@ -397,6 +399,10 @@ export interface SessionIndexEntry {
   last_message_at: number;
   created_at: number;
   updated_at: number;
+  /** Whether the session is currently executing (processing AI request) */
+  isExecuting?: boolean;
+  /** Unix timestamp ms when this session was last read by any device */
+  lastReadAt?: number;
 }
 
 /** Project entry in the IndexRoom */

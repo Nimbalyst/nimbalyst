@@ -1,0 +1,15 @@
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# Xcode
+xcuserdata/
+DerivedData/
+build/
+
+# Node
+node_modules/
+dist-transcript/
+
+# OS
+.DS_Store

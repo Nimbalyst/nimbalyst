@@ -24,6 +24,8 @@
     "analyze:top": "node scripts/bundle-size.js --top",
     "clean": "rm -rf packages/*/node_modules/.vite packages/*/dist node_modules/.cache",
     "clean:full": "rm -rf packages/*/node_modules packages/*/dist node_modules && npm install",
+    "ios:test:swift": "npm run test:swift --prefix packages/ios",
+    "ios:build:transcript": "npm run build:transcript --prefix packages/ios",
     "cap:dev": "npm run dev --prefix packages/capacitor",
     "cap:build": "npm run build --prefix packages/capacitor",
     "cap:ios": "npm run ios --prefix packages/capacitor",
@@ -58,6 +60,7 @@
     "packages/rexical",
     "packages/collabv3",
     "packages/capacitor",
+    "packages/ios",
     "packages/extension-sdk",
     "packages/extensions/*"
   ],

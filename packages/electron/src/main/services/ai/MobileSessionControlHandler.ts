@@ -322,7 +322,18 @@ function handleToolPermissionResponse(
 ): void {
   log.info('Handling ToolPermission response:', promptId, 'decision:', response.decision, 'scope:', response.scope);
 
-  // Notify renderer to handle the permission response
+  // Resolve the permission on the provider directly (same as desktop renderer does via IPC)
+  const provider = ProviderFactory.getProvider('claude-code', sessionId);
+  log.info('ToolPermission provider lookup:', provider ? 'found' : 'not found', 'hasResolve:', provider ? typeof (provider as any).resolveToolPermission : 'N/A');
+
+  if (provider && typeof (provider as any).resolveToolPermission === 'function') {
+    log.info('Calling resolveToolPermission on provider for:', promptId);
+    (provider as any).resolveToolPermission(promptId, response, sessionId, 'mobile');
+  } else {
+    log.warn('No provider found or provider does not support tool permission for session:', sessionId);
+  }
+
+  // Notify renderer to update the UI
   notifyAllWindows('ai:toolPermissionResponse', {
     sessionId,
     promptId,

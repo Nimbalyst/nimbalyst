@@ -137,6 +137,8 @@ interface SessionIndexEntry {
     tokens: number;
     contextWindow: number;
   };
+  /** Unix timestamp ms when this session was last read by any device */
+  lastReadAt?: number;
 }
 
 /** Decrypted session index entry with required title and project_id - used for return values */
@@ -181,7 +183,7 @@ type ClientMessage =
   | { type: 'create_session_request'; request: EncryptedCreateSessionRequest }
   | { type: 'create_session_response'; response: EncryptedCreateSessionResponse }
   | { type: 'session_control'; message: { session_id: string; message_type: string; payload?: Record<string, unknown>; timestamp: number; sent_by: 'desktop' | 'mobile' } }
-  | { type: 'request_mobile_push'; session_id: string; title: string; body: string }
+  | { type: 'request_mobile_push'; session_id: string; title: string; body: string; requesting_device_id?: string }
   | { type: 'settings_sync'; settings: EncryptedSettingsPayload };
 
 /** Encrypted project index entry from server */
@@ -538,6 +540,8 @@ interface CachedSessionIndex {
   };
   /** Whether there are pending interactive prompts (permissions or questions) waiting for response */
   hasPendingPrompt?: boolean;
+  /** Unix timestamp ms when this session was last read by any device */
+  lastReadAt?: number;
 }
 
 // ============================================================================
@@ -573,6 +577,8 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
   let indexConnected = false;
   let deviceAnnounceInterval: ReturnType<typeof setInterval> | null = null;
   let pingInterval: ReturnType<typeof setInterval> | null = null;
+  let indexReconnectAttempts = 0;
+  let indexReconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Listeners for index changes (session updates broadcast to all connected clients)
   // Listeners receive decrypted data (CachedSessionIndex format)
@@ -1064,6 +1070,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
 
     indexWs.onopen = () => {
       indexConnected = true;
+      indexReconnectAttempts = 0;
       console.log('[CollabV3] Connected to index');
 
       // Send device announcement if device info is provided
@@ -1085,17 +1092,22 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       indexConnected = false;
       indexWs = null;
       stopDeviceAnnounceInterval();
-      console.log('[CollabV3] Disconnected from index, will attempt reconnect in 5 seconds');
 
-      // Auto-reconnect after a delay
-      setTimeout(() => {
+      // Exponential backoff: 2s, 4s, 8s, 16s, 30s max
+      const delay = Math.min(2000 * Math.pow(2, indexReconnectAttempts), 30000);
+      indexReconnectAttempts++;
+      console.log(`[CollabV3] Disconnected from index, reconnect attempt ${indexReconnectAttempts} in ${delay}ms`);
+
+      if (indexReconnectTimer) clearTimeout(indexReconnectTimer);
+      indexReconnectTimer = setTimeout(() => {
+        indexReconnectTimer = null;
         if (!indexWs && !indexConnected) {
           console.log('[CollabV3] Attempting to reconnect to index...');
           connectToIndex().catch(err => {
             console.error('[CollabV3] Failed to reconnect to index:', err);
           });
         }
-      }, 5000);
+      }, delay);
     };
 
     indexWs.onerror = (event) => {
@@ -1175,6 +1187,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
                     queuedPromptCount: entry.queuedPromptCount,
                     queuedPrompts,
                     hasPendingPrompt: entry.hasPendingPrompt,
+                    lastReadAt: entry.lastReadAt,
                   };
 
                   // Cache the decrypted entry
@@ -1192,6 +1205,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
                     pendingExecution: decrypted.pendingExecution,
                     isExecuting: decrypted.isExecuting,
                     queuedPrompts: decrypted.queuedPrompts,
+                    lastReadAt: decrypted.lastReadAt,
                   };
                   sessionIndexCache.set(entry.session_id, cacheEntry);
 
@@ -1279,6 +1293,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
               pendingExecution: entry.pendingExecution,
               isExecuting: entry.isExecuting,
               hasPendingPrompt: entry.hasPendingPrompt,
+              lastReadAt: entry.lastReadAt,
             };
 
             // Decrypt title - encrypted titles are required
@@ -1852,6 +1867,11 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
         this.disconnect(sessionId);
       }
 
+      if (indexReconnectTimer) {
+        clearTimeout(indexReconnectTimer);
+        indexReconnectTimer = null;
+      }
+      indexReconnectAttempts = 0;
       if (indexWs) {
         indexWs.close();
         indexWs = null;
@@ -2013,6 +2033,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
               pendingExecution: baseEntry.pendingExecution,
               isExecuting: baseEntry.isExecuting,
               currentContext: baseEntry.currentContext,
+              lastReadAt: baseEntry.lastReadAt,
             };
 
             // Encrypt title for wire
@@ -2045,6 +2066,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
               pendingExecution: 'pendingExecution' in meta ? meta.pendingExecution : cached.pendingExecution,
               isExecuting: 'isExecuting' in meta ? meta.isExecuting : cached.isExecuting,
               currentContext: 'currentContext' in meta ? meta.currentContext : cached.currentContext,
+              lastReadAt: 'lastReadAt' in meta ? (meta as any).lastReadAt : cached.lastReadAt,
             };
             await sendIndexUpdate(updatedCache);
           } else if (meta.title && meta.provider) {
@@ -2063,6 +2085,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
               pendingExecution: meta.pendingExecution,
               isExecuting: meta.isExecuting,
               currentContext: meta.currentContext,
+              lastReadAt: (meta as any).lastReadAt,
             };
             await sendIndexUpdate(newEntry);
           } else {
@@ -2425,16 +2448,18 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
         return;
       }
 
+      const deviceId = config.getDeviceInfo?.()?.device_id ?? config.deviceInfo?.device_id;
       const msg: ClientMessage = {
         type: 'request_mobile_push',
         session_id: sessionId,
         title,
         body,
+        requesting_device_id: deviceId,
       };
-      // console.log('[CollabV3] Requesting mobile push for session:', sessionId, 'readyState:', indexWs.readyState, 'bufferedAmount:', indexWs.bufferedAmount);
+      console.log('[CollabV3] Requesting mobile push for session:', sessionId, 'deviceId:', deviceId, 'readyState:', indexWs.readyState);
       try {
         indexWs.send(JSON.stringify(msg));
-        // console.log('[CollabV3] Mobile push message sent successfully');
+        console.log('[CollabV3] Mobile push message sent successfully');
       } catch (error) {
         console.error('[CollabV3] Failed to send mobile push message:', error);
       }

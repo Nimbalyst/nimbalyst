@@ -2706,12 +2706,28 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
     sessionId?: string,
     respondedBy: 'desktop' | 'mobile' = 'desktop'
   ): void {
+    // Try ToolPermissionService first (primary path when service is available)
+    if (this.permissionService) {
+      this.permissionService.resolvePermission(requestId, response);
+      // Persist the response as nimbalyst_tool_result for widget rendering
+      if (sessionId) {
+        this.logAgentMessage(
+          sessionId,
+          'claude-code',
+          'output',
+          this.createPermissionResultMessage(requestId, response, respondedBy)
+        ).catch(err => {
+          console.error('[CLAUDE-CODE] Failed to persist permission response:', err);
+        });
+      }
+      return;
+    }
+
+    // Fallback: resolve via the mixin's pending map (for tests or when service not available)
     this.permissions.resolveToolPermission(
       requestId,
       response,
       (_reqId, resp, by) => {
-        // Persist the response as nimbalyst_tool_result for widget rendering
-        // SessionManager will parse this and attach to the tool call as toolCall.result
         if (sessionId) {
           this.logAgentMessage(
             sessionId,
@@ -2732,8 +2748,24 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
    * @param sessionId - Session ID for persisting the cancellation message
    */
   public rejectToolPermission(requestId: string, error: Error, sessionId?: string): void {
+    // Try ToolPermissionService first (primary path)
+    if (this.permissionService) {
+      this.permissionService.rejectPermission(requestId, error);
+      if (sessionId) {
+        this.logAgentMessage(
+          sessionId,
+          'claude-code',
+          'output',
+          this.createPermissionCancellationMessage(requestId)
+        ).catch(err => {
+          console.error('[CLAUDE-CODE] Failed to persist permission cancellation:', err);
+        });
+      }
+      return;
+    }
+
+    // Fallback: reject via the mixin's pending map
     this.permissions.rejectToolPermission(requestId, error, (_reqId) => {
-      // Persist cancellation as nimbalyst_tool_result for widget rendering
       if (sessionId) {
         this.logAgentMessage(
           sessionId,

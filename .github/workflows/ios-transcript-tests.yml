@@ -1,0 +1,222 @@
+name: iOS Transcript Tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'packages/ios/**'
+      - 'packages/runtime/**'
+      - '.github/workflows/ios-transcript-tests.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'packages/ios/**'
+      - 'packages/runtime/**'
+      - '.github/workflows/ios-transcript-tests.yml'
+
+jobs:
+  test-transcript-bundle:
+    name: Test Transcript Bundle Build
+    runs-on: macos-14
+    defaults:
+      run:
+        working-directory: packages/ios
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: |
+          cd ../..
+          npm ci
+
+      - name: Build transcript bundle
+        run: npx vite build --config vite.config.transcript.ts
+
+      - name: Verify transcript bundle exists
+        run: |
+          if [ ! -f "dist-transcript/transcript.html" ]; then
+            echo "Error: transcript.html not found in dist-transcript/"
+            exit 1
+          fi
+          if [ ! -d "dist-transcript/assets" ]; then
+            echo "Error: assets folder not found in dist-transcript/"
+            exit 1
+          fi
+          echo "Transcript bundle built successfully"
+
+      - name: Check bundle size
+        run: |
+          du -sh dist-transcript
+          du -sh dist-transcript/assets
+
+      - name: Upload transcript bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: transcript-bundle
+          path: packages/ios/dist-transcript/
+          retention-days: 7
+
+  test-ios-native:
+    name: Test iOS Native Code
+    runs-on: macos-14
+    needs: test-transcript-bundle
+    defaults:
+      run:
+        working-directory: packages/ios
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16.0'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: |
+          cd ../..
+          npm ci
+
+      - name: Download transcript bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: transcript-bundle
+          path: packages/ios/dist-transcript/
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Copy transcript to iOS Resources
+        run: |
+          mkdir -p NimbalystApp/Resources/transcript-dist
+          cp dist-transcript/transcript.html NimbalystApp/Resources/transcript-dist/
+          cp -R dist-transcript/assets NimbalystApp/Resources/transcript-dist/
+
+      - name: Regenerate Xcode project
+        run: |
+          cd NimbalystApp
+          xcodegen generate
+
+      - name: Build NimbalystNative package
+        run: |
+          cd NimbalystNative
+          swift build -c debug
+
+      - name: Run NimbalystNative tests
+        run: |
+          cd NimbalystNative
+          swift test --enable-code-coverage
+
+      - name: Build iOS app (simulator)
+        run: |
+          cd NimbalystApp
+          xcodebuild \
+            -project NimbalystApp.xcodeproj \
+            -scheme NimbalystApp \
+            -destination 'platform=iOS Simulator,name=iPhone 15,OS=17.5' \
+            -configuration Debug \
+            clean build
+
+      - name: Run iOS UI tests (if exists)
+        run: |
+          cd NimbalystApp
+          if xcodebuild test -showTestPlans -project NimbalystApp.xcodeproj 2>&1 | grep -q "Test Plan"; then
+            xcodebuild test \
+              -project NimbalystApp.xcodeproj \
+              -scheme NimbalystApp \
+              -destination 'platform=iOS Simulator,name=iPhone 15,OS=17.5' \
+              -configuration Debug
+          else
+            echo "No UI test plans found, skipping"
+          fi
+
+  test-e2e-integration:
+    name: End-to-End Integration Test
+    runs-on: macos-14
+    needs: test-ios-native
+    defaults:
+      run:
+        working-directory: packages/ios
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16.0'
+
+      - name: Install dependencies
+        run: |
+          cd ../..
+          npm ci
+
+      - name: Build transcript bundle
+        run: npx vite build --config vite.config.transcript.ts
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Full build and test
+        run: |
+          # Copy transcript
+          mkdir -p NimbalystApp/Resources/transcript-dist
+          cp dist-transcript/transcript.html NimbalystApp/Resources/transcript-dist/
+          cp -R dist-transcript/assets NimbalystApp/Resources/transcript-dist/
+
+          # Regenerate Xcode project
+          cd NimbalystApp
+          xcodegen generate
+
+          # Build app
+          xcodebuild \
+            -project NimbalystApp.xcodeproj \
+            -scheme NimbalystApp \
+            -destination 'platform=iOS Simulator,name=iPhone 15,OS=17.5' \
+            -configuration Debug \
+            clean build
+
+          echo "Full integration build successful"
+
+      - name: Verify transcript bundle in app
+        run: |
+          # Find the built app
+          APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData -name "NimbalystApp.app" -type d | head -n 1)
+          if [ -z "$APP_PATH" ]; then
+            echo "Error: Could not find built app"
+            exit 1
+          fi
+
+          # Check if transcript-dist exists in the app bundle
+          if [ ! -d "$APP_PATH/transcript-dist" ]; then
+            echo "Error: transcript-dist not found in app bundle at $APP_PATH"
+            echo "Contents of app bundle:"
+            ls -la "$APP_PATH"
+            exit 1
+          fi
+
+          echo "Transcript bundle successfully included in app"
+          echo "App bundle location: $APP_PATH"
+          ls -la "$APP_PATH/transcript-dist"

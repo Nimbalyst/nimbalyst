@@ -30,7 +30,7 @@ The MCP tool safely queries the database through the running Nimbalyst process, 
 
 Nimbalyst is an extensible, AI-native workspace that supports multiple editor types through a unified extension system. While it originated as a Lexical-based markdown editor, the architecture is evolving toward a fully pluggable model where **all editors** - including the core Lexical editor, Monaco code editor, spreadsheets, diagrams, and custom visual editors - are provided through extensions.
 
-This is a monorepo containing multiple packages including the Electron desktop app, the core editor (Rexical), runtime services, extension SDK, and mobile support via Capacitor.
+This is a monorepo containing multiple packages including the Electron desktop app, the core editor (Rexical), runtime services, extension SDK, native iOS app, and mobile support via Capacitor (for Android).
 
 ## Extension Architecture
 
@@ -51,7 +51,8 @@ packages/
   electron/       # Desktop app (Electron)
   rexical/        # Lexical-based editor
   runtime/        # Cross-platform runtime services (AI, sync)
-  capacitor/      # Mobile app (iOS/Android)
+  ios/            # Native iOS app (SwiftUI)
+  capacitor/      # Mobile web app (Capacitor, for Android)
   core/           # Shared utilities
   collabv3/       # Collaboration server
   extension-sdk/  # Extension development kit
@@ -69,7 +70,8 @@ For detailed information about specific packages, see their CLAUDE.md files:
 - `/packages/electron/CLAUDE.md` - Electron desktop app specifics
 - `/packages/runtime/CLAUDE.md` - AI providers and runtime services
 - `/packages/rexical/CLAUDE.md` - Lexical editor architecture
-- `/packages/capacitor/CLAUDE.md` - Mobile app (iOS/iPadOS)
+- `/packages/ios/CLAUDE.md` - Native iOS app (SwiftUI)
+- `/packages/capacitor/CLAUDE.md` - Capacitor mobile app (Android)
 - `/packages/collabv3/CLAUDE.md` - Sync server (Cloudflare Workers)
 
 ## Development Commands
@@ -86,7 +88,8 @@ For detailed information about specific packages, see their CLAUDE.md files:
 - **E2E tests**: See [E2E_TESTING.md](./docs/E2E_TESTING.md) for comprehensive documentation
 
 ### Other Packages
-- **Capacitor (mobile)**: `npm run cap:dev`, `npm run cap:ios`, `npm run cap:android`
+- **iOS (native)**: `npm run ios:test:swift`, `npm run ios:build:transcript`
+- **Capacitor (Android)**: `npm run cap:dev`, `npm run cap:android`
 - **Collaboration server**: `npm run collabv2:dev`, `npm run collabv2:deploy`
 
 ## Releases
