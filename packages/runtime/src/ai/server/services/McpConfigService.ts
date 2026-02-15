@@ -71,7 +71,12 @@ export class McpConfigService {
       config['nimbalyst-mcp'] = {
         type: 'sse',
         transport: 'sse',
-        url: mcpUrl
+        url: mcpUrl,
+        // Override default 60s tool timeout for Codex CLI.
+        // Some tools (e.g. developer_git_commit_proposal) block indefinitely
+        // waiting for user input — the user may leave and return hours or
+        // days later. Use a very large value (~7 days) to effectively disable.
+        tool_timeout_sec: 604800,
       };
     }
 

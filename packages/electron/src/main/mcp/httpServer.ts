@@ -2372,25 +2372,9 @@ The commit message should follow these guidelines:
           workspacePath
         );
 
-        // Wait for user confirmation (with a longer timeout since user interaction is involved)
-        const GIT_COMMIT_TIMEOUT_MS = 300000; // 5 minutes
-
+        // Wait indefinitely for user confirmation.
+        // The user may step away and return hours or days later — no timeout.
         return new Promise((resolve) => {
-          const timeout = setTimeout(() => {
-            ipcMain.removeAllListeners(proposalId);
-
-            resolve({
-              content: [
-                {
-                  type: "text",
-                  text: "Git commit proposal timed out waiting for user confirmation.",
-                },
-              ],
-              isError: true,
-            });
-          }, GIT_COMMIT_TIMEOUT_MS);
-
-          // Listen for the user's response
           // Helper to extract file path from string or object
           const getFilePath = (f: FileToStage) =>
             typeof f === "string" ? f : f.path;
@@ -2409,7 +2393,6 @@ The commit message should follow these guidelines:
                 commitMessage?: string;
               }
             ) => {
-              clearTimeout(timeout);
 
               if (result.action === "committed" && result.commitHash) {
                 // Only report success if we have a valid commit hash
