@@ -2412,6 +2412,49 @@ ${newLines.map(line => '+' + line).join('\n')}`;
       throw new Error(`Failed to squash commits: ${error instanceof Error ? error.message : String(error)}. ${backupCreated ? `Backup branch '${backupBranchName}' available for recovery.` : ''}`);
     }
   }
+
+  /**
+   * Dry run: list all gitignored files that would be removed from a worktree.
+   * Uses git clean -Xdn to preview without deleting.
+   */
+  async listGitignoredFiles(worktreePath: string): Promise<string[]> {
+    if (!worktreePath) {
+      throw new Error('worktreePath is required');
+    }
+
+    const git: SimpleGit = simpleGit(worktreePath);
+    const result = await git.raw(['clean', '-Xdn']);
+
+    if (!result.trim()) return [];
+
+    const lines = result.trim().split('\n').filter(line => line.trim().length > 0);
+    return lines.map(line => line.replace(/^Would remove /, ''));
+  }
+
+  /**
+   * Remove all gitignored files from a worktree.
+   * Uses git clean -Xdf (only gitignored, include directories, force).
+   */
+  async cleanGitignoredFiles(worktreePath: string): Promise<string[]> {
+    if (!worktreePath) {
+      throw new Error('worktreePath is required');
+    }
+
+    return gitOperationLock.withLock(worktreePath, 'cleanGitignoredFiles', async () => {
+      logger.info('Cleaning gitignored files from worktree', { worktreePath });
+
+      const git: SimpleGit = simpleGit(worktreePath);
+      const result = await git.raw(['clean', '-Xdf']);
+
+      if (!result.trim()) return [];
+
+      const lines = result.trim().split('\n').filter(line => line.trim().length > 0);
+      const removed = lines.map(line => line.replace(/^Removing /, ''));
+
+      logger.info('Cleaned gitignored files', { worktreePath, removedCount: removed.length });
+      return removed;
+    });
+  }
 }
 
 // Export singleton instance

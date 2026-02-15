@@ -832,6 +832,30 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     });
   };
 
+  const handleCleanGitignored = useCallback(async (worktreeId: string) => {
+    const worktreeData = worktreeCache.get(worktreeId);
+    if (!worktreeData?.path) return;
+
+    const worktreeName = worktreeData.displayName || worktreeData.name || 'worktree';
+
+    try {
+      const preview = await window.electronAPI.worktreeListGitignored(worktreeData.path);
+      if (!preview.success || preview.count === 0) return;
+
+      const confirmed = window.confirm(
+        `Remove ${preview.count} gitignored ${preview.count === 1 ? 'item' : 'items'} from "${worktreeName}"?\n\nThis includes files like node_modules and build artifacts that can be regenerated.`
+      );
+      if (!confirmed) return;
+
+      const result = await window.electronAPI.worktreeCleanGitignored(worktreeData.path);
+      if (!result.success) {
+        console.error('[SessionHistory] Failed to clean gitignored files:', result.error);
+      }
+    } catch (error) {
+      console.error('[SessionHistory] Failed to clean gitignored files:', error);
+    }
+  }, [worktreeCache]);
+
   // Handle archive confirmation - clean up sessions and cache after successful archive
   const handleConfirmArchiveWorktree = useCallback(async () => {
     if (!archiveWorktreeDialogState) return;
@@ -1371,6 +1395,12 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     closeCardContextMenu();
     onAddTerminalToWorktree(cardContextMenu.worktreeId);
   }, [cardContextMenu, closeCardContextMenu, onAddTerminalToWorktree]);
+
+  const handleCardCleanGitignored = useCallback(() => {
+    if (!cardContextMenu || !cardContextMenu.worktreeId) return;
+    closeCardContextMenu();
+    handleCleanGitignored(cardContextMenu.worktreeId);
+  }, [cardContextMenu, closeCardContextMenu, handleCleanGitignored]);
 
   // Close dropdowns and context menu when clicking outside
   useEffect(() => {
@@ -2558,6 +2588,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                       onArchiveOtherWorktrees={handleArchiveOtherBlitzWorktrees}
                       onWorktreeRename={handleWorktreeRename}
                       onWorktreeArchive={handleArchiveWorktree}
+                      onWorktreeCleanGitignored={handleCleanGitignored}
                       onSessionRename={onSessionRename}
                     />
                   );
@@ -2599,6 +2630,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                       onWorktreePinToggle={handleWorktreePinToggle}
                       onWorktreeArchive={handleArchiveWorktree}
                       onWorktreeRename={handleWorktreeRename}
+                      onWorktreeCleanGitignored={handleCleanGitignored}
                       onFilesMode={onWorktreeFilesMode}
                       onChangesMode={onWorktreeChangesMode}
                       onAddSession={onAddSessionToWorktree}
@@ -2845,6 +2877,13 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                   Add Terminal
                 </button>
               )}
+              <button
+                className="session-card-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
+                onClick={handleCardCleanGitignored}
+              >
+                <MaterialSymbol icon="delete_sweep" size={14} />
+                Clear Gitignored Files
+              </button>
               <div className="session-card-context-menu-divider h-px my-1 bg-[var(--nim-border)]" />
               <button
                 className="session-card-context-menu-item destructive flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-error)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[rgba(239,68,68,0.1)] [&_svg]:shrink-0"

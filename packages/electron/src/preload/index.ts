@@ -681,6 +681,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('worktree:rebase', worktreePath),
   worktreeArchive: (worktreeId: string, workspacePath: string) =>
     ipcRenderer.invoke('worktree:archive', worktreeId, workspacePath),
+  worktreeListGitignored: (worktreePath: string) =>
+    ipcRenderer.invoke('worktree:list-gitignored', worktreePath),
+  worktreeCleanGitignored: (worktreePath: string) =>
+    ipcRenderer.invoke('worktree:clean-gitignored', worktreePath),
 
   // Archive progress operations
   archive: {

@@ -607,6 +607,18 @@ interface ElectronAPI {
     success: boolean;
     error?: string;
   }>;
+  worktreeListGitignored: (worktreePath: string) => Promise<{
+    success: boolean;
+    error?: string;
+    files: string[];
+    count: number;
+  }>;
+  worktreeCleanGitignored: (worktreePath: string) => Promise<{
+    success: boolean;
+    error?: string;
+    removed?: string[];
+    count?: number;
+  }>;
 
   // Archive progress operations
   archive: {

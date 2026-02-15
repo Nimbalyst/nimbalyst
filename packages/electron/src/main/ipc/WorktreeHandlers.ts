@@ -1351,5 +1351,55 @@ export function registerWorktreeHandlers(): void {
     }
   });
 
+  /**
+   * Preview gitignored files that would be cleaned from a worktree (dry run).
+   *
+   * @param worktreePath - Path to the worktree directory
+   * @returns List of files that would be removed and their count
+   */
+  ipcMain.handle('worktree:list-gitignored', async (_event, worktreePath: string) => {
+    try {
+      if (!worktreePath) {
+        throw new Error('worktreePath is required');
+      }
+
+      const files = await gitWorktreeService.listGitignoredFiles(worktreePath);
+
+      return { success: true, files, count: files.length };
+    } catch (error) {
+      logger.error('Failed to list gitignored files:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to list gitignored files',
+        files: [],
+        count: 0,
+      };
+    }
+  });
+
+  /**
+   * Clean all gitignored files from a worktree.
+   *
+   * @param worktreePath - Path to the worktree directory
+   * @returns List of removed files
+   */
+  ipcMain.handle('worktree:clean-gitignored', async (_event, worktreePath: string) => {
+    try {
+      if (!worktreePath) {
+        throw new Error('worktreePath is required');
+      }
+
+      const removed = await gitWorktreeService.cleanGitignoredFiles(worktreePath);
+
+      return { success: true, removed, count: removed.length };
+    } catch (error) {
+      logger.error('Failed to clean gitignored files:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to clean gitignored files',
+      };
+    }
+  });
+
   logger.info('Worktree handlers registered');
 }

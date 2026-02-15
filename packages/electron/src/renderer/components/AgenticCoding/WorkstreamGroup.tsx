@@ -134,6 +134,7 @@ interface WorkstreamGroupProps {
   onAddSession?: (worktreeId: string) => void;
   onAddTerminal?: (worktreeId: string) => void;
   onAddSuperLoop?: (worktreeId: string) => void;
+  onWorktreeCleanGitignored?: (worktreeId: string) => void;
 }
 
 export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
@@ -171,6 +172,7 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
   onAddSession,
   onAddTerminal,
   onAddSuperLoop,
+  onWorktreeCleanGitignored,
 }) => {
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
@@ -306,6 +308,14 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
       onAddTerminal(worktree.id);
     }
   }, [type, worktree, onAddTerminal]);
+
+  const handleCleanGitignored = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowContextMenu(false);
+    if (type === 'worktree' && worktree && onWorktreeCleanGitignored) {
+      onWorktreeCleanGitignored(worktree.id);
+    }
+  }, [type, worktree, onWorktreeCleanGitignored]);
 
   const handleRenameClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -651,6 +661,15 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
             >
               <MaterialSymbol icon="sync" size={14} />
               New Super Loop
+            </button>
+          )}
+          {type === 'worktree' && onWorktreeCleanGitignored && (
+            <button
+              className="workstream-group-context-menu-item flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
+              onClick={handleCleanGitignored}
+            >
+              <MaterialSymbol icon="delete_sweep" size={14} />
+              Clear Gitignored Files
             </button>
           )}
           {type === 'worktree' && onWorktreeArchive && (

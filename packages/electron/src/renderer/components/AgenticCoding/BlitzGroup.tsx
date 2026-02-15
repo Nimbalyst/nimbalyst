@@ -57,6 +57,7 @@ interface BlitzGroupProps {
   onArchiveOtherWorktrees?: (blitzId: string, keepWorktreeId: string) => void;
   onWorktreeRename?: (worktreeId: string, newName: string) => void;
   onWorktreeArchive?: (worktreeId: string) => void;
+  onWorktreeCleanGitignored?: (worktreeId: string) => void;
   onSessionRename?: (sessionId: string, newName: string) => void;
 }
 
@@ -210,6 +211,7 @@ export const BlitzGroup: React.FC<BlitzGroupProps> = memo(({
   onArchiveOtherWorktrees,
   onWorktreeRename,
   onWorktreeArchive,
+  onWorktreeCleanGitignored,
   onSessionRename,
 }) => {
   const allSessionIds = useMemo(
@@ -320,6 +322,15 @@ export const BlitzGroup: React.FC<BlitzGroupProps> = memo(({
     }
     setSessionContextMenuWorktreeId(null);
   }, [sessionContextMenuWorktreeId, onWorktreeArchive]);
+
+  const handleSessionWorktreeCleanGitignored = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowSessionContextMenu(false);
+    if (onWorktreeCleanGitignored && sessionContextMenuWorktreeId) {
+      onWorktreeCleanGitignored(sessionContextMenuWorktreeId);
+    }
+    setSessionContextMenuWorktreeId(null);
+  }, [sessionContextMenuWorktreeId, onWorktreeCleanGitignored]);
 
   const handleRenameSubmitItem = useCallback(() => {
     const trimmedValue = renameItemValue.trim();
@@ -735,6 +746,15 @@ export const BlitzGroup: React.FC<BlitzGroupProps> = memo(({
             >
               <MaterialSymbol icon="archive" size={14} />
               Archive Other Worktrees in Blitz
+            </button>
+          )}
+          {onWorktreeCleanGitignored && (
+            <button
+              className="workstream-group-context-menu-item flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
+              onClick={handleSessionWorktreeCleanGitignored}
+            >
+              <MaterialSymbol icon="delete_sweep" size={14} />
+              Clear Gitignored Files
             </button>
           )}
           {onWorktreeArchive && (
