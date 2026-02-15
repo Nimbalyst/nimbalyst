@@ -49,6 +49,7 @@ export { GitCommitConfirmationWidget } from './GitCommitConfirmationWidget';
 export { ExitPlanModeWidget } from './ExitPlanModeWidget';
 export { ToolPermissionWidget } from './ToolPermissionWidget';
 export { FileChangeWidget } from './FileChangeWidget';
+export { RalphProgressSnapshotWidget } from './RalphProgressSnapshotWidget';
 
 // Re-export host types (for use in SessionTranscript to set the host)
 export type { InteractiveWidgetHost, PermissionScope, ToolPermissionResponse } from './InteractiveWidgetHost';
@@ -93,6 +94,7 @@ import { GitCommitConfirmationWidget } from './GitCommitConfirmationWidget';
 import { ExitPlanModeWidget } from './ExitPlanModeWidget';
 import { ToolPermissionWidget } from './ToolPermissionWidget';
 import { FileChangeWidget } from './FileChangeWidget';
+import { RalphProgressSnapshotWidget } from './RalphProgressSnapshotWidget';
 
 /**
  * Registry of custom tool widgets
@@ -134,6 +136,9 @@ export const CUSTOM_TOOL_WIDGETS: CustomToolWidgetRegistry = {
 
   // File change tool - displays Codex file modifications with content snapshots
   'file_change': FileChangeWidget,
+
+  // Ralph Loop progress snapshot - shows progress.json at iteration start/end
+  'RalphProgressSnapshot': RalphProgressSnapshotWidget,
 };
 
 /**

@@ -14,6 +14,7 @@ import { getDatabase } from '../database/initialize';
 import { createRalphLoopStore, type RalphLoopStore } from './RalphLoopStore';
 import { createWorktreeStore, type WorktreeStore } from './WorktreeStore';
 import { AISessionsRepository } from '@nimbalyst/runtime/storage/repositories/AISessionsRepository';
+import { AgentMessagesRepository } from '@nimbalyst/runtime/storage/repositories/AgentMessagesRepository';
 import {
   RALPH_DEFAULTS,
   type RalphLoop,
@@ -545,11 +546,18 @@ export class RalphLoopService {
     // We'll emit an event that the renderer can listen to and process
     this.emitIterationPrompt(ralphId, sessionId, prompt, runner.worktreePath, runner.workspaceId);
 
+    // Inject progress snapshot at START of iteration (after prompt is emitted so the
+    // snapshot messages don't exist when the renderer loads the session for ai:sendMessage)
+    await this.injectProgressSnapshot(sessionId, runner.worktreePath, 'iteration-start', iterationNumber, ralphId);
+
     // Wait for the session to complete
     // The renderer will call back when the session is done
     const result = await this.waitForSessionComplete(sessionId);
 
     if (result.success) {
+      // Inject progress snapshot at END of iteration
+      await this.injectProgressSnapshot(sessionId, runner.worktreePath, 'iteration-end', iterationNumber, ralphId);
+
       // Mark iteration as completed
       await ralphStore.updateIterationStatus(iterationId, 'completed');
 
@@ -784,6 +792,59 @@ export class RalphLoopService {
     }
 
     await fs.promises.rename(tmpPath, progressPath);
+  }
+
+  /**
+   * Inject a progress.json snapshot as a nimbalyst_tool_use message into the session.
+   * This creates a visual widget in the chat transcript showing progress state at that moment.
+   */
+  private async injectProgressSnapshot(
+    sessionId: string,
+    worktreePath: string,
+    timing: 'iteration-start' | 'iteration-end',
+    iterationNumber: number,
+    ralphId: string
+  ): Promise<void> {
+    const progress = await this.readProgressFile(worktreePath);
+    if (!progress) return;
+
+    const now = new Date();
+    const snapshotId = `ralph-progress-${timing}-${iterationNumber}-${Date.now()}`;
+
+    // Write nimbalyst_tool_use message (creates the tool call in the transcript)
+    await AgentMessagesRepository.create({
+      sessionId,
+      source: 'nimbalyst',
+      direction: 'output',
+      createdAt: now,
+      content: JSON.stringify({
+        type: 'nimbalyst_tool_use',
+        id: snapshotId,
+        name: 'RalphProgressSnapshot',
+        input: {
+          timing,
+          iterationNumber,
+          ralphId,
+          progress,
+          capturedAt: now.getTime(),
+        },
+      }),
+    });
+
+    // Write matching nimbalyst_tool_result so the widget renders as completed
+    await AgentMessagesRepository.create({
+      sessionId,
+      source: 'nimbalyst',
+      direction: 'output',
+      createdAt: now,
+      content: JSON.stringify({
+        type: 'nimbalyst_tool_result',
+        tool_use_id: snapshotId,
+        result: JSON.stringify(progress),
+      }),
+    });
+
+    logger.info('Injected progress snapshot', { sessionId, timing, iterationNumber });
   }
 
   // ========================================

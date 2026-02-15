@@ -182,6 +182,19 @@ export const RalphFilesPanel: React.FC<RalphFilesPanelProps> = React.memo(({
               </button>
             ))}
           </div>
+
+          {/* Raw JSON view */}
+          {progress && (
+            <details className="text-[10px] pt-1">
+              <summary className="text-[var(--nim-text-muted)] cursor-pointer py-1 hover:text-[var(--nim-text)] list-none flex items-center gap-1">
+                <MaterialSymbol icon="data_object" size={12} className="shrink-0" />
+                <span>Raw JSON</span>
+              </summary>
+              <pre className="mt-1 p-2 bg-[var(--nim-bg-tertiary)] border border-[var(--nim-border)] rounded text-[10px] leading-relaxed text-[var(--nim-text-muted)] overflow-auto max-h-[200px] whitespace-pre-wrap break-words m-0">
+                {JSON.stringify(progress, null, 2)}
+              </pre>
+            </details>
+          )}
         </div>
       )}
     </div>
