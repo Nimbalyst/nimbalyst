@@ -215,16 +215,30 @@ export function registerGitHandlers(): void {
               }
             }
 
-            log.info(`[git:commit] Staging files: ${filesToStage.join(', ')}`);
+            const filesToStageRelative = filesToStage.map(toGitPath);
+            log.info(`[git:commit] Staging files (raw): ${filesToStage.join(', ')}`);
+            log.info(`[git:commit] Staging files (git-relative): ${filesToStageRelative.join(', ')}`);
+
+            // Check which files actually exist on disk before staging
+            const fileExistence = filesToStage.map((f) => {
+              const absPath = isAbsolute(f) ? f : join(workspacePath, f);
+              return { path: f, exists: existsSync(absPath) };
+            });
+            const missingOnDisk = fileExistence.filter((f) => !f.exists);
+            if (missingOnDisk.length > 0) {
+              log.warn(`[git:commit] Files missing on disk: ${missingOnDisk.map((f) => f.path).join(', ')}`);
+            }
+
             await git.add(filesToStage);
 
             // Verify only the selected files are staged
             const status = await git.status();
             const stagedFiles = new Set([...status.staged, ...status.created]);
-            log.info(`[git:commit] After staging - staged: ${stagedFiles.size}, created: ${status.created.length}`);
+            log.info(`[git:commit] After staging - staged files: [${[...status.staged].join(', ')}], created files: [${[...status.created].join(', ')}]`);
+            log.info(`[git:commit] Full status - modified: [${status.modified.join(', ')}], not_added: [${status.not_added.join(', ')}], deleted: [${status.deleted.join(', ')}], renamed: [${status.renamed.map((r) => `${r.from}->${r.to}`).join(', ')}], conflicted: [${status.conflicted.join(', ')}]`);
 
             if (stagedFiles.size === 0) {
-              log.warn(`[git:commit] No files were staged despite add() succeeding`);
+              log.warn(`[git:commit] No files were staged despite add() succeeding. Requested: [${filesToStage.join(', ')}], git-relative: [${filesToStageRelative.join(', ')}]`);
               // Restore originally staged files before returning
               if (originallyStaged.size > 0) {
                 await git.add(Array.from(originallyStaged));
@@ -235,7 +249,6 @@ export function registerGitHandlers(): void {
               };
             }
 
-            const filesToStageRelative = filesToStage.map(toGitPath);
             const filesToStageRelSet = new Set(filesToStageRelative);
             const unexpectedFiles = Array.from(stagedFiles).filter(f => !filesToStageRelSet.has(f));
             const missingFiles = filesToStageRelative.filter(f => !stagedFiles.has(f));
