@@ -39,6 +39,13 @@ import {
 import { workstreamActiveChildAtom, workstreamStateAtom } from './atoms/workstreamState';
 import { triggerWorktreeRefreshAtom } from './atoms/gitOperations';
 
+// Per-session debounce timers for reloadSessionDataAtom.
+// During active streaming, message-logged fires on every chunk, which would
+// trigger a full DB reload of ALL messages each time. Debouncing collapses
+// these into one reload per RELOAD_DEBOUNCE_MS window per session.
+const reloadDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const RELOAD_DEBOUNCE_MS = 1000;
+
 /**
  * Initialize global session state listeners.
  * Should be called once at app startup (or when AgentMode mounts).
@@ -143,10 +150,19 @@ export function initSessionStateListeners(): () => void {
       return;
     }
 
-    // Reload session data to pick up the new message
-    // Note: SessionTranscript also does this for mounted sessions, but this
-    // ensures unmounted sessions (child sessions, inactive tabs) get updated too
-    store.set(reloadSessionDataAtom, { sessionId, workspacePath });
+    // Debounce session data reload per session.
+    // During active streaming, message-logged fires on every chunk which would
+    // trigger a full DB reload of ALL messages (2000+) each time. PGLite is
+    // single-threaded, so these reads queue up and block writes, causing a
+    // cascading slowdown. Debouncing collapses rapid events into one reload.
+    const existingTimer = reloadDebounceTimers.get(sessionId);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+    reloadDebounceTimers.set(sessionId, setTimeout(() => {
+      reloadDebounceTimers.delete(sessionId);
+      store.set(reloadSessionDataAtom, { sessionId, workspacePath });
+    }, RELOAD_DEBOUNCE_MS));
 
     // Update session metadata with updatedAt timestamp and ensure it's unarchived
     // The database layer already sets is_archived = FALSE when a message is added,
@@ -401,6 +417,12 @@ export function initSessionStateListeners(): () => void {
 
   // Return cleanup function
   return () => {
+    // Clear all pending reload debounce timers
+    for (const timer of reloadDebounceTimers.values()) {
+      clearTimeout(timer);
+    }
+    reloadDebounceTimers.clear();
+
     window.electronAPI.sessionState?.removeStateChangeListener?.(handleStateChange);
     window.electronAPI.sessionState?.unsubscribe?.();
     cleanupMessageLogged?.();
