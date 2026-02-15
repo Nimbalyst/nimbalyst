@@ -1,26 +1,26 @@
 /**
- * RalphLoopStore - Database operations for Ralph Loops
+ * SuperLoopStore - Database operations for Super Loops
  *
- * Manages CRUD operations for ralph_loops and ralph_iterations tables using PGLite.
+ * Manages CRUD operations for super_loops and super_iterations tables using PGLite.
  * Follows patterns from WorktreeStore.
  */
 
 import log from 'electron-log/main';
 import { toMillis } from '../utils/timestampUtils';
 import type {
-  RalphLoop,
-  RalphIteration,
-  RalphLoopWithIterations,
-  RalphLoopStatus,
-  RalphIterationStatus,
-} from '../../shared/types/ralph';
+  SuperLoop,
+  SuperIteration,
+  SuperLoopWithIterations,
+  SuperLoopStatus,
+  SuperIterationStatus,
+} from '../../shared/types/superLoop';
 
-const logger = log.scope('RalphLoopStore');
+const logger = log.scope('SuperLoopStore');
 
 /**
- * Database row structure for ralph_loops table
+ * Database row structure for super_loops table
  */
-interface RalphLoopRow {
+interface SuperLoopRow {
   id: string;
   worktree_id: string;
   task_description: string;
@@ -37,11 +37,11 @@ interface RalphLoopRow {
 }
 
 /**
- * Database row structure for ralph_iterations table
+ * Database row structure for super_iterations table
  */
-interface RalphIterationRow {
+interface SuperIterationRow {
   id: string;
-  ralph_loop_id: string;
+  super_loop_id: string;
   session_id: string;
   iteration_number: number;
   status: string;
@@ -60,15 +60,15 @@ type PGliteLike = {
 type EnsureReadyFn = () => Promise<void>;
 
 /**
- * Convert row to RalphLoop
+ * Convert row to SuperLoop
  */
-function rowToRalphLoop(row: RalphLoopRow): RalphLoop {
+function rowToSuperLoop(row: SuperLoopRow): SuperLoop {
   return {
     id: row.id,
     worktreeId: row.worktree_id,
     taskDescription: row.task_description,
     title: row.title ?? undefined,
-    status: row.status as RalphLoopStatus,
+    status: row.status as SuperLoopStatus,
     currentIteration: row.current_iteration,
     maxIterations: row.max_iterations,
     modelId: row.model_id ?? undefined,
@@ -81,15 +81,15 @@ function rowToRalphLoop(row: RalphLoopRow): RalphLoop {
 }
 
 /**
- * Convert row to RalphIteration
+ * Convert row to SuperIteration
  */
-function rowToRalphIteration(row: RalphIterationRow): RalphIteration {
+function rowToSuperIteration(row: SuperIterationRow): SuperIteration {
   return {
     id: row.id,
-    ralphLoopId: row.ralph_loop_id,
+    superLoopId: row.super_loop_id,
     sessionId: row.session_id,
     iterationNumber: row.iteration_number,
-    status: row.status as RalphIterationStatus,
+    status: row.status as SuperIterationStatus,
     exitReason: row.exit_reason ?? undefined,
     createdAt: toMillis(row.created_at),
     completedAt: row.completed_at ? toMillis(row.completed_at) : undefined,
@@ -97,9 +97,9 @@ function rowToRalphIteration(row: RalphIterationRow): RalphIteration {
 }
 
 /**
- * Create a RalphLoopStore instance
+ * Create a SuperLoopStore instance
  */
-export function createRalphLoopStore(db: PGliteLike, ensureDbReady?: EnsureReadyFn) {
+export function createSuperLoopStore(db: PGliteLike, ensureDbReady?: EnsureReadyFn) {
   const ensureReady = async () => {
     if (ensureDbReady) {
       await ensureDbReady();
@@ -108,11 +108,11 @@ export function createRalphLoopStore(db: PGliteLike, ensureDbReady?: EnsureReady
 
   return {
     // ========================================
-    // Ralph Loop CRUD
+    // Super Loop CRUD
     // ========================================
 
     /**
-     * Create a new Ralph Loop
+     * Create a new Super Loop
      */
     async createLoop(
       id: string,
@@ -120,15 +120,15 @@ export function createRalphLoopStore(db: PGliteLike, ensureDbReady?: EnsureReady
       taskDescription: string,
       maxIterations: number = 20,
       modelId?: string
-    ): Promise<RalphLoop> {
+    ): Promise<SuperLoop> {
       await ensureReady();
 
-      logger.info('Creating ralph loop', { id, worktreeId, maxIterations, modelId });
+      logger.info('Creating super loop', { id, worktreeId, maxIterations, modelId });
 
       const now = new Date();
 
       await db.query(
-        `INSERT INTO ralph_loops (
+        `INSERT INTO super_loops (
           id, worktree_id, task_description, status, current_iteration, max_iterations, model_id, created_at, updated_at
         ) VALUES (
           $1, $2, $3, 'pending', 0, $4, $5, $6, $6
@@ -136,7 +136,7 @@ export function createRalphLoopStore(db: PGliteLike, ensureDbReady?: EnsureReady
         [id, worktreeId, taskDescription, maxIterations, modelId ?? null, now]
       );
 
-      logger.info('Ralph loop created', { id });
+      logger.info('Super loop created', { id });
 
       return {
         id,
@@ -152,98 +152,98 @@ export function createRalphLoopStore(db: PGliteLike, ensureDbReady?: EnsureReady
     },
 
     /**
-     * Get a Ralph Loop by ID
+     * Get a Super Loop by ID
      */
-    async getLoop(id: string): Promise<RalphLoop | null> {
+    async getLoop(id: string): Promise<SuperLoop | null> {
       await ensureReady();
 
-      logger.debug('Getting ralph loop', { id });
+      logger.debug('Getting super loop', { id });
 
-      const { rows } = await db.query<RalphLoopRow>(
-        `SELECT * FROM ralph_loops WHERE id = $1 LIMIT 1`,
+      const { rows } = await db.query<SuperLoopRow>(
+        `SELECT * FROM super_loops WHERE id = $1 LIMIT 1`,
         [id]
       );
 
       if (rows.length === 0) {
-        logger.debug('Ralph loop not found', { id });
+        logger.debug('Super loop not found', { id });
         return null;
       }
 
-      return rowToRalphLoop(rows[0]);
+      return rowToSuperLoop(rows[0]);
     },
 
     /**
-     * Get a Ralph Loop by worktree ID
+     * Get a Super Loop by worktree ID
      */
-    async getLoopByWorktreeId(worktreeId: string): Promise<RalphLoop | null> {
+    async getLoopByWorktreeId(worktreeId: string): Promise<SuperLoop | null> {
       await ensureReady();
 
-      logger.debug('Getting ralph loop by worktree', { worktreeId });
+      logger.debug('Getting super loop by worktree', { worktreeId });
 
-      const { rows } = await db.query<RalphLoopRow>(
-        `SELECT * FROM ralph_loops WHERE worktree_id = $1 ORDER BY created_at DESC LIMIT 1`,
+      const { rows } = await db.query<SuperLoopRow>(
+        `SELECT * FROM super_loops WHERE worktree_id = $1 ORDER BY created_at DESC LIMIT 1`,
         [worktreeId]
       );
 
       if (rows.length === 0) {
-        logger.debug('Ralph loop not found for worktree', { worktreeId });
+        logger.debug('Super loop not found for worktree', { worktreeId });
         return null;
       }
 
-      return rowToRalphLoop(rows[0]);
+      return rowToSuperLoop(rows[0]);
     },
 
     /**
-     * Get all Ralph Loops for a workspace
+     * Get all Super Loops for a workspace
      */
-    async listLoops(workspaceId: string): Promise<RalphLoop[]> {
+    async listLoops(workspaceId: string): Promise<SuperLoop[]> {
       await ensureReady();
 
-      logger.debug('Listing ralph loops', { workspaceId });
+      logger.debug('Listing super loops', { workspaceId });
 
-      const { rows } = await db.query<RalphLoopRow>(
-        `SELECT rl.* FROM ralph_loops rl
+      const { rows } = await db.query<SuperLoopRow>(
+        `SELECT rl.* FROM super_loops rl
          JOIN worktrees w ON rl.worktree_id = w.id
          WHERE w.workspace_id = $1
          ORDER BY rl.created_at DESC`,
         [workspaceId]
       );
 
-      const loops = rows.map(rowToRalphLoop);
-      logger.debug('Found ralph loops', { count: loops.length });
+      const loops = rows.map(rowToSuperLoop);
+      logger.debug('Found super loops', { count: loops.length });
 
       return loops;
     },
 
     /**
-     * Update Ralph Loop status
+     * Update Super Loop status
      */
     async updateLoopStatus(
       id: string,
-      status: RalphLoopStatus,
+      status: SuperLoopStatus,
       completionReason?: string
     ): Promise<void> {
       await ensureReady();
 
-      logger.info('Updating ralph loop status', { id, status, completionReason });
+      logger.info('Updating super loop status', { id, status, completionReason });
 
       if (completionReason !== undefined) {
         await db.query(
-          `UPDATE ralph_loops
+          `UPDATE super_loops
            SET status = $2, completion_reason = $3, updated_at = CURRENT_TIMESTAMP
            WHERE id = $1`,
           [id, status, completionReason]
         );
       } else {
         await db.query(
-          `UPDATE ralph_loops
+          `UPDATE super_loops
            SET status = $2, updated_at = CURRENT_TIMESTAMP
            WHERE id = $1`,
           [id, status]
         );
       }
 
-      logger.info('Ralph loop status updated', { id, status });
+      logger.info('Super loop status updated', { id, status });
     },
 
     /**
@@ -252,10 +252,10 @@ export function createRalphLoopStore(db: PGliteLike, ensureDbReady?: EnsureReady
     async incrementIteration(id: string): Promise<number> {
       await ensureReady();
 
-      logger.info('Incrementing ralph loop iteration', { id });
+      logger.info('Incrementing super loop iteration', { id });
 
       const { rows } = await db.query<{ current_iteration: number }>(
-        `UPDATE ralph_loops
+        `UPDATE super_loops
          SET current_iteration = current_iteration + 1, updated_at = CURRENT_TIMESTAMP
          WHERE id = $1
          RETURNING current_iteration`,
@@ -263,21 +263,21 @@ export function createRalphLoopStore(db: PGliteLike, ensureDbReady?: EnsureReady
       );
 
       const newIteration = rows[0]?.current_iteration ?? 0;
-      logger.info('Ralph loop iteration incremented', { id, iteration: newIteration });
+      logger.info('Super loop iteration incremented', { id, iteration: newIteration });
 
       return newIteration;
     },
 
     /**
-     * Update Ralph Loop metadata (title, archive, pin)
+     * Update Super Loop metadata (title, archive, pin)
      */
     async updateLoop(
       id: string,
       updates: { title?: string; isArchived?: boolean; isPinned?: boolean }
-    ): Promise<RalphLoop | null> {
+    ): Promise<SuperLoop | null> {
       await ensureReady();
 
-      logger.info('Updating ralph loop', { id, updates });
+      logger.info('Updating super loop', { id, updates });
 
       const setClauses: string[] = [];
       const params: any[] = [id];
@@ -302,8 +302,8 @@ export function createRalphLoopStore(db: PGliteLike, ensureDbReady?: EnsureReady
 
       setClauses.push('updated_at = CURRENT_TIMESTAMP');
 
-      const { rows } = await db.query<RalphLoopRow>(
-        `UPDATE ralph_loops SET ${setClauses.join(', ')} WHERE id = $1 RETURNING *`,
+      const { rows } = await db.query<SuperLoopRow>(
+        `UPDATE super_loops SET ${setClauses.join(', ')} WHERE id = $1 RETURNING *`,
         params
       );
 
@@ -311,56 +311,56 @@ export function createRalphLoopStore(db: PGliteLike, ensureDbReady?: EnsureReady
         return null;
       }
 
-      return rowToRalphLoop(rows[0]);
+      return rowToSuperLoop(rows[0]);
     },
 
     /**
-     * Delete a Ralph Loop and all its iterations
+     * Delete a Super Loop and all its iterations
      */
     async deleteLoop(id: string): Promise<void> {
       await ensureReady();
 
-      logger.info('Deleting ralph loop', { id });
+      logger.info('Deleting super loop', { id });
 
       // Iterations are deleted automatically via ON DELETE CASCADE
-      await db.query('DELETE FROM ralph_loops WHERE id = $1', [id]);
+      await db.query('DELETE FROM super_loops WHERE id = $1', [id]);
 
-      logger.info('Ralph loop deleted', { id });
+      logger.info('Super loop deleted', { id });
     },
 
     // ========================================
-    // Ralph Iteration CRUD
+    // Super Iteration CRUD
     // ========================================
 
     /**
-     * Create a new Ralph Iteration
+     * Create a new Super Iteration
      */
     async createIteration(
       id: string,
-      ralphLoopId: string,
+      superLoopId: string,
       sessionId: string,
       iterationNumber: number
-    ): Promise<RalphIteration> {
+    ): Promise<SuperIteration> {
       await ensureReady();
 
-      logger.info('Creating ralph iteration', { id, ralphLoopId, sessionId, iterationNumber });
+      logger.info('Creating super iteration', { id, superLoopId, sessionId, iterationNumber });
 
       const now = new Date();
 
       await db.query(
-        `INSERT INTO ralph_iterations (
-          id, ralph_loop_id, session_id, iteration_number, status, created_at
+        `INSERT INTO super_iterations (
+          id, super_loop_id, session_id, iteration_number, status, created_at
         ) VALUES (
           $1, $2, $3, $4, 'running', $5
         )`,
-        [id, ralphLoopId, sessionId, iterationNumber, now]
+        [id, superLoopId, sessionId, iterationNumber, now]
       );
 
-      logger.info('Ralph iteration created', { id, iterationNumber });
+      logger.info('Super iteration created', { id, iterationNumber });
 
       return {
         id,
-        ralphLoopId,
+        superLoopId,
         sessionId,
         iterationNumber,
         status: 'running',
@@ -369,22 +369,22 @@ export function createRalphLoopStore(db: PGliteLike, ensureDbReady?: EnsureReady
     },
 
     /**
-     * Get all iterations for a Ralph Loop
+     * Get all iterations for a Super Loop
      */
-    async getIterations(ralphLoopId: string): Promise<RalphIteration[]> {
+    async getIterations(superLoopId: string): Promise<SuperIteration[]> {
       await ensureReady();
 
-      logger.debug('Getting ralph iterations', { ralphLoopId });
+      logger.debug('Getting super iterations', { superLoopId });
 
-      const { rows } = await db.query<RalphIterationRow>(
-        `SELECT * FROM ralph_iterations
-         WHERE ralph_loop_id = $1
+      const { rows } = await db.query<SuperIterationRow>(
+        `SELECT * FROM super_iterations
+         WHERE super_loop_id = $1
          ORDER BY iteration_number ASC`,
-        [ralphLoopId]
+        [superLoopId]
       );
 
-      const iterations = rows.map(rowToRalphIteration);
-      logger.debug('Found ralph iterations', { count: iterations.length });
+      const iterations = rows.map(rowToSuperIteration);
+      logger.debug('Found super iterations', { count: iterations.length });
 
       return iterations;
     },
@@ -392,13 +392,13 @@ export function createRalphLoopStore(db: PGliteLike, ensureDbReady?: EnsureReady
     /**
      * Get iteration by session ID
      */
-    async getIterationBySessionId(sessionId: string): Promise<RalphIteration | null> {
+    async getIterationBySessionId(sessionId: string): Promise<SuperIteration | null> {
       await ensureReady();
 
-      logger.debug('Getting ralph iteration by session', { sessionId });
+      logger.debug('Getting super iteration by session', { sessionId });
 
-      const { rows } = await db.query<RalphIterationRow>(
-        `SELECT * FROM ralph_iterations WHERE session_id = $1 LIMIT 1`,
+      const { rows } = await db.query<SuperIterationRow>(
+        `SELECT * FROM super_iterations WHERE session_id = $1 LIMIT 1`,
         [sessionId]
       );
 
@@ -406,7 +406,7 @@ export function createRalphLoopStore(db: PGliteLike, ensureDbReady?: EnsureReady
         return null;
       }
 
-      return rowToRalphIteration(rows[0]);
+      return rowToSuperIteration(rows[0]);
     },
 
     /**
@@ -414,30 +414,30 @@ export function createRalphLoopStore(db: PGliteLike, ensureDbReady?: EnsureReady
      */
     async updateIterationStatus(
       id: string,
-      status: RalphIterationStatus,
+      status: SuperIterationStatus,
       exitReason?: string
     ): Promise<void> {
       await ensureReady();
 
-      logger.info('Updating ralph iteration status', { id, status, exitReason });
+      logger.info('Updating super iteration status', { id, status, exitReason });
 
       if (status === 'completed' || status === 'failed') {
         await db.query(
-          `UPDATE ralph_iterations
+          `UPDATE super_iterations
            SET status = $2, exit_reason = $3, completed_at = CURRENT_TIMESTAMP
            WHERE id = $1`,
           [id, status, exitReason ?? null]
         );
       } else {
         await db.query(
-          `UPDATE ralph_iterations
+          `UPDATE super_iterations
            SET status = $2, exit_reason = $3
            WHERE id = $1`,
           [id, status, exitReason ?? null]
         );
       }
 
-      logger.info('Ralph iteration status updated', { id, status });
+      logger.info('Super iteration status updated', { id, status });
     },
 
     // ========================================
@@ -445,9 +445,9 @@ export function createRalphLoopStore(db: PGliteLike, ensureDbReady?: EnsureReady
     // ========================================
 
     /**
-     * Get a Ralph Loop with all its iterations
+     * Get a Super Loop with all its iterations
      */
-    async getLoopWithIterations(id: string): Promise<RalphLoopWithIterations | null> {
+    async getLoopWithIterations(id: string): Promise<SuperLoopWithIterations | null> {
       await ensureReady();
 
       const loop = await this.getLoop(id);
@@ -464,21 +464,21 @@ export function createRalphLoopStore(db: PGliteLike, ensureDbReady?: EnsureReady
     },
 
     /**
-     * Get active (running or paused) Ralph Loops
+     * Get active (running or paused) Super Loops
      */
-    async getActiveLoops(): Promise<RalphLoop[]> {
+    async getActiveLoops(): Promise<SuperLoop[]> {
       await ensureReady();
 
-      logger.debug('Getting active ralph loops');
+      logger.debug('Getting active super loops');
 
-      const { rows } = await db.query<RalphLoopRow>(
-        `SELECT * FROM ralph_loops
+      const { rows } = await db.query<SuperLoopRow>(
+        `SELECT * FROM super_loops
          WHERE status IN ('running', 'paused')
          ORDER BY updated_at DESC`
       );
 
-      const loops = rows.map(rowToRalphLoop);
-      logger.debug('Found active ralph loops', { count: loops.length });
+      const loops = rows.map(rowToSuperLoop);
+      logger.debug('Found active super loops', { count: loops.length });
 
       return loops;
     },
@@ -486,19 +486,19 @@ export function createRalphLoopStore(db: PGliteLike, ensureDbReady?: EnsureReady
     /**
      * Mark all running iterations for a loop as failed (startup recovery)
      */
-    async failOrphanedIterations(ralphLoopId: string): Promise<number> {
+    async failOrphanedIterations(superLoopId: string): Promise<number> {
       await ensureReady();
 
       const { rows } = await db.query<{ id: string }>(
-        `UPDATE ralph_iterations
+        `UPDATE super_iterations
          SET status = 'failed', exit_reason = 'Interrupted by app restart', completed_at = CURRENT_TIMESTAMP
-         WHERE ralph_loop_id = $1 AND status = 'running'
+         WHERE super_loop_id = $1 AND status = 'running'
          RETURNING id`,
-        [ralphLoopId]
+        [superLoopId]
       );
 
       if (rows.length > 0) {
-        logger.info('Failed orphaned iterations', { ralphLoopId, count: rows.length });
+        logger.info('Failed orphaned iterations', { superLoopId, count: rows.length });
       }
       return rows.length;
     },
@@ -512,7 +512,7 @@ export function createRalphLoopStore(db: PGliteLike, ensureDbReady?: EnsureReady
       logger.info('Updating max iterations', { id, maxIterations });
 
       await db.query(
-        `UPDATE ralph_loops
+        `UPDATE super_loops
          SET max_iterations = $2, updated_at = CURRENT_TIMESTAMP
          WHERE id = $1`,
         [id, maxIterations]
@@ -522,6 +522,6 @@ export function createRalphLoopStore(db: PGliteLike, ensureDbReady?: EnsureReady
 }
 
 /**
- * RalphLoopStore type
+ * SuperLoopStore type
  */
-export type RalphLoopStore = ReturnType<typeof createRalphLoopStore>;
+export type SuperLoopStore = ReturnType<typeof createSuperLoopStore>;

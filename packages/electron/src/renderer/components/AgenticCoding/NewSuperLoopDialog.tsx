@@ -1,18 +1,18 @@
 /**
- * NewRalphLoopDialog - Dialog for creating a new Ralph Loop
+ * NewSuperLoopDialog - Dialog for creating a new Super Loop
  *
- * Allows users to specify a task description and configuration for a new Ralph Loop.
- * A dedicated worktree is automatically created for each Ralph Loop.
+ * Allows users to specify a task description and configuration for a new Super Loop.
+ * A dedicated worktree is automatically created for each Super Loop.
  */
 
 import React, { useState, useCallback, useEffect } from 'react';
 import { useAtom, useSetAtom } from 'jotai';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import {
-  newRalphLoopDialogOpenAtom,
-  upsertRalphLoopAtom,
-} from '../../store/atoms/ralphLoop';
-import { RALPH_DEFAULTS } from '../../../shared/types/ralph';
+  newSuperLoopDialogOpenAtom,
+  upsertSuperLoopAtom,
+} from '../../store/atoms/superLoop';
+import { SUPER_LOOP_DEFAULTS } from '../../../shared/types/superLoop';
 import { getClaudeCodeModelLabel } from '../../utils/modelUtils';
 
 interface AgentModel {
@@ -21,22 +21,22 @@ interface AgentModel {
   provider: string;
 }
 
-interface NewRalphLoopDialogProps {
+interface NewSuperLoopDialogProps {
   workspacePath: string;
-  onRalphLoopCreated?: (ralphId: string, worktreeId: string) => void;
+  onSuperLoopCreated?: (superLoopId: string, worktreeId: string) => void;
 }
 
 const DEFAULT_MODEL = 'claude-code:opus';
 
-export const NewRalphLoopDialog: React.FC<NewRalphLoopDialogProps> = ({
+export const NewSuperLoopDialog: React.FC<NewSuperLoopDialogProps> = ({
   workspacePath,
-  onRalphLoopCreated,
+  onSuperLoopCreated,
 }) => {
-  const [isOpen, setIsOpen] = useAtom(newRalphLoopDialogOpenAtom);
-  const upsertRalphLoop = useSetAtom(upsertRalphLoopAtom);
+  const [isOpen, setIsOpen] = useAtom(newSuperLoopDialogOpenAtom);
+  const upsertSuperLoop = useSetAtom(upsertSuperLoopAtom);
 
   const [taskDescription, setTaskDescription] = useState('');
-  const [maxIterations, setMaxIterations] = useState<number>(RALPH_DEFAULTS.maxIterations);
+  const [maxIterations, setMaxIterations] = useState<number>(SUPER_LOOP_DEFAULTS.maxIterations);
   const [selectedModel, setSelectedModel] = useState<string>(DEFAULT_MODEL);
   const [agentModels, setAgentModels] = useState<AgentModel[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
@@ -69,7 +69,7 @@ export const NewRalphLoopDialog: React.FC<NewRalphLoopDialogProps> = ({
           }
         }
       } catch (err) {
-        console.error('[NewRalphLoopDialog] Failed to load models:', err);
+        console.error('[NewSuperLoopDialog] Failed to load models:', err);
       } finally {
         setLoadingModels(false);
       }
@@ -82,7 +82,7 @@ export const NewRalphLoopDialog: React.FC<NewRalphLoopDialogProps> = ({
   useEffect(() => {
     if (isOpen) {
       setTaskDescription('');
-      setMaxIterations(RALPH_DEFAULTS.maxIterations);
+      setMaxIterations(SUPER_LOOP_DEFAULTS.maxIterations);
       setSelectedModel(DEFAULT_MODEL);
       setError(null);
     }
@@ -104,26 +104,26 @@ export const NewRalphLoopDialog: React.FC<NewRalphLoopDialogProps> = ({
     setError(null);
 
     try {
-      // The IPC handler will auto-create a dedicated worktree for this Ralph Loop
-      const result = await window.electronAPI.invoke('ralph:create', workspacePath, taskDescription.trim(), {
+      // The IPC handler will auto-create a dedicated worktree for this Super Loop
+      const result = await window.electronAPI.invoke('super-loop:create', workspacePath, taskDescription.trim(), {
         maxIterations,
         modelId: selectedModel,
       });
 
       if (result.success && result.loop) {
-        upsertRalphLoop(result.loop);
+        upsertSuperLoop(result.loop);
         setIsOpen(false);
-        onRalphLoopCreated?.(result.loop.id, result.worktree?.id);
+        onSuperLoopCreated?.(result.loop.id, result.worktree?.id);
       } else {
-        setError(result.error || 'Failed to create Ralph Loop');
+        setError(result.error || 'Failed to create Super Loop');
       }
     } catch (err) {
-      console.error('[NewRalphLoopDialog] Failed to create ralph loop:', err);
-      setError('Failed to create Ralph Loop');
+      console.error('[NewSuperLoopDialog] Failed to create super loop:', err);
+      setError('Failed to create Super Loop');
     } finally {
       setIsCreating(false);
     }
-  }, [workspacePath, taskDescription, maxIterations, selectedModel, setIsOpen, upsertRalphLoop, onRalphLoopCreated]);
+  }, [workspacePath, taskDescription, maxIterations, selectedModel, setIsOpen, upsertSuperLoop, onSuperLoopCreated]);
 
   // Handle keyboard events
   useEffect(() => {
@@ -168,7 +168,7 @@ export const NewRalphLoopDialog: React.FC<NewRalphLoopDialogProps> = ({
         <div className="flex items-center justify-between px-4 py-3 border-b border-nim">
           <div className="flex items-center gap-2">
             <MaterialSymbol icon="sync" size={20} className="text-nim-primary" />
-            <h2 className="text-lg font-semibold text-nim">New Ralph Loop</h2>
+            <h2 className="text-lg font-semibold text-nim">New Super Loop</h2>
           </div>
           <button
             onClick={handleClose}
@@ -183,9 +183,10 @@ export const NewRalphLoopDialog: React.FC<NewRalphLoopDialogProps> = ({
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {/* Description */}
           <div className="text-sm text-nim-muted">
-            Ralph Loops run an autonomous AI agent iteratively until a task is complete.
+            Super Loops run an autonomous AI agent iteratively until a task is complete.
             Each iteration starts with fresh context while progress persists via files.
             A dedicated worktree will be automatically created for this loop.
+            <span className="italic">Heavily inspired by Ralph Loops.</span>
           </div>
 
           {/* Task Description */}
@@ -202,7 +203,7 @@ export const NewRalphLoopDialog: React.FC<NewRalphLoopDialogProps> = ({
               autoFocus
             />
             <p className="text-xs text-nim-muted">
-              This will be saved to .ralph/task.md in a new worktree.
+              This will be saved to .superloop/task.md in a new worktree.
             </p>
           </div>
 
@@ -308,4 +309,4 @@ export const NewRalphLoopDialog: React.FC<NewRalphLoopDialogProps> = ({
   );
 };
 
-export default NewRalphLoopDialog;
+export default NewSuperLoopDialog;

@@ -38,7 +38,7 @@ import { BadGitStateDialog } from './BadGitStateDialog';
 import { HelpTooltip } from '../../help';
 import { refreshWorktreeChangedFiles } from '../../store/listeners/fileStateListeners';
 import { getWorktreeNameFromPath } from '../../utils/pathUtils';
-import { RalphFilesPanel } from './RalphFilesPanel';
+import { SuperFilesPanel } from './SuperFilesPanel';
 
 // Types for worktree mode (copied from DiffModeView)
 interface WorktreeChangedFile {
@@ -71,7 +71,7 @@ interface GitOperationsPanelProps {
   worktreePath?: string | null;
   /** Callback when worktree is archived */
   onWorktreeArchived?: () => void;
-  /** Callback to open a file (used for .ralph/ file links) */
+  /** Callback to open a file (used for .superloop/ file links) */
   onFileClick?: (filePath: string) => void;
 }
 
@@ -1472,9 +1472,9 @@ Please proceed with this strategy.`;
               </div>
             )}
 
-            {/* Ralph Loop Progress (only for worktrees with a loop) */}
+            {/* Super Loop Progress (only for worktrees with a loop) */}
             {worktreeId && worktreePath && onFileClick && (
-              <RalphFilesPanel
+              <SuperFilesPanel
                 worktreeId={worktreeId}
                 worktreePath={worktreePath}
                 onFileClick={onFileClick}

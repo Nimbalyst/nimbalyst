@@ -130,7 +130,7 @@ interface WorkstreamGroupProps {
   onChangesMode?: (worktreeId: string) => void;
   onAddSession?: (worktreeId: string) => void;
   onAddTerminal?: (worktreeId: string) => void;
-  onAddRalphLoop?: (worktreeId: string) => void;
+  onAddSuperLoop?: (worktreeId: string) => void;
 }
 
 export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
@@ -166,7 +166,7 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
   onChangesMode,
   onAddSession,
   onAddTerminal,
-  onAddRalphLoop,
+  onAddSuperLoop,
 }) => {
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
@@ -280,13 +280,13 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
     }
   }, [isRenamingWorktree]);
 
-  const handleAddRalphLoop = useCallback((e: React.MouseEvent) => {
+  const handleAddSuperLoop = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     setShowContextMenu(false);
-    if (type === 'worktree' && worktree && onAddRalphLoop) {
-      onAddRalphLoop(worktree.id);
+    if (type === 'worktree' && worktree && onAddSuperLoop) {
+      onAddSuperLoop(worktree.id);
     }
-  }, [type, worktree, onAddRalphLoop]);
+  }, [type, worktree, onAddSuperLoop]);
   const handleFilesMode = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     if (type === 'worktree' && worktree && onFilesMode) {
@@ -577,13 +577,13 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
               Add Terminal
             </button>
           )}
-          {type === 'worktree' && onAddRalphLoop && (
+          {type === 'worktree' && onAddSuperLoop && (
             <button
               className="workstream-group-context-menu-item flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
-              onClick={handleAddRalphLoop}
+              onClick={handleAddSuperLoop}
             >
               <MaterialSymbol icon="sync" size={14} />
-              New Ralph Loop
+              New Super Loop
             </button>
           )}
           {type === 'worktree' && onWorktreeArchive && (

@@ -1,7 +1,7 @@
 /**
- * RalphProgressSnapshotWidget - Displays a progress.json snapshot in the chat transcript.
+ * SuperProgressSnapshotWidget - Displays a progress.json snapshot in the chat transcript.
  *
- * Injected by RalphLoopService at the start and end of each Ralph Loop iteration.
+ * Injected by SuperLoopService at the start and end of each Super Loop iteration.
  * Shows formatted progress data (phase, status, learnings, blockers) with collapsible raw JSON.
  */
 
@@ -11,7 +11,7 @@ import type { CustomToolWidgetProps } from './index';
 interface ProgressSnapshot {
   timing: 'iteration-start' | 'iteration-end';
   iterationNumber: number;
-  ralphId: string;
+  superLoopId: string;
   progress: {
     currentIteration: number;
     phase: string;
@@ -35,7 +35,7 @@ const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   blocked: { bg: 'rgba(249,115,22,0.15)', text: '#f97316' },
 };
 
-export const RalphProgressSnapshotWidget: React.FC<CustomToolWidgetProps> = ({ message }) => {
+export const SuperProgressSnapshotWidget: React.FC<CustomToolWidgetProps> = ({ message }) => {
   const [showRawJson, setShowRawJson] = useState(false);
   const tool = message.toolCall;
   if (!tool?.arguments) return null;
@@ -207,7 +207,7 @@ export const RalphProgressSnapshotWidget: React.FC<CustomToolWidgetProps> = ({ m
   );
 };
 
-RalphProgressSnapshotWidget.displayName = 'RalphProgressSnapshotWidget';
+SuperProgressSnapshotWidget.displayName = 'SuperProgressSnapshotWidget';
 
 const Badge: React.FC<{ label: string; bg: string; color: string }> = ({ label, bg, color }) => (
   <span

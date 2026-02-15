@@ -39,9 +39,9 @@ export const BETA_FEATURES: readonly BetaFeatureDefinition[] = [
     icon: 'terminal',
   },
   {
-    tag: 'ralph-loops',
-    name: 'Ralph Loops',
-    description: 'Enable Ralph Loops for iterative agent workflows in dedicated worktrees.',
+    tag: 'super-loops',
+    name: 'Super Loops',
+    description: 'Enable Super Loops for iterative agent workflows in dedicated worktrees.',
     icon: 'sync',
   },
 ] as const;

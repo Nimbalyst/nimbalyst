@@ -1,45 +1,45 @@
 /**
- * Ralph Loop Atoms
+ * Super Loop Atoms
  *
- * Jotai atoms for managing Ralph Loop state in the renderer.
+ * Jotai atoms for managing Super Loop state in the renderer.
  * Provides reactive state for UI components to display loop progress and status.
  */
 
 import { atom } from 'jotai';
 import { atomFamily } from 'jotai/utils';
 import type {
-  RalphLoop,
-  RalphLoopWithIterations,
-  RalphLoopStatus,
-  RalphLoopEvent,
-  RalphIteration,
-  RalphProgressFile,
-} from '../../../shared/types/ralph';
+  SuperLoop,
+  SuperLoopWithIterations,
+  SuperLoopStatus,
+  SuperLoopEvent,
+  SuperIteration,
+  SuperProgressFile,
+} from '../../../shared/types/superLoop';
 
 // ========================================
 // Registry Atoms
 // ========================================
 
 /**
- * Registry of all Ralph Loops by ID.
+ * Registry of all Super Loops by ID.
  * Populated via IPC when fetching loops for a workspace.
  */
-export const ralphLoopRegistryAtom = atom<Map<string, RalphLoop>>(new Map());
+export const superLoopRegistryAtom = atom<Map<string, SuperLoop>>(new Map());
 
 /**
- * Derived: Array of all ralph loops sorted by creation date (newest first)
+ * Derived: Array of all super loops sorted by creation date (newest first)
  */
-export const ralphLoopListAtom = atom((get) => {
-  const registry = get(ralphLoopRegistryAtom);
+export const superLoopListAtom = atom((get) => {
+  const registry = get(superLoopRegistryAtom);
   return Array.from(registry.values())
     .sort((a, b) => b.createdAt - a.createdAt);
 });
 
 /**
- * Derived: Active (running or paused) ralph loops
+ * Derived: Active (running or paused) super loops
  */
-export const activeRalphLoopsAtom = atom((get) => {
-  const registry = get(ralphLoopRegistryAtom);
+export const activeSuperLoopsAtom = atom((get) => {
+  const registry = get(superLoopRegistryAtom);
   return Array.from(registry.values())
     .filter(loop => loop.status === 'running' || loop.status === 'paused');
 });
@@ -49,11 +49,11 @@ export const activeRalphLoopsAtom = atom((get) => {
 // ========================================
 
 /**
- * Get a single ralph loop by ID
+ * Get a single super loop by ID
  */
-export const ralphLoopAtom = atomFamily((loopId: string) =>
+export const superLoopAtom = atomFamily((loopId: string) =>
   atom((get) => {
-    const registry = get(ralphLoopRegistryAtom);
+    const registry = get(superLoopRegistryAtom);
     return registry.get(loopId) ?? null;
   })
 );
@@ -61,7 +61,7 @@ export const ralphLoopAtom = atomFamily((loopId: string) =>
 /**
  * Runner state for active loops (from main process)
  */
-export interface RalphRunnerState {
+export interface SuperRunnerState {
   isRunning: boolean;
   isPaused: boolean;
   currentIteration: number;
@@ -69,22 +69,22 @@ export interface RalphRunnerState {
   currentSessionId: string | null;
 }
 
-export const ralphRunnerStateAtom = atomFamily((_loopId: string) =>
-  atom<RalphRunnerState | null>(null)
+export const superRunnerStateAtom = atomFamily((_loopId: string) =>
+  atom<SuperRunnerState | null>(null)
 );
 
 /**
- * Iterations for a ralph loop (loaded separately due to potential size)
+ * Iterations for a super loop (loaded separately due to potential size)
  */
-export const ralphIterationsAtom = atomFamily((_loopId: string) =>
-  atom<RalphLoopWithIterations['iterations']>([])
+export const superIterationsAtom = atomFamily((_loopId: string) =>
+  atom<SuperLoopWithIterations['iterations']>([])
 );
 
 /**
- * Progress file data for a ralph loop (loaded when loop is completed/failed)
+ * Progress file data for a super loop (loaded when loop is completed/failed)
  */
-export const ralphProgressAtom = atomFamily((_loopId: string) =>
-  atom<RalphProgressFile | null>(null)
+export const superProgressAtom = atomFamily((_loopId: string) =>
+  atom<SuperProgressFile | null>(null)
 );
 
 // ========================================
@@ -92,70 +92,70 @@ export const ralphProgressAtom = atomFamily((_loopId: string) =>
 // ========================================
 
 /**
- * Update the ralph loop registry with new loops
+ * Update the super loop registry with new loops
  */
-export const setRalphLoopsAtom = atom(
+export const setSuperLoopsAtom = atom(
   null,
-  (get, set, loops: RalphLoop[]) => {
-    const newRegistry = new Map<string, RalphLoop>();
+  (get, set, loops: SuperLoop[]) => {
+    const newRegistry = new Map<string, SuperLoop>();
     for (const loop of loops) {
       newRegistry.set(loop.id, loop);
     }
-    set(ralphLoopRegistryAtom, newRegistry);
+    set(superLoopRegistryAtom, newRegistry);
   }
 );
 
 /**
- * Update or add a single ralph loop
+ * Update or add a single super loop
  */
-export const upsertRalphLoopAtom = atom(
+export const upsertSuperLoopAtom = atom(
   null,
-  (get, set, loop: RalphLoop) => {
-    const registry = new Map(get(ralphLoopRegistryAtom));
+  (get, set, loop: SuperLoop) => {
+    const registry = new Map(get(superLoopRegistryAtom));
     registry.set(loop.id, loop);
-    set(ralphLoopRegistryAtom, registry);
+    set(superLoopRegistryAtom, registry);
   }
 );
 
 /**
- * Remove a ralph loop from the registry
+ * Remove a super loop from the registry
  */
-export const removeRalphLoopAtom = atom(
+export const removeSuperLoopAtom = atom(
   null,
   (get, set, loopId: string) => {
-    const registry = new Map(get(ralphLoopRegistryAtom));
+    const registry = new Map(get(superLoopRegistryAtom));
     registry.delete(loopId);
-    set(ralphLoopRegistryAtom, registry);
+    set(superLoopRegistryAtom, registry);
   }
 );
 
 /**
  * Update runner state for a loop
  */
-export const setRalphRunnerStateAtom = atom(
+export const setSuperRunnerStateAtom = atom(
   null,
-  (get, set, { loopId, state }: { loopId: string; state: RalphRunnerState | null }) => {
-    set(ralphRunnerStateAtom(loopId), state);
+  (get, set, { loopId, state }: { loopId: string; state: SuperRunnerState | null }) => {
+    set(superRunnerStateAtom(loopId), state);
   }
 );
 
 /**
  * Update iterations for a loop
  */
-export const setRalphIterationsAtom = atom(
+export const setSuperIterationsAtom = atom(
   null,
-  (get, set, { loopId, iterations }: { loopId: string; iterations: RalphLoopWithIterations['iterations'] }) => {
-    set(ralphIterationsAtom(loopId), iterations);
+  (get, set, { loopId, iterations }: { loopId: string; iterations: SuperLoopWithIterations['iterations'] }) => {
+    set(superIterationsAtom(loopId), iterations);
   }
 );
 
 /**
  * Update progress file data for a loop
  */
-export const setRalphProgressAtom = atom(
+export const setSuperProgressAtom = atom(
   null,
-  (get, set, { loopId, progress }: { loopId: string; progress: RalphProgressFile | null }) => {
-    set(ralphProgressAtom(loopId), progress);
+  (get, set, { loopId, progress }: { loopId: string; progress: SuperProgressFile | null }) => {
+    set(superProgressAtom(loopId), progress);
   }
 );
 
@@ -164,164 +164,164 @@ export const setRalphProgressAtom = atom(
 // ========================================
 
 /**
- * Process a ralph loop event and update state accordingly
+ * Process a super loop event and update state accordingly
  */
-export const processRalphEventAtom = atom(
+export const processSuperEventAtom = atom(
   null,
-  (get, set, event: RalphLoopEvent) => {
+  (get, set, event: SuperLoopEvent) => {
     // Guard against undefined or malformed events
-    if (!event || typeof event !== 'object' || !('type' in event) || !('ralphId' in event)) {
-      console.warn('[processRalphEventAtom] Received invalid event:', event);
+    if (!event || typeof event !== 'object' || !('type' in event) || !('superLoopId' in event)) {
+      console.warn('[processSuperEventAtom] Received invalid event:', event);
       return;
     }
 
-    const registry = new Map(get(ralphLoopRegistryAtom));
+    const registry = new Map(get(superLoopRegistryAtom));
 
     switch (event.type) {
       case 'iteration-started': {
-        const loop = registry.get(event.ralphId);
+        const loop = registry.get(event.superLoopId);
         if (loop) {
-          registry.set(event.ralphId, {
+          registry.set(event.superLoopId, {
             ...loop,
             currentIteration: event.iterationNumber,
             updatedAt: Date.now(),
           });
-          set(ralphLoopRegistryAtom, registry);
+          set(superLoopRegistryAtom, registry);
 
           // Update runner state (create default if doesn't exist yet)
-          const existingRunnerState = get(ralphRunnerStateAtom(event.ralphId));
-          const runnerState: RalphRunnerState = existingRunnerState ?? {
+          const existingRunnerState = get(superRunnerStateAtom(event.superLoopId));
+          const runnerState: SuperRunnerState = existingRunnerState ?? {
             isRunning: true,
             isPaused: false,
             currentIteration: 0,
             maxIterations: loop.maxIterations,
             currentSessionId: null,
           };
-          set(ralphRunnerStateAtom(event.ralphId), {
+          set(superRunnerStateAtom(event.superLoopId), {
             ...runnerState,
             currentIteration: event.iterationNumber,
             currentSessionId: event.sessionId,
           });
 
           // Add the new iteration to the iterations atom
-          const newIteration: RalphIteration = {
+          const newIteration: SuperIteration = {
             id: event.iterationId,
-            ralphLoopId: event.ralphId,
+            superLoopId: event.superLoopId,
             sessionId: event.sessionId,
             iterationNumber: event.iterationNumber,
             status: 'running',
             createdAt: Date.now(),
           };
-          const currentIterations = get(ralphIterationsAtom(event.ralphId));
+          const currentIterations = get(superIterationsAtom(event.superLoopId));
           // Only add if not already present (in case of duplicate events)
           if (!currentIterations.some(iter => iter.id === event.iterationId)) {
-            set(ralphIterationsAtom(event.ralphId), [...currentIterations, newIteration]);
+            set(superIterationsAtom(event.superLoopId), [...currentIterations, newIteration]);
           }
         }
         break;
       }
 
       case 'iteration-completed': {
-        const loop = registry.get(event.ralphId);
+        const loop = registry.get(event.superLoopId);
         if (loop) {
-          registry.set(event.ralphId, {
+          registry.set(event.superLoopId, {
             ...loop,
             updatedAt: Date.now(),
           });
-          set(ralphLoopRegistryAtom, registry);
+          set(superLoopRegistryAtom, registry);
 
           // Update the iteration status in the iterations atom
-          const currentIterations = get(ralphIterationsAtom(event.ralphId));
+          const currentIterations = get(superIterationsAtom(event.superLoopId));
           const updatedIterations = currentIterations.map(iter =>
             iter.id === event.iterationId
               ? { ...iter, status: 'completed' as const, exitReason: event.exitReason, completedAt: Date.now() }
               : iter
           );
-          set(ralphIterationsAtom(event.ralphId), updatedIterations);
+          set(superIterationsAtom(event.superLoopId), updatedIterations);
         }
         break;
       }
 
       case 'iteration-failed': {
-        const loop = registry.get(event.ralphId);
+        const loop = registry.get(event.superLoopId);
         if (loop) {
-          registry.set(event.ralphId, {
+          registry.set(event.superLoopId, {
             ...loop,
             updatedAt: Date.now(),
           });
-          set(ralphLoopRegistryAtom, registry);
+          set(superLoopRegistryAtom, registry);
 
           // Update the iteration status in the iterations atom
-          const currentIterations = get(ralphIterationsAtom(event.ralphId));
+          const currentIterations = get(superIterationsAtom(event.superLoopId));
           const updatedIterations = currentIterations.map(iter =>
             iter.id === event.iterationId
               ? { ...iter, status: 'failed' as const, exitReason: event.error, completedAt: Date.now() }
               : iter
           );
-          set(ralphIterationsAtom(event.ralphId), updatedIterations);
+          set(superIterationsAtom(event.superLoopId), updatedIterations);
         }
         break;
       }
 
       case 'loop-blocked': {
-        const loop = registry.get(event.ralphId);
+        const loop = registry.get(event.superLoopId);
         if (loop) {
-          registry.set(event.ralphId, {
+          registry.set(event.superLoopId, {
             ...loop,
             status: 'blocked',
             completionReason: event.reason,
             updatedAt: Date.now(),
           });
-          set(ralphLoopRegistryAtom, registry);
-          set(ralphRunnerStateAtom(event.ralphId), null);
+          set(superLoopRegistryAtom, registry);
+          set(superRunnerStateAtom(event.superLoopId), null);
         }
         break;
       }
 
       case 'loop-completed':
       case 'loop-stopped': {
-        const loop = registry.get(event.ralphId);
+        const loop = registry.get(event.superLoopId);
         if (loop) {
-          registry.set(event.ralphId, {
+          registry.set(event.superLoopId, {
             ...loop,
             status: 'completed',
             completionReason: event.reason,
             updatedAt: Date.now(),
           });
-          set(ralphLoopRegistryAtom, registry);
-          set(ralphRunnerStateAtom(event.ralphId), null);
+          set(superLoopRegistryAtom, registry);
+          set(superRunnerStateAtom(event.superLoopId), null);
         }
         break;
       }
 
       case 'loop-failed': {
-        const loop = registry.get(event.ralphId);
+        const loop = registry.get(event.superLoopId);
         if (loop) {
-          registry.set(event.ralphId, {
+          registry.set(event.superLoopId, {
             ...loop,
             status: 'failed',
             completionReason: event.error,
             updatedAt: Date.now(),
           });
-          set(ralphLoopRegistryAtom, registry);
-          set(ralphRunnerStateAtom(event.ralphId), null);
+          set(superLoopRegistryAtom, registry);
+          set(superRunnerStateAtom(event.superLoopId), null);
         }
         break;
       }
 
       case 'loop-paused': {
-        const loop = registry.get(event.ralphId);
+        const loop = registry.get(event.superLoopId);
         if (loop) {
-          registry.set(event.ralphId, {
+          registry.set(event.superLoopId, {
             ...loop,
             status: 'paused',
             updatedAt: Date.now(),
           });
-          set(ralphLoopRegistryAtom, registry);
+          set(superLoopRegistryAtom, registry);
 
-          const runnerState = get(ralphRunnerStateAtom(event.ralphId));
+          const runnerState = get(superRunnerStateAtom(event.superLoopId));
           if (runnerState) {
-            set(ralphRunnerStateAtom(event.ralphId), {
+            set(superRunnerStateAtom(event.superLoopId), {
               ...runnerState,
               isPaused: true,
               isRunning: false,
@@ -332,18 +332,18 @@ export const processRalphEventAtom = atom(
       }
 
       case 'loop-resumed': {
-        const loop = registry.get(event.ralphId);
+        const loop = registry.get(event.superLoopId);
         if (loop) {
-          registry.set(event.ralphId, {
+          registry.set(event.superLoopId, {
             ...loop,
             status: 'running',
             updatedAt: Date.now(),
           });
-          set(ralphLoopRegistryAtom, registry);
+          set(superLoopRegistryAtom, registry);
 
-          const runnerState = get(ralphRunnerStateAtom(event.ralphId));
+          const runnerState = get(superRunnerStateAtom(event.superLoopId));
           if (runnerState) {
-            set(ralphRunnerStateAtom(event.ralphId), {
+            set(superRunnerStateAtom(event.superLoopId), {
               ...runnerState,
               isPaused: false,
               isRunning: true,
@@ -361,23 +361,23 @@ export const processRalphEventAtom = atom(
 // ========================================
 
 /**
- * Whether the new ralph loop dialog is open
+ * Whether the new super loop dialog is open
  */
-export const newRalphLoopDialogOpenAtom = atom(false);
+export const newSuperLoopDialogOpenAtom = atom(false);
 
 /**
- * Currently selected/expanded ralph loop in UI
+ * Currently selected/expanded super loop in UI
  */
-export const selectedRalphLoopIdAtom = atom<string | null>(null);
+export const selectedSuperLoopIdAtom = atom<string | null>(null);
 
 // ========================================
 // Helpers
 // ========================================
 
 /**
- * Get ralph loop status display info
+ * Get super loop status display info
  */
-export function getRalphStatusInfo(status: RalphLoopStatus): {
+export function getSuperStatusInfo(status: SuperLoopStatus): {
   label: string;
   color: 'running' | 'paused' | 'completed' | 'failed' | 'pending' | 'blocked';
 } {

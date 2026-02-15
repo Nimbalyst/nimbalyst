@@ -1,5 +1,5 @@
 /**
- * Centralized IPC listeners for Ralph Loop events
+ * Centralized IPC listeners for Super Loop events
  *
  * Follows the centralized IPC listener architecture (see docs/IPC_LISTENERS.md):
  * - Components NEVER subscribe to IPC events directly
@@ -7,23 +7,23 @@
  * - Components read from atoms
  *
  * Events handled:
- * - ralph:event -> processRalphEventAtom (loop state changes)
- * - ralph:iteration-prompt -> orchestrates AI session for iteration
+ * - super-loop:event -> processSuperEventAtom (loop state changes)
+ * - super-loop:iteration-prompt -> orchestrates AI session for iteration
  *
- * Call initRalphLoopListeners() once in AgentMode.tsx on mount.
+ * Call initSuperLoopListeners() once in AgentMode.tsx on mount.
  */
 
 import { store } from '../index';
-import { processRalphEventAtom } from '../atoms/ralphLoop';
-import type { RalphLoopEvent } from '../../../shared/types/ralph';
+import { processSuperEventAtom } from '../atoms/superLoop';
+import type { SuperLoopEvent } from '../../../shared/types/superLoop';
 
 /**
- * Initialize Ralph Loop IPC listeners.
+ * Initialize Super Loop IPC listeners.
  * Should be called once at app startup.
  *
  * @returns Cleanup function to call on unmount
  */
-export function initRalphLoopListeners(): () => void {
+export function initSuperLoopListeners(): () => void {
   const cleanups: Array<() => void> = [];
 
   // Track pending sessions so we can clean up listeners on shutdown.
@@ -31,39 +31,39 @@ export function initRalphLoopListeners(): () => void {
   const pendingSessionCleanups = new Map<string, () => void>();
 
   // =========================================================================
-  // Ralph Loop Events (state changes)
+  // Super Loop Events (state changes)
   // =========================================================================
   cleanups.push(
-    window.electronAPI.on('ralph:event', (ralphEvent: RalphLoopEvent) => {
-      if (!ralphEvent || typeof ralphEvent !== 'object') {
-        console.warn('[ralphLoopListeners] Received invalid ralph event:', ralphEvent);
+    window.electronAPI.on('super-loop:event', (superLoopEvent: SuperLoopEvent) => {
+      if (!superLoopEvent || typeof superLoopEvent !== 'object') {
+        console.warn('[superLoopListeners] Received invalid super loop event:', superLoopEvent);
         return;
       }
-      store.set(processRalphEventAtom, ralphEvent);
+      store.set(processSuperEventAtom, superLoopEvent);
     })
   );
 
   // =========================================================================
-  // Ralph Iteration Prompts (session orchestration)
+  // Super Loop Iteration Prompts (session orchestration)
   // =========================================================================
   cleanups.push(
-    window.electronAPI.on('ralph:iteration-prompt', async (
+    window.electronAPI.on('super-loop:iteration-prompt', async (
       data: {
-        ralphId: string;
+        superLoopId: string;
         sessionId: string;
         prompt: string;
         worktreePath: string;
         workspaceId: string;
       }
     ) => {
-      if (!data || typeof data !== 'object' || !data.ralphId || !data.sessionId) {
-        console.warn('[ralphLoopListeners] Received invalid iteration prompt data:', data);
+      if (!data || typeof data !== 'object' || !data.superLoopId || !data.sessionId) {
+        console.warn('[superLoopListeners] Received invalid iteration prompt data:', data);
         return;
       }
 
       try {
-        console.log('[ralphLoopListeners] Processing iteration prompt:', {
-          ralphId: data.ralphId,
+        console.log('[superLoopListeners] Processing iteration prompt:', {
+          superLoopId: data.superLoopId,
           sessionId: data.sessionId,
         });
 
@@ -89,14 +89,14 @@ export function initRalphLoopListeners(): () => void {
             isComplete?: boolean;
           }) => {
             if (response.sessionId === data.sessionId && response.isComplete) {
-              console.log('[ralphLoopListeners] Session stream complete:', data.sessionId);
+              console.log('[superLoopListeners] Session stream complete:', data.sessionId);
               doResolve();
             }
           };
 
           const handleError = (error: { sessionId: string }) => {
             if (error.sessionId === data.sessionId) {
-              console.log('[ralphLoopListeners] Session error, resolving:', data.sessionId);
+              console.log('[superLoopListeners] Session error, resolving:', data.sessionId);
               doResolve();
             }
           };
@@ -123,10 +123,10 @@ export function initRalphLoopListeners(): () => void {
         await streamCompletePromise;
 
         // Notify main process that session completed successfully
-        console.log('[ralphLoopListeners] Notifying session complete:', data.sessionId);
-        window.electronAPI.send('ralph:session-complete', data.sessionId, true);
+        console.log('[superLoopListeners] Notifying session complete:', data.sessionId);
+        window.electronAPI.send('super-loop:session-complete', data.sessionId, true);
       } catch (err) {
-        console.error('[ralphLoopListeners] Failed to process iteration prompt:', err);
+        console.error('[superLoopListeners] Failed to process iteration prompt:', err);
         // Clean up any pending listeners
         const cleanup = pendingSessionCleanups.get(data.sessionId);
         if (cleanup) {
@@ -134,7 +134,7 @@ export function initRalphLoopListeners(): () => void {
           pendingSessionCleanups.delete(data.sessionId);
         }
         // Still notify completion so the loop can continue/handle error
-        window.electronAPI.send('ralph:session-complete', data.sessionId, false);
+        window.electronAPI.send('super-loop:session-complete', data.sessionId, false);
       }
     })
   );

@@ -1,7 +1,7 @@
 /**
- * RalphLoopService - Core orchestration for Ralph Loops
+ * SuperLoopService - Core orchestration for Super Loops
  *
- * Ralph Loops are an autonomous AI agent loop pattern that runs iteratively until a task is complete.
+ * Super Loops are an autonomous AI agent loop pattern that runs iteratively until a task is complete.
  * Each iteration starts with fresh context while state persists via files (progress tracking, git history).
  */
 
@@ -11,30 +11,30 @@ import { ulid } from 'ulid';
 import * as fs from 'fs';
 import * as path from 'path';
 import { getDatabase } from '../database/initialize';
-import { createRalphLoopStore, type RalphLoopStore } from './RalphLoopStore';
+import { createSuperLoopStore, type SuperLoopStore } from './SuperLoopStore';
 import { createWorktreeStore, type WorktreeStore } from './WorktreeStore';
 import { AISessionsRepository } from '@nimbalyst/runtime/storage/repositories/AISessionsRepository';
 import { AgentMessagesRepository } from '@nimbalyst/runtime/storage/repositories/AgentMessagesRepository';
 import {
-  RALPH_DEFAULTS,
-  type RalphLoop,
-  type RalphLoopWithIterations,
-  type RalphLoopConfig,
-  type RalphExitCondition,
-  type RalphProgressFile,
-  type RalphLoopEvent,
-  type RalphPhase,
-} from '../../shared/types/ralph';
+  SUPER_LOOP_DEFAULTS,
+  type SuperLoop,
+  type SuperLoopWithIterations,
+  type SuperLoopConfig,
+  type SuperExitCondition,
+  type SuperProgressFile,
+  type SuperLoopEvent,
+  type SuperPhase,
+} from '../../shared/types/superLoop';
 
-const logger = log.scope('RalphLoopService');
+const logger = log.scope('SuperLoopService');
 
 const MAX_CONSECUTIVE_FAILURES = 3;
 
 /**
- * Ralph Loop runner state
+ * Super Loop runner state
  */
-interface RalphLoopRunnerState {
-  loop: RalphLoop;
+interface SuperLoopRunnerState {
+  loop: SuperLoop;
   worktreePath: string;
   workspaceId: string;
   isPaused: boolean;
@@ -44,87 +44,87 @@ interface RalphLoopRunnerState {
 }
 
 /**
- * RalphLoopService - Singleton service for managing Ralph Loops
+ * SuperLoopService - Singleton service for managing Super Loops
  */
-export class RalphLoopService {
-  private static instance: RalphLoopService | null = null;
-  private activeRunners: Map<string, RalphLoopRunnerState> = new Map();
-  private ralphStore: RalphLoopStore | null = null;
+export class SuperLoopService {
+  private static instance: SuperLoopService | null = null;
+  private activeRunners: Map<string, SuperLoopRunnerState> = new Map();
+  private superLoopStore: SuperLoopStore | null = null;
   private worktreeStore: WorktreeStore | null = null;
 
   private constructor() {}
 
-  public static getInstance(): RalphLoopService {
-    if (!RalphLoopService.instance) {
-      RalphLoopService.instance = new RalphLoopService();
+  public static getInstance(): SuperLoopService {
+    if (!SuperLoopService.instance) {
+      SuperLoopService.instance = new SuperLoopService();
     }
-    return RalphLoopService.instance;
+    return SuperLoopService.instance;
   }
 
   /**
    * Initialize stores lazily
    */
-  private async ensureStores(): Promise<{ ralphStore: RalphLoopStore; worktreeStore: WorktreeStore }> {
+  private async ensureStores(): Promise<{ superLoopStore: SuperLoopStore; worktreeStore: WorktreeStore }> {
     const db = getDatabase();
     if (!db) {
       throw new Error('Database not initialized');
     }
 
-    if (!this.ralphStore) {
-      this.ralphStore = createRalphLoopStore(db);
+    if (!this.superLoopStore) {
+      this.superLoopStore = createSuperLoopStore(db);
     }
     if (!this.worktreeStore) {
       this.worktreeStore = createWorktreeStore(db);
     }
 
-    return { ralphStore: this.ralphStore, worktreeStore: this.worktreeStore };
+    return { superLoopStore: this.superLoopStore, worktreeStore: this.worktreeStore };
   }
 
   /**
-   * Recover ralph loops that were interrupted by app restart.
+   * Recover super loops that were interrupted by app restart.
    * Called once at startup after handlers are registered.
    * Running loops -> paused, orphaned running iterations -> failed.
    */
   async recoverStaleLoopState(): Promise<void> {
     try {
-      const { ralphStore } = await this.ensureStores();
-      const activeLoops = await ralphStore.getActiveLoops();
+      const { superLoopStore } = await this.ensureStores();
+      const activeLoops = await superLoopStore.getActiveLoops();
 
       if (activeLoops.length === 0) {
         return;
       }
 
-      logger.info('Recovering stale ralph loops', { count: activeLoops.length });
+      logger.info('Recovering stale super loops', { count: activeLoops.length });
 
       for (const loop of activeLoops) {
         if (loop.status === 'running') {
-          await ralphStore.updateLoopStatus(loop.id, 'paused', 'Interrupted by app restart');
+          await superLoopStore.updateLoopStatus(loop.id, 'paused', 'Interrupted by app restart');
           logger.info('Recovered stale running loop -> paused', { id: loop.id });
         }
-        await ralphStore.failOrphanedIterations(loop.id);
+        await superLoopStore.failOrphanedIterations(loop.id);
       }
 
-      logger.info('Stale ralph loop recovery complete');
+      logger.info('Stale super loop recovery complete');
     } catch (error) {
-      logger.error('Failed to recover stale ralph loop state', { error });
+      logger.error('Failed to recover stale super loop state', { error });
     }
   }
 
   // ========================================
-  // Ralph Loop Lifecycle
+  // Super Loop Lifecycle
   // ========================================
 
   /**
-   * Create a new Ralph Loop for a worktree
+   * Create a new Super Loop for a worktree
    */
   async createLoop(
     worktreeId: string,
     taskDescription: string,
-    config?: RalphLoopConfig
-  ): Promise<RalphLoop> {
-    logger.info('Creating ralph loop', { worktreeId, taskDescription: taskDescription.slice(0, 100) });
+    config?: SuperLoopConfig
+  ): Promise<SuperLoop> {
+    logger.info('Creating super loop', { worktreeId, taskDescription: taskDescription.slice(0, 100) });
 
-    const { ralphStore, worktreeStore } = await this.ensureStores();
+    const { superLoopStore, worktreeStore } = await this.ensureStores();
 
     // Verify worktree exists
     const worktree = await worktreeStore.get(worktreeId);
@@ -133,52 +133,52 @@ export class RalphLoopService {
     }
 
     // Check if there's already an active loop for this worktree
-    const existingLoop = await ralphStore.getLoopByWorktreeId(worktreeId);
+    const existingLoop = await superLoopStore.getLoopByWorktreeId(worktreeId);
     if (existingLoop && (existingLoop.status === 'running' || existingLoop.status === 'paused')) {
-      throw new Error(`Worktree already has an active Ralph Loop: ${existingLoop.id}`);
+      throw new Error(`Worktree already has an active Super Loop: ${existingLoop.id}`);
     }
 
     const loopId = ulid();
-    const maxIterations = config?.maxIterations ?? RALPH_DEFAULTS.maxIterations;
+    const maxIterations = config?.maxIterations ?? SUPER_LOOP_DEFAULTS.maxIterations;
     const modelId = config?.modelId;
 
-    const loop = await ralphStore.createLoop(loopId, worktreeId, taskDescription, maxIterations, modelId);
+    const loop = await superLoopStore.createLoop(loopId, worktreeId, taskDescription, maxIterations, modelId);
 
-    // Initialize ralph files in the worktree
-    await this.initializeRalphFiles(worktree.path, taskDescription, maxIterations);
+    // Initialize super loop files in the worktree
+    await this.initializeSuperLoopFiles(worktree.path, taskDescription, maxIterations);
 
-    logger.info('Ralph loop created', { id: loop.id, worktreeId, modelId });
+    logger.info('Super loop created', { id: loop.id, worktreeId, modelId });
 
     return loop;
   }
 
   /**
-   * Start or resume a Ralph Loop
+   * Start or resume a Super Loop
    */
-  async startLoop(ralphId: string): Promise<void> {
-    logger.info('Starting ralph loop', { ralphId });
+  async startLoop(superLoopId: string): Promise<void> {
+    logger.info('Starting super loop', { superLoopId });
 
-    const { ralphStore, worktreeStore } = await this.ensureStores();
+    const { superLoopStore, worktreeStore } = await this.ensureStores();
 
-    const loop = await ralphStore.getLoop(ralphId);
+    const loop = await superLoopStore.getLoop(superLoopId);
     if (!loop) {
-      throw new Error(`Ralph loop not found: ${ralphId}`);
+      throw new Error(`Super loop not found: ${superLoopId}`);
     }
 
     if (loop.status === 'completed' || loop.status === 'failed') {
-      throw new Error(`Cannot start a ${loop.status} ralph loop`);
+      throw new Error(`Cannot start a ${loop.status} super loop`);
     }
 
     // Check if already running
-    if (this.activeRunners.has(ralphId)) {
-      const runner = this.activeRunners.get(ralphId)!;
+    if (this.activeRunners.has(superLoopId)) {
+      const runner = this.activeRunners.get(superLoopId)!;
       if (runner.isPaused) {
         runner.isPaused = false;
-        this.signalResume(ralphId);
-        this.emitEvent({ type: 'loop-resumed', ralphId });
+        this.signalResume(superLoopId);
+        this.emitEvent({ type: 'loop-resumed', superLoopId });
         return;
       }
-      throw new Error('Ralph loop is already running');
+      throw new Error('Super loop is already running');
     }
 
     // Get worktree info
@@ -188,10 +188,10 @@ export class RalphLoopService {
     }
 
     // Update status to running
-    await ralphStore.updateLoopStatus(ralphId, 'running');
+    await superLoopStore.updateLoopStatus(superLoopId, 'running');
 
     // Create runner state
-    const runnerState: RalphLoopRunnerState = {
+    const runnerState: SuperLoopRunnerState = {
       loop: { ...loop, status: 'running' },
       worktreePath: worktree.path,
       workspaceId: worktree.projectPath,
@@ -200,40 +200,40 @@ export class RalphLoopService {
       currentSessionId: null,
       currentIterationId: null,
     };
-    this.activeRunners.set(ralphId, runnerState);
+    this.activeRunners.set(superLoopId, runnerState);
 
     // Start the loop asynchronously
-    this.runLoop(ralphId).catch(error => {
-      logger.error('Ralph loop failed', { ralphId, error });
-      this.handleLoopError(ralphId, error);
+    this.runLoop(superLoopId).catch(error => {
+      logger.error('Super loop failed', { superLoopId, error });
+      this.handleLoopError(superLoopId, error);
     });
   }
 
   /**
-   * Pause a running Ralph Loop
+   * Pause a running Super Loop
    */
-  async pauseLoop(ralphId: string): Promise<void> {
-    logger.info('Pausing ralph loop', { ralphId });
+  async pauseLoop(superLoopId: string): Promise<void> {
+    logger.info('Pausing super loop', { superLoopId });
 
-    const runner = this.activeRunners.get(ralphId);
+    const runner = this.activeRunners.get(superLoopId);
     if (!runner) {
-      throw new Error('Ralph loop is not running');
+      throw new Error('Super loop is not running');
     }
 
     runner.isPaused = true;
-    const { ralphStore } = await this.ensureStores();
-    await ralphStore.updateLoopStatus(ralphId, 'paused');
+    const { superLoopStore } = await this.ensureStores();
+    await superLoopStore.updateLoopStatus(superLoopId, 'paused');
 
-    this.emitEvent({ type: 'loop-paused', ralphId });
+    this.emitEvent({ type: 'loop-paused', superLoopId });
   }
 
   /**
-   * Stop a Ralph Loop
+   * Stop a Super Loop
    */
-  async stopLoop(ralphId: string, reason: string = 'User stopped'): Promise<void> {
-    logger.info('Stopping ralph loop', { ralphId, reason });
+  async stopLoop(superLoopId: string, reason: string = 'User stopped'): Promise<void> {
+    logger.info('Stopping super loop', { superLoopId, reason });
 
-    const runner = this.activeRunners.get(ralphId);
+    const runner = this.activeRunners.get(superLoopId);
     if (runner) {
       runner.isStopped = true;
       runner.isPaused = false;
@@ -248,36 +248,36 @@ export class RalphLoopService {
       }
 
       // Resolve pending pause resolver so runLoop can exit cleanly
-      const pauseResolver = pauseResolvers.get(ralphId);
+      const pauseResolver = pauseResolvers.get(superLoopId);
       if (pauseResolver) {
-        pauseResolvers.delete(ralphId);
+        pauseResolvers.delete(superLoopId);
         pauseResolver();
       }
     }
 
-    const { ralphStore } = await this.ensureStores();
-    await ralphStore.updateLoopStatus(ralphId, 'completed', reason);
+    const { superLoopStore } = await this.ensureStores();
+    await superLoopStore.updateLoopStatus(superLoopId, 'completed', reason);
 
-    this.activeRunners.delete(ralphId);
-    this.emitEvent({ type: 'loop-stopped', ralphId, reason });
+    this.activeRunners.delete(superLoopId);
+    this.emitEvent({ type: 'loop-stopped', superLoopId, reason });
   }
 
   /**
-   * Continue a blocked Ralph Loop with user-provided feedback
+   * Continue a blocked Super Loop with user-provided feedback
    */
-  async continueBlockedLoop(ralphId: string, userFeedback: string): Promise<void> {
-    logger.info('Continuing blocked ralph loop', { ralphId });
+  async continueBlockedLoop(superLoopId: string, userFeedback: string): Promise<void> {
+    logger.info('Continuing blocked super loop', { superLoopId });
 
-    const { ralphStore, worktreeStore } = await this.ensureStores();
+    const { superLoopStore, worktreeStore } = await this.ensureStores();
 
-    const loop = await ralphStore.getLoop(ralphId);
+    const loop = await superLoopStore.getLoop(superLoopId);
     if (!loop) {
-      throw new Error(`Ralph loop not found: ${ralphId}`);
+      throw new Error(`Super loop not found: ${superLoopId}`);
     }
 
     // Only allow continuing blocked loops
     if (loop.status !== 'blocked') {
-      throw new Error(`Cannot continue a ${loop.status} ralph loop - only blocked loops can be continued`);
+      throw new Error(`Cannot continue a ${loop.status} super loop - only blocked loops can be continued`);
     }
 
     // Get worktree to read/write progress file
@@ -293,7 +293,7 @@ export class RalphLoopService {
     }
 
     // Update progress.json with user feedback and reset status
-    const updatedProgress: RalphProgressFile = {
+    const updatedProgress: SuperProgressFile = {
       ...progress,
       status: 'running',
       blockers: [], // Clear blockers
@@ -303,26 +303,26 @@ export class RalphLoopService {
     await this.writeProgressFile(worktree.path, updatedProgress);
 
     // Reset loop status to pending so startLoop can run
-    await ralphStore.updateLoopStatus(ralphId, 'pending');
+    await superLoopStore.updateLoopStatus(superLoopId, 'pending');
 
     // Start the loop
-    await this.startLoop(ralphId);
+    await this.startLoop(superLoopId);
   }
 
   /**
    * Force-resume a completed/failed/blocked loop
    */
   async forceResumeLoop(
-    ralphId: string,
+    superLoopId: string,
     options?: { bumpMaxIterations?: number; resetCompletionSignal?: boolean }
   ): Promise<void> {
-    logger.info('Force-resuming ralph loop', { ralphId, options });
+    logger.info('Force-resuming super loop', { superLoopId, options });
 
-    const { ralphStore, worktreeStore } = await this.ensureStores();
+    const { superLoopStore, worktreeStore } = await this.ensureStores();
 
-    const loop = await ralphStore.getLoop(ralphId);
+    const loop = await superLoopStore.getLoop(superLoopId);
     if (!loop) {
-      throw new Error(`Ralph loop not found: ${ralphId}`);
+      throw new Error(`Super loop not found: ${superLoopId}`);
     }
 
     if (loop.status === 'running') {
@@ -335,7 +335,7 @@ export class RalphLoopService {
     }
 
     if (options?.bumpMaxIterations && options.bumpMaxIterations > 0) {
-      await ralphStore.updateMaxIterations(ralphId, loop.maxIterations + options.bumpMaxIterations);
+      await superLoopStore.updateMaxIterations(superLoopId, loop.maxIterations + options.bumpMaxIterations);
     }
 
     if (options?.resetCompletionSignal) {
@@ -349,8 +349,8 @@ export class RalphLoopService {
       }
     }
 
-    await ralphStore.updateLoopStatus(ralphId, 'pending');
-    await this.startLoop(ralphId);
+    await superLoopStore.updateLoopStatus(superLoopId, 'pending');
+    await this.startLoop(superLoopId);
   }
 
   // ========================================
@@ -360,81 +360,81 @@ export class RalphLoopService {
   /**
    * Main loop execution
    */
-  private async runLoop(ralphId: string): Promise<void> {
-    logger.info('Running ralph loop', { ralphId });
+  private async runLoop(superLoopId: string): Promise<void> {
+    logger.info('Running super loop', { superLoopId });
 
-    const { ralphStore } = await this.ensureStores();
+    const { superLoopStore } = await this.ensureStores();
     let consecutiveFailures = 0;
 
     while (true) {
-      const runner = this.activeRunners.get(ralphId);
+      const runner = this.activeRunners.get(superLoopId);
       if (!runner || runner.isStopped) {
-        logger.info('Ralph loop exiting: runner stopped or missing', { ralphId, hasRunner: !!runner });
+        logger.info('Super loop exiting: runner stopped or missing', { superLoopId, hasRunner: !!runner });
         return;
       }
 
       // Wait if paused using event-driven approach
       if (runner.isPaused) {
-        await this.waitForResume(ralphId);
+        await this.waitForResume(superLoopId);
       }
 
       if (runner.isStopped) {
-        logger.info('Ralph loop exiting: stopped after resume', { ralphId });
+        logger.info('Super loop exiting: stopped after resume', { superLoopId });
         return;
       }
 
       // Refresh loop state
-      const loop = await ralphStore.getLoop(ralphId);
+      const loop = await superLoopStore.getLoop(superLoopId);
       if (!loop) {
-        throw new Error('Ralph loop disappeared');
+        throw new Error('Super loop disappeared');
       }
 
       // Check max iterations
       if (loop.currentIteration >= loop.maxIterations) {
-        logger.info('Ralph loop exiting: max iterations reached', {
-          ralphId,
+        logger.info('Super loop exiting: max iterations reached', {
+          superLoopId,
           currentIteration: loop.currentIteration,
           maxIterations: loop.maxIterations,
         });
-        await this.completeLoop(ralphId, 'max_iterations', `Reached maximum iterations: ${loop.maxIterations}`);
+        await this.completeLoop(superLoopId, 'max_iterations', `Reached maximum iterations: ${loop.maxIterations}`);
         return;
       }
 
       // Check exit conditions from progress file
       const exitCondition = await this.checkExitConditions(runner.worktreePath);
       if (exitCondition) {
-        logger.info('Ralph loop exiting: exit condition from progress file', {
-          ralphId,
+        logger.info('Super loop exiting: exit condition from progress file', {
+          superLoopId,
           exitType: exitCondition.type,
           exitReason: exitCondition.reason,
           currentIteration: loop.currentIteration,
         });
         if (exitCondition.type === 'blocked') {
-          await this.blockLoop(ralphId, exitCondition.reason);
+          await this.blockLoop(superLoopId, exitCondition.reason);
         } else {
-          await this.completeLoop(ralphId, exitCondition.type, exitCondition.reason);
+          await this.completeLoop(superLoopId, exitCondition.type, exitCondition.reason);
         }
         return;
       }
 
       // Run next iteration
       try {
-        logger.info('Ralph loop starting iteration', {
-          ralphId,
+        logger.info('Super loop starting iteration', {
+          superLoopId,
           nextIteration: loop.currentIteration + 1,
           consecutiveFailures,
         });
-        await this.runIteration(ralphId, runner);
+        await this.runIteration(superLoopId, runner);
         // Reset consecutive failures on success
         consecutiveFailures = 0;
-        logger.info('Ralph loop iteration completed successfully', {
-          ralphId,
+        logger.info('Super loop iteration completed successfully', {
+          superLoopId,
           iteration: loop.currentIteration + 1,
         });
       } catch (error) {
         consecutiveFailures++;
         logger.error('Iteration failed', {
-          ralphId,
+          superLoopId,
           iteration: loop.currentIteration + 1,
           consecutiveFailures,
           error: error instanceof Error ? error.message : String(error),
@@ -442,18 +442,18 @@ export class RalphLoopService {
 
         // Mark iteration as failed
         if (runner.currentIterationId) {
-          await ralphStore.updateIterationStatus(runner.currentIterationId, 'failed',
+          await superLoopStore.updateIterationStatus(runner.currentIterationId, 'failed',
             error instanceof Error ? error.message : 'Unknown error');
         }
 
         // Check if we've hit max consecutive failures
         if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
-          logger.info('Ralph loop exiting: max consecutive failures', {
-            ralphId,
+          logger.info('Super loop exiting: max consecutive failures', {
+            superLoopId,
             consecutiveFailures,
           });
           await this.completeLoop(
-            ralphId,
+            superLoopId,
             'error',
             `Stopped after ${MAX_CONSECUTIVE_FAILURES} consecutive iteration failures`
           );
@@ -470,19 +470,19 @@ export class RalphLoopService {
   /**
    * Wait for a paused loop to be resumed or stopped
    */
-  private waitForResume(ralphId: string): Promise<void> {
+  private waitForResume(superLoopId: string): Promise<void> {
     return new Promise((resolve) => {
-      pauseResolvers.set(ralphId, resolve);
+      pauseResolvers.set(superLoopId, resolve);
     });
   }
 
   /**
    * Signal that a loop has been resumed
    */
-  private signalResume(ralphId: string): void {
-    const resolver = pauseResolvers.get(ralphId);
+  private signalResume(superLoopId: string): void {
+    const resolver = pauseResolvers.get(superLoopId);
     if (resolver) {
-      pauseResolvers.delete(ralphId);
+      pauseResolvers.delete(superLoopId);
       resolver();
     }
   }
@@ -490,18 +490,18 @@ export class RalphLoopService {
   /**
    * Run a single iteration
    */
-  private async runIteration(ralphId: string, runner: RalphLoopRunnerState): Promise<void> {
-    const { ralphStore } = await this.ensureStores();
+  private async runIteration(superLoopId: string, runner: SuperLoopRunnerState): Promise<void> {
+    const { superLoopStore } = await this.ensureStores();
 
     // Read current phase from progress file
     const progress = await this.readProgressFile(runner.worktreePath);
-    const phase: RalphPhase = progress?.phase ?? 'planning';
+    const phase: SuperPhase = progress?.phase ?? 'planning';
 
     // Increment iteration counter
-    const iterationNumber = await ralphStore.incrementIteration(ralphId);
+    const iterationNumber = await superLoopStore.incrementIteration(superLoopId);
     runner.loop.currentIteration = iterationNumber;
 
-    logger.info('Starting ralph iteration', { ralphId, iterationNumber, phase });
+    logger.info('Starting super loop iteration', { superLoopId, iterationNumber, phase });
 
     // Create a new AI session for this iteration
     const sessionId = ulid();
@@ -519,7 +519,7 @@ export class RalphLoopService {
       id: sessionId,
       provider,
       model,
-      title: `Ralph ${phaseLabel} #${iterationNumber}`,
+      title: `Super Loop ${phaseLabel} #${iterationNumber}`,
       workspaceId: runner.workspaceId,
       providerConfig: {
         workingDirectory: runner.worktreePath,
@@ -528,27 +528,27 @@ export class RalphLoopService {
     });
 
     // Create iteration record
-    await ralphStore.createIteration(iterationId, ralphId, sessionId, iterationNumber);
+    await superLoopStore.createIteration(iterationId, superLoopId, sessionId, iterationNumber);
 
     this.emitEvent({
       type: 'iteration-started',
-      ralphId,
+      superLoopId,
       iterationId,
       iterationNumber,
       sessionId
     });
 
-    // Generate the ralph prompt based on current phase
-    const prompt = this.generateRalphPrompt(phase);
+    // Generate the super loop prompt based on current phase
+    const prompt = this.generateSuperLoopPrompt(phase);
 
     // Send the prompt to Claude Code
     // This needs to be done via the renderer process which handles the AI communication
     // We'll emit an event that the renderer can listen to and process
-    this.emitIterationPrompt(ralphId, sessionId, prompt, runner.worktreePath, runner.workspaceId);
+    this.emitIterationPrompt(superLoopId, sessionId, prompt, runner.worktreePath, runner.workspaceId);
 
     // Inject progress snapshot at START of iteration (after prompt is emitted so the
     // snapshot messages don't exist when the renderer loads the session for ai:sendMessage)
-    await this.injectProgressSnapshot(sessionId, runner.worktreePath, 'iteration-start', iterationNumber, ralphId);
+    await this.injectProgressSnapshot(sessionId, runner.worktreePath, 'iteration-start', iterationNumber, superLoopId);
 
     // Wait for the session to complete
     // The renderer will call back when the session is done
@@ -556,24 +556,24 @@ export class RalphLoopService {
 
     if (result.success) {
       // Inject progress snapshot at END of iteration
-      await this.injectProgressSnapshot(sessionId, runner.worktreePath, 'iteration-end', iterationNumber, ralphId);
+      await this.injectProgressSnapshot(sessionId, runner.worktreePath, 'iteration-end', iterationNumber, superLoopId);
 
       // Mark iteration as completed
-      await ralphStore.updateIterationStatus(iterationId, 'completed');
+      await superLoopStore.updateIterationStatus(iterationId, 'completed');
 
       this.emitEvent({
         type: 'iteration-completed',
-        ralphId,
+        superLoopId,
         iterationId,
         iterationNumber
       });
     } else {
       // Session was interrupted (window closed, user stopped, etc.)
-      await ralphStore.updateIterationStatus(iterationId, 'failed', 'Session interrupted');
+      await superLoopStore.updateIterationStatus(iterationId, 'failed', 'Session interrupted');
 
       this.emitEvent({
         type: 'iteration-failed',
-        ralphId,
+        superLoopId,
         iterationId,
         iterationNumber,
         error: 'Session interrupted'
@@ -624,41 +624,41 @@ export class RalphLoopService {
   /**
    * Complete the loop
    */
-  private async completeLoop(ralphId: string, type: string, reason: string): Promise<void> {
-    logger.info('Completing ralph loop', { ralphId, type, reason });
+  private async completeLoop(superLoopId: string, type: string, reason: string): Promise<void> {
+    logger.info('Completing super loop', { superLoopId, type, reason });
 
-    const { ralphStore } = await this.ensureStores();
-    await ralphStore.updateLoopStatus(ralphId, 'completed', `${type}: ${reason}`);
+    const { superLoopStore } = await this.ensureStores();
+    await superLoopStore.updateLoopStatus(superLoopId, 'completed', `${type}: ${reason}`);
 
-    this.activeRunners.delete(ralphId);
-    this.emitEvent({ type: 'loop-completed', ralphId, reason });
+    this.activeRunners.delete(superLoopId);
+    this.emitEvent({ type: 'loop-completed', superLoopId, reason });
   }
 
   /**
    * Block the loop (Claude indicated it's stuck and needs user input)
    */
-  private async blockLoop(ralphId: string, reason: string): Promise<void> {
-    logger.info('Blocking ralph loop', { ralphId, reason });
+  private async blockLoop(superLoopId: string, reason: string): Promise<void> {
+    logger.info('Blocking super loop', { superLoopId, reason });
 
-    const { ralphStore } = await this.ensureStores();
-    await ralphStore.updateLoopStatus(ralphId, 'blocked', reason);
+    const { superLoopStore } = await this.ensureStores();
+    await superLoopStore.updateLoopStatus(superLoopId, 'blocked', reason);
 
-    this.activeRunners.delete(ralphId);
-    this.emitEvent({ type: 'loop-blocked', ralphId, reason });
+    this.activeRunners.delete(superLoopId);
+    this.emitEvent({ type: 'loop-blocked', superLoopId, reason });
   }
 
   /**
    * Handle loop error
    */
-  private async handleLoopError(ralphId: string, error: unknown): Promise<void> {
-    logger.error('Ralph loop error', { ralphId, error });
+  private async handleLoopError(superLoopId: string, error: unknown): Promise<void> {
+    logger.error('Super loop error', { superLoopId, error });
 
-    const { ralphStore } = await this.ensureStores();
+    const { superLoopStore } = await this.ensureStores();
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    await ralphStore.updateLoopStatus(ralphId, 'failed', errorMessage);
+    await superLoopStore.updateLoopStatus(superLoopId, 'failed', errorMessage);
 
-    this.activeRunners.delete(ralphId);
-    this.emitEvent({ type: 'loop-failed', ralphId, error: errorMessage });
+    this.activeRunners.delete(superLoopId);
+    this.emitEvent({ type: 'loop-failed', superLoopId, error: errorMessage });
   }
 
   // ========================================
@@ -666,24 +666,24 @@ export class RalphLoopService {
   // ========================================
 
   /**
-   * Initialize .ralph/ directory with task and config files
+   * Initialize .superloop/ directory with task and config files
    */
-  private async initializeRalphFiles(
+  private async initializeSuperLoopFiles(
     worktreePath: string,
     taskDescription: string,
     maxIterations: number
   ): Promise<void> {
-    const ralphDir = path.join(worktreePath, '.ralph');
+    const superLoopDir = path.join(worktreePath, '.superloop');
 
-    // Create .ralph directory if it doesn't exist
-    await fs.promises.mkdir(ralphDir, { recursive: true });
+    // Create .superloop directory if it doesn't exist
+    await fs.promises.mkdir(superLoopDir, { recursive: true });
 
     // Write task.md
-    const taskPath = path.join(ralphDir, 'task.md');
+    const taskPath = path.join(superLoopDir, 'task.md');
     await fs.promises.writeFile(taskPath, taskDescription, 'utf-8');
 
     // Write config.json
-    const configPath = path.join(ralphDir, 'config.json');
+    const configPath = path.join(superLoopDir, 'config.json');
     const config = {
       maxIterations,
       createdAt: new Date().toISOString(),
@@ -691,7 +691,7 @@ export class RalphLoopService {
     await fs.promises.writeFile(configPath, JSON.stringify(config, null, 2), 'utf-8');
 
     // Write initial progress.json (atomic write with backup)
-    const progress: RalphProgressFile = {
+    const progress: SuperProgressFile = {
       currentIteration: 0,
       phase: 'planning',
       status: 'running',
@@ -702,19 +702,19 @@ export class RalphLoopService {
     await this.writeProgressFile(worktreePath, progress);
 
     // Create empty IMPLEMENTATION_PLAN.md
-    const planPath = path.join(ralphDir, 'IMPLEMENTATION_PLAN.md');
-    await fs.promises.writeFile(planPath, '# Implementation Plan\n\n<!-- Generated by Ralph Loop - Claude will populate this during planning phase -->\n', 'utf-8');
+    const planPath = path.join(superLoopDir, 'IMPLEMENTATION_PLAN.md');
+    await fs.promises.writeFile(planPath, '# Implementation Plan\n\n<!-- Generated by Super Loop - Claude will populate this during planning phase -->\n', 'utf-8');
 
-    // Add .ralph to .gitignore if not already present
-    await this.ensureRalphInGitignore(worktreePath);
+    // Add .superloop to .gitignore if not already present
+    await this.ensureSuperLoopInGitignore(worktreePath);
 
-    logger.info('Ralph files initialized', { worktreePath });
+    logger.info('Super loop files initialized', { worktreePath });
   }
 
   /**
-   * Ensure .ralph is in .gitignore
+   * Ensure .superloop is in .gitignore
    */
-  private async ensureRalphInGitignore(worktreePath: string): Promise<void> {
+  private async ensureSuperLoopInGitignore(worktreePath: string): Promise<void> {
     const gitignorePath = path.join(worktreePath, '.gitignore');
 
     try {
@@ -725,10 +725,10 @@ export class RalphLoopService {
         // File doesn't exist, will create it
       }
 
-      if (!content.includes('.ralph')) {
-        const newContent = content.endsWith('\n') ? content + '.ralph/\n' : content + '\n.ralph/\n';
+      if (!content.includes('.superloop')) {
+        const newContent = content.endsWith('\n') ? content + '.superloop/\n' : content + '\n.superloop/\n';
         await fs.promises.writeFile(gitignorePath, newContent, 'utf-8');
-        logger.info('Added .ralph to .gitignore', { worktreePath });
+        logger.info('Added .superloop to .gitignore', { worktreePath });
       }
     } catch (error) {
       logger.warn('Failed to update .gitignore', { worktreePath, error });
@@ -738,13 +738,13 @@ export class RalphLoopService {
   /**
    * Read the progress file with fallback to backup on corruption
    */
-  private async readProgressFile(worktreePath: string): Promise<RalphProgressFile | null> {
-    const progressPath = path.join(worktreePath, '.ralph', 'progress.json');
+  private async readProgressFile(worktreePath: string): Promise<SuperProgressFile | null> {
+    const progressPath = path.join(worktreePath, '.superloop', 'progress.json');
     const backupPath = progressPath + '.bak';
 
     try {
       const content = await fs.promises.readFile(progressPath, 'utf-8');
-      return JSON.parse(content) as RalphProgressFile;
+      return JSON.parse(content) as SuperProgressFile;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
         return null;
@@ -754,7 +754,7 @@ export class RalphLoopService {
         logger.warn('Corrupt progress.json, trying backup', { worktreePath, error: error.message });
         try {
           const backupContent = await fs.promises.readFile(backupPath, 'utf-8');
-          return JSON.parse(backupContent) as RalphProgressFile;
+          return JSON.parse(backupContent) as SuperProgressFile;
         } catch {
           logger.warn('Backup progress.json also unavailable, using default', { worktreePath });
           return {
@@ -776,8 +776,8 @@ export class RalphLoopService {
   /**
    * Atomically write progress.json with backup
    */
-  private async writeProgressFile(worktreePath: string, progress: RalphProgressFile): Promise<void> {
-    const progressPath = path.join(worktreePath, '.ralph', 'progress.json');
+  private async writeProgressFile(worktreePath: string, progress: SuperProgressFile): Promise<void> {
+    const progressPath = path.join(worktreePath, '.superloop', 'progress.json');
     const tmpPath = progressPath + '.tmp';
     const backupPath = progressPath + '.bak';
 
@@ -803,13 +803,13 @@ export class RalphLoopService {
     worktreePath: string,
     timing: 'iteration-start' | 'iteration-end',
     iterationNumber: number,
-    ralphId: string
+    superLoopId: string
   ): Promise<void> {
     const progress = await this.readProgressFile(worktreePath);
     if (!progress) return;
 
     const now = new Date();
-    const snapshotId = `ralph-progress-${timing}-${iterationNumber}-${Date.now()}`;
+    const snapshotId = `super-loop-progress-${timing}-${iterationNumber}-${Date.now()}`;
 
     // Write nimbalyst_tool_use message (creates the tool call in the transcript)
     await AgentMessagesRepository.create({
@@ -820,11 +820,11 @@ export class RalphLoopService {
       content: JSON.stringify({
         type: 'nimbalyst_tool_use',
         id: snapshotId,
-        name: 'RalphProgressSnapshot',
+        name: 'SuperProgressSnapshot',
         input: {
           timing,
           iterationNumber,
-          ralphId,
+          superLoopId,
           progress,
           capturedAt: now.getTime(),
         },
@@ -854,7 +854,7 @@ export class RalphLoopService {
   /**
    * Check exit conditions from progress file
    */
-  private async checkExitConditions(worktreePath: string): Promise<RalphExitCondition | null> {
+  private async checkExitConditions(worktreePath: string): Promise<SuperExitCondition | null> {
     const progress = await this.readProgressFile(worktreePath);
 
     if (!progress) {
@@ -896,19 +896,19 @@ export class RalphLoopService {
    * Based on Geoffrey Huntley's Ralph Loop methodology
    */
   private generatePlanPrompt(): string {
-    return `0a. Study \`.ralph/task.md\` to understand the task requirements.
-0b. Study \`@.ralph/IMPLEMENTATION_PLAN.md\` (if present) to understand the plan so far.
+    return `0a. Study \`.superloop/task.md\` to understand the task requirements.
+0b. Study \`@.superloop/IMPLEMENTATION_PLAN.md\` (if present) to understand the plan so far.
 0c. Study the existing codebase to understand shared utilities, patterns, and components.
 0d. Reference the project's CLAUDE.md for build commands and project conventions.
-0e. Read \`.ralph/progress.json\` - check \`learnings\` from previous iterations and \`userFeedback\` if present.
+0e. Read \`.superloop/progress.json\` - check \`learnings\` from previous iterations and \`userFeedback\` if present.
 
-1. Study \`@.ralph/IMPLEMENTATION_PLAN.md\` (if present; it may be incomplete) and search the existing source code to compare against the task requirements. Analyze findings, prioritize tasks, and create/update \`@.ralph/IMPLEMENTATION_PLAN.md\` as a bullet point list sorted by priority of items yet to be implemented. Consider searching for TODO, minimal implementations, placeholders, skipped/flaky tests, and inconsistent patterns.
+1. Study \`@.superloop/IMPLEMENTATION_PLAN.md\` (if present; it may be incomplete) and search the existing source code to compare against the task requirements. Analyze findings, prioritize tasks, and create/update \`@.superloop/IMPLEMENTATION_PLAN.md\` as a bullet point list sorted by priority of items yet to be implemented. Consider searching for TODO, minimal implementations, placeholders, skipped/flaky tests, and inconsistent patterns.
 
 IMPORTANT: Plan only. Do NOT implement anything. Do NOT assume functionality is missing; confirm with code search first.
 
-ULTIMATE GOAL: Read \`.ralph/task.md\` for the goal. Consider missing elements and plan accordingly. If an element is missing, search first to confirm it doesn't exist.
+ULTIMATE GOAL: Read \`.superloop/task.md\` for the goal. Consider missing elements and plan accordingly. If an element is missing, search first to confirm it doesn't exist.
 
-BEFORE YOU FINISH: You MUST update \`.ralph/progress.json\` as the last thing you do. This is how state is communicated between iterations. Set the following fields:
+BEFORE YOU FINISH: You MUST update \`.superloop/progress.json\` as the last thing you do. This is how state is communicated between iterations. Set the following fields:
 - \`"phase": "building"\` to signal that the next iteration should begin building
 - \`"status": "running"\`
 - \`"learnings"\`: append an entry with \`{ "iteration": <current iteration number>, "summary": "<what you learned/decided this iteration>", "filesChanged": [<files you created or modified>] }\`
@@ -920,38 +920,38 @@ BEFORE YOU FINISH: You MUST update \`.ralph/progress.json\` as the last thing yo
    * Based on Geoffrey Huntley's Ralph Loop methodology
    */
   private generateBuildPrompt(): string {
-    return `0a. Study \`.ralph/task.md\` to understand the task requirements.
-0b. Study \`@.ralph/IMPLEMENTATION_PLAN.md\` to understand the current plan and priorities.
+    return `0a. Study \`.superloop/task.md\` to understand the task requirements.
+0b. Study \`@.superloop/IMPLEMENTATION_PLAN.md\` to understand the current plan and priorities.
 0c. Reference the project's CLAUDE.md for build commands and project conventions.
-0d. Read \`.ralph/progress.json\` - check \`learnings\` from previous iterations to avoid repeating work, and \`userFeedback\` if present (the user has provided guidance to help you).
+0d. Read \`.superloop/progress.json\` - check \`learnings\` from previous iterations to avoid repeating work, and \`userFeedback\` if present (the user has provided guidance to help you).
 
-1. Your task is to implement functionality per the task requirements. Follow \`@.ralph/IMPLEMENTATION_PLAN.md\` and choose the most important incomplete item to address. Before making changes, search the codebase (don't assume not implemented). Complete ONE item per iteration.
+1. Your task is to implement functionality per the task requirements. Follow \`@.superloop/IMPLEMENTATION_PLAN.md\` and choose the most important incomplete item to address. Before making changes, search the codebase (don't assume not implemented). Complete ONE item per iteration.
 
 2. After implementing functionality, run the tests for that unit of code. If functionality is missing then add it per the task requirements.
 
-3. When you discover issues, immediately update \`@.ralph/IMPLEMENTATION_PLAN.md\` with your findings. When resolved, mark the item complete or remove it.
+3. When you discover issues, immediately update \`@.superloop/IMPLEMENTATION_PLAN.md\` with your findings. When resolved, mark the item complete or remove it.
 
-4. When the tests pass, update \`@.ralph/IMPLEMENTATION_PLAN.md\`, then commit your changes with a descriptive message.
+4. When the tests pass, update \`@.superloop/IMPLEMENTATION_PLAN.md\`, then commit your changes with a descriptive message.
 
 IMPORTANT RULES:
 - Single sources of truth, no migrations/adapters. If tests unrelated to your work fail, resolve them as part of the increment.
-- Keep \`@.ralph/IMPLEMENTATION_PLAN.md\` current with learnings - future iterations depend on this to avoid duplicating efforts.
+- Keep \`@.superloop/IMPLEMENTATION_PLAN.md\` current with learnings - future iterations depend on this to avoid duplicating efforts.
 - Implement functionality completely. Placeholders and stubs waste effort by requiring work to be redone.
-- When \`@.ralph/IMPLEMENTATION_PLAN.md\` becomes large, clean out completed items.
-- For any bugs you notice, resolve them or document them in \`@.ralph/IMPLEMENTATION_PLAN.md\`.
+- When \`@.superloop/IMPLEMENTATION_PLAN.md\` becomes large, clean out completed items.
+- For any bugs you notice, resolve them or document them in \`@.superloop/IMPLEMENTATION_PLAN.md\`.
 
-BEFORE YOU FINISH: You MUST update \`.ralph/progress.json\` as the LAST thing you do every iteration. This file is how state is communicated between iterations - the next iteration starts with fresh context and depends on this file. Update these fields:
+BEFORE YOU FINISH: You MUST update \`.superloop/progress.json\` as the LAST thing you do every iteration. This file is how state is communicated between iterations - the next iteration starts with fresh context and depends on this file. Update these fields:
 - \`"learnings"\`: append an entry with \`{ "iteration": <current iteration number>, "summary": "<what you accomplished, key decisions, and anything the next iteration needs to know>", "filesChanged": [<files you created or modified>] }\`
 - \`"status"\`: keep as \`"running"\` if work remains
-- \`"completionSignal"\`: set to \`true\` ONLY when ALL items in \`@.ralph/IMPLEMENTATION_PLAN.md\` are complete and the task from \`.ralph/task.md\` is fully satisfied
+- \`"completionSignal"\`: set to \`true\` ONLY when ALL items in \`@.superloop/IMPLEMENTATION_PLAN.md\` are complete and the task from \`.superloop/task.md\` is fully satisfied
 - If you are BLOCKED and cannot make progress, set \`"status": "blocked"\` and describe the blocker in the \`"blockers"\` array`;
   }
 
   /**
-   * Generate the system prompt for a ralph iteration
+   * Generate the system prompt for a super loop iteration
    * Selects plan or build prompt based on current phase
    */
-  private generateRalphPrompt(phase: 'planning' | 'building'): string {
+  private generateSuperLoopPrompt(phase: 'planning' | 'building'): string {
     if (phase === 'planning') {
       return this.generatePlanPrompt();
     }
@@ -963,13 +963,13 @@ BEFORE YOU FINISH: You MUST update \`.ralph/progress.json\` as the LAST thing yo
   // ========================================
 
   /**
-   * Emit a ralph loop event to all windows
+   * Emit a super loop event to all windows
    */
-  private emitEvent(event: RalphLoopEvent): void {
+  private emitEvent(event: SuperLoopEvent): void {
     const windows = BrowserWindow.getAllWindows();
     for (const window of windows) {
       if (!window.isDestroyed()) {
-        window.webContents.send('ralph:event', event);
+        window.webContents.send('super-loop:event', event);
       }
     }
   }
@@ -980,7 +980,7 @@ BEFORE YOU FINISH: You MUST update \`.ralph/progress.json\` as the LAST thing yo
    * Prefers the focused window, falls back to the first non-destroyed window.
    */
   private emitIterationPrompt(
-    ralphId: string,
+    superLoopId: string,
     sessionId: string,
     prompt: string,
     worktreePath: string,
@@ -994,13 +994,13 @@ BEFORE YOU FINISH: You MUST update \`.ralph/progress.json\` as the LAST thing yo
       throw new Error('No window available to send iteration prompt');
     }
     logger.info('Sending iteration prompt to window', {
-      ralphId,
+      superLoopId,
       sessionId,
       windowId: target.id,
       totalWindows: windows.length,
     });
-    target.webContents.send('ralph:iteration-prompt', {
-      ralphId,
+    target.webContents.send('super-loop:iteration-prompt', {
+      superLoopId,
       sessionId,
       prompt,
       worktreePath,
@@ -1013,51 +1013,51 @@ BEFORE YOU FINISH: You MUST update \`.ralph/progress.json\` as the LAST thing yo
   // ========================================
 
   /**
-   * Get a Ralph Loop by ID
+   * Get a Super Loop by ID
    */
-  async getLoop(ralphId: string): Promise<RalphLoop | null> {
-    const { ralphStore } = await this.ensureStores();
-    return ralphStore.getLoop(ralphId);
+  async getLoop(superLoopId: string): Promise<SuperLoop | null> {
+    const { superLoopStore } = await this.ensureStores();
+    return superLoopStore.getLoop(superLoopId);
   }
 
   /**
-   * Get a Ralph Loop by worktree ID
+   * Get a Super Loop by worktree ID
    */
-  async getLoopByWorktreeId(worktreeId: string): Promise<RalphLoop | null> {
-    const { ralphStore } = await this.ensureStores();
-    return ralphStore.getLoopByWorktreeId(worktreeId);
+  async getLoopByWorktreeId(worktreeId: string): Promise<SuperLoop | null> {
+    const { superLoopStore } = await this.ensureStores();
+    return superLoopStore.getLoopByWorktreeId(worktreeId);
   }
 
   /**
-   * Get a Ralph Loop with all iterations
+   * Get a Super Loop with all iterations
    */
-  async getLoopWithIterations(ralphId: string): Promise<RalphLoopWithIterations | null> {
-    const { ralphStore } = await this.ensureStores();
-    return ralphStore.getLoopWithIterations(ralphId);
+  async getLoopWithIterations(superLoopId: string): Promise<SuperLoopWithIterations | null> {
+    const { superLoopStore } = await this.ensureStores();
+    return superLoopStore.getLoopWithIterations(superLoopId);
   }
 
   /**
-   * Get all Ralph Loops for a workspace
+   * Get all Super Loops for a workspace
    */
-  async listLoops(workspaceId: string): Promise<RalphLoop[]> {
-    const { ralphStore } = await this.ensureStores();
-    return ralphStore.listLoops(workspaceId);
+  async listLoops(workspaceId: string): Promise<SuperLoop[]> {
+    const { superLoopStore } = await this.ensureStores();
+    return superLoopStore.listLoops(workspaceId);
   }
 
   /**
-   * Get runner state for a ralph loop
+   * Get runner state for a super loop
    */
-  getRunnerState(ralphId: string): RalphLoopRunnerState | undefined {
-    return this.activeRunners.get(ralphId);
+  getRunnerState(superLoopId: string): SuperLoopRunnerState | undefined {
+    return this.activeRunners.get(superLoopId);
   }
 
   /**
-   * Get the progress file for a Ralph Loop
+   * Get the progress file for a Super Loop
    */
-  async getProgressFile(ralphId: string): Promise<RalphProgressFile | null> {
-    const { ralphStore, worktreeStore } = await this.ensureStores();
+  async getProgressFile(superLoopId: string): Promise<SuperProgressFile | null> {
+    const { superLoopStore, worktreeStore } = await this.ensureStores();
 
-    const loop = await ralphStore.getLoop(ralphId);
+    const loop = await superLoopStore.getLoop(superLoopId);
     if (!loop) {
       return null;
     }
@@ -1071,31 +1071,31 @@ BEFORE YOU FINISH: You MUST update \`.ralph/progress.json\` as the LAST thing yo
   }
 
   /**
-   * Update Ralph Loop metadata (title, archive, pin)
+   * Update Super Loop metadata (title, archive, pin)
    */
   async updateLoop(
-    ralphId: string,
+    superLoopId: string,
     updates: { title?: string; isArchived?: boolean; isPinned?: boolean }
-  ): Promise<RalphLoop | null> {
-    logger.info('Updating ralph loop', { ralphId, updates });
+  ): Promise<SuperLoop | null> {
+    logger.info('Updating super loop', { superLoopId, updates });
 
-    const { ralphStore } = await this.ensureStores();
-    return ralphStore.updateLoop(ralphId, updates);
+    const { superLoopStore } = await this.ensureStores();
+    return superLoopStore.updateLoop(superLoopId, updates);
   }
 
   /**
-   * Delete a Ralph Loop
+   * Delete a Super Loop
    */
-  async deleteLoop(ralphId: string): Promise<void> {
+  async deleteLoop(superLoopId: string): Promise<void> {
     // Stop if running
-    if (this.activeRunners.has(ralphId)) {
-      await this.stopLoop(ralphId, 'Deleted');
+    if (this.activeRunners.has(superLoopId)) {
+      await this.stopLoop(superLoopId, 'Deleted');
     }
 
-    const { ralphStore } = await this.ensureStores();
-    await ralphStore.deleteLoop(ralphId);
+    const { superLoopStore } = await this.ensureStores();
+    await superLoopStore.deleteLoop(superLoopId);
 
-    logger.info('Ralph loop deleted', { ralphId });
+    logger.info('Super loop deleted', { superLoopId });
   }
 }
 
@@ -1121,6 +1121,6 @@ app.on('window-all-closed', () => {
 });
 
 // Export singleton getter
-export function getRalphLoopService(): RalphLoopService {
-  return RalphLoopService.getInstance();
+export function getSuperLoopService(): SuperLoopService {
+  return SuperLoopService.getInstance();
 }

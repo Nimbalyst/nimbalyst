@@ -1149,12 +1149,39 @@ class PGLiteWorker {
       throw error;
     }
 
-    // Ralph Loops table - autonomous AI agent loop pattern
-    // Ralph Loops run iteratively until a task is complete, with fresh context each iteration
-    console.log('[PGLite Worker] Creating ralph_loops table...');
+    // Migration: Rename ralph_loops -> super_loops and ralph_iterations -> super_iterations
     try {
       await this.db.exec(`
-        CREATE TABLE IF NOT EXISTS ralph_loops (
+        DO $$
+        BEGIN
+          IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'ralph_loops')
+             AND NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'super_loops') THEN
+            ALTER TABLE ralph_loops RENAME TO super_loops;
+            ALTER INDEX IF EXISTS idx_ralph_loops_worktree RENAME TO idx_super_loops_worktree;
+            ALTER INDEX IF EXISTS idx_ralph_loops_status RENAME TO idx_super_loops_status;
+          END IF;
+
+          IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'ralph_iterations')
+             AND NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'super_iterations') THEN
+            ALTER TABLE ralph_iterations RENAME TO super_iterations;
+            ALTER TABLE super_iterations RENAME COLUMN ralph_loop_id TO super_loop_id;
+            ALTER INDEX IF EXISTS idx_ralph_iterations_loop RENAME TO idx_super_iterations_loop;
+            ALTER INDEX IF EXISTS idx_ralph_iterations_session RENAME TO idx_super_iterations_session;
+          END IF;
+        END $$;
+      `);
+      console.log('[PGLite Worker] Migrated ralph_loops/ralph_iterations -> super_loops/super_iterations');
+    } catch (error) {
+      console.error('[PGLite Worker] Failed to migrate ralph -> super loop tables:', error);
+      // Non-fatal - tables may not exist yet
+    }
+
+    // Super Loops table - autonomous AI agent loop pattern
+    // Super Loops run iteratively until a task is complete, with fresh context each iteration
+    console.log('[PGLite Worker] Creating super_loops table...');
+    try {
+      await this.db.exec(`
+        CREATE TABLE IF NOT EXISTS super_loops (
           id TEXT PRIMARY KEY,
           worktree_id TEXT NOT NULL REFERENCES worktrees(id) ON DELETE CASCADE,
           task_description TEXT NOT NULL,
@@ -1166,22 +1193,22 @@ class PGLiteWorker {
           updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
         );
 
-        CREATE INDEX IF NOT EXISTS idx_ralph_loops_worktree ON ralph_loops(worktree_id);
-        CREATE INDEX IF NOT EXISTS idx_ralph_loops_status ON ralph_loops(status);
+        CREATE INDEX IF NOT EXISTS idx_super_loops_worktree ON super_loops(worktree_id);
+        CREATE INDEX IF NOT EXISTS idx_super_loops_status ON super_loops(status);
       `);
-      console.log('[PGLite Worker] ralph_loops table created successfully');
+      console.log('[PGLite Worker] super_loops table created successfully');
     } catch (error) {
-      console.error('[PGLite Worker] Failed to create ralph_loops table:', error);
+      console.error('[PGLite Worker] Failed to create super_loops table:', error);
       throw error;
     }
 
-    // Ralph Iterations table - each iteration is linked to an AI session
-    console.log('[PGLite Worker] Creating ralph_iterations table...');
+    // Super Iterations table - each iteration is linked to an AI session
+    console.log('[PGLite Worker] Creating super_iterations table...');
     try {
       await this.db.exec(`
-        CREATE TABLE IF NOT EXISTS ralph_iterations (
+        CREATE TABLE IF NOT EXISTS super_iterations (
           id TEXT PRIMARY KEY,
-          ralph_loop_id TEXT NOT NULL REFERENCES ralph_loops(id) ON DELETE CASCADE,
+          super_loop_id TEXT NOT NULL REFERENCES super_loops(id) ON DELETE CASCADE,
           session_id TEXT NOT NULL REFERENCES ai_sessions(id) ON DELETE CASCADE,
           iteration_number INTEGER NOT NULL,
           status TEXT NOT NULL DEFAULT 'running',
@@ -1190,62 +1217,62 @@ class PGLiteWorker {
           completed_at TIMESTAMPTZ
         );
 
-        CREATE INDEX IF NOT EXISTS idx_ralph_iterations_loop ON ralph_iterations(ralph_loop_id);
-        CREATE INDEX IF NOT EXISTS idx_ralph_iterations_session ON ralph_iterations(session_id);
+        CREATE INDEX IF NOT EXISTS idx_super_iterations_loop ON super_iterations(super_loop_id);
+        CREATE INDEX IF NOT EXISTS idx_super_iterations_session ON super_iterations(session_id);
       `);
-      console.log('[PGLite Worker] ralph_iterations table created successfully');
+      console.log('[PGLite Worker] super_iterations table created successfully');
     } catch (error) {
-      console.error('[PGLite Worker] Failed to create ralph_iterations table:', error);
+      console.error('[PGLite Worker] Failed to create super_iterations table:', error);
       throw error;
     }
 
-    // Add model_id column to ralph_loops (for per-loop model selection)
+    // Add model_id column to super_loops (for per-loop model selection)
     try {
       await this.db.exec(`
         DO $$
         BEGIN
           IF NOT EXISTS (
             SELECT 1 FROM information_schema.columns
-            WHERE table_name = 'ralph_loops' AND column_name = 'model_id'
+            WHERE table_name = 'super_loops' AND column_name = 'model_id'
           ) THEN
-            ALTER TABLE ralph_loops ADD COLUMN model_id TEXT;
+            ALTER TABLE super_loops ADD COLUMN model_id TEXT;
           END IF;
         END $$;
       `);
-      console.log('[PGLite Worker] model_id column added to ralph_loops');
+      console.log('[PGLite Worker] model_id column added to super_loops');
     } catch (error) {
-      console.error('[PGLite Worker] Failed to add model_id column to ralph_loops:', error);
+      console.error('[PGLite Worker] Failed to add model_id column to super_loops:', error);
       throw error;
     }
 
-    // Add title, is_archived, is_pinned columns to ralph_loops
+    // Add title, is_archived, is_pinned columns to super_loops
     try {
       await this.db.exec(`
         DO $$
         BEGIN
           IF NOT EXISTS (
             SELECT 1 FROM information_schema.columns
-            WHERE table_name = 'ralph_loops' AND column_name = 'title'
+            WHERE table_name = 'super_loops' AND column_name = 'title'
           ) THEN
-            ALTER TABLE ralph_loops ADD COLUMN title TEXT;
+            ALTER TABLE super_loops ADD COLUMN title TEXT;
           END IF;
           IF NOT EXISTS (
             SELECT 1 FROM information_schema.columns
-            WHERE table_name = 'ralph_loops' AND column_name = 'is_archived'
+            WHERE table_name = 'super_loops' AND column_name = 'is_archived'
           ) THEN
-            ALTER TABLE ralph_loops ADD COLUMN is_archived BOOLEAN DEFAULT FALSE;
+            ALTER TABLE super_loops ADD COLUMN is_archived BOOLEAN DEFAULT FALSE;
           END IF;
           IF NOT EXISTS (
             SELECT 1 FROM information_schema.columns
-            WHERE table_name = 'ralph_loops' AND column_name = 'is_pinned'
+            WHERE table_name = 'super_loops' AND column_name = 'is_pinned'
           ) THEN
-            ALTER TABLE ralph_loops ADD COLUMN is_pinned BOOLEAN DEFAULT FALSE;
+            ALTER TABLE super_loops ADD COLUMN is_pinned BOOLEAN DEFAULT FALSE;
           END IF;
         END $$;
       `);
-      console.log('[PGLite Worker] title, is_archived, is_pinned columns added to ralph_loops');
+      console.log('[PGLite Worker] title, is_archived, is_pinned columns added to super_loops');
     } catch (error) {
-      console.error('[PGLite Worker] Failed to add title/is_archived/is_pinned columns to ralph_loops:', error);
+      console.error('[PGLite Worker] Failed to add title/is_archived/is_pinned columns to super_loops:', error);
       throw error;
     }
   }

@@ -1,5 +1,5 @@
 /**
- * RalphLoopGroup - Displays a Ralph Loop in the session history
+ * SuperLoopGroup - Displays a Super Loop in the session history
  *
  * Follows the same visual and interaction patterns as BlitzGroup:
  * - Flat list item (no card/border)
@@ -12,25 +12,25 @@ import React, { useState, useEffect, useCallback, useMemo, useRef, memo } from '
 import { useAtomValue, useSetAtom } from 'jotai';
 import { MaterialSymbol, ProviderIcon } from '@nimbalyst/runtime';
 import {
-  ralphRunnerStateAtom,
-  ralphIterationsAtom,
-  setRalphIterationsAtom,
-  ralphProgressAtom,
-  setRalphProgressAtom,
-  getRalphStatusInfo,
-} from '../../store/atoms/ralphLoop';
+  superRunnerStateAtom,
+  superIterationsAtom,
+  setSuperIterationsAtom,
+  superProgressAtom,
+  setSuperProgressAtom,
+  getSuperStatusInfo,
+} from '../../store/atoms/superLoop';
 import {
   groupSessionStatusAtom,
   sessionProcessingAtom,
   sessionUnreadAtom,
   sessionPendingPromptAtom,
 } from '../../store';
-import type { RalphLoop, RalphLoopStatus, RalphIteration, RalphLearning } from '../../../shared/types/ralph';
+import type { SuperLoop, SuperLoopStatus, SuperIteration, SuperLearning } from '../../../shared/types/superLoop';
 import { getRelativeTimeString } from '../../utils/dateFormatting';
 
-interface RalphLoopGroupProps {
+interface SuperLoopGroupProps {
   loopId: string;
-  loop: RalphLoop;
+  loop: SuperLoop;
   isExpanded: boolean;
   isActive: boolean;
   onToggle: () => void;
@@ -46,9 +46,9 @@ interface RalphLoopGroupProps {
  * Compact status badge matching BlitzGroup's archive badge style.
  * Hidden when running (the spinning sync icon indicates running state).
  */
-const RalphStatusBadge: React.FC<{ status: RalphLoopStatus }> = memo(({ status }) => {
+const SuperStatusBadge: React.FC<{ status: SuperLoopStatus }> = memo(({ status }) => {
   if (status === 'running') return null;
-  const { label } = getRalphStatusInfo(status);
+  const { label } = getSuperStatusInfo(status);
   const colorMap: Record<string, string> = {
     paused: 'bg-[rgba(234,179,8,0.15)] text-[var(--nim-warning)]',
     completed: 'bg-[rgba(59,130,246,0.15)] text-[var(--nim-primary)]',
@@ -64,11 +64,11 @@ const RalphStatusBadge: React.FC<{ status: RalphLoopStatus }> = memo(({ status }
 });
 
 /**
- * Aggregate status indicator for the Ralph Loop group header.
+ * Aggregate status indicator for the Super Loop group header.
  * When iterations are loaded, uses groupSessionStatusAtom (same as BlitzGroupStatus).
  * When not loaded, derives a simple indicator from the loop status.
  */
-const RalphGroupStatus: React.FC<{ sessionIds: string[]; loopStatus: RalphLoopStatus }> = memo(({ sessionIds, loopStatus }) => {
+const SuperGroupStatus: React.FC<{ sessionIds: string[]; loopStatus: SuperLoopStatus }> = memo(({ sessionIds, loopStatus }) => {
   // When iteration session IDs are available, use the standard group status atom
   const sessionIdsKey = useMemo(() => JSON.stringify([...sessionIds].sort()), [sessionIds]);
   const groupStatus = useAtomValue(groupSessionStatusAtom(sessionIdsKey));
@@ -120,7 +120,7 @@ const RalphGroupStatus: React.FC<{ sessionIds: string[]; loopStatus: RalphLoopSt
  * Per-session status indicator for iteration rows.
  * Same pattern as BlitzSessionStatus.
  */
-const RalphIterationStatus: React.FC<{ sessionId: string }> = memo(({ sessionId }) => {
+const SuperIterationStatus: React.FC<{ sessionId: string }> = memo(({ sessionId }) => {
   const isProcessing = useAtomValue(sessionProcessingAtom(sessionId));
   const hasPendingPrompt = useAtomValue(sessionPendingPromptAtom(sessionId));
   const hasUnread = useAtomValue(sessionUnreadAtom(sessionId));
@@ -152,14 +152,14 @@ const RalphIterationStatus: React.FC<{ sessionId: string }> = memo(({ sessionId 
 /**
  * Iteration row matching BlitzSessionRow style.
  */
-const RalphIterationRow: React.FC<{
-  iteration: RalphIteration;
-  learning?: RalphLearning;
+const SuperIterationRow: React.FC<{
+  iteration: SuperIteration;
+  learning?: SuperLearning;
   isActive: boolean;
   onSelect: () => void;
 }> = memo(({ iteration, learning, isActive, onSelect }) => (
   <div
-    className={`ralph-iteration-item flex items-center gap-2 py-1.5 px-3 mr-2 mb-0.5 cursor-pointer rounded transition-colors duration-150 select-none ${
+    className={`super-loop-iteration-item flex items-center gap-2 py-1.5 px-3 mr-2 mb-0.5 cursor-pointer rounded transition-colors duration-150 select-none ${
       isActive ? 'bg-[var(--nim-bg-selected)]' : 'hover:bg-[var(--nim-bg-hover)]'
     } focus:outline-2 focus:outline-[var(--nim-border-focus)] focus:outline-offset-[-2px]`}
     onClick={onSelect}
@@ -183,7 +183,7 @@ const RalphIterationRow: React.FC<{
       {getRelativeTimeString(iteration.createdAt)}
     </span>
     <div className="shrink-0 flex items-center">
-      <RalphIterationStatus sessionId={iteration.sessionId} />
+      <SuperIterationStatus sessionId={iteration.sessionId} />
     </div>
   </div>
 ));
@@ -191,7 +191,7 @@ const RalphIterationRow: React.FC<{
 /**
  * Blocked continue UI - textarea and button for providing feedback to overcome a blocker.
  */
-const RalphBlockedContinueUI: React.FC<{ loopId: string }> = memo(({ loopId }) => {
+const SuperBlockedContinueUI: React.FC<{ loopId: string }> = memo(({ loopId }) => {
   const [input, setInput] = useState('');
   const [isContinuing, setIsContinuing] = useState(false);
 
@@ -199,13 +199,13 @@ const RalphBlockedContinueUI: React.FC<{ loopId: string }> = memo(({ loopId }) =
     if (!input.trim()) return;
     setIsContinuing(true);
     try {
-      const result = await window.electronAPI.invoke('ralph:continue-blocked', loopId, input);
+      const result = await window.electronAPI.invoke('super-loop:continue-blocked', loopId, input);
       if (!result.success) {
-        console.error('[RalphLoopGroup] Failed to continue loop:', result.error);
+        console.error('[SuperLoopGroup] Failed to continue loop:', result.error);
       }
       setInput('');
     } catch (err) {
-      console.error('[RalphLoopGroup] Failed to continue loop:', err);
+      console.error('[SuperLoopGroup] Failed to continue loop:', err);
     } finally {
       setIsContinuing(false);
     }
@@ -232,7 +232,7 @@ const RalphBlockedContinueUI: React.FC<{ loopId: string }> = memo(({ loopId }) =
   );
 });
 
-export const RalphLoopGroup: React.FC<RalphLoopGroupProps> = memo(({
+export const SuperLoopGroup: React.FC<SuperLoopGroupProps> = memo(({
   loopId,
   loop,
   isExpanded,
@@ -245,11 +245,11 @@ export const RalphLoopGroup: React.FC<RalphLoopGroupProps> = memo(({
   onRename,
   onPinToggle,
 }) => {
-  const runnerState = useAtomValue(ralphRunnerStateAtom(loopId));
-  const iterations = useAtomValue(ralphIterationsAtom(loopId));
-  const setIterations = useSetAtom(setRalphIterationsAtom);
-  const progress = useAtomValue(ralphProgressAtom(loopId));
-  const setProgress = useSetAtom(setRalphProgressAtom);
+  const runnerState = useAtomValue(superRunnerStateAtom(loopId));
+  const iterations = useAtomValue(superIterationsAtom(loopId));
+  const setIterations = useSetAtom(setSuperIterationsAtom);
+  const progress = useAtomValue(superProgressAtom(loopId));
+  const setProgress = useSetAtom(setSuperProgressAtom);
 
   const [isLoadingIterations, setIsLoadingIterations] = useState(false);
 
@@ -280,12 +280,12 @@ export const RalphLoopGroup: React.FC<RalphLoopGroupProps> = memo(({
       if (iterations.length === 0) {
         setIsLoadingIterations(true);
         try {
-          const result = await window.electronAPI.invoke('ralph:get-with-iterations', loopId);
+          const result = await window.electronAPI.invoke('super-loop:get-with-iterations', loopId);
           if (!cancelled && result.success && result.loop?.iterations) {
             setIterations({ loopId, iterations: result.loop.iterations });
           }
         } catch (err) {
-          console.error('[RalphLoopGroup] Failed to load iterations:', err);
+          console.error('[SuperLoopGroup] Failed to load iterations:', err);
         } finally {
           if (!cancelled) setIsLoadingIterations(false);
         }
@@ -293,12 +293,12 @@ export const RalphLoopGroup: React.FC<RalphLoopGroupProps> = memo(({
 
       if (!progress) {
         try {
-          const result = await window.electronAPI.invoke('ralph:get-progress', loopId);
+          const result = await window.electronAPI.invoke('super-loop:get-progress', loopId);
           if (!cancelled && result.success && result.progress) {
             setProgress({ loopId, progress: result.progress });
           }
         } catch (err) {
-          console.error('[RalphLoopGroup] Failed to load progress:', err);
+          console.error('[SuperLoopGroup] Failed to load progress:', err);
         }
       }
     };
@@ -310,36 +310,36 @@ export const RalphLoopGroup: React.FC<RalphLoopGroupProps> = memo(({
   // Control handlers
   const handleStart = useCallback(async () => {
     try {
-      await window.electronAPI.invoke('ralph:start', loopId);
+      await window.electronAPI.invoke('super-loop:start', loopId);
     } catch (err) {
-      console.error('[RalphLoopGroup] Failed to start loop:', err);
+      console.error('[SuperLoopGroup] Failed to start loop:', err);
     }
   }, [loopId]);
 
   const handlePause = useCallback(async () => {
     try {
-      await window.electronAPI.invoke('ralph:pause', loopId);
+      await window.electronAPI.invoke('super-loop:pause', loopId);
     } catch (err) {
-      console.error('[RalphLoopGroup] Failed to pause loop:', err);
+      console.error('[SuperLoopGroup] Failed to pause loop:', err);
     }
   }, [loopId]);
 
   const handleStop = useCallback(async () => {
     try {
-      await window.electronAPI.invoke('ralph:stop', loopId, 'User stopped');
+      await window.electronAPI.invoke('super-loop:stop', loopId, 'User stopped');
     } catch (err) {
-      console.error('[RalphLoopGroup] Failed to stop loop:', err);
+      console.error('[SuperLoopGroup] Failed to stop loop:', err);
     }
   }, [loopId]);
 
   const handleForceResume = useCallback(async () => {
     try {
-      await window.electronAPI.invoke('ralph:force-resume', loopId, {
+      await window.electronAPI.invoke('super-loop:force-resume', loopId, {
         bumpMaxIterations: 5,
         resetCompletionSignal: true,
       });
     } catch (err) {
-      console.error('[RalphLoopGroup] Failed to force-resume loop:', err);
+      console.error('[SuperLoopGroup] Failed to force-resume loop:', err);
     }
   }, [loopId]);
 
@@ -462,13 +462,13 @@ export const RalphLoopGroup: React.FC<RalphLoopGroupProps> = memo(({
 
   return (
     <div
-      className={`ralph-loop-group mb-1 ${loop.isArchived ? 'archived' : ''} ${isActive ? 'active' : ''}`}
-      data-testid={`ralph-loop-group-${loopId}`}
+      className={`super-loop-group mb-1 ${loop.isArchived ? 'archived' : ''} ${isActive ? 'active' : ''}`}
+      data-testid={`super-loop-group-${loopId}`}
       onMouseLeave={handleCloseContextMenu}
     >
       {/* Header - matches BlitzGroup/WorkstreamGroup header structure */}
       <div
-        className={`ralph-loop-group-header flex items-center gap-0 text-[0.8125rem] text-[var(--nim-text)] transition-colors duration-150 rounded-md mx-2 w-[calc(100%-1rem)] ${
+        className={`super-loop-group-header flex items-center gap-0 text-[0.8125rem] text-[var(--nim-text)] transition-colors duration-150 rounded-md mx-2 w-[calc(100%-1rem)] ${
           isActive ? 'bg-[var(--nim-bg-selected)]' : 'hover:bg-[var(--nim-bg-hover)]'
         }`}
         onContextMenu={handleContextMenu}
@@ -478,7 +478,7 @@ export const RalphLoopGroup: React.FC<RalphLoopGroupProps> = memo(({
           className="flex items-center justify-center w-6 h-full min-h-[2.5rem] p-0 bg-transparent border-none cursor-pointer text-[var(--nim-text-faint)] shrink-0 rounded-l-md hover:bg-[var(--nim-bg-secondary)] focus:outline-none focus-visible:outline-2 focus-visible:outline-[var(--nim-border-focus)] focus-visible:outline-offset-[-2px]"
           onClick={handleChevronClick}
           aria-expanded={isExpanded}
-          aria-label={`${isExpanded ? 'Collapse' : 'Expand'} Ralph Loop`}
+          aria-label={`${isExpanded ? 'Collapse' : 'Expand'} Super Loop`}
         >
           <MaterialSymbol
             icon="chevron_right"
@@ -499,7 +499,7 @@ export const RalphLoopGroup: React.FC<RalphLoopGroupProps> = memo(({
               handleHeaderClick(e as unknown as React.MouseEvent);
             }
           }}
-          aria-label={`Ralph Loop: ${displayTitle}`}
+          aria-label={`Super Loop: ${displayTitle}`}
         >
           {/* Sync icon */}
           <div className={`shrink-0 w-[1.125rem] h-[1.125rem] mt-[0.0625rem] flex items-center justify-center ${
@@ -540,8 +540,8 @@ export const RalphLoopGroup: React.FC<RalphLoopGroupProps> = memo(({
                   )}
                 </>
               )}
-              {!isRenaming && <RalphStatusBadge status={loop.status} />}
-              {!isRenaming && <RalphGroupStatus sessionIds={iterationSessionIds} loopStatus={loop.status} />}
+              {!isRenaming && <SuperStatusBadge status={loop.status} />}
+              {!isRenaming && <SuperGroupStatus sessionIds={iterationSessionIds} loopStatus={loop.status} />}
             </div>
             {/* Subtitle line */}
             <div className="flex items-center gap-1.5 flex-wrap">
@@ -608,7 +608,7 @@ export const RalphLoopGroup: React.FC<RalphLoopGroupProps> = memo(({
 
       {/* Expanded content - iteration sessions */}
       {isExpanded && (
-        <div className="ralph-loop-children pt-1 pb-1 pl-10 animate-[ralphSlideDown_0.2s_ease-out]">
+        <div className="super-loop-children pt-1 pb-1 pl-10 animate-[superLoopSlideDown_0.2s_ease-out]">
           {isLoadingIterations ? (
             <div className="flex items-center justify-center py-3">
               <MaterialSymbol icon="progress_activity" size={16} className="animate-spin text-[var(--nim-text-muted)]" />
@@ -621,7 +621,7 @@ export const RalphLoopGroup: React.FC<RalphLoopGroupProps> = memo(({
             iterations.map((iteration) => {
               const learning = progress?.learnings?.find(l => l.iteration === iteration.iterationNumber);
               return (
-                <RalphIterationRow
+                <SuperIterationRow
                   key={iteration.id}
                   iteration={iteration}
                   learning={learning}
@@ -634,7 +634,7 @@ export const RalphLoopGroup: React.FC<RalphLoopGroupProps> = memo(({
 
           {/* Blocked continue UI */}
           {loop.status === 'blocked' && (
-            <RalphBlockedContinueUI loopId={loopId} />
+            <SuperBlockedContinueUI loopId={loopId} />
           )}
         </div>
       )}
@@ -684,7 +684,7 @@ export const RalphLoopGroup: React.FC<RalphLoopGroupProps> = memo(({
       )}
 
       <style>{`
-        @keyframes ralphSlideDown {
+        @keyframes superLoopSlideDown {
           from {
             opacity: 0;
             transform: translateY(-4px);
@@ -694,7 +694,7 @@ export const RalphLoopGroup: React.FC<RalphLoopGroupProps> = memo(({
             transform: translateY(0);
           }
         }
-        .ralph-loop-group.archived .ralph-loop-group-header {
+        .super-loop-group.archived .super-loop-group-header {
           opacity: 0.5;
         }
       `}</style>
@@ -702,4 +702,4 @@ export const RalphLoopGroup: React.FC<RalphLoopGroupProps> = memo(({
   );
 });
 
-export default RalphLoopGroup;
+export default SuperLoopGroup;

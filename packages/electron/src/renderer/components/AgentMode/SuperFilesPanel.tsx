@@ -1,57 +1,57 @@
 /**
- * RalphFilesPanel - Shows Ralph Loop progress and .ralph/ files for a worktree.
+ * SuperFilesPanel - Shows Super Loop progress and .superloop/ files for a worktree.
  *
- * Since .ralph/ is gitignored, these files don't appear in the uncommitted files view.
+ * Since .superloop/ is gitignored, these files don't appear in the uncommitted files view.
  * This panel surfaces the loop's progress (phase, iteration, learnings, blockers)
- * and provides clickable links to open the .ralph/ files directly.
+ * and provides clickable links to open the .superloop/ files directly.
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import {
-  ralphProgressAtom,
-  setRalphProgressAtom,
-} from '../../store/atoms/ralphLoop';
-import type { RalphLoop } from '../../../shared/types/ralph';
+  superProgressAtom,
+  setSuperProgressAtom,
+} from '../../store/atoms/superLoop';
+import type { SuperLoop } from '../../../shared/types/superLoop';
 
-interface RalphFilesPanelProps {
+interface SuperFilesPanelProps {
   worktreeId: string;
   worktreePath: string;
   onFileClick: (filePath: string) => void;
 }
 
-const RALPH_FILES = [
+const SUPER_LOOP_FILES = [
   { name: 'IMPLEMENTATION_PLAN.md', icon: 'description' as const, label: 'Plan' },
   { name: 'task.md', icon: 'task' as const, label: 'Task' },
   { name: 'progress.json', icon: 'monitoring' as const, label: 'Progress' },
   { name: 'config.json', icon: 'settings' as const, label: 'Config' },
 ];
 
-export const RalphFilesPanel: React.FC<RalphFilesPanelProps> = React.memo(({
+export const SuperFilesPanel: React.FC<SuperFilesPanelProps> = React.memo(({
   worktreeId,
   worktreePath,
   onFileClick,
 }) => {
-  const [loop, setLoop] = useState<RalphLoop | null>(null);
+  const [loop, setLoop] = useState<SuperLoop | null>(null);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  const progress = useAtomValue(ralphProgressAtom(loop?.id ?? ''));
-  const setProgress = useSetAtom(setRalphProgressAtom);
+  const progress = useAtomValue(superProgressAtom(loop?.id ?? ''));
+  const setProgress = useSetAtom(setSuperProgressAtom);
 
-  // Load the ralph loop for this worktree
+  // Load the super loop for this worktree
   useEffect(() => {
     let cancelled = false;
 
     async function loadLoop() {
       try {
-        const result = await window.electronAPI.invoke('ralph:get-by-worktree', worktreeId);
+        const result = await window.electronAPI.invoke('super-loop:get-by-worktree', worktreeId);
         if (!cancelled && result.success && result.loop) {
           setLoop(result.loop);
         }
       } catch (error) {
-        console.error('[RalphFilesPanel] Failed to load ralph loop:', error);
+        console.error('[SuperFilesPanel] Failed to load super loop:', error);
       } finally {
         if (!cancelled) {
           setIsLoading(false);
@@ -74,12 +74,12 @@ export const RalphFilesPanel: React.FC<RalphFilesPanelProps> = React.memo(({
       if (progress) return;
 
       try {
-        const result = await window.electronAPI.invoke('ralph:get-progress', loopId);
+        const result = await window.electronAPI.invoke('super-loop:get-progress', loopId);
         if (!cancelled && result.success && result.progress) {
           setProgress({ loopId, progress: result.progress });
         }
       } catch (error) {
-        console.error('[RalphFilesPanel] Failed to load progress:', error);
+        console.error('[SuperFilesPanel] Failed to load progress:', error);
       }
     }
 
@@ -92,7 +92,7 @@ export const RalphFilesPanel: React.FC<RalphFilesPanelProps> = React.memo(({
   }, []);
 
   const handleFileClick = useCallback((fileName: string) => {
-    const filePath = `${worktreePath}/.ralph/${fileName}`;
+    const filePath = `${worktreePath}/.superloop/${fileName}`;
     onFileClick(filePath);
   }, [worktreePath, onFileClick]);
 
@@ -170,12 +170,12 @@ export const RalphFilesPanel: React.FC<RalphFilesPanelProps> = React.memo(({
 
           {/* File links */}
           <div className="flex flex-wrap gap-1 pt-1">
-            {RALPH_FILES.map((file) => (
+            {SUPER_LOOP_FILES.map((file) => (
               <button
                 key={file.name}
                 className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] text-[var(--nim-primary)] bg-transparent border border-[var(--nim-border)] rounded cursor-pointer hover:bg-[var(--nim-bg-hover)] transition-colors"
                 onClick={() => handleFileClick(file.name)}
-                title={`.ralph/${file.name}`}
+                title={`.superloop/${file.name}`}
               >
                 <MaterialSymbol icon={file.icon} size={12} />
                 <span>{file.label}</span>
@@ -201,7 +201,7 @@ export const RalphFilesPanel: React.FC<RalphFilesPanelProps> = React.memo(({
   );
 });
 
-RalphFilesPanel.displayName = 'RalphFilesPanel';
+SuperFilesPanel.displayName = 'SuperFilesPanel';
 
 const PhaseBadge: React.FC<{ phase: string }> = React.memo(({ phase }) => {
   const colorMap: Record<string, string> = {

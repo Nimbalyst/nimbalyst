@@ -38,8 +38,8 @@ import { registerUsageAnalyticsHandlers } from './ipc/UsageAnalyticsHandlers';
 import { registerWorktreeHandlers } from './ipc/WorktreeHandlers';
 import { registerBlitzHandlers } from './ipc/BlitzHandlers';
 import { registerProjectMigrationHandlers } from './ipc/ProjectMigrationHandlers';
-import { registerRalphLoopHandlers } from './ipc/RalphLoopHandlers';
-import { getRalphLoopService } from './services/RalphLoopService';
+import { registerSuperLoopHandlers } from './ipc/SuperLoopHandlers';
+import { getSuperLoopService } from './services/SuperLoopService';
 import {
     type AppTheme,
     dismissClaudeCodeWindowsWarning,
@@ -741,7 +741,7 @@ app.whenReady().then(async () => {
     registerWorktreeHandlers();
     registerBlitzHandlers();
     registerProjectMigrationHandlers();
-    registerRalphLoopHandlers();
+    registerSuperLoopHandlers();
     registerMCPConfigHandlers();
     registerClaudeCodePluginHandlers();
     registerDatabaseBrowserHandlers();
@@ -911,8 +911,8 @@ app.whenReady().then(async () => {
     // Check for pending restart continuations and queue continuation prompts
     await checkForRestartContinuation(aiService);
 
-    // Recover any ralph loops that were running when the app last shut down
-    await getRalphLoopService().recoverStaleLoopState();
+    // Recover any super loops that were running when the app last shut down
+    await getSuperLoopService().recoverStaleLoopState();
 
     // Initialize Voice Mode handlers
     // The renderer calls 'voice-mode:init' to trigger initialization

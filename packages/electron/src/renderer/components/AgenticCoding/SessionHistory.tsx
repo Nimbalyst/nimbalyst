@@ -1,12 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
-import { Virtuoso, VirtuosoHandle } from 'react-virtuoso';
 import { CollapsibleGroup } from './CollapsibleGroup';
 import { SessionListItem } from './SessionListItem';
 import { WorkstreamGroup } from './WorkstreamGroup';
 import { BlitzGroup } from './BlitzGroup';
-import { RalphLoopGroup } from './RalphLoopGroup';
-import { NewRalphLoopDialog } from './NewRalphLoopDialog';
+import { SuperLoopGroup } from './SuperLoopGroup';
+import { NewSuperLoopDialog } from './NewSuperLoopDialog';
 import { ArchiveProgress } from './ArchiveProgress';
 import { IndexBuildDialog } from './IndexBuildDialog';
 import { ArchiveWorktreeDialog } from '../AgentMode/ArchiveWorktreeDialog';
@@ -33,9 +32,9 @@ import {
   type SessionListItem as SessionListItemType,
 } from '../../store';
 import { alphaFeatureEnabledAtom, betaFeatureEnabledAtom, worktreesFeatureAvailableAtom } from '../../store/atoms/appSettings';
-import { ralphLoopListAtom, upsertRalphLoopAtom, removeRalphLoopAtom } from '../../store/atoms/ralphLoop';
-import { useRalphLoopDialog } from '../../hooks/useRalphLoop';
-import type { RalphLoop } from '../../../shared/types/ralph';
+import { superLoopListAtom, upsertSuperLoopAtom, removeSuperLoopAtom } from '../../store/atoms/superLoop';
+import { useSuperLoopDialog } from '../../hooks/useSuperLoop';
+import type { SuperLoop } from '../../../shared/types/superLoop';
 import { store } from '@nimbalyst/runtime/store';
 import './SessionHistory.css';
 
@@ -293,14 +292,14 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   const removeSessionFromAtom = useSetAtom(removeSessionFullAtom);
 
   const isWorktreesAvailable = useAtomValue(worktreesFeatureAvailableAtom);
-  const isRalphLoopsBetaEnabled = useAtomValue(betaFeatureEnabledAtom('ralph-loops'));
-  const isRalphLoopsAvailable = isWorktreesAvailable && isRalphLoopsBetaEnabled;
+  const isSuperLoopsBetaEnabled = useAtomValue(betaFeatureEnabledAtom('super-loops'));
+  const isSuperLoopsAvailable = isWorktreesAvailable && isSuperLoopsBetaEnabled;
 
-  // === Ralph Loop state ===
-  const ralphLoops = useAtomValue(ralphLoopListAtom);
-  const upsertRalphLoop = useSetAtom(upsertRalphLoopAtom);
-  const removeRalphLoop = useSetAtom(removeRalphLoopAtom);
-  const { openDialog: openRalphLoopDialog } = useRalphLoopDialog();
+  // === Super Loop state ===
+  const superLoops = useAtomValue(superLoopListAtom);
+  const upsertSuperLoop = useSetAtom(upsertSuperLoopAtom);
+  const removeSuperLoop = useSetAtom(removeSuperLoopAtom);
+  const { openDialog: openSuperLoopDialog } = useSuperLoopDialog();
 
   // Get the session registry to look up parent session IDs
   const sessionRegistry = useAtomValue(sessionRegistryAtom);
@@ -402,12 +401,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   } = useArchiveWorktreeDialog();
 
   // Track scroll position to restore after refresh
-  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
-  const [scrollContainerEl, setScrollContainerEl] = useState<HTMLDivElement | null>(null);
-  const scrollContainerCallbackRef = useCallback((node: HTMLDivElement | null) => {
-    scrollContainerRef.current = node;
-    setScrollContainerEl(node);
-  }, []);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const scrollPositionRef = useRef<number>(0);
 
   // Save scroll position on scroll
@@ -849,13 +843,13 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
         return newCache;
       });
 
-      // If this worktree belongs to a Ralph Loop, remove the loop from state
-      const ralphLoop = ralphLoops.find(loop => loop.worktreeId === worktreeId);
-      if (ralphLoop) {
-        removeRalphLoop(ralphLoop.id);
+      // If this worktree belongs to a Super Loop, remove the loop from state
+      const superLoop = superLoops.find(loop => loop.worktreeId === worktreeId);
+      if (superLoop) {
+        removeSuperLoop(superLoop.id);
       }
     });
-  }, [archiveWorktreeDialogState, allSessions, workspacePath, confirmArchiveWorktree, removeSessionFromAtom, onSessionArchive, ralphLoops, removeRalphLoop]);
+  }, [archiveWorktreeDialogState, allSessions, workspacePath, confirmArchiveWorktree, removeSessionFromAtom, onSessionArchive, superLoops, removeSuperLoop]);
 
   const handleUnarchiveSession = async (sessionId: string) => {
     try {
@@ -1114,28 +1108,28 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     }
   }, [worktreeCache, workspacePath]);
 
-  // Ralph Loop handlers
-  const handleRalphLoopUpdate = useCallback(async (
+  // Super Loop handlers
+  const handleSuperLoopUpdate = useCallback(async (
     loopId: string,
     updates: { title?: string; isArchived?: boolean; isPinned?: boolean }
   ) => {
     try {
-      const result = await window.electronAPI.invoke('ralph:update', loopId, updates);
+      const result = await window.electronAPI.invoke('super-loop:update', loopId, updates);
       if (result.success && result.loop) {
-        upsertRalphLoop(result.loop);
+        upsertSuperLoop(result.loop);
       }
     } catch (error) {
-      console.error('[SessionHistory] Failed to update ralph loop:', error);
+      console.error('[SessionHistory] Failed to update super loop:', error);
     }
-  }, [upsertRalphLoop]);
+  }, [upsertSuperLoop]);
 
-  const handleRalphLoopArchive = useCallback(async (loop: RalphLoop) => {
-    // Ralph loops own a dedicated worktree - archive via the worktree archive dialog
+  const handleSuperLoopArchive = useCallback(async (loop: SuperLoop) => {
+    // Super loops own a dedicated worktree - archive via the worktree archive dialog
     // which queues deletion of the actual git worktree
     try {
       const result = await window.electronAPI.invoke('worktree:get', loop.worktreeId);
       if (!result.success || !result.worktree) {
-        console.error('[SessionHistory] Failed to get worktree for ralph loop:', result.error);
+        console.error('[SessionHistory] Failed to get worktree for super loop:', result.error);
         return;
       }
       const wt = result.worktree;
@@ -1145,17 +1139,17 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
         worktreePath: wt.path,
       });
     } catch (error) {
-      console.error('[SessionHistory] Failed to archive ralph loop:', error);
+      console.error('[SessionHistory] Failed to archive super loop:', error);
     }
   }, [showArchiveWorktreeDialog]);
 
-  const handleRalphLoopRename = useCallback((loopId: string, newName: string) => {
-    handleRalphLoopUpdate(loopId, { title: newName });
-  }, [handleRalphLoopUpdate]);
+  const handleSuperLoopRename = useCallback((loopId: string, newName: string) => {
+    handleSuperLoopUpdate(loopId, { title: newName });
+  }, [handleSuperLoopUpdate]);
 
-  const handleRalphLoopPinToggle = useCallback((loopId: string, isPinned: boolean) => {
-    handleRalphLoopUpdate(loopId, { isPinned });
-  }, [handleRalphLoopUpdate]);
+  const handleSuperLoopPinToggle = useCallback((loopId: string, isPinned: boolean) => {
+    handleSuperLoopUpdate(loopId, { isPinned });
+  }, [handleSuperLoopUpdate]);
 
   const toggleSortDropdown = () => {
     setSortDropdownOpen(!sortDropdownOpen);
@@ -1447,13 +1441,13 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     return Array.from(worktreeGroupsData.keys());
   }, [worktreeGroupsData]);
 
-  // Create unified list items that can be a session, workstream, worktree group, blitz group, or ralph loop
+  // Create unified list items that can be a session, workstream, worktree group, blitz group, or super loop
   type UnifiedListItem =
     | { type: 'session'; session: SessionItem; timestamp: number; isWorktreeSession?: boolean }
     | { type: 'workstream'; session: SessionItem; sessions: SessionItem[]; timestamp: number }
     | { type: 'worktree'; worktreeId: string; sessions: SessionItem[]; timestamp: number }
     | { type: 'blitz'; blitzId: string; worktrees: { worktreeId: string; sessions: SessionItem[] }[]; timestamp: number }
-    | { type: 'ralphLoop'; loop: RalphLoop; timestamp: number };
+    | { type: 'superLoop'; loop: SuperLoop; timestamp: number };
 
   // Build unified time-grouped data with both sessions and worktrees interleaved
   const groupedItems = useMemo(() => {
@@ -1500,16 +1494,16 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
       }
     }
 
-    // Exclude worktrees that belong to Ralph Loops - those are rendered via RalphLoopGroup
-    const ralphLoopWorktreeIds = new Set(ralphLoops.map(loop => loop.worktreeId));
+    // Exclude worktrees that belong to Super Loops - those are rendered via SuperLoopGroup
+    const superLoopWorktreeIds = new Set(superLoops.map(loop => loop.worktreeId));
 
     // Group blitz worktrees by blitzId, keep standalone worktrees separate
     const blitzWorktrees = new Map<string, { worktreeId: string; sessions: SessionItem[] }[]>();
     const standaloneWorktrees: [string, { sessions: SessionItem[]; timestamp: number }][] = [];
 
     for (const [worktreeId, data] of worktreeGroupsData) {
-      // Skip worktrees that belong to Ralph Loops
-      if (ralphLoopWorktreeIds.has(worktreeId)) {
+      // Skip worktrees that belong to Super Loops
+      if (superLoopWorktreeIds.has(worktreeId)) {
         continue;
       }
 
@@ -1579,10 +1573,10 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
       }
     }
 
-    // Add Ralph Loops as grouped items
-    for (const loop of ralphLoops) {
+    // Add Super Loops as grouped items
+    for (const loop of superLoops) {
       const timestamp = timestampField === 'updatedAt' ? loop.updatedAt : loop.createdAt;
-      const item = { type: 'ralphLoop' as const, loop, timestamp };
+      const item = { type: 'superLoop' as const, loop, timestamp };
       if (loop.isPinned) {
         pinnedItems.push(item);
       } else {
@@ -1628,33 +1622,9 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     }
 
     return result as Record<TimeGroupKey | 'Pinned', UnifiedListItem[]>;
-  }, [sessions, worktreeGroupsData, sortBy, worktreeCache, workstreamChildrenCache, blitzCache, ralphLoops]);
+  }, [sessions, worktreeGroupsData, sortBy, worktreeCache, workstreamChildrenCache, blitzCache, superLoops]);
 
   const groupKeys = Object.keys(groupedItems) as (TimeGroupKey | 'Pinned')[];
-
-  // Flatten groups and their visible items into a single array for Virtuoso.
-  // Group headers are included as items; collapsed groups omit their children.
-  type FlatVirtuosoItem =
-    | { kind: 'group-header'; groupKey: string; itemCount: number; isExpanded: boolean }
-    | { kind: 'item'; groupKey: string; item: UnifiedListItem };
-
-  const flatVirtuosoItems = useMemo(() => {
-    const flat: FlatVirtuosoItem[] = [];
-    for (const groupKey of groupKeys) {
-      const items = groupedItems[groupKey];
-      const isExpanded = !collapsedGroups.includes(groupKey);
-      flat.push({ kind: 'group-header', groupKey, itemCount: items.length, isExpanded });
-      if (isExpanded) {
-        for (const item of items) {
-          flat.push({ kind: 'item', groupKey, item });
-        }
-      }
-    }
-    return flat;
-  }, [groupKeys, groupedItems, collapsedGroups]);
-
-  // Ref for Virtuoso to support scroll-to-active
-  const virtuosoRef = useRef<VirtuosoHandle>(null);
 
   // Batch fetch all worktree data when sortedWorktreeIds changes (prevents N+1 query problem)
   useEffect(() => {
@@ -2248,7 +2218,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
           </div>
         </div>
       )}
-      <div className="session-history-list nim-scrollbar flex-1 overflow-y-auto overflow-x-hidden py-2 scroll-smooth" ref={scrollContainerCallbackRef}>
+      <div className="session-history-list nim-scrollbar flex-1 overflow-y-auto overflow-x-hidden py-2 scroll-smooth" ref={scrollContainerRef}>
         {groupKeys.length === 0 && hasSearchQuery ? (
           // No search results - show message with option to clear
           <div className="session-history-empty flex flex-col items-center justify-center px-4 py-8 text-center text-[var(--nim-text-faint)] text-[13px]">
@@ -2415,8 +2385,8 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                         </div>
                       </div>
                     );
-                  } else if (item.type === 'ralphLoop') {
-                    // Ralph Loop card (in card view, we skip these for now - they show in list view)
+                  } else if (item.type === 'superLoop') {
+                    // Super Loop card (in card view, we skip these for now - they show in list view)
                     return null;
                   } else {
                     // Regular session card
@@ -2480,213 +2450,210 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
             </div>
           </>
         ) : (
-          /* Virtualized list view - flat Virtuoso list with group headers as items */
-          flatVirtuosoItems.length > 0 && scrollContainerEl ? (
-            <Virtuoso
-              ref={virtuosoRef}
-              customScrollParent={scrollContainerEl}
-              totalCount={flatVirtuosoItems.length}
-              overscan={400}
-              itemContent={(index) => {
-                const entry = flatVirtuosoItems[index];
-                if (entry.kind === 'group-header') {
-                  // Render inline group header (same markup as CollapsibleGroup)
-                  return (
-                    <div className="collapsible-group mb-1">
-                      <button
-                        className="collapsible-group-header flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-xs font-semibold text-nim-muted text-left transition-colors duration-150 hover:bg-nim-hover"
-                        onClick={() => handleToggleGroup(entry.groupKey)}
-                        aria-expanded={entry.isExpanded}
-                        aria-label={`${entry.groupKey} group, ${entry.isExpanded ? 'expanded' : 'collapsed'}`}
-                      >
-                        <MaterialSymbol
-                          icon="chevron_right"
-                          size={12}
-                          className={`collapsible-group-chevron shrink-0 text-nim-faint transition-transform duration-200 ${entry.isExpanded ? 'rotate-90' : ''}`}
+          <>
+            {/* Unified time groups with interleaved sessions and worktrees */}
+            {groupKeys.map(groupKey => {
+              const items = groupedItems[groupKey];
+              const isExpanded = !collapsedGroups.includes(groupKey);
+
+              return (
+                <CollapsibleGroup
+                  key={groupKey}
+                  title={groupKey}
+                  isExpanded={isExpanded}
+                  onToggle={() => handleToggleGroup(groupKey)}
+                  count={items.length}
+                >
+                  {items.map(item => {
+                    if (item.type === 'blitz') {
+                      // Blitz group - collapsible group containing multiple worktrees
+                      const blitzData = blitzCache.get(item.blitzId);
+                      const isBlitzExpanded = !collapsedGroups.includes(`blitz:${item.blitzId}`);
+                      const allSessionIds = item.worktrees.flatMap(w => w.sessions.map(s => s.id));
+                      const isBlitzActive = allSessionIds.includes(activeSessionId || '');
+
+                      return (
+                        <BlitzGroup
+                          key={`blitz-${item.blitzId}`}
+                          blitzId={item.blitzId}
+                          title={blitzData?.displayName || (blitzData?.prompt ? blitzData.prompt.slice(0, 60) + (blitzData.prompt.length > 60 ? '...' : '') : 'Loading...')}
+                          isExpanded={isBlitzExpanded}
+                          isActive={isBlitzActive}
+                          isPinned={blitzData?.isPinned}
+                          isArchived={blitzData?.isArchived}
+                          onToggle={() => handleToggleGroup(`blitz:${item.blitzId}`)}
+                          worktrees={item.worktrees.map(w => ({
+                            worktreeId: w.worktreeId,
+                            sessions: w.sessions,
+                            worktreeData: worktreeCache.get(w.worktreeId),
+                          }))}
+                          activeSessionId={activeSessionId}
+                          onSessionSelect={onSessionSelect}
+                          worktreeCache={worktreeCache}
+                          collapsedGroups={collapsedGroups}
+                          onToggleWorktreeGroup={handleToggleGroup}
+                          onBlitzRename={handleBlitzRename}
+                          onBlitzPinToggle={handleBlitzPinToggle}
+                          onBlitzArchive={handleBlitzArchive}
+                          onArchiveOtherWorktrees={handleArchiveOtherBlitzWorktrees}
+                          onWorktreeRename={handleWorktreeRename}
+                          onWorktreeArchive={handleArchiveWorktree}
+                          onSessionRename={onSessionRename}
                         />
-                        <span className="collapsible-group-title flex-1 overflow-hidden text-ellipsis whitespace-nowrap uppercase tracking-wide">{entry.groupKey}</span>
-                        <span className="collapsible-group-count shrink-0 text-[0.625rem] text-nim-faint font-normal">{entry.itemCount}</span>
-                      </button>
-                    </div>
-                  );
-                }
+                      );
+                    }
+                    if (item.type === 'worktree') {
+                      // Worktree group - use new unified WorkstreamGroup
+                      const worktreeData = worktreeCache.get(item.worktreeId);
+                      const isWorktreeExpanded = !collapsedGroups.includes(`worktree:${item.worktreeId}`);
 
-                // Render the appropriate item type
-                const item = entry.item;
-                if (item.type === 'blitz') {
-                  const blitzData = blitzCache.get(item.blitzId);
-                  const isBlitzExpanded = !collapsedGroups.includes(`blitz:${item.blitzId}`);
-                  const allSessionIds = item.worktrees.flatMap(w => w.sessions.map(s => s.id));
-                  const isBlitzActive = allSessionIds.includes(activeSessionId || '');
+                      return (
+                        <WorkstreamGroup
+                          key={`worktree-${item.worktreeId}`}
+                          type="worktree"
+                          id={item.worktreeId}
+                          title={worktreeData?.displayName || worktreeData?.name || 'Loading...'}
+                          isExpanded={isWorktreeExpanded}
+                          isActive={item.sessions.some(s => s.id === activeSessionId)}
+                          onToggle={() => handleToggleGroup(`worktree:${item.worktreeId}`)}
+                          onSelect={() => {
+                            // Select last active session in worktree when clicking header
+                            // Falls back to first session if no previous selection
+                            const lastActiveSessionId = store.get(worktreeActiveSessionAtom(item.worktreeId));
+                            const sessionToSelect = lastActiveSessionId
+                              ? item.sessions.find(s => s.id === lastActiveSessionId)
+                              : null;
+                            const targetSession = sessionToSelect || item.sessions[0];
+                            if (targetSession) {
+                              onSessionSelect(targetSession.id);
+                            }
+                          }}
+                          sessions={item.sessions}
+                          sortBy={sortBy}
+                          activeSessionId={activeSessionId}
+                          onSessionSelect={onSessionSelect}
+                          onChildSessionSelect={onChildSessionSelect}
+                          onSessionDelete={onSessionDelete ? handleDeleteSession : undefined}
+                          onSessionArchive={handleArchiveSession}
+                          onSessionUnarchive={handleUnarchiveSession}
+                          onSessionPinToggle={handleSessionPinToggle}
+                          onSessionRename={onSessionRename}
+                          worktree={worktreeData || { id: item.worktreeId, name: 'Loading...', path: '', branch: '' }}
+                          gitStatus={worktreeData?.gitStatus}
+                          onWorktreePinToggle={handleWorktreePinToggle}
+                          onWorktreeArchive={handleArchiveWorktree}
+                          onWorktreeRename={handleWorktreeRename}
+                          onFilesMode={onWorktreeFilesMode}
+                          onChangesMode={onWorktreeChangesMode}
+                          onAddSession={onAddSessionToWorktree}
+                          onAddTerminal={onAddTerminalToWorktree}
+                        />
+                      );
+                    } else if (item.type === 'workstream') {
+                      // Workstream (session with children) - use new unified WorkstreamGroup
+                      const session = item.session;
+                      const isWorkstreamExpanded = !collapsedGroups.includes(`workstream:${session.id}`);
 
-                  return (
-                    <BlitzGroup
-                      blitzId={item.blitzId}
-                      title={blitzData?.displayName || (blitzData?.prompt ? blitzData.prompt.slice(0, 60) + (blitzData.prompt.length > 60 ? '...' : '') : 'Loading...')}
-                      isExpanded={isBlitzExpanded}
-                      isActive={isBlitzActive}
-                      isPinned={blitzData?.isPinned}
-                      isArchived={blitzData?.isArchived}
-                      onToggle={() => handleToggleGroup(`blitz:${item.blitzId}`)}
-                      worktrees={item.worktrees.map(w => ({
-                        worktreeId: w.worktreeId,
-                        sessions: w.sessions,
-                        worktreeData: worktreeCache.get(w.worktreeId),
-                      }))}
-                      activeSessionId={activeSessionId}
-                      onSessionSelect={onSessionSelect}
-                      worktreeCache={worktreeCache}
-                      collapsedGroups={collapsedGroups}
-                      onToggleWorktreeGroup={handleToggleGroup}
-                      onBlitzRename={handleBlitzRename}
-                      onBlitzPinToggle={handleBlitzPinToggle}
-                      onBlitzArchive={handleBlitzArchive}
-                      onArchiveOtherWorktrees={handleArchiveOtherBlitzWorktrees}
-                      onWorktreeRename={handleWorktreeRename}
-                      onWorktreeArchive={handleArchiveWorktree}
-                      onSessionRename={onSessionRename}
-                    />
-                  );
-                }
-                if (item.type === 'worktree') {
-                  const worktreeData = worktreeCache.get(item.worktreeId);
-                  const isWorktreeExpanded = !collapsedGroups.includes(`worktree:${item.worktreeId}`);
+                      // Check if this workstream is active: either the parent itself is active,
+                      // or the active session's parent ID matches this workstream
+                      const isWorkstreamActive = session.id === activeSessionId ||
+                                                 (activeSessionParentId === session.id);
 
-                  return (
-                    <WorkstreamGroup
-                      type="worktree"
-                      id={item.worktreeId}
-                      title={worktreeData?.displayName || worktreeData?.name || 'Loading...'}
-                      isExpanded={isWorktreeExpanded}
-                      isActive={item.sessions.some(s => s.id === activeSessionId)}
-                      onToggle={() => handleToggleGroup(`worktree:${item.worktreeId}`)}
-                      onSelect={() => {
-                        const lastActiveSessionId = store.get(worktreeActiveSessionAtom(item.worktreeId));
-                        const sessionToSelect = lastActiveSessionId
-                          ? item.sessions.find(s => s.id === lastActiveSessionId)
-                          : null;
-                        const targetSession = sessionToSelect || item.sessions[0];
-                        if (targetSession) {
-                          onSessionSelect(targetSession.id);
-                        }
-                      }}
-                      sessions={item.sessions}
-                      sortBy={sortBy}
-                      activeSessionId={activeSessionId}
-                      onSessionSelect={onSessionSelect}
-                      onChildSessionSelect={onChildSessionSelect}
-                      onSessionDelete={onSessionDelete ? handleDeleteSession : undefined}
-                      onSessionArchive={handleArchiveSession}
-                      onSessionUnarchive={handleUnarchiveSession}
-                      onSessionPinToggle={handleSessionPinToggle}
-                      onSessionRename={onSessionRename}
-                      worktree={worktreeData || { id: item.worktreeId, name: 'Loading...', path: '', branch: '' }}
-                      gitStatus={worktreeData?.gitStatus}
-                      onWorktreePinToggle={handleWorktreePinToggle}
-                      onWorktreeArchive={handleArchiveWorktree}
-                      onWorktreeRename={handleWorktreeRename}
-                      onFilesMode={onWorktreeFilesMode}
-                      onChangesMode={onWorktreeChangesMode}
-                      onAddSession={onAddSessionToWorktree}
-                      onAddTerminal={onAddTerminalToWorktree}
-                    />
-                  );
-                }
-                if (item.type === 'workstream') {
-                  const session = item.session;
-                  const isWorkstreamExpanded = !collapsedGroups.includes(`workstream:${session.id}`);
-                  const isWorkstreamActive = session.id === activeSessionId ||
-                                             (activeSessionParentId === session.id);
+                      return (
+                        <WorkstreamGroup
+                          key={`workstream-${session.id}`}
+                          type="workstream"
+                          id={session.id}
+                          title={session.title || 'Untitled Workstream'}
+                          isExpanded={isWorkstreamExpanded}
+                          isActive={isWorkstreamActive}
+                          onToggle={() => handleToggleGroup(`workstream:${session.id}`)}
+                          onSelect={() => onSessionSelect(session.id)}
+                          sessions={item.sessions}
+                          sortBy={sortBy}
+                          activeSessionId={activeSessionId}
+                          onSessionSelect={onSessionSelect}
+                          onChildSessionSelect={onChildSessionSelect}
+                          onSessionDelete={onSessionDelete ? handleDeleteSession : undefined}
+                          onSessionArchive={handleArchiveSession}
+                          onSessionUnarchive={handleUnarchiveSession}
+                          onSessionPinToggle={handleSessionPinToggle}
+                          onSessionRename={onSessionRename}
+                          provider={session.provider}
+                          isPinned={session.isPinned}
+                          isArchived={session.isArchived}
+                          childCount={session.childCount}
+                          onWorkstreamArchive={handleArchiveSession}
+                          onWorkstreamPinToggle={handleSessionPinToggle}
+                        />
+                      );
+                    } else if (item.type === 'superLoop') {
+                      // Super Loop - autonomous agent loop
+                      const isSuperExpanded = !collapsedGroups.includes(`super-loop:${item.loop.id}`);
+                      const superWorktreeSessions = worktreeGroupsData.get(item.loop.worktreeId);
+                      const isSuperActive = superWorktreeSessions
+                        ? superWorktreeSessions.sessions.some(s => s.id === activeSessionId)
+                        : false;
 
-                  return (
-                    <WorkstreamGroup
-                      type="workstream"
-                      id={session.id}
-                      title={session.title || 'Untitled Workstream'}
-                      isExpanded={isWorkstreamExpanded}
-                      isActive={isWorkstreamActive}
-                      onToggle={() => handleToggleGroup(`workstream:${session.id}`)}
-                      onSelect={() => onSessionSelect(session.id)}
-                      sessions={item.sessions}
-                      sortBy={sortBy}
-                      activeSessionId={activeSessionId}
-                      onSessionSelect={onSessionSelect}
-                      onChildSessionSelect={onChildSessionSelect}
-                      onSessionDelete={onSessionDelete ? handleDeleteSession : undefined}
-                      onSessionArchive={handleArchiveSession}
-                      onSessionUnarchive={handleUnarchiveSession}
-                      onSessionPinToggle={handleSessionPinToggle}
-                      onSessionRename={onSessionRename}
-                      provider={session.provider}
-                      isPinned={session.isPinned}
-                      isArchived={session.isArchived}
-                      childCount={session.childCount}
-                      onWorkstreamArchive={handleArchiveSession}
-                      onWorkstreamPinToggle={handleSessionPinToggle}
-                    />
-                  );
-                }
-                if (item.type === 'ralphLoop') {
-                  const isRalphExpanded = !collapsedGroups.includes(`ralph:${item.loop.id}`);
-                  const ralphWorktreeSessions = worktreeGroupsData.get(item.loop.worktreeId);
-                  const isRalphActive = ralphWorktreeSessions
-                    ? ralphWorktreeSessions.sessions.some(s => s.id === activeSessionId)
-                    : false;
-
-                  return (
-                    <RalphLoopGroup
-                      loopId={item.loop.id}
-                      loop={item.loop}
-                      isExpanded={isRalphExpanded}
-                      isActive={isRalphActive}
-                      onToggle={() => handleToggleGroup(`ralph:${item.loop.id}`)}
-                      activeSessionId={activeSessionId}
-                      onSessionSelect={onSessionSelect}
-                      onArchive={() => handleRalphLoopArchive(item.loop)}
-                      onRename={(newName) => handleRalphLoopRename(item.loop.id, newName)}
-                      onPinToggle={(isPinned) => handleRalphLoopPinToggle(item.loop.id, isPinned)}
-                    />
-                  );
-                }
-                // Regular session
-                const session = item.session;
-                return (
-                  <SessionListItem
-                    id={session.id}
-                    title={session.title || 'Untitled Session'}
-                    createdAt={session.createdAt}
-                    updatedAt={session.updatedAt}
-                    isActive={session.id === activeSessionId}
-                    isLoaded={loadedSessionIds.includes(session.id)}
-                    isArchived={session.isArchived}
-                    isPinned={session.isPinned}
-                    isSelected={selectedSessionIds.has(session.id)}
-                    sortBy={sortBy}
-                    onClick={(e) => handleSessionClick(session.id, e)}
-                    onDelete={onSessionDelete ? () => handleDeleteSession(session.id) : undefined}
-                    onArchive={() => handleArchiveSession(session.id)}
-                    onUnarchive={() => handleUnarchiveSession(session.id)}
-                    onRename={onSessionRename ? (newName: string) => onSessionRename(session.id, newName) : undefined}
-                    onPinToggle={(isPinned) => handleSessionPinToggle(session.id, isPinned)}
-                    onBranch={onSessionBranch ? () => onSessionBranch(session.id) : undefined}
-                    provider={session.provider}
-                    model={session.model}
-                    messageCount={session.messageCount}
-                    isProcessing={session.isProcessing}
-                    hasUnread={session.hasUnread}
-                    hasPendingPrompt={session.hasPendingPrompt}
-                    sessionType={session.sessionType}
-                    isWorkstream={false}
-                    isWorktreeSession={item.isWorktreeSession}
-                    parentSessionId={session.parentSessionId}
-                    projectPath={session.projectPath}
-                    uncommittedCount={session.uncommittedCount}
-                    branchedAt={session.branchedAt}
-                  />
-                );
-              }}
-            />
-          ) : null
+                      return (
+                        <SuperLoopGroup
+                          key={`super-loop-${item.loop.id}`}
+                          loopId={item.loop.id}
+                          loop={item.loop}
+                          isExpanded={isSuperExpanded}
+                          isActive={isSuperActive}
+                          onToggle={() => handleToggleGroup(`super-loop:${item.loop.id}`)}
+                          activeSessionId={activeSessionId}
+                          onSessionSelect={onSessionSelect}
+                          onArchive={() => handleSuperLoopArchive(item.loop)}
+                          onRename={(newName) => handleSuperLoopRename(item.loop.id, newName)}
+                          onPinToggle={(isPinned) => handleSuperLoopPinToggle(item.loop.id, isPinned)}
+                        />
+                      );
+                    } else {
+                      // Regular session - use SessionListItem
+                      const session = item.session;
+                      return (
+                        <SessionListItem
+                          key={session.id}
+                          id={session.id}
+                          title={session.title || 'Untitled Session'}
+                          createdAt={session.createdAt}
+                          updatedAt={session.updatedAt}
+                          isActive={session.id === activeSessionId}
+                          isLoaded={loadedSessionIds.includes(session.id)}
+                          isArchived={session.isArchived}
+                          isPinned={session.isPinned}
+                          isSelected={selectedSessionIds.has(session.id)}
+                          sortBy={sortBy}
+                          onClick={(e) => handleSessionClick(session.id, e)}
+                          onDelete={onSessionDelete ? () => handleDeleteSession(session.id) : undefined}
+                          onArchive={() => handleArchiveSession(session.id)}
+                          onUnarchive={() => handleUnarchiveSession(session.id)}
+                          onRename={onSessionRename ? (newName: string) => onSessionRename(session.id, newName) : undefined}
+                          onPinToggle={(isPinned) => handleSessionPinToggle(session.id, isPinned)}
+                          onBranch={onSessionBranch ? () => onSessionBranch(session.id) : undefined}
+                          provider={session.provider}
+                          model={session.model}
+                          messageCount={session.messageCount}
+                          isProcessing={session.isProcessing}
+                          hasUnread={session.hasUnread}
+                          hasPendingPrompt={session.hasPendingPrompt}
+                          sessionType={session.sessionType}
+                          isWorkstream={false}
+                          isWorktreeSession={item.isWorktreeSession}
+                          parentSessionId={session.parentSessionId}
+                          projectPath={session.projectPath}
+                          uncommittedCount={session.uncommittedCount}
+                          branchedAt={session.branchedAt}
+                        />
+                      );
+                    }
+                  })}
+                </CollapsibleGroup>
+              );
+            })}
+          </>
         )}
       </div>
 
@@ -2863,8 +2830,8 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
         />
       )}
 
-      {/* New Ralph Loop dialog */}
-      <NewRalphLoopDialog workspacePath={workspacePath} />
+      {/* New Super Loop dialog */}
+      <NewSuperLoopDialog workspacePath={workspacePath} />
 
       {/* New dropdown menu - fixed position outside main container */}
       {newDropdownOpen && newDropdownPosition && (
@@ -2937,19 +2904,19 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
               <span>New Terminal</span>
             </button>
           )}
-          {isRalphLoopsAvailable && (
+          {isSuperLoopsAvailable && (
             <button
               className={`session-history-new-option flex items-center w-full px-3 py-2 text-[13px] bg-transparent border-none text-[var(--nim-text)] cursor-pointer transition-colors duration-150 text-left gap-2 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0 [&_svg]:text-[var(--nim-text-muted)] [&>span]:flex-1 ${!isGitRepo ? 'opacity-50 cursor-not-allowed hover:bg-transparent' : ''}`}
-              data-testid="new-ralph-loop-button"
-              onClick={() => { if (isGitRepo) { openRalphLoopDialog(); setNewDropdownOpen(false); setNewDropdownPosition(null); } }}
+              data-testid="new-super-loop-button"
+              onClick={() => { if (isGitRepo) { openSuperLoopDialog(); setNewDropdownOpen(false); setNewDropdownPosition(null); } }}
               disabled={!isGitRepo}
-              title={!isGitRepo ? 'Ralph Loops require a git repository' : undefined}
+              title={!isGitRepo ? 'Super Loops require a git repository' : undefined}
             >
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M13 5.5H9.5M13 5.5L10.5 3M13 5.5L10.5 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                 <path d="M3 10.5H6.5M3 10.5L5.5 8M3 10.5L5.5 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
-              <span>New Ralph Loop</span>
+              <span>New Super Loop</span>
             </button>
           )}
         </div>

@@ -16,7 +16,7 @@ import { atom, useAtomValue, useSetAtom } from 'jotai';
 import { defaultAgentModelAtom, worktreesFeatureAvailableAtom, betaFeatureEnabledAtom } from '../../store/atoms/appSettings';
 import { ResizablePanel } from '../AgenticCoding/ResizablePanel';
 import { SessionHistory } from '../AgenticCoding/SessionHistory';
-import { useRalphLoopInit } from '../../hooks/useRalphLoop';
+import { useSuperLoopInit } from '../../hooks/useSuperLoop';
 import { AgentWorkstreamPanel, type AgentWorkstreamPanelRef } from './AgentWorkstreamPanel';
 import {
   selectedWorkstreamAtom,
@@ -51,7 +51,7 @@ import { initFileStateListeners } from '../../store/listeners/fileStateListeners
 import { initSessionListListeners } from '../../store/listeners/sessionListListeners';
 import { initSessionTranscriptListeners } from '../../store/listeners/sessionTranscriptListeners';
 import { initClaudeUsageListeners } from '../../store/listeners/claudeUsageListeners';
-import { initRalphLoopListeners } from '../../store/listeners/ralphLoopListeners';
+import { initSuperLoopListeners } from '../../store/listeners/superLoopListeners';
 import { fetchSessionSharesAtom } from '../../store';
 import type { WorktreeCreateResult, SessionCreateResult } from '../../../shared/ipc/types';
 import { BlitzDialog } from '../BlitzDialog/BlitzDialog';
@@ -108,8 +108,8 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
   const isBlitzBetaEnabled = useAtomValue(betaFeatureEnabledAtom('blitz'));
   const isBlitzAvailable = isWorktreesAvailable && isBlitzBetaEnabled;
 
-  // Keep Ralph Loop listeners active even when session history is collapsed/hidden.
-  useRalphLoopInit(workspacePath);
+  // Keep Super Loop listeners active even when session history is collapsed/hidden.
+  useSuperLoopInit(workspacePath);
 
   // Layout state from atoms
   const historyWidth = useAtomValue(sessionHistoryWidthAtom);
@@ -179,9 +179,9 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
     return cleanup;
   }, []);
 
-  // Initialize Ralph Loop listeners (global, runs once)
+  // Initialize Super Loop listeners (global, runs once)
   useEffect(() => {
-    const cleanup = initRalphLoopListeners();
+    const cleanup = initSuperLoopListeners();
     return cleanup;
   }, []);
 

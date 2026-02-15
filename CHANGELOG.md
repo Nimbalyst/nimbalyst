@@ -24,7 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ### Added
-- Ralph Loops - autonomous AI agent iteration system
+- Super Loops - autonomous AI agent iteration system (inspired by Ralph Loops)
 
 ### Changed
 - Polish blitz creation dialog UI
