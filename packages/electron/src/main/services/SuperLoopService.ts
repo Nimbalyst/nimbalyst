@@ -335,10 +335,7 @@ export class SuperLoopService {
       throw new Error(`Worktree not found: ${loop.worktreeId}`);
     }
 
-    if (options?.bumpMaxIterations && options.bumpMaxIterations > 0) {
-      await superLoopStore.updateMaxIterations(superLoopId, loop.maxIterations + options.bumpMaxIterations);
-    }
-
+    // File operations first (can fail without leaving DB in inconsistent state)
     if (options?.resetCompletionSignal) {
       const progress = await this.readProgressFile(worktree.path);
       if (progress && progress.completionSignal) {
@@ -348,6 +345,11 @@ export class SuperLoopService {
           status: 'running',
         });
       }
+    }
+
+    // DB operations after file operations succeed
+    if (options?.bumpMaxIterations && options.bumpMaxIterations > 0) {
+      await superLoopStore.updateMaxIterations(superLoopId, loop.maxIterations + options.bumpMaxIterations);
     }
 
     await superLoopStore.updateLoopStatus(superLoopId, 'pending');
@@ -1127,6 +1129,15 @@ app.on('window-all-closed', () => {
     for (const [sessionId, resolver] of sessionCompleteResolvers) {
       sessionCompleteResolvers.delete(sessionId);
       resolver({ success: false });
+    }
+  }
+  if (pauseResolvers.size > 0) {
+    logger.warn('All windows closed with pending pause resolvers, resolving', {
+      count: pauseResolvers.size,
+    });
+    for (const [loopId, resolver] of pauseResolvers) {
+      pauseResolvers.delete(loopId);
+      resolver();
     }
   }
 });

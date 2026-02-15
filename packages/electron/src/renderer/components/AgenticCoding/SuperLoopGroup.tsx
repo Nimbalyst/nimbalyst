@@ -264,6 +264,10 @@ export const SuperLoopGroup: React.FC<SuperLoopGroupProps> = memo(({
   const [renameValue, setRenameValue] = useState('');
   const renameInputRef = useRef<HTMLInputElement>(null);
 
+  // Force-resume dropdown state
+  const [showForceResumeMenu, setShowForceResumeMenu] = useState(false);
+  const forceResumeMenuRef = useRef<HTMLDivElement>(null);
+
   // Extract iteration session IDs for aggregate status
   const iterationSessionIds = useMemo(
     () => iterations.map(iter => iter.sessionId),
@@ -332,10 +336,11 @@ export const SuperLoopGroup: React.FC<SuperLoopGroupProps> = memo(({
     }
   }, [loopId]);
 
-  const handleForceResume = useCallback(async () => {
+  const handleForceResume = useCallback(async (bumpIterations: number) => {
+    setShowForceResumeMenu(false);
     try {
       await window.electronAPI.invoke('super-loop:force-resume', loopId, {
-        bumpMaxIterations: 5,
+        bumpMaxIterations: bumpIterations > 0 ? bumpIterations : undefined,
         resetCompletionSignal: true,
       });
     } catch (err) {
@@ -594,13 +599,38 @@ export const SuperLoopGroup: React.FC<SuperLoopGroupProps> = memo(({
               </button>
             )}
             {(loop.status === 'completed' || loop.status === 'failed' || loop.status === 'blocked') && (
-              <button
-                onClick={handleForceResume}
-                className="p-1 rounded hover:bg-[var(--nim-bg-secondary)] text-[var(--nim-text-faint)] hover:text-green-500 transition-colors"
-                title="Resume loop"
-              >
-                <MaterialSymbol icon="replay" size={14} />
-              </button>
+              <div className="relative">
+                <button
+                  onClick={(e) => { e.stopPropagation(); setShowForceResumeMenu(prev => !prev); }}
+                  className="p-1 rounded hover:bg-[var(--nim-bg-secondary)] text-[var(--nim-text-faint)] hover:text-green-500 transition-colors"
+                  title="Resume loop"
+                >
+                  <MaterialSymbol icon="replay" size={14} />
+                </button>
+                {showForceResumeMenu && (
+                  <div
+                    ref={forceResumeMenuRef}
+                    className="absolute right-0 top-full mt-1 z-50 min-w-[160px] bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded-md shadow-lg py-1"
+                    onMouseLeave={() => setShowForceResumeMenu(false)}
+                  >
+                    <div className="px-3 py-1.5 text-[10px] text-[var(--nim-text-muted)] font-semibold uppercase tracking-wide">Resume with</div>
+                    {[
+                      { label: 'No extra iterations', bump: 0 },
+                      { label: '+5 iterations', bump: 5 },
+                      { label: '+10 iterations', bump: 10 },
+                      { label: '+20 iterations', bump: 20 },
+                    ].map(opt => (
+                      <button
+                        key={opt.bump}
+                        className="flex items-center gap-2 w-full px-3 py-1.5 text-[12px] text-[var(--nim-text)] bg-transparent border-none cursor-pointer hover:bg-[var(--nim-bg-hover)] text-left"
+                        onClick={(e) => { e.stopPropagation(); handleForceResume(opt.bump); }}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </div>
