@@ -10,6 +10,10 @@ import {
   claudeUsageIndicatorEnabledAtom,
   setClaudeUsageIndicatorEnabledAtom,
 } from '../../../store/atoms/claudeUsageAtoms';
+import {
+  autoCommitEnabledAtom,
+  setAutoCommitEnabledAtom,
+} from '../../../store/atoms/autoCommitAtoms';
 
 // Built-in SDK version (dynamically from the SDK's package.json)
 const BUNDLED_SDK_VERSION = sdkPackageJson.version || 'unknown';
@@ -72,6 +76,10 @@ export function ClaudeCodePanel({
   // Usage indicator setting
   const usageIndicatorEnabled = useAtomValue(claudeUsageIndicatorEnabledAtom);
   const setUsageIndicatorEnabled = useSetAtom(setClaudeUsageIndicatorEnabledAtom);
+
+  // Auto-commit setting
+  const autoCommitEnabled = useAtomValue(autoCommitEnabledAtom);
+  const setAutoCommitEnabled = useSetAtom(setAutoCommitEnabledAtom);
 
   // Standalone binary setting (macOS only - hides dock icon when spawning Claude Code)
   const [useStandaloneBinary, setUseStandaloneBinaryState] = useState(false);
@@ -329,6 +337,25 @@ export function ClaudeCodePanel({
             type="checkbox"
             checked={agentTeamsEnabled}
             onChange={(e) => handleToggleAgentTeams(e.target.checked)}
+            className="hidden peer"
+          />
+          <span className="provider-toggle-slider absolute cursor-pointer inset-0 rounded-full transition-all bg-[var(--nim-bg-tertiary)] before:absolute before:content-[''] before:h-5 before:w-5 before:left-0.5 before:bottom-0.5 before:rounded-full before:transition-all before:bg-white before:shadow-sm peer-checked:bg-[var(--nim-primary)] peer-checked:before:translate-x-5"></span>
+        </label>
+      </div>
+
+      {/* Auto-approve Commits Toggle */}
+      <div className="provider-enable flex items-center justify-between gap-4 py-4 mb-4 border-b border-[var(--nim-border)]">
+        <div>
+          <span className="provider-enable-label text-sm font-medium text-[var(--nim-text)]">Auto-approve Commits</span>
+          <p className="text-xs text-[var(--nim-text-muted)] mt-1">
+            Automatically approve when Claude proposes git commits, without requiring manual confirmation.
+          </p>
+        </div>
+        <label className="provider-toggle relative inline-block w-11 h-6 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={autoCommitEnabled}
+            onChange={(e) => setAutoCommitEnabled(e.target.checked)}
             className="hidden peer"
           />
           <span className="provider-toggle-slider absolute cursor-pointer inset-0 rounded-full transition-all bg-[var(--nim-bg-tertiary)] before:absolute before:content-[''] before:h-5 before:w-5 before:left-0.5 before:bottom-0.5 before:rounded-full before:transition-all before:bg-white before:shadow-sm peer-checked:bg-[var(--nim-primary)] peer-checked:before:translate-x-5"></span>

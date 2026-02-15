@@ -134,6 +134,22 @@ export interface InteractiveWidgetHost {
   gitCommitCancel(proposalId: string): Promise<void>;
 
   // ============================================================
+  // Auto-commit
+  // ============================================================
+
+  /**
+   * Whether auto-commit is enabled for git commit proposals.
+   * When true, GitCommitConfirmationWidget auto-triggers commit without user input.
+   */
+  autoCommitEnabled: boolean;
+
+  /**
+   * Set whether auto-commit is enabled.
+   * Used by the widget to let users disable auto-commit after a successful commit.
+   */
+  setAutoCommitEnabled(enabled: boolean): void;
+
+  // ============================================================
   // Common Operations
   // ============================================================
 
@@ -182,6 +198,11 @@ export const noopInteractiveWidgetHost: InteractiveWidgetHost = {
   },
   toolPermissionCancel: async () => {
     console.warn('[InteractiveWidgetHost] No host available for toolPermissionCancel');
+  },
+
+  autoCommitEnabled: false,
+  setAutoCommitEnabled: () => {
+    console.warn('[InteractiveWidgetHost] No host available for setAutoCommitEnabled');
   },
 
   gitCommit: async () => {

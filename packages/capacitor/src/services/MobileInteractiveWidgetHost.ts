@@ -168,6 +168,15 @@ export function createMobileInteractiveWidgetHost(
     },
 
     // ============================================================
+    // Auto-commit (not supported on mobile)
+    // ============================================================
+
+    autoCommitEnabled: false,
+    setAutoCommitEnabled(_enabled: boolean): void {
+      // No-op on mobile
+    },
+
+    // ============================================================
     // Git Commit Operations
     // ============================================================
 

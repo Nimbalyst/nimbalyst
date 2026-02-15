@@ -3602,6 +3602,7 @@ export class AIService {
       const showPromptAdditions = this.getSettingsStore().get('showPromptAdditions', false) as boolean;
       const showUsageIndicator = this.getSettingsStore().get('showUsageIndicator', false) as boolean;
       const useStandaloneBinary = this.getSettingsStore().get('useStandaloneBinary', false) as boolean;
+      const autoCommitEnabled = this.getSettingsStore().get('autoCommitEnabled', false) as boolean;
 
       return {
         defaultProvider: this.getSettingsStore().get('defaultProvider', 'claude-code'),
@@ -3612,6 +3613,7 @@ export class AIService {
         showPromptAdditions,
         showUsageIndicator,
         useStandaloneBinary,
+        autoCommitEnabled,
       };
     });
 
@@ -3679,6 +3681,10 @@ export class AIService {
         this.getSettingsStore().set('useStandaloneBinary', settings.useStandaloneBinary);
         // Update ClaudeCodeProvider immediately so new sessions use the updated setting
         ClaudeCodeProvider.setUseStandaloneBinary(settings.useStandaloneBinary);
+      }
+
+      if (settings.autoCommitEnabled !== undefined) {
+        this.getSettingsStore().set('autoCommitEnabled', settings.autoCommitEnabled);
       }
 
       return { success: true };

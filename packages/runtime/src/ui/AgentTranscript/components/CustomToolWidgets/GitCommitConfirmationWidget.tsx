@@ -14,7 +14,7 @@
  * - tool.result containing "cancelled" means user cancelled
  */
 
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useAtomValue } from 'jotai';
 import { usePostHog } from 'posthog-js/react';
 import { MaterialSymbol } from '../../../..';
@@ -523,6 +523,7 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
         action: result.success ? 'committed' : 'error',
         file_count: fileCountBucket,
         success: result.success,
+        auto_commit: host.autoCommitEnabled ?? false,
       });
     } catch (error) {
       setIsCommitting(false);
@@ -552,6 +553,23 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
       console.error('[GitCommitWidget] Failed to send cancel response:', err);
     });
   }, [proposalId, hasResponded, isPending, filesToStage.size, host]);
+
+  // Auto-commit: trigger handleConfirm automatically when auto-commit is enabled
+  const autoCommitTriggeredRef = useRef(false);
+  useEffect(() => {
+    if (
+      isPending &&
+      host?.autoCommitEnabled &&
+      !isCommitting &&
+      !hasResponded &&
+      !autoCommitTriggeredRef.current &&
+      filesToStage.size > 0 &&
+      commitMessage.trim()
+    ) {
+      autoCommitTriggeredRef.current = true;
+      handleConfirm();
+    }
+  }, [isPending, host?.autoCommitEnabled, isCommitting, hasResponded, filesToStage.size, commitMessage, handleConfirm]);
 
   // No loading state needed - atom is reactive and updates when DB changes
 
@@ -641,6 +659,19 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
                 })}
               </div>
             </div>
+            {host?.autoCommitEnabled && (
+              <div className="mt-2 pt-2 border-t border-[var(--nim-border)]">
+                <button
+                  className="text-[0.75rem] text-[var(--nim-text-muted)] hover:text-[var(--nim-text)] underline cursor-pointer bg-transparent border-none p-0 transition-colors"
+                  onClick={() => {
+                    host.setAutoCommitEnabled(false);
+                    host.trackEvent('auto_commit_disabled', { source: 'commit_success_widget' });
+                  }}
+                >
+                  Disable auto-approve
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           <div className="git-commit-widget__error-content p-2 bg-[color-mix(in_srgb,var(--nim-error)_8%,var(--nim-bg))] text-[var(--nim-error)] text-[0.8125rem]">
@@ -668,6 +699,14 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
         <MaterialSymbol icon="commit" size={16} className="text-[var(--nim-primary)]" />
         <span className="text-sm font-semibold text-[var(--nim-text)] flex-1">Commit Proposal</span>
       </div>
+
+      {/* Auto-commit indicator */}
+      {host?.autoCommitEnabled && (
+        <div className="git-commit-widget__auto-commit-indicator flex items-center gap-1.5 px-2 py-1.5 bg-[color-mix(in_srgb,var(--nim-info)_10%,var(--nim-bg))] border-b border-[var(--nim-border)] text-[0.75rem] text-[var(--nim-info)]">
+          <MaterialSymbol icon="bolt" size={14} />
+          <span>Auto-approve enabled - committing automatically...</span>
+        </div>
+      )}
 
       <div className="git-commit-widget__content p-2 flex flex-col gap-3">
         {/* Reasoning */}
@@ -702,7 +741,19 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
         </div>
 
         {/* Actions */}
-        <div className="git-commit-widget__actions flex gap-2 justify-end pt-2 border-t border-[var(--nim-border)]">
+        <div className="git-commit-widget__actions flex items-center gap-2 pt-2 border-t border-[var(--nim-border)]">
+          <label className="flex items-center gap-1.5 cursor-pointer flex-1 min-w-0">
+            <input
+              type="checkbox"
+              checked={host?.autoCommitEnabled ?? false}
+              onChange={(e) => {
+                host?.setAutoCommitEnabled(e.target.checked);
+                host?.trackEvent(e.target.checked ? 'auto_commit_enabled' : 'auto_commit_disabled', { source: 'commit_widget' });
+              }}
+              className="accent-[var(--nim-primary)] w-3.5 h-3.5 cursor-pointer"
+            />
+            <span className="text-[0.75rem] text-[var(--nim-text-muted)]">Auto-approve commits</span>
+          </label>
           <button
             data-testid="git-commit-cancel"
             className="git-commit-widget__cancel-btn flex items-center gap-1.5 py-1.5 px-3 text-[0.8125rem] font-medium border border-[var(--nim-border)] rounded bg-[var(--nim-bg)] text-[var(--nim-text)] cursor-pointer transition-all hover:bg-[var(--nim-bg-hover)] disabled:opacity-50 disabled:cursor-not-allowed"

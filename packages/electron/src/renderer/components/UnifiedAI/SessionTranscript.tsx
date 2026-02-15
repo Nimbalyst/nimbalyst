@@ -69,6 +69,7 @@ import { setAgentModeSettingsAtom, showPromptAdditionsAtom, hasExternalEditorAto
 import { supportsEffortLevel, parseEffortLevel, type EffortLevel } from '../../utils/modelUtils';
 import { buildPlanModeInstructions, PLAN_MODE_DEACTIVATION } from '@nimbalyst/runtime/ai/services/planModePrompts';
 import { resolvePlanFilePath } from '../../utils/pathUtils';
+import { autoCommitEnabledAtom, setAutoCommitEnabledAtom } from '../../store/atoms/autoCommitAtoms';
 
 interface Todo {
   status: 'pending' | 'in_progress' | 'completed';
@@ -328,6 +329,10 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
 
   // Agent mode settings (for persisting default model)
   const setAgentModeSettings = useSetAtom(setAgentModeSettingsAtom);
+
+  // Auto-commit setting
+  const autoCommitEnabled = useAtomValue(autoCommitEnabledAtom);
+  const setAutoCommitEnabled = useSetAtom(setAutoCommitEnabledAtom);
 
   const setGroupByDirectory = useCallback((value: boolean) => {
     if (workspacePath) {
@@ -1163,6 +1168,12 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
         refreshPendingPrompts(sessionId);
       },
 
+      // Auto-commit
+      autoCommitEnabled,
+      setAutoCommitEnabled: (enabled: boolean) => {
+        setAutoCommitEnabled(enabled);
+      },
+
       // Git commit operations
       gitCommit: async (proposalId: string, files: string[], message: string) => {
         try {
@@ -1253,7 +1264,9 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     handleExitPlanModeCancel,
     refreshPendingPrompts,
     respondToPrompt,
-    posthog
+    posthog,
+    autoCommitEnabled,
+    setAutoCommitEnabled,
   ]);
 
   // Feature flags

@@ -37,6 +37,10 @@ import {
   claudeUsageIndicatorEnabledAtom,
   initClaudeUsageIndicatorSetting,
 } from './store/atoms/claudeUsageAtoms';
+import {
+  autoCommitEnabledAtom,
+  initAutoCommitSetting,
+} from './store/atoms/autoCommitAtoms';
 
 // console.log('[RENDERER] Imports complete at', new Date().toISOString());
 
@@ -111,6 +115,9 @@ await Promise.all([
   }),
   initClaudeUsageIndicatorSetting().then((enabled) => {
     store.set(claudeUsageIndicatorEnabledAtom, enabled);
+  }),
+  initAutoCommitSetting().then((enabled) => {
+    store.set(autoCommitEnabledAtom, enabled);
   }),
 ]).catch(() => {
   // Ignore errors - settings will use defaults
