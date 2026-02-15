@@ -10,6 +10,7 @@ import log from 'electron-log/main';
 import { ulid } from 'ulid';
 import * as fs from 'fs';
 import * as path from 'path';
+import simpleGit from 'simple-git';
 import { getDatabase } from '../database/initialize';
 import { createSuperLoopStore, type SuperLoopStore } from './SuperLoopStore';
 import { createWorktreeStore, type WorktreeStore } from './WorktreeStore';
@@ -729,6 +730,16 @@ export class SuperLoopService {
         const newContent = content.endsWith('\n') ? content + '.superloop/\n' : content + '\n.superloop/\n';
         await fs.promises.writeFile(gitignorePath, newContent, 'utf-8');
         logger.info('Added .superloop to .gitignore', { worktreePath });
+
+        // Commit the .gitignore change so it's tracked immediately
+        try {
+          const git = simpleGit(worktreePath);
+          await git.add('.gitignore');
+          await git.commit('chore: add .superloop to .gitignore');
+          logger.info('Committed .superloop addition to .gitignore', { worktreePath });
+        } catch (commitError) {
+          logger.warn('Failed to commit .gitignore update', { worktreePath, error: commitError });
+        }
       }
     } catch (error) {
       logger.warn('Failed to update .gitignore', { worktreePath, error });
