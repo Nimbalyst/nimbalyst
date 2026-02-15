@@ -900,6 +900,7 @@ export class RalphLoopService {
 0b. Study \`@.ralph/IMPLEMENTATION_PLAN.md\` (if present) to understand the plan so far.
 0c. Study the existing codebase to understand shared utilities, patterns, and components.
 0d. Reference the project's CLAUDE.md for build commands and project conventions.
+0e. Read \`.ralph/progress.json\` - check \`learnings\` from previous iterations and \`userFeedback\` if present.
 
 1. Study \`@.ralph/IMPLEMENTATION_PLAN.md\` (if present; it may be incomplete) and search the existing source code to compare against the task requirements. Analyze findings, prioritize tasks, and create/update \`@.ralph/IMPLEMENTATION_PLAN.md\` as a bullet point list sorted by priority of items yet to be implemented. Consider searching for TODO, minimal implementations, placeholders, skipped/flaky tests, and inconsistent patterns.
 
@@ -907,7 +908,11 @@ IMPORTANT: Plan only. Do NOT implement anything. Do NOT assume functionality is 
 
 ULTIMATE GOAL: Read \`.ralph/task.md\` for the goal. Consider missing elements and plan accordingly. If an element is missing, search first to confirm it doesn't exist.
 
-When planning is complete, update \`.ralph/progress.json\` and set \`"phase": "building"\` to signal that the next iteration should begin building.`;
+BEFORE YOU FINISH: You MUST update \`.ralph/progress.json\` as the last thing you do. This is how state is communicated between iterations. Set the following fields:
+- \`"phase": "building"\` to signal that the next iteration should begin building
+- \`"status": "running"\`
+- \`"learnings"\`: append an entry with \`{ "iteration": <current iteration number>, "summary": "<what you learned/decided this iteration>", "filesChanged": [<files you created or modified>] }\`
+- If you are BLOCKED and cannot create a viable plan, set \`"status": "blocked"\` and describe the blocker in the \`"blockers"\` array`;
   }
 
   /**
@@ -918,7 +923,7 @@ When planning is complete, update \`.ralph/progress.json\` and set \`"phase": "b
     return `0a. Study \`.ralph/task.md\` to understand the task requirements.
 0b. Study \`@.ralph/IMPLEMENTATION_PLAN.md\` to understand the current plan and priorities.
 0c. Reference the project's CLAUDE.md for build commands and project conventions.
-0d. Check \`.ralph/progress.json\` for \`userFeedback\` - if present, the user has provided guidance to help you overcome the previous blocker. Incorporate this feedback into your approach.
+0d. Read \`.ralph/progress.json\` - check \`learnings\` from previous iterations to avoid repeating work, and \`userFeedback\` if present (the user has provided guidance to help you).
 
 1. Your task is to implement functionality per the task requirements. Follow \`@.ralph/IMPLEMENTATION_PLAN.md\` and choose the most important incomplete item to address. Before making changes, search the codebase (don't assume not implemented). Complete ONE item per iteration.
 
@@ -935,9 +940,11 @@ IMPORTANT RULES:
 - When \`@.ralph/IMPLEMENTATION_PLAN.md\` becomes large, clean out completed items.
 - For any bugs you notice, resolve them or document them in \`@.ralph/IMPLEMENTATION_PLAN.md\`.
 
-COMPLETION: When ALL items in \`@.ralph/IMPLEMENTATION_PLAN.md\` are complete and the task from \`.ralph/task.md\` is fully satisfied, update \`.ralph/progress.json\` and set \`"completionSignal": true\`.
-
-If you are BLOCKED and cannot make progress, set \`"status": "blocked"\` in \`.ralph/progress.json\` and describe the blocker in the \`"blockers"\` array.`;
+BEFORE YOU FINISH: You MUST update \`.ralph/progress.json\` as the LAST thing you do every iteration. This file is how state is communicated between iterations - the next iteration starts with fresh context and depends on this file. Update these fields:
+- \`"learnings"\`: append an entry with \`{ "iteration": <current iteration number>, "summary": "<what you accomplished, key decisions, and anything the next iteration needs to know>", "filesChanged": [<files you created or modified>] }\`
+- \`"status"\`: keep as \`"running"\` if work remains
+- \`"completionSignal"\`: set to \`true\` ONLY when ALL items in \`@.ralph/IMPLEMENTATION_PLAN.md\` are complete and the task from \`.ralph/task.md\` is fully satisfied
+- If you are BLOCKED and cannot make progress, set \`"status": "blocked"\` and describe the blocker in the \`"blockers"\` array`;
   }
 
   /**
