@@ -2273,6 +2273,46 @@ export class AIService {
                   logger.ai.warn('[AIService] applyDiff payload missing replacements', previewForLog(rawArgs));
                 }
 
+                // Snapshot file contents for file_change events before saving
+                if (toolName === 'file_change' && toolArgs?.changes) {
+                  const changes = toolArgs.changes as Array<{ path: string; kind: string }>;
+                  const fileSnapshots: Record<string, { content: string | null; error?: string; isBinary?: boolean; truncated?: boolean }> = {};
+                  const MAX_SNAPSHOT_SIZE = 100_000; // 100KB per file
+
+                  for (const change of changes) {
+                    if (!change?.path) continue;
+                    if (change.kind === 'delete') {
+                      fileSnapshots[change.path] = { content: null };
+                      continue;
+                    }
+                    try {
+                      const buffer = fs.readFileSync(change.path);
+                      // Binary detection: check for null bytes in first 8KB
+                      const sampleSize = Math.min(buffer.length, 8192);
+                      let isBinary = false;
+                      for (let i = 0; i < sampleSize; i++) {
+                        if (buffer[i] === 0) { isBinary = true; break; }
+                      }
+                      if (isBinary) {
+                        fileSnapshots[change.path] = { content: null, isBinary: true };
+                      } else if (buffer.length > MAX_SNAPSHOT_SIZE) {
+                        fileSnapshots[change.path] = { content: buffer.toString('utf-8', 0, MAX_SNAPSHOT_SIZE), truncated: true };
+                      } else {
+                        fileSnapshots[change.path] = { content: buffer.toString('utf-8') };
+                      }
+                    } catch (err) {
+                      fileSnapshots[change.path] = { content: null, error: err instanceof Error ? err.message : String(err) };
+                    }
+                  }
+
+                  // Attach snapshots to the tool call result
+                  if (typeof chunk.toolCall.result === 'object' && chunk.toolCall.result !== null) {
+                    (chunk.toolCall.result as any).fileSnapshots = fileSnapshots;
+                  } else {
+                    chunk.toolCall.result = { success: true, fileSnapshots };
+                  }
+                }
+
                 // Save tool call as a separate message in the session
                 const toolResult = chunk.toolCall.result as any;
                 const isFailedResult = toolResult?.success === false;

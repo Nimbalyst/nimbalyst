@@ -48,6 +48,7 @@ export { BashWidget } from './BashWidget';
 export { GitCommitConfirmationWidget } from './GitCommitConfirmationWidget';
 export { ExitPlanModeWidget } from './ExitPlanModeWidget';
 export { ToolPermissionWidget } from './ToolPermissionWidget';
+export { FileChangeWidget } from './FileChangeWidget';
 
 // Re-export host types (for use in SessionTranscript to set the host)
 export type { InteractiveWidgetHost, PermissionScope, ToolPermissionResponse } from './InteractiveWidgetHost';
@@ -91,6 +92,7 @@ import { BashWidget } from './BashWidget';
 import { GitCommitConfirmationWidget } from './GitCommitConfirmationWidget';
 import { ExitPlanModeWidget } from './ExitPlanModeWidget';
 import { ToolPermissionWidget } from './ToolPermissionWidget';
+import { FileChangeWidget } from './FileChangeWidget';
 
 /**
  * Registry of custom tool widgets
@@ -129,6 +131,9 @@ export const CUSTOM_TOOL_WIDGETS: CustomToolWidgetRegistry = {
 
   // Tool permission - interactive permission widget for tools requiring approval
   'ToolPermission': ToolPermissionWidget,
+
+  // File change tool - displays Codex file modifications with content snapshots
+  'file_change': FileChangeWidget,
 };
 
 /**

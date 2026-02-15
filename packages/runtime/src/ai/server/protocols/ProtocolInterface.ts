@@ -46,6 +46,7 @@ export interface ToolResult {
   exit_code?: number;
   // file_change specific
   changes?: unknown;
+  fileSnapshots?: Record<string, { content: string | null; error?: string; isBinary?: boolean; truncated?: boolean }>;
 }
 
 /**
