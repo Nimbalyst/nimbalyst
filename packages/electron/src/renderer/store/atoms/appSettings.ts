@@ -398,6 +398,7 @@ const defaultAdvancedSettings: AdvancedSettings = {
   betaFeatures: {
     blitz: false,
     codex: false,
+    'ralph-loops': false,
   } as Record<BetaFeatureTag, boolean>,
   enableAllBetaFeatures: false,
   customPathDirs: '',

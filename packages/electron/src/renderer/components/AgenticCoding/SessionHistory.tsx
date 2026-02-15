@@ -4,6 +4,8 @@ import { CollapsibleGroup } from './CollapsibleGroup';
 import { SessionListItem } from './SessionListItem';
 import { WorkstreamGroup } from './WorkstreamGroup';
 import { BlitzGroup } from './BlitzGroup';
+import { RalphLoopGroup } from './RalphLoopGroup';
+import { NewRalphLoopDialog } from './NewRalphLoopDialog';
 import { ArchiveProgress } from './ArchiveProgress';
 import { IndexBuildDialog } from './IndexBuildDialog';
 import { ArchiveWorktreeDialog } from '../AgentMode/ArchiveWorktreeDialog';
@@ -29,7 +31,10 @@ import {
   worktreeActiveSessionAtom,
   type SessionListItem as SessionListItemType,
 } from '../../store';
-import { alphaFeatureEnabledAtom } from '../../store/atoms/appSettings';
+import { alphaFeatureEnabledAtom, betaFeatureEnabledAtom, worktreesFeatureAvailableAtom } from '../../store/atoms/appSettings';
+import { ralphLoopListAtom, upsertRalphLoopAtom, removeRalphLoopAtom } from '../../store/atoms/ralphLoop';
+import { useRalphLoopDialog } from '../../hooks/useRalphLoop';
+import type { RalphLoop } from '../../../shared/types/ralph';
 import { store } from '@nimbalyst/runtime/store';
 import './SessionHistory.css';
 
@@ -285,6 +290,16 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   const refreshSessions = useSetAtom(refreshSessionListAtom);
   const updateSessionStore = useSetAtom(updateSessionStoreAtom);
   const removeSessionFromAtom = useSetAtom(removeSessionFullAtom);
+
+  const isWorktreesAvailable = useAtomValue(worktreesFeatureAvailableAtom);
+  const isRalphLoopsBetaEnabled = useAtomValue(betaFeatureEnabledAtom('ralph-loops'));
+  const isRalphLoopsAvailable = isWorktreesAvailable && isRalphLoopsBetaEnabled;
+
+  // === Ralph Loop state ===
+  const ralphLoops = useAtomValue(ralphLoopListAtom);
+  const upsertRalphLoop = useSetAtom(upsertRalphLoopAtom);
+  const removeRalphLoop = useSetAtom(removeRalphLoopAtom);
+  const { openDialog: openRalphLoopDialog } = useRalphLoopDialog();
 
   // Get the session registry to look up parent session IDs
   const sessionRegistry = useAtomValue(sessionRegistryAtom);
@@ -827,8 +842,14 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
         newCache.delete(worktreeId);
         return newCache;
       });
+
+      // If this worktree belongs to a Ralph Loop, remove the loop from state
+      const ralphLoop = ralphLoops.find(loop => loop.worktreeId === worktreeId);
+      if (ralphLoop) {
+        removeRalphLoop(ralphLoop.id);
+      }
     });
-  }, [archiveWorktreeDialogState, allSessions, workspacePath, confirmArchiveWorktree, removeSessionFromAtom, onSessionArchive]);
+  }, [archiveWorktreeDialogState, allSessions, workspacePath, confirmArchiveWorktree, removeSessionFromAtom, onSessionArchive, ralphLoops, removeRalphLoop]);
 
   const handleUnarchiveSession = async (sessionId: string) => {
     try {
@@ -1086,6 +1107,49 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
       console.error('[SessionHistory] Failed to archive other blitz worktrees:', error);
     }
   }, [worktreeCache, workspacePath]);
+
+  // Ralph Loop handlers
+  const handleRalphLoopUpdate = useCallback(async (
+    loopId: string,
+    updates: { title?: string; isArchived?: boolean; isPinned?: boolean }
+  ) => {
+    try {
+      const result = await window.electronAPI.invoke('ralph:update', loopId, updates);
+      if (result.success && result.loop) {
+        upsertRalphLoop(result.loop);
+      }
+    } catch (error) {
+      console.error('[SessionHistory] Failed to update ralph loop:', error);
+    }
+  }, [upsertRalphLoop]);
+
+  const handleRalphLoopArchive = useCallback(async (loop: RalphLoop) => {
+    // Ralph loops own a dedicated worktree - archive via the worktree archive dialog
+    // which queues deletion of the actual git worktree
+    try {
+      const result = await window.electronAPI.invoke('worktree:get', loop.worktreeId);
+      if (!result.success || !result.worktree) {
+        console.error('[SessionHistory] Failed to get worktree for ralph loop:', result.error);
+        return;
+      }
+      const wt = result.worktree;
+      await showArchiveWorktreeDialog({
+        worktreeId: wt.id,
+        worktreeName: wt.displayName || wt.name || wt.path?.split('/').pop() || 'worktree',
+        worktreePath: wt.path,
+      });
+    } catch (error) {
+      console.error('[SessionHistory] Failed to archive ralph loop:', error);
+    }
+  }, [showArchiveWorktreeDialog]);
+
+  const handleRalphLoopRename = useCallback((loopId: string, newName: string) => {
+    handleRalphLoopUpdate(loopId, { title: newName });
+  }, [handleRalphLoopUpdate]);
+
+  const handleRalphLoopPinToggle = useCallback((loopId: string, isPinned: boolean) => {
+    handleRalphLoopUpdate(loopId, { isPinned });
+  }, [handleRalphLoopUpdate]);
 
   const toggleSortDropdown = () => {
     setSortDropdownOpen(!sortDropdownOpen);
@@ -1377,12 +1441,13 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     return Array.from(worktreeGroupsData.keys());
   }, [worktreeGroupsData]);
 
-  // Create unified list items that can be a session, workstream, worktree group, or blitz group
+  // Create unified list items that can be a session, workstream, worktree group, blitz group, or ralph loop
   type UnifiedListItem =
     | { type: 'session'; session: SessionItem; timestamp: number; isWorktreeSession?: boolean }
     | { type: 'workstream'; session: SessionItem; sessions: SessionItem[]; timestamp: number }
     | { type: 'worktree'; worktreeId: string; sessions: SessionItem[]; timestamp: number }
-    | { type: 'blitz'; blitzId: string; worktrees: { worktreeId: string; sessions: SessionItem[] }[]; timestamp: number };
+    | { type: 'blitz'; blitzId: string; worktrees: { worktreeId: string; sessions: SessionItem[] }[]; timestamp: number }
+    | { type: 'ralphLoop'; loop: RalphLoop; timestamp: number };
 
   // Build unified time-grouped data with both sessions and worktrees interleaved
   const groupedItems = useMemo(() => {
@@ -1429,11 +1494,19 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
       }
     }
 
+    // Exclude worktrees that belong to Ralph Loops - those are rendered via RalphLoopGroup
+    const ralphLoopWorktreeIds = new Set(ralphLoops.map(loop => loop.worktreeId));
+
     // Group blitz worktrees by blitzId, keep standalone worktrees separate
     const blitzWorktrees = new Map<string, { worktreeId: string; sessions: SessionItem[] }[]>();
     const standaloneWorktrees: [string, { sessions: SessionItem[]; timestamp: number }][] = [];
 
     for (const [worktreeId, data] of worktreeGroupsData) {
+      // Skip worktrees that belong to Ralph Loops
+      if (ralphLoopWorktreeIds.has(worktreeId)) {
+        continue;
+      }
+
       const worktreeData = worktreeCache.get(worktreeId);
       if (worktreeData?.blitzId) {
         // This worktree belongs to a blitz
@@ -1500,6 +1573,17 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
       }
     }
 
+    // Add Ralph Loops as grouped items
+    for (const loop of ralphLoops) {
+      const timestamp = timestampField === 'updatedAt' ? loop.updatedAt : loop.createdAt;
+      const item = { type: 'ralphLoop' as const, loop, timestamp };
+      if (loop.isPinned) {
+        pinnedItems.push(item);
+      } else {
+        items.push(item);
+      }
+    }
+
     // Group non-pinned items into time buckets
     const groups: Record<TimeGroupKey, UnifiedListItem[]> = {
       'Today': [],
@@ -1538,7 +1622,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     }
 
     return result as Record<TimeGroupKey | 'Pinned', UnifiedListItem[]>;
-  }, [sessions, worktreeGroupsData, sortBy, worktreeCache, workstreamChildrenCache, blitzCache]);
+  }, [sessions, worktreeGroupsData, sortBy, worktreeCache, workstreamChildrenCache, blitzCache, ralphLoops]);
 
   const groupKeys = Object.keys(groupedItems) as (TimeGroupKey | 'Pinned')[];
 
@@ -2301,6 +2385,9 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                         </div>
                       </div>
                     );
+                  } else if (item.type === 'ralphLoop') {
+                    // Ralph Loop card (in card view, we skip these for now - they show in list view)
+                    return null;
                   } else {
                     // Regular session card
                     const session = item.session;
@@ -2498,6 +2585,29 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                           childCount={session.childCount}
                           onWorkstreamArchive={handleArchiveSession}
                           onWorkstreamPinToggle={handleSessionPinToggle}
+                        />
+                      );
+                    } else if (item.type === 'ralphLoop') {
+                      // Ralph Loop - autonomous agent loop
+                      const isRalphExpanded = !collapsedGroups.includes(`ralph:${item.loop.id}`);
+                      const ralphWorktreeSessions = worktreeGroupsData.get(item.loop.worktreeId);
+                      const isRalphActive = ralphWorktreeSessions
+                        ? ralphWorktreeSessions.sessions.some(s => s.id === activeSessionId)
+                        : false;
+
+                      return (
+                        <RalphLoopGroup
+                          key={`ralph-loop-${item.loop.id}`}
+                          loopId={item.loop.id}
+                          loop={item.loop}
+                          isExpanded={isRalphExpanded}
+                          isActive={isRalphActive}
+                          onToggle={() => handleToggleGroup(`ralph:${item.loop.id}`)}
+                          activeSessionId={activeSessionId}
+                          onSessionSelect={onSessionSelect}
+                          onArchive={() => handleRalphLoopArchive(item.loop)}
+                          onRename={(newName) => handleRalphLoopRename(item.loop.id, newName)}
+                          onPinToggle={(isPinned) => handleRalphLoopPinToggle(item.loop.id, isPinned)}
                         />
                       );
                     } else {
@@ -2720,6 +2830,9 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
         />
       )}
 
+      {/* New Ralph Loop dialog */}
+      <NewRalphLoopDialog workspacePath={workspacePath} />
+
       {/* New dropdown menu - fixed position outside main container */}
       {newDropdownOpen && newDropdownPosition && (
         <div
@@ -2789,6 +2902,18 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                 <path d="M9 13H13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
               </svg>
               <span>New Terminal</span>
+            </button>
+          )}
+          {isRalphLoopsAvailable && (
+            <button
+              className={`session-history-new-option flex items-center w-full px-3 py-2 text-[13px] bg-transparent border-none text-[var(--nim-text)] cursor-pointer transition-colors duration-150 text-left gap-2 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0 [&_svg]:text-[var(--nim-text-muted)] [&>span]:flex-1 ${!isGitRepo ? 'opacity-50 cursor-not-allowed hover:bg-transparent' : ''}`}
+              data-testid="new-ralph-loop-button"
+              onClick={() => { if (isGitRepo) { openRalphLoopDialog(); setNewDropdownOpen(false); setNewDropdownPosition(null); } }}
+              disabled={!isGitRepo}
+              title={!isGitRepo ? 'Ralph Loops require a git repository' : undefined}
+            >
+              <MaterialSymbol icon="sync" size={14} />
+              <span>New Ralph Loop</span>
             </button>
           )}
         </div>

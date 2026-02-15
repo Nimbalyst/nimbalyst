@@ -383,3 +383,20 @@ export {
   loadInitialQueuedPrompts,
   clearSessionError,
 } from './listeners/sessionTranscriptListeners';
+
+// Session files atoms (file edits, git status, worktree changes)
+export {
+  sessionFileEditsAtom,
+  sessionGitStatusAtom,
+  sessionPendingReviewFilesAtom,
+  workspaceUncommittedFilesAtom,
+  worktreeChangedFilesAtom,
+  worktreeGitStatusAtom,
+  workstreamFileEditsAtom,
+  workstreamGitStatusAtom,
+  workstreamPendingReviewFilesAtom,
+  clearSessionFileStateAtom,
+  type FileEditWithSession,
+  type WorktreeChangedFile,
+  type WorktreeGitStatus,
+} from './atoms/sessionFiles';

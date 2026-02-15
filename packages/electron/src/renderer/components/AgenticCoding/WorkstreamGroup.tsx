@@ -130,6 +130,7 @@ interface WorkstreamGroupProps {
   onChangesMode?: (worktreeId: string) => void;
   onAddSession?: (worktreeId: string) => void;
   onAddTerminal?: (worktreeId: string) => void;
+  onAddRalphLoop?: (worktreeId: string) => void;
 }
 
 export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
@@ -165,6 +166,7 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
   onChangesMode,
   onAddSession,
   onAddTerminal,
+  onAddRalphLoop,
 }) => {
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
@@ -278,6 +280,13 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
     }
   }, [isRenamingWorktree]);
 
+  const handleAddRalphLoop = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowContextMenu(false);
+    if (type === 'worktree' && worktree && onAddRalphLoop) {
+      onAddRalphLoop(worktree.id);
+    }
+  }, [type, worktree, onAddRalphLoop]);
   const handleFilesMode = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     if (type === 'worktree' && worktree && onFilesMode) {
@@ -566,6 +575,15 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
             >
               <MaterialSymbol icon="terminal" size={14} />
               Add Terminal
+            </button>
+          )}
+          {type === 'worktree' && onAddRalphLoop && (
+            <button
+              className="workstream-group-context-menu-item flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
+              onClick={handleAddRalphLoop}
+            >
+              <MaterialSymbol icon="sync" size={14} />
+              New Ralph Loop
             </button>
           )}
           {type === 'worktree' && onWorktreeArchive && (

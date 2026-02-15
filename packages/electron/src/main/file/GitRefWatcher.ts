@@ -14,23 +14,30 @@ interface WatcherEntry {
   git: SimpleGit;
 }
 
+interface GitDirInfo {
+  /** The git directory for this workspace (worktree-specific for worktrees) */
+  gitDir: string;
+  /** The common git directory where refs/heads are stored (same as gitDir for regular repos) */
+  commonDir: string;
+}
+
 /**
- * Resolve the actual git directory for a workspace.
- * In regular repos, this is workspacePath/.git
- * In worktrees, .git is a file containing "gitdir: /path/to/actual/git/dir"
+ * Resolve the git directories for a workspace.
+ * In regular repos, both gitDir and commonDir are workspacePath/.git
+ * In worktrees, gitDir is the worktree-specific dir, commonDir is the shared parent
  *
  * @param workspacePath - The workspace path to check
- * @returns The path to the actual git directory, or null if not a git repo
+ * @returns GitDirInfo with both directories, or null if not a git repo
  */
-async function resolveGitDir(workspacePath: string): Promise<string | null> {
+async function resolveGitDirs(workspacePath: string): Promise<GitDirInfo | null> {
   const gitPath = path.join(workspacePath, '.git');
 
   try {
     const stat = await fs.promises.stat(gitPath);
 
     if (stat.isDirectory()) {
-      // Regular git repository
-      return gitPath;
+      // Regular git repository - gitDir and commonDir are the same
+      return { gitDir: gitPath, commonDir: gitPath };
     }
 
     if (stat.isFile()) {
@@ -38,12 +45,26 @@ async function resolveGitDir(workspacePath: string): Promise<string | null> {
       const content = await fs.promises.readFile(gitPath, 'utf-8');
       const match = content.match(/^gitdir:\s*(.+)$/m);
       if (match) {
-        const gitDir = match[1].trim();
+        let gitDir = match[1].trim();
         // The gitdir path may be relative or absolute
-        if (path.isAbsolute(gitDir)) {
-          return gitDir;
+        if (!path.isAbsolute(gitDir)) {
+          gitDir = path.resolve(workspacePath, gitDir);
         }
-        return path.resolve(workspacePath, gitDir);
+
+        // For worktrees, the commondir is in the gitDir/commondir file
+        // This points to the shared .git directory where refs/heads are stored
+        const commonDirFile = path.join(gitDir, 'commondir');
+        try {
+          const commonDirContent = await fs.promises.readFile(commonDirFile, 'utf-8');
+          let commonDir = commonDirContent.trim();
+          if (!path.isAbsolute(commonDir)) {
+            commonDir = path.resolve(gitDir, commonDir);
+          }
+          return { gitDir, commonDir };
+        } catch {
+          // No commondir file - fall back to gitDir
+          return { gitDir, commonDir: gitDir };
+        }
       }
     }
   } catch {
@@ -81,14 +102,16 @@ export class GitRefWatcher {
     }
 
     try {
-      // Resolve the actual git directory (handles worktrees where .git is a file)
-      const gitDir = await resolveGitDir(workspacePath);
+      // Resolve the git directories (handles worktrees where .git is a file)
+      const gitDirs = await resolveGitDirs(workspacePath);
 
-      if (!gitDir) {
+      if (!gitDirs) {
         // Not a git repository
         logger.main.debug('[GitRefWatcher] Not a git repository:', path.basename(workspacePath));
         return;
       }
+
+      const { gitDir, commonDir } = gitDirs;
 
       const git: SimpleGit = simpleGit(workspacePath);
 
@@ -106,8 +129,8 @@ export class GitRefWatcher {
       const lastCommitHash = log.latest?.hash || '';
 
       // Watch refs/heads/<current-branch> for commit detection
-      // Use the resolved gitDir for the actual ref file location
-      const branchRefPath = path.join(gitDir, 'refs/heads', currentBranch);
+      // Use commonDir for refs (in worktrees, refs are in the shared parent .git dir)
+      const branchRefPath = path.join(commonDir, 'refs/heads', currentBranch);
       const refWatcher = chokidar.watch(branchRefPath, {
         ignoreInitial: true,
         persistent: true,
@@ -171,7 +194,8 @@ export class GitRefWatcher {
       logger.main.info('[GitRefWatcher] Started watching:', {
         workspace: path.basename(workspacePath),
         branch: currentBranch,
-        gitDir: gitDir !== path.join(workspacePath, '.git') ? gitDir : undefined, // Log if using worktree gitdir
+        // Log if using worktree (gitDir != commonDir means refs are in a different location)
+        isWorktree: gitDir !== commonDir ? true : undefined,
       });
     } catch (error) {
       logger.main.error('[GitRefWatcher] Failed to start watching:', error);

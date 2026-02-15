@@ -1148,6 +1148,106 @@ class PGLiteWorker {
       console.error('[PGLite Worker] Failed to add blitz_id column to worktrees:', error);
       throw error;
     }
+
+    // Ralph Loops table - autonomous AI agent loop pattern
+    // Ralph Loops run iteratively until a task is complete, with fresh context each iteration
+    console.log('[PGLite Worker] Creating ralph_loops table...');
+    try {
+      await this.db.exec(`
+        CREATE TABLE IF NOT EXISTS ralph_loops (
+          id TEXT PRIMARY KEY,
+          worktree_id TEXT NOT NULL REFERENCES worktrees(id) ON DELETE CASCADE,
+          task_description TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'pending',
+          current_iteration INTEGER DEFAULT 0,
+          max_iterations INTEGER DEFAULT 20,
+          completion_reason TEXT,
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_ralph_loops_worktree ON ralph_loops(worktree_id);
+        CREATE INDEX IF NOT EXISTS idx_ralph_loops_status ON ralph_loops(status);
+      `);
+      console.log('[PGLite Worker] ralph_loops table created successfully');
+    } catch (error) {
+      console.error('[PGLite Worker] Failed to create ralph_loops table:', error);
+      throw error;
+    }
+
+    // Ralph Iterations table - each iteration is linked to an AI session
+    console.log('[PGLite Worker] Creating ralph_iterations table...');
+    try {
+      await this.db.exec(`
+        CREATE TABLE IF NOT EXISTS ralph_iterations (
+          id TEXT PRIMARY KEY,
+          ralph_loop_id TEXT NOT NULL REFERENCES ralph_loops(id) ON DELETE CASCADE,
+          session_id TEXT NOT NULL REFERENCES ai_sessions(id) ON DELETE CASCADE,
+          iteration_number INTEGER NOT NULL,
+          status TEXT NOT NULL DEFAULT 'running',
+          exit_reason TEXT,
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          completed_at TIMESTAMPTZ
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_ralph_iterations_loop ON ralph_iterations(ralph_loop_id);
+        CREATE INDEX IF NOT EXISTS idx_ralph_iterations_session ON ralph_iterations(session_id);
+      `);
+      console.log('[PGLite Worker] ralph_iterations table created successfully');
+    } catch (error) {
+      console.error('[PGLite Worker] Failed to create ralph_iterations table:', error);
+      throw error;
+    }
+
+    // Add model_id column to ralph_loops (for per-loop model selection)
+    try {
+      await this.db.exec(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'ralph_loops' AND column_name = 'model_id'
+          ) THEN
+            ALTER TABLE ralph_loops ADD COLUMN model_id TEXT;
+          END IF;
+        END $$;
+      `);
+      console.log('[PGLite Worker] model_id column added to ralph_loops');
+    } catch (error) {
+      console.error('[PGLite Worker] Failed to add model_id column to ralph_loops:', error);
+      throw error;
+    }
+
+    // Add title, is_archived, is_pinned columns to ralph_loops
+    try {
+      await this.db.exec(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'ralph_loops' AND column_name = 'title'
+          ) THEN
+            ALTER TABLE ralph_loops ADD COLUMN title TEXT;
+          END IF;
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'ralph_loops' AND column_name = 'is_archived'
+          ) THEN
+            ALTER TABLE ralph_loops ADD COLUMN is_archived BOOLEAN DEFAULT FALSE;
+          END IF;
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'ralph_loops' AND column_name = 'is_pinned'
+          ) THEN
+            ALTER TABLE ralph_loops ADD COLUMN is_pinned BOOLEAN DEFAULT FALSE;
+          END IF;
+        END $$;
+      `);
+      console.log('[PGLite Worker] title, is_archived, is_pinned columns added to ralph_loops');
+    } catch (error) {
+      console.error('[PGLite Worker] Failed to add title/is_archived/is_pinned columns to ralph_loops:', error);
+      throw error;
+    }
   }
 
   async query(message) {

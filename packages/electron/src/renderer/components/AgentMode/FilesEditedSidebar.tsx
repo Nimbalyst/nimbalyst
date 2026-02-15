@@ -96,7 +96,9 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
   const allFileEdits = useAtomValue(workstreamFileEditsAtom(workstreamId));
   const sessionFilesGitStatus = useAtomValue(workstreamGitStatusAtom(workstreamId));
   const pendingReviewFiles = useAtomValue(workstreamPendingReviewFilesAtom(workstreamId));
-  const allUncommittedFiles = useAtomValue(workspaceUncommittedFilesAtom(workspacePath));
+  // For worktrees, use worktreePath; otherwise use main workspacePath
+  const uncommittedFilesPath = worktreePath || workspacePath;
+  const allUncommittedFiles = useAtomValue(workspaceUncommittedFilesAtom(uncommittedFilesPath));
   // Always call the hook unconditionally with a stable key, use empty array if no worktreeId
   const worktreeChangedFilesKey = worktreeId || '__no_worktree__';
   const worktreeChangedFilesRaw = useAtomValue(worktreeChangedFilesAtom(worktreeChangedFilesKey));

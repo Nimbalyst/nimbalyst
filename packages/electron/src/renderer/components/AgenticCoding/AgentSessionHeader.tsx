@@ -7,12 +7,13 @@ import {
   sessionEditorStateAtom,
   setSessionLayoutModeAtom,
   sessionHasTabsAtom,
+  worktreeGitStatusAtom,
 } from '../../store';
 import { LayoutControls } from '../UnifiedAI/LayoutControls';
 import { useAlphaFeature } from '../../hooks/useAlphaFeature';
 import { errorNotificationService } from '../../services/ErrorNotificationService';
 
-interface WorktreeWithStatus {
+interface WorktreeMetadata {
   id: string;
   name: string;
   displayName?: string;
@@ -20,15 +21,10 @@ interface WorktreeWithStatus {
   branch: string;
   base_branch?: string;
   isArchived?: boolean;
-  gitStatus?: {
-    ahead?: number;
-    behind?: number;
-    uncommitted?: boolean;
-  };
 }
 
-// Module-level cache for worktree data to avoid refetching on every render
-const worktreeCache = new Map<string, WorktreeWithStatus>();
+// Module-level cache for worktree metadata (not git status - that's in an atom)
+const worktreeMetadataCache = new Map<string, WorktreeMetadata>();
 
 interface AgentSessionHeaderProps {
   sessionData: SessionData | null;
@@ -42,6 +38,7 @@ export const AgentSessionHeader: React.FC<AgentSessionHeaderProps> = ({
   workspacePath,
 }) => {
   const sessionId = sessionData?.id ?? '';
+  const worktreeId = sessionData?.worktreeId ?? '';
 
   // Subscribe to processing atom - uses aggregated atom that includes child sessions
   // This ensures the header shows processing when ANY child in a workstream is running
@@ -52,74 +49,63 @@ export const AgentSessionHeader: React.FC<AgentSessionHeaderProps> = ({
   const setSessionLayoutMode = useSetAtom(setSessionLayoutModeAtom);
   const hasTabs = useAtomValue(sessionHasTabsAtom(sessionId));
 
+  // Subscribe to worktree git status atom - updated by centralized listener on git:status-changed
+  const worktreeGitStatus = useAtomValue(worktreeGitStatusAtom(worktreeId));
+
   // Determine if this is a worktree session (layout controls only for non-worktree)
   const isWorktreeSession = !!sessionData?.worktreeId;
   // Determine if this is a workstream child session (has a parent)
   const isWorkstreamSession = !!sessionData?.parentSessionId;
   const showLayoutControls = sessionData && !isWorktreeSession;
-  // Use cached data immediately if available
-  const cachedData = sessionData?.worktreeId ? worktreeCache.get(sessionData.worktreeId) ?? null : null;
-  const [worktreeData, setWorktreeData] = useState<WorktreeWithStatus | null>(cachedData);
+  // Use cached metadata immediately if available
+  const cachedData = worktreeId ? worktreeMetadataCache.get(worktreeId) ?? null : null;
+  const [worktreeMetadata, setWorktreeMetadata] = useState<WorktreeMetadata | null>(cachedData);
   const fetchingRef = useRef<string | null>(null);
 
-  // Fetch worktree data if this is a worktree session
-  const fetchWorktreeData = useCallback(async (worktreeId: string) => {
+  // Fetch worktree metadata if this is a worktree session
+  // Note: Git status comes from the atom, not from this fetch
+  const fetchWorktreeMetadata = useCallback(async (wtId: string) => {
     // Check cache first
-    if (worktreeCache.has(worktreeId)) {
-      return worktreeCache.get(worktreeId)!;
+    if (worktreeMetadataCache.has(wtId)) {
+      return worktreeMetadataCache.get(wtId)!;
     }
 
     try {
-      const result = await window.electronAPI.invoke('worktree:get', worktreeId);
+      const result = await window.electronAPI.invoke('worktree:get', wtId);
       if (!result.success || !result.worktree) {
         return null;
       }
 
       const worktree = result.worktree;
 
-      // Fetch git status for the worktree (skip for archived worktrees since they don't exist on disk)
-      let gitStatus: { ahead?: number; behind?: number; uncommitted?: boolean } | undefined;
-      if (!worktree.isArchived) {
-        try {
-          // TODO GH: RE-ENABLE
-          // const statusResult = await window.electronAPI.invoke('worktree:get-status', worktree.path);
-          // if (statusResult.success && statusResult.status) {
-          //   gitStatus = {
-          //     ahead: statusResult.status.ahead,
-          //     behind: statusResult.status.behind,
-          //     uncommitted: statusResult.status.hasUncommittedChanges,
-          //   };
-          // }
-        } catch (err) {
-          // Continue without git status
-        }
-      }
-
-      const data: WorktreeWithStatus = {
-        ...worktree,
-        gitStatus,
+      const metadata: WorktreeMetadata = {
+        id: worktree.id,
+        name: worktree.name,
+        displayName: worktree.displayName,
+        path: worktree.path,
+        branch: worktree.branch,
+        base_branch: worktree.base_branch,
+        isArchived: worktree.isArchived,
       };
 
       // Cache the result
-      worktreeCache.set(worktreeId, data);
-      return data;
+      worktreeMetadataCache.set(wtId, metadata);
+      return metadata;
     } catch (err) {
-      console.error('[AgentSessionHeader] Failed to fetch worktree data:', err);
+      console.error('[AgentSessionHeader] Failed to fetch worktree metadata:', err);
       return null;
     }
   }, []);
 
   useEffect(() => {
-    const worktreeId = sessionData?.worktreeId;
-
     if (!worktreeId) {
-      setWorktreeData(null);
+      setWorktreeMetadata(null);
       return;
     }
 
     // If we have cached data, use it immediately
-    if (worktreeCache.has(worktreeId)) {
-      setWorktreeData(worktreeCache.get(worktreeId)!);
+    if (worktreeMetadataCache.has(worktreeId)) {
+      setWorktreeMetadata(worktreeMetadataCache.get(worktreeId)!);
       return;
     }
 
@@ -129,32 +115,32 @@ export const AgentSessionHeader: React.FC<AgentSessionHeaderProps> = ({
     }
 
     fetchingRef.current = worktreeId;
-    fetchWorktreeData(worktreeId).then(data => {
+    fetchWorktreeMetadata(worktreeId).then(data => {
       if (fetchingRef.current === worktreeId) {
-        setWorktreeData(data);
+        setWorktreeMetadata(data);
         fetchingRef.current = null;
       }
     });
-  }, [sessionData?.worktreeId, fetchWorktreeData]);
+  }, [worktreeId, fetchWorktreeMetadata]);
 
   // Listen for worktree display name updates from main process
   // This handles automatic worktree naming when first session in worktree is named
   useEffect(() => {
-    if (!sessionData?.worktreeId) return;
+    if (!worktreeId) return;
 
     const unsubscribe = window.electronAPI?.on?.('worktree:display-name-updated',
       (data: { worktreeId: string; displayName: string }) => {
-        if (data.worktreeId === sessionData.worktreeId) {
+        if (data.worktreeId === worktreeId) {
           // Update local state
-          setWorktreeData(prev => prev ? {
+          setWorktreeMetadata(prev => prev ? {
             ...prev,
             displayName: data.displayName
           } : null);
 
           // Update module-level cache
-          if (worktreeCache.has(data.worktreeId)) {
-            const cached = worktreeCache.get(data.worktreeId)!;
-            worktreeCache.set(data.worktreeId, {
+          if (worktreeMetadataCache.has(data.worktreeId)) {
+            const cached = worktreeMetadataCache.get(data.worktreeId)!;
+            worktreeMetadataCache.set(data.worktreeId, {
               ...cached,
               displayName: data.displayName
             });
@@ -164,7 +150,7 @@ export const AgentSessionHeader: React.FC<AgentSessionHeaderProps> = ({
     );
 
     return () => unsubscribe?.();
-  }, [sessionData?.worktreeId]);
+  }, [worktreeId]);
 
   const isSyncEnabled = useAlphaFeature('sync');
   const [isSharing, setIsSharing] = useState(false);
@@ -231,20 +217,20 @@ export const AgentSessionHeader: React.FC<AgentSessionHeaderProps> = ({
           <div className="agent-session-header-meta flex items-center gap-2 mt-0.5 text-xs text-[var(--nim-text-muted)]">
             {/* Meta info: worktree details load async, but we show model immediately for non-worktree */}
             {isWorktreeSession ? (
-              worktreeData ? (
+              worktreeMetadata ? (
                 <>
-                  <span className="agent-session-header-worktree-name text-[var(--nim-text-muted)] font-medium">{worktreeData.name}</span>
-                  {worktreeData.gitStatus?.ahead && worktreeData.gitStatus.ahead > 0 && (
+                  <span className="agent-session-header-worktree-name text-[var(--nim-text-muted)] font-medium">{worktreeMetadata.name}</span>
+                  {worktreeGitStatus && worktreeGitStatus.ahead > 0 && (
                     <span className="agent-session-header-badge ahead inline-flex items-center px-1.5 py-0.5 rounded text-[0.625rem] font-medium uppercase tracking-wide bg-green-500/15 text-green-500">
-                      {worktreeData.gitStatus.ahead} ahead
+                      {worktreeGitStatus.ahead} ahead
                     </span>
                   )}
-                  {worktreeData.gitStatus?.behind && worktreeData.gitStatus.behind > 0 && (
+                  {worktreeGitStatus && worktreeGitStatus.behind > 0 && (
                     <span className="agent-session-header-badge behind inline-flex items-center px-1.5 py-0.5 rounded text-[0.625rem] font-medium uppercase tracking-wide bg-orange-500/15 text-orange-500">
-                      {worktreeData.gitStatus.behind} behind
+                      {worktreeGitStatus.behind} behind
                     </span>
                   )}
-                  {worktreeData.gitStatus?.uncommitted && (
+                  {worktreeGitStatus?.hasUncommittedChanges && (
                     <span className="agent-session-header-badge uncommitted inline-flex items-center px-1.5 py-0.5 rounded text-[0.625rem] font-medium uppercase tracking-wide bg-violet-500/15 text-violet-500">
                       uncommitted
                     </span>

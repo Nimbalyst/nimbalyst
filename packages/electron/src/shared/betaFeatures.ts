@@ -38,6 +38,12 @@ export const BETA_FEATURES: readonly BetaFeatureDefinition[] = [
     description: 'Enable OpenAI Codex agent provider for code generation tasks.',
     icon: 'terminal',
   },
+  {
+    tag: 'ralph-loops',
+    name: 'Ralph Loops',
+    description: 'Enable Ralph Loops for iterative agent workflows in dedicated worktrees.',
+    icon: 'sync',
+  },
 ] as const;
 
 /**

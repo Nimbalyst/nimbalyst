@@ -38,6 +38,7 @@ import { registerUsageAnalyticsHandlers } from './ipc/UsageAnalyticsHandlers';
 import { registerWorktreeHandlers } from './ipc/WorktreeHandlers';
 import { registerBlitzHandlers } from './ipc/BlitzHandlers';
 import { registerProjectMigrationHandlers } from './ipc/ProjectMigrationHandlers';
+import { registerRalphLoopHandlers } from './ipc/RalphLoopHandlers';
 import {
     type AppTheme,
     dismissClaudeCodeWindowsWarning,
@@ -739,6 +740,7 @@ app.whenReady().then(async () => {
     registerWorktreeHandlers();
     registerBlitzHandlers();
     registerProjectMigrationHandlers();
+    registerRalphLoopHandlers();
     registerMCPConfigHandlers();
     registerClaudeCodePluginHandlers();
     registerDatabaseBrowserHandlers();

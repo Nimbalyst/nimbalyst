@@ -15,8 +15,8 @@ import { AISessionsRepository } from '@nimbalyst/runtime/storage/repositories/AI
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
 import { getTerminalSessionManager } from '../services/TerminalSessionManager';
 import { getTerminalsByWorktreeId, deleteTerminalInstance } from '../utils/terminalStore';
-import type { WorktreeCreateResult } from '../../shared/ipc/types';
 import { gitRefWatcher } from '../file/GitRefWatcher';
+import type { WorktreeCreateResult } from '../../shared/ipc/types';
 import { gitOperationLock } from '../services/GitOperationLock';
 
 const logger = log.scope('WorktreeHandlers');
@@ -51,6 +51,7 @@ function emitTerminalListChanged(workspacePath: string): void {
  */
 export function registerWorktreeHandlers(): void {
   const gitWorktreeService = new GitWorktreeService();
+  let watchersInitialized = false;
 
   /**
    * Create a new git worktree and store its metadata
@@ -131,6 +132,11 @@ export function registerWorktreeHandlers(): void {
 
         // DB insert succeeded, clear cleanup tracking
         createdWorktree = null;
+
+        // Start git ref watcher for the worktree path to detect commits
+        gitRefWatcher.start(worktree.path).catch((error) => {
+          logger.error('Failed to start GitRefWatcher for worktree:', error);
+        });
 
         const totalDuration = Date.now() - startTime;
         logger.info('Worktree created successfully', {
@@ -279,6 +285,9 @@ export function registerWorktreeHandlers(): void {
         throw new Error(`Worktree not found: ${worktreeId}`);
       }
 
+      // Stop the git ref watcher for this worktree
+      await gitRefWatcher.stop(worktree.path);
+
       // Delete the git worktree
       await gitWorktreeService.deleteWorktree(worktree.path, workspacePath);
 
@@ -322,6 +331,24 @@ export function registerWorktreeHandlers(): void {
       const worktrees = await worktreeStore.list(workspacePath);
 
       logger.info('Found worktrees', { count: worktrees.length });
+
+      // Start git ref watchers for all non-archived worktrees on first list call.
+      // This ensures commit detection works for worktrees loaded on app restart.
+      // Only runs once; per-worktree start() is called at creation time.
+      if (!watchersInitialized) {
+        watchersInitialized = true;
+        for (const worktree of worktrees) {
+          if (!worktree.isArchived) {
+            gitRefWatcher.start(worktree.path).catch((error) => {
+              logger.warn('Failed to start GitRefWatcher for worktree:', {
+                worktreeId: worktree.id,
+                path: worktree.path,
+                error: error instanceof Error ? error.message : String(error),
+              });
+            });
+          }
+        }
+      }
 
       return {
         success: true,
@@ -987,6 +1014,9 @@ export function registerWorktreeHandlers(): void {
       const terminalManager = getTerminalSessionManager();
       await terminalManager.destroyTerminalsForSessions(sessionIds);
       logger.info('Destroyed terminal processes for worktree sessions', { worktreeId });
+
+      // Stop the git ref watcher for this worktree (it's being archived/deleted)
+      await gitRefWatcher.stop(worktree.path);
 
       // Step 2b: Delete terminals associated with this worktree
       // Terminals have a worktreeId field that links them to the worktree.
