@@ -563,6 +563,7 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
         worktreeId={worktreeId}
         worktreePath={worktreePath}
         onWorktreeArchived={onWorktreeArchived}
+        onFileClick={onFileClick}
       />
 
       {/* Todo Panel - shows agent's current tasks */}

@@ -38,6 +38,7 @@ import { BadGitStateDialog } from './BadGitStateDialog';
 import { HelpTooltip } from '../../help';
 import { refreshWorktreeChangedFiles } from '../../store/listeners/fileStateListeners';
 import { getWorktreeNameFromPath } from '../../utils/pathUtils';
+import { RalphFilesPanel } from './RalphFilesPanel';
 
 // Types for worktree mode (copied from DiffModeView)
 interface WorktreeChangedFile {
@@ -70,10 +71,12 @@ interface GitOperationsPanelProps {
   worktreePath?: string | null;
   /** Callback when worktree is archived */
   onWorktreeArchived?: () => void;
+  /** Callback to open a file (used for .ralph/ file links) */
+  onFileClick?: (filePath: string) => void;
 }
 
 export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
-  ({ workspacePath, workstreamId, sessionId, editedFiles, worktreeId, worktreePath, onWorktreeArchived }) => {
+  ({ workspacePath, workstreamId, sessionId, editedFiles, worktreeId, worktreePath, onWorktreeArchived, onFileClick }) => {
     // Use useAtomValue for read-only, useSetAtom for write-only to minimize re-renders
     const gitStatus = useAtomValue(gitStatusAtom);
     const setGitStatus = useSetAtom(gitStatusAtom);
@@ -1467,6 +1470,15 @@ Please proceed with this strategy.`;
                   </div>
                 )}
               </div>
+            )}
+
+            {/* Ralph Loop Progress (only for worktrees with a loop) */}
+            {worktreeId && worktreePath && onFileClick && (
+              <RalphFilesPanel
+                worktreeId={worktreeId}
+                worktreePath={worktreePath}
+                onFileClick={onFileClick}
+              />
             )}
 
             {/* History Toggle */}
