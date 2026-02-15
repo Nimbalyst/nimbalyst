@@ -20,6 +20,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.69] - 2026-02-14
+
+
+### Added
+- Ralph Loops - autonomous AI agent iteration system
+
+### Changed
+- Polish blitz creation dialog UI
+
+### Fixed
+- Command execution bash widget
+
 ## [0.52.68] - 2026-02-13
 
 
