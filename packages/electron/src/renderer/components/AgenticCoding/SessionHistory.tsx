@@ -2945,7 +2945,10 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
               disabled={!isGitRepo}
               title={!isGitRepo ? 'Ralph Loops require a git repository' : undefined}
             >
-              <MaterialSymbol icon="sync" size={14} />
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M13 5.5H9.5M13 5.5L10.5 3M13 5.5L10.5 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M3 10.5H6.5M3 10.5L5.5 8M3 10.5L5.5 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
               <span>New Ralph Loop</span>
             </button>
           )}
