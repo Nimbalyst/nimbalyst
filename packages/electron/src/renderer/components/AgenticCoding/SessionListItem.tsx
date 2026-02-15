@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useRef, memo } from 'react';
+import React, { useState, useCallback, useEffect, useRef, useMemo, memo } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { MaterialSymbol, ProviderIcon } from '@nimbalyst/runtime';
 import { getRelativeTimeString } from '../../utils/dateFormatting';
@@ -96,7 +96,7 @@ interface SessionListItemProps {
   branchedAt?: number; // Timestamp when this session was branched (branch tracking)
 }
 
-export const SessionListItem: React.FC<SessionListItemProps> = ({
+export const SessionListItem = memo<SessionListItemProps>(({
   id,
   title,
   createdAt,
@@ -452,19 +452,20 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
 
   // Show timestamp based on current sort order
   const timestamp = sortBy === 'updated' ? (updatedAt || createdAt) : createdAt;
-  const relativeTime = getRelativeTimeString(timestamp);
   const timestampLabel = sortBy === 'updated' ? 'updated' : 'created';
 
-  // Format the full datetime for display in local timezone
-  const fullDateTime = new Date(timestamp).toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-    timeZoneName: 'short'
-  });
+  const { relativeTime, fullDateTime } = useMemo(() => ({
+    relativeTime: getRelativeTimeString(timestamp),
+    fullDateTime: new Date(timestamp).toLocaleString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+      timeZoneName: 'short'
+    }),
+  }), [timestamp]);
 
   // Extract model ID from provider:model format
   const displayModel = model?.includes(':') ? model.split(':')[1] : model;
@@ -712,4 +713,27 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
       )}
     </div>
   );
-};
+}, (prev, next) => {
+  return (
+    prev.id === next.id &&
+    prev.title === next.title &&
+    prev.createdAt === next.createdAt &&
+    prev.updatedAt === next.updatedAt &&
+    prev.isActive === next.isActive &&
+    prev.isLoaded === next.isLoaded &&
+    prev.isArchived === next.isArchived &&
+    prev.isPinned === next.isPinned &&
+    prev.isSelected === next.isSelected &&
+    prev.sortBy === next.sortBy &&
+    prev.provider === next.provider &&
+    prev.model === next.model &&
+    prev.messageCount === next.messageCount &&
+    prev.sessionType === next.sessionType &&
+    prev.isWorkstream === next.isWorkstream &&
+    prev.isWorktreeSession === next.isWorktreeSession &&
+    prev.parentSessionId === next.parentSessionId &&
+    prev.projectPath === next.projectPath &&
+    prev.uncommittedCount === next.uncommittedCount &&
+    prev.branchedAt === next.branchedAt
+  );
+});
