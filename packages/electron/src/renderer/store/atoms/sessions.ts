@@ -727,6 +727,27 @@ export const sessionHasChildrenAtom = atomFamily((sessionId: string) =>
 );
 
 /**
+ * Derived: index mapping parentSessionId -> child session IDs.
+ * Computed once when the registry changes, so child lookups are O(1) instead of
+ * scanning the entire registry per session (which was O(N^2) for N sessions).
+ */
+const parentToChildIdsAtom = atom((get) => {
+  const registry = get(sessionRegistryAtom);
+  const map = new Map<string, string[]>();
+  for (const [id, meta] of registry) {
+    if (meta.parentSessionId) {
+      const children = map.get(meta.parentSessionId);
+      if (children) {
+        children.push(id);
+      } else {
+        map.set(meta.parentSessionId, [id]);
+      }
+    }
+  }
+  return map;
+});
+
+/**
  * Derived: whether a session OR any of its children is processing.
  * For workstreams, the parent header should show processing if ANY child is running.
  * This atom provides that aggregated view - subscribe to this instead of sessionProcessingAtom
@@ -734,7 +755,7 @@ export const sessionHasChildrenAtom = atomFamily((sessionId: string) =>
  *
  * Checks children from TWO sources:
  * 1. sessionChildrenAtom - populated when workstream is opened (has exact child IDs)
- * 2. sessionRegistryAtom - always available (finds children by parentSessionId)
+ * 2. parentToChildIdsAtom - pre-computed index from registry (O(1) lookup)
  */
 export const sessionOrChildProcessingAtom = atomFamily((sessionId: string) =>
   atom((get) => {
@@ -751,11 +772,11 @@ export const sessionOrChildProcessingAtom = atomFamily((sessionId: string) =>
       }
     }
 
-    // Also check children from registry (works even before workstream is opened)
-    // This ensures session list shows processing state for unopened workstreams
-    const registry = get(sessionRegistryAtom);
-    for (const [childId, meta] of registry) {
-      if (meta.parentSessionId === sessionId) {
+    // Check children from pre-computed registry index (works even before workstream is opened)
+    // Uses parentToChildIdsAtom for O(1) lookup instead of scanning the full registry
+    const childIds = get(parentToChildIdsAtom).get(sessionId);
+    if (childIds) {
+      for (const childId of childIds) {
         if (get(sessionProcessingAtom(childId))) {
           return true;
         }
