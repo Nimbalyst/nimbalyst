@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
+import { Virtuoso, VirtuosoHandle } from 'react-virtuoso';
 import { CollapsibleGroup } from './CollapsibleGroup';
 import { SessionListItem } from './SessionListItem';
 import { WorkstreamGroup } from './WorkstreamGroup';
@@ -401,7 +402,12 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   } = useArchiveWorktreeDialog();
 
   // Track scroll position to restore after refresh
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const [scrollContainerEl, setScrollContainerEl] = useState<HTMLDivElement | null>(null);
+  const scrollContainerCallbackRef = useCallback((node: HTMLDivElement | null) => {
+    scrollContainerRef.current = node;
+    setScrollContainerEl(node);
+  }, []);
   const scrollPositionRef = useRef<number>(0);
 
   // Save scroll position on scroll
@@ -1626,6 +1632,30 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
 
   const groupKeys = Object.keys(groupedItems) as (TimeGroupKey | 'Pinned')[];
 
+  // Flatten groups and their visible items into a single array for Virtuoso.
+  // Group headers are included as items; collapsed groups omit their children.
+  type FlatVirtuosoItem =
+    | { kind: 'group-header'; groupKey: string; itemCount: number; isExpanded: boolean }
+    | { kind: 'item'; groupKey: string; item: UnifiedListItem };
+
+  const flatVirtuosoItems = useMemo(() => {
+    const flat: FlatVirtuosoItem[] = [];
+    for (const groupKey of groupKeys) {
+      const items = groupedItems[groupKey];
+      const isExpanded = !collapsedGroups.includes(groupKey);
+      flat.push({ kind: 'group-header', groupKey, itemCount: items.length, isExpanded });
+      if (isExpanded) {
+        for (const item of items) {
+          flat.push({ kind: 'item', groupKey, item });
+        }
+      }
+    }
+    return flat;
+  }, [groupKeys, groupedItems, collapsedGroups]);
+
+  // Ref for Virtuoso to support scroll-to-active
+  const virtuosoRef = useRef<VirtuosoHandle>(null);
+
   // Batch fetch all worktree data when sortedWorktreeIds changes (prevents N+1 query problem)
   useEffect(() => {
     const missingWorktreeIds = sortedWorktreeIds.filter(id => !worktreeCache.has(id));
@@ -2218,7 +2248,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
           </div>
         </div>
       )}
-      <div className="session-history-list nim-scrollbar flex-1 overflow-y-auto overflow-x-hidden py-2 scroll-smooth" ref={scrollContainerRef}>
+      <div className="session-history-list nim-scrollbar flex-1 overflow-y-auto overflow-x-hidden py-2 scroll-smooth" ref={scrollContainerCallbackRef}>
         {groupKeys.length === 0 && hasSearchQuery ? (
           // No search results - show message with option to clear
           <div className="session-history-empty flex flex-col items-center justify-center px-4 py-8 text-center text-[var(--nim-text-faint)] text-[13px]">
@@ -2450,210 +2480,213 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
             </div>
           </>
         ) : (
-          <>
-            {/* Unified time groups with interleaved sessions and worktrees */}
-            {groupKeys.map(groupKey => {
-              const items = groupedItems[groupKey];
-              const isExpanded = !collapsedGroups.includes(groupKey);
-
-              return (
-                <CollapsibleGroup
-                  key={groupKey}
-                  title={groupKey}
-                  isExpanded={isExpanded}
-                  onToggle={() => handleToggleGroup(groupKey)}
-                  count={items.length}
-                >
-                  {items.map(item => {
-                    if (item.type === 'blitz') {
-                      // Blitz group - collapsible group containing multiple worktrees
-                      const blitzData = blitzCache.get(item.blitzId);
-                      const isBlitzExpanded = !collapsedGroups.includes(`blitz:${item.blitzId}`);
-                      const allSessionIds = item.worktrees.flatMap(w => w.sessions.map(s => s.id));
-                      const isBlitzActive = allSessionIds.includes(activeSessionId || '');
-
-                      return (
-                        <BlitzGroup
-                          key={`blitz-${item.blitzId}`}
-                          blitzId={item.blitzId}
-                          title={blitzData?.displayName || (blitzData?.prompt ? blitzData.prompt.slice(0, 60) + (blitzData.prompt.length > 60 ? '...' : '') : 'Loading...')}
-                          isExpanded={isBlitzExpanded}
-                          isActive={isBlitzActive}
-                          isPinned={blitzData?.isPinned}
-                          isArchived={blitzData?.isArchived}
-                          onToggle={() => handleToggleGroup(`blitz:${item.blitzId}`)}
-                          worktrees={item.worktrees.map(w => ({
-                            worktreeId: w.worktreeId,
-                            sessions: w.sessions,
-                            worktreeData: worktreeCache.get(w.worktreeId),
-                          }))}
-                          activeSessionId={activeSessionId}
-                          onSessionSelect={onSessionSelect}
-                          worktreeCache={worktreeCache}
-                          collapsedGroups={collapsedGroups}
-                          onToggleWorktreeGroup={handleToggleGroup}
-                          onBlitzRename={handleBlitzRename}
-                          onBlitzPinToggle={handleBlitzPinToggle}
-                          onBlitzArchive={handleBlitzArchive}
-                          onArchiveOtherWorktrees={handleArchiveOtherBlitzWorktrees}
-                          onWorktreeRename={handleWorktreeRename}
-                          onWorktreeArchive={handleArchiveWorktree}
-                          onSessionRename={onSessionRename}
+          /* Virtualized list view - flat Virtuoso list with group headers as items */
+          flatVirtuosoItems.length > 0 && scrollContainerEl ? (
+            <Virtuoso
+              ref={virtuosoRef}
+              customScrollParent={scrollContainerEl}
+              totalCount={flatVirtuosoItems.length}
+              overscan={400}
+              itemContent={(index) => {
+                const entry = flatVirtuosoItems[index];
+                if (entry.kind === 'group-header') {
+                  // Render inline group header (same markup as CollapsibleGroup)
+                  return (
+                    <div className="collapsible-group mb-1">
+                      <button
+                        className="collapsible-group-header flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-xs font-semibold text-nim-muted text-left transition-colors duration-150 hover:bg-nim-hover"
+                        onClick={() => handleToggleGroup(entry.groupKey)}
+                        aria-expanded={entry.isExpanded}
+                        aria-label={`${entry.groupKey} group, ${entry.isExpanded ? 'expanded' : 'collapsed'}`}
+                      >
+                        <MaterialSymbol
+                          icon="chevron_right"
+                          size={12}
+                          className={`collapsible-group-chevron shrink-0 text-nim-faint transition-transform duration-200 ${entry.isExpanded ? 'rotate-90' : ''}`}
                         />
-                      );
-                    }
-                    if (item.type === 'worktree') {
-                      // Worktree group - use new unified WorkstreamGroup
-                      const worktreeData = worktreeCache.get(item.worktreeId);
-                      const isWorktreeExpanded = !collapsedGroups.includes(`worktree:${item.worktreeId}`);
+                        <span className="collapsible-group-title flex-1 overflow-hidden text-ellipsis whitespace-nowrap uppercase tracking-wide">{entry.groupKey}</span>
+                        <span className="collapsible-group-count shrink-0 text-[0.625rem] text-nim-faint font-normal">{entry.itemCount}</span>
+                      </button>
+                    </div>
+                  );
+                }
 
-                      return (
-                        <WorkstreamGroup
-                          key={`worktree-${item.worktreeId}`}
-                          type="worktree"
-                          id={item.worktreeId}
-                          title={worktreeData?.displayName || worktreeData?.name || 'Loading...'}
-                          isExpanded={isWorktreeExpanded}
-                          isActive={item.sessions.some(s => s.id === activeSessionId)}
-                          onToggle={() => handleToggleGroup(`worktree:${item.worktreeId}`)}
-                          onSelect={() => {
-                            // Select last active session in worktree when clicking header
-                            // Falls back to first session if no previous selection
-                            const lastActiveSessionId = store.get(worktreeActiveSessionAtom(item.worktreeId));
-                            const sessionToSelect = lastActiveSessionId
-                              ? item.sessions.find(s => s.id === lastActiveSessionId)
-                              : null;
-                            const targetSession = sessionToSelect || item.sessions[0];
-                            if (targetSession) {
-                              onSessionSelect(targetSession.id);
-                            }
-                          }}
-                          sessions={item.sessions}
-                          sortBy={sortBy}
-                          activeSessionId={activeSessionId}
-                          onSessionSelect={onSessionSelect}
-                          onChildSessionSelect={onChildSessionSelect}
-                          onSessionDelete={onSessionDelete ? handleDeleteSession : undefined}
-                          onSessionArchive={handleArchiveSession}
-                          onSessionUnarchive={handleUnarchiveSession}
-                          onSessionPinToggle={handleSessionPinToggle}
-                          onSessionRename={onSessionRename}
-                          worktree={worktreeData || { id: item.worktreeId, name: 'Loading...', path: '', branch: '' }}
-                          gitStatus={worktreeData?.gitStatus}
-                          onWorktreePinToggle={handleWorktreePinToggle}
-                          onWorktreeArchive={handleArchiveWorktree}
-                          onWorktreeRename={handleWorktreeRename}
-                          onFilesMode={onWorktreeFilesMode}
-                          onChangesMode={onWorktreeChangesMode}
-                          onAddSession={onAddSessionToWorktree}
-                          onAddTerminal={onAddTerminalToWorktree}
-                        />
-                      );
-                    } else if (item.type === 'workstream') {
-                      // Workstream (session with children) - use new unified WorkstreamGroup
-                      const session = item.session;
-                      const isWorkstreamExpanded = !collapsedGroups.includes(`workstream:${session.id}`);
+                // Render the appropriate item type
+                const item = entry.item;
+                if (item.type === 'blitz') {
+                  const blitzData = blitzCache.get(item.blitzId);
+                  const isBlitzExpanded = !collapsedGroups.includes(`blitz:${item.blitzId}`);
+                  const allSessionIds = item.worktrees.flatMap(w => w.sessions.map(s => s.id));
+                  const isBlitzActive = allSessionIds.includes(activeSessionId || '');
 
-                      // Check if this workstream is active: either the parent itself is active,
-                      // or the active session's parent ID matches this workstream
-                      const isWorkstreamActive = session.id === activeSessionId ||
-                                                 (activeSessionParentId === session.id);
+                  return (
+                    <BlitzGroup
+                      blitzId={item.blitzId}
+                      title={blitzData?.displayName || (blitzData?.prompt ? blitzData.prompt.slice(0, 60) + (blitzData.prompt.length > 60 ? '...' : '') : 'Loading...')}
+                      isExpanded={isBlitzExpanded}
+                      isActive={isBlitzActive}
+                      isPinned={blitzData?.isPinned}
+                      isArchived={blitzData?.isArchived}
+                      onToggle={() => handleToggleGroup(`blitz:${item.blitzId}`)}
+                      worktrees={item.worktrees.map(w => ({
+                        worktreeId: w.worktreeId,
+                        sessions: w.sessions,
+                        worktreeData: worktreeCache.get(w.worktreeId),
+                      }))}
+                      activeSessionId={activeSessionId}
+                      onSessionSelect={onSessionSelect}
+                      worktreeCache={worktreeCache}
+                      collapsedGroups={collapsedGroups}
+                      onToggleWorktreeGroup={handleToggleGroup}
+                      onBlitzRename={handleBlitzRename}
+                      onBlitzPinToggle={handleBlitzPinToggle}
+                      onBlitzArchive={handleBlitzArchive}
+                      onArchiveOtherWorktrees={handleArchiveOtherBlitzWorktrees}
+                      onWorktreeRename={handleWorktreeRename}
+                      onWorktreeArchive={handleArchiveWorktree}
+                      onSessionRename={onSessionRename}
+                    />
+                  );
+                }
+                if (item.type === 'worktree') {
+                  const worktreeData = worktreeCache.get(item.worktreeId);
+                  const isWorktreeExpanded = !collapsedGroups.includes(`worktree:${item.worktreeId}`);
 
-                      return (
-                        <WorkstreamGroup
-                          key={`workstream-${session.id}`}
-                          type="workstream"
-                          id={session.id}
-                          title={session.title || 'Untitled Workstream'}
-                          isExpanded={isWorkstreamExpanded}
-                          isActive={isWorkstreamActive}
-                          onToggle={() => handleToggleGroup(`workstream:${session.id}`)}
-                          onSelect={() => onSessionSelect(session.id)}
-                          sessions={item.sessions}
-                          sortBy={sortBy}
-                          activeSessionId={activeSessionId}
-                          onSessionSelect={onSessionSelect}
-                          onChildSessionSelect={onChildSessionSelect}
-                          onSessionDelete={onSessionDelete ? handleDeleteSession : undefined}
-                          onSessionArchive={handleArchiveSession}
-                          onSessionUnarchive={handleUnarchiveSession}
-                          onSessionPinToggle={handleSessionPinToggle}
-                          onSessionRename={onSessionRename}
-                          provider={session.provider}
-                          isPinned={session.isPinned}
-                          isArchived={session.isArchived}
-                          childCount={session.childCount}
-                          onWorkstreamArchive={handleArchiveSession}
-                          onWorkstreamPinToggle={handleSessionPinToggle}
-                        />
-                      );
-                    } else if (item.type === 'ralphLoop') {
-                      // Ralph Loop - autonomous agent loop
-                      const isRalphExpanded = !collapsedGroups.includes(`ralph:${item.loop.id}`);
-                      const ralphWorktreeSessions = worktreeGroupsData.get(item.loop.worktreeId);
-                      const isRalphActive = ralphWorktreeSessions
-                        ? ralphWorktreeSessions.sessions.some(s => s.id === activeSessionId)
-                        : false;
+                  return (
+                    <WorkstreamGroup
+                      type="worktree"
+                      id={item.worktreeId}
+                      title={worktreeData?.displayName || worktreeData?.name || 'Loading...'}
+                      isExpanded={isWorktreeExpanded}
+                      isActive={item.sessions.some(s => s.id === activeSessionId)}
+                      onToggle={() => handleToggleGroup(`worktree:${item.worktreeId}`)}
+                      onSelect={() => {
+                        const lastActiveSessionId = store.get(worktreeActiveSessionAtom(item.worktreeId));
+                        const sessionToSelect = lastActiveSessionId
+                          ? item.sessions.find(s => s.id === lastActiveSessionId)
+                          : null;
+                        const targetSession = sessionToSelect || item.sessions[0];
+                        if (targetSession) {
+                          onSessionSelect(targetSession.id);
+                        }
+                      }}
+                      sessions={item.sessions}
+                      sortBy={sortBy}
+                      activeSessionId={activeSessionId}
+                      onSessionSelect={onSessionSelect}
+                      onChildSessionSelect={onChildSessionSelect}
+                      onSessionDelete={onSessionDelete ? handleDeleteSession : undefined}
+                      onSessionArchive={handleArchiveSession}
+                      onSessionUnarchive={handleUnarchiveSession}
+                      onSessionPinToggle={handleSessionPinToggle}
+                      onSessionRename={onSessionRename}
+                      worktree={worktreeData || { id: item.worktreeId, name: 'Loading...', path: '', branch: '' }}
+                      gitStatus={worktreeData?.gitStatus}
+                      onWorktreePinToggle={handleWorktreePinToggle}
+                      onWorktreeArchive={handleArchiveWorktree}
+                      onWorktreeRename={handleWorktreeRename}
+                      onFilesMode={onWorktreeFilesMode}
+                      onChangesMode={onWorktreeChangesMode}
+                      onAddSession={onAddSessionToWorktree}
+                      onAddTerminal={onAddTerminalToWorktree}
+                    />
+                  );
+                }
+                if (item.type === 'workstream') {
+                  const session = item.session;
+                  const isWorkstreamExpanded = !collapsedGroups.includes(`workstream:${session.id}`);
+                  const isWorkstreamActive = session.id === activeSessionId ||
+                                             (activeSessionParentId === session.id);
 
-                      return (
-                        <RalphLoopGroup
-                          key={`ralph-loop-${item.loop.id}`}
-                          loopId={item.loop.id}
-                          loop={item.loop}
-                          isExpanded={isRalphExpanded}
-                          isActive={isRalphActive}
-                          onToggle={() => handleToggleGroup(`ralph:${item.loop.id}`)}
-                          activeSessionId={activeSessionId}
-                          onSessionSelect={onSessionSelect}
-                          onArchive={() => handleRalphLoopArchive(item.loop)}
-                          onRename={(newName) => handleRalphLoopRename(item.loop.id, newName)}
-                          onPinToggle={(isPinned) => handleRalphLoopPinToggle(item.loop.id, isPinned)}
-                        />
-                      );
-                    } else {
-                      // Regular session - use SessionListItem
-                      const session = item.session;
-                      return (
-                        <SessionListItem
-                          key={session.id}
-                          id={session.id}
-                          title={session.title || 'Untitled Session'}
-                          createdAt={session.createdAt}
-                          updatedAt={session.updatedAt}
-                          isActive={session.id === activeSessionId}
-                          isLoaded={loadedSessionIds.includes(session.id)}
-                          isArchived={session.isArchived}
-                          isPinned={session.isPinned}
-                          isSelected={selectedSessionIds.has(session.id)}
-                          sortBy={sortBy}
-                          onClick={(e) => handleSessionClick(session.id, e)}
-                          onDelete={onSessionDelete ? () => handleDeleteSession(session.id) : undefined}
-                          onArchive={() => handleArchiveSession(session.id)}
-                          onUnarchive={() => handleUnarchiveSession(session.id)}
-                          onRename={onSessionRename ? (newName: string) => onSessionRename(session.id, newName) : undefined}
-                          onPinToggle={(isPinned) => handleSessionPinToggle(session.id, isPinned)}
-                          onBranch={onSessionBranch ? () => onSessionBranch(session.id) : undefined}
-                          provider={session.provider}
-                          model={session.model}
-                          messageCount={session.messageCount}
-                          isProcessing={session.isProcessing}
-                          hasUnread={session.hasUnread}
-                          hasPendingPrompt={session.hasPendingPrompt}
-                          sessionType={session.sessionType}
-                          isWorkstream={false}
-                          isWorktreeSession={item.isWorktreeSession}
-                          parentSessionId={session.parentSessionId}
-                          projectPath={session.projectPath}
-                          uncommittedCount={session.uncommittedCount}
-                          branchedAt={session.branchedAt}
-                        />
-                      );
-                    }
-                  })}
-                </CollapsibleGroup>
-              );
-            })}
-          </>
+                  return (
+                    <WorkstreamGroup
+                      type="workstream"
+                      id={session.id}
+                      title={session.title || 'Untitled Workstream'}
+                      isExpanded={isWorkstreamExpanded}
+                      isActive={isWorkstreamActive}
+                      onToggle={() => handleToggleGroup(`workstream:${session.id}`)}
+                      onSelect={() => onSessionSelect(session.id)}
+                      sessions={item.sessions}
+                      sortBy={sortBy}
+                      activeSessionId={activeSessionId}
+                      onSessionSelect={onSessionSelect}
+                      onChildSessionSelect={onChildSessionSelect}
+                      onSessionDelete={onSessionDelete ? handleDeleteSession : undefined}
+                      onSessionArchive={handleArchiveSession}
+                      onSessionUnarchive={handleUnarchiveSession}
+                      onSessionPinToggle={handleSessionPinToggle}
+                      onSessionRename={onSessionRename}
+                      provider={session.provider}
+                      isPinned={session.isPinned}
+                      isArchived={session.isArchived}
+                      childCount={session.childCount}
+                      onWorkstreamArchive={handleArchiveSession}
+                      onWorkstreamPinToggle={handleSessionPinToggle}
+                    />
+                  );
+                }
+                if (item.type === 'ralphLoop') {
+                  const isRalphExpanded = !collapsedGroups.includes(`ralph:${item.loop.id}`);
+                  const ralphWorktreeSessions = worktreeGroupsData.get(item.loop.worktreeId);
+                  const isRalphActive = ralphWorktreeSessions
+                    ? ralphWorktreeSessions.sessions.some(s => s.id === activeSessionId)
+                    : false;
+
+                  return (
+                    <RalphLoopGroup
+                      loopId={item.loop.id}
+                      loop={item.loop}
+                      isExpanded={isRalphExpanded}
+                      isActive={isRalphActive}
+                      onToggle={() => handleToggleGroup(`ralph:${item.loop.id}`)}
+                      activeSessionId={activeSessionId}
+                      onSessionSelect={onSessionSelect}
+                      onArchive={() => handleRalphLoopArchive(item.loop)}
+                      onRename={(newName) => handleRalphLoopRename(item.loop.id, newName)}
+                      onPinToggle={(isPinned) => handleRalphLoopPinToggle(item.loop.id, isPinned)}
+                    />
+                  );
+                }
+                // Regular session
+                const session = item.session;
+                return (
+                  <SessionListItem
+                    id={session.id}
+                    title={session.title || 'Untitled Session'}
+                    createdAt={session.createdAt}
+                    updatedAt={session.updatedAt}
+                    isActive={session.id === activeSessionId}
+                    isLoaded={loadedSessionIds.includes(session.id)}
+                    isArchived={session.isArchived}
+                    isPinned={session.isPinned}
+                    isSelected={selectedSessionIds.has(session.id)}
+                    sortBy={sortBy}
+                    onClick={(e) => handleSessionClick(session.id, e)}
+                    onDelete={onSessionDelete ? () => handleDeleteSession(session.id) : undefined}
+                    onArchive={() => handleArchiveSession(session.id)}
+                    onUnarchive={() => handleUnarchiveSession(session.id)}
+                    onRename={onSessionRename ? (newName: string) => onSessionRename(session.id, newName) : undefined}
+                    onPinToggle={(isPinned) => handleSessionPinToggle(session.id, isPinned)}
+                    onBranch={onSessionBranch ? () => onSessionBranch(session.id) : undefined}
+                    provider={session.provider}
+                    model={session.model}
+                    messageCount={session.messageCount}
+                    isProcessing={session.isProcessing}
+                    hasUnread={session.hasUnread}
+                    hasPendingPrompt={session.hasPendingPrompt}
+                    sessionType={session.sessionType}
+                    isWorkstream={false}
+                    isWorktreeSession={item.isWorktreeSession}
+                    parentSessionId={session.parentSessionId}
+                    projectPath={session.projectPath}
+                    uncommittedCount={session.uncommittedCount}
+                    branchedAt={session.branchedAt}
+                  />
+                );
+              }}
+            />
+          ) : null
         )}
       </div>
 
