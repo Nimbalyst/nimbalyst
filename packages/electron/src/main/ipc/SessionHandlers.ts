@@ -692,17 +692,38 @@ export async function registerSessionHandlers() {
         // Checkpoints aren't implemented in current system
     });
 
-    // Get sessions by file path
+    // Get sessions by file path (cross-worktree aware)
     safeHandle('sessions:get-by-file', async (event, workspaceId: string, filePath: string) => {
         try {
             const { database } = await import('../database/PGLiteDatabaseWorker');
+            const { resolveProjectPath } = await import('../utils/workspaceDetection');
 
-            // Query session_files table to get session IDs that have interacted with this file
-            const fileLinksResult = await database.query(
-                `SELECT DISTINCT session_id FROM session_files
-                 WHERE workspace_id = $1 AND file_path = $2`,
-                [workspaceId, filePath]
-            );
+            // Compute relative path for cross-workspace matching
+            const relativePath = filePath.startsWith(workspaceId)
+                ? filePath.slice(workspaceId.length) // includes leading /
+                : null;
+
+            const projectPath = resolveProjectPath(workspaceId);
+
+            let fileLinksResult;
+            if (relativePath) {
+                // Query across all related workspaces using relative path suffix
+                // This handles: worktree -> main project, main project -> worktrees,
+                // and worktree -> other worktrees
+                fileLinksResult = await database.query(
+                    `SELECT DISTINCT session_id FROM session_files
+                     WHERE file_path LIKE '%' || $1
+                     AND (workspace_id = $2 OR workspace_id = $3 OR workspace_id LIKE $4)`,
+                    [relativePath, workspaceId, projectPath, projectPath + '_worktrees/%']
+                );
+            } else {
+                // Fallback: exact match only
+                fileLinksResult = await database.query(
+                    `SELECT DISTINCT session_id FROM session_files
+                     WHERE workspace_id = $1 AND file_path = $2`,
+                    [workspaceId, filePath]
+                );
+            }
 
             if (!fileLinksResult.rows || fileLinksResult.rows.length === 0) {
                 return [];
@@ -710,7 +731,7 @@ export async function registerSessionHandlers() {
 
             const sessionIds = fileLinksResult.rows.map((row: any) => row.session_id);
 
-            // Get list entries with messageCount
+            // Get list entries with messageCount (only available for current workspace sessions)
             const listEntries = await AISessionsRepository.list(workspaceId);
             const entriesMap = new Map(listEntries.map(entry => [entry.id, entry]));
 
@@ -718,9 +739,11 @@ export async function registerSessionHandlers() {
             const sessionsData = await AISessionsRepository.getMany(sessionIds);
 
             // Map and enrich with entry data
+            // Sort: current workspace sessions first, then others by updatedAt desc
             const sessions = sessionsData
                 .map(session => {
                     const entry = entriesMap.get(session.id);
+                    const sessionWorkspaceId = session.workspacePath || '';
                     return {
                         id: session.id,
                         title: session.title || 'Untitled Session',
@@ -728,10 +751,18 @@ export async function registerSessionHandlers() {
                         model: session.model,
                         createdAt: session.createdAt,
                         updatedAt: session.updatedAt,
-                        messageCount: entry?.messageCount || 0
+                        messageCount: entry?.messageCount || 0,
+                        worktreeId: (session as any).worktreeId || null,
+                        isCurrentWorkspace: sessionWorkspaceId === workspaceId
                     };
                 })
-                .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+                .sort((a, b) => {
+                    // Current workspace sessions first
+                    if (a.isCurrentWorkspace !== b.isCurrentWorkspace) {
+                        return a.isCurrentWorkspace ? -1 : 1;
+                    }
+                    return (b.updatedAt || 0) - (a.updatedAt || 0);
+                });
 
             return sessions;
         } catch (error) {
