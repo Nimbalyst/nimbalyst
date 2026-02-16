@@ -2354,6 +2354,167 @@ The commit message should follow these guidelines:
           // Continue anyway - worst case is no durability
         }
 
+        // Check if auto-commit is enabled - if so, commit directly without waiting for UI
+        let isAutoCommit = false;
+        try {
+          const Store = (await import("electron-store")).default;
+          const aiSettingsStore = new Store({ name: "ai-settings" });
+          isAutoCommit = aiSettingsStore.get(
+            "autoCommitEnabled",
+            false
+          ) as boolean;
+        } catch {
+          // If we can't read settings, fall through to manual mode
+        }
+
+        if (isAutoCommit) {
+          console.log(
+            `[MCP Server] Auto-commit enabled, executing commit directly for proposal: ${proposalId}`
+          );
+
+          const getFilePath = (f: FileToStage) =>
+            typeof f === "string" ? f : f.path;
+          const filePaths = proposalArgs.filesToStage!.map(getFilePath);
+          const commitMessage = proposalArgs.commitMessage!;
+
+          try {
+            const simpleGit = (await import("simple-git")).default;
+            const { gitOperationLock } = await import(
+              "../services/GitOperationLock"
+            );
+
+            const commitResult = await gitOperationLock.withLock(
+              workspacePath,
+              "git:commit",
+              async () => {
+                const git = simpleGit(workspacePath);
+
+                // Reset staging area, then add only selected files
+                try {
+                  await git.reset(["HEAD"]);
+                } catch {
+                  // May fail in fresh repo with no commits - that's OK
+                }
+                await git.add(filePaths);
+
+                // Commit
+                return await git.commit(commitMessage);
+              }
+            );
+
+            // Get commit date
+            let commitDate: string | undefined;
+            if (commitResult.commit) {
+              try {
+                const git = simpleGit(workspacePath);
+                const showResult = await git.show([
+                  commitResult.commit,
+                  "--no-patch",
+                  "--format=%aI",
+                ]);
+                commitDate = showResult.trim();
+              } catch {
+                // Non-critical
+              }
+            }
+
+            const response = {
+              action: (commitResult.commit
+                ? "committed"
+                : "cancelled") as "committed" | "cancelled",
+              commitHash: commitResult.commit || undefined,
+              commitDate,
+              error: commitResult.commit
+                ? undefined
+                : "No changes were committed",
+              filesCommitted: commitResult.commit ? filePaths : undefined,
+              commitMessage: commitResult.commit ? commitMessage : undefined,
+            };
+
+            // Persist the response to DB
+            const { database } = await import(
+              "../database/PGLiteDatabaseWorker"
+            );
+            const timestamp = Date.now();
+            const responseContent = {
+              type: "git_commit_proposal_response",
+              proposalId,
+              ...response,
+              respondedAt: timestamp,
+              respondedBy: "auto_commit",
+            };
+            await database.query(
+              `INSERT INTO ai_agent_messages (session_id, source, direction, content, created_at, hidden)
+               VALUES ($1, $2, $3, $4, $5, $6)`,
+              [
+                targetSessionId,
+                "nimbalyst",
+                "output",
+                JSON.stringify(responseContent),
+                new Date(timestamp),
+                false,
+              ]
+            );
+
+            // Notify renderer to clear the pending interactive prompt indicator
+            if (commitWindow && !commitWindow.isDestroyed()) {
+              commitWindow.webContents.send("ai:gitCommitProposalResolved", {
+                sessionId: targetSessionId,
+                proposalId,
+              });
+              // Also send the proposal to renderer so the widget shows the result
+              commitWindow.webContents.send("mcp:gitCommitProposal", {
+                proposalId,
+                workspacePath,
+                sessionId: targetSessionId,
+                filesToStage: proposalArgs.filesToStage,
+                commitMessage: proposalArgs.commitMessage,
+                reasoning: proposalArgs.reasoning,
+              });
+            }
+
+            console.log(
+              `[MCP Server] Auto-commit completed: ${
+                commitResult.commit || "no changes"
+              }`
+            );
+
+            // Return the result directly (no need for the promise/ipcMain.once flow)
+            if (response.action === "committed" && response.commitHash) {
+              return {
+                content: [
+                  {
+                    type: "text" as const,
+                    text: `Auto-committed ${filePaths.length} file(s).\nCommit hash: ${
+                      response.commitHash
+                    }${
+                      response.commitDate
+                        ? `\nCommit date: ${response.commitDate}`
+                        : ""
+                    }\nCommit message: ${commitMessage}`,
+                  },
+                ],
+                isError: false,
+              };
+            } else {
+              return {
+                content: [
+                  {
+                    type: "text" as const,
+                    text: `Auto-commit failed: ${
+                      response.error || "No changes were committed"
+                    }`,
+                  },
+                ],
+                isError: true,
+              };
+            }
+          } catch (error) {
+            console.error("[MCP Server] Auto-commit failed:", error);
+            // Fall through to manual mode on error
+          }
+        }
+
         // Show OS notification if app is backgrounded
         // Get session title for notification body
         let sessionTitle = "AI Session";
