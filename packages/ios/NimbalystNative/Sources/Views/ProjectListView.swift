@@ -4,12 +4,14 @@ import GRDB
 
 /// Displays the list of projects (workspace paths) synced from the desktop app.
 /// Uses GRDB ValueObservation for reactive updates when the database changes.
-struct ProjectListView: View {
+public struct ProjectListView: View {
     @EnvironmentObject var appState: AppState
     @State private var projects: [Project] = []
     @State private var cancellable: AnyDatabaseCancellable?
 
-    var body: some View {
+    public init() {}
+
+    public var body: some View {
         List(projects) { project in
             NavigationLink(value: project) {
                 ProjectRow(project: project)
@@ -86,7 +88,8 @@ struct ProjectListView: View {
     }
 
     private var isDesktopConnected: Bool {
-        appState.syncManager?.connectedDevices.contains(where: { $0.type == "desktop" }) ?? false
+        if appState.screenshotMode { return true }
+        return appState.syncManager?.connectedDevices.contains(where: { $0.type == "desktop" }) ?? false
     }
 
     private var connectionIndicator: some View {

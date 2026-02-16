@@ -22,6 +22,9 @@ public final class AppState: ObservableObject {
     @Published public var isPaired: Bool = false
     @Published public var isConnected: Bool = false
 
+    /// When true, views should show demo connection indicators (green desktop dot).
+    public var screenshotMode: Bool = false
+
     /// The database manager. Available after both pairing and authentication.
     /// Views use this to set up GRDB ValueObservation for reactive updates.
     @Published public private(set) var databaseManager: DatabaseManager?
@@ -327,4 +330,19 @@ public final class AppState: ObservableObject {
         voice.configure(database: database, syncManager: sync, projectId: projectId)
         #endif
     }
+
+    // MARK: - Screenshot Mode
+
+    #if DEBUG
+    /// Create an AppState configured for screenshot capture.
+    /// Uses an in-memory database with realistic demo data, bypasses auth/pairing.
+    public static func forScreenshots() -> AppState {
+        let db = try! ScreenshotDataProvider.createPopulatedDatabase()
+        let state = AppState(databaseManager: db)
+        state.authManager.isAuthenticated = true
+        state.isConnected = true
+        state.screenshotMode = true
+        return state
+    }
+    #endif
 }

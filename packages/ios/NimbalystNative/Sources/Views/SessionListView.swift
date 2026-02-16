@@ -47,12 +47,16 @@ struct GroupedSessions: Identifiable {
 
 /// Displays sessions for a given project with status badges, pull-to-refresh,
 /// search, time-based grouping, and reactive GRDB observation.
-struct SessionListView: View {
+public struct SessionListView: View {
     @EnvironmentObject var appState: AppState
-    let project: Project
+    public let project: Project
 
     @State private var sessions: [Session] = []
     @State private var cancellable: AnyDatabaseCancellable?
+
+    public init(project: Project) {
+        self.project = project
+    }
     @State private var searchText = ""
     @State private var isCreatingSession = false
 
@@ -75,7 +79,7 @@ struct SessionListView: View {
         }
     }
 
-    var body: some View {
+    public var body: some View {
         List {
             ForEach(groupedSessions) { group in
                 Section(group.period.rawValue) {
@@ -153,7 +157,8 @@ struct SessionListView: View {
     }
 
     private var isDesktopConnected: Bool {
-        appState.syncManager?.connectedDevices.contains(where: { $0.type == "desktop" }) ?? false
+        if appState.screenshotMode { return true }
+        return appState.syncManager?.connectedDevices.contains(where: { $0.type == "desktop" }) ?? false
     }
 
     private var connectionIndicator: some View {

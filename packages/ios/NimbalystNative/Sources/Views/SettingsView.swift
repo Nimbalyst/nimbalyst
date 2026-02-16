@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Native settings screen with connection info, account, notifications, and unpair.
-struct SettingsView: View {
+public struct SettingsView: View {
     @EnvironmentObject var appState: AppState
     @State private var pushEnabled = UserDefaults.standard.bool(forKey: "pushNotificationsEnabled")
     @State private var analyticsEnabled = AnalyticsManager.shared.isEnabled
@@ -12,11 +12,13 @@ struct SettingsView: View {
     @State private var hasOpenAIApiKey = KeychainManager.getOpenAIApiKey() != nil
     @State private var voiceSettings = VoiceModeSettings.load()
 
+    public init() {}
+
     private var connectedDevices: [DeviceInfo] {
         appState.syncManager?.connectedDevices ?? []
     }
 
-    var body: some View {
+    public var body: some View {
         Form {
             connectionSection
             accountSection

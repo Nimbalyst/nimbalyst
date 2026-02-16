@@ -32,14 +32,41 @@ struct NimbalystAppMain: App {
     /// (bypasses pairing/auth for testing transcript rendering).
     private let isTranscriptTest = CommandLine.arguments.contains("--transcript-test")
 
+    /// Launch with --screenshot-mode to show the app with realistic demo data
+    /// for App Store screenshot capture. Combine with --screenshot-screen=<name>
+    /// to target a specific screen (projects, sessions, detail, settings, pairing).
+    private let isScreenshotMode: Bool = {
+        #if DEBUG
+        return CommandLine.arguments.contains("--screenshot-mode")
+        #else
+        return false
+        #endif
+    }()
+
     init() {
+        #if DEBUG
+        if CommandLine.arguments.contains("--screenshot-mode") {
+            _appState = StateObject(wrappedValue: AppState.forScreenshots())
+        } else {
+            _appState = StateObject(wrappedValue: AppState())
+        }
+        #else
         _appState = StateObject(wrappedValue: AppState())
+        #endif
     }
 
     var body: some Scene {
         WindowGroup {
             if isTranscriptTest {
                 TranscriptTestView()
+            } else if isScreenshotMode {
+                #if DEBUG
+                ScreenshotHostView()
+                    .environmentObject(appState)
+                #else
+                ContentView()
+                    .environmentObject(appState)
+                #endif
             } else {
                 ContentView()
                     .environmentObject(appState)

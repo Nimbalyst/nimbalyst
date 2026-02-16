@@ -12,6 +12,14 @@ settings:
 packages:
   NimbalystNative:
     path: ../NimbalystNative
+schemes:
+  NimbalystApp:
+    build:
+      targets:
+        NimbalystApp: all
+    run:
+      config: Debug
+      commandLineArguments: {}
 targets:
   NimbalystApp:
     type: application

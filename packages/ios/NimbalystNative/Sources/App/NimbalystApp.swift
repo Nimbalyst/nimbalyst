@@ -402,7 +402,8 @@ struct IPadSessionSidebar: View {
     }
 
     private var isDesktopConnected: Bool {
-        appState.syncManager?.connectedDevices.contains(where: { $0.type == "desktop" }) ?? false
+        if appState.screenshotMode { return true }
+        return appState.syncManager?.connectedDevices.contains(where: { $0.type == "desktop" }) ?? false
     }
 
     private var connectionIndicator: some View {
