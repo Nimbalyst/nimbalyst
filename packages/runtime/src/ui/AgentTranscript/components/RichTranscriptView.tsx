@@ -1180,7 +1180,7 @@ export const RichTranscriptView = React.forwardRef<
                           className="rich-transcript-message rounded-md relative max-w-full overflow-x-hidden break-words mb-2 assistant bg-[var(--nim-bg)] normal p-3"
                         >
                           <div className="rich-transcript-message-header flex items-center gap-2 mb-1.5">
-                            <div className="rich-transcript-message-avatar rounded-full p-1 shrink-0 assistant">
+                            <div className="rich-transcript-message-avatar w-7 h-7 rounded-full shrink-0 flex items-center justify-center assistant">
                               {/* No icon for Codex - provider icon handled elsewhere */}
                             </div>
                             <div className="rich-transcript-message-meta flex-1 flex items-baseline gap-2">
@@ -1277,7 +1277,7 @@ export const RichTranscriptView = React.forwardRef<
                       >
                         {isNewGroup && (
                           <div className="rich-transcript-message-header flex items-center gap-2 mb-1.5">
-                            <div className={`rich-transcript-message-avatar rounded-full p-1 shrink-0 ${isUser ? 'user' : 'assistant'}`}>
+                            <div className={`rich-transcript-message-avatar w-7 h-7 rounded-full shrink-0 flex items-center justify-center ${isUser ? 'user' : 'assistant'}`}>
                               {isUser && (
                                 <MaterialSymbol icon="person" size={18} />
                               )}
