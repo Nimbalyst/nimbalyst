@@ -848,8 +848,11 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
       if (!confirmed) return;
 
       const result = await window.electronAPI.worktreeCleanGitignored(worktreeData.path);
-      if (!result.success) {
+      if (result.success) {
+        window.alert(`Removed ${result.count} gitignored ${result.count === 1 ? 'item' : 'items'} from "${worktreeName}".`);
+      } else {
         console.error('[SessionHistory] Failed to clean gitignored files:', result.error);
+        window.alert(`Failed to clean gitignored files: ${result.error}`);
       }
     } catch (error) {
       console.error('[SessionHistory] Failed to clean gitignored files:', error);

@@ -710,11 +710,14 @@ export async function registerSessionHandlers() {
                 // Query across all related workspaces using relative path suffix
                 // This handles: worktree -> main project, main project -> worktrees,
                 // and worktree -> other worktrees
+                // Escape SQL LIKE wildcards in the path to prevent unintended pattern matching
+                const escapedRelativePath = relativePath.replace(/[%_\\]/g, '\\$&');
+                const escapedProjectPath = projectPath.replace(/[%_\\]/g, '\\$&');
                 fileLinksResult = await database.query(
                     `SELECT DISTINCT session_id FROM session_files
-                     WHERE file_path LIKE '%' || $1
-                     AND (workspace_id = $2 OR workspace_id = $3 OR workspace_id LIKE $4)`,
-                    [relativePath, workspaceId, projectPath, projectPath + '_worktrees/%']
+                     WHERE file_path LIKE '%' || $1 ESCAPE '\\'
+                     AND (workspace_id = $2 OR workspace_id = $3 OR workspace_id LIKE $4 ESCAPE '\\')`,
+                    [escapedRelativePath, workspaceId, projectPath, escapedProjectPath + '_worktrees/%']
                 );
             } else {
                 // Fallback: exact match only
