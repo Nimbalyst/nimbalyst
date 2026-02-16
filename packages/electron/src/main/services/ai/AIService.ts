@@ -3620,6 +3620,7 @@ export class AIService {
       const aiDebugLogging = this.getSettingsStore().get('aiDebugLogging', false) as boolean;
       const showPromptAdditions = this.getSettingsStore().get('showPromptAdditions', false) as boolean;
       const showUsageIndicator = this.getSettingsStore().get('showUsageIndicator', false) as boolean;
+      const showCodexUsageIndicator = this.getSettingsStore().get('showCodexUsageIndicator', true) as boolean;
       const useStandaloneBinary = this.getSettingsStore().get('useStandaloneBinary', false) as boolean;
       const autoCommitEnabled = this.getSettingsStore().get('autoCommitEnabled', false) as boolean;
 
@@ -3631,6 +3632,7 @@ export class AIService {
         aiDebugLogging,
         showPromptAdditions,
         showUsageIndicator,
+        showCodexUsageIndicator,
         useStandaloneBinary,
         autoCommitEnabled,
       };
@@ -3694,6 +3696,10 @@ export class AIService {
 
       if (settings.showUsageIndicator !== undefined) {
         this.getSettingsStore().set('showUsageIndicator', settings.showUsageIndicator);
+      }
+
+      if (settings.showCodexUsageIndicator !== undefined) {
+        this.getSettingsStore().set('showCodexUsageIndicator', settings.showCodexUsageIndicator);
       }
 
       if (settings.useStandaloneBinary !== undefined) {

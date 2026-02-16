@@ -9,6 +9,7 @@ import { SyncStatusButton } from '../SyncStatusButton/SyncStatusButton';
 import { TrustIndicator } from '../TrustIndicator';
 import { ExtensionDevIndicator } from '../ExtensionDevIndicator';
 import { ClaudeUsageIndicator } from '../ClaudeUsageIndicator';
+import { CodexUsageIndicator } from '../CodexUsageIndicator';
 import { useExtensionGutterButtons } from '../../extensions/panels/usePanels';
 import { HelpTooltip } from '../../help';
 import { terminalFeatureAvailableAtom } from '../../store/atoms/appSettings';
@@ -373,6 +374,9 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
 
         {/* Claude Usage Indicator - Shows API usage limits */}
         <ClaudeUsageIndicator />
+
+        {/* Codex Usage Indicator - Shows Codex subscription usage limits */}
+        <CodexUsageIndicator />
 
         {/* Extension Dev Indicator - Shows when extension dev tools are enabled */}
         <ExtensionDevIndicator onOpenSettings={onOpenSettings} />

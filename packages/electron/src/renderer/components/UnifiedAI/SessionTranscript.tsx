@@ -24,6 +24,7 @@ import { PromptQueueList } from './PromptQueueList';
 import { useDialog } from '../../contexts/DialogContext';
 import { FileGutter } from '../AIChat/FileGutter';
 import { recordClaudeActivity } from '../../store/listeners/claudeUsageListeners';
+import { recordCodexActivity } from '../../store/listeners/codexUsageListeners';
 import { PendingReviewBanner } from '../AIChat/PendingReviewBanner';
 import type { AIMode } from './ModeTag';
 // Note: ExitPlanMode, AskUserQuestion, and ToolPermission use inline widgets via InteractiveWidgetHost (in runtime package)
@@ -775,9 +776,11 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
 
       await window.electronAPI.invoke('ai:sendMessage', message, docContext, sessionId, workspacePath);
 
-      // Record activity for Claude usage tracking (wake up polling if sleeping)
+      // Record activity for usage tracking (wake up polling if sleeping)
       if (provider?.startsWith('claude')) {
         recordClaudeActivity();
+      } else if (provider === 'openai-codex') {
+        recordCodexActivity();
       }
     } catch (error) {
       console.error('[SessionTranscript] Failed to send message:', error);

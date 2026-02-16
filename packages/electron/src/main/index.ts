@@ -78,6 +78,8 @@ import { registerWalkthroughHandlers } from './ipc/WalkthroughHandlers';
 import { registerDataModelHandlers } from './ipc/DataModelHandlers';
 import { registerClaudeUsageHandlers } from './ipc/ClaudeUsageHandlers';
 import { claudeUsageService } from './services/ClaudeUsageService';
+import { registerCodexUsageHandlers } from './ipc/CodexUsageHandlers';
+import { codexUsageService } from './services/CodexUsageService';
 import { registerExtensionHandlers, getClaudePluginPaths, initializeExtensionFileTypes } from './ipc/ExtensionHandlers';
 import { getRegisteredExtensions } from './extensions/RegisteredFileTypes';
 import { ClaudeCodeProvider, OpenAICodexProvider } from '@nimbalyst/runtime/ai/server';
@@ -735,6 +737,8 @@ app.whenReady().then(async () => {
     registerNotificationHandlers();
     registerClaudeUsageHandlers();
     claudeUsageService.initialize();
+    registerCodexUsageHandlers();
+    codexUsageService.initialize();
     registerPermissionHandlers();
     registerGitStatusHandlers();
     registerGitHandlers();
