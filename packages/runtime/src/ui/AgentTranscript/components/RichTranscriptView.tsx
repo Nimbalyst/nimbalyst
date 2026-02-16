@@ -1346,12 +1346,13 @@ export const RichTranscriptView = React.forwardRef<
                           if (!isEndOfGroup) return null;
                           // Don't show for the last assistant group if still streaming
                           if (isWaitingForResponse && nextNonToolIdx >= messages.length) return null;
-                          // Find the preceding user message that triggered this turn
+                          // Find the preceding user-input message that triggered this turn
+                          // Only consider genuine user input (isUserInput), not system-generated user-role messages
                           let startIdx = index - 1;
-                          while (startIdx >= 0 && messages[startIdx].role !== 'user') {
+                          while (startIdx >= 0 && !(messages[startIdx].role === 'user' && messages[startIdx].isUserInput)) {
                             startIdx--;
                           }
-                          if (startIdx < 0) return null; // No preceding user message
+                          if (startIdx < 0) return null; // No preceding user input message
                           const startTimestamp = messages[startIdx].timestamp;
                           const endTimestamp = message.timestamp;
                           const duration = formatDuration(startTimestamp, endTimestamp);

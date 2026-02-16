@@ -140,7 +140,7 @@ const AgentTranscriptPanelComponent: React.FC<AgentTranscriptPanelProps> = ({
   useEffect(() => {
     const userMessages = sessionData.messages
       .map((msg, index) => ({ msg, index }))
-      .filter(({ msg }) => msg.role === 'user');
+      .filter(({ msg }) => msg.role === 'user' && msg.isUserInput);
 
     const markers: PromptMarker[] = userMessages.map(({ msg, index }, promptIndex) => ({
       id: promptIndex + 1,

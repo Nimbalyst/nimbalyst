@@ -53,6 +53,7 @@ function chatMessageFromServerMessage(msg: any): Message {
     isError: msg.isError,
     isAuthError: msg.isAuthError,
     errorMessage: msg.errorMessage,
+    isUserInput: msg.isUserInput ?? (msg.role === 'user' ? true : undefined),
     isStreamingStatus: msg.isStreamingStatus,
     streamingData: msg.streamingData,
     attachments: msg.attachments,
@@ -191,6 +192,7 @@ export function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
               content: parsed.prompt,
               timestamp,
               mode,
+              isUserInput: true,
               attachments: attachments && attachments.length > 0 ? attachments : undefined
             });
           } else if (parsed.type === 'user' && parsed.message) {
@@ -234,6 +236,7 @@ export function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
                 role: msg.role || 'user',
                 content: content,
                 timestamp,
+                isUserInput: true,
                 attachments: attachments && attachments.length > 0 ? attachments : undefined
               });
             }
@@ -246,6 +249,7 @@ export function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
             role: 'user',
             content: agentMsg.content,
             attachments: attachments && attachments.length > 0 ? attachments : undefined,
+            isUserInput: true,
             timestamp
           });
         }

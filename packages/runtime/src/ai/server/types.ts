@@ -99,6 +99,7 @@ export interface Message {
   isError?: boolean;
   isAuthError?: boolean; // True when error is an authentication failure (SDK first-class detection)
   errorMessage?: string;
+  isUserInput?: boolean; // True for genuine user-initiated messages (typed prompts, superloop/blitz); false for system-generated user-role messages
   isSystem?: boolean; // For system messages like slash command output
   isStreamingStatus?: boolean;
   streamingData?: {
