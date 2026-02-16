@@ -78,7 +78,10 @@ public struct ProjectListView: View {
             startObserving()
         }
         .onReceive(appState.$databaseManager) { db in
-            if db != nil && cancellable == nil {
+            // Always restart observation when databaseManager changes (e.g. after re-pairing)
+            cancellable?.cancel()
+            cancellable = nil
+            if db != nil {
                 startObserving()
             }
         }

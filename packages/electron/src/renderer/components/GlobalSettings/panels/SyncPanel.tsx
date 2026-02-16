@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { usePostHog } from 'posthog-js/react';
-import { useAtom, useAtomValue } from 'jotai';
+import { useAtom } from 'jotai';
 import { QRPairingModal } from './QRPairingModal';
 import {
   syncConfigAtom,
@@ -159,7 +159,7 @@ export function SyncPanel() {
   const isDevelopment = import.meta.env.DEV;
 
   // Sync config from Jotai atom
-  const config = useAtomValue(syncConfigAtom);
+  const [config, setConfig] = useAtom(syncConfigAtom);
   const [, updateConfig] = useAtom(setSyncConfigAtom);
 
   // Compute effective server URL early so it can be used throughout
@@ -287,12 +287,21 @@ export function SyncPanel() {
     updateConfig({ [field]: value });
   };
 
-  const handleProjectToggle = (projectPath: string, enabled: boolean) => {
+  const handleProjectToggle = async (projectPath: string, enabled: boolean) => {
+    // Update local atom for immediate UI feedback (set atom directly to avoid
+    // the debounced sync:set-config path which does a full teardown/reinit)
     const enabledProjects = config.enabledProjects || projects.map(p => p.path);
     const updated = enabled
       ? [...enabledProjects, projectPath]
       : enabledProjects.filter(p => p !== projectPath);
-    updateConfig({ enabledProjects: updated });
+    setConfig({ ...config, enabledProjects: updated });
+
+    // Call sync:toggle-project to persist config and trigger immediate incremental sync
+    try {
+      await window.electronAPI.invoke('sync:toggle-project', projectPath, enabled);
+    } catch (error) {
+      console.error('[SyncPanel] Failed to toggle project sync:', error);
+    }
   };
 
   // Environment switch handler (dev only)

@@ -730,16 +730,25 @@ export function registerSettingsHandlers() {
 
         logger.store.info(`[sync:toggle-project] Project sync ${enabled ? 'enabled' : 'disabled'} for: ${workspacePath}`);
 
-        // If a project was enabled, trigger an incremental sync to push its sessions
+        // If a project was enabled, trigger sync to push its sessions immediately
         if (enabled) {
             try {
-                const { triggerIncrementalSync } = await import('../services/SyncManager');
-                // Run async - don't block the IPC response
-                triggerIncrementalSync().catch(err => {
-                    logger.store.error('[sync:toggle-project] Failed to trigger sync:', err);
-                });
+                const { triggerIncrementalSync, isSyncProviderReady } = await import('../services/SyncManager');
+                if (isSyncProviderReady()) {
+                    // Provider exists - trigger incremental sync directly
+                    triggerIncrementalSync().catch(err => {
+                        logger.store.error('[sync:toggle-project] Failed to trigger sync:', err);
+                    });
+                } else {
+                    // Provider not ready yet (e.g. sync was just enabled) - reinitialize
+                    // which will create the provider and run initial sync including this project
+                    const { repositoryManager } = await import('../services/RepositoryManager');
+                    repositoryManager.reinitializeSyncWithNewConfig().catch(err => {
+                        logger.store.error('[sync:toggle-project] Failed to reinitialize sync:', err);
+                    });
+                }
             } catch (err) {
-                logger.store.error('[sync:toggle-project] Failed to import SyncManager:', err);
+                logger.store.error('[sync:toggle-project] Failed to trigger sync:', err);
             }
         }
 

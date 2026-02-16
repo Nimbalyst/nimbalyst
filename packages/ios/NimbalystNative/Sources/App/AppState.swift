@@ -79,10 +79,16 @@ public final class AppState: ObservableObject {
     /// The userId parameter is informational only (e.g., syncEmail from QR) -- the actual
     /// user ID for crypto and routing comes from Stytch auth.
     public func pair(with seed: String, serverUrl: String, userId: String, analyticsId: String? = nil) throws {
+        // Delete any leftover database from a previous pairing.
+        // This ensures stale decrypted data from a different account doesn't survive
+        // into the new pairing (e.g., if unpair() couldn't delete the locked file).
+        DatabaseManager.deleteDatabase()
+
         try KeychainManager.storeEncryptionKey(seed: seed)
         try KeychainManager.storeServerUrl(serverUrl)
         // Store the QR userId as a fallback identifier (not used for crypto or routing)
         try KeychainManager.storeUserId(userId)
+        logger.info("Paired with userId=\(userId), contains @: \(userId.contains("@"))")
         isPaired = true
 
         // Link mobile analytics to desktop's PostHog identity
@@ -100,6 +106,7 @@ public final class AppState: ObservableObject {
     }
 
     public func unpair() {
+        logger.error("unpair() called! Stack: \(Thread.callStackSymbols.joined(separator: "\n"))")
         AnalyticsManager.shared.capture("mobile_device_unpairing")
         AnalyticsManager.shared.reset()
 
@@ -110,11 +117,17 @@ public final class AppState: ObservableObject {
         voiceAgent = nil
         #endif
         syncManager?.disconnect()
+        // Erase all rows while the database connection is still open.
+        // Deleting the file after nilling refs is unreliable because ARC may
+        // not immediately dealloc the DatabasePool, leaving the file locked.
+        try? databaseManager?.eraseAllData()
         KeychainManager.deleteAll()
         authManager.logout()
         cryptoManager = nil
         databaseManager = nil
         syncManager = nil
+        // Also attempt file deletion for a clean slate on re-pair.
+        DatabaseManager.deleteDatabase()
         isPaired = false
         isConnected = false
     }
@@ -138,6 +151,10 @@ public final class AppState: ObservableObject {
 
         authManager.$isAuthenticated
             .dropFirst()
+            // @Published fires in willSet (before the property updates).
+            // Dispatch to next run loop tick so authManager.isAuthenticated
+            // reflects the new value when connectIfReady() reads it.
+            .receive(on: DispatchQueue.main)
             .sink { [weak self] authenticated in
                 guard let self else { return }
                 self.logger.info("isAuthenticated changed to \(authenticated)")
