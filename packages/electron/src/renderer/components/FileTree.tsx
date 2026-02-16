@@ -562,6 +562,35 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, showIcon
     }
   }, []);
 
+  const handleShareLink = useCallback(async (filePath: string) => {
+    try {
+      const result = await window.electronAPI.shareFileAsLink({ filePath });
+      if (result?.success) {
+        const { errorNotificationService } = await import('../services/ErrorNotificationService');
+        errorNotificationService.showInfo(
+          result.isUpdate ? 'Share link updated' : 'Share link copied',
+          'The link has been copied to your clipboard.',
+          { duration: 3000 }
+        );
+      } else {
+        const { errorNotificationService } = await import('../services/ErrorNotificationService');
+        errorNotificationService.showError(
+          'Share failed',
+          result?.error || 'Failed to share file',
+          { duration: 5000 }
+        );
+      }
+    } catch (error) {
+      console.error('Failed to share file:', error);
+      const { errorNotificationService } = await import('../services/ErrorNotificationService');
+      errorNotificationService.showError(
+        'Share failed',
+        error instanceof Error ? error.message : 'An unexpected error occurred',
+        { duration: 5000 }
+      );
+    }
+  }, []);
+
   // Drag and drop handlers
   const handleDragStart = useCallback((e: React.DragEvent, item: FileTreeItem) => {
     // Prevent dragging by the icon
@@ -848,6 +877,7 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, showIcon
           onNewFolder={onNewFolder}
           onViewHistory={onViewHistory}
           onViewWorkspaceHistory={onViewWorkspaceHistory}
+          onShareLink={handleShareLink}
           selectedPaths={selectedPaths}
           extensionFileTypes={extensionFileTypes}
         />

@@ -100,6 +100,7 @@ interface ElectronAPI {
   listShares: () => Promise<{ success: boolean; shares?: Array<{ shareId: string; sessionId: string; title: string; sizeBytes: number; createdAt: string; expiresAt: string | null; viewCount: number }>; error?: string }>;
   deleteShare: (options: { shareId: string; sessionId?: string }) => Promise<{ success: boolean; error?: string }>;
   getShareKeys: () => Promise<Record<string, string>>;
+  shareFileAsLink: (options: { filePath: string }) => Promise<{ success: boolean; url?: string; shareId?: string; isUpdate?: boolean; encryptionKey?: string; error?: string }>;
 
   setDocumentEdited: (edited: boolean) => void;
   setTitle: (title: string) => void;

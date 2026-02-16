@@ -1,11 +1,13 @@
 import { clipboard } from 'electron';
 import { net } from 'electron';
-import { randomBytes, createCipheriv } from 'crypto';
+import { randomBytes, createCipheriv, createHash } from 'crypto';
+import { promises as fs } from 'fs';
 import { safeHandle } from '../utils/ipcRegistry';
 import { logger } from '../utils/logger';
 import { AISessionsRepository, AgentMessagesRepository, transformAgentMessagesToUI } from '@nimbalyst/runtime';
 import type { SessionData } from '@nimbalyst/runtime/ai/server/types';
 import { exportSessionToHtml } from '../services/SessionHtmlExporter';
+import { exportFileToHtml } from '../services/FileHtmlExporter';
 import { getSessionJwt, refreshSession } from '../services/StytchAuthService';
 import { store } from '../utils/store';
 
@@ -261,6 +263,81 @@ export function registerShareHandlers() {
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         logger.file.error(`[ShareHandlers] Delete share failed: ${errorMessage}`);
+        return { success: false, error: errorMessage };
+      }
+    }
+  );
+
+  /**
+   * Share a file as an encrypted link.
+   * Reads the file, renders to HTML, encrypts client-side, uploads ciphertext.
+   * The decryption key is included in the URL fragment (never sent to server).
+   */
+  safeHandle(
+    'share:fileAsLink',
+    async (
+      _event,
+      options: { filePath: string }
+    ): Promise<{ success: boolean; url?: string; shareId?: string; isUpdate?: boolean; encryptionKey?: string; error?: string }> => {
+      const { filePath } = options;
+
+      if (!filePath) {
+        return { success: false, error: 'filePath is required' };
+      }
+
+      const jwt = await getValidJwt();
+      if (!jwt) {
+        return { success: false, error: 'Not signed in. Sign in via Settings > Account & Sync.' };
+      }
+
+      const serverUrl = SHARE_SERVER_URL;
+
+      try {
+        // Read file content
+        const content = await fs.readFile(filePath, 'utf-8');
+
+        // Render to HTML
+        const html = exportFileToHtml(filePath, content);
+
+        // Use hashed file path as key identifier (avoids leaking paths in electron-store)
+        const keyId = `file:${createHash('sha256').update(filePath).digest('hex').slice(0, 16)}`;
+
+        // Encrypt the HTML content
+        const shareKey = getOrCreateShareKey(keyId);
+        const encrypted = encryptContent(html, shareKey);
+        const urlSafeKey = keyToUrlSafe(shareKey);
+
+        // Upload encrypted content to server (zero-knowledge: no filename sent)
+        const response = await net.fetch(`${serverUrl}/share`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${jwt}`,
+            'Content-Type': 'application/octet-stream',
+            'X-Session-Title': 'Encrypted file',
+            'X-Session-Id': keyId,
+          },
+          body: encrypted,
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          logger.file.error(`[ShareHandlers] File upload failed: ${response.status} ${errorText}`);
+          return { success: false, error: `Upload failed: ${errorText || response.status}` };
+        }
+
+        const data = await response.json() as { shareId: string; url: string; isUpdate?: boolean };
+
+        // Append decryption key to URL fragment
+        const fullUrl = `${data.url}#key=${urlSafeKey}`;
+
+        // Copy URL to clipboard
+        clipboard.writeText(fullUrl);
+
+        logger.file.info(`[ShareHandlers] File ${data.isUpdate ? 'updated' : 'shared'}: ${data.url}`);
+        return { success: true, url: fullUrl, shareId: data.shareId, isUpdate: data.isUpdate, encryptionKey: urlSafeKey };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        logger.file.error(`[ShareHandlers] File share failed: ${errorMessage}`);
         return { success: false, error: errorMessage };
       }
     }

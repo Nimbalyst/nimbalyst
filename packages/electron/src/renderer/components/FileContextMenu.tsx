@@ -10,6 +10,14 @@ import {
   copyFilePathAtom,
 } from '../store/atoms/appSettings';
 
+/** File extensions that support sharing as rendered HTML links. */
+const SHAREABLE_EXTENSIONS = new Set(['.md', '.markdown']);
+
+function isShareableFile(fileName: string): boolean {
+  const ext = fileName.lastIndexOf('.') >= 0 ? fileName.slice(fileName.lastIndexOf('.')).toLowerCase() : '';
+  return SHAREABLE_EXTENSIONS.has(ext);
+}
+
 interface FileContextMenuProps {
   x: number;
   y: number;
@@ -25,6 +33,7 @@ interface FileContextMenuProps {
   onNewFolder?: (folderPath: string) => void;
   onViewHistory?: (filePath: string) => void;
   onViewWorkspaceHistory?: (folderPath: string) => void;
+  onShareLink?: (filePath: string) => void;
   selectedPaths?: Set<string>;
   /** Extension-contributed file types */
   extensionFileTypes?: ExtensionFileType[];
@@ -45,6 +54,7 @@ export function FileContextMenu({
   onNewFolder,
   onViewHistory,
   onViewWorkspaceHistory,
+  onShareLink,
   selectedPaths,
   extensionFileTypes = []
 }: FileContextMenuProps) {
@@ -177,6 +187,13 @@ export function FileContextMenu({
 
   const handleCopyPath = () => {
     copyFilePath(filePath);
+    onClose();
+  };
+
+  const handleShareLink = () => {
+    if (onShareLink) {
+      onShareLink(filePath);
+    }
     onClose();
   };
 
@@ -344,6 +361,12 @@ export function FileContextMenu({
             <div className={menuItemClasses} onClick={() => { onViewHistory(filePath); onClose(); }}>
               <MaterialSymbol icon="history" size={18} />
               <span>View History...</span>
+            </div>
+          )}
+          {onShareLink && isShareableFile(fileName) && (
+            <div className={menuItemClasses} onClick={handleShareLink}>
+              <MaterialSymbol icon="share" size={18} />
+              <span>Share Link</span>
             </div>
           )}
         </>

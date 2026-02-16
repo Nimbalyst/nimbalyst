@@ -267,6 +267,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('share:delete', options) as Promise<{ success: boolean; error?: string }>,
   getShareKeys: () =>
     ipcRenderer.invoke('share:getKeys') as Promise<Record<string, string>>,
+  shareFileAsLink: (options: { filePath: string }) =>
+    ipcRenderer.invoke('share:fileAsLink', options) as Promise<{ success: boolean; url?: string; shareId?: string; isUpdate?: boolean; encryptionKey?: string; error?: string }>,
 
   // Window operations
   setDocumentEdited: (edited: boolean) => ipcRenderer.send('set-document-edited', edited),
