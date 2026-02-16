@@ -229,10 +229,12 @@ export const SessionListItem = memo<SessionListItemProps>(({
           viewCount: 0,
           encryptionKey: result.encryptionKey,
         });
+        const expiryDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+        const expiryStr = expiryDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
         errorNotificationService.showInfo(
           result.isUpdate ? 'Share link updated' : 'Share link copied',
-          result.isUpdate ? 'The shared session has been updated. Link copied to clipboard.' : 'The share link has been copied to your clipboard.',
-          { duration: 3000 }
+          `Link copied to clipboard. Expires ${expiryStr}.`,
+          { duration: 4000 }
         );
       } else if (result?.error) {
         errorNotificationService.showError('Share failed', result.error);

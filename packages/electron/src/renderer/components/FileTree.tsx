@@ -567,10 +567,12 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, showIcon
       const result = await window.electronAPI.shareFileAsLink({ filePath });
       if (result?.success) {
         const { errorNotificationService } = await import('../services/ErrorNotificationService');
+        const expiryDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+        const expiryStr = expiryDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
         errorNotificationService.showInfo(
           result.isUpdate ? 'Share link updated' : 'Share link copied',
-          'The link has been copied to your clipboard.',
-          { duration: 3000 }
+          `Link copied to clipboard. Expires ${expiryStr}.`,
+          { duration: 4000 }
         );
       } else {
         const { errorNotificationService } = await import('../services/ErrorNotificationService');
