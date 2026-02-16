@@ -38,10 +38,6 @@ import {
   initClaudeUsageIndicatorSetting,
 } from './store/atoms/claudeUsageAtoms';
 import {
-  autoCommitEnabledAtom,
-  initAutoCommitSetting,
-} from './store/atoms/autoCommitAtoms';
-import {
   codexUsageIndicatorEnabledAtom,
   initCodexUsageIndicatorSetting,
 } from './store/atoms/codexUsageAtoms';
@@ -119,9 +115,6 @@ await Promise.all([
   }),
   initClaudeUsageIndicatorSetting().then((enabled) => {
     store.set(claudeUsageIndicatorEnabledAtom, enabled);
-  }),
-  initAutoCommitSetting().then((enabled) => {
-    store.set(autoCommitEnabledAtom, enabled);
   }),
   initCodexUsageIndicatorSetting().then((enabled) => {
     store.set(codexUsageIndicatorEnabledAtom, enabled);

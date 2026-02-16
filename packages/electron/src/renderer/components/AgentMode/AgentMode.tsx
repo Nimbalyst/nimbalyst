@@ -51,7 +51,6 @@ import { initFileStateListeners } from '../../store/listeners/fileStateListeners
 import { initSessionListListeners } from '../../store/listeners/sessionListListeners';
 import { initSessionTranscriptListeners } from '../../store/listeners/sessionTranscriptListeners';
 import { initClaudeUsageListeners } from '../../store/listeners/claudeUsageListeners';
-import { initSuperLoopListeners } from '../../store/listeners/superLoopListeners';
 import { initCodexUsageListeners } from '../../store/listeners/codexUsageListeners';
 import { fetchSessionSharesAtom } from '../../store';
 import type { WorktreeCreateResult, SessionCreateResult } from '../../../shared/ipc/types';
@@ -177,12 +176,6 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
   // Initialize Claude usage listeners (global, runs once)
   useEffect(() => {
     const cleanup = initClaudeUsageListeners();
-    return cleanup;
-  }, []);
-
-  // Initialize Super Loop listeners (global, runs once)
-  useEffect(() => {
-    const cleanup = initSuperLoopListeners();
     return cleanup;
   }, []);
 
