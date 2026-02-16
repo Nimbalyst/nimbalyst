@@ -917,6 +917,33 @@ export class GitWorktreeService {
   }
 
   /**
+   * Safely pop a stash, cleaning up conflict markers if the pop fails.
+   *
+   * When git stash pop encounters conflicts, it leaves conflict markers
+   * (<<<<<<< Updated upstream / ======= / >>>>>>> Stashed changes) in files
+   * but does NOT consume the stash. This method detects that case and
+   * restores the working directory to a clean state so the user doesn't
+   * end up with unexpected conflict markers in their files.
+   */
+  private async safeStashPop(git: SimpleGit, context: string): Promise<void> {
+    try {
+      logger.info(`Restoring stashed changes after ${context}`);
+      await git.stash(['pop']);
+    } catch (popError) {
+      logger.error(`Stash pop failed after ${context}, cleaning up conflict markers`, { popError });
+      // git stash pop with conflicts leaves markers in files but doesn't consume the stash.
+      // Clean up the working directory to remove conflict markers, restoring pre-operation state.
+      // The stash remains on the stack so nothing is lost.
+      try {
+        await git.checkout(['.']);
+        logger.info('Cleaned up conflict markers from failed stash pop. Stash is preserved on stack.');
+      } catch (cleanupError) {
+        logger.error('Failed to clean up conflict markers after failed stash pop', { cleanupError });
+      }
+    }
+  }
+
+  /**
    * Get diff for a specific file in a worktree
    *
    * @param worktreePath - Path to the worktree
@@ -1582,12 +1609,7 @@ ${newLines.map(line => '+' + line).join('\n')}`;
 
           // Try to restore stash if needed
           if (didStash) {
-            try {
-              await mainGit.stash(['pop']);
-              logger.info('Restored stash after detecting bad git state');
-            } catch (popError) {
-              logger.error('Failed to restore stash after detecting bad state', { popError });
-            }
+            await this.safeStashPop(mainGit, 'detecting bad merge state');
           }
 
           return {
@@ -1691,12 +1713,7 @@ ${newLines.map(line => '+' + line).join('\n')}`;
 
           // If merge failed and we stashed, try to restore the stash AFTER abort
           if (didStash) {
-            try {
-              await mainGit.stash(['pop']);
-              logger.info('Auto-stash popped after merge abort');
-            } catch (popError) {
-              logger.warn('Failed to pop stash after merge abort', { popError });
-            }
+            await this.safeStashPop(mainGit, 'merge abort');
           }
 
           return {
@@ -1708,12 +1725,7 @@ ${newLines.map(line => '+' + line).join('\n')}`;
 
         // Non-conflict merge error - restore stash before throwing
         if (didStash) {
-          try {
-            await mainGit.stash(['pop']);
-            logger.info('Auto-stash popped after non-conflict merge failure');
-          } catch (popError) {
-            logger.warn('Failed to pop stash after merge failure', { popError });
-          }
+          await this.safeStashPop(mainGit, 'non-conflict merge failure');
         }
 
         throw mergeError;
@@ -2030,12 +2042,7 @@ ${newLines.map(line => '+' + line).join('\n')}`;
 
           // Try to restore stash if needed
           if (didStash) {
-            try {
-              await git.stash(['pop']);
-              logger.info('Restored stash after detecting bad git state');
-            } catch (popError) {
-              logger.error('Failed to restore stash after detecting bad state', { popError });
-            }
+            await this.safeStashPop(git, 'detecting bad rebase state');
           }
 
           return {
@@ -2128,12 +2135,7 @@ ${newLines.map(line => '+' + line).join('\n')}`;
 
           // Restore stash if we stashed
           if (didStash) {
-            try {
-              logger.info('Restoring stashed changes after untracked file conflict');
-              await git.stash(['pop']);
-            } catch (popError) {
-              logger.error('Failed to restore stashed changes after untracked conflict', { popError });
-            }
+            await this.safeStashPop(git, 'untracked file conflict');
           }
 
           return {
@@ -2151,13 +2153,7 @@ ${newLines.map(line => '+' + line).join('\n')}`;
 
           // Restore stash if we stashed
           if (didStash) {
-            try {
-              logger.info('Restoring stashed changes after aborted rebase');
-              await git.stash(['pop']);
-            } catch (popError) {
-              logger.error('Failed to restore stashed changes after abort', { popError });
-              // Continue to return conflict error, but mention stash issue
-            }
+            await this.safeStashPop(git, 'aborted rebase');
           }
 
           return {
@@ -2169,12 +2165,7 @@ ${newLines.map(line => '+' + line).join('\n')}`;
 
         // Restore stash on other errors too
         if (didStash) {
-          try {
-            logger.info('Restoring stashed changes after rebase error');
-            await git.stash(['pop']);
-          } catch (popError) {
-            logger.error('Failed to restore stashed changes after error', { popError });
-          }
+          await this.safeStashPop(git, 'rebase error');
         }
 
         throw rebaseError;
