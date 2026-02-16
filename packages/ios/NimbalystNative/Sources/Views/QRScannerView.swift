@@ -17,6 +17,8 @@ public struct QRPairingData: Equatable {
     public let seed: String
     public let serverUrl: String
     public let userId: String
+    /// Desktop's PostHog analytics ID for cross-device identity linking.
+    public let analyticsId: String?
 
     /// Parse QR code string into pairing data.
     /// Supports the desktop v4 payload format (encryptionKeySeed, syncEmail)
@@ -64,7 +66,9 @@ public struct QRPairingData: Equatable {
             }
         }
 
-        return QRPairingData(seed: seed, serverUrl: serverUrl, userId: userId)
+        let analyticsId = json["analyticsId"] as? String
+
+        return QRPairingData(seed: seed, serverUrl: serverUrl, userId: userId, analyticsId: analyticsId)
     }
 }
 

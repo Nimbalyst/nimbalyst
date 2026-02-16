@@ -29,6 +29,9 @@ struct ProjectListView: View {
         }
         .navigationDestination(for: Project.self) { project in
             SessionListView(project: project)
+                .onAppear {
+                    AnalyticsManager.shared.capture("mobile_project_selected")
+                }
         }
         .overlay {
             if projects.isEmpty {

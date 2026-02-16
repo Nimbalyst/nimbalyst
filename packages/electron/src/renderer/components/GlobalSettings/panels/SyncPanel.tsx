@@ -44,13 +44,13 @@ interface Project {
 }
 
 interface DeviceInfo {
-  device_id: string;
+  deviceId: string;
   name: string;
   type: 'desktop' | 'mobile' | 'tablet' | 'unknown';
   platform: string;
-  app_version?: string;
-  connected_at: number;
-  last_active_at: number;
+  appVersion?: string;
+  connectedAt: number;
+  lastActiveAt: number;
 }
 
 // NOTE: Props have been removed - SyncPanel now uses Jotai atoms directly.
@@ -742,7 +742,7 @@ export function SyncPanel() {
               <div className="mt-2">
                 {connectedDevices.map((device) => (
                   <div
-                    key={device.device_id}
+                    key={device.deviceId}
                     className="flex items-center gap-2.5 px-2.5 py-2 bg-nim-secondary rounded-md mb-1.5 last:mb-0"
                   >
                     <div className="w-2 h-2 rounded-full bg-green-500" />
@@ -751,7 +751,7 @@ export function SyncPanel() {
                         {device.name}
                       </div>
                       <div className="text-[11px] text-nim-faint">
-                        {device.platform} - {formatRelativeTime(device.connected_at)}
+                        {device.platform} - {formatRelativeTime(device.connectedAt)}
                       </div>
                     </div>
                   </div>

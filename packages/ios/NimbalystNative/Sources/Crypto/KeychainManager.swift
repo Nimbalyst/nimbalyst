@@ -15,6 +15,8 @@ enum KeychainManager {
         case authUserId = "stytch_user_id"
         case authEmail = "stytch_email"
         case authExpiresAt = "stytch_expires_at"
+        case openAIApiKey = "openai_api_key"
+        case analyticsId = "analytics_id"
     }
 
     // MARK: - Encryption Key
@@ -96,6 +98,34 @@ enum KeychainManager {
         delete(key: .authExpiresAt)
     }
 
+    // MARK: - OpenAI API Key
+
+    static func storeOpenAIApiKey(_ key: String) throws {
+        try store(key: .openAIApiKey, value: key)
+    }
+
+    static func getOpenAIApiKey() -> String? {
+        retrieve(key: .openAIApiKey)
+    }
+
+    static func deleteOpenAIApiKey() {
+        delete(key: .openAIApiKey)
+    }
+
+    // MARK: - Analytics ID
+
+    static func storeAnalyticsId(_ id: String) throws {
+        try store(key: .analyticsId, value: id)
+    }
+
+    static func getAnalyticsId() -> String? {
+        retrieve(key: .analyticsId)
+    }
+
+    static func deleteAnalyticsId() {
+        delete(key: .analyticsId)
+    }
+
     // MARK: - Cleanup
 
     static func deleteAll() {
@@ -103,6 +133,8 @@ enum KeychainManager {
         delete(key: .serverUrl)
         delete(key: .userId)
         deleteAuthSession()
+        deleteOpenAIApiKey()
+        deleteAnalyticsId()
     }
 
     // MARK: - Generic Keychain Operations

@@ -161,7 +161,8 @@ public struct PairingView: View {
             try appState.pair(
                 with: pairingData.seed,
                 serverUrl: pairingData.serverUrl,
-                userId: pairingData.userId
+                userId: pairingData.userId,
+                analyticsId: pairingData.analyticsId
             )
             isScanning = false
         } catch {

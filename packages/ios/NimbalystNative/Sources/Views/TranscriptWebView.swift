@@ -79,7 +79,22 @@ public struct TranscriptWebView: UIViewRepresentable {
             // The JS app already mounted and sent `ready` during warmup, but
             // there was no bridge handler to receive it. Probe whether the
             // bridge is live by checking for window.nimbalyst.
-            pooled.evaluateJavaScript("typeof window.nimbalyst") { result, _ in
+            pooled.evaluateJavaScript("typeof window.nimbalyst") { result, error in
+                if let error {
+                    // Content process is likely dead (GPU idle exit killed it).
+                    // Reload the HTML to get a fresh content process.
+                    Self.logger.warning("Pre-warmed web view probe failed, reloading: \(error.localizedDescription)")
+                    context.coordinator.webViewReady = false
+                    context.coordinator.isReady = false
+                    let bundleURL = Bundle.main.bundleURL
+                    let distURL = bundleURL.appendingPathComponent("transcript-dist")
+                    let htmlURL = distURL.appendingPathComponent("transcript.html")
+                    if FileManager.default.fileExists(atPath: htmlURL.path) {
+                        pooled.loadFileURL(htmlURL, allowingReadAccessTo: distURL)
+                    }
+                    return
+                }
+
                 if let type = result as? String, type == "object" {
                     context.coordinator.webViewReady = true
                     // Flush any pending session data
@@ -313,33 +328,55 @@ public struct TranscriptWebView: UIViewRepresentable {
             logger.error("Provisional navigation failed: \(error.localizedDescription)")
         }
 
+        /// Track content process terminations to avoid crash loops.
+        private var contentProcessTerminationCount = 0
+
         public func webView(_ webView: WKWebView, webContentProcessDidTerminate: WKWebView) {
-            logger.warning("Content process terminated - reloading")
+            contentProcessTerminationCount += 1
+            logger.warning("Content process terminated (count: \(self.contentProcessTerminationCount))")
             webViewReady = false
             isReady = false
-            // Store current session for reload
-            if let sid = currentSessionId {
+            lastMessageCount = 0
+
+            if currentSessionId != nil {
                 pendingSession = (session, [])
             }
-            webView.reload()
+
+            // Avoid crash loops: only reload if we haven't had too many terminations.
+            // iOS will kill the app if WKWebView content process crashes repeatedly.
+            guard contentProcessTerminationCount <= 2 else {
+                logger.error("Content process terminated too many times, not reloading")
+                return
+            }
+
+            // Delay reload slightly to let iOS recover the content process.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self, weak webView] in
+                guard let webView, self?.webViewReady == false else { return }
+                webView.reload()
+            }
         }
 
         // MARK: - Swift -> JS
 
-        /// Maximum messages to send in the initial loadSession call.
-        /// Keeps the first render fast; remaining messages are sent in background chunks.
-        private static let initialPageSize = 50
-        /// Number of messages per background chunk.
-        private static let chunkSize = 100
+        // Uses callAsyncJavaScript to pass data as arguments instead of string
+        // interpolation, avoiding escaping issues with special characters in
+        // message content (code, nested JSON, unicode, etc.).
+
+        private func callJS(_ script: String, arguments: [String: Any] = [:], in webView: WKWebView, completion: ((Error?) -> Void)? = nil) {
+            webView.callAsyncJavaScript(script, arguments: arguments, in: nil, in: .page) { result in
+                switch result {
+                case .failure(let error):
+                    completion?(error)
+                case .success:
+                    completion?(nil)
+                }
+            }
+        }
 
         func loadSessionIntoWebView(session: Session, messages: [Message]) {
             guard let webView = webView else { return }
 
-            // Send only the last N messages initially for fast first render.
-            let initialCount = min(messages.count, Self.initialPageSize)
-            let initialMessages = Array(messages.suffix(initialCount))
-
-            let bridgeMessages = initialMessages.map { messageToBridgeJSON($0) }
+            let bridgeMessages = messages.map { messageToBridgeJSON($0) }
 
             let metadata: [String: Any] = [
                 "title": session.titleDecrypted as Any,
@@ -355,19 +392,7 @@ public struct TranscriptWebView: UIViewRepresentable {
                 "metadata": metadata,
             ]
 
-            guard let jsonData = try? JSONSerialization.data(withJSONObject: sessionData),
-                  let jsonString = String(data: jsonData, encoding: .utf8) else {
-                logger.error("Failed to serialize session data")
-                return
-            }
-
-            // Capture remaining older messages for background delivery.
-            let remainingMessages = messages.count > initialCount
-                ? Array(messages.prefix(messages.count - initialCount))
-                : []
-
-            let js = "window.nimbalyst?.loadSession(\(jsonString));"
-            webView.evaluateJavaScript(js) { [weak self] _, error in
+            callJS("window.nimbalyst?.loadSession(data);", arguments: ["data": sessionData], in: webView) { [weak self] error in
                 if let error = error {
                     self?.logger.error("loadSession JS error: \(error.localizedDescription)")
                 } else {
@@ -380,43 +405,6 @@ public struct TranscriptWebView: UIViewRepresentable {
 
                     // Signal to the parent view that transcript is ready.
                     self?.onReady?()
-
-                    // Send remaining older messages in background chunks.
-                    if !remainingMessages.isEmpty {
-                        self?.sendRemainingChunks(remainingMessages, webView: webView)
-                    }
-                }
-            }
-        }
-
-        /// Sends older messages to the web view in background-serialized chunks.
-        /// Each chunk is serialized off the main thread, then dispatched to the
-        /// JS bridge on the main thread with a small delay between chunks.
-        private func sendRemainingChunks(_ messages: [Message], webView: WKWebView) {
-            let chunks = stride(from: 0, to: messages.count, by: Self.chunkSize).map {
-                Array(messages[$0..<min($0 + Self.chunkSize, messages.count)])
-            }
-
-            for (index, chunk) in chunks.enumerated() {
-                let bridgeChunk = chunk.map { messageToBridgeJSON($0) }
-
-                // Serialize on a background queue to keep the main thread free.
-                DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-                    guard let jsonData = try? JSONSerialization.data(withJSONObject: bridgeChunk),
-                          let jsonString = String(data: jsonData, encoding: .utf8) else { return }
-
-                    let js = "window.nimbalyst?.loadMoreMessages(\(jsonString));"
-
-                    // Small delay between chunks to let the UI breathe.
-                    let delay = Double(index) * 0.05
-                    DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                        guard self?.isReady == true else { return }
-                        webView.evaluateJavaScript(js) { _, error in
-                            if let error = error {
-                                self?.logger.error("loadMoreMessages chunk \(index) error: \(error.localizedDescription)")
-                            }
-                        }
-                    }
                 }
             }
         }
@@ -425,11 +413,7 @@ public struct TranscriptWebView: UIViewRepresentable {
             guard let webView = webView, isReady else { return }
 
             let bridgeMsg = messageToBridgeJSON(message)
-            guard let jsonData = try? JSONSerialization.data(withJSONObject: bridgeMsg),
-                  let jsonString = String(data: jsonData, encoding: .utf8) else { return }
-
-            let js = "window.nimbalyst?.appendMessage(\(jsonString));"
-            webView.evaluateJavaScript(js) { [weak self] _, error in
+            callJS("window.nimbalyst?.appendMessage(msg);", arguments: ["msg": bridgeMsg], in: webView) { [weak self] error in
                 if let error = error {
                     self?.logger.error("appendMessage JS error: \(error.localizedDescription)")
                 }
@@ -447,11 +431,7 @@ public struct TranscriptWebView: UIViewRepresentable {
                 "isExecuting": session.isExecuting,
             ]
 
-            guard let jsonData = try? JSONSerialization.data(withJSONObject: metadata),
-                  let jsonString = String(data: jsonData, encoding: .utf8) else { return }
-
-            let js = "window.nimbalyst?.updateMetadata(\(jsonString));"
-            webView.evaluateJavaScript(js) { [weak self] _, error in
+            callJS("window.nimbalyst?.updateMetadata(meta);", arguments: ["meta": metadata], in: webView) { [weak self] error in
                 if let error = error {
                     self?.logger.error("updateMetadata JS error: \(error.localizedDescription)")
                 }

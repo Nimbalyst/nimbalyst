@@ -124,12 +124,24 @@ public struct MainNavigationView: View {
                 }
             }
         }
+        .overlay(alignment: .bottom) {
+            if let voice = appState.voiceAgent, voice.state != .disconnected {
+                VoiceOverlay(voiceAgent: voice)
+                    .padding(.bottom, 8)
+            }
+        }
         .onChange(of: notificationManager.pendingSessionId) { _, newValue in
             guard let sessionId = newValue else { return }
             navigateToSession(sessionId)
             notificationManager.pendingSessionId = nil
         }
         .onAppear {
+            let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
+            AnalyticsManager.shared.capture("mobile_app_opened", properties: [
+                "platform": "ios",
+                "$set": ["nimbalyst_mobile_version": version],
+            ])
+
             // Handle notification tap that launched the app
             if let sessionId = notificationManager.pendingSessionId {
                 navigateToSession(sessionId)
@@ -218,6 +230,7 @@ struct IPadNavigationView: View {
                     selectedProject = project
                     selectedSession = nil
                     showProjectPicker = false
+                    configureVoiceForProject(project)
                 } label: {
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
@@ -275,9 +288,14 @@ struct IPadNavigationView: View {
                 // Auto-select the most recent project if none selected
                 if selectedProject == nil, let first = newProjects.first {
                     selectedProject = first
+                    appState.configureVoiceAgent(forProject: first.id)
                 }
             }
         )
+    }
+
+    private func configureVoiceForProject(_ project: Project) {
+        appState.configureVoiceAgent(forProject: project.id)
     }
 }
 
@@ -316,8 +334,11 @@ struct IPadSessionSidebar: View {
             ForEach(groupedSessions) { group in
                 Section(group.period.rawValue) {
                     ForEach(group.sessions) { session in
-                        SessionRow(session: session)
-                            .tag(session)
+                        SessionRow(
+                            session: session,
+                            voiceFocusedSessionId: appState.voiceAgent?.activeSessionId
+                        )
+                        .tag(session)
                     }
                     .onDelete { offsets in
                         deleteSessionsInGroup(group: group, at: offsets)

@@ -34,6 +34,9 @@ public final class SyncManager: ObservableObject {
     /// Parameters: (sessionId, lastAssistantMessageSummary)
     public var onSessionCompleted: ((String, String) -> Void)?
 
+    /// Called when settings are synced from the desktop (e.g., OpenAI API key, voice mode config).
+    public var onSettingsSynced: ((SyncedSettings) -> Void)?
+
     private var serverUrl: String
     private var userId: String
     /// The Stytch user ID for room routing (from JWT sub claim). May differ from pairing userId.
@@ -169,6 +172,8 @@ public final class SyncManager: ObservableObject {
             handleDeviceJoined(data)
         case "deviceLeft":
             handleDeviceLeft(data)
+        case "settingsSyncBroadcast":
+            handleSettingsSyncBroadcast(data)
         case "error":
             handleServerError(data)
         default:
@@ -370,6 +375,58 @@ public final class SyncManager: ObservableObject {
         }
         guard let msg = try? decoder.decode(DeviceLeftMessage.self, from: data) else { return }
         connectedDevices.removeAll { $0.deviceId == msg.deviceId }
+    }
+
+    // MARK: - Settings Sync
+
+    private func handleSettingsSyncBroadcast(_ data: Data) {
+        guard let broadcast = try? decoder.decode(SettingsSyncBroadcast.self, from: data) else {
+            logger.error("Failed to decode settingsSyncBroadcast")
+            return
+        }
+
+        let payload = broadcast.settings
+        logger.info("Received settings sync from device: \(payload.deviceId), version: \(payload.version)")
+
+        // Decrypt the settings JSON using the shared encryption key
+        guard let settingsJson = crypto.decryptOrNil(
+            encryptedBase64: payload.encryptedSettings,
+            ivBase64: payload.settingsIv
+        ) else {
+            logger.error("Failed to decrypt synced settings")
+            return
+        }
+
+        guard let settingsData = settingsJson.data(using: .utf8),
+              let settings = try? JSONDecoder().decode(SyncedSettings.self, from: settingsData) else {
+            logger.error("Failed to parse decrypted settings JSON")
+            return
+        }
+
+        logger.info("Decrypted settings: version=\(settings.version), hasOpenAIKey=\(settings.openaiApiKey != nil)")
+
+        // Store the OpenAI API key in the Keychain
+        if let apiKey = settings.openaiApiKey, !apiKey.isEmpty {
+            try? KeychainManager.storeOpenAIApiKey(apiKey)
+            logger.info("Stored OpenAI API key from desktop sync")
+            NotificationCenter.default.post(name: .init("OpenAIApiKeySynced"), object: nil)
+        }
+
+        #if os(iOS)
+        // Store voice mode settings if present
+        if let voiceMode = settings.voiceMode {
+            var currentSettings = VoiceModeSettings.load()
+            if let voice = voiceMode.voice {
+                currentSettings.voice = voice
+            }
+            if let delay = voiceMode.submitDelayMs {
+                currentSettings.promptConfirmationDelay = TimeInterval(delay) / 1000.0
+            }
+            currentSettings.save()
+        }
+        #endif
+
+        onSettingsSynced?(settings)
     }
 
     // MARK: - Error Handling

@@ -29,12 +29,20 @@ public final class AppState: ObservableObject {
     /// Auth manager for Stytch OAuth.
     public let authManager = AuthManager()
 
+    /// Voice mode agent. One instance shared across the app (iOS only).
+    #if os(iOS)
+    @Published public private(set) var voiceAgent: VoiceAgent?
+    #endif
+
     private var cryptoManager: CryptoManager?
     public private(set) var syncManager: SyncManager?
     private var cancellables = Set<AnyCancellable>()
     private var jwtRefreshTimer: Timer?
 
     public init() {
+        // Initialize analytics early so events can be captured throughout the lifecycle
+        AnalyticsManager.shared.initialize()
+
         // Check if we have stored credentials (pairing state)
         isPaired = KeychainManager.hasEncryptionKey()
 
@@ -67,12 +75,16 @@ public final class AppState: ObservableObject {
     /// The QR code provides the encryption seed and server URL.
     /// The userId parameter is informational only (e.g., syncEmail from QR) -- the actual
     /// user ID for crypto and routing comes from Stytch auth.
-    public func pair(with seed: String, serverUrl: String, userId: String) throws {
+    public func pair(with seed: String, serverUrl: String, userId: String, analyticsId: String? = nil) throws {
         try KeychainManager.storeEncryptionKey(seed: seed)
         try KeychainManager.storeServerUrl(serverUrl)
         // Store the QR userId as a fallback identifier (not used for crypto or routing)
         try KeychainManager.storeUserId(userId)
         isPaired = true
+
+        // Link mobile analytics to desktop's PostHog identity
+        AnalyticsManager.shared.setDistinctIdFromPairing(analyticsId)
+        AnalyticsManager.shared.capture("mobile_pairing_completed")
         // If already authenticated (re-pairing scenario), set up managers and connect.
         // On fresh install this won't fire -- the auth observer handles post-login setup.
         if authManager.isAuthenticated {
@@ -85,8 +97,15 @@ public final class AppState: ObservableObject {
     }
 
     public func unpair() {
+        AnalyticsManager.shared.capture("mobile_device_unpairing")
+        AnalyticsManager.shared.reset()
+
         jwtRefreshTimer?.invalidate()
         jwtRefreshTimer = nil
+        #if os(iOS)
+        voiceAgent?.deactivate()
+        voiceAgent = nil
+        #endif
         syncManager?.disconnect()
         KeychainManager.deleteAll()
         authManager.logout()
@@ -120,6 +139,7 @@ public final class AppState: ObservableObject {
                 guard let self else { return }
                 self.logger.info("isAuthenticated changed to \(authenticated)")
                 if authenticated {
+                    AnalyticsManager.shared.capture("mobile_login_completed")
                     self.setupManagersIfNeeded()
                     self.connectIfReady()
                     #if canImport(UIKit)
@@ -239,6 +259,11 @@ public final class AppState: ObservableObject {
         }
         logger.info("Initializing managers")
 
+        // Set email on analytics profile if available from Stytch auth
+        if let email = KeychainManager.getAuthEmail() {
+            AnalyticsManager.shared.setEmail(email)
+        }
+
         // Initialize CryptoManager with the correct userId for key derivation
         cryptoManager = CryptoManager(seed: seed, userId: userId)
 
@@ -262,5 +287,44 @@ public final class AppState: ObservableObject {
         sync.$isConnected
             .receive(on: DispatchQueue.main)
             .assign(to: &$isConnected)
+
+        #if os(iOS)
+        // Initialize voice agent
+        let voice = VoiceAgent()
+        voiceAgent = voice
+
+        // Wire session completion notifications from SyncManager to VoiceAgent
+        sync.onSessionCompleted = { [weak voice] sessionId, summary in
+            Task { @MainActor in
+                voice?.onSessionCompleted(sessionId: sessionId, summary: summary)
+            }
+        }
+
+        // Wire settings sync to update VoiceAgent when settings arrive from desktop
+        sync.onSettingsSynced = { [weak voice] _ in
+            Task { @MainActor in
+                voice?.settings = VoiceModeSettings.load()
+            }
+        }
+
+        // Forward VoiceAgent state changes to trigger SwiftUI re-renders
+        voice.objectWillChange
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
+        #endif
+    }
+
+    /// Configure the voice agent with a specific project context.
+    /// Called when the user navigates to a project's session list.
+    public func configureVoiceAgent(forProject projectId: String) {
+        #if os(iOS)
+        guard let voice = voiceAgent,
+              let database = databaseManager,
+              let sync = syncManager else { return }
+        voice.configure(database: database, syncManager: sync, projectId: projectId)
+        #endif
     }
 }

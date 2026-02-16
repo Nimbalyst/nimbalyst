@@ -124,6 +124,35 @@ struct ServerError: Codable {
     let message: String
 }
 
+/// Encrypted settings payload from desktop (e.g., API keys, voice mode config).
+struct EncryptedSettingsPayload: Codable {
+    let encryptedSettings: String
+    let settingsIv: String
+    let deviceId: String
+    let timestamp: Int
+    let version: Int
+}
+
+/// Settings sync broadcast from server (desktop -> mobile).
+struct SettingsSyncBroadcast: Codable {
+    let type: String
+    let settings: EncryptedSettingsPayload
+    let fromConnectionId: String?
+}
+
+/// Decrypted settings received from desktop.
+public struct SyncedSettings: Codable {
+    public let openaiApiKey: String?
+    public let voiceMode: SyncedVoiceModeSettings?
+    public let version: Int
+}
+
+/// Voice mode settings synced from desktop.
+public struct SyncedVoiceModeSettings: Codable {
+    public let voice: String?
+    public let submitDelayMs: Int?
+}
+
 // MARK: - Client -> Server Messages
 
 struct IndexSyncRequest: Codable {

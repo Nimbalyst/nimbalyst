@@ -1,5 +1,5 @@
 {
-  "originHash" : "69688159a426cf7755d43a5a48d42b1a07548f5e38a1af84c778017955860b82",
+  "originHash" : "5e49e2bc8fe34b930832d75e41b45779ecd47e34b5ddcb941eb185347c19948b",
   "pins" : [
     {
       "identity" : "grdb.swift",
@@ -8,6 +8,15 @@
       "state" : {
         "revision" : "aa0079aeb82a4bf00324561a40bffe68c6fe1c26",
         "version" : "7.9.0"
+      }
+    },
+    {
+      "identity" : "posthog-ios",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/PostHog/posthog-ios.git",
+      "state" : {
+        "revision" : "1ba3e8636d4f1ad9f18f5a4273e88d39a162466b",
+        "version" : "3.41.1"
       }
     }
   ],

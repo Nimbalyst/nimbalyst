@@ -4,8 +4,13 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject var appState: AppState
     @State private var pushEnabled = UserDefaults.standard.bool(forKey: "pushNotificationsEnabled")
+    @State private var analyticsEnabled = AnalyticsManager.shared.isEnabled
     @State private var showUnpairConfirmation = false
     @Environment(\.dismiss) private var dismiss
+
+    // Voice mode settings
+    @State private var hasOpenAIApiKey = KeychainManager.getOpenAIApiKey() != nil
+    @State private var voiceSettings = VoiceModeSettings.load()
 
     private var connectedDevices: [DeviceInfo] {
         appState.syncManager?.connectedDevices ?? []
@@ -16,7 +21,9 @@ struct SettingsView: View {
             connectionSection
             accountSection
             #if os(iOS)
+            voiceModeSection
             notificationsSection
+            analyticsSection
             #endif
             dangerSection
         }
@@ -114,6 +121,100 @@ struct SettingsView: View {
             Text("Notifications")
         } footer: {
             Text("Get notified when AI sessions complete or need your attention.")
+        }
+    }
+    #endif
+
+    // MARK: - Voice Mode
+
+    #if os(iOS)
+    private static let voiceOptions = [
+        "alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse",
+    ]
+
+    private var voiceModeSection: some View {
+        Section {
+            // API Key (synced from desktop)
+            HStack {
+                Text("OpenAI API Key")
+                Spacer()
+                if hasOpenAIApiKey {
+                    HStack(spacing: 4) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(NimbalystColors.success)
+                        Text("Synced from desktop")
+                            .foregroundStyle(.secondary)
+                    }
+                    .font(.caption)
+                } else {
+                    Text("Not synced yet")
+                        .foregroundStyle(.secondary)
+                        .font(.caption)
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .init("OpenAIApiKeySynced"))) { _ in
+                hasOpenAIApiKey = KeychainManager.getOpenAIApiKey() != nil
+            }
+
+            // Voice picker
+            Picker("Voice", selection: $voiceSettings.voice) {
+                ForEach(Self.voiceOptions, id: \.self) { voice in
+                    Text(voice.capitalized).tag(voice)
+                }
+            }
+            .onChange(of: voiceSettings.voice) { _ in saveVoiceSettings() }
+
+            // Idle timeout
+            Stepper(
+                "Idle Timeout: \(Int(voiceSettings.idleTimeout))s",
+                value: $voiceSettings.idleTimeout,
+                in: 10...120,
+                step: 10
+            )
+            .onChange(of: voiceSettings.idleTimeout) { _ in saveVoiceSettings() }
+
+            // Auto-announce completions
+            Toggle("Auto-Announce Completions", isOn: $voiceSettings.autoAnnounceCompletions)
+                .onChange(of: voiceSettings.autoAnnounceCompletions) { _ in saveVoiceSettings() }
+
+            // Prompt confirmation delay
+            Stepper(
+                "Confirm Delay: \(Int(voiceSettings.promptConfirmationDelay))s",
+                value: $voiceSettings.promptConfirmationDelay,
+                in: 1...10,
+                step: 1
+            )
+            .onChange(of: voiceSettings.promptConfirmationDelay) { _ in saveVoiceSettings() }
+        } header: {
+            Text("Voice Mode")
+        } footer: {
+            Text("Voice mode uses OpenAI's Realtime API for voice-to-voice conversations. The API key is synced from your desktop app's OpenAI settings.")
+        }
+    }
+
+    private func saveVoiceSettings() {
+        voiceSettings.save()
+        appState.voiceAgent?.settings = voiceSettings
+    }
+    #endif
+
+    // MARK: - Analytics
+
+    #if os(iOS)
+    private var analyticsSection: some View {
+        Section {
+            Toggle("Usage Analytics", isOn: $analyticsEnabled)
+                .onChange(of: analyticsEnabled) { newValue in
+                    if newValue {
+                        AnalyticsManager.shared.optIn()
+                    } else {
+                        AnalyticsManager.shared.optOut()
+                    }
+                }
+        } header: {
+            Text("Privacy")
+        } footer: {
+            Text("Anonymous usage analytics help improve Nimbalyst. No session content or file paths are ever collected.")
         }
     }
     #endif

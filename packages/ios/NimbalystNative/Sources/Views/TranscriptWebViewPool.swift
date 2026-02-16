@@ -22,6 +22,9 @@ public final class TranscriptWebViewPool {
     /// Whether the pre-warmed web view has finished loading its HTML+JS.
     private var isWarm = false
 
+    /// Whether the content process has been terminated (webview is dead).
+    private var isContentProcessDead = false
+
     /// Callback for when the warm web view finishes loading.
     private var onWarm: (() -> Void)?
 
@@ -104,13 +107,24 @@ public final class TranscriptWebViewPool {
         }
     }
 
-    /// Take the pre-warmed web view. Returns nil if none available (caller should create its own).
+    /// Take the pre-warmed web view. Returns nil if none available or if the
+    /// content process has been terminated (caller should create its own).
     /// After calling this, the pool is empty until `warmup()` is called again.
     public func takeWebView() -> WKWebView? {
         guard let webView = warmWebView else { return nil }
+
+        // Don't hand out a dead webview - the content process was killed
+        // (e.g., by GPU process idle exit). Caller will create a fresh one.
+        if isContentProcessDead {
+            logger.warning("Discarding pre-warmed web view: content process was terminated")
+            discardWarmWebView()
+            return nil
+        }
+
         warmWebView = nil
         warmupDelegate = nil
         isWarm = false
+        isContentProcessDead = false
         onWarm = nil
         return webView
     }
@@ -125,11 +139,19 @@ public final class TranscriptWebViewPool {
         isWarm
     }
 
+    /// Mark the content process as dead. Called from the navigation delegate
+    /// when the content process terminates. This is safe to call from any context
+    /// since it just sets a flag that `takeWebView()` checks.
+    func markContentProcessDead() {
+        isContentProcessDead = true
+    }
+
     /// Discard the pooled web view (e.g. if its content process crashed).
     func discardWarmWebView() {
         warmWebView = nil
         warmupDelegate = nil
         isWarm = false
+        isContentProcessDead = false
         onWarm = nil
     }
 }
@@ -158,7 +180,11 @@ private class WarmupNavigationDelegate: NSObject, WKNavigationDelegate {
     }
 
     func webView(_ webView: WKWebView, webContentProcessDidTerminate: WKWebView) {
-        Task { @MainActor in
+        // WKNavigationDelegate is called on the main thread.
+        // Use MainActor.assumeIsolated to call @MainActor methods synchronously,
+        // avoiding the Task race where takeWebView() could run before the cleanup.
+        MainActor.assumeIsolated {
+            TranscriptWebViewPool.shared.markContentProcessDead()
             TranscriptWebViewPool.shared.discardWarmWebView()
         }
     }
