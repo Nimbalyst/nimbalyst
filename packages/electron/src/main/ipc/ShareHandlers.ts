@@ -6,21 +6,7 @@ import { AISessionsRepository, AgentMessagesRepository, transformAgentMessagesTo
 import type { SessionData } from '@nimbalyst/runtime/ai/server/types';
 import { exportSessionToHtml } from '../services/SessionHtmlExporter';
 import { getSessionJwt, refreshSession } from '../services/StytchAuthService';
-import { getSessionSyncConfig } from '../utils/store';
-
-/**
- * Get the sync server HTTP URL from config.
- * Converts ws:// to http:// and wss:// to https://.
- */
-function getShareServerUrl(): string | null {
-  const config = getSessionSyncConfig();
-  if (!config?.serverUrl) return null;
-
-  return config.serverUrl
-    .replace(/^ws:/, 'http:')
-    .replace(/^wss:/, 'https:')
-    .replace(/\/$/, '');
-}
+const SHARE_SERVER_URL = 'https://sync.nimbalyst.com';
 
 /**
  * Get a valid JWT, always refreshing to ensure it's not expired.
@@ -73,10 +59,7 @@ export function registerShareHandlers() {
         return { success: false, error: 'Not signed in. Sign in via Settings > Account & Sync.' };
       }
 
-      const serverUrl = getShareServerUrl();
-      if (!serverUrl) {
-        return { success: false, error: 'Sync not configured. Set up sync in Settings > Account & Sync.' };
-      }
+      const serverUrl = SHARE_SERVER_URL;
 
       try {
         // Load session and generate HTML (same pattern as ExportHandlers)
@@ -148,10 +131,7 @@ export function registerShareHandlers() {
         return { success: false, error: 'Not signed in' };
       }
 
-      const serverUrl = getShareServerUrl();
-      if (!serverUrl) {
-        return { success: false, error: 'Sync not configured' };
-      }
+      const serverUrl = SHARE_SERVER_URL;
 
       try {
         const response = await net.fetch(`${serverUrl}/shares`, {
@@ -197,10 +177,7 @@ export function registerShareHandlers() {
         return { success: false, error: 'Not signed in' };
       }
 
-      const serverUrl = getShareServerUrl();
-      if (!serverUrl) {
-        return { success: false, error: 'Sync not configured' };
-      }
+      const serverUrl = SHARE_SERVER_URL;
 
       try {
         const response = await net.fetch(`${serverUrl}/share/${shareId}`, {
