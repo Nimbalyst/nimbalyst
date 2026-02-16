@@ -263,6 +263,9 @@ public final class SyncManager: ObservableObject {
             ivBase64: entry.titleIv
         )
 
+        // Preserve local isExecuting/lastReadAt when the server entry doesn't include them
+        let existing = try? database.session(byId: entry.sessionId)
+
         let session = Session(
             id: entry.sessionId,
             projectId: projectId,
@@ -272,14 +275,14 @@ public final class SyncManager: ObservableObject {
             provider: entry.provider,
             model: entry.model,
             mode: entry.mode,
-            isExecuting: entry.isExecuting ?? false,
+            isExecuting: entry.isExecuting ?? existing?.isExecuting ?? false,
             hasQueuedPrompts: entry.hasPendingPrompt ?? false,
             contextTokens: entry.currentContext?.tokens,
             contextWindow: entry.currentContext?.contextWindow,
             createdAt: entry.createdAt,
             updatedAt: entry.updatedAt,
-            lastReadAt: entry.lastReadAt,
-            lastMessageAt: entry.lastMessageAt
+            lastReadAt: entry.lastReadAt ?? existing?.lastReadAt,
+            lastMessageAt: entry.lastMessageAt ?? existing?.lastMessageAt
         )
 
         do {

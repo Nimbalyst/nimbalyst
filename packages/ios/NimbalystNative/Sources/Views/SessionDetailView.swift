@@ -103,6 +103,11 @@ public struct SessionDetailView: View {
         }
         #endif
         .toolbar {
+            if let voice = appState.voiceAgent, voice.state != .disconnected {
+                ToolbarItem(placement: .principal) {
+                    VoiceStatusPill(state: voice.state)
+                }
+            }
             ToolbarItem(placement: .primaryAction) {
                 sessionMenu
             }
@@ -111,6 +116,7 @@ public struct SessionDetailView: View {
             startObserving()
             // Mark session as read when viewing it
             appState.syncManager?.markSessionRead(sessionId: session.id)
+            AnalyticsManager.shared.capture("mobile_session_viewed")
         }
         .task {
             // Join session room async to avoid blocking navigation transition
@@ -189,10 +195,21 @@ public struct SessionDetailView: View {
             }
             #endif
 
-            Button {
-                // TODO: Open voice mode
-            } label: {
-                Label("Voice Mode", systemImage: "mic.fill")
+            if let voice = appState.voiceAgent {
+                Button {
+                    if voice.state == .disconnected {
+                        voice.activeSessionId = session.id
+                        voice.activate()
+                    } else {
+                        voice.deactivate()
+                    }
+                } label: {
+                    if voice.state == .disconnected {
+                        Label("Start Voice Mode", systemImage: "mic.fill")
+                    } else {
+                        Label("Stop Voice Mode", systemImage: "mic.slash")
+                    }
+                }
             }
 
             if let provider = displaySession.provider,
@@ -296,6 +313,9 @@ public struct SessionDetailView: View {
 
         do {
             try syncManager.sendPrompt(sessionId: session.id, text: text)
+            AnalyticsManager.shared.capture("mobile_ai_message_sent", properties: [
+                "hasAttachments": false,
+            ])
         } catch {
             print("Failed to send prompt: \(error)")
         }
@@ -321,6 +341,10 @@ public struct SessionDetailView: View {
                let jsonStr = String(data: json, encoding: .utf8) {
                 syncManager.appendToolResult(sessionId: session.id, toolResultId: promptId, content: jsonStr)
             }
+            AnalyticsManager.shared.capture("mobile_ask_user_question_response", properties: [
+                "action": "submitted",
+                "question_count": answers.count,
+            ])
 
         case "toolPermissionSubmit":
             let response = body["response"] as? [String: Any] ?? [:]
@@ -338,6 +362,10 @@ public struct SessionDetailView: View {
                let jsonStr = String(data: json, encoding: .utf8) {
                 syncManager.appendToolResult(sessionId: session.id, toolResultId: promptId, content: jsonStr)
             }
+            AnalyticsManager.shared.capture("mobile_tool_permission_response", properties: [
+                "decision": response["decision"] as? String ?? "unknown",
+                "scope": response["scope"] as? String ?? "unknown",
+            ])
 
         case "exitPlanModeApprove":
             syncManager.sendSessionControlMessage(
@@ -349,6 +377,9 @@ public struct SessionDetailView: View {
                     "response": ["approved": true],
                 ]
             )
+            AnalyticsManager.shared.capture("mobile_exit_plan_mode_response", properties: [
+                "action": "approved",
+            ])
 
         case "exitPlanModeDeny":
             let feedback = body["feedback"] as? String
@@ -363,6 +394,10 @@ public struct SessionDetailView: View {
                     "response": response,
                 ]
             )
+            AnalyticsManager.shared.capture("mobile_exit_plan_mode_response", properties: [
+                "action": "denied",
+                "has_feedback": feedback != nil,
+            ])
 
         case "gitCommit":
             let files = body["files"] as? [String] ?? []
@@ -380,6 +415,10 @@ public struct SessionDetailView: View {
                     ],
                 ]
             )
+            AnalyticsManager.shared.capture("mobile_git_commit_response", properties: [
+                "action": "approved",
+                "file_count": files.count,
+            ])
 
         default:
             print("Unhandled interactive response: \(action)")

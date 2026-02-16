@@ -81,7 +81,10 @@ struct SessionListView: View {
                 Section(group.period.rawValue) {
                     ForEach(group.sessions) { session in
                         NavigationLink(value: session) {
-                            SessionRow(session: session)
+                            SessionRow(
+                                session: session,
+                                voiceFocusedSessionId: appState.voiceAgent?.activeSessionId
+                            )
                         }
                     }
                     .onDelete { offsets in
@@ -106,6 +109,9 @@ struct SessionListView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 HStack(spacing: 12) {
+                    if let voice = appState.voiceAgent, voice.state != .disconnected {
+                        VoiceStatusPill(state: voice.state)
+                    }
                     connectionIndicator
                     Button {
                         createAndNavigateToSession()
@@ -139,6 +145,7 @@ struct SessionListView: View {
         }
         .onAppear {
             startObserving()
+            appState.configureVoiceAgent(forProject: project.id)
         }
         .onDisappear {
             cancellable?.cancel()
@@ -203,6 +210,7 @@ struct SessionListView: View {
         isCreatingSession = true
         do {
             try sync.createSession(projectId: project.id, initialPrompt: nil)
+            AnalyticsManager.shared.capture("mobile_session_created")
         } catch {
             print("Failed to create session: \(error)")
         }
@@ -216,6 +224,7 @@ struct SessionListView: View {
 
 struct SessionRow: View {
     let session: Session
+    var voiceFocusedSessionId: String? = nil
 
     var body: some View {
         HStack(spacing: 8) {
@@ -251,6 +260,13 @@ struct SessionRow: View {
             Spacer()
 
             HStack(spacing: 6) {
+                // Voice focus indicator
+                if voiceFocusedSessionId == session.id {
+                    Image(systemName: "mic.fill")
+                        .font(.caption2)
+                        .foregroundStyle(NimbalystColors.primary)
+                }
+
                 // Context usage
                 if let pct = session.contextUsagePercent {
                     ContextUsageBadge(percent: pct)

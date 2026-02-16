@@ -40,10 +40,10 @@ import type {
 interface EncryptedMessage {
   id: string;
   sequence: number;
-  created_at: number;
+  createdAt: number;
   source: 'user' | 'assistant' | 'tool' | 'system';
   direction: 'input' | 'output';
-  encrypted_content: string;
+  encryptedContent: string;
   iv: string;
   metadata: {
     tool_name?: string;
@@ -56,7 +56,7 @@ interface EncryptedMessage {
 interface EncryptedQueuedPrompt {
   id: string;
   /** Encrypted prompt text (base64) */
-  encrypted_prompt: string;
+  encryptedPrompt: string;
   /** IV for prompt decryption (base64) */
   iv: string;
   timestamp: number;
@@ -71,20 +71,20 @@ interface PlaintextQueuedPrompt {
 
 interface SessionMetadata {
   /** Encrypted title (base64) */
-  encrypted_title?: string;
+  encryptedTitle?: string;
   /** IV for title decryption (base64) */
-  title_iv?: string;
+  titleIv?: string;
   /** Plaintext title (for local cache / pre-encryption) */
   title?: string;
   provider: string;
   model?: string;
   mode?: 'agent' | 'planning';
   /** Encrypted project ID (base64) - required for wire protocol */
-  encrypted_project_id: string;
-  /** IV for project_id decryption (base64) */
-  project_id_iv: string;
-  created_at: number;
-  updated_at: number;
+  encryptedProjectId: string;
+  /** IV for projectId decryption (base64) */
+  projectIdIv: string;
+  createdAt: number;
+  updatedAt: number;
   pendingExecution?: {
     messageId: string;
     sentAt: number;
@@ -101,24 +101,24 @@ interface SessionMetadata {
 }
 
 interface SessionIndexEntry {
-  session_id: string;
+  sessionId: string;
   /** Encrypted project ID (base64) - required for wire protocol */
-  encrypted_project_id: string;
-  /** IV for project_id decryption (base64) */
-  project_id_iv: string;
+  encryptedProjectId: string;
+  /** IV for projectId decryption (base64) */
+  projectIdIv: string;
   /** Encrypted title (base64) */
-  encrypted_title?: string;
+  encryptedTitle?: string;
   /** IV for title decryption (base64) */
-  title_iv?: string;
+  titleIv?: string;
   /** Plaintext title (for local cache / pre-encryption) */
   title?: string;
   provider: string;
   model?: string;
   mode?: 'agent' | 'planning';
-  message_count: number;
-  last_message_at: number;
-  created_at: number;
-  updated_at: number;
+  messageCount: number;
+  lastMessageAt: number;
+  createdAt: number;
+  updatedAt: number;
   pendingExecution?: {
     messageId: string;
     sentAt: number;
@@ -141,78 +141,78 @@ interface SessionIndexEntry {
   lastReadAt?: number;
 }
 
-/** Decrypted session index entry with required title and project_id - used for return values */
-type DecryptedSessionIndexEntry = Omit<SessionIndexEntry, 'title' | 'encrypted_title' | 'title_iv' | 'encrypted_project_id' | 'project_id_iv' | 'encryptedQueuedPrompts'> & {
+/** Decrypted session index entry with required title and projectId - used for return values */
+type DecryptedSessionIndexEntry = Omit<SessionIndexEntry, 'title' | 'encryptedTitle' | 'titleIv' | 'encryptedProjectId' | 'projectIdIv' | 'encryptedQueuedPrompts'> & {
   title: string;  // Required after decryption
-  project_id: string;  // Decrypted project ID
+  projectId: string;  // Decrypted project ID
   queuedPrompts?: PlaintextQueuedPrompt[];  // Decrypted queued prompts
 };
 
 /** Encrypted create session request for wire protocol */
 interface EncryptedCreateSessionRequest {
-  request_id: string;
+  requestId: string;
   /** Encrypted project ID (base64) - required for wire protocol */
-  encrypted_project_id: string;
-  /** IV for project_id decryption (base64) */
-  project_id_iv: string;
+  encryptedProjectId: string;
+  /** IV for projectId decryption (base64) */
+  projectIdIv: string;
   /** Encrypted initial prompt (base64), optional */
-  encrypted_initial_prompt?: string;
-  /** IV for prompt decryption (base64), required if encrypted_initial_prompt present */
-  initial_prompt_iv?: string;
+  encryptedInitialPrompt?: string;
+  /** IV for prompt decryption (base64), required if encryptedInitialPrompt present */
+  initialPromptIv?: string;
   timestamp: number;
 }
 
 /** Encrypted create session response for wire protocol */
 interface EncryptedCreateSessionResponse {
-  request_id: string;
+  requestId: string;
   success: boolean;
-  session_id?: string;
+  sessionId?: string;
   error?: string;
 }
 
 type ClientMessage =
-  | { type: 'sync_request'; since_id?: string; since_seq?: number }
-  | { type: 'append_message'; message: EncryptedMessage }
-  | { type: 'update_metadata'; metadata: Partial<SessionMetadata> }
-  | { type: 'delete_session' }
-  | { type: 'index_sync_request'; project_id?: string }
-  | { type: 'index_update'; session: SessionIndexEntry }
-  | { type: 'index_batch_update'; sessions: SessionIndexEntry[] }
-  | { type: 'index_delete'; session_id: string }
-  | { type: 'device_announce'; device: DeviceInfo }
-  | { type: 'create_session_request'; request: EncryptedCreateSessionRequest }
-  | { type: 'create_session_response'; response: EncryptedCreateSessionResponse }
-  | { type: 'session_control'; message: { session_id: string; message_type: string; payload?: Record<string, unknown>; timestamp: number; sent_by: 'desktop' | 'mobile' } }
-  | { type: 'request_mobile_push'; session_id: string; title: string; body: string; requesting_device_id?: string }
-  | { type: 'settings_sync'; settings: EncryptedSettingsPayload };
+  | { type: 'syncRequest'; sinceId?: string; sinceSeq?: number }
+  | { type: 'appendMessage'; message: EncryptedMessage }
+  | { type: 'updateMetadata'; metadata: Partial<SessionMetadata> }
+  | { type: 'deleteSession' }
+  | { type: 'indexSyncRequest'; projectId?: string }
+  | { type: 'indexUpdate'; session: SessionIndexEntry }
+  | { type: 'indexBatchUpdate'; sessions: SessionIndexEntry[] }
+  | { type: 'indexDelete'; sessionId: string }
+  | { type: 'deviceAnnounce'; device: DeviceInfo }
+  | { type: 'createSessionRequest'; request: EncryptedCreateSessionRequest }
+  | { type: 'createSessionResponse'; response: EncryptedCreateSessionResponse }
+  | { type: 'sessionControl'; message: { sessionId: string; messageType: string; payload?: Record<string, unknown>; timestamp: number; sentBy: 'desktop' | 'mobile' } }
+  | { type: 'requestMobilePush'; sessionId: string; title: string; body: string; requestingDeviceId?: string }
+  | { type: 'settingsSync'; settings: EncryptedSettingsPayload };
 
 /** Encrypted project index entry from server */
 interface ServerProjectEntry {
-  encrypted_project_id: string;
-  project_id_iv: string;
-  encrypted_name: string;
-  name_iv: string;
-  encrypted_path?: string;
-  path_iv?: string;
-  session_count: number;
-  last_activity_at: number;
-  sync_enabled: boolean;
+  encryptedProjectId: string;
+  projectIdIv: string;
+  encryptedName: string;
+  nameIv: string;
+  encryptedPath?: string;
+  pathIv?: string;
+  sessionCount: number;
+  lastActivityAt: number;
+  syncEnabled: boolean;
 }
 
 type ServerMessage =
-  | { type: 'sync_response'; messages: EncryptedMessage[]; metadata: SessionMetadata | null; has_more: boolean; cursor: string | null }
-  | { type: 'message_broadcast'; message: EncryptedMessage; from_connection_id?: string }
-  | { type: 'metadata_broadcast'; metadata: Partial<SessionMetadata>; from_connection_id?: string }
-  | { type: 'index_sync_response'; sessions: SessionIndexEntry[]; projects: ServerProjectEntry[] }
-  | { type: 'index_broadcast'; session: SessionIndexEntry; from_connection_id?: string }
-  | { type: 'project_broadcast'; project: ServerProjectEntry; from_connection_id?: string }
-  | { type: 'devices_list'; devices: DeviceInfo[] }
-  | { type: 'device_joined'; device: DeviceInfo }
-  | { type: 'device_left'; device_id: string }
-  | { type: 'create_session_request_broadcast'; request: EncryptedCreateSessionRequest; from_connection_id?: string }
-  | { type: 'create_session_response_broadcast'; response: EncryptedCreateSessionResponse; from_connection_id?: string }
-  | { type: 'session_control_broadcast'; message: { session_id: string; message_type: string; payload?: Record<string, unknown>; timestamp: number; sent_by: 'desktop' | 'mobile' }; from_connection_id?: string }
-  | { type: 'settings_sync_broadcast'; settings: EncryptedSettingsPayload; from_connection_id?: string }
+  | { type: 'syncResponse'; messages: EncryptedMessage[]; metadata: SessionMetadata | null; hasMore: boolean; cursor: string | null }
+  | { type: 'messageBroadcast'; message: EncryptedMessage; fromConnectionId?: string }
+  | { type: 'metadataBroadcast'; metadata: Partial<SessionMetadata>; fromConnectionId?: string }
+  | { type: 'indexSyncResponse'; sessions: SessionIndexEntry[]; projects: ServerProjectEntry[] }
+  | { type: 'indexBroadcast'; session: SessionIndexEntry; fromConnectionId?: string }
+  | { type: 'projectBroadcast'; project: ServerProjectEntry; fromConnectionId?: string }
+  | { type: 'devicesList'; devices: DeviceInfo[] }
+  | { type: 'deviceJoined'; device: DeviceInfo }
+  | { type: 'deviceLeft'; deviceId: string }
+  | { type: 'createSessionRequestBroadcast'; request: EncryptedCreateSessionRequest; fromConnectionId?: string }
+  | { type: 'createSessionResponseBroadcast'; response: EncryptedCreateSessionResponse; fromConnectionId?: string }
+  | { type: 'sessionControlBroadcast'; message: { sessionId: string; messageType: string; payload?: Record<string, unknown>; timestamp: number; sentBy: 'desktop' | 'mobile' }; fromConnectionId?: string }
+  | { type: 'settingsSyncBroadcast'; settings: EncryptedSettingsPayload; fromConnectionId?: string }
   | { type: 'error'; code: string; message: string };
 
 // ============================================================================
@@ -344,7 +344,7 @@ async function encryptQueuedPrompts(
       const { encrypted, iv } = await encrypt(prompt.prompt, key);
       return {
         id: prompt.id,
-        encrypted_prompt: encrypted,
+        encryptedPrompt: encrypted,
         iv,
         timestamp: prompt.timestamp,
       };
@@ -362,7 +362,7 @@ async function decryptQueuedPrompts(
 ): Promise<PlaintextQueuedPrompt[]> {
   return Promise.all(
     prompts.map(async (prompt) => {
-      const decryptedPrompt = await decrypt(prompt.encrypted_prompt, prompt.iv, key);
+      const decryptedPrompt = await decrypt(prompt.encryptedPrompt, prompt.iv, key);
       return {
         id: prompt.id,
         prompt: decryptedPrompt,
@@ -378,11 +378,11 @@ async function decryptQueuedPrompts(
 async function encryptTitle(
   title: string,
   key: CryptoKey
-): Promise<{ encrypted_title: string; title_iv: string }> {
+): Promise<{ encryptedTitle: string; titleIv: string }> {
   const { encrypted, iv } = await encrypt(title, key);
   return {
-    encrypted_title: encrypted,
-    title_iv: iv,
+    encryptedTitle: encrypted,
+    titleIv: iv,
   };
 }
 
@@ -390,16 +390,16 @@ async function encryptTitle(
  * Decrypt a session title received from wire.
  */
 async function decryptTitle(
-  encrypted_title: string,
-  title_iv: string,
+  encryptedTitle: string,
+  titleIv: string,
   key: CryptoKey
 ): Promise<string> {
-  return decrypt(encrypted_title, title_iv, key);
+  return decrypt(encryptedTitle, titleIv, key);
 }
 
 /**
- * Fixed IV for project_id encryption.
- * Using a fixed IV makes encryption deterministic so the same project_id always
+ * Fixed IV for projectId encryption.
+ * Using a fixed IV makes encryption deterministic so the same projectId always
  * produces the same ciphertext, allowing the server to deduplicate by encrypted value.
  * This is acceptable because project_ids are not secret (just privacy-sensitive)
  * and the encryption key itself provides the security.
@@ -410,13 +410,13 @@ const PROJECT_ID_FIXED_IV = new Uint8Array([
 
 /**
  * Encrypt a project ID for wire transmission.
- * Uses a fixed IV so the same project_id always produces the same ciphertext,
+ * Uses a fixed IV so the same projectId always produces the same ciphertext,
  * enabling server-side deduplication.
  */
 async function encryptProjectId(
   projectId: string,
   key: CryptoKey
-): Promise<{ encrypted_project_id: string; project_id_iv: string }> {
+): Promise<{ encryptedProjectId: string; projectIdIv: string }> {
   const encoder = new TextEncoder();
   const data = encoder.encode(projectId);
 
@@ -427,8 +427,8 @@ async function encryptProjectId(
   );
 
   return {
-    encrypted_project_id: btoa(String.fromCharCode(...new Uint8Array(encrypted))),
-    project_id_iv: btoa(String.fromCharCode(...PROJECT_ID_FIXED_IV)),
+    encryptedProjectId: btoa(String.fromCharCode(...new Uint8Array(encrypted))),
+    projectIdIv: btoa(String.fromCharCode(...PROJECT_ID_FIXED_IV)),
   };
 }
 
@@ -436,11 +436,11 @@ async function encryptProjectId(
  * Decrypt a project ID received from wire.
  */
 async function decryptProjectId(
-  encrypted_project_id: string,
-  project_id_iv: string,
+  encryptedProjectId: string,
+  projectIdIv: string,
   key: CryptoKey
 ): Promise<string> {
-  return decrypt(encrypted_project_id, project_id_iv, key);
+  return decrypt(encryptedProjectId, projectIdIv, key);
 }
 
 /**
@@ -449,11 +449,11 @@ async function decryptProjectId(
 async function encryptProjectName(
   name: string,
   key: CryptoKey
-): Promise<{ encrypted_name: string; name_iv: string }> {
+): Promise<{ encryptedName: string; nameIv: string }> {
   const { encrypted, iv } = await encrypt(name, key);
   return {
-    encrypted_name: encrypted,
-    name_iv: iv,
+    encryptedName: encrypted,
+    nameIv: iv,
   };
 }
 
@@ -461,11 +461,11 @@ async function encryptProjectName(
  * Decrypt a project name received from wire.
  */
 async function decryptProjectName(
-  encrypted_name: string,
-  name_iv: string,
+  encryptedName: string,
+  nameIv: string,
   key: CryptoKey
 ): Promise<string> {
-  return decrypt(encrypted_name, name_iv, key);
+  return decrypt(encryptedName, nameIv, key);
 }
 
 /**
@@ -474,11 +474,11 @@ async function decryptProjectName(
 async function encryptProjectPath(
   path: string,
   key: CryptoKey
-): Promise<{ encrypted_path: string; path_iv: string }> {
+): Promise<{ encryptedPath: string; pathIv: string }> {
   const { encrypted, iv } = await encrypt(path, key);
   return {
-    encrypted_path: encrypted,
-    path_iv: iv,
+    encryptedPath: encrypted,
+    pathIv: iv,
   };
 }
 
@@ -486,11 +486,11 @@ async function encryptProjectPath(
  * Decrypt a project path received from wire.
  */
 async function decryptProjectPath(
-  encrypted_path: string,
-  path_iv: string,
+  encryptedPath: string,
+  pathIv: string,
   key: CryptoKey
 ): Promise<string> {
-  return decrypt(encrypted_path, path_iv, key);
+  return decrypt(encryptedPath, pathIv, key);
 }
 
 // ============================================================================
@@ -504,7 +504,7 @@ interface SessionConnection {
   changeListeners: Set<(change: SessionChange) => void>;
   lastSequence: number;
   encryptionKey?: CryptoKey;
-  /** Cached metadata from sync_response and metadata_broadcast */
+  /** Cached metadata from syncResponse and metadataBroadcast */
   cachedMetadata?: Partial<SessionMetadata>;
   /** Timestamp of last activity (send/receive) for LRU eviction */
   lastActivity: number;
@@ -513,17 +513,17 @@ interface SessionConnection {
 // Cache of session index entries for partial update merging
 // This cache stores DECRYPTED values locally
 interface CachedSessionIndex {
-  session_id: string;
-  project_id: string;
+  sessionId: string;
+  projectId: string;
   /** Decrypted title (stored locally after decryption) */
   title: string;
   provider: string;
   model?: string;
   mode?: 'agent' | 'planning';
-  message_count: number;
-  last_message_at: number;
-  created_at: number;
-  updated_at: number;
+  messageCount: number;
+  lastMessageAt: number;
+  createdAt: number;
+  updatedAt: number;
   // Execution state fields synced via index updates to mobile
   pendingExecution?: {
     messageId: string;
@@ -638,16 +638,16 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
 
     // Merge pending update with cached entry
     const updatedCache: CachedSessionIndex = {
-      session_id: sessionId,
-      project_id: cached.project_id,
+      sessionId: sessionId,
+      projectId: cached.projectId,
       title: pending.title ?? cached.title,
       provider: cached.provider,
       model: cached.model,
       mode: cached.mode,
-      message_count: cached.message_count,
-      last_message_at: cached.last_message_at,
-      created_at: cached.created_at,
-      updated_at: Date.now(),
+      messageCount: cached.messageCount,
+      lastMessageAt: cached.lastMessageAt,
+      createdAt: cached.createdAt,
+      updatedAt: Date.now(),
       pendingExecution: 'pendingExecution' in pending ? pending.pendingExecution : cached.pendingExecution,
       isExecuting: 'isExecuting' in pending ? pending.isExecuting : cached.isExecuting,
     };
@@ -661,41 +661,41 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       return;
     }
 
-    // Encrypt project_id
-    const { encrypted_project_id, project_id_iv } = await encryptProjectId(updatedCache.project_id, config.encryptionKey);
+    // Encrypt projectId
+    const { encryptedProjectId, projectIdIv } = await encryptProjectId(updatedCache.projectId, config.encryptionKey);
 
     // Build wire entry - DO NOT include plaintext values
     const indexEntry: SessionIndexEntry = {
-      session_id: updatedCache.session_id,
-      encrypted_project_id,
-      project_id_iv,
+      sessionId: updatedCache.sessionId,
+      encryptedProjectId,
+      projectIdIv,
       provider: updatedCache.provider,
       model: updatedCache.model,
       mode: updatedCache.mode,
-      message_count: updatedCache.message_count,
-      last_message_at: updatedCache.last_message_at,
-      created_at: updatedCache.created_at,
-      updated_at: updatedCache.updated_at,
+      messageCount: updatedCache.messageCount,
+      lastMessageAt: updatedCache.lastMessageAt,
+      createdAt: updatedCache.createdAt,
+      updatedAt: updatedCache.updatedAt,
       pendingExecution: updatedCache.pendingExecution,
       isExecuting: updatedCache.isExecuting,
     };
 
     // Encrypt title
     if (updatedCache.title) {
-      const { encrypted_title, title_iv } = await encryptTitle(updatedCache.title, config.encryptionKey);
-      indexEntry.encrypted_title = encrypted_title;
-      indexEntry.title_iv = title_iv;
+      const { encryptedTitle, titleIv } = await encryptTitle(updatedCache.title, config.encryptionKey);
+      indexEntry.encryptedTitle = encryptedTitle;
+      indexEntry.titleIv = titleIv;
     }
 
     // Send to server
-    const indexMsg: ClientMessage = { type: 'index_update', session: indexEntry };
+    const indexMsg: ClientMessage = { type: 'indexUpdate', session: indexEntry };
     // console.log('[CollabV3] Sending deferred index_update for session:', sessionId, 'isExecuting:', indexEntry.isExecuting);
     indexWs.send(JSON.stringify(indexMsg));
   }
 
   // Pending fetch index request (resolves when index_sync_response is received)
   let pendingIndexFetch: {
-    resolve: (result: { sessions: DecryptedSessionIndexEntry[]; projects: Array<{ project_id: string; name: string; session_count: number; last_activity_at: number; sync_enabled: boolean }> }) => void;
+    resolve: (result: { sessions: DecryptedSessionIndexEntry[]; projects: Array<{ projectId: string; name: string; sessionCount: number; lastActivityAt: number; syncEnabled: boolean }> }) => void;
     reject: (error: Error) => void;
   } | null = null;
 
@@ -706,11 +706,11 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
     // Check both our flag AND the actual WebSocket readyState to avoid "Sent before connected" errors
     if (deviceInfo && indexWs && indexConnected && indexWs.readyState === WebSocket.OPEN) {
       const announceMsg: ClientMessage = {
-        type: 'device_announce',
+        type: 'deviceAnnounce',
         device: {
           ...deviceInfo,
-          // Ensure last_active_at is current (callback may provide its own)
-          last_active_at: deviceInfo.last_active_at ?? Date.now(),
+          // Ensure lastActiveAt is current (callback may provide its own)
+          lastActiveAt: deviceInfo.lastActiveAt ?? Date.now(),
         },
       };
       indexWs.send(JSON.stringify(announceMsg));
@@ -831,14 +831,14 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
     return {
       id: syncId,
       sequence: 0, // Server assigns sequence
-      created_at: message.createdAt instanceof Date
+      createdAt: message.createdAt instanceof Date
         ? message.createdAt.getTime()
         : typeof message.createdAt === 'number'
           ? message.createdAt
           : Date.now(),
       source: message.source as EncryptedMessage['source'],
       direction: message.direction as EncryptedMessage['direction'],
-      encrypted_content: encrypted,
+      encryptedContent: encrypted,
       iv,
       metadata: {},
     };
@@ -848,7 +848,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
     encrypted: EncryptedMessage,
     key: CryptoKey
   ): Promise<AgentMessage> {
-    const decrypted = await decrypt(encrypted.encrypted_content, encrypted.iv, key);
+    const decrypted = await decrypt(encrypted.encryptedContent, encrypted.iv, key);
     const parsed = JSON.parse(decrypted);
 
     return {
@@ -858,7 +858,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       direction: encrypted.direction,
       content: parsed.content,
       metadata: parsed.metadata,
-      createdAt: new Date(encrypted.created_at),
+      createdAt: new Date(encrypted.createdAt),
       hidden: parsed.hidden ?? false,
     };
   }
@@ -876,15 +876,15 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       );
 
       switch (message.type) {
-        case 'sync_response':
+        case 'syncResponse':
           handleSyncResponse(sessionId, message);
           break;
 
-        case 'message_broadcast':
+        case 'messageBroadcast':
           handleMessageBroadcast(sessionId, message);
           break;
 
-        case 'metadata_broadcast':
+        case 'metadataBroadcast':
           // Note: async function, but we don't await to avoid blocking message processing
           handleMetadataBroadcast(sessionId, message).catch(err => {
             console.error('[CollabV3] Error handling metadata broadcast:', err);
@@ -903,7 +903,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
 
   async function handleSyncResponse(
     sessionId: string,
-    response: Extract<ServerMessage, { type: 'sync_response' }>
+    response: Extract<ServerMessage, { type: 'syncResponse' }>
   ): Promise<void> {
     const session = sessions.get(sessionId);
     if (!session) return;
@@ -937,15 +937,15 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
 
     // Update status
     updateStatus(sessionId, {
-      syncing: response.has_more,
+      syncing: response.hasMore,
       lastSyncedAt: Date.now(),
     });
 
     // Request more if needed
-    if (response.has_more && response.cursor) {
+    if (response.hasMore && response.cursor) {
       const nextRequest: ClientMessage = {
-        type: 'sync_request',
-        since_seq: parseInt(response.cursor, 10),
+        type: 'syncRequest',
+        sinceSeq: parseInt(response.cursor, 10),
       };
       session.ws.send(JSON.stringify(nextRequest));
     }
@@ -953,7 +953,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
 
   async function handleMessageBroadcast(
     sessionId: string,
-    broadcast: Extract<ServerMessage, { type: 'message_broadcast' }>
+    broadcast: Extract<ServerMessage, { type: 'messageBroadcast' }>
   ): Promise<void> {
     const session = sessions.get(sessionId);
     if (!session || !session.encryptionKey) return;
@@ -976,7 +976,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
 
   async function handleMetadataBroadcast(
     sessionId: string,
-    broadcast: Extract<ServerMessage, { type: 'metadata_broadcast' }>
+    broadcast: Extract<ServerMessage, { type: 'metadataBroadcast' }>
   ): Promise<void> {
     // console.log('[CollabV3] Received metadata_broadcast for session:', sessionId, 'metadata:', JSON.stringify(broadcast.metadata));
 
@@ -993,24 +993,24 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       mode: broadcast.metadata.mode,
       provider: broadcast.metadata.provider,
       model: broadcast.metadata.model,
-      updatedAt: broadcast.metadata.updated_at ?? Date.now(),
+      updatedAt: broadcast.metadata.updatedAt ?? Date.now(),
       pendingExecution: broadcast.metadata.pendingExecution,
       isExecuting: broadcast.metadata.isExecuting,
     };
 
     // Decrypt title - encrypted titles are required
-    if (broadcast.metadata.encrypted_title && broadcast.metadata.title_iv && session.encryptionKey) {
+    if (broadcast.metadata.encryptedTitle && broadcast.metadata.titleIv && session.encryptionKey) {
       try {
-        metadata.title = await decryptTitle(broadcast.metadata.encrypted_title, broadcast.metadata.title_iv, session.encryptionKey);
+        metadata.title = await decryptTitle(broadcast.metadata.encryptedTitle, broadcast.metadata.titleIv, session.encryptionKey);
       } catch (err) {
         console.error('[CollabV3] Failed to decrypt title:', err);
         metadata.title = 'Untitled';
       }
-    } else if (broadcast.metadata.encrypted_title) {
+    } else if (broadcast.metadata.encryptedTitle) {
       // Encrypted title present but no key - show as untitled
       metadata.title = 'Untitled';
     }
-    // If no encrypted_title field at all, don't update the title
+    // If no encryptedTitle field at all, don't update the title
 
     // Decrypt queued prompts - encrypted prompts are required
     if (broadcast.metadata.encryptedQueuedPrompts && broadcast.metadata.encryptedQueuedPrompts.length > 0 && session.encryptionKey) {
@@ -1125,8 +1125,8 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
         );
 
         switch (message.type) {
-          case 'index_sync_response': {
-            // console.log('[CollabV3] Received index_sync_response:', message.sessions.length, 'sessions');
+          case 'indexSyncResponse': {
+            // console.log('[CollabV3] Received indexSyncResponse:', message.sessions.length, 'sessions');
             if (pendingIndexFetch) {
               // Decrypt sensitive fields before returning
               const decryptedSessions: DecryptedSessionIndexEntry[] = await Promise.all(
@@ -1136,23 +1136,23 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
                   let projectId: string;
                   let queuedPrompts: Array<{ id: string; prompt: string; timestamp: number }> | undefined;
 
-                  // Decrypt project_id - encrypted project_id is required
-                  if (entry.encrypted_project_id && entry.project_id_iv && config.encryptionKey) {
+                  // Decrypt projectId - encrypted projectId is required
+                  if (entry.encryptedProjectId && entry.projectIdIv && config.encryptionKey) {
                     try {
-                      projectId = await decryptProjectId(entry.encrypted_project_id, entry.project_id_iv, config.encryptionKey);
+                      projectId = await decryptProjectId(entry.encryptedProjectId, entry.projectIdIv, config.encryptionKey);
                     } catch (err) {
-                      console.error('[CollabV3] Failed to decrypt session project_id:', err);
+                      console.error('[CollabV3] Failed to decrypt session projectId:', err);
                       projectId = 'unknown';
                     }
                   } else {
-                    // No encrypted project_id - use placeholder
+                    // No encrypted projectId - use placeholder
                     projectId = 'unknown';
                   }
 
                   // Decrypt title - encrypted titles are required
-                  if (entry.encrypted_title && entry.title_iv && config.encryptionKey) {
+                  if (entry.encryptedTitle && entry.titleIv && config.encryptionKey) {
                     try {
-                      title = await decryptTitle(entry.encrypted_title, entry.title_iv, config.encryptionKey);
+                      title = await decryptTitle(entry.encryptedTitle, entry.titleIv, config.encryptionKey);
                     } catch (err) {
                       console.error('[CollabV3] Failed to decrypt session title:', err);
                       title = 'Untitled';
@@ -1172,16 +1172,16 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
                   }
 
                   const decrypted: DecryptedSessionIndexEntry = {
-                    session_id: entry.session_id,
-                    project_id: projectId,
+                    sessionId: entry.sessionId,
+                    projectId: projectId,
                     title,
                     provider: entry.provider,
                     model: entry.model,
                     mode: entry.mode,
-                    message_count: entry.message_count,
-                    last_message_at: entry.last_message_at,
-                    created_at: entry.created_at,
-                    updated_at: entry.updated_at,
+                    messageCount: entry.messageCount,
+                    lastMessageAt: entry.lastMessageAt,
+                    createdAt: entry.createdAt,
+                    updatedAt: entry.updatedAt,
                     pendingExecution: entry.pendingExecution,
                     isExecuting: entry.isExecuting,
                     queuedPromptCount: entry.queuedPromptCount,
@@ -1192,22 +1192,22 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
 
                   // Cache the decrypted entry
                   const cacheEntry: CachedSessionIndex = {
-                    session_id: decrypted.session_id,
-                    project_id: decrypted.project_id,
+                    sessionId: decrypted.sessionId,
+                    projectId: decrypted.projectId,
                     title: decrypted.title,
                     provider: decrypted.provider,
                     model: decrypted.model,
                     mode: decrypted.mode,
-                    message_count: decrypted.message_count,
-                    last_message_at: decrypted.last_message_at,
-                    created_at: decrypted.created_at,
-                    updated_at: decrypted.updated_at,
+                    messageCount: decrypted.messageCount,
+                    lastMessageAt: decrypted.lastMessageAt,
+                    createdAt: decrypted.createdAt,
+                    updatedAt: decrypted.updatedAt,
                     pendingExecution: decrypted.pendingExecution,
                     isExecuting: decrypted.isExecuting,
                     queuedPrompts: decrypted.queuedPrompts,
                     lastReadAt: decrypted.lastReadAt,
                   };
-                  sessionIndexCache.set(entry.session_id, cacheEntry);
+                  sessionIndexCache.set(entry.sessionId, cacheEntry);
 
                   return decrypted;
                 })
@@ -1219,12 +1219,12 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
                   let projectId: string;
                   let name: string;
 
-                  // Decrypt project_id
-                  if (proj.encrypted_project_id && proj.project_id_iv && config.encryptionKey) {
+                  // Decrypt projectId
+                  if (proj.encryptedProjectId && proj.projectIdIv && config.encryptionKey) {
                     try {
-                      projectId = await decryptProjectId(proj.encrypted_project_id, proj.project_id_iv, config.encryptionKey);
+                      projectId = await decryptProjectId(proj.encryptedProjectId, proj.projectIdIv, config.encryptionKey);
                     } catch (err) {
-                      console.error('[CollabV3] Failed to decrypt project_id:', err);
+                      console.error('[CollabV3] Failed to decrypt projectId:', err);
                       projectId = 'unknown';
                     }
                   } else {
@@ -1232,9 +1232,9 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
                   }
 
                   // Decrypt name
-                  if (proj.encrypted_name && proj.name_iv && config.encryptionKey) {
+                  if (proj.encryptedName && proj.nameIv && config.encryptionKey) {
                     try {
-                      name = await decryptProjectName(proj.encrypted_name, proj.name_iv, config.encryptionKey);
+                      name = await decryptProjectName(proj.encryptedName, proj.nameIv, config.encryptionKey);
                     } catch (err) {
                       console.error('[CollabV3] Failed to decrypt project name:', err);
                       name = projectId.split('/').pop() ?? 'Unknown';
@@ -1244,11 +1244,11 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
                   }
 
                   return {
-                    project_id: projectId,
+                    projectId: projectId,
                     name,
-                    session_count: proj.session_count,
-                    last_activity_at: proj.last_activity_at,
-                    sync_enabled: proj.sync_enabled,
+                    sessionCount: proj.sessionCount,
+                    lastActivityAt: proj.lastActivityAt,
+                    syncEnabled: proj.syncEnabled,
                   };
                 })
               );
@@ -1262,17 +1262,17 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
             break;
           }
 
-          case 'index_broadcast': {
+          case 'indexBroadcast': {
             // Another device updated a session - decrypt sensitive fields first
             const entry = message.session;
 
-            // Decrypt project_id - encrypted project_id is required
+            // Decrypt projectId - encrypted projectId is required
             let projectId: string;
-            if (entry.encrypted_project_id && entry.project_id_iv && config.encryptionKey) {
+            if (entry.encryptedProjectId && entry.projectIdIv && config.encryptionKey) {
               try {
-                projectId = await decryptProjectId(entry.encrypted_project_id, entry.project_id_iv, config.encryptionKey);
+                projectId = await decryptProjectId(entry.encryptedProjectId, entry.projectIdIv, config.encryptionKey);
               } catch (err) {
-                console.error('[CollabV3] Failed to decrypt index entry project_id:', err);
+                console.error('[CollabV3] Failed to decrypt index entry projectId:', err);
                 projectId = 'unknown';
               }
             } else {
@@ -1280,16 +1280,16 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
             }
 
             const decryptedEntry: CachedSessionIndex = {
-              session_id: entry.session_id,
-              project_id: projectId,
+              sessionId: entry.sessionId,
+              projectId: projectId,
               title: 'Untitled', // Will be overwritten if encrypted title present
               provider: entry.provider,
               model: entry.model,
               mode: entry.mode,
-              message_count: entry.message_count,
-              last_message_at: entry.last_message_at,
-              created_at: entry.created_at,
-              updated_at: entry.updated_at,
+              messageCount: entry.messageCount,
+              lastMessageAt: entry.lastMessageAt,
+              createdAt: entry.createdAt,
+              updatedAt: entry.updatedAt,
               pendingExecution: entry.pendingExecution,
               isExecuting: entry.isExecuting,
               hasPendingPrompt: entry.hasPendingPrompt,
@@ -1297,9 +1297,9 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
             };
 
             // Decrypt title - encrypted titles are required
-            if (entry.encrypted_title && entry.title_iv && config.encryptionKey) {
+            if (entry.encryptedTitle && entry.titleIv && config.encryptionKey) {
               try {
-                decryptedEntry.title = await decryptTitle(entry.encrypted_title, entry.title_iv, config.encryptionKey);
+                decryptedEntry.title = await decryptTitle(entry.encryptedTitle, entry.titleIv, config.encryptionKey);
               } catch (err) {
                 console.error('[CollabV3] Failed to decrypt index entry title:', err);
                 decryptedEntry.title = 'Untitled';
@@ -1326,23 +1326,23 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
             // If no encrypted prompts, queuedPrompts stays undefined
 
             // Cache the decrypted entry
-            sessionIndexCache.set(entry.session_id, decryptedEntry);
-            // console.log('[CollabV3] Received index_broadcast for session:', entry.session_id,
+            sessionIndexCache.set(entry.sessionId, decryptedEntry);
+            // console.log('[CollabV3] Received indexBroadcast for session:', entry.sessionId,
             //   'queuedPrompts:', decryptedEntry.queuedPrompts?.length ?? 0,
             //   'pendingExecution:', decryptedEntry.pendingExecution,
             //   'isExecuting:', decryptedEntry.isExecuting);
 
             // Apply any pending metadata updates that were waiting for this session
-            applyPendingMetadataUpdates(entry.session_id).catch(err => {
+            applyPendingMetadataUpdates(entry.sessionId).catch(err => {
               console.error('[CollabV3] Error applying pending metadata updates:', err);
             });
 
             // Notify all index change listeners with decrypted data
             indexChangeListeners.forEach((callback) => {
               try {
-                callback(entry.session_id, {
+                callback(entry.sessionId, {
                   ...decryptedEntry,
-                  session_id: decryptedEntry.session_id,
+                  sessionId: decryptedEntry.sessionId,
                 });
               } catch (err) {
                 console.error('[CollabV3] Error in index change listener:', err);
@@ -1351,7 +1351,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
             break;
           }
 
-          case 'project_broadcast':
+          case 'projectBroadcast':
             // New project created by another device - log for now
             // Desktop clients currently don't need to update local state since projects are
             // derived from local workspace folders, not server state
@@ -1359,37 +1359,37 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
             console.log('[CollabV3] New project received from another device');
             break;
 
-          case 'devices_list':
+          case 'devicesList':
             // console.log('[CollabV3] Received devices list:', message.devices.length, 'devices');
             // Replace all tracked devices with the server's list
             connectedDevices.clear();
             for (const device of message.devices) {
-              connectedDevices.set(device.device_id, device);
+              connectedDevices.set(device.deviceId, device);
             }
             notifyDeviceStatusChange();
             break;
 
-          case 'device_joined':
+          case 'deviceJoined':
             // console.log('[CollabV3] Device joined:', message.device.name, message.device.type);
-            connectedDevices.set(message.device.device_id, message.device);
+            connectedDevices.set(message.device.deviceId, message.device);
             notifyDeviceStatusChange();
             break;
 
-          case 'device_left':
-            // console.log('[CollabV3] Device left:', message.device_id);
-            connectedDevices.delete(message.device_id);
+          case 'deviceLeft':
+            // console.log('[CollabV3] Device left:', message.deviceId);
+            connectedDevices.delete(message.deviceId);
             notifyDeviceStatusChange();
             break;
 
-          case 'create_session_request_broadcast': {
+          case 'createSessionRequestBroadcast': {
             // Another device (mobile) requested session creation
-            // Decrypt project_id - required for encrypted wire protocol
+            // Decrypt projectId - required for encrypted wire protocol
             let projectId: string;
-            if (message.request.encrypted_project_id && message.request.project_id_iv && config.encryptionKey) {
+            if (message.request.encryptedProjectId && message.request.projectIdIv && config.encryptionKey) {
               try {
-                projectId = await decryptProjectId(message.request.encrypted_project_id, message.request.project_id_iv, config.encryptionKey);
+                projectId = await decryptProjectId(message.request.encryptedProjectId, message.request.projectIdIv, config.encryptionKey);
               } catch (err) {
-                console.error('[CollabV3] Failed to decrypt project_id in create request:', err);
+                console.error('[CollabV3] Failed to decrypt projectId in create request:', err);
                 projectId = 'unknown';
               }
             } else {
@@ -1398,16 +1398,16 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
 
             // Decrypt the initial prompt if present
             let initialPrompt: string | undefined;
-            if (message.request.encrypted_initial_prompt && message.request.initial_prompt_iv && config.encryptionKey) {
+            if (message.request.encryptedInitialPrompt && message.request.initialPromptIv && config.encryptionKey) {
               try {
-                initialPrompt = await decrypt(message.request.encrypted_initial_prompt, message.request.initial_prompt_iv, config.encryptionKey);
+                initialPrompt = await decrypt(message.request.encryptedInitialPrompt, message.request.initialPromptIv, config.encryptionKey);
               } catch (err) {
                 console.error('[CollabV3] Failed to decrypt initial prompt:', err);
               }
             }
 
             const decryptedRequest: CreateSessionRequest = {
-              requestId: message.request.request_id,
+              requestId: message.request.requestId,
               projectId,
               initialPrompt,
               timestamp: message.request.timestamp,
@@ -1428,12 +1428,12 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
             break;
           }
 
-          case 'create_session_response_broadcast': {
+          case 'createSessionResponseBroadcast': {
             // Desktop responded to our session creation request
             const response: CreateSessionResponse = {
-              requestId: message.response.request_id,
+              requestId: message.response.requestId,
               success: message.response.success,
-              sessionId: message.response.session_id,
+              sessionId: message.response.sessionId,
               error: message.response.error,
             };
 
@@ -1451,17 +1451,17 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
             break;
           }
 
-          case 'session_control_broadcast': {
+          case 'sessionControlBroadcast': {
             // Generic session control message from another device
             const controlMessage: SessionControlMessage = {
-              sessionId: message.message.session_id,
-              type: message.message.message_type,
+              sessionId: message.message.sessionId,
+              type: message.message.messageType,
               payload: message.message.payload,
               timestamp: message.message.timestamp,
-              sentBy: message.message.sent_by,
+              sentBy: message.message.sentBy,
             };
 
-            console.log('[CollabV3] Received session_control:', controlMessage.sessionId, controlMessage.type);
+            console.log('[CollabV3] Received sessionControl:', controlMessage.sessionId, controlMessage.type);
 
             // Notify all listeners
             sessionControlMessageListeners.forEach((callback) => {
@@ -1474,13 +1474,13 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
             break;
           }
 
-          case 'settings_sync_broadcast': {
+          case 'settingsSyncBroadcast': {
             // Another device synced settings (e.g., desktop syncing API key to mobile)
             const payload = message.settings;
 
             // Don't process our own broadcasts
-            const ourDeviceId = config.getDeviceInfo?.()?.device_id ?? config.deviceInfo?.device_id;
-            if (ourDeviceId && payload.device_id === ourDeviceId) {
+            const ourDeviceId = config.getDeviceInfo?.()?.deviceId ?? config.deviceInfo?.deviceId;
+            if (ourDeviceId && payload.deviceId === ourDeviceId) {
               break;
             }
 
@@ -1492,13 +1492,13 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
 
             try {
               const decryptedSettingsJson = await decrypt(
-                payload.encrypted_settings,
-                payload.settings_iv,
+                payload.encryptedSettings,
+                payload.settingsIv,
                 config.encryptionKey
               );
               const settings: SyncedSettings = JSON.parse(decryptedSettingsJson);
 
-              console.log('[CollabV3] Received settings sync from device:', payload.device_id, 'version:', settings.version);
+              console.log('[CollabV3] Received settings sync from device:', payload.deviceId, 'version:', settings.version);
 
               // Notify all listeners
               settingsSyncListeners.forEach((callback) => {
@@ -1577,7 +1577,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
           // First update metadata if provided
           if (metadata) {
             const metadataMsg: ClientMessage = {
-              type: 'update_metadata',
+              type: 'updateMetadata',
               metadata: {
                 title: metadata.title,
                 provider: metadata.provider,
@@ -1591,7 +1591,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
           // Send each message
           for (const message of messages) {
             const encrypted = await encryptMessage(message, config.encryptionKey!);
-            const clientMsg: ClientMessage = { type: 'append_message', message: encrypted };
+            const clientMsg: ClientMessage = { type: 'appendMessage', message: encrypted };
             ws.send(JSON.stringify(clientMsg));
           }
 
@@ -1673,46 +1673,54 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
     const entries: SessionIndexEntry[] = await Promise.all(sessionsData.map(async session => {
       const projectId = session.workspaceId ?? 'default';
 
-      // Encrypt project_id - encryption is required
+      // Encrypt projectId - encryption is required
       if (!config.encryptionKey) {
-        throw new Error('[CollabV3] Cannot send session: no encryption key for project_id');
+        throw new Error('[CollabV3] Cannot send session: no encryption key for projectId');
       }
-      const { encrypted_project_id, project_id_iv } = await encryptProjectId(projectId, config.encryptionKey);
+      const { encryptedProjectId, projectIdIv } = await encryptProjectId(projectId, config.encryptionKey);
+
+      // Check if we have cached execution state for this session
+      const existingCache = sessionIndexCache.get(session.id);
+      const pending = pendingMetadataUpdates.get(session.id);
+      const cachedIsExecuting = pending?.isExecuting ?? existingCache?.isExecuting;
 
       const entry: SessionIndexEntry = {
-        session_id: session.id,
-        encrypted_project_id,
-        project_id_iv,
+        sessionId: session.id,
+        encryptedProjectId,
+        projectIdIv,
         provider: session.provider,
         model: session.model,
         mode: session.mode as SessionIndexEntry['mode'],
-        message_count: session.messageCount,
-        last_message_at: session.updatedAt,
-        created_at: session.createdAt,
-        updated_at: session.updatedAt,
+        messageCount: session.messageCount,
+        lastMessageAt: session.updatedAt,
+        createdAt: session.createdAt,
+        updatedAt: session.updatedAt,
         currentContext: session.currentContext,
+        isExecuting: cachedIsExecuting,
       };
 
       // Encrypt title - encryption is required
       if (session.title) {
-        const { encrypted_title, title_iv } = await encryptTitle(session.title, config.encryptionKey);
-        entry.encrypted_title = encrypted_title;
-        entry.title_iv = title_iv;
+        const { encryptedTitle, titleIv } = await encryptTitle(session.title, config.encryptionKey);
+        entry.encryptedTitle = encryptedTitle;
+        entry.titleIv = titleIv;
       }
 
       // Cache the entry with DECRYPTED values for local use
+      // Preserve isExecuting from existing cache or pending updates
       const cacheEntry: CachedSessionIndex = {
-        session_id: session.id,
-        project_id: projectId, // Store decrypted
+        sessionId: session.id,
+        projectId: projectId, // Store decrypted
         title: session.title, // Store decrypted
         provider: session.provider,
         model: session.model,
         mode: session.mode as CachedSessionIndex['mode'],
-        message_count: session.messageCount,
-        last_message_at: session.updatedAt,
-        created_at: session.createdAt,
-        updated_at: session.updatedAt,
+        messageCount: session.messageCount,
+        lastMessageAt: session.updatedAt,
+        createdAt: session.createdAt,
+        updatedAt: session.updatedAt,
         currentContext: session.currentContext,
+        isExecuting: cachedIsExecuting,
       };
       sessionIndexCache.set(session.id, cacheEntry);
 
@@ -1727,12 +1735,12 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
 
     // Use batch API if we have multiple sessions, otherwise single update
     if (entries.length > 1) {
-      const msg: ClientMessage = { type: 'index_batch_update', sessions: entries };
+      const msg: ClientMessage = { type: 'indexBatchUpdate', sessions: entries };
       const msgStr = JSON.stringify(msg);
       console.log('[CollabV3] Sending batch index update:', entries.length, 'sessions, message length:', msgStr.length);
       indexWs.send(msgStr);
     } else if (entries.length === 1) {
-      const msg: ClientMessage = { type: 'index_update', session: entries[0] };
+      const msg: ClientMessage = { type: 'indexUpdate', session: entries[0] };
       indexWs.send(JSON.stringify(msg));
     }
 
@@ -1824,7 +1832,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
           updateStatus(sessionId, { connected: true, syncing: true });
 
           // Request initial sync
-          const syncRequest: ClientMessage = { type: 'sync_request' };
+          const syncRequest: ClientMessage = { type: 'syncRequest' };
           ws.send(JSON.stringify(syncRequest));
 
           resolve();
@@ -1924,12 +1932,12 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
             const encrypted = await encryptMessage(change.message, session.encryptionKey);
             // console.log('[CollabV3] Encrypted message:', {
             //   id: encrypted.id,
-            //   contentLength: encrypted.encrypted_content.length,
+            //   contentLength: encrypted.encryptedContent.length,
             //   ivLength: encrypted.iv.length,
             //   source: encrypted.source,
             //   direction: encrypted.direction,
             // });
-            clientMessage = { type: 'append_message', message: encrypted };
+            clientMessage = { type: 'appendMessage', message: encrypted };
           } catch (err) {
             console.error('[CollabV3] Failed to encrypt message:', err);
             return;
@@ -1945,9 +1953,9 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
             if (!session.encryptionKey) {
               console.error('[CollabV3] Cannot send session title: no encryption key');
             } else {
-              const { encrypted_title, title_iv } = await encryptTitle(change.metadata.title, session.encryptionKey);
-              metadata.encrypted_title = encrypted_title;
-              metadata.title_iv = title_iv;
+              const { encryptedTitle, titleIv } = await encryptTitle(change.metadata.title, session.encryptionKey);
+              metadata.encryptedTitle = encryptedTitle;
+              metadata.titleIv = titleIv;
             }
           }
 
@@ -1974,13 +1982,13 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
               metadata.encryptedQueuedPrompts = undefined;
             }
           }
-          clientMessage = { type: 'update_metadata', metadata };
+          clientMessage = { type: 'updateMetadata', metadata };
           break;
         }
 
         case 'session_deleted':
           // Send delete to session room
-          clientMessage = { type: 'delete_session' };
+          clientMessage = { type: 'deleteSession' };
           break;
       }
 
@@ -1999,7 +2007,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
         if (change.type === 'session_deleted') {
           // Delete from index and cache
           sessionIndexCache.delete(sessionId);
-          const indexDeleteMsg: ClientMessage = { type: 'index_delete', session_id: sessionId };
+          const indexDeleteMsg: ClientMessage = { type: 'indexDelete', sessionId: sessionId };
           // console.log('[CollabV3] Sending index_delete for session:', sessionId);
           indexWs.send(JSON.stringify(indexDeleteMsg));
         } else if (change.type === 'metadata_updated') {
@@ -2015,21 +2023,21 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
               return;
             }
 
-            // Encrypt project_id for wire
-            const { encrypted_project_id, project_id_iv } = await encryptProjectId(baseEntry.project_id, session.encryptionKey);
+            // Encrypt projectId for wire
+            const { encryptedProjectId, projectIdIv } = await encryptProjectId(baseEntry.projectId, session.encryptionKey);
 
             // Start with the cache entry (stores decrypted values)
             const indexEntry: SessionIndexEntry = {
-              session_id: baseEntry.session_id,
-              encrypted_project_id,
-              project_id_iv,
+              sessionId: baseEntry.sessionId,
+              encryptedProjectId,
+              projectIdIv,
               provider: baseEntry.provider,
               model: baseEntry.model,
               mode: baseEntry.mode,
-              message_count: baseEntry.message_count,
-              last_message_at: baseEntry.last_message_at,
-              created_at: baseEntry.created_at,
-              updated_at: baseEntry.updated_at,
+              messageCount: baseEntry.messageCount,
+              lastMessageAt: baseEntry.lastMessageAt,
+              createdAt: baseEntry.createdAt,
+              updatedAt: baseEntry.updatedAt,
               pendingExecution: baseEntry.pendingExecution,
               isExecuting: baseEntry.isExecuting,
               currentContext: baseEntry.currentContext,
@@ -2038,15 +2046,15 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
 
             // Encrypt title for wire
             if (baseEntry.title) {
-              const { encrypted_title, title_iv } = await encryptTitle(baseEntry.title, session.encryptionKey);
-              indexEntry.encrypted_title = encrypted_title;
-              indexEntry.title_iv = title_iv;
+              const { encryptedTitle, titleIv } = await encryptTitle(baseEntry.title, session.encryptionKey);
+              indexEntry.encryptedTitle = encryptedTitle;
+              indexEntry.titleIv = titleIv;
             }
 
             // Update local cache with decrypted values
             sessionIndexCache.set(sessionId, baseEntry);
 
-            const indexMsg: ClientMessage = { type: 'index_update', session: indexEntry };
+            const indexMsg: ClientMessage = { type: 'indexUpdate', session: indexEntry };
             indexWs!.send(JSON.stringify(indexMsg));
           };
 
@@ -2056,13 +2064,13 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
             // Merge partial update with cached entry (cache stores decrypted values)
             const updatedCache: CachedSessionIndex = {
               ...cached,
-              project_id: meta.workspaceId ?? cached.project_id,
+              projectId: meta.workspaceId ?? cached.projectId,
               title: meta.title ?? cached.title,
               provider: meta.provider ?? cached.provider,
               model: meta.model ?? cached.model,
               mode: (meta.mode ?? cached.mode) as CachedSessionIndex['mode'],
-              last_message_at: updatedAt,
-              updated_at: updatedAt,
+              lastMessageAt: updatedAt,
+              updatedAt: updatedAt,
               pendingExecution: 'pendingExecution' in meta ? meta.pendingExecution : cached.pendingExecution,
               isExecuting: 'isExecuting' in meta ? meta.isExecuting : cached.isExecuting,
               currentContext: 'currentContext' in meta ? meta.currentContext : cached.currentContext,
@@ -2072,16 +2080,16 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
           } else if (meta.title && meta.provider) {
             // New session - need at least title and provider
             const newEntry: CachedSessionIndex = {
-              session_id: sessionId,
-              project_id: meta.workspaceId ?? 'default',
+              sessionId: sessionId,
+              projectId: meta.workspaceId ?? 'default',
               title: meta.title,
               provider: meta.provider,
               model: meta.model,
               mode: meta.mode as CachedSessionIndex['mode'],
-              message_count: 0,
-              last_message_at: updatedAt,
-              created_at: updatedAt,
-              updated_at: updatedAt,
+              messageCount: 0,
+              lastMessageAt: updatedAt,
+              createdAt: updatedAt,
+              updatedAt: updatedAt,
               pendingExecution: meta.pendingExecution,
               isExecuting: meta.isExecuting,
               currentContext: meta.currentContext,
@@ -2132,7 +2140,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       // console.log('[CollabV3] Projects are auto-calculated from sessions');
     },
 
-    async fetchIndex(): Promise<{ sessions: DecryptedSessionIndexEntry[]; projects: Array<{ project_id: string; name: string; session_count: number; last_activity_at: number; sync_enabled: boolean }> }> {
+    async fetchIndex(): Promise<{ sessions: DecryptedSessionIndexEntry[]; projects: Array<{ projectId: string; name: string; sessionCount: number; lastActivityAt: number; syncEnabled: boolean }> }> {
       // Wait for connection if not ready
       if (!indexWs || !indexConnected) {
         // console.log('[CollabV3] Waiting for index connection before fetching...');
@@ -2176,7 +2184,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
         };
 
         // Send index sync request
-        const request: ClientMessage = { type: 'index_sync_request' };
+        const request: ClientMessage = { type: 'indexSyncRequest' };
         indexWs!.send(JSON.stringify(request));
         // console.log('[CollabV3] Sent index_sync_request');
       });
@@ -2230,13 +2238,13 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       }
 
       const wireResponse: EncryptedCreateSessionResponse = {
-        request_id: response.requestId,
+        requestId: response.requestId,
         success: response.success,
-        session_id: response.sessionId,
+        sessionId: response.sessionId,
         error: response.error,
       };
 
-      const msg: ClientMessage = { type: 'create_session_response', response: wireResponse };
+      const msg: ClientMessage = { type: 'createSessionResponse', response: wireResponse };
       console.log('[CollabV3] Sending create_session_response:', response.requestId, 'success:', response.success, 'sessionId:', response.sessionId);
       indexWs.send(JSON.stringify(msg));
     },
@@ -2266,13 +2274,13 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
         return;
       }
 
-      // Encrypt project_id
-      const { encrypted_project_id, project_id_iv } = await encryptProjectId(request.projectId, config.encryptionKey);
+      // Encrypt projectId
+      const { encryptedProjectId, projectIdIv } = await encryptProjectId(request.projectId, config.encryptionKey);
 
       const wireRequest: EncryptedCreateSessionRequest = {
-        request_id: request.requestId,
-        encrypted_project_id,
-        project_id_iv,
+        requestId: request.requestId,
+        encryptedProjectId,
+        projectIdIv,
         timestamp: request.timestamp,
       };
 
@@ -2280,14 +2288,14 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       if (request.initialPrompt) {
         try {
           const { encrypted, iv } = await encrypt(request.initialPrompt, config.encryptionKey);
-          wireRequest.encrypted_initial_prompt = encrypted;
-          wireRequest.initial_prompt_iv = iv;
+          wireRequest.encryptedInitialPrompt = encrypted;
+          wireRequest.initialPromptIv = iv;
         } catch (err) {
           console.error('[CollabV3] Failed to encrypt initial prompt:', err);
         }
       }
 
-      const msg: ClientMessage = { type: 'create_session_request', request: wireRequest };
+      const msg: ClientMessage = { type: 'createSessionRequest', request: wireRequest };
       // Debug logging - uncomment if needed
       // console.log('[CollabV3] Sending create_session_request:', request.requestId, 'project:', request.projectId);
       indexWs.send(JSON.stringify(msg));
@@ -2340,16 +2348,16 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       }
 
       const msg: ClientMessage = {
-        type: 'session_control',
+        type: 'sessionControl',
         message: {
-          session_id: message.sessionId,
-          message_type: message.type,
+          sessionId: message.sessionId,
+          messageType: message.type,
           payload: message.payload,
           timestamp: message.timestamp,
-          sent_by: message.sentBy,
+          sentBy: message.sentBy,
         },
       };
-      console.log('[CollabV3] Sending session_control:', message.sessionId, message.type);
+      console.log('[CollabV3] Sending sessionControl:', message.sessionId, message.type);
       indexWs.send(JSON.stringify(msg));
     },
 
@@ -2388,21 +2396,21 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
 
       try {
         // Get our device ID
-        const deviceId = config.getDeviceInfo?.()?.device_id ?? config.deviceInfo?.device_id ?? 'unknown';
+        const deviceId = config.getDeviceInfo?.()?.deviceId ?? config.deviceInfo?.deviceId ?? 'unknown';
 
         // Encrypt the settings as JSON
         const settingsJson = JSON.stringify(settings);
         const { encrypted, iv } = await encrypt(settingsJson, config.encryptionKey);
 
         const payload: EncryptedSettingsPayload = {
-          encrypted_settings: encrypted,
-          settings_iv: iv,
-          device_id: deviceId,
+          encryptedSettings: encrypted,
+          settingsIv: iv,
+          deviceId: deviceId,
           timestamp: Date.now(),
           version: settings.version,
         };
 
-        const msg: ClientMessage = { type: 'settings_sync', settings: payload };
+        const msg: ClientMessage = { type: 'settingsSync', settings: payload };
         console.log('[CollabV3] Syncing settings, version:', settings.version, 'ws state:', indexWs.readyState);
         if (indexWs.readyState !== WebSocket.OPEN) {
           console.error('[CollabV3] Cannot sync settings - websocket not open, state:', indexWs.readyState);
@@ -2448,13 +2456,13 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
         return;
       }
 
-      const deviceId = config.getDeviceInfo?.()?.device_id ?? config.deviceInfo?.device_id;
+      const deviceId = config.getDeviceInfo?.()?.deviceId ?? config.deviceInfo?.deviceId;
       const msg: ClientMessage = {
-        type: 'request_mobile_push',
-        session_id: sessionId,
+        type: 'requestMobilePush',
+        sessionId: sessionId,
         title,
         body,
-        requesting_device_id: deviceId,
+        requestingDeviceId: deviceId,
       };
       console.log('[CollabV3] Requesting mobile push for session:', sessionId, 'deviceId:', deviceId, 'readyState:', indexWs.readyState);
       try {

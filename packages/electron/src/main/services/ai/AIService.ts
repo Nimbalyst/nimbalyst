@@ -757,14 +757,14 @@ export class AIService {
         syncProvider.onIndexChange(async (sessionId, entry) => {
             // Notify renderer about session list changes
             // This ensures new sessions from mobile appear immediately in the UI
-            // Use getCachedIndexEntry to get project_id without database lookup
+            // Use getCachedIndexEntry to get projectId without database lookup
             if (syncProvider.getCachedIndexEntry) {
               const cachedEntry = syncProvider.getCachedIndexEntry(sessionId);
-              if (cachedEntry?.project_id) {
-                const targetWindow = findWindowByWorkspace(cachedEntry.project_id);
+              if (cachedEntry?.projectId) {
+                const targetWindow = findWindowByWorkspace(cachedEntry.projectId);
                 if (targetWindow && !targetWindow.isDestroyed()) {
                   targetWindow.webContents.send('sessions:refresh-list', {
-                    workspacePath: cachedEntry.project_id,
+                    workspacePath: cachedEntry.projectId,
                     sessionId
                   });
 
@@ -773,7 +773,7 @@ export class AIService {
                     targetWindow.webContents.send('sessions:sync-read-state', {
                       sessionId,
                       lastReadAt: entry.lastReadAt,
-                      lastMessageAt: entry.last_message_at,
+                      lastMessageAt: entry.lastMessageAt,
                     });
                   }
                 }
