@@ -1278,13 +1278,15 @@ export const RichTranscriptView = React.forwardRef<
                         {isNewGroup && (
                           <div className="rich-transcript-message-header flex items-center gap-2 mb-1.5">
                             <div className={`rich-transcript-message-avatar w-7 h-7 rounded-full shrink-0 flex items-center justify-center ${isUser ? 'user' : 'assistant'}`}>
-                              {isUser && (
+                              {isUser ? (
                                 <MaterialSymbol icon="person" size={18} />
+                              ) : (
+                                <ProviderIcon provider={provider || 'claude-code'} size={18} />
                               )}
                             </div>
                             <div className="rich-transcript-message-meta flex-1 flex items-baseline gap-2">
                               <span className="rich-transcript-message-sender font-medium text-[var(--nim-text)] text-sm">
-                                {isUser ? 'You' : ''}
+                                {isUser ? 'You' : getProviderDisplayName(provider)}
                               </span>
                               {isUser && message.mode === 'planning' && (
                                 <span
