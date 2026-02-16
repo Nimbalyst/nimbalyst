@@ -26,10 +26,18 @@ interface CodexOutputRendererProps {
   readFile?: (filePath: string) => Promise<{ success: boolean; content?: string; error?: string }>;
 }
 
+/**
+ * A section of Codex output, preserving the temporal order of events.
+ * Consecutive events of the same type are merged into a single section.
+ */
+export type CodexSection =
+  | { type: 'reasoning'; blocks: string[] }
+  | { type: 'output'; content: string }
+  | { type: 'tool_call'; toolCall: ToolCall };
+
 interface ParsedCodexOutput {
-  reasoning: string[];
-  output: string;
-  toolCalls: ToolCall[];
+  /** Ordered sections preserving the temporal sequence of reasoning, tool calls, and output. */
+  sections: CodexSection[];
 }
 
 function getEventItem(rawEvent: Record<string, unknown>): Record<string, unknown> | null {
@@ -164,23 +172,34 @@ function appendOutputChunk(outputParts: string[], candidateText: string, previou
 }
 
 /**
- * Parses raw Codex SDK events (stored as JSON strings in message.content) to extract reasoning and output.
+ * Parses raw Codex SDK events (stored as JSON strings in message.content) into ordered sections.
  * This is display-time parsing - NO preprocessing before storage.
  *
  * Each message.content contains JSON.stringify(rawEvent) from the Codex SDK.
  * message.metadata.eventType contains the raw event type persisted at write-time.
  *
+ * Sections preserve the temporal order of events. Consecutive events of the same type
+ * are merged into a single section (e.g., multiple reasoning events become one reasoning
+ * section with multiple blocks).
+ *
  * PERFORMANCE NOTE: This function re-parses all events on each call. The component already uses
  * useMemo([rawEvents]) for memoization, which prevents unnecessary re-parsing when the component
- * re-renders but rawEvents haven't changed. If incremental parsing becomes necessary (e.g., for
- * handling very large event streams), consider implementing a cached index tracker in the parent
- * component to only process new events added since the last parse.
+ * re-renders but rawEvents haven't changed.
  */
 export function parseCodexRawEvents(rawEvents: Message[]): ParsedCodexOutput {
-  const reasoning: string[] = [];
+  const sections: CodexSection[] = [];
+
+  // Track tool calls by ID for merging item.started/item.completed pairs
   const toolCallsMap = new Map<string, ToolCall>();
-  const outputParts: string[] = [];
+
+  // Track cumulative output state for dedup across the entire parse
   let lastCumulativeOutput = '';
+  // Track output parts for the current output section
+  let currentOutputParts: string[] | null = null;
+
+  function lastSection(): CodexSection | undefined {
+    return sections[sections.length - 1];
+  }
 
   for (let index = 0; index < rawEvents.length; index++) {
     const msg = rawEvents[index];
@@ -217,12 +236,16 @@ export function parseCodexRawEvents(rawEvents: Message[]): ParsedCodexOutput {
       const shouldTreatAsTool = (item && isToolItemType(itemType)) || eventType === 'tool_call';
 
       if (shouldTreatAsTool && item) {
+        // Reset output tracking when switching away from output
+        currentOutputParts = null;
+
         const itemId = extractStringField(item, 'id');
         const toolCallId = (itemId && itemId) || `tool-${msg.timestamp ?? Date.now()}-${index}`;
         const existingToolCall = toolCallsMap.get(toolCallId);
         const toolResult = getToolResult(rawEventType, item, itemType);
 
         if (existingToolCall) {
+          // Merge into existing tool call (item.completed updating item.started)
           if (existingToolCall.name === 'Unknown Tool') {
             existingToolCall.name = getToolDisplayName(item, itemType);
           }
@@ -238,7 +261,9 @@ export function parseCodexRawEvents(rawEvents: Message[]): ParsedCodexOutput {
           if (toolResult !== undefined) {
             existingToolCall.result = toolResult;
           }
+          // No new section - the ToolCall object is mutated in place
         } else {
+          // New tool call - create a new section
           const newToolCall: ToolCall = {
             id: toolCallId,
             name: getToolDisplayName(item, itemType),
@@ -248,6 +273,7 @@ export function parseCodexRawEvents(rawEvents: Message[]): ParsedCodexOutput {
             newToolCall.result = toolResult;
           }
           toolCallsMap.set(toolCallId, newToolCall);
+          sections.push({ type: 'tool_call', toolCall: newToolCall });
         }
 
         continue;
@@ -270,9 +296,29 @@ export function parseCodexRawEvents(rawEvents: Message[]): ParsedCodexOutput {
           rawEventType === 'error');
 
       if (isReasoningEvent) {
-        reasoning.push(text);
+        // Reset output tracking when switching away from output
+        currentOutputParts = null;
+
+        const last = lastSection();
+        if (last && last.type === 'reasoning') {
+          // Merge into the current reasoning section
+          last.blocks.push(text);
+        } else {
+          // Start a new reasoning section
+          sections.push({ type: 'reasoning', blocks: [text] });
+        }
       } else if (isOutputEvent) {
-        lastCumulativeOutput = appendOutputChunk(outputParts, text, lastCumulativeOutput);
+        const last = lastSection();
+        if (last && last.type === 'output' && currentOutputParts !== null) {
+          // Continue accumulating into the current output section
+          lastCumulativeOutput = appendOutputChunk(currentOutputParts, text, lastCumulativeOutput);
+          last.content = currentOutputParts.join('');
+        } else {
+          // Start a new output section
+          currentOutputParts = [];
+          lastCumulativeOutput = appendOutputChunk(currentOutputParts, text, lastCumulativeOutput);
+          sections.push({ type: 'output', content: currentOutputParts.join('') });
+        }
       }
     } catch (error) {
       // If parsing fails, log but don't crash the UI
@@ -280,24 +326,15 @@ export function parseCodexRawEvents(rawEvents: Message[]): ParsedCodexOutput {
     }
   }
 
-  // Convert Map to array
-  const toolCalls = Array.from(toolCallsMap.values());
-
-  // Join output parts for efficient string concatenation
-  const output = outputParts.join('');
-
-  return { reasoning, output, toolCalls };
+  return { sections };
 }
 
 /**
- * Renders Codex (OpenAI GPT-5) output from an array of raw event messages.
+ * Renders Codex (OpenAI) output from an array of raw event messages.
  * Each message contains a single Codex SDK event as JSON in the content field.
  *
- * Parses at display time to extract:
- * - Reasoning blocks: Thinking content (from raw `item.type='reasoning'`)
- * - Final answer: Agent message content (from raw `item.type='agent_message'`)
- *
- * Tool calls are handled separately by the parent component (same as Claude Code).
+ * Parses at display time into ordered sections preserving the temporal sequence:
+ * reasoning blocks, tool calls, and output appear inline in the order they happened.
  *
  * See docs/CODEX_RAW_STORAGE.md for storage architecture.
  */
@@ -308,11 +345,23 @@ export const CodexOutputRenderer: React.FC<CodexOutputRendererProps> = ({
   workspacePath,
   readFile,
 }) => {
-  const [isThinkingExpanded, setIsThinkingExpanded] = useState(false);
+  const [expandedReasoningSections, setExpandedReasoningSections] = useState<Set<number>>(new Set());
   const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
 
   // Parse raw events at display time
-  const { reasoning, output, toolCalls } = useMemo(() => parseCodexRawEvents(rawEvents), [rawEvents]);
+  const { sections } = useMemo(() => parseCodexRawEvents(rawEvents), [rawEvents]);
+
+  const handleToggleReasoningExpand = (sectionIndex: number) => {
+    setExpandedReasoningSections(prev => {
+      const next = new Set(prev);
+      if (next.has(sectionIndex)) {
+        next.delete(sectionIndex);
+      } else {
+        next.add(sectionIndex);
+      }
+      return next;
+    });
+  };
 
   const handleToggleToolExpand = (toolId: string) => {
     setExpandedTools(prev => {
@@ -327,8 +376,8 @@ export const CodexOutputRenderer: React.FC<CodexOutputRendererProps> = ({
   };
 
   // Render tool call widget (same style as Claude Code)
-  const renderToolCall = (tool: ToolCall, toolIndex: number) => {
-    const toolId = tool.id || tool.name || `tool-${toolIndex}`;
+  const renderToolCall = (tool: ToolCall, sectionIndex: number) => {
+    const toolId = tool.id || tool.name || `tool-${sectionIndex}`;
     const isExpanded = expandedTools.has(toolId);
     const toolResult = tool.result;
     const resultDetails = typeof toolResult === 'object' && toolResult !== null && typeof toolResult !== 'string' ? (toolResult as unknown as Record<string, unknown>) : null;
@@ -433,11 +482,58 @@ export const CodexOutputRenderer: React.FC<CodexOutputRendererProps> = ({
     );
   };
 
-  // If no reasoning blocks and no tool calls, render as plain markdown
-  if (reasoning.length === 0 && toolCalls.length === 0) {
+  const renderReasoningSection = (blocks: string[], sectionIndex: number) => {
+    const isExpanded = expandedReasoningSections.has(sectionIndex);
+    return (
+      <div key={`reasoning-${sectionIndex}`} className="codex-thinking border border-[var(--nim-border)] rounded-md overflow-hidden bg-[var(--nim-bg-secondary)]">
+        <button
+          onClick={() => handleToggleReasoningExpand(sectionIndex)}
+          className="w-full py-2 px-3 flex items-center gap-2 text-left border-none cursor-pointer bg-transparent transition-colors hover:bg-[var(--nim-bg-hover)]"
+          aria-expanded={isExpanded}
+          aria-label={`${isExpanded ? 'Collapse' : 'Expand'} reasoning blocks`}
+        >
+          <MaterialSymbol
+            icon={isExpanded ? 'expand_more' : 'chevron_right'}
+            size={16}
+            className="text-[var(--nim-text-faint)]"
+          />
+          <MaterialSymbol
+            icon="psychology"
+            size={16}
+            className="text-[var(--nim-primary)]"
+          />
+          <span className="text-sm font-medium text-[var(--nim-text)]">
+            Reasoning
+          </span>
+          <span className="text-xs text-[var(--nim-text-faint)] ml-auto">
+            {blocks.length} {blocks.length === 1 ? 'block' : 'blocks'}
+          </span>
+        </button>
+
+        {isExpanded && (
+          <div className="border-t border-[var(--nim-border)] p-3 space-y-3 max-h-96 overflow-y-auto">
+            {blocks.map((block, blockIndex) => (
+              <div key={blockIndex} className="codex-thinking-block text-sm text-[var(--nim-text-muted)] leading-relaxed">
+                <MarkdownRenderer content={block} isUser={false} />
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Empty state
+  if (sections.length === 0) {
+    return null;
+  }
+
+  // Plain output-only: single output section with no reasoning or tools
+  const isPlainOutput = sections.length === 1 && sections[0].type === 'output';
+  if (isPlainOutput) {
     return (
       <div className={isCollapsed ? 'max-h-20 overflow-hidden relative' : ''}>
-        <MarkdownRenderer content={output} isUser={false} />
+        <MarkdownRenderer content={(sections[0] as { type: 'output'; content: string }).content} isUser={false} />
         {isCollapsed && (
           <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-[var(--nim-bg)] to-transparent pointer-events-none" />
         )}
@@ -447,55 +543,29 @@ export const CodexOutputRenderer: React.FC<CodexOutputRendererProps> = ({
 
   return (
     <div className="codex-output flex flex-col gap-2">
-      {/* Reasoning blocks - collapsible */}
-      {reasoning.length > 0 && (
-        <div className="codex-thinking border border-[var(--nim-border)] rounded-md overflow-hidden bg-[var(--nim-bg-secondary)]">
-          <button
-            onClick={() => setIsThinkingExpanded(!isThinkingExpanded)}
-            className="w-full py-2 px-3 flex items-center gap-2 text-left border-none cursor-pointer bg-transparent transition-colors hover:bg-[var(--nim-bg-hover)]"
-            aria-expanded={isThinkingExpanded}
-            aria-label={`${isThinkingExpanded ? 'Collapse' : 'Expand'} reasoning blocks`}
-          >
-            <MaterialSymbol
-              icon={isThinkingExpanded ? 'expand_more' : 'chevron_right'}
-              size={16}
-              className="text-[var(--nim-text-faint)]"
-            />
-            <MaterialSymbol
-              icon="psychology"
-              size={16}
-              className="text-[var(--nim-primary)]"
-            />
-            <span className="text-sm font-medium text-[var(--nim-text)]">
-              Reasoning
-            </span>
-            <span className="text-xs text-[var(--nim-text-faint)] ml-auto">
-              {reasoning.length} {reasoning.length === 1 ? 'block' : 'blocks'}
-            </span>
-          </button>
-
-          {isThinkingExpanded && (
-            <div className="border-t border-[var(--nim-border)] p-3 space-y-3 max-h-96 overflow-y-auto">
-              {reasoning.map((block, index) => (
-                <div key={index} className="codex-thinking-block text-sm text-[var(--nim-text-muted)] leading-relaxed">
-                  <MarkdownRenderer content={block} isUser={false} />
-                </div>
-              ))}
+      {sections.map((section, sectionIndex) => {
+        if (section.type === 'reasoning') {
+          return renderReasoningSection(section.blocks, sectionIndex);
+        }
+        if (section.type === 'tool_call') {
+          return renderToolCall(section.toolCall, sectionIndex);
+        }
+        if (section.type === 'output') {
+          const isLastSection = sectionIndex === sections.length - 1;
+          return (
+            <div
+              key={`output-${sectionIndex}`}
+              className={`codex-answer ${isLastSection && isCollapsed ? 'max-h-20 overflow-hidden relative' : ''}`}
+            >
+              <MarkdownRenderer content={section.content} isUser={false} />
+              {isLastSection && isCollapsed && (
+                <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-[var(--nim-bg)] to-transparent pointer-events-none" />
+              )}
             </div>
-          )}
-        </div>
-      )}
-
-      {/* Tool calls - rendered with same widget as Claude Code */}
-      {toolCalls.map(renderToolCall)}
-
-      {/* Final answer - main content */}
-      <div className={`codex-answer ${isCollapsed ? 'max-h-20 overflow-hidden relative' : ''}`}>
-        <MarkdownRenderer content={output} isUser={false} />
-        {isCollapsed && (
-          <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-[var(--nim-bg)] to-transparent pointer-events-none" />
-        )}
-      </div>
+          );
+        }
+        return null;
+      })}
     </div>
   );
 };

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Message } from '../../../../ai/server/types';
-import { parseCodexRawEvents } from '../CodexOutputRenderer';
+import { parseCodexRawEvents, type CodexSection } from '../CodexOutputRenderer';
 
 function buildRawMessage(rawEvent: Record<string, unknown>, timestamp: number): Message {
   return {
@@ -75,15 +75,27 @@ describe('parseCodexRawEvents', () => {
 
     const parsed = parseCodexRawEvents(events);
 
-    expect(parsed.reasoning).toEqual(['**Reading instructions**']);
-    expect(parsed.output).toBe('Done.');
-    expect(parsed.toolCalls).toHaveLength(1);
-    expect(parsed.toolCalls[0].name).toBe('mcp__nimbalyst-extension-dev__get_environment_info');
-    expect(parsed.toolCalls[0].result).toEqual({
+    expect(parsed.sections).toHaveLength(3);
+
+    // Section 0: reasoning
+    expect(parsed.sections[0].type).toBe('reasoning');
+    expect((parsed.sections[0] as Extract<CodexSection, { type: 'reasoning' }>).blocks).toEqual([
+      '**Reading instructions**',
+    ]);
+
+    // Section 1: tool call (started + completed merged)
+    expect(parsed.sections[1].type).toBe('tool_call');
+    const toolSection = parsed.sections[1] as Extract<CodexSection, { type: 'tool_call' }>;
+    expect(toolSection.toolCall.name).toBe('mcp__nimbalyst-extension-dev__get_environment_info');
+    expect(toolSection.toolCall.result).toEqual({
       success: true,
       result: { ok: true },
       status: 'completed',
     });
+
+    // Section 2: output
+    expect(parsed.sections[2].type).toBe('output');
+    expect((parsed.sections[2] as Extract<CodexSection, { type: 'output' }>).content).toBe('Done.');
   });
 
   it('renders command_execution and file_change events as tool calls', () => {
@@ -130,13 +142,16 @@ describe('parseCodexRawEvents', () => {
 
     const parsed = parseCodexRawEvents(events);
 
-    expect(parsed.toolCalls).toHaveLength(2);
+    expect(parsed.sections).toHaveLength(2);
 
-    expect(parsed.toolCalls[0].name).toBe('command_execution');
-    expect(parsed.toolCalls[0].arguments).toEqual({
+    // Section 0: command_execution (started + completed merged)
+    expect(parsed.sections[0].type).toBe('tool_call');
+    const cmdSection = parsed.sections[0] as Extract<CodexSection, { type: 'tool_call' }>;
+    expect(cmdSection.toolCall.name).toBe('command_execution');
+    expect(cmdSection.toolCall.arguments).toEqual({
       command: '/bin/zsh -lc ls',
     });
-    expect(parsed.toolCalls[0].result).toEqual({
+    expect(cmdSection.toolCall.result).toEqual({
       success: true,
       command: '/bin/zsh -lc ls',
       output: 'README.md\npackage.json\n',
@@ -144,14 +159,140 @@ describe('parseCodexRawEvents', () => {
       status: 'completed',
     });
 
-    expect(parsed.toolCalls[1].name).toBe('file_change');
-    expect(parsed.toolCalls[1].arguments).toEqual({
+    // Section 1: file_change
+    expect(parsed.sections[1].type).toBe('tool_call');
+    const fileSection = parsed.sections[1] as Extract<CodexSection, { type: 'tool_call' }>;
+    expect(fileSection.toolCall.name).toBe('file_change');
+    expect(fileSection.toolCall.arguments).toEqual({
       changes: [{ path: '/tmp/file.ts', kind: 'update' }],
     });
-    expect(parsed.toolCalls[1].result).toEqual({
+    expect(fileSection.toolCall.result).toEqual({
       success: true,
       status: 'completed',
       changes: [{ path: '/tmp/file.ts', kind: 'update' }],
     });
+  });
+
+  it('preserves interleaved order of reasoning, tools, and output', () => {
+    const events: Message[] = [
+      // Reasoning block 1
+      buildRawMessage(
+        { type: 'item.completed', item: { id: 'r1', type: 'reasoning', text: 'Thinking about step 1' } },
+        1
+      ),
+      // Tool call
+      buildRawMessage(
+        {
+          type: 'item.completed',
+          item: { id: 'tool-1', type: 'mcp_tool_call', server: 's', tool: 'read', arguments: {}, result: 'ok', error: null, status: 'completed' },
+        },
+        2
+      ),
+      // Reasoning block 2
+      buildRawMessage(
+        { type: 'item.completed', item: { id: 'r2', type: 'reasoning', text: 'Thinking about step 2' } },
+        3
+      ),
+      // Output
+      buildRawMessage(
+        { type: 'item.completed', item: { id: 'msg-1', type: 'agent_message', text: 'Final answer.' } },
+        4
+      ),
+    ];
+
+    const parsed = parseCodexRawEvents(events);
+
+    expect(parsed.sections).toHaveLength(4);
+    expect(parsed.sections[0].type).toBe('reasoning');
+    expect(parsed.sections[1].type).toBe('tool_call');
+    expect(parsed.sections[2].type).toBe('reasoning');
+    expect(parsed.sections[3].type).toBe('output');
+
+    // Verify each section has the right content
+    expect((parsed.sections[0] as Extract<CodexSection, { type: 'reasoning' }>).blocks).toEqual([
+      'Thinking about step 1',
+    ]);
+    expect((parsed.sections[2] as Extract<CodexSection, { type: 'reasoning' }>).blocks).toEqual([
+      'Thinking about step 2',
+    ]);
+    expect((parsed.sections[3] as Extract<CodexSection, { type: 'output' }>).content).toBe('Final answer.');
+  });
+
+  it('merges consecutive reasoning events into one section', () => {
+    const events: Message[] = [
+      buildRawMessage(
+        { type: 'item.completed', item: { id: 'r1', type: 'reasoning', text: 'First thought' } },
+        1
+      ),
+      buildRawMessage(
+        { type: 'item.completed', item: { id: 'r2', type: 'reasoning', text: 'Second thought' } },
+        2
+      ),
+      buildRawMessage(
+        { type: 'item.completed', item: { id: 'r3', type: 'reasoning', text: 'Third thought' } },
+        3
+      ),
+    ];
+
+    const parsed = parseCodexRawEvents(events);
+
+    expect(parsed.sections).toHaveLength(1);
+    expect(parsed.sections[0].type).toBe('reasoning');
+    expect((parsed.sections[0] as Extract<CodexSection, { type: 'reasoning' }>).blocks).toEqual([
+      'First thought',
+      'Second thought',
+      'Third thought',
+    ]);
+  });
+
+  it('merges tool call started/completed pair into one section', () => {
+    const events: Message[] = [
+      buildRawMessage(
+        {
+          type: 'item.started',
+          item: { id: 'tool-1', type: 'mcp_tool_call', server: 's', tool: 'read', arguments: {}, status: 'in_progress' },
+        },
+        1
+      ),
+      buildRawMessage(
+        {
+          type: 'item.completed',
+          item: { id: 'tool-1', type: 'mcp_tool_call', server: 's', tool: 'read', arguments: {}, result: { data: 1 }, error: null, status: 'completed' },
+        },
+        2
+      ),
+    ];
+
+    const parsed = parseCodexRawEvents(events);
+
+    expect(parsed.sections).toHaveLength(1);
+    expect(parsed.sections[0].type).toBe('tool_call');
+    const toolSection = parsed.sections[0] as Extract<CodexSection, { type: 'tool_call' }>;
+    expect(toolSection.toolCall.id).toBe('tool-1');
+    expect(toolSection.toolCall.result).toEqual({
+      success: true,
+      result: { data: 1 },
+      status: 'completed',
+    });
+  });
+
+  it('returns empty sections for empty input', () => {
+    const parsed = parseCodexRawEvents([]);
+    expect(parsed.sections).toEqual([]);
+  });
+
+  it('renders output-only events as a single output section', () => {
+    const events: Message[] = [
+      buildRawMessage(
+        { type: 'item.completed', item: { id: 'msg-1', type: 'agent_message', text: 'Hello world.' } },
+        1
+      ),
+    ];
+
+    const parsed = parseCodexRawEvents(events);
+
+    expect(parsed.sections).toHaveLength(1);
+    expect(parsed.sections[0].type).toBe('output');
+    expect((parsed.sections[0] as Extract<CodexSection, { type: 'output' }>).content).toBe('Hello world.');
   });
 });
