@@ -506,7 +506,7 @@ export class LMStudioProvider extends BaseAIProvider {
                               id: toolId,
                               name: 'streamContent',
                               arguments: { content: rawContent, position: streamConfig?.position || 'cursor' },
-                              result: { success: true, message: 'Content streamed to editor' }
+                              result: { success: true, output: 'Content streamed to editor' }
                             }
                           };
 

@@ -40,7 +40,7 @@ export const SuperProgressSnapshotWidget: React.FC<CustomToolWidgetProps> = ({ m
   const tool = message.toolCall;
   if (!tool?.arguments) return null;
 
-  const snapshot = tool.arguments as ProgressSnapshot;
+  const snapshot = tool.arguments as unknown as ProgressSnapshot;
   const { timing, iterationNumber, progress } = snapshot;
 
   if (!progress) return null;
