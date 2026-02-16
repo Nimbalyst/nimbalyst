@@ -99,6 +99,13 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
   private teammateIdleMessagePending: boolean = false;
   // Flag: set when streamInput fails due to dead transport, used in finally block
   private transportDied: boolean = false;
+  // Flag: set when interrupt() is called on the lead query. After interrupt(),
+  // the transport is dead and streamInput will always fail, so skip the while loop.
+  private wasInterrupted: boolean = false;
+  // Guard: prevents infinite continuation loops when the lead's turn keeps ending
+  // with active teammates. Set true when we trigger a continuation, reset when
+  // a real teammate message arrives or teammates complete.
+  private continuationTriggered: boolean = false;
 
   // Teammate management: spawning, messaging, lifecycle, config I/O
   private teammateManager: TeammateManager;
@@ -1071,6 +1078,12 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
         }
         if (documentContext?.mode) {
           metadataToLog.mode = documentContext.mode;
+        }
+        // Detect teammate messages by content pattern and tag metadata for UI reconstruction
+        const teammateMatch = message.match(/^\[Teammate message from "([^"]+)"\]/);
+        if (teammateMatch) {
+          metadataToLog.messageType = 'teammate_message_injected';
+          metadataToLog.teammateName = teammateMatch[1];
         }
         await this.logAgentMessage(sessionId, 'claude-code', 'input', JSON.stringify({
           prompt: message,
@@ -2123,10 +2136,12 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
       }
 
       // ── Process queued teammate messages via streamInput ──────────────
-      // After the main loop exits (naturally or via interrupt()), drain
-      // any pending teammate-to-lead messages. Each is injected as a new
-      // user turn on the existing query via streamInput.
-      while (this.teammateManager.hasPendingTeammateMessages() && this.leadQuery) {
+      // After the main loop exits naturally, drain any pending teammate-to-lead
+      // messages. Each is injected as a new user turn on the existing query via
+      // streamInput. Skip if the query was interrupted — after interrupt() the
+      // transport is dead and streamInput will always fail. Messages stay queued
+      // for the finally block to re-trigger via a fresh sendMessage.
+      while (this.teammateManager.hasPendingTeammateMessages() && this.leadQuery && !this.wasInterrupted) {
         const nextMsg = this.teammateManager.drainNextTeammateMessage();
         if (!nextMsg) break;
 
@@ -2344,6 +2359,7 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
     } finally {
       this.leadQuery = null;
       this.abortController = null;
+      this.wasInterrupted = false;
       // Note: markMessagesAsHidden is reset at the START of sendMessage to prevent race conditions
 
       // If teammate messages are still queued (e.g. streamInput failed for a drained
@@ -2373,6 +2389,30 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
         // Transport died and no pending messages to re-trigger.
         // Abandon idle teammates since they can't be resumed.
         this.teammateManager.abandonIdleTeammates(sessionId);
+      } else if (this.teammateManager.hasActiveTeammates() && !hideMessages) {
+        // Skip for hidden commands (e.g., /context auto-fetch) — those are internal
+        // bookkeeping calls that shouldn't drive teammate lifecycle.
+        if (!this.continuationTriggered) {
+          // The lead's turn ended naturally but teammates are still active (idle).
+          // The lead may have intended to continue (e.g., send shutdown messages)
+          // but the SDK closed the response. Trigger a single continuation so the
+          // lead gets another turn to manage its teammates.
+          // Guard: continuationTriggered prevents infinite loops if the lead's
+          // continuation turn also ends without resolving teammates.
+          console.log('[CLAUDE-CODE] Lead turn ended with active teammates, triggering continuation');
+          this.continuationTriggered = true;
+          this.teammateIdleMessagePending = true;
+          this.emit('teammate:messageWhileIdle', {
+            sessionId: this.teammateManager.lastUsedSessionId,
+            message: '[System: Your previous turn ended but you still have active teammates. Continue managing your team — send shutdown messages or take other actions as needed.]',
+          });
+        } else {
+          // Continuation already fired and the lead still didn't resolve teammates.
+          // Abandon idle teammates to unstick the session.
+          console.log('[CLAUDE-CODE] Lead continuation failed to resolve teammates, abandoning idle teammates');
+          this.teammateManager.abandonIdleTeammates(sessionId);
+          this.continuationTriggered = false;
+        }
       }
 
       this.transportDied = false;
@@ -2406,6 +2446,11 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
    *   queued for the finally block to handle via resume.
    */
   async interruptWithMessage(message: string): Promise<void> {
+    // A real teammate message arrived — reset the continuation guard so
+    // the lead can get another continuation if its next turn also ends
+    // with active teammates.
+    this.continuationTriggered = false;
+
     if (!this.leadQuery) {
       // Guard against duplicate idle triggers: if a teammate:messageWhileIdle event
       // was already emitted but sendMessage hasn't started yet, don't drain another.
@@ -2437,12 +2482,12 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
       return;
     }
 
-    // Interrupt the lead query - the sendMessage() loop will detect the
-    // pending messages (via teammateManager queue) and inject via streamInput.
-    // If the transport is already dead (lead turn finished but generator hasn't
-    // reached finally yet), interrupt() will fail and the message stays queued
-    // for the finally block to deliver via a resume-based sendMessage().
+    // Interrupt the lead query. After interrupt(), the transport is dead and
+    // streamInput will always fail. Set wasInterrupted so the while loop after
+    // the for-await skips streamInput and lets the finally block re-trigger
+    // delivery via a fresh sendMessage call.
     console.log('[CLAUDE-CODE] interruptWithMessage: interrupting active lead query');
+    this.wasInterrupted = true;
     try {
       await this.leadQuery.interrupt();
     } catch (err) {
@@ -2481,6 +2526,16 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
    */
   public hasActiveTeammates(): boolean {
     return this.teammateManager.hasActiveTeammates();
+  }
+
+  /**
+   * Check if the lead is currently processing or about to process a message.
+   * True when leadQuery is set (actively streaming) or when a
+   * teammate:messageWhileIdle event was emitted but sendMessage hasn't started yet.
+   * Used by AIService to avoid ending the session prematurely.
+   */
+  public isLeadBusy(): boolean {
+    return this.leadQuery !== null || this.teammateIdleMessagePending;
   }
 
   /**

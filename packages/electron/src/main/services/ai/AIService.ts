@@ -1939,6 +1939,11 @@ export class AIService {
         }
         logger.main.info(`[AIService] Teammate message while lead idle, triggering sendMessage for session ${data.sessionId}`);
         try {
+          // Ensure the session is marked as running so the UI shows the stop button.
+          // sendMessageHandler also calls startSession, but there can be a gap between
+          // the setImmediate and when that runs. Re-calling startSession is safe (idempotent).
+          await sessionStateManager.startSession({ sessionId: data.sessionId });
+
           const targetWindow = findWindowByWorkspace(effectiveWorkspacePath);
           if (targetWindow && !targetWindow.isDestroyed()) {
             // Create a mock event and call sendMessage directly
@@ -1972,6 +1977,17 @@ export class AIService {
         if (!data.sessionId) return;
         // Only end the session if it's still tracked as active (lead deferred ending)
         if (stateManager.isSessionActive(data.sessionId)) {
+          // Don't end the session if the lead is currently processing or about to
+          // process a message. The lead's sendMessage completion will handle endSession.
+          // This prevents a race where teammates:allCompleted fires while the lead's
+          // resumed CLI subprocess is still spawning (can take 10+ seconds).
+          const isLeadBusy = typeof (provider as any).isLeadBusy === 'function'
+            && (provider as any).isLeadBusy();
+          if (isLeadBusy) {
+            logger.main.info(`[AIService] All teammates completed for ${data.sessionId}, but lead is busy — deferring endSession to sendMessage completion`);
+            return;
+          }
+
           logger.main.info(`[AIService] All teammates completed for session ${data.sessionId}, ending deferred session`);
           await stateManager.endSession(data.sessionId);
 
@@ -2713,13 +2729,18 @@ export class AIService {
               });
 
               // Mark session as complete so UI shows agent is ready.
-              // Skip if teammates are still active - the session will be ended
-              // when the last teammate completes (via teammates:allCompleted event).
+              // Skip if teammates are still active OR if the lead is about to
+              // resume (teammateIdleMessagePending). The session will be ended
+              // when the last teammate completes (via teammates:allCompleted event)
+              // or when the resumed sendMessage finishes.
               const hasTeammates = session.provider === 'claude-code'
                 && typeof (provider as any).hasActiveTeammates === 'function'
                 && (provider as any).hasActiveTeammates();
-              if (hasTeammates) {
-                logger.main.info(`[AIService] Deferring endSession for ${session.id} - teammates still active`);
+              const isLeadBusy = session.provider === 'claude-code'
+                && typeof (provider as any).isLeadBusy === 'function'
+                && (provider as any).isLeadBusy();
+              if (hasTeammates || isLeadBusy) {
+                logger.main.info(`[AIService] Deferring endSession for ${session.id} - ${hasTeammates ? 'teammates still active' : 'lead resuming'}`);
               } else {
                 await stateManager.endSession(session.id);
 
@@ -2891,12 +2912,15 @@ export class AIService {
           });
 
           // End the session to remove it from active sessions.
-          // Skip if teammates are still active - deferred to teammates:allCompleted.
+          // Skip if teammates are still active or lead is resuming - deferred to teammates:allCompleted.
           const hasTeammatesOnError = session.provider === 'claude-code'
             && typeof (provider as any).hasActiveTeammates === 'function'
             && (provider as any).hasActiveTeammates();
-          if (hasTeammatesOnError) {
-            logger.main.info(`[AIService] Deferring endSession for ${session.id} on error - teammates still active`);
+          const isLeadBusyOnError = session.provider === 'claude-code'
+            && typeof (provider as any).isLeadBusy === 'function'
+            && (provider as any).isLeadBusy();
+          if (hasTeammatesOnError || isLeadBusyOnError) {
+            logger.main.info(`[AIService] Deferring endSession for ${session.id} on error - ${hasTeammatesOnError ? 'teammates still active' : 'lead resuming'}`);
           } else {
             await stateManager.endSession(session.id);
           }

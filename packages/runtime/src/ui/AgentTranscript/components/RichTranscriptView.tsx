@@ -66,6 +66,17 @@ const injectRichTranscriptStyles = () => {
       border-left: 3px solid var(--nim-primary);
     }
 
+    /* Teammate message notification styling */
+    .rich-transcript-teammate-notification {
+      background-color: color-mix(in srgb, var(--nim-primary) 5%, var(--nim-bg));
+      border-left: 3px solid color-mix(in srgb, var(--nim-primary) 40%, transparent);
+      padding: 0.5rem 0.75rem;
+    }
+    .rich-transcript-message-avatar.teammate-notification {
+      background-color: color-mix(in srgb, var(--nim-primary) 15%, transparent);
+      color: var(--nim-primary);
+    }
+
     /* VList scrollbar styling */
     .rich-transcript-vlist {
       scrollbar-width: thin;
@@ -1262,6 +1273,55 @@ export const RichTranscriptView = React.forwardRef<
                       return (
                         <div key={`${sessionId}-${index}`} className="rich-transcript-tool-container orphan ml-6 mb-2">
                           {renderToolCard(message, index, 0)}
+                        </div>
+                      );
+                    }
+
+                    // Render teammate messages as compact inline notifications
+                    if (isUser && message.metadata?.isTeammateMessage) {
+                      const teammateName = (message.metadata?.teammateName as string) || 'Teammate';
+                      return (
+                        <div
+                          key={`${sessionId}-${index}`}
+                          data-message-index={index}
+                          ref={(el) => {
+                            if (el) messageRefs.current.set(index, el);
+                          }}
+                          className="rich-transcript-message rich-transcript-teammate-notification rounded-md relative max-w-full overflow-x-hidden break-words mb-2"
+                        >
+                          <div className="flex items-start gap-2">
+                            <div className="rich-transcript-message-avatar teammate-notification rounded-full p-1 shrink-0">
+                              <MaterialSymbol icon="forum" size={14} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-baseline gap-2 mb-0.5">
+                                <span className="text-xs font-medium text-[var(--nim-text-muted)]">
+                                  Message received from {teammateName}
+                                </span>
+                                <span className="text-[10px] text-[var(--nim-text-faint)]">
+                                  {formatMessageTime(message.timestamp)}
+                                </span>
+                              </div>
+                              <div className="text-xs text-[var(--nim-text-muted)]">
+                                <MessageSegment
+                                  message={message}
+                                  isUser={true}
+                                  isCollapsed={isCollapsed}
+                                  showToolCalls={false}
+                                  showThinking={settings.showThinking}
+                                  expandedTools={expandedTools}
+                                  onToggleToolExpand={toggleToolExpand}
+                                  documentContext={documentContext}
+                                  shouldShowLoginWidget={false}
+                                  sessionId={sessionId}
+                                  isLastMessage={index === messages.length - 1}
+                                  onOpenFile={onOpenFile}
+                                  onCompact={onCompact}
+                                  provider={provider}
+                                />
+                              </div>
+                            </div>
+                          </div>
                         </div>
                       );
                     }

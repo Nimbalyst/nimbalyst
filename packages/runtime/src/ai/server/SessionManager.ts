@@ -187,14 +187,40 @@ export function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
             // Extract attachments and mode from metadata if present
             const attachments = agentMsg.metadata?.attachments;
             const mode = agentMsg.metadata?.mode;
-            uiMessages.push({
-              role: 'user',
-              content: parsed.prompt,
-              timestamp,
-              mode,
-              isUserInput: true,
-              attachments: attachments && attachments.length > 0 ? attachments : undefined
-            });
+
+            // Detect teammate messages via DB metadata (Path 1: mid-turn injection)
+            // or content pattern (Path 2: idle sendMessage, backward compat)
+            // Batched messages use "---" separator between multiple [Teammate message from "..."] blocks
+            const isTeammateFromMetadata = agentMsg.metadata?.messageType === 'teammate_message_injected';
+            const teammateContentMatch = parsed.prompt.match(/^\[Teammate message from "([^"]+)"\]\n\n/);
+            const isTeammateMessage = isTeammateFromMetadata || !!teammateContentMatch;
+
+            if (isTeammateMessage) {
+              // Split batched teammate messages (separated by \n\n---\n\n)
+              const segments = parsed.prompt.split(/\n\n---\n\n/);
+              for (const segment of segments) {
+                const segmentMatch = segment.match(/^\[Teammate message from "([^"]+)"\]\n\n([\s\S]*)$/);
+                const teammateName = segmentMatch?.[1] || agentMsg.metadata?.teammateName || 'Unknown';
+                const cleanContent = segmentMatch ? segmentMatch[2] : segment;
+                uiMessages.push({
+                  role: 'user',
+                  content: cleanContent,
+                  timestamp,
+                  mode,
+                  isUserInput: false,
+                  metadata: { isTeammateMessage: true, teammateName },
+                });
+              }
+            } else {
+              uiMessages.push({
+                role: 'user',
+                content: parsed.prompt,
+                timestamp,
+                mode,
+                isUserInput: true,
+                attachments: attachments && attachments.length > 0 ? attachments : undefined
+              });
+            }
           } else if (parsed.type === 'user' && parsed.message) {
             // Slash command format: { type: "user", message: { role: "user", content: "..." } }
             const msg = parsed.message;
