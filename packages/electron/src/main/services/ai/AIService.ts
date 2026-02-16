@@ -2735,36 +2735,37 @@ export class AIService {
                   provider: session.provider
                 });
 
-              // Request mobile push notification for agent completion
-              if (syncProvider) {
-                logger.main.info('[AIService] Requesting mobile push for session:', session.id, 'hasMethod:', !!syncProvider.requestMobilePush);
-                syncProvider.requestMobilePush?.(
-                  session.id,
-                  session.title || 'AI Session',
-                  notificationBody
-                );
-              } else {
-                logger.main.info('[AIService] No syncProvider for mobile push');
-              }
-
-              // AUTO-FETCH CONTEXT USAGE: For claude-code provider, automatically send /context to get accurate token usage.
-              // We defer awaiting the promise until after streaming completes so that queued prompts don't start early.
-              // Skip if the response ended with an error (e.g., context overflow) to avoid showing the /context request to the user.
-              // Skip if there are queued prompts waiting - prioritize responsiveness over context accuracy.
-              // CRITICAL: Use effectiveWorkspacePath so /context runs in the worktree directory for worktree sessions
-              if (session.provider === 'claude-code' && !hadError) {
-                // Check if there are queued prompts waiting - skip /context to prioritize responsiveness
-                const { getQueuedPromptsStore } = await import('../RepositoryManager');
-                const queueStore = getQueuedPromptsStore();
-                const pendingPrompts = await queueStore.listPending(session.id);
-
-                if (pendingPrompts.length > 0) {
-                  console.log('[AIService] Skipping auto /context - queued prompts waiting');
+                // Request mobile push notification for agent completion
+                if (syncProvider) {
+                  logger.main.info('[AIService] Requesting mobile push for session:', session.id, 'hasMethod:', !!syncProvider.requestMobilePush);
+                  syncProvider.requestMobilePush?.(
+                    session.id,
+                    session.title || 'AI Session',
+                    notificationBody
+                  );
                 } else {
-                  autoContextPromise = this.runAutoContextCommand(session, effectiveWorkspacePath, event);
+                  logger.main.info('[AIService] No syncProvider for mobile push');
                 }
-              } else if (session.provider === 'claude-code' && hadError) {
-                console.log('[AIService] Skipping auto /context due to error in response');
+
+                // AUTO-FETCH CONTEXT USAGE: For claude-code provider, automatically send /context to get accurate token usage.
+                // We defer awaiting the promise until after streaming completes so that queued prompts don't start early.
+                // Skip if the response ended with an error (e.g., context overflow) to avoid showing the /context request to the user.
+                // Skip if there are queued prompts waiting - prioritize responsiveness over context accuracy.
+                // CRITICAL: Use effectiveWorkspacePath so /context runs in the worktree directory for worktree sessions
+                if (session.provider === 'claude-code' && !hadError) {
+                  // Check if there are queued prompts waiting - skip /context to prioritize responsiveness
+                  const { getQueuedPromptsStore } = await import('../RepositoryManager');
+                  const queueStore = getQueuedPromptsStore();
+                  const pendingPrompts = await queueStore.listPending(session.id);
+
+                  if (pendingPrompts.length > 0) {
+                    console.log('[AIService] Skipping auto /context - queued prompts waiting');
+                  } else {
+                    autoContextPromise = this.runAutoContextCommand(session, effectiveWorkspacePath, event);
+                  }
+                } else if (session.provider === 'claude-code' && hadError) {
+                  console.log('[AIService] Skipping auto /context due to error in response');
+                }
               }
 
               break;
