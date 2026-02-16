@@ -9,7 +9,7 @@
  * - Actions menu (View History, Toggle Source Mode, Set Document Type, etc.)
  */
 
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useSetAtom } from 'jotai';
 import { $isHeadingNode } from '@lexical/rich-text';
 import { $getRoot } from 'lexical';
@@ -138,6 +138,42 @@ interface AISession {
   worktreeId?: string | null;
   isCurrentWorkspace?: boolean;
 }
+
+const SessionItem: React.FC<{
+  session: AISession;
+  isLast?: boolean;
+  hasActions?: boolean;
+  onLoadAgent: (id: string) => void;
+  onLoadChat: (id: string) => void;
+  formatTime: (ts: number) => string;
+}> = ({ session, isLast, hasActions = true, onLoadAgent, onLoadChat, formatTime }) => (
+  <div className={`ai-session-item py-3 px-4 flex flex-col gap-2 border-b border-[var(--nim-border)] ${isLast ? 'last:border-b-0' : ''} hover:bg-[var(--nim-bg-hover)]`}>
+    <div className="ai-session-header flex flex-col gap-1">
+      <div className="ai-session-title text-sm font-medium whitespace-nowrap overflow-hidden text-ellipsis text-[var(--nim-text)]">{session.title}</div>
+      <div className="ai-session-meta text-xs text-[var(--nim-text-muted)]">
+        {session.provider} &bull; {formatTime(session.updatedAt)} &bull; {session.messageCount} turns
+      </div>
+    </div>
+    {hasActions && (
+      <div className="ai-session-actions flex gap-1.5">
+        <button
+          className="ai-session-action-button flex-1 py-1.5 px-2.5 text-xs font-medium rounded cursor-pointer transition-all duration-150 bg-[var(--nim-bg)] text-[var(--nim-text)] border border-[var(--nim-border)] hover:bg-[var(--nim-bg-secondary)] hover:border-[var(--nim-primary)]"
+          onClick={() => onLoadAgent(session.id)}
+          title="Open in Agent mode"
+        >
+          Agent
+        </button>
+        <button
+          className="ai-session-action-button flex-1 py-1.5 px-2.5 text-xs font-medium rounded cursor-pointer transition-all duration-150 bg-[var(--nim-bg)] text-[var(--nim-text)] border border-[var(--nim-border)] hover:bg-[var(--nim-bg-secondary)] hover:border-[var(--nim-primary)]"
+          onClick={() => onLoadChat(session.id)}
+          title="Open in Chat panel"
+        >
+          Chat
+        </button>
+      </div>
+    )}
+  </div>
+);
 
 interface TOCItem {
   text: string;
@@ -597,13 +633,14 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
     return new Date(timestamp).toLocaleDateString();
   };
 
-  // Determine if we should show AI button
-  const showAIButton = Boolean(workspaceId && onSwitchToAgentMode);
+  // Determine if we should show AI button (shown in both editor and agent modes)
+  const showAIButton = Boolean(workspaceId);
+  const hasSessionActions = Boolean(onSwitchToAgentMode || onOpenSessionInChat);
 
   // Group sessions: current workspace first, then others
   const isInWorktree = workspaceId ? isWorktreePath(workspaceId) : false;
-  const currentWorkspaceSessions = aiSessions.filter(s => s.isCurrentWorkspace);
-  const otherSessions = aiSessions.filter(s => !s.isCurrentWorkspace);
+  const currentWorkspaceSessions = useMemo(() => aiSessions.filter(s => s.isCurrentWorkspace), [aiSessions]);
+  const otherSessions = useMemo(() => aiSessions.filter(s => !s.isCurrentWorkspace), [aiSessions]);
   const hasGroupedSessions = currentWorkspaceSessions.length > 0 && otherSessions.length > 0;
 
   // Determine if we should show TOC button (Markdown only)
@@ -695,89 +732,19 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
                           {isInWorktree ? 'This branch' : 'This project'}
                         </div>
                         {currentWorkspaceSessions.map((session) => (
-                          <div key={session.id} className="ai-session-item py-3 px-4 flex flex-col gap-2 border-b border-[var(--nim-border)] hover:bg-[var(--nim-bg-hover)]">
-                            <div className="ai-session-header flex flex-col gap-1">
-                              <div className="ai-session-title text-sm font-medium whitespace-nowrap overflow-hidden text-ellipsis text-[var(--nim-text)]">{session.title}</div>
-                              <div className="ai-session-meta text-xs text-[var(--nim-text-muted)]">
-                                {session.provider} &bull; {formatRelativeTime(session.updatedAt)} &bull; {session.messageCount} turns
-                              </div>
-                            </div>
-                            <div className="ai-session-actions flex gap-1.5">
-                              <button
-                                className="ai-session-action-button flex-1 py-1.5 px-2.5 text-xs font-medium rounded cursor-pointer transition-all duration-150 bg-[var(--nim-bg)] text-[var(--nim-text)] border border-[var(--nim-border)] hover:bg-[var(--nim-bg-secondary)] hover:border-[var(--nim-primary)]"
-                                onClick={() => handleLoadSessionInAgentMode(session.id)}
-                                title="Open in Agent mode"
-                              >
-                                Agent
-                              </button>
-                              <button
-                                className="ai-session-action-button flex-1 py-1.5 px-2.5 text-xs font-medium rounded cursor-pointer transition-all duration-150 bg-[var(--nim-bg)] text-[var(--nim-text)] border border-[var(--nim-border)] hover:bg-[var(--nim-bg-secondary)] hover:border-[var(--nim-primary)]"
-                                onClick={() => handleLoadSessionInChat(session.id)}
-                                title="Open in Chat panel"
-                              >
-                                Chat
-                              </button>
-                            </div>
-                          </div>
+                          <SessionItem key={session.id} session={session} hasActions={hasSessionActions} onLoadAgent={handleLoadSessionInAgentMode} onLoadChat={handleLoadSessionInChat} formatTime={formatRelativeTime} />
                         ))}
                         {/* Other sessions */}
                         <div className="ai-sessions-group-header px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--nim-text-faint)] bg-[var(--nim-bg-secondary)]">
                           Other sessions
                         </div>
                         {otherSessions.map((session) => (
-                          <div key={session.id} className="ai-session-item py-3 px-4 flex flex-col gap-2 border-b border-[var(--nim-border)] last:border-b-0 hover:bg-[var(--nim-bg-hover)]">
-                            <div className="ai-session-header flex flex-col gap-1">
-                              <div className="ai-session-title text-sm font-medium whitespace-nowrap overflow-hidden text-ellipsis text-[var(--nim-text)]">{session.title}</div>
-                              <div className="ai-session-meta text-xs text-[var(--nim-text-muted)]">
-                                {session.provider} &bull; {formatRelativeTime(session.updatedAt)} &bull; {session.messageCount} turns
-                              </div>
-                            </div>
-                            <div className="ai-session-actions flex gap-1.5">
-                              <button
-                                className="ai-session-action-button flex-1 py-1.5 px-2.5 text-xs font-medium rounded cursor-pointer transition-all duration-150 bg-[var(--nim-bg)] text-[var(--nim-text)] border border-[var(--nim-border)] hover:bg-[var(--nim-bg-secondary)] hover:border-[var(--nim-primary)]"
-                                onClick={() => handleLoadSessionInAgentMode(session.id)}
-                                title="Open in Agent mode"
-                              >
-                                Agent
-                              </button>
-                              <button
-                                className="ai-session-action-button flex-1 py-1.5 px-2.5 text-xs font-medium rounded cursor-pointer transition-all duration-150 bg-[var(--nim-bg)] text-[var(--nim-text)] border border-[var(--nim-border)] hover:bg-[var(--nim-bg-secondary)] hover:border-[var(--nim-primary)]"
-                                onClick={() => handleLoadSessionInChat(session.id)}
-                                title="Open in Chat panel"
-                              >
-                                Chat
-                              </button>
-                            </div>
-                          </div>
+                          <SessionItem key={session.id} session={session} isLast hasActions={hasSessionActions} onLoadAgent={handleLoadSessionInAgentMode} onLoadChat={handleLoadSessionInChat} formatTime={formatRelativeTime} />
                         ))}
                       </>
                     ) : (
-                      /* Flat list when not in a worktree or only one group */
                       aiSessions.map((session) => (
-                        <div key={session.id} className="ai-session-item py-3 px-4 flex flex-col gap-2 border-b border-[var(--nim-border)] last:border-b-0 hover:bg-[var(--nim-bg-hover)]">
-                          <div className="ai-session-header flex flex-col gap-1">
-                            <div className="ai-session-title text-sm font-medium whitespace-nowrap overflow-hidden text-ellipsis text-[var(--nim-text)]">{session.title}</div>
-                            <div className="ai-session-meta text-xs text-[var(--nim-text-muted)]">
-                              {session.provider} &bull; {formatRelativeTime(session.updatedAt)} &bull; {session.messageCount} turns
-                            </div>
-                          </div>
-                          <div className="ai-session-actions flex gap-1.5">
-                            <button
-                              className="ai-session-action-button flex-1 py-1.5 px-2.5 text-xs font-medium rounded cursor-pointer transition-all duration-150 bg-[var(--nim-bg)] text-[var(--nim-text)] border border-[var(--nim-border)] hover:bg-[var(--nim-bg-secondary)] hover:border-[var(--nim-primary)]"
-                              onClick={() => handleLoadSessionInAgentMode(session.id)}
-                              title="Open in Agent mode"
-                            >
-                              Agent
-                            </button>
-                            <button
-                              className="ai-session-action-button flex-1 py-1.5 px-2.5 text-xs font-medium rounded cursor-pointer transition-all duration-150 bg-[var(--nim-bg)] text-[var(--nim-text)] border border-[var(--nim-border)] hover:bg-[var(--nim-bg-secondary)] hover:border-[var(--nim-primary)]"
-                              onClick={() => handleLoadSessionInChat(session.id)}
-                              title="Open in Chat panel"
-                            >
-                              Chat
-                            </button>
-                          </div>
-                        </div>
+                        <SessionItem key={session.id} session={session} isLast hasActions={hasSessionActions} onLoadAgent={handleLoadSessionInAgentMode} onLoadChat={handleLoadSessionInChat} formatTime={formatRelativeTime} />
                       ))
                     )}
                   </div>
@@ -785,19 +752,21 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
                   <div className="ai-sessions-empty p-4 text-center text-[13px] text-[var(--nim-text-muted)]">No AI sessions have edited this file yet</div>
                 )}
 
-                {/* Start new session button - subtle style at bottom */}
-                <div className="ai-session-start-container px-3 py-2.5 border-t border-[var(--nim-border)]">
-                  <button
-                    className="ai-session-start-button w-full py-1.5 px-3 border border-[var(--nim-border)] rounded text-[13px] font-medium text-left cursor-pointer flex items-center gap-2 transition-all duration-150 text-[var(--nim-text-muted)] bg-transparent hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)] hover:border-[var(--nim-primary)]"
-                    onClick={handleStartAgentSession}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <line x1="12" y1="5" x2="12" y2="19"/>
-                      <line x1="5" y1="12" x2="19" y2="12"/>
-                    </svg>
-                    Start new agent session
-                  </button>
-                </div>
+                {/* Start new session button - only shown when agent mode switch is available */}
+                {onSwitchToAgentMode && (
+                  <div className="ai-session-start-container px-3 py-2.5 border-t border-[var(--nim-border)]">
+                    <button
+                      className="ai-session-start-button w-full py-1.5 px-3 border border-[var(--nim-border)] rounded text-[13px] font-medium text-left cursor-pointer flex items-center gap-2 transition-all duration-150 text-[var(--nim-text-muted)] bg-transparent hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)] hover:border-[var(--nim-primary)]"
+                      onClick={handleStartAgentSession}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <line x1="12" y1="5" x2="12" y2="19"/>
+                        <line x1="5" y1="12" x2="19" y2="12"/>
+                      </svg>
+                      Start new agent session
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
