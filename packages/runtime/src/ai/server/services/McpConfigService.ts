@@ -22,6 +22,9 @@ export interface McpConfigServiceDeps {
   /** Port for the extension development MCP server */
   extensionDevServerPort: number | null;
 
+  /** Port for the Super Loop progress MCP server */
+  superLoopProgressServerPort: number | null;
+
   /** Loader for user and workspace MCP server configs */
   mcpConfigLoader: ((workspacePath?: string) => Promise<Record<string, any>>) | null;
 
@@ -96,6 +99,15 @@ export class McpConfigService {
         type: 'sse',
         transport: 'sse',
         url: `http://127.0.0.1:${this.deps.extensionDevServerPort}/mcp${params}`
+      };
+    }
+
+    // Include Super Loop progress MCP server if it's started (provides super_loop_progress_update tool)
+    if (this.deps.superLoopProgressServerPort !== null && sessionId) {
+      config['nimbalyst-super-loop-progress'] = {
+        type: 'sse',
+        transport: 'sse',
+        url: `http://127.0.0.1:${this.deps.superLoopProgressServerPort}/mcp?sessionId=${encodeURIComponent(sessionId)}`
       };
     }
 

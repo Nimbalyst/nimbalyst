@@ -173,6 +173,7 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
       mcpServerPort: ClaudeCodeProvider.mcpServerPort,
       sessionNamingServerPort: ClaudeCodeProvider.sessionNamingServerPort,
       extensionDevServerPort: ClaudeCodeProvider.extensionDevServerPort,
+      superLoopProgressServerPort: ClaudeCodeProvider.superLoopProgressServerPort,
       mcpConfigLoader: ClaudeCodeProvider.mcpConfigLoader,
       extensionPluginsLoader: ClaudeCodeProvider.extensionPluginsLoader,
       claudeSettingsEnvLoader: ClaudeCodeProvider.claudeSettingsEnvLoader,
@@ -272,6 +273,9 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
   // Provides tools for building, installing, and reloading extensions
   private static extensionDevServerPort: number | null = null;
 
+  // Super Loop progress MCP server port (injected from electron main process)
+  private static superLoopProgressServerPort: number | null = null;
+
   // MCP config loader (injected from electron main process)
   // Returns merged user + workspace MCP servers
   private static mcpConfigLoader: ((workspacePath?: string) => Promise<Record<string, any>>) | null = null;
@@ -350,6 +354,14 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
    */
   public static setExtensionDevServerPort(port: number | null): void {
     ClaudeCodeProvider.extensionDevServerPort = port;
+  }
+
+  /**
+   * Set the Super Loop progress MCP server port (called from electron main process)
+   * This provides the super_loop_progress_update tool for Super Loop iterations
+   */
+  public static setSuperLoopProgressServerPort(port: number | null): void {
+    ClaudeCodeProvider.superLoopProgressServerPort = port;
   }
 
   /**

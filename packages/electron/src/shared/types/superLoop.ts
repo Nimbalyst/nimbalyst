@@ -91,8 +91,22 @@ export interface SuperExitCondition {
 export type SuperPhase = 'planning' | 'building';
 
 /**
+ * Input for the super_loop_progress_update MCP tool.
+ * Claude calls this tool at the end of each iteration to report progress.
+ * The tool handler writes progress.json and records the call for verification.
+ */
+export interface SuperProgressUpdateInput {
+  phase: SuperPhase;
+  status: 'running' | 'completed' | 'blocked';
+  completionSignal: boolean;
+  learnings: SuperLearning[];
+  blockers: string[];
+  currentIteration: number;
+}
+
+/**
  * Progress file structure (.superloop/progress.json)
- * This file is read/written by Claude at each iteration to track state
+ * Written by the super_loop_progress_update MCP tool at each iteration
  */
 export interface SuperProgressFile {
   currentIteration: number;

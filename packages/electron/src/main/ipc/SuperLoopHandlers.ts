@@ -13,6 +13,7 @@ import type { SuperLoopConfig } from '../../shared/types/superLoop';
 import { GitWorktreeService } from '../services/GitWorktreeService';
 import { createWorktreeStore } from '../services/WorktreeStore';
 import { getDatabase } from '../database/initialize';
+import { wasProgressToolCalled, clearProgressToolCall } from '../mcp/superLoopProgressServer';
 
 const logger = log.scope('SuperLoopHandlers');
 
@@ -471,6 +472,26 @@ export function registerSuperLoopHandlers(): void {
   safeOn('super-loop:session-complete', async (_event, sessionId: string, success?: boolean) => {
     logger.info('Super loop session complete notification', { sessionId, success });
     superLoopService.notifySessionComplete(sessionId, success ?? true);
+  });
+
+  /**
+   * Check if the progress update MCP tool was called for a session
+   */
+  safeHandle('super-loop:was-progress-tool-called', async (_event, sessionId: string) => {
+    if (!sessionId) {
+      return { called: false };
+    }
+    return { called: wasProgressToolCalled(sessionId) };
+  });
+
+  /**
+   * Clear the progress tool call tracking for a session (cleanup after iteration)
+   */
+  safeHandle('super-loop:clear-progress-tool-call', async (_event, sessionId: string) => {
+    if (sessionId) {
+      clearProgressToolCall(sessionId);
+    }
+    return { success: true };
   });
 
   handlersRegistered = true;

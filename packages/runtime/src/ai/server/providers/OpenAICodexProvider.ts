@@ -88,6 +88,9 @@ export class OpenAICodexProvider extends BaseAgentProvider {
   // Extension dev MCP server port (injected from electron main process)
   private static extensionDevServerPort: number | null = null;
 
+  // Super Loop progress MCP server port (injected from electron main process)
+  private static superLoopProgressServerPort: number | null = null;
+
   // MCP config loader (injected from electron main process)
   // Returns merged user + workspace MCP servers
   private static mcpConfigLoader: ((workspacePath?: string) => Promise<Record<string, MCPServerConfig>>) | null = null;
@@ -161,6 +164,7 @@ export class OpenAICodexProvider extends BaseAgentProvider {
       mcpServerPort: OpenAICodexProvider.mcpServerPort,
       sessionNamingServerPort: OpenAICodexProvider.sessionNamingServerPort,
       extensionDevServerPort: OpenAICodexProvider.extensionDevServerPort,
+      superLoopProgressServerPort: OpenAICodexProvider.superLoopProgressServerPort,
       mcpConfigLoader: OpenAICodexProvider.mcpConfigLoader,
       extensionPluginsLoader: null,
       claudeSettingsEnvLoader: OpenAICodexProvider.claudeSettingsEnvLoader,
@@ -198,6 +202,10 @@ export class OpenAICodexProvider extends BaseAgentProvider {
 
   public static setExtensionDevServerPort(port: number | null): void {
     OpenAICodexProvider.extensionDevServerPort = port;
+  }
+
+  public static setSuperLoopProgressServerPort(port: number | null): void {
+    OpenAICodexProvider.superLoopProgressServerPort = port;
   }
 
   public static setMCPConfigLoader(loader: ((workspacePath?: string) => Promise<Record<string, MCPServerConfig>>) | null): void {

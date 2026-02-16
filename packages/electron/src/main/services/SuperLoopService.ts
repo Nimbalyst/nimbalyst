@@ -26,6 +26,7 @@ import {
   type SuperLoopEvent,
   type SuperPhase,
 } from '../../shared/types/superLoop';
+import { SuperLoopProgressService } from './SuperLoopProgressService';
 
 const logger = log.scope('SuperLoopService');
 
@@ -544,6 +545,10 @@ export class SuperLoopService {
     // Generate the super loop prompt based on current phase
     const prompt = this.generateSuperLoopPrompt(phase);
 
+    // Register session with the progress service so the MCP tool can find the worktree path
+    const progressService = SuperLoopProgressService.getInstance();
+    progressService.registerSession(sessionId, runner.worktreePath);
+
     // Send the prompt to Claude Code
     // This needs to be done via the renderer process which handles the AI communication
     // We'll emit an event that the renderer can listen to and process
@@ -556,6 +561,9 @@ export class SuperLoopService {
     // Wait for the session to complete
     // The renderer will call back when the session is done
     const result = await this.waitForSessionComplete(sessionId);
+
+    // Unregister session from progress service
+    progressService.unregisterSession(sessionId);
 
     if (result.success) {
       // Inject progress snapshot at END of iteration
@@ -787,9 +795,10 @@ export class SuperLoopService {
   }
 
   /**
-   * Atomically write progress.json with backup
+   * Atomically write progress.json with backup.
+   * Public so SuperLoopProgressService can delegate writes from the MCP tool.
    */
-  private async writeProgressFile(worktreePath: string, progress: SuperProgressFile): Promise<void> {
+  async writeProgressFile(worktreePath: string, progress: SuperProgressFile): Promise<void> {
     const progressPath = path.join(worktreePath, '.superloop', 'progress.json');
     const tmpPath = progressPath + '.tmp';
     const backupPath = progressPath + '.bak';
@@ -913,7 +922,7 @@ export class SuperLoopService {
 0b. Study \`@.superloop/IMPLEMENTATION_PLAN.md\` (if present) to understand the plan so far.
 0c. Study the existing codebase to understand shared utilities, patterns, and components.
 0d. Reference the project's CLAUDE.md for build commands and project conventions.
-0e. Read \`.superloop/progress.json\` - check \`learnings\` from previous iterations and \`userFeedback\` if present.
+0e. Check the progress snapshots at the start of this session for \`learnings\` from previous iterations and \`userFeedback\` if present.
 
 1. Study \`@.superloop/IMPLEMENTATION_PLAN.md\` (if present; it may be incomplete) and search the existing source code to compare against the task requirements. Analyze findings, prioritize tasks, and create/update \`@.superloop/IMPLEMENTATION_PLAN.md\` as a bullet point list sorted by priority of items yet to be implemented. Consider searching for TODO, minimal implementations, placeholders, skipped/flaky tests, and inconsistent patterns.
 
@@ -921,11 +930,14 @@ IMPORTANT: Plan only. Do NOT implement anything. Do NOT assume functionality is 
 
 ULTIMATE GOAL: Read \`.superloop/task.md\` for the goal. Consider missing elements and plan accordingly. If an element is missing, search first to confirm it doesn't exist.
 
-BEFORE YOU FINISH: You MUST update \`.superloop/progress.json\` as the last thing you do. This is how state is communicated between iterations. Set the following fields:
-- \`"phase": "building"\` to signal that the next iteration should begin building
-- \`"status": "running"\`
-- \`"learnings"\`: append an entry with \`{ "iteration": <current iteration number>, "summary": "<what you learned/decided this iteration>", "filesChanged": [<files you created or modified>] }\`
-- If you are BLOCKED and cannot create a viable plan, set \`"status": "blocked"\` and describe the blocker in the \`"blockers"\` array`;
+BEFORE YOU FINISH: You MUST call the \`super_loop_progress_update\` MCP tool as the LAST thing you do. This tool is how state is communicated between iterations. Call it with:
+- \`phase\`: "building" (to signal the next iteration should begin building)
+- \`status\`: "running"
+- \`completionSignal\`: false
+- \`learnings\`: include all previous learnings plus a new entry with \`{ "iteration": <current iteration number>, "summary": "<what you learned/decided this iteration>", "filesChanged": [<files you created or modified>] }\`
+- \`blockers\`: [] (empty unless blocked)
+- \`currentIteration\`: <your iteration number>
+- If you are BLOCKED and cannot create a viable plan, set \`status\` to "blocked" and list blockers in the \`blockers\` array`;
   }
 
   /**
@@ -936,7 +948,7 @@ BEFORE YOU FINISH: You MUST update \`.superloop/progress.json\` as the last thin
     return `0a. Study \`.superloop/task.md\` to understand the task requirements.
 0b. Study \`@.superloop/IMPLEMENTATION_PLAN.md\` to understand the current plan and priorities.
 0c. Reference the project's CLAUDE.md for build commands and project conventions.
-0d. Read \`.superloop/progress.json\` - check \`learnings\` from previous iterations to avoid repeating work, and \`userFeedback\` if present (the user has provided guidance to help you).
+0d. Check the progress snapshots at the start of this session for \`learnings\` from previous iterations to avoid repeating work, and \`userFeedback\` if present (the user has provided guidance to help you).
 
 1. Your task is to implement functionality per the task requirements. Follow \`@.superloop/IMPLEMENTATION_PLAN.md\` and choose the most important incomplete item to address. Before making changes, search the codebase (don't assume not implemented). Complete ONE item per iteration.
 
@@ -953,11 +965,14 @@ IMPORTANT RULES:
 - When \`@.superloop/IMPLEMENTATION_PLAN.md\` becomes large, clean out completed items.
 - For any bugs you notice, resolve them or document them in \`@.superloop/IMPLEMENTATION_PLAN.md\`.
 
-BEFORE YOU FINISH: You MUST update \`.superloop/progress.json\` as the LAST thing you do every iteration. This file is how state is communicated between iterations - the next iteration starts with fresh context and depends on this file. Update these fields:
-- \`"learnings"\`: append an entry with \`{ "iteration": <current iteration number>, "summary": "<what you accomplished, key decisions, and anything the next iteration needs to know>", "filesChanged": [<files you created or modified>] }\`
-- \`"status"\`: keep as \`"running"\` if work remains
-- \`"completionSignal"\`: set to \`true\` ONLY when ALL items in \`@.superloop/IMPLEMENTATION_PLAN.md\` are complete and the task from \`.superloop/task.md\` is fully satisfied
-- If you are BLOCKED and cannot make progress, set \`"status": "blocked"\` and describe the blocker in the \`"blockers"\` array`;
+BEFORE YOU FINISH: You MUST call the \`super_loop_progress_update\` MCP tool as the LAST thing you do every iteration. This tool is how state is communicated between iterations - the next iteration starts with fresh context and depends on this. Call it with:
+- \`learnings\`: include all previous learnings plus a new entry with \`{ "iteration": <current iteration number>, "summary": "<what you accomplished, key decisions, and anything the next iteration needs to know>", "filesChanged": [<files you created or modified>] }\`
+- \`status\`: "running" if work remains
+- \`completionSignal\`: true ONLY when ALL items in \`@.superloop/IMPLEMENTATION_PLAN.md\` are complete and the task from \`.superloop/task.md\` is fully satisfied
+- \`phase\`: "building"
+- \`blockers\`: [] (empty unless blocked)
+- \`currentIteration\`: <your iteration number>
+- If you are BLOCKED and cannot make progress, set \`status\` to "blocked" and list blockers in the \`blockers\` array`;
   }
 
   /**
