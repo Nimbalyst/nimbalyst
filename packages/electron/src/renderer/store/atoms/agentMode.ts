@@ -49,6 +49,7 @@ export interface AgentModeLayout {
   filesEditedWidth: number;
   todoPanelCollapsed: boolean;
   teammatePanelCollapsed: boolean;
+  agentPanelCollapsed: boolean;
 }
 
 // ============================================================
@@ -69,6 +70,7 @@ const DEFAULT_LAYOUT: AgentModeLayout = {
   filesEditedWidth: 256,
   todoPanelCollapsed: false,
   teammatePanelCollapsed: false,
+  agentPanelCollapsed: false,
 };
 
 /**
@@ -87,6 +89,7 @@ function mergeWithDefaults(persisted: Partial<AgentModeLayout> | undefined): Age
     // Ensure panel collapse states have defaults if missing from old persisted data
     todoPanelCollapsed: persisted?.todoPanelCollapsed ?? DEFAULT_LAYOUT.todoPanelCollapsed,
     teammatePanelCollapsed: persisted?.teammatePanelCollapsed ?? DEFAULT_LAYOUT.teammatePanelCollapsed,
+    agentPanelCollapsed: persisted?.agentPanelCollapsed ?? DEFAULT_LAYOUT.agentPanelCollapsed,
   };
 }
 
@@ -142,6 +145,11 @@ export const todoPanelCollapsedAtom = atom(
 /** Whether the teammate panel is collapsed */
 export const teammatePanelCollapsedAtom = atom(
   (get) => get(agentModeLayoutAtom).teammatePanelCollapsed
+);
+
+/** Whether the agent panel is collapsed */
+export const agentPanelCollapsedAtom = atom(
+  (get) => get(agentModeLayoutAtom).agentPanelCollapsed
 );
 
 /** Per-session derived atom for current teammates from session metadata */
@@ -313,6 +321,24 @@ export const toggleTeammatePanelCollapsedAtom = atom(
   (get, set) => {
     const current = get(agentModeLayoutAtom);
     const newLayout = { ...current, teammatePanelCollapsed: !current.teammatePanelCollapsed };
+
+    set(agentModeLayoutAtom, newLayout);
+
+    if (!currentWorkspacePath) {
+      throw new Error('[agentMode] Cannot persist layout - initAgentModeLayout not called');
+    }
+    schedulePersist(currentWorkspacePath, newLayout);
+  }
+);
+
+/**
+ * Toggle agent panel collapsed state.
+ */
+export const toggleAgentPanelCollapsedAtom = atom(
+  null,
+  (get, set) => {
+    const current = get(agentModeLayoutAtom);
+    const newLayout = { ...current, agentPanelCollapsed: !current.agentPanelCollapsed };
 
     set(agentModeLayoutAtom, newLayout);
 

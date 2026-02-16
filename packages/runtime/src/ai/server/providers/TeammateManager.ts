@@ -98,6 +98,7 @@ export class TeammateManager {
   private static readonly TEAMMATE_COLORS = ['blue', 'green', 'yellow', 'purple'];
   private teammateColorIndex: number = 0;
   private bgAgentCounter: number = 0;
+  private subAgentCounter: number = 0;
 
   // Debounce state for emitTeammateUpdate
   private pendingStatusOverrides: Map<string, 'running' | 'completed' | 'errored' | 'idle'> = new Map();
@@ -279,7 +280,7 @@ export class TeammateManager {
     const teams = new Set<string>();
     for (const agentId of agentIds) {
       const team = this.extractTeamName(agentId);
-      if (team === '_background') continue;  // Skip background sub-agents
+      if (team === '_background' || team === '_subagent') continue;  // Skip background/plain sub-agents
       const sanitized = this.sanitizeTeamNameOrUndefined(team);
       if (sanitized) {
         teams.add(sanitized);
@@ -1754,6 +1755,49 @@ export class TeammateManager {
         handled: true,
         result: this.denyPreToolUse(
           `Background agent "${name}" has been spawned by Nimbalyst and is now running. agent_id: ${agentId}. Do NOT retry this Task call -- the agent is already active.\n\nIMPORTANT: Nimbalyst intercepts Task calls to spawn background agents, which returns an "error" status even though the spawn succeeded. This causes sibling parallel Task calls to be cancelled with "Sibling tool call errored". You MUST spawn background agents sequentially (one Task call per turn), never in parallel.`
+        ),
+      };
+    }
+
+    // ── Plain sub-agent interception ─────────────────────────────────────
+    if (toolName === 'Task' && !toolInput?.team_name && !toolInput?.name) {
+      const saIndex = this.subAgentCounter++;
+      const sanitizedDesc = this.sanitizeBackgroundAgentName(toolInput.description || `sa-${saIndex}`);
+      const name = `sa-${saIndex}-${sanitizedDesc}`;
+      const teamName = '_subagent';
+      const agentId = `${name}@${teamName}`;
+      const prompt = toolInput.prompt || 'Do your assigned work.';
+      const agentType = toolInput.subagent_type || 'general-purpose';
+      const model = toolInput.model;
+
+      if (sessionId) {
+        this.logSyntheticToolPair(
+          sessionId,
+          toolUseID || `task-sa-${Date.now()}`,
+          'Task',
+          toolInput,
+          {
+            status: 'subagent_spawned',
+            agent_id: agentId,
+            name,
+            agent_type: agentType,
+            model,
+            color: 'blue',
+          },
+          'subagent_task'
+        );
+      }
+
+      this.spawnBackgroundAgent(sessionId, agentId, name, teamName, prompt, agentType, model);
+
+      this.emitTeammateUpdate(sessionId).catch(err => {
+        console.error('[CLAUDE-CODE] Failed to emit sub-agent update:', err);
+      });
+
+      return {
+        handled: true,
+        result: this.denyPreToolUse(
+          `Sub-agent "${name}" has been spawned by Nimbalyst and is now running. agent_id: ${agentId}. Do NOT retry this Task call -- the sub-agent is already active.\n\nIMPORTANT: Nimbalyst intercepts Task calls to spawn sub-agents, which returns an "error" status even though the spawn succeeded. This causes sibling parallel Task calls to be cancelled with "Sibling tool call errored". You MUST spawn sub-agents sequentially (one Task call per turn), never in parallel.`
         ),
       };
     }
