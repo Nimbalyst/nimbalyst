@@ -181,7 +181,7 @@ export const BlitzDialog: React.FC<BlitzDialogProps> = ({
       onKeyDown={handleKeyDown}
     >
       <div
-        className="nim-modal w-[90vw] max-w-[560px] animate-[worktree-modal-appear_0.2s_ease]"
+        className="nim-modal w-[90vw] max-w-[560px] max-h-[85vh] animate-[worktree-modal-appear_0.2s_ease]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -251,38 +251,40 @@ export const BlitzDialog: React.FC<BlitzDialogProps> = ({
             ) : modelSelections.length === 0 ? (
               <div className="text-[13px] text-nim-faint py-3">No agent models available. Configure API keys in Settings.</div>
             ) : (
-              <div className="flex flex-col gap-2">
-                {modelSelections.map(model => (
-                  <label
-                    key={model.id}
-                    className={`grid grid-cols-[auto_auto_1fr_auto] items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors rounded-lg border border-nim bg-nim ${
-                      model.checked
-                        ? 'bg-nim-selected border-l-2 border-l-[var(--nim-primary)]'
-                        : 'hover:bg-nim-hover border-l-2 border-l-transparent'
-                    } ${creating ? 'opacity-50 pointer-events-none' : ''}`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={model.checked}
-                      onChange={() => toggleModel(model.id)}
-                      className="shrink-0 accent-[var(--nim-primary)]"
-                      disabled={creating}
-                    />
-                    <span className="shrink-0">{getProviderIcon(model.provider, { size: 14 })}</span>
-                    <span className="text-[13px] text-nim truncate">{getModelDisplayName(model)}</span>
-                    <input
-                      type="number"
-                      min={1}
-                      max={5}
-                      value={model.count}
-                      onChange={(e) => updateCount(model.id, parseInt(e.target.value) || 1)}
-                      disabled={!model.checked || creating}
-                      className={`w-14 px-2 py-1 text-center text-[13px] bg-nim-secondary border border-nim rounded text-nim outline-none focus:border-nim-focus ${
-                        !model.checked ? 'opacity-30' : ''
-                      }`}
-                    />
-                  </label>
-                ))}
+              <div className="max-h-[260px] overflow-y-auto pr-1">
+                <div className="flex flex-col gap-1.5">
+                  {modelSelections.map(model => (
+                    <label
+                      key={model.id}
+                      className={`grid grid-cols-[auto_auto_1fr_auto] items-center gap-3 px-2.5 py-2 cursor-pointer transition-colors rounded-lg border border-nim bg-nim ${
+                        model.checked
+                          ? 'bg-nim-selected border-l-2 border-l-[var(--nim-primary)]'
+                          : 'hover:bg-nim-hover border-l-2 border-l-transparent'
+                      } ${creating ? 'opacity-50 pointer-events-none' : ''}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={model.checked}
+                        onChange={() => toggleModel(model.id)}
+                        className="shrink-0 accent-[var(--nim-primary)]"
+                        disabled={creating}
+                      />
+                      <span className="shrink-0">{getProviderIcon(model.provider, { size: 14 })}</span>
+                      <span className="text-[13px] text-nim truncate">{getModelDisplayName(model)}</span>
+                      <input
+                        type="number"
+                        min={1}
+                        max={5}
+                        value={model.count}
+                        onChange={(e) => updateCount(model.id, parseInt(e.target.value) || 1)}
+                        disabled={!model.checked || creating}
+                        className={`w-14 px-2 py-1 text-center text-[13px] bg-nim-secondary border border-nim rounded text-nim outline-none focus:border-nim-focus ${
+                          !model.checked ? 'opacity-30' : ''
+                        }`}
+                      />
+                    </label>
+                  ))}
+                </div>
               </div>
             )}
             <div className="text-[11px] text-nim-faint">
