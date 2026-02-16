@@ -31,6 +31,25 @@ export function OpenAICodexPanel({
         </p>
       </div>
 
+      <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)]">
+        <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">Prerequisites</h4>
+        <p className="text-[13px] text-[var(--nim-text-muted)] mb-2 leading-relaxed">
+          Before enabling OpenAI Codex, you need to install the Codex CLI and log in with your OpenAI account.
+        </p>
+        <p className="text-[13px] text-[var(--nim-text-muted)] leading-relaxed">
+          See the{' '}
+          <a
+            href="https://github.com/openai/codex"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[var(--nim-primary)] hover:underline"
+          >
+            OpenAI Codex setup instructions
+          </a>
+          {' '}for installation and authentication steps.
+        </p>
+      </div>
+
       <div className="provider-enable flex items-center justify-between gap-4 py-4 mb-4 border-b border-[var(--nim-border)]">
         <span className="provider-enable-label text-sm font-medium text-[var(--nim-text)]">Enable OpenAI Codex</span>
         <label className="provider-toggle relative inline-block w-11 h-6 cursor-pointer">
@@ -85,8 +104,7 @@ export function OpenAICodexPanel({
             <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">Codex Configuration</h4>
             <div className="cli-config-section">
               <p className="text-[13px] text-[var(--nim-text-muted)] mb-3">
-                The Codex SDK is bundled with Nimbalyst. Model selection is handled automatically.
-                No additional configuration required.
+                Model selection is handled automatically. No additional configuration required.
               </p>
             </div>
           </div>
