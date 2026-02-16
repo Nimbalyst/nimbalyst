@@ -140,19 +140,40 @@ const AgentTranscriptPanelComponent: React.FC<AgentTranscriptPanelProps> = ({
   useEffect(() => {
     const userMessages = sessionData.messages
       .map((msg, index) => ({ msg, index }))
-      .filter(({ msg }) => msg.role === 'user' && msg.isUserInput);
+      .filter(({ msg }) => msg.role === 'user' && msg.isUserInput !== false);
 
-    const markers: PromptMarker[] = userMessages.map(({ msg, index }, promptIndex) => ({
-      id: promptIndex + 1,
-      sessionId,
-      promptText: msg.content,
-      outputIndex: index,
-      timestamp: formatISO(msg.timestamp) || new Date().toISOString(),
-      completionTimestamp: undefined
-    }));
+    const allMessages = sessionData.messages;
+    const markers: PromptMarker[] = userMessages.map(({ msg, index }, promptIndex) => {
+      // Find the next user-input message to bound this turn
+      const nextUserMsg = userMessages[promptIndex + 1];
+      const endBound = nextUserMsg ? nextUserMsg.index : allMessages.length;
+
+      // Walk backward from endBound to find the last assistant/tool message in this turn
+      let completionTimestamp: string | undefined;
+      for (let i = endBound - 1; i > index; i--) {
+        if (allMessages[i].role !== 'user') {
+          completionTimestamp = formatISO(allMessages[i].timestamp) || undefined;
+          break;
+        }
+      }
+
+      // Don't show completion for the last prompt if session is still processing
+      if (promptIndex === userMessages.length - 1 && isProcessing) {
+        completionTimestamp = undefined;
+      }
+
+      return {
+        id: promptIndex + 1,
+        sessionId,
+        promptText: msg.content,
+        outputIndex: index,
+        timestamp: formatISO(msg.timestamp) || new Date().toISOString(),
+        completionTimestamp
+      };
+    });
 
     setPrompts(markers);
-  }, [sessionData.messages, sessionId]);
+  }, [sessionData.messages, sessionId, isProcessing]);
 
   // Extract file edits from database
   useEffect(() => {

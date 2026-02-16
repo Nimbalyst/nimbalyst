@@ -1198,6 +1198,28 @@ export const RichTranscriptView = React.forwardRef<
                               readFile={readFile}
                             />
                           </div>
+
+                          {/* Show elapsed time at the end of a completed Codex turn */}
+                          {(() => {
+                            const lastEventIdx = index + codexEvents.length - 1;
+                            // Don't show if still streaming (last group and waiting)
+                            if (isWaitingForResponse && lastEventIdx >= messages.length - 1) return null;
+                            // Find the preceding user-input message
+                            let startIdx = index - 1;
+                            while (startIdx >= 0 && !(messages[startIdx].role === 'user' && messages[startIdx].isUserInput !== false)) {
+                              startIdx--;
+                            }
+                            if (startIdx < 0) return null;
+                            const startTimestamp = messages[startIdx].timestamp;
+                            const endTimestamp = codexEvents[codexEvents.length - 1].timestamp;
+                            const duration = formatDuration(startTimestamp, endTimestamp);
+                            if (!duration || duration === '0ms') return null;
+                            return (
+                              <div className="rich-transcript-turn-elapsed text-xs text-[var(--nim-text-faint)] mt-2 ml-6">
+                                Finished in {duration}
+                              </div>
+                            );
+                          })()}
                         </div>
                       );
                     }
@@ -1349,7 +1371,7 @@ export const RichTranscriptView = React.forwardRef<
                           // Find the preceding user-input message that triggered this turn
                           // Only consider genuine user input (isUserInput), not system-generated user-role messages
                           let startIdx = index - 1;
-                          while (startIdx >= 0 && !(messages[startIdx].role === 'user' && messages[startIdx].isUserInput)) {
+                          while (startIdx >= 0 && !(messages[startIdx].role === 'user' && messages[startIdx].isUserInput !== false)) {
                             startIdx--;
                           }
                           if (startIdx < 0) return null; // No preceding user input message
