@@ -87,8 +87,8 @@ export function BetaFeaturesPanel() {
                     {feature.description}
                   </span>
                   {feature.tag === 'codex' && (
-                    <span className="setting-description text-xs leading-relaxed text-[var(--nim-text-muted)]">
-                      Note: Red/green diffs are not currently working in Codex.
+                    <span className="setting-description text-xs leading-relaxed text-[var(--nim-warning)]">
+                      Beta: Some functionality, such as red/green diffs in files, is not yet working.
                     </span>
                   )}
                 </div>
