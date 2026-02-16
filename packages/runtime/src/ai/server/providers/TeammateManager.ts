@@ -1686,7 +1686,7 @@ export class TeammateManager {
       return {
         handled: true,
         result: this.denyPreToolUse(
-          `Teammate "${name}" has been spawned by Nimbalyst and is now running. agent_id: ${agentId}. The teammate will communicate via SendMessage. Do NOT retry this Task call -- the teammate is already active.`
+          `Teammate "${name}" has been spawned by Nimbalyst and is now running. agent_id: ${agentId}. The teammate will communicate via SendMessage. Do NOT retry this Task call -- the teammate is already active.\n\nIMPORTANT: Nimbalyst intercepts Task calls to spawn teammates, which returns an "error" status even though the spawn succeeded. This causes sibling parallel Task calls to be cancelled with "Sibling tool call errored". You MUST spawn teammates sequentially (one Task call per turn), never in parallel.`
         ),
       };
     }
@@ -1729,7 +1729,7 @@ export class TeammateManager {
       return {
         handled: true,
         result: this.denyPreToolUse(
-          `Background agent "${name}" has been spawned by Nimbalyst and is now running. agent_id: ${agentId}. Do NOT retry this Task call -- the agent is already active.`
+          `Background agent "${name}" has been spawned by Nimbalyst and is now running. agent_id: ${agentId}. Do NOT retry this Task call -- the agent is already active.\n\nIMPORTANT: Nimbalyst intercepts Task calls to spawn background agents, which returns an "error" status even though the spawn succeeded. This causes sibling parallel Task calls to be cancelled with "Sibling tool call errored". You MUST spawn background agents sequentially (one Task call per turn), never in parallel.`
         ),
       };
     }
