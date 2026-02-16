@@ -847,12 +847,13 @@ export const RichTranscriptView = React.forwardRef<
   const renderToolCard = (toolMsg: Message, toolIndex: number, depth: number = 0): JSX.Element | null => {
     if (!toolMsg.toolCall) return null;
 
-    // Hide Task tool calls that failed with "Sibling tool call errored" -
-    // these are cancelled parallel spawns that were never actually started
+    // Hide Task tool calls that were cancelled as siblings of a parallel spawn.
+    // These get exactly "<tool_use_error>Sibling tool call errored</tool_use_error>"
+    // as their result and were never actually started.
     if (toolMsg.toolCall.name === 'Task' && (toolMsg as any).isError) {
       const result = toolMsg.toolCall.result;
       const resultStr = typeof result === 'string' ? result : '';
-      if (resultStr.includes('Sibling tool call errored')) {
+      if (/^\s*(<tool_use_error>)?\s*Sibling tool call errored\s*(<\/tool_use_error>)?\s*$/.test(resultStr)) {
         return null;
       }
     }
