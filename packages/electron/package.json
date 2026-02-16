@@ -209,7 +209,7 @@
         "to": "node-pty"
       },
       {
-        "from": "../../node_modules/@openai/codex-sdk",
+        "from": "node_modules/@openai/codex-sdk",
         "to": "app.asar.unpacked/node_modules/@openai/codex-sdk"
       },
       {

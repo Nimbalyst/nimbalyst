@@ -105,6 +105,12 @@ export class OpenAICodexProvider extends BaseAgentProvider {
   // (Homebrew, nvm, volta, etc.) that are missing from Electron's minimal GUI PATH
   private static enhancedPathLoader: (() => string) | null = null;
 
+  // SDK module loader (injected from electron main process for packaged builds)
+  // In packaged builds, dynamic import('@openai/codex-sdk') fails because the
+  // package isn't resolvable from within app.asar. This loader provides an
+  // alternative resolution path using process.resourcesPath.
+  private static sdkModuleLoader: (() => Promise<CodexSdkModuleLike>) | null = null;
+
   constructor(config?: { apiKey?: string }, deps?: OpenAICodexProviderDeps) {
     super();
     const apiKey = config?.apiKey || process.env.OPENAI_API_KEY || '';
@@ -121,7 +127,7 @@ export class OpenAICodexProvider extends BaseAgentProvider {
     } else {
       this.protocol = new CodexSDKProtocol(
         apiKey,
-        loadCodexSdkModule,
+        OpenAICodexProvider.sdkModuleLoader ?? loadCodexSdkModule,
         resolvePackagedCodexBinaryPath
       );
     }
@@ -208,6 +214,10 @@ export class OpenAICodexProvider extends BaseAgentProvider {
 
   public static setEnhancedPathLoader(loader: (() => string) | null): void {
     OpenAICodexProvider.enhancedPathLoader = loader;
+  }
+
+  public static setSdkModuleLoader(loader: (() => Promise<CodexSdkModuleLike>) | null): void {
+    OpenAICodexProvider.sdkModuleLoader = loader;
   }
 
   async initialize(config: ProviderConfig): Promise<void> {
@@ -325,7 +335,7 @@ export class OpenAICodexProvider extends BaseAgentProvider {
     apiKey?: string,
     deps?: OpenAICodexModelDiscoveryDeps,
   ): Promise<AIModel[]> {
-    const loadSdk = deps?.loadSdkModule ?? loadCodexSdkModule;
+    const loadSdk = deps?.loadSdkModule ?? OpenAICodexProvider.sdkModuleLoader ?? loadCodexSdkModule;
 
     try {
       const sdkModule = await loadSdk();

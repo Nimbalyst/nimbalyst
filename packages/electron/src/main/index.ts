@@ -840,6 +840,20 @@ app.whenReady().then(async () => {
     // (docker, homebrew, nvm, etc.) that are missing from Electron's GUI PATH
     OpenAICodexProvider.setEnhancedPathLoader(() => getEnhancedPath());
 
+    // Inject SDK module loader for packaged builds where dynamic import('@openai/codex-sdk')
+    // can't resolve the package from within app.asar
+    if (app.isPackaged) {
+      const sdkPath = path.join(
+        process.resourcesPath,
+        'app.asar.unpacked', 'node_modules', '@openai', 'codex-sdk'
+      );
+      OpenAICodexProvider.setSdkModuleLoader(async () => {
+        const { createRequire } = await import('module');
+        const req = createRequire(import.meta.url);
+        return req(sdkPath);
+      });
+    }
+
     // Inject additional directories loader
     // This allows Claude to access SDK docs when working on extension projects
     ClaudeCodeProvider.setAdditionalDirectoriesLoader(getAdditionalDirectoriesForWorkspace);
