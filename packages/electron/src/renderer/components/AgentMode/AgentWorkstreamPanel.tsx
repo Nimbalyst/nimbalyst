@@ -19,7 +19,7 @@
 import React, { useCallback, useEffect, useRef, useState, useImperativeHandle, type KeyboardEvent } from 'react';
 import { getWorktreeNameFromPath } from '../../utils/pathUtils';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
-import { ProviderIcon, MaterialSymbol } from '@nimbalyst/runtime';
+import { ProviderIcon, MaterialSymbol, SearchReplaceStateManager } from '@nimbalyst/runtime';
 import { WorkstreamEditorTabs, type WorkstreamEditorTabsRef } from './WorkstreamEditorTabs';
 import { WorkstreamSessionTabs } from './WorkstreamSessionTabs';
 import { FilesEditedSidebar } from './FilesEditedSidebar';
@@ -518,6 +518,15 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
   // Ref for the editor area to check focus
   const editorAreaRef = useRef<HTMLDivElement>(null);
 
+  // Ref for the session/transcript area to check focus
+  const sessionAreaRef = useRef<HTMLDivElement>(null);
+
+  // Track which panel (editor vs session) was last clicked/focused.
+  // Used by CMD+F to determine where to route find, since document.activeElement
+  // is unreliable (e.g., clicking a tab bar or non-focusable area doesn't set activeElement
+  // inside the editor area). Defaults to 'session' since that's the primary panel.
+  const lastFocusedPanelRef = useRef<'editor' | 'session'>('session');
+
   // For single sessions, activeSessionId should be the session itself
   // For workstreams, activeSessionId should be one of the children
   // We trust the atom state - no fallback that masks bugs
@@ -789,28 +798,90 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
     document.body.style.userSelect = 'none';
   }, [sidebarWidth, setSidebarWidth]);
 
-  // Handle CMD+F routing based on focus
-  // Route to editor if editor has focus, otherwise route to transcript
+  // Track which panel was last clicked to route CMD+F correctly.
+  // document.activeElement is unreliable because clicking tab bars, non-focusable
+  // areas, or scrolling in the editor area doesn't necessarily move activeElement
+  // into that area. mousedown on the panel container is a reliable proxy.
+  useEffect(() => {
+    const editorArea = editorAreaRef.current;
+    const sessionArea = sessionAreaRef.current;
+
+    const handleEditorClick = () => { lastFocusedPanelRef.current = 'editor'; };
+    const handleSessionClick = () => { lastFocusedPanelRef.current = 'session'; };
+
+    editorArea?.addEventListener('mousedown', handleEditorClick, true);
+    sessionArea?.addEventListener('mousedown', handleSessionClick, true);
+
+    return () => {
+      editorArea?.removeEventListener('mousedown', handleEditorClick, true);
+      sessionArea?.removeEventListener('mousedown', handleSessionClick, true);
+    };
+  }, [showEditorTabs, showSessionTabs]);
+
+  // Trigger find in the active editor. Two strategies based on editor type:
+  // - Monaco: dispatch synthetic Cmd+F keydown to its internal textarea, which
+  //   Monaco's keybinding system processes to open its built-in find widget.
+  // - Lexical: use SearchReplaceStateManager.toggle() directly (same as Files mode).
+  //   We can't use synthetic keydown because Lexical's SearchReplacePlugin checks
+  //   isEditorActive (based on React state), which won't be true synchronously
+  //   after focusing the contenteditable.
+  const triggerEditorFind = useCallback(() => {
+    const editorArea = editorAreaRef.current;
+    if (!editorArea) {
+      console.log('[AgentWorkstreamPanel] triggerEditorFind: no editorArea ref');
+      return;
+    }
+
+    const monacoTextarea = editorArea.querySelector<HTMLTextAreaElement>('.monaco-editor .inputarea textarea');
+
+    if (monacoTextarea) {
+      console.log('[AgentWorkstreamPanel] triggerEditorFind: dispatching to Monaco textarea');
+      monacoTextarea.focus();
+      monacoTextarea.dispatchEvent(new KeyboardEvent('keydown', {
+        key: 'f', code: 'KeyF', metaKey: true,
+        bubbles: true, cancelable: true,
+      }));
+    } else {
+      // Lexical or other editor - use SearchReplaceStateManager
+      const activeFilePath = editorTabsRef.current?.getActiveFilePath();
+      if (activeFilePath) {
+        console.log('[AgentWorkstreamPanel] triggerEditorFind: toggling SearchReplaceStateManager for', activeFilePath);
+        SearchReplaceStateManager.toggle(activeFilePath);
+      } else {
+        console.log('[AgentWorkstreamPanel] triggerEditorFind: no active file path');
+      }
+    }
+  }, []);
+
+  // Dispatch find-next/find-prev keyboard events to the active editor.
+  // These only work when the editor already has focus (find dialog is open).
+  const dispatchEditorKeyEvent = useCallback((key: string, code: string, meta: boolean, shift = false) => {
+    const editorArea = editorAreaRef.current;
+    if (!editorArea) return;
+
+    const monacoTextarea = editorArea.querySelector<HTMLTextAreaElement>('.monaco-editor .inputarea textarea');
+    const target = monacoTextarea || document;
+
+    target.dispatchEvent(new KeyboardEvent('keydown', {
+      key, code, metaKey: meta, shiftKey: shift,
+      bubbles: true, cancelable: true,
+    }));
+  }, []);
+
+  // Handle CMD+F routing based on which panel was last interacted with.
+  // Editor panel: triggerEditorFind handles Monaco vs Lexical differently.
+  // Session panel: dispatch transcript:find CustomEvent.
   useEffect(() => {
     const handleFind = () => {
-      // Check if the editor area has focus
-      const activeElement = document.activeElement;
-      const editorHasFocus = editorAreaRef.current?.contains(activeElement);
+      const activeFilePath = editorTabsRef.current?.getActiveFilePath();
+      const editorIsTarget = lastFocusedPanelRef.current === 'editor' && activeFilePath;
 
-      if (editorHasFocus && editorTabsRef.current) {
-        // Editor has focus - trigger find in the active editor
-        // Monaco and Lexical handle CMD+F natively, so we dispatch a keyboard event
-        // to simulate the user pressing CMD+F directly in the focused editor
-        const event = new KeyboardEvent('keydown', {
-          key: 'f',
-          code: 'KeyF',
-          metaKey: true,
-          bubbles: true,
-          cancelable: true,
-        });
-        activeElement?.dispatchEvent(event);
+      console.log('[AgentWorkstreamPanel] handleFind: lastFocusedPanel=' + lastFocusedPanelRef.current +
+        ' activeFilePath=' + activeFilePath + ' activeSessionId=' + activeSessionId);
+
+      if (editorIsTarget) {
+        triggerEditorFind();
       } else if (activeSessionId) {
-        // Transcript has focus - dispatch to transcript with sessionId
         window.dispatchEvent(new CustomEvent('transcript:find', {
           detail: { sessionId: activeSessionId }
         }));
@@ -818,21 +889,9 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
     };
 
     const handleFindNext = () => {
-      const activeElement = document.activeElement;
-      const editorHasFocus = editorAreaRef.current?.contains(activeElement);
-
-      if (editorHasFocus) {
-        // Editor has focus - trigger find next in the active editor
-        const event = new KeyboardEvent('keydown', {
-          key: 'g',
-          code: 'KeyG',
-          metaKey: true,
-          bubbles: true,
-          cancelable: true,
-        });
-        activeElement?.dispatchEvent(event);
+      if (lastFocusedPanelRef.current === 'editor' && editorTabsRef.current?.getActiveFilePath()) {
+        dispatchEditorKeyEvent('g', 'KeyG', true);
       } else if (activeSessionId) {
-        // Transcript has focus - dispatch to transcript with sessionId
         window.dispatchEvent(new CustomEvent('transcript:find-next', {
           detail: { sessionId: activeSessionId }
         }));
@@ -840,22 +899,9 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
     };
 
     const handleFindPrevious = () => {
-      const activeElement = document.activeElement;
-      const editorHasFocus = editorAreaRef.current?.contains(activeElement);
-
-      if (editorHasFocus) {
-        // Editor has focus - trigger find previous in the active editor
-        const event = new KeyboardEvent('keydown', {
-          key: 'g',
-          code: 'KeyG',
-          metaKey: true,
-          shiftKey: true,
-          bubbles: true,
-          cancelable: true,
-        });
-        activeElement?.dispatchEvent(event);
+      if (lastFocusedPanelRef.current === 'editor' && editorTabsRef.current?.getActiveFilePath()) {
+        dispatchEditorKeyEvent('g', 'KeyG', true, true);
       }
-      // Note: transcript find-previous not yet implemented
     };
 
     window.addEventListener('menu:find', handleFind);
@@ -867,17 +913,13 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
       window.removeEventListener('menu:find-next', handleFindNext);
       window.removeEventListener('menu:find-previous', handleFindPrevious);
     };
-  }, [activeSessionId]);
+  }, [activeSessionId, triggerEditorFind, dispatchEditorKeyEvent]);
 
   // Expose ref methods
   useImperativeHandle(ref, () => ({
     closeActiveTab: () => {
-      // Only close editor tabs if the editor area has focus
-      const activeElement = document.activeElement;
-      const editorHasFocus = editorAreaRef.current?.contains(activeElement);
-
-      if (editorHasFocus && editorTabsRef.current) {
-        // Close the active editor tab
+      // Only close editor tabs if the editor panel was last focused
+      if (lastFocusedPanelRef.current === 'editor' && editorTabsRef.current) {
         editorTabsRef.current.closeActiveTab();
       }
       // If transcript has focus, do nothing - we don't want to close AI sessions with CMD+W
@@ -930,7 +972,7 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
 
           {/* Session tabs + active session panel */}
           {showSessionTabs && (
-            <div className={`agent-workstream-session-area flex flex-col overflow-hidden ${collapseTranscript ? 'shrink-0' : 'flex-1 min-h-0'} ${layoutMode === 'transcript' ? 'maximized' : ''}`}>
+            <div ref={sessionAreaRef} className={`agent-workstream-session-area flex flex-col overflow-hidden ${collapseTranscript ? 'shrink-0' : 'flex-1 min-h-0'} ${layoutMode === 'transcript' ? 'maximized' : ''}`}>
               <WorkstreamSessionTabs
                 workspacePath={workspacePath}
                 workstreamId={workstreamId}
