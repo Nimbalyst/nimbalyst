@@ -79,7 +79,7 @@ import UIKit
 /// Camera-based QR code scanner using AVCaptureSession.
 /// Wraps AVCaptureVideoPreviewLayer in a UIViewRepresentable for SwiftUI.
 struct QRScannerView: UIViewRepresentable {
-    let onScanned: (String) -> Void
+    let onScanned: @Sendable (String) -> Void
 
     func makeCoordinator() -> Coordinator {
         Coordinator(onScanned: onScanned)
@@ -92,11 +92,11 @@ struct QRScannerView: UIViewRepresentable {
 
     func updateUIView(_ uiView: QRScannerUIView, context: Context) {}
 
-    class Coordinator: NSObject, AVCaptureMetadataOutputObjectsDelegate {
-        let onScanned: (String) -> Void
+    class Coordinator: NSObject, @preconcurrency AVCaptureMetadataOutputObjectsDelegate {
+        let onScanned: @Sendable (String) -> Void
         private var hasScanned = false
 
-        init(onScanned: @escaping (String) -> Void) {
+        init(onScanned: @escaping @Sendable (String) -> Void) {
             self.onScanned = onScanned
         }
 
@@ -178,7 +178,7 @@ class QRScannerUIView: UIView {
 
     private func setupCamera() {
         let session = AVCaptureSession()
-        session.sessionPreset = .medium // 480p is sufficient for QR codes, much faster than default
+        session.sessionPreset = .high // 720p - medium (480p) is too low for reliable QR detection on some devices
 
         guard let device = AVCaptureDevice.default(for: .video),
               let input = try? AVCaptureDeviceInput(device: device) else { return }
