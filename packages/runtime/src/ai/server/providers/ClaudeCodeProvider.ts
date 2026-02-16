@@ -2399,10 +2399,11 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
    *
    * - If the lead is idle (no active query): stores the message for the next
    *   sendMessage() call and emits an event so AIService can trigger processing.
-   * - If the lead has running teammates (sub-agents): queues the message to be
-   *   delivered after the current turn completes naturally.
-   * - Otherwise: interrupts the query so the sendMessage() loop can inject the
-   *   message via streamInput.
+   * - If the lead has an active query: attempts interrupt() so the sendMessage()
+   *   loop can inject the message via streamInput on the live transport. If the
+   *   transport is already dead (turn finished but generator hasn't reached
+   *   finally yet), interrupt() will fail gracefully and the message stays
+   *   queued for the finally block to handle via resume.
    */
   async interruptWithMessage(message: string): Promise<void> {
     if (!this.leadQuery) {
@@ -2436,19 +2437,16 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
       return;
     }
 
-    if (this.teammateManager.hasRunningTeammates()) {
-      // Don't interrupt while sub-agents are running; queue for after turn completes
-      console.log('[CLAUDE-CODE] interruptWithMessage: teammates running, queueing for after turn');
-      return;
-    }
-
     // Interrupt the lead query - the sendMessage() loop will detect the
-    // pending messages (via teammateManager queue) and inject via streamInput
+    // pending messages (via teammateManager queue) and inject via streamInput.
+    // If the transport is already dead (lead turn finished but generator hasn't
+    // reached finally yet), interrupt() will fail and the message stays queued
+    // for the finally block to deliver via a resume-based sendMessage().
     console.log('[CLAUDE-CODE] interruptWithMessage: interrupting active lead query');
     try {
       await this.leadQuery.interrupt();
     } catch (err) {
-      console.warn('[CLAUDE-CODE] interruptWithMessage: interrupt() failed:', err);
+      console.warn('[CLAUDE-CODE] interruptWithMessage: interrupt() failed (transport may be closed):', err);
     }
   }
 
