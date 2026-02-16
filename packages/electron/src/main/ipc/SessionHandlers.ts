@@ -590,6 +590,9 @@ export async function registerSessionHandlers() {
     // Delete session
     safeHandle('sessions:delete', async (event, sessionId: string) => {
         try {
+            // Destroy any active provider (aborts lead query and kills all teammates)
+            ProviderFactory.destroyProvider(sessionId);
+
             await AISessionsRepository.delete(sessionId);
             return { success: true };
         } catch (error) {

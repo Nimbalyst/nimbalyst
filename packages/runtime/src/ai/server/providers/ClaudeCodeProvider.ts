@@ -94,8 +94,9 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
 
   // Lead query reference for interruptWithMessage support
   private leadQuery: Query | null = null;
-  // Flag: a teammate message is pending; check teammateManager queue for content
-  private hasTeammateInterrupt: boolean = false;
+  // Flag: set when a teammate:messageWhileIdle has been emitted but sendMessage hasn't
+  // started yet. Prevents interruptWithMessage from emitting duplicate events.
+  private teammateIdleMessagePending: boolean = false;
   // Flag: set when streamInput fails due to dead transport, used in finally block
   private transportDied: boolean = false;
 
@@ -1144,6 +1145,7 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
         options
       });
       this.leadQuery = leadQuery as unknown as Query;
+      this.teammateIdleMessagePending = false;
       const queryIterator = leadQuery as AsyncIterable<any>;
       const queryCallDuration = Date.now() - queryCallStart;
       // console.log(`[CLAUDE-CODE] SDK query() returned iterator in ${queryCallDuration}ms`);
@@ -2127,7 +2129,6 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
       while (this.teammateManager.hasPendingTeammateMessages() && this.leadQuery) {
         const nextMsg = this.teammateManager.drainNextTeammateMessage();
         if (!nextMsg) break;
-        this.hasTeammateInterrupt = false;
 
         const formattedMessage = `[Teammate message from "${nextMsg.teammateName}"]\n\n${nextMsg.content}`;
         console.log(`[CLAUDE-CODE] Processing queued teammate message via streamInput: "${nextMsg.summary}"`);
@@ -2212,7 +2213,6 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
           throw iterError;
         }
       }
-      this.hasTeammateInterrupt = false;
 
       // Check if this was a slash command that returned no output
       // This helps users understand when a command doesn't exist or failed silently
@@ -2350,10 +2350,20 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
       // message), re-trigger delivery now that leadQuery is null. This mirrors the
       // "lead is idle" path in interruptWithMessage.
       if (this.teammateManager.hasPendingTeammateMessages()) {
-        const firstMsg = this.teammateManager.drainNextTeammateMessage();
-        if (firstMsg) {
-          const formatted = `[Teammate message from "${firstMsg.teammateName}"]\n\n${firstMsg.content}`;
-          console.log(`[CLAUDE-CODE] Re-triggering teammate message delivery after sendMessage exit: "${firstMsg.summary}"`);
+        // Drain ALL pending messages into a single formatted prompt
+        const messages: Array<{teammateName: string; content: string; summary: string}> = [];
+        while (this.teammateManager.hasPendingTeammateMessages()) {
+          const msg = this.teammateManager.drainNextTeammateMessage();
+          if (msg) messages.push(msg);
+          else break;
+        }
+        if (messages.length > 0) {
+          const formatted = messages
+            .map(msg => `[Teammate message from "${msg.teammateName}"]\n\n${msg.content}`)
+            .join('\n\n---\n\n');
+          const summaries = messages.map(msg => msg.summary).join(', ');
+          console.log(`[CLAUDE-CODE] Re-triggering ${messages.length} teammate message(s) after sendMessage exit: "${summaries}"`);
+          this.teammateIdleMessagePending = true;
           this.emit('teammate:messageWhileIdle', {
             sessionId: this.teammateManager.lastUsedSessionId,
             message: formatted,
@@ -2396,17 +2406,32 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
    */
   async interruptWithMessage(message: string): Promise<void> {
     if (!this.leadQuery) {
-      // Lead is idle - drain the first queued message and emit event so
-      // AIService can trigger a new sendMessage. Any additional messages
-      // will be processed by the while loop in sendMessage after this turn.
-      const firstMsg = this.teammateManager.drainNextTeammateMessage();
-      if (!firstMsg) return;
+      // Guard against duplicate idle triggers: if a teammate:messageWhileIdle event
+      // was already emitted but sendMessage hasn't started yet, don't drain another.
+      // The pending sendMessage will process the queue via its while loop.
+      if (this.teammateIdleMessagePending) {
+        console.log('[CLAUDE-CODE] interruptWithMessage: idle message already pending, skipping duplicate trigger');
+        return;
+      }
 
-      const formattedMessage = `[Teammate message from "${firstMsg.teammateName}"]\n\n${firstMsg.content}`;
-      console.log(`[CLAUDE-CODE] interruptWithMessage: lead is idle, triggering sendMessage for "${firstMsg.summary}"`);
+      // Drain ALL pending messages into a single formatted prompt
+      const messages: Array<{teammateName: string; content: string; summary: string; teammateAgentId: string}> = [];
+      while (this.teammateManager.hasPendingTeammateMessages()) {
+        const msg = this.teammateManager.drainNextTeammateMessage();
+        if (msg) messages.push(msg);
+        else break;
+      }
+      if (messages.length === 0) return;
+
+      const formatted = messages
+        .map(msg => `[Teammate message from "${msg.teammateName}"]\n\n${msg.content}`)
+        .join('\n\n---\n\n');
+      const summaries = messages.map(msg => msg.summary).join(', ');
+      console.log(`[CLAUDE-CODE] interruptWithMessage: lead is idle, triggering sendMessage for ${messages.length} message(s): "${summaries}"`);
+      this.teammateIdleMessagePending = true;
       this.emit('teammate:messageWhileIdle', {
         sessionId: this.teammateManager.lastUsedSessionId,
-        message: formattedMessage,
+        message: formatted,
       });
       return;
     }
@@ -2414,14 +2439,12 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
     if (this.teammateManager.hasRunningTeammates()) {
       // Don't interrupt while sub-agents are running; queue for after turn completes
       console.log('[CLAUDE-CODE] interruptWithMessage: teammates running, queueing for after turn');
-      this.hasTeammateInterrupt = true;
       return;
     }
 
     // Interrupt the lead query - the sendMessage() loop will detect the
     // pending messages (via teammateManager queue) and inject via streamInput
     console.log('[CLAUDE-CODE] interruptWithMessage: interrupting active lead query');
-    this.hasTeammateInterrupt = true;
     try {
       await this.leadQuery.interrupt();
     } catch (err) {

@@ -1930,6 +1930,13 @@ export class AIService {
           logger.main.warn('[AIService] teammate:messageWhileIdle with no sessionId');
           return;
         }
+        // Guard: don't trigger sendMessage if session was already ended
+        // (e.g., all teammates completed between message queue and this handler)
+        const sessionStateManager = getSessionStateManager();
+        if (!sessionStateManager.isSessionActive(data.sessionId)) {
+          logger.main.info(`[AIService] Ignoring teammate message for ended session ${data.sessionId}`);
+          return;
+        }
         logger.main.info(`[AIService] Teammate message while lead idle, triggering sendMessage for session ${data.sessionId}`);
         try {
           const targetWindow = findWindowByWorkspace(effectiveWorkspacePath);

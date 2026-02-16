@@ -625,50 +625,31 @@ export class TeammateManager {
         await fsp.writeFile(inboxPath, JSON.stringify({ messages: [] }, null, 2));
       }
 
-      let config: any;
+      const configLockPath = teamConfigPath + '.lock';
+      const result = await this.withSimpleFileLock(configLockPath, async () => {
+        let config: any;
 
-      let configExists = false;
-      try {
-        await fsp.access(teamConfigPath);
-        configExists = true;
-      } catch { /* does not exist */ }
+        let configExists = false;
+        try {
+          await fsp.access(teamConfigPath);
+          configExists = true;
+        } catch { /* does not exist */ }
 
-      if (configExists) {
-        const configContent = await fsp.readFile(teamConfigPath, 'utf-8');
-        config = JSON.parse(configContent);
+        if (configExists) {
+          const configContent = await fsp.readFile(teamConfigPath, 'utf-8');
+          config = JSON.parse(configContent);
 
-        const existingMember = config.members?.find((m: any) => m.agentId === agentId);
-        if (existingMember) {
-          console.log(`[TEAM-CONFIG] Teammate "${agentId}" already registered in team config`);
-          return;
-        }
+          const existingMember = config.members?.find((m: any) => m.agentId === agentId);
+          if (existingMember) {
+            console.log(`[TEAM-CONFIG] Teammate "${agentId}" already registered in team config`);
+            return;
+          }
 
-        if (!config.members) {
-          config.members = [];
-        }
+          if (!config.members) {
+            config.members = [];
+          }
 
-        config.members.push({
-          agentId,
-          name,
-          agentType,
-          model: model || 'haiku',
-          color,
-          planModeRequired: false,
-          joinedAt: Date.now(),
-          tmuxPaneId: 'in-process',
-          cwd,
-          subscriptions: [],
-          prompt,
-          backendType: 'in-process',
-        });
-      } else {
-        console.warn(`[TEAM-CONFIG] Creating new team config for "${teamName}" - this should have been created by TeamCreate`);
-        config = {
-          name: teamName,
-          description: '',
-          createdAt: Date.now(),
-          leadAgentId: `team-lead@${teamName}`,
-          members: [{
+          config.members.push({
             agentId,
             name,
             agentType,
@@ -681,12 +662,40 @@ export class TeammateManager {
             subscriptions: [],
             prompt,
             backendType: 'in-process',
-          }],
-        };
-      }
+          });
+        } else {
+          console.warn(`[TEAM-CONFIG] Creating new team config for "${teamName}" - this should have been created by TeamCreate`);
+          config = {
+            name: teamName,
+            description: '',
+            createdAt: Date.now(),
+            leadAgentId: `team-lead@${teamName}`,
+            members: [{
+              agentId,
+              name,
+              agentType,
+              model: model || 'haiku',
+              color,
+              planModeRequired: false,
+              joinedAt: Date.now(),
+              tmuxPaneId: 'in-process',
+              cwd,
+              subscriptions: [],
+              prompt,
+              backendType: 'in-process',
+            }],
+          };
+        }
 
-      await fsp.writeFile(teamConfigPath, JSON.stringify(config, null, 2));
-      console.log(`[TEAM-CONFIG] Registered teammate "${agentId}" in team config at ${teamConfigPath}`);
+        const tmpPath = teamConfigPath + '.tmp';
+        await fsp.writeFile(tmpPath, JSON.stringify(config, null, 2));
+        await fsp.rename(tmpPath, teamConfigPath);
+        console.log(`[TEAM-CONFIG] Registered teammate "${agentId}" in team config at ${teamConfigPath}`);
+      });
+
+      if (result === null) {
+        console.warn(`[TEAM-CONFIG] Timed out acquiring config lock for team "${teamName}" - teammate "${agentId}" not registered`);
+      }
     } catch (error) {
       console.error(`[TEAM-CONFIG] Failed to update team config for "${agentId}":`, error);
     }
@@ -763,6 +772,21 @@ export class TeammateManager {
         const code = error?.code;
         if (code !== 'EEXIST') {
           throw error;
+        }
+        // Check for stale locks (e.g., process crashed while holding lock)
+        try {
+          const lockStat = await fsp.stat(lockPath);
+          const lockAgeMs = Date.now() - lockStat.mtimeMs;
+          if (lockAgeMs > 30000) {
+            console.warn(`[FILE-LOCK] Removing stale lock at "${lockPath}" (age: ${Math.round(lockAgeMs / 1000)}s)`);
+            try {
+              await fsp.unlink(lockPath);
+            } catch {
+              // Another process may have cleaned it up
+            }
+          }
+        } catch {
+          // Lock file may have been removed between our check and stat
         }
         await new Promise(resolve => setTimeout(resolve, retryDelayMs));
       }
