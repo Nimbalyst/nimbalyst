@@ -22,13 +22,22 @@ public struct ContentView: View {
 }
 
 /// Login screen shown after pairing but before authentication.
-/// Uses ASWebAuthenticationSession for Google OAuth via the sync server.
+/// Offers Google OAuth and email magic link sign-in.
+/// The paired email (from QR code) determines which account to use.
 public struct LoginView: View {
     @EnvironmentObject var appState: AppState
+
+    private var pairedEmail: String? {
+        if let email = KeychainManager.getUserId(), email.contains("@") {
+            return email
+        }
+        return nil
+    }
 
     public init() {}
 
     public var body: some View {
+        let _ = NSLog("[LoginView] getUserId=\(KeychainManager.getUserId() ?? "nil"), pairedEmail=\(pairedEmail ?? "nil")")
         VStack(spacing: 24) {
             Spacer()
 
@@ -40,7 +49,7 @@ public struct LoginView: View {
                 .font(.title)
                 .fontWeight(.bold)
 
-            if let pairedEmail = KeychainManager.getUserId(), pairedEmail.contains("@") {
+            if let pairedEmail {
                 Text("Sign in as **\(pairedEmail)** to sync with your Mac.")
                     .font(.body)
                     .foregroundStyle(.secondary)
@@ -55,26 +64,59 @@ public struct LoginView: View {
             }
 
             #if os(iOS)
-            Button {
-                guard let serverUrl = KeychainManager.getServerUrl() else { return }
-                appState.authManager.login(serverUrl: serverUrl)
-            } label: {
-                HStack(spacing: 8) {
-                    if appState.authManager.isAuthenticating {
-                        ProgressView()
-                            .tint(.white)
+            if appState.authManager.magicLinkSent {
+                // Waiting for user to tap the link in their email
+                magicLinkSentView
+            } else {
+                // Sign-in buttons
+                VStack(spacing: 12) {
+                    Button {
+                        guard let serverUrl = KeychainManager.getServerUrl() else { return }
+                        appState.authManager.login(serverUrl: serverUrl)
+                    } label: {
+                        HStack(spacing: 8) {
+                            if appState.authManager.isAuthenticating {
+                                ProgressView()
+                                    .tint(.white)
+                            }
+                            Text(appState.authManager.isAuthenticating ? "Signing in..." : "Sign in with Google")
+                                .fontWeight(.semibold)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 50)
+                        .background(NimbalystColors.primary)
+                        .foregroundStyle(.white)
+                        .cornerRadius(12)
                     }
-                    Text(appState.authManager.isAuthenticating ? "Signing in..." : "Sign in with Google")
-                        .fontWeight(.semibold)
+                    .disabled(appState.authManager.isAuthenticating)
+
+                    if let email = pairedEmail {
+                        Button {
+                            guard let serverUrl = KeychainManager.getServerUrl() else { return }
+                            appState.authManager.sendMagicLink(email: email, serverUrl: serverUrl)
+                        } label: {
+                            HStack(spacing: 8) {
+                                if appState.authManager.isAuthenticating {
+                                    ProgressView()
+                                        .tint(NimbalystColors.primary)
+                                }
+                                Text(appState.authManager.isAuthenticating ? "Sending..." : "Sign in with email link")
+                                    .fontWeight(.semibold)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 50)
+                            .background(Color.clear)
+                            .foregroundStyle(NimbalystColors.primary)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(NimbalystColors.primary, lineWidth: 1.5)
+                            )
+                        }
+                        .disabled(appState.authManager.isAuthenticating)
+                    }
                 }
-                .frame(maxWidth: .infinity)
-                .frame(height: 50)
-                .background(NimbalystColors.primary)
-                .foregroundStyle(.white)
-                .cornerRadius(12)
+                .padding(.horizontal, 32)
             }
-            .disabled(appState.authManager.isAuthenticating)
-            .padding(.horizontal, 32)
             #endif
 
             if let error = appState.authManager.authError {
@@ -94,6 +136,44 @@ public struct LoginView: View {
             .padding(.bottom, 24)
         }
     }
+
+    #if os(iOS)
+    private var magicLinkSentView: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "envelope.badge")
+                .font(.system(size: 36))
+                .foregroundStyle(NimbalystColors.success)
+
+            Text("Check your email")
+                .font(.headline)
+
+            if let email = pairedEmail {
+                Text("We sent a sign-in link to **\(email)**. Tap the link in your email to continue.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+
+            Button("Resend link") {
+                guard let email = pairedEmail,
+                      let serverUrl = KeychainManager.getServerUrl() else { return }
+                appState.authManager.magicLinkSent = false
+                appState.authManager.sendMagicLink(email: email, serverUrl: serverUrl)
+            }
+            .font(.callout)
+            .foregroundStyle(NimbalystColors.primary)
+            .padding(.top, 4)
+
+            Button("Use a different sign-in method") {
+                appState.authManager.magicLinkSent = false
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .padding(.top, 4)
+        }
+        .padding(.horizontal, 32)
+    }
+    #endif
 }
 
 /// Main navigation using NavigationStack for iPhone and NavigationSplitView for iPad.

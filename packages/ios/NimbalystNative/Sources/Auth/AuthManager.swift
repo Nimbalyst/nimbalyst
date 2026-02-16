@@ -18,6 +18,7 @@ public final class AuthManager: ObservableObject {
     @Published public var email: String?
     @Published public var isAuthenticating: Bool = false
     @Published public var authError: String?
+    @Published public var magicLinkSent: Bool = false
 
     /// Retained to prevent deallocation during the browser flow.
     private var authSession: ASWebAuthenticationSession?
@@ -98,6 +99,75 @@ public final class AuthManager: ObservableObject {
     }
     #endif
 
+    // MARK: - Magic Link
+
+    #if os(iOS)
+    /// Send a magic link email to the given address for passwordless login.
+    /// The server sends the email via Stytch; the magic link redirects through
+    /// the server's `/auth/callback` which then issues a `nimbalyst://auth/callback` deep link.
+    public func sendMagicLink(email: String, serverUrl: String) {
+        guard !isAuthenticating else { return }
+
+        let baseUrl = serverUrl
+            .replacingOccurrences(of: "wss://", with: "https://")
+            .replacingOccurrences(of: "ws://", with: "http://")
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+
+        guard let url = URL(string: "\(baseUrl)/api/auth/magic-link") else {
+            authError = "Invalid server URL"
+            return
+        }
+
+        isAuthenticating = true
+        authError = nil
+        magicLinkSent = false
+
+        // The magic link callback goes to the server's /auth/callback, which
+        // authenticates the token and redirects to nimbalyst://auth/callback.
+        let callbackUrl = "\(baseUrl)/auth/callback"
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let body: [String: Any] = [
+            "email": email,
+            "redirect_url": callbackUrl,
+        ]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+
+        Task {
+            do {
+                let (data, response) = try await URLSession.shared.data(for: request)
+                await MainActor.run {
+                    isAuthenticating = false
+
+                    guard let httpResponse = response as? HTTPURLResponse else {
+                        authError = "Unexpected response"
+                        return
+                    }
+
+                    if httpResponse.statusCode == 200 {
+                        magicLinkSent = true
+                        logger.info("Magic link sent to \(email)")
+                    } else {
+                        let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+                        let errorMsg = json?["error"] as? String ?? "Failed to send magic link"
+                        authError = errorMsg
+                        logger.error("Magic link failed: \(errorMsg)")
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    isAuthenticating = false
+                    authError = "Network error: \(error.localizedDescription)"
+                    logger.error("Magic link request failed: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+    #endif
+
     // MARK: - Callback
 
     /// Handle the `nimbalyst://auth/callback?...` deep link.
@@ -106,8 +176,10 @@ public final class AuthManager: ObservableObject {
     /// The desktop derives encryption keys using `PBKDF2(seed, "nimbalyst:<stytchUserId>")`,
     /// so the mobile app MUST authenticate as the same user to derive the same key.
     public func handleCallback(_ url: URL) {
+        NSLog("[AuthManager] handleCallback called with URL: \(url.absoluteString.prefix(120))")
         guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
               let queryItems = components.queryItems else {
+            NSLog("[AuthManager] handleCallback: Invalid callback URL - no components/queryItems")
             authError = "Invalid callback URL"
             return
         }
@@ -116,12 +188,13 @@ public final class AuthManager: ObservableObject {
             guard let value = item.value else { return nil }
             return (item.name, value)
         })
+        NSLog("[AuthManager] handleCallback params: \(params.keys.sorted().joined(separator: ", "))")
 
         guard let sessionToken = params["session_token"],
               let sessionJwt = params["session_jwt"],
               let userId = params["user_id"] else {
             authError = "Missing required auth parameters"
-            logger.error("Callback missing params. Got: \(params.keys.joined(separator: ", "))")
+            NSLog("[AuthManager] handleCallback MISSING params. Got: \(params.keys.joined(separator: ", "))")
             return
         }
 
@@ -130,12 +203,14 @@ public final class AuthManager: ObservableObject {
 
         // Validate the login matches the paired account.
         // The QR code includes syncEmail so we can check it here.
-        if let pairedEmail = KeychainManager.getUserId(),
+        let pairedUserId = KeychainManager.getUserId()
+        NSLog("[AuthManager] email=\(email), pairedUserId=\(pairedUserId ?? "nil")")
+        if let pairedEmail = pairedUserId,
            pairedEmail.contains("@"),
            !email.isEmpty,
            email.lowercased() != pairedEmail.lowercased() {
             authError = "Wrong account. Sign in with \(pairedEmail) to match your desktop pairing."
-            logger.error("Email mismatch: logged in as \(email), paired with \(pairedEmail)")
+            NSLog("[AuthManager] EMAIL MISMATCH: logged in as \(email), paired with \(pairedEmail)")
             return
         }
 
@@ -150,10 +225,10 @@ public final class AuthManager: ObservableObject {
             isAuthenticated = true
             self.email = email
             authError = nil
-            logger.info("Authentication successful for \(email)")
+            NSLog("[AuthManager] Authentication SUCCESS for \(email)")
         } catch {
             authError = "Failed to store auth session: \(error.localizedDescription)"
-            logger.error("Failed to store auth session: \(error.localizedDescription)")
+            NSLog("[AuthManager] Authentication FAILED: \(error.localizedDescription)")
         }
     }
 
@@ -224,6 +299,7 @@ public final class AuthManager: ObservableObject {
         isAuthenticated = false
         email = nil
         authError = nil
+        magicLinkSent = false
     }
 }
 

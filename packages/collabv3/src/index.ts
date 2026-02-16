@@ -571,7 +571,19 @@ async function handleAuthRoutes(
 
       const deepLinkUrl = `nimbalyst://auth/callback?${deepLinkParams.toString()}`;
 
-      // Return a page that redirects to the deep link
+      // Mobile Safari: do a direct 302 redirect to the deep link.
+      // Safari on iOS blocks automatic JS redirects to custom URL schemes,
+      // but follows HTTP 302 redirects reliably.
+      const ua = request.headers.get('user-agent') || '';
+      const isMobile = /iPhone|iPad|iPod/i.test(ua);
+      if (isMobile) {
+        return new Response(null, {
+          status: 302,
+          headers: { 'Location': deepLinkUrl },
+        });
+      }
+
+      // Desktop: return a page that redirects to the deep link
       // Always show session copy option for manual setup on devices that can't use deep links
       return new Response(renderSuccessPage(deepLinkUrl, sessionData, true), {
         status: 200,

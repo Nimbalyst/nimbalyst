@@ -38,6 +38,32 @@ public final class DatabaseManager {
         return dbDir.appendingPathComponent("nimbalyst.sqlite").path
     }
 
+    /// Erase all data from every table. Safe to call while the database is still
+    /// open -- this avoids the ARC-timing issues of deleting the file on disk
+    /// while references may still hold the database pool open.
+    public func eraseAllData() throws {
+        try writer.write { db in
+            // Order matters: children before parents due to foreign key constraints
+            try db.execute(sql: "DELETE FROM queuedPrompts")
+            try db.execute(sql: "DELETE FROM messages")
+            try db.execute(sql: "DELETE FROM syncState")
+            try db.execute(sql: "DELETE FROM sessions")
+            try db.execute(sql: "DELETE FROM projects")
+        }
+    }
+
+    /// Delete the entire database directory from disk.
+    /// Removes the directory containing the sqlite file, WAL, and SHM in one operation.
+    /// The directory is recreated on the next `defaultPath` access.
+    public static func deleteDatabase() {
+        let appSupport = FileManager.default.urls(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask
+        ).first!
+        let dbDir = appSupport.appendingPathComponent("NimbalystNative", isDirectory: true)
+        try? FileManager.default.removeItem(at: dbDir)
+    }
+
     // MARK: - Migrations
 
     private func migrate() throws {

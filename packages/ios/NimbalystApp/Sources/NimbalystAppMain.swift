@@ -26,6 +26,7 @@ struct NimbalystAppMain: App {
     #if canImport(UIKit)
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     #endif
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var appState: AppState
 
     /// Launch with --transcript-test to show the TranscriptWebView with fake data
@@ -71,19 +72,30 @@ struct NimbalystAppMain: App {
                 ContentView()
                     .environmentObject(appState)
                     .onOpenURL { url in
+                        NSLog("[onOpenURL] Received URL: \(url.absoluteString.prefix(120))")
                         handleDeepLink(url)
                     }
             }
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            NSLog("[ScenePhase] changed to: \(String(describing: newPhase))")
         }
     }
 
     /// Handle `nimbalyst://` deep links.
     /// The auth callback comes in as `nimbalyst://auth/callback?session_token=...&session_jwt=...`
     private func handleDeepLink(_ url: URL) {
-        guard url.scheme == "nimbalyst" else { return }
+        NSLog("[DeepLink] handleDeepLink called with scheme=\(url.scheme ?? "nil"), host=\(url.host ?? "nil"), path=\(url.path)")
+        guard url.scheme == "nimbalyst" else {
+            NSLog("[DeepLink] Ignored: wrong scheme")
+            return
+        }
 
         if url.host == "auth" {
+            NSLog("[DeepLink] Routing to authManager.handleCallback")
             appState.authManager.handleCallback(url)
+        } else {
+            NSLog("[DeepLink] Ignored: unknown host")
         }
     }
 }
