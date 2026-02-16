@@ -20,6 +20,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.53.1] - 2026-02-16
+
+
+### Added
+- Sub-agents now appear in sidebar alongside teammates
+- Codex reasoning blocks expanded by default for better visibility
+- Codex sessions now show "Finished in" duration reflecting actual session time
+- AI sessions button shows cross-worktree file history
+- "Clear Gitignored Files" context menu action for worktrees
+- Shell environment and enhanced PATH passed to Codex SDK
+
+### Fixed
+- Auto-commit no longer blocks session when not viewing it
+- Fixed text[] cast in getMany query to match ai_sessions.id column type
+- Resolved race conditions and reliability issues in teammate management
+- Sequential teammate spawning instructions moved to deny responses
+- Codex reasoning blocks render inline instead of grouped at top
+- Escaped SQL LIKE wildcards and added clean gitignored feedback
+- Git clean exclude approach and trim preserve list
+- AI sessions button visible in agent mode file viewer
+- Resolved Codex CLI in packaged builds
+
 ## [0.53.0] - 2026-02-16
 
 
