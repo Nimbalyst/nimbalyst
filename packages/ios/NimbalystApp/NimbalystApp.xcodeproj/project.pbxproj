@@ -3,13 +3,14 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 63;
+	objectVersion = 77;
 	objects = {
 
 /* Begin PBXBuildFile section */
 		2430D292FD676E64EB569585 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = EB11A131E099B9309C58DE20 /* Assets.xcassets */; };
 		6D2BC05B6E2A22A09C4240A5 /* NimbalystNative in Frameworks */ = {isa = PBXBuildFile; productRef = D41B25A54BA519221EC949FC /* NimbalystNative */; };
 		8861F70DF98177EB5D6F8FAD /* DebugMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = 988E8A7EF37C4B495EEC60EB /* DebugMenu.swift */; };
+		8CCF7ABD0E97B52B81EAE4BB /* ScreenshotHostView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AD3D7B50527B2E106E5D1EA /* ScreenshotHostView.swift */; };
 		D61148B64AD2C6754C306505 /* transcript-dist in Resources */ = {isa = PBXBuildFile; fileRef = CCD597478FE1DE96262222D2 /* transcript-dist */; };
 		FE00B6A23CEE6253684F19C8 /* NimbalystAppMain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61EF9877A6E8685EEDBAC2DB /* NimbalystAppMain.swift */; };
 /* End PBXBuildFile section */
@@ -18,7 +19,8 @@
 		0682F97FD1E3CABA141B8DAE /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		20AF8F81DCF89FDFC6ABBD41 /* NimbalystNative */ = {isa = PBXFileReference; lastKnownFileType = folder; name = NimbalystNative; path = ../NimbalystNative; sourceTree = SOURCE_ROOT; };
 		3654DBF9031AF3A4E820E5E3 /* NimbalystApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = NimbalystApp.entitlements; sourceTree = "<group>"; };
-		410140D418FDDE3F17C78BB9 /* NimbalystApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NimbalystApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		410140D418FDDE3F17C78BB9 /* NimbalystApp.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = NimbalystApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		4AD3D7B50527B2E106E5D1EA /* ScreenshotHostView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotHostView.swift; sourceTree = "<group>"; };
 		61EF9877A6E8685EEDBAC2DB /* NimbalystAppMain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NimbalystAppMain.swift; sourceTree = "<group>"; };
 		988E8A7EF37C4B495EEC60EB /* DebugMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugMenu.swift; sourceTree = "<group>"; };
 		CCD597478FE1DE96262222D2 /* transcript-dist */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "transcript-dist"; path = "Resources/transcript-dist"; sourceTree = SOURCE_ROOT; };
@@ -52,6 +54,7 @@
 				0682F97FD1E3CABA141B8DAE /* Info.plist */,
 				3654DBF9031AF3A4E820E5E3 /* NimbalystApp.entitlements */,
 				61EF9877A6E8685EEDBAC2DB /* NimbalystAppMain.swift */,
+				4AD3D7B50527B2E106E5D1EA /* ScreenshotHostView.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -115,6 +118,12 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					B3CF4230C889EC2EB2A2E42C = {
+						DevelopmentTeam = X8S24QHAT9;
+						ProvisioningStyle = Automatic;
+					};
+				};
 			};
 			buildConfigurationList = F3160EFC8557D8AC12B6D046 /* Build configuration list for PBXProject "NimbalystApp" */;
 			compatibilityVersion = "Xcode 14.0";
@@ -129,6 +138,7 @@
 			packageReferences = (
 				ABD8257BB05FBCA15B4E04B1 /* XCLocalSwiftPackageReference "../NimbalystNative" */,
 			);
+			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -178,6 +188,7 @@
 			files = (
 				8861F70DF98177EB5D6F8FAD /* DebugMenu.swift in Sources */,
 				FE00B6A23CEE6253684F19C8 /* NimbalystAppMain.swift in Sources */,
+				8CCF7ABD0E97B52B81EAE4BB /* ScreenshotHostView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -189,16 +200,14 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Sources/NimbalystApp.entitlements;
-				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = X8S24QHAT9;
 				INFOPLIST_FILE = Sources/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.nimbalyst.app;
-				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -209,16 +218,14 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Sources/NimbalystApp.entitlements;
-				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = X8S24QHAT9;
 				INFOPLIST_FILE = Sources/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.nimbalyst.app;
-				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
