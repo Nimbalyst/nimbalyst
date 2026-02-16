@@ -20,6 +20,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.53.0] - 2026-02-16
+
+
+### Added
+- Native iOS app with SwiftUI navigation and encrypted sync
+- Voice mode for native iOS app with OpenAI Realtime API
+
+### Changed
+- Standardized wire protocol on camelCase across all sync layers
+- Removed deprecated tool packages system
+- Removed window title file tracking and IPC overhead
+
+### Fixed
+- Prevent bulk sync from clobbering isExecuting and lastReadAt state
+- Debounce session data reload during active streaming to prevent flickering
+- Enable drag-and-drop of standalone sessions into workstreams
+- Resolve TypeScript errors in AI protocol and UI components
+
 ## [0.52.70] - 2026-02-15
 
 
