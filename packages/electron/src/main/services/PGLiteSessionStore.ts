@@ -391,7 +391,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
       if (sessionIds.length === 0) return [];
       await ensureReady();
 
-      // Use ANY($1::uuid[]) for batch query - much more efficient than N individual queries
+      // Use ANY($1::text[]) for batch query - much more efficient than N individual queries
       const { rows } = await db.query<any>(
         `SELECT s.*,
          EXTRACT(EPOCH FROM s.last_read_timestamp) * 1000 AS last_read_ms,
@@ -401,7 +401,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
          FROM ai_sessions s
          LEFT JOIN worktrees w ON s.worktree_id = w.id
          LEFT JOIN ai_sessions branched_from ON s.branched_from_session_id = branched_from.id
-         WHERE s.id = ANY($1::uuid[])`,
+         WHERE s.id = ANY($1::text[])`,
         [sessionIds]
       );
 
