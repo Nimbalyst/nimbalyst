@@ -20,6 +20,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.53.2] - 2026-02-16
+
+
+### Added
+- 30-day TTL for synced sessions to automatically clean up old data
+- Email magic link login for iOS app (alternative to QR code pairing)
+- Screenshot mode for App Store submission
+
+### Fixed
+- Cmd+F find routing in Agent Mode split screen now correctly targets the active editor
+- Unified iOS splash screen to simple logo on both iPhone and iPad
+- Session sharing no longer requires sync config to be set up
+- Project sync now triggers immediately and iOS re-pairing works correctly
+- Prevent QR scanner from setting invalid rectOfInterest
+- Update Xcode scheme and project settings for compatibility
+
 ## [0.53.1] - 2026-02-16
 
 
