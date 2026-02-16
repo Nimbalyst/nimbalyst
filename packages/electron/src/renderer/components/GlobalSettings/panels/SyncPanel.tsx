@@ -406,7 +406,8 @@ export function SyncPanel() {
       </div>
 
       {/* Environment Toggle - Dev Only */}
-      {isDevelopment && (
+      {/*{isDevelopment && (*/}
+      {false && (
         <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
           <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">Environment (Dev Only)</h4>
           <div className="flex gap-2">
