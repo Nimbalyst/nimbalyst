@@ -1609,6 +1609,10 @@ export class TeammateManager {
         this.clearPendingMessages(agentId);
         void this.removeTeammateFromConfig(idleInfo.teamName, agentId);
         this.scheduleEmitTeammateUpdate(sessionId, new Map([[agentId, 'completed']]));
+        if (!this.hasActiveTeammates()) {
+          console.log(`[MANAGED-TEAMMATE] All teammates completed/errored, emitting teammates:allCompleted`);
+          this.deps.emit('teammates:allCompleted', { sessionId });
+        }
         return;
       }
     }
@@ -1622,6 +1626,10 @@ export class TeammateManager {
         this.clearPendingMessages(agentId);
         void this.removeTeammateFromConfig(managedInfo.teamName, agentId);
         this.scheduleEmitTeammateUpdate(sessionId, new Map([[agentId, 'completed']]));
+        if (!this.hasActiveTeammates()) {
+          console.log(`[MANAGED-TEAMMATE] All teammates completed/errored, emitting teammates:allCompleted`);
+          this.deps.emit('teammates:allCompleted', { sessionId });
+        }
         return;
       }
     }
