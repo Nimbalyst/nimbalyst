@@ -345,14 +345,14 @@ export const CodexOutputRenderer: React.FC<CodexOutputRendererProps> = ({
   workspacePath,
   readFile,
 }) => {
-  const [expandedReasoningSections, setExpandedReasoningSections] = useState<Set<number>>(new Set());
+  const [collapsedReasoningSections, setCollapsedReasoningSections] = useState<Set<number>>(new Set());
   const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
 
   // Parse raw events at display time
   const { sections } = useMemo(() => parseCodexRawEvents(rawEvents), [rawEvents]);
 
-  const handleToggleReasoningExpand = (sectionIndex: number) => {
-    setExpandedReasoningSections(prev => {
+  const handleToggleReasoningCollapse = (sectionIndex: number) => {
+    setCollapsedReasoningSections(prev => {
       const next = new Set(prev);
       if (next.has(sectionIndex)) {
         next.delete(sectionIndex);
@@ -483,11 +483,11 @@ export const CodexOutputRenderer: React.FC<CodexOutputRendererProps> = ({
   };
 
   const renderReasoningSection = (blocks: string[], sectionIndex: number) => {
-    const isExpanded = expandedReasoningSections.has(sectionIndex);
+    const isExpanded = !collapsedReasoningSections.has(sectionIndex);
     return (
       <div key={`reasoning-${sectionIndex}`} className="codex-thinking border border-[var(--nim-border)] rounded-md overflow-hidden bg-[var(--nim-bg-secondary)]">
         <button
-          onClick={() => handleToggleReasoningExpand(sectionIndex)}
+          onClick={() => handleToggleReasoningCollapse(sectionIndex)}
           className="w-full py-2 px-3 flex items-center gap-2 text-left border-none cursor-pointer bg-transparent transition-colors hover:bg-[var(--nim-bg-hover)]"
           aria-expanded={isExpanded}
           aria-label={`${isExpanded ? 'Collapse' : 'Expand'} reasoning blocks`}
