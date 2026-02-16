@@ -378,11 +378,12 @@ const extractEditsFromToolMessage = (message: Message): any[] => {
   const tool = message.toolCall;
   if (!tool) return [];
 
+  const args = tool.arguments as Record<string, any> | undefined;
   const fallbackPath =
     tool.targetFilePath ||
-    tool.arguments?.file_path ||
-    tool.arguments?.filePath ||
-    tool.arguments?.path;
+    (args?.file_path as string | undefined) ||
+    (args?.filePath as string | undefined) ||
+    (args?.path as string | undefined);
 
   const edits: any[] = [];
   const visited = new WeakSet<object>();
@@ -505,8 +506,8 @@ const extractEditsFromToolMessage = (message: Message): any[] => {
     message.edits.forEach(edit => pushEdit(edit, fallbackPath));
   }
 
-  if (tool.arguments) {
-    visit(tool.arguments);
+  if (args) {
+    visit(args);
   }
 
   if (tool.result) {
@@ -884,8 +885,9 @@ export const RichTranscriptView = React.forwardRef<
     }
 
     // Extract description from arguments for sub-agents
-    const description = isSubAgent && tool.arguments?.description ? tool.arguments.description : null;
-    const prompt = isSubAgent && tool.arguments?.prompt ? tool.arguments.prompt : null;
+    const toolArgs = tool.arguments as Record<string, any> | undefined;
+    const description = (isSubAgent && toolArgs?.description ? toolArgs.description : null) as string | null;
+    const prompt = (isSubAgent && toolArgs?.prompt ? toolArgs.prompt : null) as string | null;
 
     // Extract result text
     const resultText = tool.result ? extractResultText(tool.result) : null;

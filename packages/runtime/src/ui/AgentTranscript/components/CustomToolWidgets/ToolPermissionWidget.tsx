@@ -111,15 +111,15 @@ export const ToolPermissionWidget: React.FC<CustomToolWidgetProps> = ({
   const host = useAtomValue(interactiveWidgetHostAtom(sessionId));
 
   // Parse tool call data
-  const args = toolCall.arguments || {};
-  const requestId = args.requestId || toolCall.id || '';
-  const toolName = args.toolName || '';
-  const rawCommand = args.rawCommand || '';
-  const pattern = args.pattern || toolName;
-  const patternDisplayName = args.patternDisplayName || getPatternDisplayName(pattern);
-  const isDestructive = args.isDestructive || false;
-  const warnings: string[] = args.warnings || [];
-  const workspacePath = args.workspacePath || '';
+  const args = (toolCall.arguments || {}) as Record<string, any>;
+  const requestId = (args.requestId || toolCall.id || '') as string;
+  const toolName = (args.toolName || '') as string;
+  const rawCommand = (args.rawCommand || '') as string;
+  const pattern = (args.pattern || toolName) as string;
+  const patternDisplayName = (args.patternDisplayName || getPatternDisplayName(pattern)) as string;
+  const isDestructive = (args.isDestructive || false) as boolean;
+  const warnings: string[] = (args.warnings || []) as string[];
+  const workspacePath = (args.workspacePath || '') as string;
 
   // Check if WebFetch request (for "All Domains" button)
   const isWebFetchRequest = toolName === 'WebFetch' || pattern.startsWith('WebFetch');

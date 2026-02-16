@@ -226,14 +226,6 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
               </div>
             )}
 
-            {typeof tool.arguments === 'string' && (tool.arguments as string).trim().length > 0 && (
-              <div className="mb-2">
-                <div className="text-nim-faint mb-1">Parameters (raw):</div>
-                <pre className="text-xs text-nim-muted font-mono overflow-x-auto bg-nim-secondary p-2 rounded">
-                  {tool.arguments}
-                </pre>
-              </div>
-            )}
 
             <div className="mt-2">
               <div className="text-nim-faint mb-1">Result:</div>

@@ -67,7 +67,7 @@ export interface ChatAttachment {
 export interface ToolCall {
   id?: string;
   name: string;
-  arguments?: Record<string, any>;
+  arguments?: Record<string, unknown>;
   result?: ToolResult | string;
   targetFilePath?: string;  // File path this tool call was executed against
   // Sub-agent specific fields
@@ -347,7 +347,7 @@ export interface ToolHandler {
   // Note: executeTool has different signature (name, args) so we handle it separately
   executeTool?(name: string, args: unknown): Promise<unknown>;
   // Dynamic property access for other tools
-  [key: string]: ((...args: any[]) => Promise<any>) | undefined;
+  [key: string]: ((args: unknown) => Promise<unknown>) | ((args: DiffArgs) => Promise<DiffResult>) | ((name: string, args: unknown) => Promise<unknown>) | undefined;
 }
 
 /**

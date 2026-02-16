@@ -76,7 +76,7 @@ function getToolDisplayName(item: Record<string, unknown>, itemType: string): st
   return fromName || 'Unknown Tool';
 }
 
-function getToolArguments(item: Record<string, unknown>, itemType: string): Record<string, any> {
+function getToolArguments(item: Record<string, unknown>, itemType: string): Record<string, unknown> | undefined {
   // Command execution: wrap command string
   if (itemType === 'command_execution') {
     return { command: extractStringField(item, 'command') ?? '' };
@@ -405,14 +405,6 @@ export const CodexOutputRenderer: React.FC<CodexOutputRendererProps> = ({
               </div>
             )}
 
-            {typeof tool.arguments === 'string' && (tool.arguments as string).trim().length > 0 && (
-              <div className="mb-2">
-                <div className="text-nim-faint mb-1">Parameters (raw):</div>
-                <pre className="text-xs text-nim-muted font-mono overflow-x-auto bg-nim-secondary p-2 rounded">
-                  {tool.arguments}
-                </pre>
-              </div>
-            )}
 
             <div className="mt-2">
               <div className="text-nim-faint mb-1">Result:</div>

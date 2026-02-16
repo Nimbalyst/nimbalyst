@@ -116,7 +116,8 @@ export class ClaudeSDKProtocol implements AgentProtocol {
     session: ProtocolSession,
     message: ProtocolMessage
   ): AsyncIterable<ProtocolEvent> {
-    const { options, resume, fork } = session.raw || {};
+    const rawSession = session.raw as { options?: any; resume?: boolean; fork?: string } | undefined;
+    const { options, resume, fork } = rawSession || {};
 
     // Build SDK query options
     const queryOptions: any = {

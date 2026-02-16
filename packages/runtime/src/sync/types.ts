@@ -39,7 +39,7 @@ export interface SyncConfig {
  */
 export interface DeviceInfo {
   /** Unique device ID (stable across sessions, generated per device) */
-  device_id: string;
+  deviceId: string;
   /** Human-readable device name (e.g., "MacBook Pro", "iPhone 15") */
   name: string;
   /** Device type for icon display */
@@ -47,13 +47,13 @@ export interface DeviceInfo {
   /** Platform (e.g., "macos", "ios", "windows", "android", "web") */
   platform: string;
   /** App version */
-  app_version?: string;
+  appVersion?: string;
   /** When this device connected (Unix timestamp ms) */
-  connected_at: number;
+  connectedAt: number;
   /** Last activity timestamp (Unix timestamp ms) - updated on user interaction */
-  last_active_at: number;
+  lastActiveAt: number;
   /** Whether the app window is currently focused (optional for backwards compatibility) */
-  is_focused?: boolean;
+  isFocused?: boolean;
   /** Derived status for presence display (optional for backwards compatibility) */
   status?: 'active' | 'idle' | 'away';
 }
@@ -105,16 +105,16 @@ export interface SyncProvider {
   /** Fetch the current server index to compare with local state */
   fetchIndex?(): Promise<{
     sessions: Array<{
-      session_id: string;
-      project_id: string;
+      sessionId: string;
+      projectId: string;
       title: string;
       provider: string;
       model?: string;
       mode?: 'agent' | 'planning';
-      message_count: number;
-      last_message_at: number;
-      created_at: number;
-      updated_at: number;
+      messageCount: number;
+      lastMessageAt: number;
+      createdAt: number;
+      updatedAt: number;
       pendingExecution?: {
         messageId: string;
         sentAt: number;
@@ -123,36 +123,39 @@ export interface SyncProvider {
       isExecuting?: boolean;
     }>;
     projects: Array<{
-      project_id: string;
+      projectId: string;
       name: string;
-      session_count: number;
-      last_activity_at: number;
-      sync_enabled: boolean;
+      sessionCount: number;
+      lastActivityAt: number;
+      syncEnabled: boolean;
     }>;
   }>;
 
   /** Subscribe to index changes (session updates broadcast to all connected clients) */
   onIndexChange?(callback: (sessionId: string, entry: {
-    session_id: string;
+    sessionId: string;
     title?: string;
     provider?: string;
     model?: string;
     mode?: 'agent' | 'planning';
-    message_count?: number;
-    updated_at?: number;
+    messageCount?: number;
+    updatedAt?: number;
+    lastMessageAt?: number;
     pendingExecution?: {
       messageId: string;
       sentAt: number;
       sentBy: 'mobile' | 'desktop';
     };
     isExecuting?: boolean;
+    /** Unix timestamp ms when this session was last read by any device */
+    lastReadAt?: number;
     /** Number of prompts queued from mobile, waiting for desktop to process */
     queuedPromptCount?: number;
-    /** Full queue of prompts (sent via index_update for desktop to process) */
+    /** Full queue of prompts (sent via indexUpdate for desktop to process) */
     queuedPrompts?: Array<{ id: string; prompt: string; timestamp: number }>;
   }) => void): () => void;
 
-  /** Get cached metadata for a session (populated from sync_response and metadata_broadcast) */
+  /** Get cached metadata for a session (populated from syncResponse and metadataBroadcast) */
   getCachedMetadata?(sessionId: string): {
     queuedPrompts?: Array<{
       id: string;
@@ -162,20 +165,20 @@ export interface SyncProvider {
     [key: string]: unknown;
   } | undefined;
 
-  /** Get cached index entry for a session (populated from index_sync_response and index_broadcast)
+  /** Get cached index entry for a session (populated from indexSyncResponse and indexBroadcast)
    * Note: Returns decrypted values - title is always present after decryption */
   getCachedIndexEntry?(sessionId: string): {
-    session_id: string;
-    project_id: string;
+    sessionId: string;
+    projectId: string;
     /** Decrypted title (always present in cache) */
     title: string;
     provider: string;
     model?: string;
     mode?: 'agent' | 'planning';
-    message_count: number;
-    last_message_at: number;
-    created_at: number;
-    updated_at: number;
+    messageCount: number;
+    lastMessageAt: number;
+    createdAt: number;
+    updatedAt: number;
     pendingExecution?: {
       messageId: string;
       sentAt: number;
@@ -429,11 +432,11 @@ export interface SyncedSettings {
  */
 export interface EncryptedSettingsPayload {
   /** Encrypted JSON blob containing SyncedSettings (base64) */
-  encrypted_settings: string;
+  encryptedSettings: string;
   /** IV for settings decryption (base64) */
-  settings_iv: string;
+  settingsIv: string;
   /** Device ID of sender */
-  device_id: string;
+  deviceId: string;
   /** Timestamp of settings change */
   timestamp: number;
   /** Version to handle upgrades */

@@ -298,7 +298,8 @@ export const MockupScreenshotWidget: React.FC<CustomToolWidgetProps> = ({
   if (!tool) return null;
 
   // Extract file path from arguments and get simple name
-  const filePath = tool.arguments?.file_path || tool.arguments?.filePath || '';
+  const args = tool.arguments as Record<string, any> | undefined;
+  const filePath = (args?.file_path || args?.filePath || '') as string;
   const mockupName = extractMockupName(filePath);
 
   // Extract image data from result (either inline or from persisted file)

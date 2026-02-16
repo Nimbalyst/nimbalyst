@@ -21,6 +21,7 @@ import {
   type ToolHandler,
   type DiffArgs,
   type DiffResult,
+  type ToolResult,
   type AIProviderType,
   type AIModel,
   type SessionData,
@@ -2289,7 +2290,11 @@ export class AIService {
                     role: 'tool',
                     content: '',  // Tool messages don't have text content
                     timestamp: Date.now(),
-                    toolCall: chunk.toolCall,
+                    toolCall: {
+                      ...chunk.toolCall,
+                      arguments: chunk.toolCall.arguments as Record<string, unknown> | undefined,
+                      result: chunk.toolCall.result as string | ToolResult | undefined
+                    },
                     ...(toolResult !== undefined ? { errorMessage: toolResult?.error, isError: toolResult?.success === false } : {})
                   };
                   await this.sessionManager.addMessage(toolMessage, session.id);
@@ -2307,7 +2312,7 @@ export class AIService {
 
                   const edit = {
                     type: 'diff',
-                    replacements: chunk.toolCall.arguments?.replacements,
+                    replacements: (chunk.toolCall.arguments as any)?.replacements,
                     // MCP edits are applied automatically by the MCP server
                     applied: toolName?.endsWith('__applyDiff')
                   };
@@ -2365,8 +2370,8 @@ export class AIService {
                   timestamp: Date.now(),
                   toolCall: {
                     name: chunk.toolError.name,
-                    arguments: chunk.toolError.arguments,
-                    result: chunk.toolError.result
+                    arguments: chunk.toolError.arguments as Record<string, unknown> | undefined,
+                    result: chunk.toolError.result as string | ToolResult | undefined
                   },
                   isError: true,
                   errorMessage: chunk.toolError.error
@@ -2396,7 +2401,7 @@ export class AIService {
               safeSend(event, 'ai:streamEditStart', {
                 sessionId: session.id,
                 targetFilePath: documentContext?.filePath,
-                ...(chunk.config as Record<string, unknown> ?? {})
+                ...(chunk.config as Record<string, unknown> || {})
               });
               hasStreamingContent = true;  // Mark that we're doing streaming
               break;
@@ -4109,23 +4114,24 @@ export class AIService {
     // This prevents race conditions if user switches tabs while waiting for AI response
     const targetFilePath = documentContext?.filePath;
 
-    return {
+    const handler: ToolHandler = {
       applyDiff: async (args: DiffArgs): Promise<DiffResult> => {
         console.log(`[AIService] applyDiff called, targetFilePath from closure:`, targetFilePath);
         return executor.applyDiff({ ...args, targetFilePath });
       },
-      streamContent: async (args: any): Promise<any> => {
+      streamContent: async (args: unknown): Promise<unknown> => {
         console.log(`[AIService] streamContent called, targetFilePath from closure:`, targetFilePath);
-        return executor.streamContent({ ...args, targetFilePath });
+        return executor.streamContent({ ...(args as any), targetFilePath });
       },
-      executeTool: async (name: string, args: any): Promise<any> => {
+      executeTool: async (name: string, args: unknown): Promise<unknown> => {
         // For tools that need targetFilePath, inject it from the closure
         if (name === 'streamContent' || name === 'applyDiff') {
-          return executor.executeTool(name, { ...args, targetFilePath });
+          return executor.executeTool(name, { ...(args as any), targetFilePath });
         }
         return executor.executeTool(name, args);
       }
     };
+    return handler;
   }
 
   private getNormalizedProviderSettings(): Record<string, any> {

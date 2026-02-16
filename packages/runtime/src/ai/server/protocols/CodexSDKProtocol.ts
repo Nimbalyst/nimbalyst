@@ -17,6 +17,7 @@ import {
   SessionOptions,
   ProtocolMessage,
   ProtocolEvent,
+  ToolResult,
 } from './ProtocolInterface';
 import {
   CodexClientLike,
@@ -165,7 +166,7 @@ export class CodexSDKProtocol implements AgentProtocol {
     try {
       // Run the thread with streaming
       const runResult = await thread.runStreamed(prompt, {
-        signal: rawOptions?.abortSignal,
+        signal: (session.raw?.options as { abortSignal?: AbortSignal })?.abortSignal,
       });
 
       // Thread ID is captured from thread.started event during streaming (see event loop below)
@@ -174,7 +175,7 @@ export class CodexSDKProtocol implements AgentProtocol {
       const events = getEventsIterable(runResult);
       for await (const event of events) {
         // Check for abort
-        if (rawOptions?.abortSignal?.aborted) {
+        if ((session.raw?.options as { abortSignal?: AbortSignal })?.abortSignal?.aborted) {
           throw new Error('Operation cancelled');
         }
 
@@ -215,9 +216,9 @@ export class CodexSDKProtocol implements AgentProtocol {
               type: 'tool_call',
               toolCall: {
                 name: parsedEvent.toolCall.name,
-                arguments: parsedEvent.toolCall.arguments as Record<string, any> | undefined,
-                ...(parsedEvent.toolCall.result != null
-                  ? { result: parsedEvent.toolCall.result as import('./ProtocolInterface').ToolResult | string }
+                arguments: parsedEvent.toolCall.arguments as Record<string, unknown> | undefined,
+                ...(parsedEvent.toolCall.result !== undefined && parsedEvent.toolCall.result !== null
+                  ? { result: parsedEvent.toolCall.result as string | ToolResult }
                   : {}),
               },
               metadata: { rawEvent: parsedEvent.rawEvent },
@@ -273,7 +274,7 @@ export class CodexSDKProtocol implements AgentProtocol {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       const isAbort =
-        rawOptions?.abortSignal?.aborted || /abort|cancel/i.test(errorMessage);
+        (session.raw?.options as { abortSignal?: AbortSignal })?.abortSignal?.aborted || /abort|cancel/i.test(errorMessage);
 
       if (!isAbort) {
         yield {

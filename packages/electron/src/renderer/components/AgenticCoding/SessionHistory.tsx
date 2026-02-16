@@ -604,6 +604,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
       }, 100);
       return () => clearTimeout(timer);
     }
+    return undefined;
   }, [activeSessionId, sessions, onSessionSelect]);
 
   // Function to trigger content search (database query for message content)
