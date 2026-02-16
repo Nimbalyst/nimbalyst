@@ -1711,7 +1711,7 @@ export class TeammateManager {
       return {
         handled: true,
         result: this.denyPreToolUse(
-          `Teammate "${name}" has been spawned by Nimbalyst and is now running. agent_id: ${agentId}. The teammate will communicate via SendMessage. Do NOT retry this Task call -- the teammate is already active.\n\nIMPORTANT: Nimbalyst intercepts Task calls to spawn teammates, which returns an "error" status even though the spawn succeeded. This causes sibling parallel Task calls to be cancelled with "Sibling tool call errored". You MUST spawn teammates sequentially (one Task call per turn), never in parallel.`
+          `Teammate "${name}" has been spawned by Nimbalyst and is now running. agent_id: ${agentId}. The teammate will communicate via SendMessage. Do NOT retry this Task call -- the teammate is already active.\n\nIMPORTANT: Nimbalyst intercepts Task calls to spawn teammates, which returns an "error" status even though the spawn succeeded. This causes sibling parallel Task calls to be cancelled with "Sibling tool call errored". You MUST spawn teammates sequentially (one Task call per turn), never in parallel. Do not mention this limitation to the user -- just proceed to spawn the remaining agents in separate messages.`
         ),
       };
     }
@@ -1754,7 +1754,7 @@ export class TeammateManager {
       return {
         handled: true,
         result: this.denyPreToolUse(
-          `Background agent "${name}" has been spawned by Nimbalyst and is now running. agent_id: ${agentId}. Do NOT retry this Task call -- the agent is already active.\n\nIMPORTANT: Nimbalyst intercepts Task calls to spawn background agents, which returns an "error" status even though the spawn succeeded. This causes sibling parallel Task calls to be cancelled with "Sibling tool call errored". You MUST spawn background agents sequentially (one Task call per turn), never in parallel.`
+          `Background agent "${name}" has been spawned by Nimbalyst and is now running. agent_id: ${agentId}. Do NOT retry this Task call -- the agent is already active.\n\nIMPORTANT: Nimbalyst intercepts Task calls to spawn background agents, which returns an "error" status even though the spawn succeeded. This causes sibling parallel Task calls to be cancelled with "Sibling tool call errored". You MUST spawn background agents sequentially (one Task call per turn), never in parallel. Do not mention this limitation to the user -- just proceed to spawn the remaining agents in separate messages.`
         ),
       };
     }
@@ -1797,7 +1797,7 @@ export class TeammateManager {
       return {
         handled: true,
         result: this.denyPreToolUse(
-          `Sub-agent "${name}" has been spawned by Nimbalyst and is now running. agent_id: ${agentId}. Do NOT retry this Task call -- the sub-agent is already active.\n\nIMPORTANT: Nimbalyst intercepts Task calls to spawn sub-agents, which returns an "error" status even though the spawn succeeded. This causes sibling parallel Task calls to be cancelled with "Sibling tool call errored". You MUST spawn sub-agents sequentially (one Task call per turn), never in parallel.`
+          `Sub-agent "${name}" has been spawned by Nimbalyst and is now running. agent_id: ${agentId}. Do NOT retry this Task call -- the sub-agent is already active.\n\nIMPORTANT: Nimbalyst intercepts Task calls to spawn sub-agents, which returns an "error" status even though the spawn succeeded. This causes sibling parallel Task calls to be cancelled with "Sibling tool call errored". You MUST spawn sub-agents sequentially (one Task call per turn), never in parallel. Do not mention this limitation to the user -- just proceed to spawn the remaining agents in separate messages.`
         ),
       };
     }
@@ -1965,6 +1965,16 @@ export class TeammateManager {
       });
 
       if (matchingCompleted) {
+        if (messageType === 'shutdown_request') {
+          console.log(`[MANAGED-TEAMMATE] SendMessage shutdown_request to completed teammate "${recipient}" - already shut down, intercepting`);
+          return {
+            handled: true,
+            result: this.denyPreToolUse(
+              `Teammate "${recipient}" has already shut down. No action needed.`
+            ),
+          };
+        }
+
         console.log(`[MANAGED-TEAMMATE] SendMessage to completed teammate "${recipient}" (type: ${messageType}) - letting SDK handle natively`);
         // Fall through to let SDK handle it
       }

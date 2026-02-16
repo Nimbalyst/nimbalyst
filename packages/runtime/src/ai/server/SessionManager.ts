@@ -188,6 +188,12 @@ export function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
             const attachments = agentMsg.metadata?.attachments;
             const mode = agentMsg.metadata?.mode;
 
+            // Skip system continuation messages (should be hidden in DB, but safety net)
+            // These are auto-generated prompts like "[System: Your previous turn ended...]"
+            if (parsed.prompt.startsWith('[System:')) {
+              continue;
+            }
+
             // Detect teammate messages via DB metadata (Path 1: mid-turn injection)
             // or content pattern (Path 2: idle sendMessage, backward compat)
             // Batched messages use "---" separator between multiple [Teammate message from "..."] blocks

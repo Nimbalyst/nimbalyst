@@ -847,6 +847,16 @@ export const RichTranscriptView = React.forwardRef<
   const renderToolCard = (toolMsg: Message, toolIndex: number, depth: number = 0): JSX.Element | null => {
     if (!toolMsg.toolCall) return null;
 
+    // Hide Task tool calls that failed with "Sibling tool call errored" -
+    // these are cancelled parallel spawns that were never actually started
+    if (toolMsg.toolCall.name === 'Task' && (toolMsg as any).isError) {
+      const result = toolMsg.toolCall.result;
+      const resultStr = typeof result === 'string' ? result : '';
+      if (resultStr.includes('Sibling tool call errored')) {
+        return null;
+      }
+    }
+
     const tool = toolMsg.toolCall;
     const toolId = tool.id || tool.name || `tool-${toolIndex}`;
     const isExpanded = expandedTools.has(toolId);
