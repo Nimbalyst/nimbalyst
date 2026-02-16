@@ -61,8 +61,34 @@ function stripSignature(binaryPath) {
 exports.default = async function(context) {
   const { appOutDir, packager } = context;
 
+  // Prune unused platform binaries from claude-agent-sdk vendor directory
+  // The SDK vendors ripgrep binaries for all 6 platform/arch combos (~61MB total).
+  // We only need the one matching the build target.
+  const arch = packager.arch ? require('builder-util').Arch[packager.arch] : process.arch;
+  const platformName = packager.platform.name === 'mac' ? 'darwin' : packager.platform.name;
+  const keepDir = `${arch}-${platformName}`;
+
+  // Find the ripgrep vendor dir - path varies by platform
+  const resourcesDir = packager.platform.name === 'mac'
+    ? path.join(appOutDir, `${packager.appInfo.productName}.app`, 'Contents/Resources')
+    : path.join(appOutDir, 'resources');
+  const vendorRipgrepDir = path.join(resourcesDir, 'app.asar.unpacked/node_modules/@anthropic-ai/claude-agent-sdk/vendor/ripgrep');
+
+  if (fs.existsSync(vendorRipgrepDir)) {
+    const entries = fs.readdirSync(vendorRipgrepDir, { withFileTypes: true });
+    let removedCount = 0;
+    for (const entry of entries) {
+      if (entry.isDirectory() && entry.name !== keepDir) {
+        fs.rmSync(path.join(vendorRipgrepDir, entry.name), { recursive: true });
+        removedCount++;
+      }
+    }
+    console.log(`AfterPack: Pruned ${removedCount} unused ripgrep platform dirs (kept ${keepDir})`);
+  }
+
+  // macOS-specific: strip signatures from Bun-compiled binaries
   if (packager.platform.name !== 'mac') {
-    console.log('AfterPack: Complete (non-macOS platform)');
+    console.log('AfterPack: Complete');
     return;
   }
 
