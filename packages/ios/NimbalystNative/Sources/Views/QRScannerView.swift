@@ -163,12 +163,17 @@ class QRScannerUIView: UIView {
     /// which accounts for device orientation and video gravity automatically.
     private func updateRectOfInterest() {
         guard let previewLayer, let metadataOutput,
+              let connection = previewLayer.connection, connection.isActive,
               bounds.width > 0, bounds.height > 0 else { return }
         // Scan center 60% of the visible preview
         let insetX = bounds.width * 0.2
         let insetY = bounds.height * 0.2
         let scanRect = bounds.insetBy(dx: insetX, dy: insetY)
-        metadataOutput.rectOfInterest = previewLayer.metadataOutputRectConverted(fromLayerRect: scanRect)
+        let converted = previewLayer.metadataOutputRectConverted(fromLayerRect: scanRect)
+        // Only apply if the conversion produced a valid rect (not zero/infinite)
+        if converted.width > 0, converted.height > 0, converted.width <= 1, converted.height <= 1 {
+            metadataOutput.rectOfInterest = converted
+        }
     }
 
     private func setupCamera() {
@@ -197,8 +202,8 @@ class QRScannerUIView: UIView {
             session.addOutput(output)
             output.setMetadataObjectsDelegate(coordinator, queue: .main)
             output.metadataObjectTypes = [.qr]
+            metadataOutput = output
         }
-        metadataOutput = output
 
         let preview = AVCaptureVideoPreviewLayer(session: session)
         preview.videoGravity = .resizeAspectFill
