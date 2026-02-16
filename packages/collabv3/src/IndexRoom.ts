@@ -32,6 +32,12 @@ import { createLogger } from './logger';
 
 const log = createLogger('IndexRoom');
 
+/** Session TTL: 30 days in milliseconds */
+const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+/** How often IndexRoom scans for expired entries: every 24 hours */
+const INDEX_CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
 interface ConnectionState {
   auth: AuthContext;
   synced: boolean;
@@ -203,6 +209,12 @@ export class IndexRoom implements DurableObject {
     // Now delete from index
     sql.exec(`DELETE FROM session_index WHERE project_id_iv IS NULL`);
     sql.exec(`DELETE FROM project_index WHERE project_id_iv IS NULL`);
+
+    // Ensure periodic cleanup alarm is scheduled
+    const existingAlarm = await this.state.storage.getAlarm();
+    if (!existingAlarm) {
+      await this.state.storage.setAlarm(Date.now() + INDEX_CLEANUP_INTERVAL_MS);
+    }
 
     this.initialized = true;
   }
@@ -1123,6 +1135,53 @@ export class IndexRoom implements DurableObject {
       }
     }
     return 'unknown';
+  }
+
+  /**
+   * Alarm handler - periodic cleanup of expired session index entries.
+   * Runs every 24 hours to remove entries older than the TTL.
+   */
+  async alarm(): Promise<void> {
+    await this.ensureInitialized();
+
+    const sql = this.state.storage.sql;
+    const cutoff = Date.now() - SESSION_TTL_MS;
+
+    const expiredSessions = sql.exec<{ session_id: string; project_id: string; project_id_iv: string }>(
+      `SELECT session_id, project_id, project_id_iv FROM session_index WHERE updated_at < ?`,
+      cutoff
+    ).toArray();
+
+    if (expiredSessions.length > 0) {
+      log.info('Cleaning up', expiredSessions.length, 'expired session index entries');
+
+      const affectedProjects = new Map<string, string>();
+
+      for (const session of expiredSessions) {
+        sql.exec(`DELETE FROM session_index WHERE session_id = ?`, session.session_id);
+        affectedProjects.set(session.project_id, session.project_id_iv);
+      }
+
+      // Update project stats for affected projects
+      for (const [encryptedProjectId, projectIdIv] of affectedProjects) {
+        await this.updateProjectStats(encryptedProjectId, projectIdIv);
+      }
+
+      // Clean up projects with zero sessions
+      sql.exec(`DELETE FROM project_index WHERE session_count = 0`);
+
+      // Broadcast deletions to connected clients
+      for (const session of expiredSessions) {
+        this.broadcast({
+          type: 'indexDeleteBroadcast',
+          sessionId: session.session_id,
+          fromConnectionId: 'ttl-cleanup',
+        });
+      }
+    }
+
+    // Reschedule for next cleanup cycle
+    await this.state.storage.setAlarm(Date.now() + INDEX_CLEANUP_INTERVAL_MS);
   }
 
   /**

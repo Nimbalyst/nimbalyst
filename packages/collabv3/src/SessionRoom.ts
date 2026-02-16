@@ -18,6 +18,9 @@ import { createLogger } from './logger';
 
 const log = createLogger('SessionRoom');
 
+/** Session TTL: 30 days in milliseconds */
+const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
 interface ConnectionState {
   auth: AuthContext;
   synced: boolean;
@@ -117,6 +120,18 @@ export class SessionRoom implements DurableObject {
       sql.exec(`DELETE FROM metadata`);
     }
 
+    // Bootstrap TTL alarm for existing sessions that don't have one yet
+    const existingAlarm = await this.state.storage.getAlarm();
+    if (!existingAlarm) {
+      const hasData = sql.exec<{ count: number }>(
+        `SELECT COUNT(*) as count FROM metadata`
+      ).toArray()[0]?.count ?? 0;
+
+      if (hasData > 0 && this.connections.size === 0) {
+        await this.scheduleExpiryAlarm();
+      }
+    }
+
     this.initialized = true;
   }
 
@@ -155,6 +170,9 @@ export class SessionRoom implements DurableObject {
     // Create WebSocket pair
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
+
+    // Cancel TTL alarm since session is now actively connected
+    await this.state.storage.deleteAlarm();
 
     // Accept with hibernation support, storing auth in tags for recovery
     // Tags persist across hibernation and allow us to restore connection state
@@ -319,6 +337,9 @@ export class SessionRoom implements DurableObject {
         cursor = String(resultRows[resultRows.length - 1].sequence);
       }
     }
+
+    // Touch activity timestamp (someone is actively viewing this session)
+    this.setMetadataValue('updated_at', String(Date.now()));
 
     // Get metadata
     const metadata = this.getMetadata();
@@ -534,6 +555,10 @@ export class SessionRoom implements DurableObject {
    */
   async webSocketClose(ws: WebSocket): Promise<void> {
     this.connections.delete(ws);
+
+    if (this.connections.size === 0) {
+      await this.scheduleExpiryAlarm();
+    }
   }
 
   /**
@@ -542,6 +567,54 @@ export class SessionRoom implements DurableObject {
   async webSocketError(ws: WebSocket, error: unknown): Promise<void> {
     console.error('WebSocket error:', error);
     this.connections.delete(ws);
+
+    if (this.connections.size === 0) {
+      await this.scheduleExpiryAlarm();
+    }
+  }
+
+  /**
+   * Schedule (or reschedule) the TTL expiry alarm.
+   */
+  private async scheduleExpiryAlarm(): Promise<void> {
+    if (this.connections.size > 0) return;
+    await this.state.storage.setAlarm(Date.now() + SESSION_TTL_MS);
+  }
+
+  /**
+   * Alarm handler - called when the TTL expires.
+   * Checks if the session is truly expired before deleting.
+   */
+  async alarm(): Promise<void> {
+    await this.ensureInitialized();
+
+    // Don't delete if there are active connections
+    if (this.connections.size > 0) {
+      log.info('Alarm fired but session has active connections, rescheduling');
+      await this.scheduleExpiryAlarm();
+      return;
+    }
+
+    const sql = this.state.storage.sql;
+    const row = sql.exec<{ value: string }>(
+      `SELECT value FROM metadata WHERE key = 'updated_at'`
+    ).toArray()[0];
+
+    const lastActivity = row ? parseInt(row.value, 10) : 0;
+    const elapsed = Date.now() - lastActivity;
+
+    if (elapsed < SESSION_TTL_MS) {
+      // Not yet expired - reschedule for the correct future time
+      const remaining = SESSION_TTL_MS - elapsed;
+      await this.state.storage.setAlarm(Date.now() + remaining);
+      log.info('Alarm fired early, rescheduling for', remaining, 'ms');
+      return;
+    }
+
+    // Session is expired - delete all data
+    log.info('Session TTL expired, deleting data. Last activity:', lastActivity);
+    sql.exec(`DELETE FROM messages`);
+    sql.exec(`DELETE FROM metadata`);
   }
 
   /**
