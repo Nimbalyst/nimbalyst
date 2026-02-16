@@ -86,12 +86,16 @@ export function BetaFeaturesPanel() {
                   <span className="setting-description text-xs leading-relaxed text-[var(--nim-text-muted)]">
                     {feature.description}
                   </span>
+                  {feature.tag === 'codex' && (
+                    <span className="setting-description text-xs leading-relaxed text-[var(--nim-text-muted)]">
+                      Note: Red/green diffs are not currently working in Codex.
+                    </span>
+                  )}
                 </div>
               </label>
             </div>
           ))}
         </div>
-
         <p className="mt-3 p-2 text-[13px] text-[var(--nim-text-muted)] bg-nim-secondary rounded border border-nim">
           Some beta features may require restarting Nimbalyst to take effect.
         </p>

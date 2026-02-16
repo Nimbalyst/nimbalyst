@@ -50,6 +50,10 @@ export function OpenAICodexPanel({
         </p>
       </div>
 
+      <p className="mb-4 p-2 text-[13px] text-[var(--nim-text-muted)] bg-nim-secondary rounded border border-nim">
+        Note: Red/green diffs are not currently working in Codex.
+      </p>
+
       <div className="provider-enable flex items-center justify-between gap-4 py-4 mb-4 border-b border-[var(--nim-border)]">
         <span className="provider-enable-label text-sm font-medium text-[var(--nim-text)]">Enable OpenAI Codex</span>
         <label className="provider-toggle relative inline-block w-11 h-6 cursor-pointer">
