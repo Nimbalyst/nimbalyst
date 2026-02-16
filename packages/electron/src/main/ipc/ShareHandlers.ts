@@ -66,13 +66,21 @@ function removeShareKey(sessionId: string): void {
  * share operation rather than risk sending an expired token.
  */
 async function getValidJwt(): Promise<string | null> {
-  // Always refresh to get a fresh JWT - the cached one may be expired
+  // Save cached JWT before refresh attempt, since refresh used to
+  // call signOut() on failure which would nuke credentials.
+  const cachedJwt = getSessionJwt();
+
   const refreshed = await refreshSession();
   if (refreshed) {
     return getSessionJwt();
   }
-  // Refresh failed - try the cached JWT as a last resort
-  return getSessionJwt();
+
+  // Refresh failed - try the cached JWT as a last resort.
+  // The server may still accept it if it hasn't expired yet.
+  if (cachedJwt) {
+    logger.file.warn('[ShareHandlers] JWT refresh failed, falling back to cached JWT');
+  }
+  return cachedJwt;
 }
 
 export interface ShareInfo {
@@ -204,6 +212,9 @@ export function registerShareHandlers() {
         if (!response.ok) {
           const errorText = await response.text();
           logger.file.error(`[ShareHandlers] List shares failed: ${response.status} ${errorText}`);
+          if (response.status === 401 || response.status === 403) {
+            return { success: false, error: 'Not signed in' };
+          }
           return { success: false, error: `Failed to list shares: ${errorText || response.status}` };
         }
 

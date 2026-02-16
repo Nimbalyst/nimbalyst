@@ -527,10 +527,9 @@ export async function refreshSession(serverUrl?: string): Promise<boolean> {
       const errorData = await response.json().catch(() => ({})) as { expired?: boolean; error?: string };
       logger.main.warn('[StytchAuthService] Session refresh failed:', errorData.error || response.status);
 
-      // If session is expired, sign out
-      if (errorData.expired || response.status === 401) {
-        await signOut();
-      }
+      // Don't auto-signOut here - let callers decide how to handle expired sessions.
+      // Auto-signOut was nuking credentials, which broke fallback logic in share handlers
+      // and could sign users out unexpectedly when background operations triggered refresh.
       return false;
     }
 
