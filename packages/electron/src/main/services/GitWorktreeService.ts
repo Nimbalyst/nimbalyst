@@ -2414,8 +2414,28 @@ ${newLines.map(line => '+' + line).join('\n')}`;
   }
 
   /**
+   * Paths to preserve even if gitignored (workspace config, secrets, session state).
+   * git clean -X -e does NOT work for excluding paths, so we filter the dry-run
+   * output ourselves and pass explicit paths to git clean.
+   */
+  private static readonly CLEAN_PRESERVE_PATTERNS = [
+    '.nimbalyst',       // Workspace assets and tracker configs
+    'nimbalyst-local',  // Plans, trackers, mockups, voice summaries
+    '.superloop',       // Superloop state
+    '.ralph',           // Ralph Loop task state, progress, implementation plans
+    '.claude',          // Permission approvals (settings.local.json), slash commands
+  ];
+
+  /** Check if a path (from git clean output) matches any preserved pattern. */
+  private static isPreservedPath(filePath: string): boolean {
+    const normalized = filePath.replace(/\/$/, '');
+    const topLevel = normalized.split('/')[0];
+    return GitWorktreeService.CLEAN_PRESERVE_PATTERNS.includes(topLevel);
+  }
+
+  /**
    * Dry run: list all gitignored files that would be removed from a worktree.
-   * Uses git clean -Xdn to preview without deleting.
+   * Filters out preserved paths (workspace config, secrets, session state).
    */
   async listGitignoredFiles(worktreePath: string): Promise<string[]> {
     if (!worktreePath) {
@@ -2428,12 +2448,15 @@ ${newLines.map(line => '+' + line).join('\n')}`;
     if (!result.trim()) return [];
 
     const lines = result.trim().split('\n').filter(line => line.trim().length > 0);
-    return lines.map(line => line.replace(/^Would remove /, ''));
+    return lines
+      .map(line => line.replace(/^Would remove /, ''))
+      .filter(p => !GitWorktreeService.isPreservedPath(p));
   }
 
   /**
-   * Remove all gitignored files from a worktree.
-   * Uses git clean -Xdf (only gitignored, include directories, force).
+   * Remove all gitignored files from a worktree, skipping preserved paths.
+   * Gets the full list via dry-run, filters out preserved paths, then removes
+   * only the safe paths by passing them as explicit pathspecs.
    */
   async cleanGitignoredFiles(worktreePath: string): Promise<string[]> {
     if (!worktreePath) {
@@ -2444,15 +2467,31 @@ ${newLines.map(line => '+' + line).join('\n')}`;
       logger.info('Cleaning gitignored files from worktree', { worktreePath });
 
       const git: SimpleGit = simpleGit(worktreePath);
-      const result = await git.raw(['clean', '-Xdf']);
 
-      if (!result.trim()) return [];
+      // Dry-run to get the full list
+      const dryRun = await git.raw(['clean', '-Xdn']);
+      if (!dryRun.trim()) return [];
 
-      const lines = result.trim().split('\n').filter(line => line.trim().length > 0);
-      const removed = lines.map(line => line.replace(/^Removing /, ''));
+      // Parse and filter out preserved paths
+      const allPaths = dryRun.trim().split('\n')
+        .filter(line => line.trim().length > 0)
+        .map(line => line.replace(/^Would remove /, ''));
 
-      logger.info('Cleaned gitignored files', { worktreePath, removedCount: removed.length });
-      return removed;
+      const toRemove = allPaths.filter(p => !GitWorktreeService.isPreservedPath(p));
+      if (toRemove.length === 0) return [];
+
+      logger.info('Removing gitignored files', {
+        worktreePath,
+        total: allPaths.length,
+        preserved: allPaths.length - toRemove.length,
+        toRemove: toRemove.length,
+      });
+
+      // Pass explicit paths so preserved dirs are never touched
+      await git.raw(['clean', '-Xdf', '--', ...toRemove]);
+
+      logger.info('Cleaned gitignored files', { worktreePath, removedCount: toRemove.length });
+      return toRemove;
     });
   }
 }

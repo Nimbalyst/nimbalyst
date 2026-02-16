@@ -1363,7 +1363,9 @@ export function registerWorktreeHandlers(): void {
         throw new Error('worktreePath is required');
       }
 
+      logger.info('Listing gitignored files for worktree', { worktreePath });
       const files = await gitWorktreeService.listGitignoredFiles(worktreePath);
+      logger.info('Listed gitignored files', { worktreePath, count: files.length });
 
       return { success: true, files, count: files.length };
     } catch (error) {
