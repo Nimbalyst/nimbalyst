@@ -150,6 +150,17 @@ export interface InteractiveWidgetHost {
   setAutoCommitEnabled(enabled: boolean): void;
 
   // ============================================================
+  // Super Loop Blocked Feedback
+  // ============================================================
+
+  /**
+   * Submit user feedback for a blocked Super Loop iteration.
+   * Sends the feedback to the same session, waits for Claude to process it,
+   * then continues the Super Loop.
+   */
+  superLoopBlockedFeedback(feedback: string): Promise<{ success: boolean; error?: string }>;
+
+  // ============================================================
   // Common Operations
   // ============================================================
 
@@ -211,6 +222,11 @@ export const noopInteractiveWidgetHost: InteractiveWidgetHost = {
   },
   gitCommitCancel: async () => {
     console.warn('[InteractiveWidgetHost] No host available for gitCommitCancel');
+  },
+
+  superLoopBlockedFeedback: async () => {
+    console.warn('[InteractiveWidgetHost] No host available for superLoopBlockedFeedback');
+    return { success: false, error: 'No host available' };
   },
 
   openFile: async () => {

@@ -494,6 +494,27 @@ export function registerSuperLoopHandlers(): void {
     return { success: true };
   });
 
+  /**
+   * Get the Super Loop iteration for a given AI session ID
+   * Used by the blocked feedback widget to look up the super loop ID
+   */
+  safeHandle('super-loop:get-iteration-by-session', async (_event, sessionId: string) => {
+    try {
+      if (!sessionId) {
+        throw new Error('sessionId is required');
+      }
+      const iteration = await superLoopService.getIterationBySessionId(sessionId);
+      return { success: true, iteration };
+    } catch (error) {
+      logger.error('Failed to get iteration by session:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get iteration',
+        iteration: null,
+      };
+    }
+  });
+
   handlersRegistered = true;
   logger.info('Super loop handlers registered');
 }

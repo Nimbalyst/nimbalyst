@@ -50,6 +50,7 @@ export { ExitPlanModeWidget } from './ExitPlanModeWidget';
 export { ToolPermissionWidget } from './ToolPermissionWidget';
 export { FileChangeWidget } from './FileChangeWidget';
 export { SuperProgressSnapshotWidget } from './SuperProgressSnapshotWidget';
+export { SuperLoopProgressWidget } from './SuperLoopProgressWidget';
 
 // Re-export host types (for use in SessionTranscript to set the host)
 export type { InteractiveWidgetHost, PermissionScope, ToolPermissionResponse } from './InteractiveWidgetHost';
@@ -95,6 +96,7 @@ import { ExitPlanModeWidget } from './ExitPlanModeWidget';
 import { ToolPermissionWidget } from './ToolPermissionWidget';
 import { FileChangeWidget } from './FileChangeWidget';
 import { SuperProgressSnapshotWidget } from './SuperProgressSnapshotWidget';
+import { SuperLoopProgressWidget } from './SuperLoopProgressWidget';
 
 /**
  * Registry of custom tool widgets
@@ -139,6 +141,10 @@ export const CUSTOM_TOOL_WIDGETS: CustomToolWidgetRegistry = {
 
   // Super Loop progress snapshot - shows progress.json at iteration start/end
   'SuperProgressSnapshot': SuperProgressSnapshotWidget,
+
+  // Super Loop progress update tool - shows progress summary or blocked feedback UI
+  'super_loop_progress_update': SuperLoopProgressWidget,
+  'mcp__nimbalyst-super-loop-progress__super_loop_progress_update': SuperLoopProgressWidget,
 };
 
 /**

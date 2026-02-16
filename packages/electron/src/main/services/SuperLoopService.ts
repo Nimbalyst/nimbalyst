@@ -25,6 +25,7 @@ import {
   type SuperProgressFile,
   type SuperLoopEvent,
   type SuperPhase,
+  type SuperIteration,
 } from '../../shared/types/superLoop';
 import { SuperLoopProgressService } from './SuperLoopProgressService';
 
@@ -262,6 +263,14 @@ export class SuperLoopService {
 
     this.activeRunners.delete(superLoopId);
     this.emitEvent({ type: 'loop-stopped', superLoopId, reason });
+  }
+
+  /**
+   * Get a Super Loop iteration by its AI session ID
+   */
+  async getIterationBySessionId(sessionId: string): Promise<SuperIteration | null> {
+    const { superLoopStore } = await this.ensureStores();
+    return superLoopStore.getIterationBySessionId(sessionId);
   }
 
   /**

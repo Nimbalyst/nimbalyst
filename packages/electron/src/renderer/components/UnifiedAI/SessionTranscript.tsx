@@ -1241,6 +1241,76 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
         });
       },
 
+      // Super Loop blocked feedback
+      superLoopBlockedFeedback: async (feedback: string) => {
+        try {
+          // 1. Look up the super loop ID for this session
+          const iterationResult = await window.electronAPI.invoke(
+            'super-loop:get-iteration-by-session',
+            sessionId
+          ) as { success: boolean; iteration?: { superLoopId: string } | null };
+
+          if (!iterationResult?.success || !iterationResult.iteration) {
+            return { success: false, error: 'Could not find Super Loop for this session' };
+          }
+
+          const superLoopId = iterationResult.iteration.superLoopId;
+
+          // 2. Send feedback message to the same session
+          const feedbackMessage = `The user has provided feedback to help overcome the blockers:\n\n${feedback}\n\nProcess this feedback. Then call the super_loop_progress_update tool with status "running" to clear the blocked state and include a learning entry summarizing the user's feedback.`;
+
+          // 3. Set up stream completion listener before sending
+          const streamComplete = new Promise<void>((resolve) => {
+            let resolved = false;
+            const doResolve = () => {
+              if (resolved) return;
+              resolved = true;
+              cleanupStream?.();
+              cleanupError?.();
+              resolve();
+            };
+            const cleanupStream = window.electronAPI.on('ai:streamResponse', (response: { sessionId: string; isComplete?: boolean }) => {
+              if (response.sessionId === sessionId && response.isComplete) doResolve();
+            });
+            const cleanupError = window.electronAPI.on('ai:error', (error: { sessionId: string }) => {
+              if (error.sessionId === sessionId) doResolve();
+            });
+          });
+
+          // 4. Send the message
+          await window.electronAPI.invoke(
+            'ai:sendMessage',
+            feedbackMessage,
+            undefined,
+            sessionId,
+            workspacePath
+          );
+
+          // 5. Wait for Claude to finish processing
+          await streamComplete;
+
+          // 6. Continue the blocked loop
+          await window.electronAPI.invoke(
+            'super-loop:continue-blocked',
+            superLoopId,
+            feedback
+          );
+
+          posthog?.capture('super_loop_blocked_feedback_submitted', {
+            superLoopId,
+            feedbackLength: feedback.length,
+          });
+
+          return { success: true };
+        } catch (error) {
+          console.error('[SessionTranscript] superLoopBlockedFeedback failed:', error);
+          return {
+            success: false,
+            error: error instanceof Error ? error.message : String(error),
+          };
+        }
+      },
+
       // Common operations
       openFile: async (filePath: string) => {
         await window.electronAPI.invoke('workspace:openFile', filePath);

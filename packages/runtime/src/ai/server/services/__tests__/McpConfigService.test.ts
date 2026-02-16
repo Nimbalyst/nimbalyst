@@ -10,6 +10,7 @@ describe('McpConfigService', () => {
       mcpServerPort: 3000,
       sessionNamingServerPort: 3001,
       extensionDevServerPort: 3002,
+      superLoopProgressServerPort: null,
       mcpConfigLoader: null,
       extensionPluginsLoader: null,
       claudeSettingsEnvLoader: null,
