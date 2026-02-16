@@ -25,6 +25,26 @@ export function getCodexTargetTriple(platform: SupportedPlatform, arch: string):
   return undefined;
 }
 
+function getCodexPackageSubpath(platform: SupportedPlatform, arch: string): string | undefined {
+  if (arch !== 'x64' && arch !== 'arm64') {
+    return undefined;
+  }
+
+  if (platform === 'darwin') {
+    return path.join('@openai', `codex-darwin-${arch}`);
+  }
+
+  if (platform === 'linux' || platform === 'android') {
+    return path.join('@openai', `codex-linux-${arch}`);
+  }
+
+  if (platform === 'win32') {
+    return path.join('@openai', `codex-win32-${arch}`);
+  }
+
+  return undefined;
+}
+
 /**
  * Options for resolving the Codex binary path in packaged applications.
  */
@@ -87,11 +107,19 @@ export function resolvePackagedCodexBinaryPath(
 
   const binaryName = platform === 'win32' ? 'codex.exe' : 'codex';
   const resourcesRoots = getResourcesRoots(resourcesPath);
+  const codexPackageSubpath = getCodexPackageSubpath(platform, arch);
 
   const packageRelativeRoots = [
     path.join('app.asar.unpacked', 'node_modules', '@openai', 'codex-sdk'),
     path.join('node_modules', '@openai', 'codex-sdk'),
     path.join('app.asar.unpacked', '@openai', 'codex-sdk'),
+    ...(codexPackageSubpath
+      ? [
+          path.join('app.asar.unpacked', 'node_modules', codexPackageSubpath),
+          path.join('node_modules', codexPackageSubpath),
+          path.join('app.asar.unpacked', codexPackageSubpath),
+        ]
+      : []),
   ];
 
   const binaryRelativePaths = [

@@ -165,6 +165,7 @@
     "asarUnpack": [
       "node_modules/**/*.node",
       "node_modules/@anthropic-ai/**/*",
+      "node_modules/@openai/codex-*/*",
       "node_modules/@openai/codex-sdk/**/*",
       "node_modules/openai/**/*",
       "node_modules/heic-decode/**/*"

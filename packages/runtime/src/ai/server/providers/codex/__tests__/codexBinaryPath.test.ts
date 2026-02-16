@@ -110,4 +110,27 @@ describe('codexBinaryPath', () => {
 
     expect(resolved).toBe(flattenedBinary);
   });
+
+  it('resolves Codex CLI binary from platform package layout', () => {
+    const resourcesPath = '/Applications/Nimbalyst.app/Contents/Resources';
+    const platformBinary = path.join(
+      resourcesPath,
+      'app.asar.unpacked',
+      'node_modules',
+      '@openai',
+      'codex-darwin-arm64',
+      'vendor',
+      'aarch64-apple-darwin',
+      'codex'
+    );
+
+    const resolved = resolvePackagedCodexBinaryPath({
+      resourcesPath,
+      platform: 'darwin',
+      arch: 'arm64',
+      existsSync: (candidate) => candidate === platformBinary,
+    });
+
+    expect(resolved).toBe(platformBinary);
+  });
 });
