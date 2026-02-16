@@ -84,6 +84,8 @@ interface AppStoreSchema {
   };
   // Extension Development Kit (EDK) - enables MCP tools for building/reloading extensions
   extensionDevToolsEnabled?: boolean;
+  // Share encryption keys: maps sessionId -> base64 AES-256 key (for re-sharing with stable URLs)
+  shareKeys?: Record<string, string>;
   // Session Sync (optional device sync)
   sessionSync?: {
     enabled: boolean;

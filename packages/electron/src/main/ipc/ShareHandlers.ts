@@ -1,12 +1,62 @@
 import { clipboard } from 'electron';
 import { net } from 'electron';
+import { randomBytes, createCipheriv } from 'crypto';
 import { safeHandle } from '../utils/ipcRegistry';
 import { logger } from '../utils/logger';
 import { AISessionsRepository, AgentMessagesRepository, transformAgentMessagesToUI } from '@nimbalyst/runtime';
 import type { SessionData } from '@nimbalyst/runtime/ai/server/types';
 import { exportSessionToHtml } from '../services/SessionHtmlExporter';
 import { getSessionJwt, refreshSession } from '../services/StytchAuthService';
+import { store } from '../utils/store';
+
 const SHARE_SERVER_URL = 'https://sync.nimbalyst.com';
+
+// --- Encryption utilities ---
+
+/** Generate a random 256-bit AES key, returned as standard base64. */
+function generateShareKey(): string {
+  return randomBytes(32).toString('base64');
+}
+
+/** Convert standard base64 to URL-safe base64 (no padding). */
+function keyToUrlSafe(base64: string): string {
+  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+/**
+ * Encrypt HTML content with AES-256-GCM.
+ * Returns Buffer of: IV (12 bytes) || ciphertext || auth tag (16 bytes)
+ */
+function encryptContent(html: string, keyBase64: string): Buffer {
+  const key = Buffer.from(keyBase64, 'base64');
+  const iv = randomBytes(12);
+  const cipher = createCipheriv('aes-256-gcm', key, iv);
+  const encrypted = Buffer.concat([cipher.update(html, 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return Buffer.concat([iv, encrypted, tag]);
+}
+
+/** Get or create the encryption key for a session. */
+function getOrCreateShareKey(sessionId: string): string {
+  const keys = store.get('shareKeys') ?? {};
+  if (keys[sessionId]) {
+    return keys[sessionId];
+  }
+  const newKey = generateShareKey();
+  store.set('shareKeys', { ...keys, [sessionId]: newKey });
+  return newKey;
+}
+
+/** Remove a stored share key when a share is deleted. */
+function removeShareKey(sessionId: string): void {
+  const keys = store.get('shareKeys') ?? {};
+  if (keys[sessionId]) {
+    const { [sessionId]: _, ...rest } = keys;
+    store.set('shareKeys', rest);
+  }
+}
+
+// --- Auth ---
 
 /**
  * Get a valid JWT, always refreshing to ensure it's not expired.
@@ -39,14 +89,15 @@ export interface ShareInfo {
 export function registerShareHandlers() {
   /**
    * Share a session as a link.
-   * Generates HTML, uploads to server, copies URL to clipboard.
+   * Generates HTML, encrypts client-side, uploads ciphertext to server.
+   * The decryption key is included in the URL fragment (never sent to server).
    */
   safeHandle(
     'share:sessionAsLink',
     async (
       _event,
       options: { sessionId: string }
-    ): Promise<{ success: boolean; url?: string; shareId?: string; isUpdate?: boolean; error?: string }> => {
+    ): Promise<{ success: boolean; url?: string; shareId?: string; isUpdate?: boolean; encryptionKey?: string; error?: string }> => {
       const { sessionId } = options;
 
       if (!sessionId) {
@@ -85,18 +136,22 @@ export function registerShareHandlers() {
         };
 
         const html = exportSessionToHtml(session);
-        const title = chatSession.title ?? 'Untitled';
 
-        // Upload to server
+        // Encrypt the HTML content
+        const shareKey = getOrCreateShareKey(sessionId);
+        const encrypted = encryptContent(html, shareKey);
+        const urlSafeKey = keyToUrlSafe(shareKey);
+
+        // Upload encrypted content to server
         const response = await net.fetch(`${serverUrl}/share`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${jwt}`,
-            'Content-Type': 'text/html',
-            'X-Session-Title': title,
+            'Content-Type': 'application/octet-stream',
+            'X-Session-Title': 'Encrypted session',
             'X-Session-Id': sessionId,
           },
-          body: html,
+          body: encrypted,
         });
 
         if (!response.ok) {
@@ -107,11 +162,14 @@ export function registerShareHandlers() {
 
         const data = await response.json() as { shareId: string; url: string; isUpdate?: boolean };
 
+        // Append decryption key to URL fragment
+        const fullUrl = `${data.url}#key=${urlSafeKey}`;
+
         // Copy URL to clipboard
-        clipboard.writeText(data.url);
+        clipboard.writeText(fullUrl);
 
         logger.file.info(`[ShareHandlers] Session ${data.isUpdate ? 'updated' : 'shared'}: ${data.url}`);
-        return { success: true, url: data.url, shareId: data.shareId, isUpdate: data.isUpdate };
+        return { success: true, url: fullUrl, shareId: data.shareId, isUpdate: data.isUpdate, encryptionKey: urlSafeKey };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         logger.file.error(`[ShareHandlers] Share failed: ${errorMessage}`);
@@ -164,9 +222,9 @@ export function registerShareHandlers() {
     'share:delete',
     async (
       _event,
-      options: { shareId: string }
+      options: { shareId: string; sessionId?: string }
     ): Promise<{ success: boolean; error?: string }> => {
-      const { shareId } = options;
+      const { shareId, sessionId } = options;
 
       if (!shareId) {
         return { success: false, error: 'shareId is required' };
@@ -193,6 +251,11 @@ export function registerShareHandlers() {
           return { success: false, error: `Failed to delete share: ${errorText || response.status}` };
         }
 
+        // Clean up local encryption key
+        if (sessionId) {
+          removeShareKey(sessionId);
+        }
+
         logger.file.info(`[ShareHandlers] Share deleted: ${shareId}`);
         return { success: true };
       } catch (error) {
@@ -200,6 +263,23 @@ export function registerShareHandlers() {
         logger.file.error(`[ShareHandlers] Delete share failed: ${errorMessage}`);
         return { success: false, error: errorMessage };
       }
+    }
+  );
+
+  /**
+   * Get locally stored share encryption keys.
+   * Used by renderer to reconstruct share URLs with decryption key fragments.
+   */
+  safeHandle(
+    'share:getKeys',
+    async (): Promise<Record<string, string>> => {
+      const keys = store.get('shareKeys') ?? {};
+      // Convert to URL-safe format for the renderer
+      const urlSafeKeys: Record<string, string> = {};
+      for (const [sessionId, key] of Object.entries(keys)) {
+        urlSafeKeys[sessionId] = keyToUrlSafe(key as string);
+      }
+      return urlSafeKeys;
     }
   );
 }

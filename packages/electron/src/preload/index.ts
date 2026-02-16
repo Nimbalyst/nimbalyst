@@ -260,11 +260,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Share operations
   shareSessionAsLink: (options: { sessionId: string }) =>
-    ipcRenderer.invoke('share:sessionAsLink', options) as Promise<{ success: boolean; url?: string; shareId?: string; isUpdate?: boolean; error?: string }>,
+    ipcRenderer.invoke('share:sessionAsLink', options) as Promise<{ success: boolean; url?: string; shareId?: string; isUpdate?: boolean; encryptionKey?: string; error?: string }>,
   listShares: () =>
     ipcRenderer.invoke('share:list') as Promise<{ success: boolean; shares?: Array<{ shareId: string; sessionId: string; title: string; sizeBytes: number; createdAt: string; expiresAt: string | null; viewCount: number }>; error?: string }>,
-  deleteShare: (options: { shareId: string }) =>
+  deleteShare: (options: { shareId: string; sessionId?: string }) =>
     ipcRenderer.invoke('share:delete', options) as Promise<{ success: boolean; error?: string }>,
+  getShareKeys: () =>
+    ipcRenderer.invoke('share:getKeys') as Promise<Record<string, string>>,
 
   // Window operations
   setDocumentEdited: (edited: boolean) => ipcRenderer.send('set-document-edited', edited),

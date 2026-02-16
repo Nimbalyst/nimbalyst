@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { MaterialSymbol } from '@nimbalyst/runtime';
+import { buildShareUrl } from '../../../store/atoms/sessionShares';
 
 interface SharedLink {
   shareId: string;
@@ -20,6 +21,7 @@ type PanelState = 'loading' | 'loaded' | 'unauthenticated' | 'error';
  */
 export const SharedLinksPanel: React.FC = () => {
   const [shares, setShares] = useState<SharedLink[]>([]);
+  const [shareKeys, setShareKeys] = useState<Record<string, string>>({});
   const [state, setState] = useState<PanelState>('loading');
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -28,13 +30,17 @@ export const SharedLinksPanel: React.FC = () => {
   const fetchShares = useCallback(async () => {
     setState('loading');
     try {
-      const result = await (window as any).electronAPI?.listShares();
+      const [result, keys] = await Promise.all([
+        (window as any).electronAPI?.listShares(),
+        (window as any).electronAPI?.getShareKeys(),
+      ]);
+      if (keys) {
+        setShareKeys(keys);
+      }
       if (result?.success && result.shares) {
         setShares(result.shares);
         setState('loaded');
       } else if (result?.error?.includes('Not signed in')) {
-        setState('unauthenticated');
-      } else if (result?.error?.includes('Sync not configured')) {
         setState('unauthenticated');
       } else {
         setErrorMessage(result?.error || 'Failed to load shares');
@@ -50,12 +56,12 @@ export const SharedLinksPanel: React.FC = () => {
     fetchShares();
   }, [fetchShares]);
 
-  const handleDelete = async (shareId: string) => {
-    setDeletingId(shareId);
+  const handleDelete = async (share: SharedLink) => {
+    setDeletingId(share.shareId);
     try {
-      const result = await (window as any).electronAPI?.deleteShare({ shareId });
+      const result = await (window as any).electronAPI?.deleteShare({ shareId: share.shareId, sessionId: share.sessionId });
       if (result?.success) {
-        setShares(prev => prev.filter(s => s.shareId !== shareId));
+        setShares(prev => prev.filter(s => s.shareId !== share.shareId));
       }
     } catch (error) {
       console.error('[SharedLinksPanel] Delete failed:', error);
@@ -64,10 +70,11 @@ export const SharedLinksPanel: React.FC = () => {
     }
   };
 
-  const handleCopyLink = (shareId: string) => {
-    const url = `https://share.nimbalyst.com/share/${shareId}`;
+  const handleCopyLink = (share: SharedLink) => {
+    const key = shareKeys[share.sessionId];
+    const url = buildShareUrl(share.shareId, key);
     navigator.clipboard.writeText(url);
-    setCopiedId(shareId);
+    setCopiedId(share.shareId);
     setTimeout(() => setCopiedId(null), 2000);
   };
 
@@ -200,14 +207,14 @@ export const SharedLinksPanel: React.FC = () => {
                 <button
                   className="flex items-center justify-center w-7 h-7 rounded-md bg-transparent border-none text-[var(--nim-text-faint)] cursor-pointer transition-colors duration-150 hover:text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]"
                   title="Copy link"
-                  onClick={() => handleCopyLink(share.shareId)}
+                  onClick={() => handleCopyLink(share)}
                 >
                   <MaterialSymbol icon={copiedId === share.shareId ? 'check' : 'content_copy'} size={14} />
                 </button>
                 <button
                   className="flex items-center justify-center w-7 h-7 rounded-md bg-transparent border-none text-[var(--nim-text-faint)] cursor-pointer transition-colors duration-150 hover:text-[var(--nim-error)] hover:bg-[var(--nim-bg-hover)] disabled:opacity-50 disabled:cursor-default"
                   title="Delete shared link"
-                  onClick={() => handleDelete(share.shareId)}
+                  onClick={() => handleDelete(share)}
                   disabled={deletingId === share.shareId}
                 >
                   <MaterialSymbol

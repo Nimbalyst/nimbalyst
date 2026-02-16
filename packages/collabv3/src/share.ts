@@ -1,8 +1,12 @@
 /**
  * Session Share Handlers
  *
- * Handles uploading, serving, listing, and deleting shared session HTML exports.
- * Shared sessions are stored in R2 with metadata in D1.
+ * Handles uploading, serving, listing, and deleting shared session exports.
+ * Shared sessions are stored encrypted in R2 with metadata in D1.
+ *
+ * All shares are client-side encrypted with AES-256-GCM. The decryption key
+ * lives in the URL fragment (#key=...) and is never sent to the server.
+ * The server only stores ciphertext -- admins cannot read user content.
  */
 
 import type { Env } from './types';
@@ -45,8 +49,8 @@ function generateShareId(): string {
 /**
  * Handle share upload: POST /share
  *
- * Authenticated. Accepts HTML body, stores in R2, records metadata in D1.
- * Returns { shareId, url }.
+ * Authenticated. Accepts encrypted binary body, stores in R2,
+ * records metadata in D1. Returns { shareId, url }.
  */
 export async function handleShareUpload(
   request: Request,
@@ -56,20 +60,21 @@ export async function handleShareUpload(
 ): Promise<Response> {
   const jsonHeaders = { ...corsHeaders, 'Content-Type': 'application/json' };
 
-  // Read HTML body
-  const html = await request.text();
-  const title = request.headers.get('X-Session-Title') || 'Untitled';
+  const title = request.headers.get('X-Session-Title') || 'Encrypted session';
   const sessionId = request.headers.get('X-Session-Id') || '';
 
+  const body = await request.arrayBuffer();
+  const bodySize = body.byteLength;
+
   // Validate size
-  if (html.length > MAX_UPLOAD_SIZE) {
+  if (bodySize > MAX_UPLOAD_SIZE) {
     return new Response(
       JSON.stringify({ error: 'File too large. Maximum size is 5 MB.' }),
       { status: 413, headers: jsonHeaders }
     );
   }
 
-  if (html.length === 0) {
+  if (bodySize === 0) {
     return new Response(
       JSON.stringify({ error: 'Empty body' }),
       { status: 400, headers: jsonHeaders }
@@ -93,31 +98,34 @@ export async function handleShareUpload(
     if (existing) {
       // Update existing share - keep same ID and URL
       shareId = existing.id;
-      r2Key = existing.r2_key;
+      r2Key = `shares/${shareId}.bin`;
       isUpdate = true;
 
-      // Overwrite R2 object
-      await env.SESSION_SHARES.put(r2Key, html, {
-        httpMetadata: { contentType: 'text/html; charset=utf-8' },
+      // Delete old R2 object if the key changed (e.g., previously .html)
+      if (existing.r2_key !== r2Key) {
+        await env.SESSION_SHARES.delete(existing.r2_key);
+      }
+
+      await env.SESSION_SHARES.put(r2Key, body, {
+        httpMetadata: { contentType: 'application/octet-stream' },
       });
 
-      // Update D1 metadata (reset TTL, update size/title)
       await env.DB.prepare(
-        `UPDATE shared_sessions SET title = ?, size_bytes = ?, updated_at = ?, expires_at = ? WHERE id = ?`
-      ).bind(title, html.length, now.toISOString(), expiresAt.toISOString(), shareId).run();
+        `UPDATE shared_sessions SET title = ?, size_bytes = ?, updated_at = ?, expires_at = ?, r2_key = ? WHERE id = ?`
+      ).bind(title, bodySize, now.toISOString(), expiresAt.toISOString(), r2Key, shareId).run();
     } else {
       // Create new share
       shareId = generateShareId();
-      r2Key = `shares/${shareId}.html`;
+      r2Key = `shares/${shareId}.bin`;
 
-      await env.SESSION_SHARES.put(r2Key, html, {
-        httpMetadata: { contentType: 'text/html; charset=utf-8' },
+      await env.SESSION_SHARES.put(r2Key, body, {
+        httpMetadata: { contentType: 'application/octet-stream' },
       });
 
       await env.DB.prepare(
         `INSERT INTO shared_sessions (id, user_id, session_id, title, r2_key, size_bytes, created_at, expires_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-      ).bind(shareId, auth.userId, sessionId, title, r2Key, html.length, now.toISOString(), expiresAt.toISOString()).run();
+      ).bind(shareId, auth.userId, sessionId, title, r2Key, bodySize, now.toISOString(), expiresAt.toISOString()).run();
     }
 
     // Build share URL - use share.nimbalyst.com in production, request origin otherwise
@@ -126,7 +134,7 @@ export async function handleShareUpload(
     const shareBase = isProduction ? 'https://share.nimbalyst.com' : url.origin;
     const shareUrl = `${shareBase}/share/${shareId}`;
 
-    log.debug('Share', isUpdate ? 'updated' : 'created', ':', shareId, 'size:', html.length, 'user:', auth.userId);
+    log.debug('Share', isUpdate ? 'updated' : 'created', ':', shareId, 'size:', bodySize, 'user:', auth.userId);
 
     return new Response(
       JSON.stringify({ shareId, url: shareUrl, isUpdate }),
@@ -144,7 +152,8 @@ export async function handleShareUpload(
 /**
  * Handle share view: GET /share/{shareId}
  *
- * Public, no auth required. Serves the HTML file from R2.
+ * Public, no auth required. Serves a decryption viewer page that extracts
+ * the key from the URL fragment and decrypts the content client-side.
  */
 export async function handleShareView(
   shareId: string,
@@ -158,8 +167,8 @@ export async function handleShareView(
   try {
     // Look up in D1
     const record = await env.DB.prepare(
-      `SELECT r2_key, expires_at, is_deleted FROM shared_sessions WHERE id = ?`
-    ).bind(shareId).first<{ r2_key: string; expires_at: string | null; is_deleted: number }>();
+      `SELECT expires_at, is_deleted FROM shared_sessions WHERE id = ?`
+    ).bind(shareId).first<{ expires_at: string | null; is_deleted: number }>();
 
     if (!record || record.is_deleted) {
       return new Response('Not found', { status: 404 });
@@ -174,7 +183,46 @@ export async function handleShareView(
       `UPDATE shared_sessions SET view_count = view_count + 1 WHERE id = ?`
     ).bind(shareId).run();
 
-    // Serve from R2
+    return new Response(getDecryptionViewerHtml(shareId), {
+      headers: {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-cache',
+      },
+    });
+  } catch (err) {
+    log.error('Share view failed:', err);
+    return new Response('Internal server error', { status: 500 });
+  }
+}
+
+/**
+ * Handle share content: GET /share/{shareId}/content
+ *
+ * Public, no auth required. Returns the raw encrypted bytes from R2.
+ * Used by the decryption viewer page to fetch ciphertext for client-side decryption.
+ */
+export async function handleShareContent(
+  shareId: string,
+  env: Env
+): Promise<Response> {
+  // Validate share ID format (base62, 22 chars)
+  if (!/^[a-zA-Z0-9]{22}$/.test(shareId)) {
+    return new Response('Not found', { status: 404 });
+  }
+
+  try {
+    const record = await env.DB.prepare(
+      `SELECT r2_key, expires_at, is_deleted FROM shared_sessions WHERE id = ?`
+    ).bind(shareId).first<{ r2_key: string; expires_at: string | null; is_deleted: number }>();
+
+    if (!record || record.is_deleted) {
+      return new Response('Not found', { status: 404 });
+    }
+
+    if (record.expires_at && new Date(record.expires_at) < new Date()) {
+      return new Response('This shared link has expired', { status: 410 });
+    }
+
     const object = await env.SESSION_SHARES.get(record.r2_key);
     if (!object) {
       return new Response('Not found', { status: 404 });
@@ -182,12 +230,12 @@ export async function handleShareView(
 
     return new Response(object.body, {
       headers: {
-        'Content-Type': 'text/html; charset=utf-8',
+        'Content-Type': 'application/octet-stream',
         'Cache-Control': 'public, max-age=3600',
       },
     });
   } catch (err) {
-    log.error('Share view failed:', err);
+    log.error('Share content fetch failed:', err);
     return new Response('Internal server error', { status: 500 });
   }
 }
@@ -212,7 +260,6 @@ export async function handleShareList(
        ORDER BY created_at DESC`
     ).bind(auth.userId).all();
 
-    const url_origin = ''; // Will be set by client based on server URL
     const shares = (result.results || []).map((row: any) => ({
       shareId: row.id,
       sessionId: row.session_id,
@@ -298,4 +345,94 @@ export async function handleShareDelete(
       { status: 500, headers: jsonHeaders }
     );
   }
+}
+
+/**
+ * Generate the decryption viewer HTML page.
+ *
+ * This self-contained page:
+ * 1. Extracts the AES-256-GCM key from the URL fragment (#key=...)
+ * 2. Fetches the encrypted content from /share/{id}/content
+ * 3. Decrypts using Web Crypto API
+ * 4. Renders the decrypted HTML in a sandboxed iframe
+ *
+ * The URL fragment is never sent to the server, so the decryption key
+ * remains client-side only.
+ */
+function getDecryptionViewerHtml(shareId: string): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nimbalyst Shared Session</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#1a1a1a;color:#e4e4e7}
+.center{display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;gap:12px}
+.spinner{width:24px;height:24px;border:3px solid #333;border-top-color:#60a5fa;border-radius:50%;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.error{max-width:28rem;margin:4rem auto;padding:2rem;text-align:center}
+.error h2{color:#ef4444;margin-bottom:8px;font-size:18px}
+.error p{color:#a1a1aa;font-size:14px;line-height:1.5}
+iframe{border:0;width:100%;height:100vh;display:block}
+.brand{position:fixed;bottom:12px;right:16px;font-size:11px;color:#52525b;z-index:10}
+.brand a{color:#60a5fa;text-decoration:none}
+</style>
+</head>
+<body>
+<div id="loading" class="center">
+<div class="spinner"></div>
+<div style="color:#a1a1aa;font-size:14px">Decrypting session...</div>
+</div>
+<div id="error" class="error" style="display:none"></div>
+<iframe id="viewer" style="display:none" sandbox="allow-scripts allow-same-origin allow-popups"></iframe>
+<div class="brand">Shared via <a href="https://nimbalyst.com" target="_blank">Nimbalyst</a></div>
+<script>
+(async()=>{
+  const errEl=document.getElementById('error');
+  const loadEl=document.getElementById('loading');
+  function showError(title,msg){
+    loadEl.style.display='none';
+    errEl.style.display='block';
+    errEl.innerHTML='<h2>'+title+'</h2><p>'+msg+'</p>';
+  }
+  const hash=window.location.hash;
+  if(!hash||!hash.startsWith('#key=')){
+    showError('Missing decryption key','The URL is incomplete. Make sure you copied the full link including the part after the # symbol.');
+    return;
+  }
+  const keyB64url=hash.slice(5);
+  const keyB64=keyB64url.replace(/-/g,'+').replace(/_/g,'/');
+  const padded=keyB64+'='.repeat((4-keyB64.length%4)%4);
+  try{
+    const resp=await fetch('/share/${shareId}/content');
+    if(!resp.ok){
+      if(resp.status===404)showError('Not found','This shared session was not found or has been removed.');
+      else if(resp.status===410)showError('Expired','This shared link has expired.');
+      else showError('Error','Failed to load the shared session (HTTP '+resp.status+').');
+      return;
+    }
+    const data=await resp.arrayBuffer();
+    if(data.byteLength<29){
+      showError('Invalid content','The shared content appears to be corrupted.');
+      return;
+    }
+    const iv=new Uint8Array(data,0,12);
+    const ciphertext=new Uint8Array(data,12);
+    const keyBytes=Uint8Array.from(atob(padded),c=>c.charCodeAt(0));
+    const cryptoKey=await crypto.subtle.importKey('raw',keyBytes,{name:'AES-GCM'},false,['decrypt']);
+    const decrypted=await crypto.subtle.decrypt({name:'AES-GCM',iv:iv},cryptoKey,ciphertext);
+    const html=new TextDecoder().decode(decrypted);
+    loadEl.style.display='none';
+    const iframe=document.getElementById('viewer');
+    iframe.style.display='block';
+    iframe.srcdoc=html;
+  }catch(e){
+    showError('Decryption failed','The decryption key may be incorrect or the content may be corrupted.');
+  }
+})();
+</script>
+</body>
+</html>`;
 }

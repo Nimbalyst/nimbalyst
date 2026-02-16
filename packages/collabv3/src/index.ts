@@ -13,7 +13,7 @@ import type { Env } from './types';
 import { SessionRoom } from './SessionRoom';
 import { IndexRoom } from './IndexRoom';
 import { parseAuth as parseAuthJWT, type AuthConfig, type AuthResult } from './auth';
-import { handleShareUpload, handleShareView, handleShareList, handleShareDelete } from './share';
+import { handleShareUpload, handleShareView, handleShareContent, handleShareList, handleShareDelete } from './share';
 import { setLogEnvironment, createLogger } from './logger';
 
 const log = createLogger('sync');
@@ -333,8 +333,16 @@ async function handleShareRoutes(
     });
   }
 
-  // GET /share/{shareId} - Public, serve HTML
-  if (url.pathname.startsWith('/share/') && request.method === 'GET') {
+  // GET /share/{shareId}/content - Public, serve raw encrypted content
+  if (url.pathname.match(/^\/share\/[^/]+\/content$/) && request.method === 'GET') {
+    const shareId = url.pathname.slice('/share/'.length, url.pathname.lastIndexOf('/'));
+    if (shareId) {
+      return handleShareContent(shareId, env);
+    }
+  }
+
+  // GET /share/{shareId} - Public, serve HTML or decryption viewer
+  if (url.pathname.startsWith('/share/') && !url.pathname.includes('/content') && request.method === 'GET') {
     const shareId = url.pathname.slice('/share/'.length);
     if (shareId) {
       return handleShareView(shareId, env);

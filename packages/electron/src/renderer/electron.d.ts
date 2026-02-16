@@ -96,9 +96,10 @@ interface ElectronAPI {
   showErrorDialog: (title: string, message: string) => Promise<void>;
 
   // Share operations
-  shareSessionAsLink: (options: { sessionId: string }) => Promise<{ success: boolean; url?: string; shareId?: string; error?: string }>;
+  shareSessionAsLink: (options: { sessionId: string }) => Promise<{ success: boolean; url?: string; shareId?: string; isUpdate?: boolean; encryptionKey?: string; error?: string }>;
   listShares: () => Promise<{ success: boolean; shares?: Array<{ shareId: string; sessionId: string; title: string; sizeBytes: number; createdAt: string; expiresAt: string | null; viewCount: number }>; error?: string }>;
-  deleteShare: (options: { shareId: string }) => Promise<{ success: boolean; error?: string }>;
+  deleteShare: (options: { shareId: string; sessionId?: string }) => Promise<{ success: boolean; error?: string }>;
+  getShareKeys: () => Promise<Record<string, string>>;
 
   setDocumentEdited: (edited: boolean) => void;
   setTitle: (title: string) => void;

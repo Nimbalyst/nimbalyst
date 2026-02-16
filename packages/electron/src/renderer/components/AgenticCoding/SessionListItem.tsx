@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect, useRef, useMemo, memo } from '
 import { useAtomValue, useSetAtom } from 'jotai';
 import { MaterialSymbol, ProviderIcon } from '@nimbalyst/runtime';
 import { getRelativeTimeString } from '../../utils/dateFormatting';
-import { sessionOrChildProcessingAtom, sessionUnreadAtom, sessionPendingPromptAtom, sessionHasPendingInteractivePromptAtom, reparentSessionAtom, refreshSessionListAtom, sessionShareAtom, addSessionShareAtom, removeSessionShareAtom } from '../../store';
+import { sessionOrChildProcessingAtom, sessionUnreadAtom, sessionPendingPromptAtom, sessionHasPendingInteractivePromptAtom, reparentSessionAtom, refreshSessionListAtom, sessionShareAtom, addSessionShareAtom, removeSessionShareAtom, shareKeysAtom, buildShareUrl } from '../../store';
 import type { ShareInfo } from '../../store';
 import { useAlphaFeature } from '../../hooks/useAlphaFeature';
 import { errorNotificationService } from '../../services/ErrorNotificationService';
@@ -146,6 +146,7 @@ export const SessionListItem = memo<SessionListItemProps>(({
   // Share state (only available when sync is enabled)
   const isSyncEnabled = useAlphaFeature('sync');
   const shareInfo = useAtomValue(sessionShareAtom(id));
+  const shareKeys = useAtomValue(shareKeysAtom);
   const addShare = useSetAtom(addSessionShareAtom);
   const removeShare = useSetAtom(removeSessionShareAtom);
 
@@ -226,6 +227,7 @@ export const SessionListItem = memo<SessionListItemProps>(({
           createdAt: new Date().toISOString(),
           expiresAt: null,
           viewCount: 0,
+          encryptionKey: result.encryptionKey,
         });
         errorNotificationService.showInfo(
           result.isUpdate ? 'Share link updated' : 'Share link copied',
@@ -246,7 +248,8 @@ export const SessionListItem = memo<SessionListItemProps>(({
     e.stopPropagation();
     setShowContextMenu(false);
     if (shareInfo) {
-      navigator.clipboard.writeText(`https://share.nimbalyst.com/share/${shareInfo.shareId}`);
+      const url = buildShareUrl(shareInfo.shareId, shareKeys.get(id));
+      navigator.clipboard.writeText(url);
       errorNotificationService.showInfo('Share link copied', 'The share link has been copied to your clipboard.', { duration: 3000 });
     }
   };
@@ -256,7 +259,7 @@ export const SessionListItem = memo<SessionListItemProps>(({
     setShowContextMenu(false);
     if (!shareInfo) return;
     try {
-      const result = await (window as any).electronAPI?.deleteShare({ shareId: shareInfo.shareId });
+      const result = await (window as any).electronAPI?.deleteShare({ shareId: shareInfo.shareId, sessionId: id });
       if (result?.success) {
         removeShare(id);
         errorNotificationService.showInfo('Session unshared', 'The share link has been removed.', { duration: 3000 });
