@@ -350,6 +350,8 @@ interface RichTranscriptViewProps {
     timestamp: number;
     messageIndex: number; // Index of user message this belongs to (for stable positioning)
   } | null;
+  /** Optional: Current teammates/agents from session metadata, used to show status on spawn cards */
+  currentTeammates?: Array<{ agentId: string; status: 'running' | 'completed' | 'errored' | 'idle' }>;
   // Note: Interactive widgets read their host from interactiveWidgetHostAtom(sessionId)
 }
 
@@ -531,7 +533,7 @@ const extractEditsFromToolMessage = (message: Message): any[] => {
 export const RichTranscriptView = React.forwardRef<
   { scrollToMessage: (index: number) => void },
   RichTranscriptViewProps
->(({ sessionId, sessionStatus, isProcessing, messages, provider, settings: propsSettings, onSettingsChange, showSettings, documentContext, workspacePath, renderEmptyExtra, readFile, onOpenFile, onCompact, promptAdditions }, ref) => {
+>(({ sessionId, sessionStatus, isProcessing, messages, provider, settings: propsSettings, onSettingsChange, showSettings, documentContext, workspacePath, renderEmptyExtra, readFile, onOpenFile, onCompact, promptAdditions, currentTeammates }, ref) => {
   const [collapsedMessages, setCollapsedMessages] = useState<Set<number>>(new Set());
   const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
   const scrollButtonRef = useRef<HTMLDivElement>(null);
@@ -979,14 +981,69 @@ export const RichTranscriptView = React.forwardRef<
               }
               return <span className="rich-transcript-tool-args text-[var(--nim-text-muted)] flex-1 overflow-hidden text-ellipsis whitespace-nowrap">{argStr}</span>;
             })()}
-            {tool.result && !(toolMsg as any).isError && (
-              <MaterialSymbol icon="check_circle" size={16} className="rich-transcript-tool-success w-4 h-4 text-[var(--nim-success)] shrink-0" />
-            )}
-            {tool.result && (toolMsg as any).isError && (
-              <MaterialSymbol icon="cancel" size={16} className="rich-transcript-tool-error w-4 h-4 text-[var(--nim-error)] shrink-0" />
-            )}
-            {isSubAgent && !tool.result && tool.toolProgress && (
-              <span className="inline-block w-3 h-3 border-2 border-[var(--nim-primary)] border-t-transparent rounded-full animate-spin shrink-0" />
+            {/* Status indicator: sub-agents/teammates show live status, regular tools show success/error */}
+            {isSubAgent ? (() => {
+              // Look up teammate status from session metadata
+              // Try tool.teammateAgentId first, then extract agent_id from result text
+              let agentId = tool.teammateAgentId;
+              if (!agentId && tool.result && typeof tool.result === 'string') {
+                const match = tool.result.match(/agent_id:\s*(\S+)/);
+                if (match) agentId = match[1].replace(/[.,]$/, '');
+              }
+              const teammateStatus = agentId ? currentTeammates?.find(t => t.agentId === agentId)?.status : undefined;
+              // If no metadata yet but spawn succeeded (isError due to interception), assume running
+              const effectiveStatus = teammateStatus || (tool.result && (toolMsg as any).isError ? 'running' : tool.result ? 'completed' : null);
+              if (effectiveStatus === 'running') {
+                return (
+                  <span className="flex items-center gap-1 shrink-0">
+                    <span className="inline-block w-3 h-3 border-2 border-[var(--nim-bg-tertiary)] border-t-[var(--nim-primary)] rounded-full animate-spin" />
+                    <span className="text-[11px] text-[var(--nim-text-muted)]">Running</span>
+                  </span>
+                );
+              }
+              if (effectiveStatus === 'idle') {
+                return (
+                  <span className="flex items-center gap-1 shrink-0">
+                    <span className="text-[var(--nim-primary)] text-[10px]">&#9675;</span>
+                    <span className="text-[11px] text-[var(--nim-text-muted)]">Idle</span>
+                  </span>
+                );
+              }
+              if (effectiveStatus === 'completed') {
+                return (
+                  <span className="flex items-center gap-1 shrink-0">
+                    <MaterialSymbol icon="check_circle" size={14} className="text-[var(--nim-success)]" />
+                    <span className="text-[11px] text-[var(--nim-text-muted)]">Done</span>
+                  </span>
+                );
+              }
+              if (effectiveStatus === 'errored') {
+                return (
+                  <span className="flex items-center gap-1 shrink-0">
+                    <MaterialSymbol icon="cancel" size={14} className="text-[var(--nim-error)]" />
+                    <span className="text-[11px] text-[var(--nim-text-muted)]">Errored</span>
+                  </span>
+                );
+              }
+              // Still waiting for result / no status yet - show progress spinner if available
+              if (!tool.result && tool.toolProgress) {
+                return (
+                  <span className="flex items-center gap-1 shrink-0">
+                    <span className="inline-block w-3 h-3 border-2 border-[var(--nim-primary)] border-t-transparent rounded-full animate-spin" />
+                    <span className="text-[11px] text-[var(--nim-text-muted)]">Running</span>
+                  </span>
+                );
+              }
+              return null;
+            })() : (
+              <>
+                {tool.result && !(toolMsg as any).isError && (
+                  <MaterialSymbol icon="check_circle" size={16} className="rich-transcript-tool-success w-4 h-4 text-[var(--nim-success)] shrink-0" />
+                )}
+                {tool.result && (toolMsg as any).isError && (
+                  <MaterialSymbol icon="cancel" size={16} className="rich-transcript-tool-error w-4 h-4 text-[var(--nim-error)] shrink-0" />
+                )}
+              </>
             )}
             <MaterialSymbol icon={isExpanded ? "expand_more" : "chevron_right"} size={16} className="rich-transcript-tool-chevron w-3 h-3 text-[var(--nim-text-faint)]" />
           </button>

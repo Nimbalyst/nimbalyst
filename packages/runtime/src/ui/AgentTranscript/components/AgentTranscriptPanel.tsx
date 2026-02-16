@@ -305,6 +305,7 @@ const AgentTranscriptPanelComponent: React.FC<AgentTranscriptPanelProps> = ({
           onOpenFile={onFileClick}
           onCompact={onCompact}
           promptAdditions={promptAdditions}
+          currentTeammates={sessionData.metadata?.currentTeammates as Array<{ agentId: string; status: 'running' | 'completed' | 'errored' | 'idle' }> | undefined}
         />
 
         {/* Floating Actions - show based on showFloatingActions prop */}
