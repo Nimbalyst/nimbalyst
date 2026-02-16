@@ -66,7 +66,7 @@ import { registerTerminalHandlers, shutdownTerminalHandlers } from './ipc/Termin
 import { AIService } from './services/ai/AIService';
 import { detectFileWorkspace, suggestWorkspaceForFile, getAdditionalDirectoriesForWorkspace } from './utils/workspaceDetection';
 // import { AgentService } from './services/agents/AgentService';
-import { cliManager, initEnhancedPath, getShellEnvironment } from './services/CLIManager';
+import { cliManager, initEnhancedPath, getEnhancedPath, getShellEnvironment } from './services/CLIManager';
 import { registerWorkspaceWindow, registerExtensionTools, shutdownHttpServer, startMcpHttpServer, updateDocumentState } from './mcp/httpServer';
 import { SessionNamingService } from './services/SessionNamingService';
 import { ExtensionDevService } from './services/ExtensionDevService';
@@ -831,6 +831,10 @@ app.whenReady().then(async () => {
     // Without this, Dock/Finder-launched Nimbalyst has a minimal environment.
     ClaudeCodeProvider.setShellEnvironmentLoader(() => getShellEnvironment());
     OpenAICodexProvider.setShellEnvironmentLoader(() => getShellEnvironment());
+
+    // Inject enhanced PATH loader so Codex can access system tools
+    // (docker, homebrew, nvm, etc.) that are missing from Electron's GUI PATH
+    OpenAICodexProvider.setEnhancedPathLoader(() => getEnhancedPath());
 
     // Inject additional directories loader
     // This allows Claude to access SDK docs when working on extension projects

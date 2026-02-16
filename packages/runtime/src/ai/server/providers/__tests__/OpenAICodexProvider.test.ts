@@ -27,6 +27,7 @@ describe('OpenAICodexProvider', () => {
     OpenAICodexProvider.setMCPConfigLoader(null);
     OpenAICodexProvider.setClaudeSettingsEnvLoader(null);
     OpenAICodexProvider.setShellEnvironmentLoader(null);
+    OpenAICodexProvider.setEnhancedPathLoader(null);
   });
 
   it('returns fallback models when SDK model discovery is unavailable', async () => {

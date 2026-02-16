@@ -100,6 +100,11 @@ export class OpenAICodexProvider extends BaseAgentProvider {
   // Reused by MCP config expansion logic for ${VAR} interpolation
   private static shellEnvironmentLoader: (() => Record<string, string> | null) | null = null;
 
+  // Enhanced PATH loader (injected from electron main process)
+  // Returns a PATH string that includes common CLI installation locations
+  // (Homebrew, nvm, volta, etc.) that are missing from Electron's minimal GUI PATH
+  private static enhancedPathLoader: (() => string) | null = null;
+
   constructor(config?: { apiKey?: string }, deps?: OpenAICodexProviderDeps) {
     super();
     const apiKey = config?.apiKey || process.env.OPENAI_API_KEY || '';
@@ -199,6 +204,10 @@ export class OpenAICodexProvider extends BaseAgentProvider {
 
   public static setShellEnvironmentLoader(loader: (() => Record<string, string> | null) | null): void {
     OpenAICodexProvider.shellEnvironmentLoader = loader;
+  }
+
+  public static setEnhancedPathLoader(loader: (() => string) | null): void {
+    OpenAICodexProvider.enhancedPathLoader = loader;
   }
 
   async initialize(config: ProviderConfig): Promise<void> {
@@ -717,6 +726,11 @@ export class OpenAICodexProvider extends BaseAgentProvider {
 
       const mcpServers = await this.mcpConfigService.getMcpServersConfig({ sessionId, workspacePath });
 
+      // Build environment for the Codex CLI binary.
+      // Electron GUI apps have a minimal process.env (missing docker, homebrew, nvm, etc.).
+      // Merge in shell env vars and the enhanced PATH so the Codex agent can see system tools.
+      const codexEnv = OpenAICodexProvider.buildCodexEnvironment();
+
       const sessionOptions = {
         workspacePath,
         model: await this.getConfiguredModel(),
@@ -726,6 +740,7 @@ export class OpenAICodexProvider extends BaseAgentProvider {
           systemPrompt,
           abortSignal: abortController.signal,
           codexConfigOverrides: this.buildCodexConfigOverrides(mcpServers),
+          ...(codexEnv ? { codexEnv } : {}),
         },
       };
 
@@ -942,6 +957,61 @@ export class OpenAICodexProvider extends BaseAgentProvider {
     // If we need history bootstrapping in the future, we can add it here.
 
     return options.message;
+  }
+
+  /**
+   * Build a complete environment for the Codex CLI binary.
+   * Merges process.env with shell env vars and enhanced PATH so the agent
+   * can access system tools (docker, homebrew, nvm, etc.) that are missing
+   * from Electron's minimal GUI environment.
+   *
+   * Returns null if no enhancement is needed (no loaders configured).
+   */
+  private static buildCodexEnvironment(): Record<string, string> | null {
+    let shellEnv: Record<string, string> | null = null;
+    let enhancedPath: string | null = null;
+
+    if (OpenAICodexProvider.shellEnvironmentLoader) {
+      try {
+        shellEnv = OpenAICodexProvider.shellEnvironmentLoader();
+      } catch (error) {
+        console.warn('[CODEX] Failed to load shell environment:', error);
+      }
+    }
+
+    if (OpenAICodexProvider.enhancedPathLoader) {
+      try {
+        enhancedPath = OpenAICodexProvider.enhancedPathLoader();
+      } catch (error) {
+        console.warn('[CODEX] Failed to load enhanced PATH:', error);
+      }
+    }
+
+    // Only build custom env if we have something to enhance
+    if (!shellEnv && !enhancedPath) {
+      return null;
+    }
+
+    const env: Record<string, string> = {};
+
+    // Start with process.env (Electron's minimal environment)
+    for (const [key, value] of Object.entries(process.env)) {
+      if (value !== undefined) {
+        env[key] = value;
+      }
+    }
+
+    // Layer shell env vars on top (AWS creds, NODE_EXTRA_CA_CERTS, etc.)
+    if (shellEnv) {
+      Object.assign(env, shellEnv);
+    }
+
+    // Set enhanced PATH (includes homebrew, nvm, docker, etc.)
+    if (enhancedPath) {
+      env.PATH = enhancedPath;
+    }
+
+    return env;
   }
 
   private buildCodexConfigOverrides(

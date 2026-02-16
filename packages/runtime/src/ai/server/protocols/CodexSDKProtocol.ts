@@ -313,10 +313,12 @@ export class CodexSDKProtocol implements AgentProtocol {
     const sdkModule = await this.loadSdkModule();
     const codexPathOverride = this.resolveCodexPathOverride();
     const codexConfigOverrides = this.getCodexConfigOverrides(options);
+    const codexEnv = this.getCodexEnv(options);
     const codexClientOptions: Record<string, unknown> = {
       apiKey: this.apiKey,
       ...(codexPathOverride ? { codexPathOverride } : {}),
       ...(codexConfigOverrides ? { config: codexConfigOverrides } : {}),
+      ...(codexEnv ? { env: codexEnv } : {}),
     };
     const optionsKey = JSON.stringify(codexClientOptions);
 
@@ -327,6 +329,20 @@ export class CodexSDKProtocol implements AgentProtocol {
     this.codexClient = new sdkModule.Codex(codexClientOptions);
     this.codexClientOptionsKey = optionsKey;
     return this.codexClient;
+  }
+
+  /**
+   * Extract environment variables from session options.
+   * When provided, the SDK passes these to the Codex CLI binary instead of
+   * inheriting process.env, ensuring tools like docker, homebrew, nvm, etc.
+   * are visible even when Electron is launched from Dock/Finder.
+   */
+  private getCodexEnv(options: SessionOptions): Record<string, string> | undefined {
+    const rawEnv = options.raw?.codexEnv;
+    if (!rawEnv || typeof rawEnv !== 'object' || Array.isArray(rawEnv)) {
+      return undefined;
+    }
+    return rawEnv as Record<string, string>;
   }
 
   /**
