@@ -20,6 +20,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.53.3] - 2026-02-16
+
+
+### Added
+- Client-side encryption for shared sessions
+
+### Fixed
+- Reduce macOS build size from 1.5GB to 631MB by excluding unused node_modules
+- Auto-enable alpha features when switching to alpha release channel
+- Add macOS platform to NimbalystNative Package.swift
+- Update iOS CI to macos-15 runner with Xcode 26.2
+
 ## [0.53.2] - 2026-02-16
 
 
