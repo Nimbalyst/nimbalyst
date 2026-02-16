@@ -381,7 +381,24 @@ export function AdvancedPanel() {
             </div>
             <select
               value={releaseChannel}
-              onChange={(e) => updateSettings({ releaseChannel: e.target.value as ReleaseChannel })}
+              onChange={(e) => {
+                const newChannel = e.target.value as ReleaseChannel;
+                if (newChannel === 'alpha') {
+                  // Auto-enable all alpha features when switching to alpha channel
+                  updateSettings({
+                    releaseChannel: newChannel,
+                    enableAllAlphaFeatures: true,
+                    alphaFeatures: enableAllAlphaFeaturesUtil(),
+                  });
+                } else {
+                  // Disable all alpha features when switching back to stable
+                  updateSettings({
+                    releaseChannel: newChannel,
+                    enableAllAlphaFeatures: false,
+                    alphaFeatures: disableAllAlphaFeatures(),
+                  });
+                }
+              }}
               className="setting-select mt-2 w-full py-2 px-3 pr-9 rounded-md text-sm bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] text-[var(--nim-text)] outline-none appearance-none bg-[url('data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2012%2012%22%3E%3Cpath%20fill%3D%22%236b7280%22%20d%3D%22M3%204.5L6%207.5L9%204.5%22%2F%3E%3C%2Fsvg%3E')] bg-no-repeat bg-[right_12px_center] focus:border-[var(--nim-primary)]"
             >
               <option value="stable">Stable</option>
