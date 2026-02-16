@@ -120,6 +120,18 @@ For detailed release instructions, see [RELEASING.md](./RELEASING.md).
 
 The `workspace:update-state` IPC handler uses a **deep merge** function (not shallow `Object.assign`). This allows multiple modules to safely update different fields in nested structures without overwriting each other. No manual read-modify-write needed.
 
+### Naming Conventions
+
+**Use camelCase everywhere except SQL column names and file system paths.**
+
+- **TypeScript/Swift interfaces, fields, variables**: `camelCase` always
+- **Wire protocol (WebSocket/HTTP JSON)**: `camelCase` - no snake_case in JSON payloads
+- **Message type discriminators**: `camelCase` (e.g., `'syncRequest'`, `'appendMessage'`, NOT `'sync_request'`, `'append_message'`)
+- **SQL column names**: `snake_case` (standard SQL convention, stays internal to the database layer)
+- **Row-to-wire mappers**: When reading from SQL, map `snake_case` columns to `camelCase` fields at the boundary (e.g., `{ sessionId: row.session_id }`)
+
+This applies to all packages: collabv3 server, runtime sync client, Electron SyncManager, and iOS SyncProtocol. Never introduce snake_case into wire-format JSON even if it "looks more API-like" - this is a private protocol consumed only by our own TypeScript and Swift clients.
+
 ## Documentation Reference
 
 **You MUST read the relevant documentation files when working on or investigating issues in the corresponding areas.**

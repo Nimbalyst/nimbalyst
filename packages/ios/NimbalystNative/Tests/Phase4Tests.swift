@@ -17,6 +17,7 @@ final class Phase4Tests: XCTestCase {
         XCTAssertEqual(result?.seed, "abc123base64==")
         XCTAssertEqual(result?.serverUrl, "wss://sync.nimbalyst.com")
         XCTAssertEqual(result?.userId, "user@example.com")
+        XCTAssertEqual(result?.analyticsId, "posthog-id")
     }
 
     func testParseV4WithoutSyncEmail() {
@@ -28,6 +29,7 @@ final class Phase4Tests: XCTestCase {
         let result = QRPairingData.parse(json)
         XCTAssertNotNil(result)
         XCTAssertEqual(result?.userId, "analytics-id-456")
+        XCTAssertEqual(result?.analyticsId, "analytics-id-456")
     }
 
     func testParseExpiredQRCode() {
@@ -109,18 +111,18 @@ final class Phase4Tests: XCTestCase {
         let data = try JSONEncoder().encode(message)
         let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
 
-        XCTAssertEqual(json["type"] as? String, "register_push_token")
+        XCTAssertEqual(json["type"] as? String, "registerPushToken")
         XCTAssertEqual(json["token"] as? String, "abc123token")
         XCTAssertEqual(json["platform"] as? String, "ios")
-        XCTAssertEqual(json["device_id"] as? String, "device-789")
+        XCTAssertEqual(json["deviceId"] as? String, "device-789")
     }
 
     // MARK: - QR Pairing Data Equality
 
     func testQRPairingDataEquality() {
-        let a = QRPairingData(seed: "s", serverUrl: "u", userId: "i")
-        let b = QRPairingData(seed: "s", serverUrl: "u", userId: "i")
-        let c = QRPairingData(seed: "x", serverUrl: "u", userId: "i")
+        let a = QRPairingData(seed: "s", serverUrl: "u", userId: "i", analyticsId: nil)
+        let b = QRPairingData(seed: "s", serverUrl: "u", userId: "i", analyticsId: nil)
+        let c = QRPairingData(seed: "x", serverUrl: "u", userId: "i", analyticsId: nil)
 
         XCTAssertEqual(a, b)
         XCTAssertNotEqual(a, c)

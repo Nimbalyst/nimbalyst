@@ -172,7 +172,7 @@ async function validateJWT(
 
     // Extract user ID from 'sub' claim
     return {
-      user_id: payload.sub,
+      userId: payload.sub,
       session_id: payload.session_id,
     };
   } catch (error) {

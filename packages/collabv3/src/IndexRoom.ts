@@ -79,15 +79,12 @@ export class IndexRoom implements DurableObject {
         // After hibernation, connections are restored but device info is lost
         // Clients will re-announce when they detect the connection is still open
         this.connections.set(ws, {
-          auth: { user_id: userId },
+          auth: { userId },
           synced: true,
           device: undefined, // Will be set when client re-announces
         });
       }
     }
-    // if (webSockets.length > 0) {
-    //   console.log(`[IndexRoom] Restored ${webSockets.length} connections from hibernation (devices will re-announce)`);
-    // }
   }
 
   /**
@@ -99,7 +96,7 @@ export class IndexRoom implements DurableObject {
     const sql = this.state.storage.sql;
 
     // Session index table
-    // Note: project_id column stores encrypted value (encrypted_project_id)
+    // Note: project_id column stores encrypted value (encryptedProjectId)
     sql.exec(`
       CREATE TABLE IF NOT EXISTS session_index (
         session_id TEXT PRIMARY KEY,
@@ -151,8 +148,8 @@ export class IndexRoom implements DurableObject {
     }
 
     // Project index table
-    // Note: project_id column stores encrypted value (encrypted_project_id)
-    // Note: name column stores encrypted value (encrypted_name)
+    // Note: project_id column stores encrypted value (encryptedProjectId)
+    // Note: name column stores encrypted value (encryptedName)
     sql.exec(`
       CREATE TABLE IF NOT EXISTS project_index (
         project_id TEXT PRIMARY KEY,
@@ -242,7 +239,7 @@ export class IndexRoom implements DurableObject {
     const [client, server] = Object.values(pair);
 
     // Accept with hibernation support, storing auth in tags for recovery
-    this.state.acceptWebSocket(server, [`${TAG_USER}${auth.user_id}`]);
+    this.state.acceptWebSocket(server, [`${TAG_USER}${auth.userId}`]);
 
     this.connections.set(server, {
       auth,
@@ -260,14 +257,14 @@ export class IndexRoom implements DurableObject {
     if (authHeader?.startsWith('Bearer ')) {
       const [userId] = authHeader.slice(7).split(':');
       if (userId) {
-        return { user_id: userId };
+        return { userId };
       }
     }
 
     const url = new URL(request.url);
     const userId = url.searchParams.get('user_id');
     if (userId) {
-      return { user_id: userId };
+      return { userId };
     }
 
     return null;
@@ -291,47 +288,47 @@ export class IndexRoom implements DurableObject {
       );
 
       switch (message.type) {
-        case 'index_sync_request':
-          await this.handleIndexSyncRequest(ws, connState, message.project_id);
+        case 'indexSyncRequest':
+          await this.handleIndexSyncRequest(ws, connState, message.projectId);
           break;
 
-        case 'index_update':
+        case 'indexUpdate':
           await this.handleIndexUpdate(ws, connState, message.session);
           break;
 
-        case 'index_batch_update':
+        case 'indexBatchUpdate':
           await this.handleIndexBatchUpdate(ws, connState, message.sessions);
           break;
 
-        case 'index_delete':
-          await this.handleIndexDelete(ws, connState, message.session_id);
+        case 'indexDelete':
+          await this.handleIndexDelete(ws, connState, message.sessionId);
           break;
 
-        case 'device_announce':
+        case 'deviceAnnounce':
           await this.handleDeviceAnnounce(ws, connState, message.device);
           break;
 
-        case 'create_session_request':
+        case 'createSessionRequest':
           await this.handleCreateSessionRequest(ws, connState, message.request);
           break;
 
-        case 'create_session_response':
+        case 'createSessionResponse':
           await this.handleCreateSessionResponse(ws, connState, message.response);
           break;
 
-        case 'session_control':
+        case 'sessionControl':
           await this.handleSessionControl(ws, connState, message.message);
           break;
 
-        case 'settings_sync':
+        case 'settingsSync':
           await this.handleSettingsSync(ws, connState, message.settings);
           break;
 
-        case 'register_push_token':
+        case 'registerPushToken':
           await this.handleRegisterPushToken(connState, message);
           break;
 
-        case 'request_mobile_push':
+        case 'requestMobilePush':
           await this.handleRequestMobilePush(connState, message);
           break;
 
@@ -387,7 +384,7 @@ export class IndexRoom implements DurableObject {
     const projects = projectRows.map(rowToProjectEntry);
 
     const response: IndexSyncResponseMessage = {
-      type: 'index_sync_response',
+      type: 'indexSyncResponse',
       sessions,
       projects,
     };
@@ -424,32 +421,36 @@ export class IndexRoom implements DurableObject {
          last_message_at = excluded.last_message_at,
          created_at = excluded.created_at,
          updated_at = excluded.updated_at,
-         is_executing = excluded.is_executing,
+         is_executing = CASE
+           WHEN excluded.is_executing IS NOT NULL
+           THEN excluded.is_executing
+           ELSE session_index.is_executing
+         END,
          last_read_at = CASE
            WHEN excluded.last_read_at IS NOT NULL AND (session_index.last_read_at IS NULL OR excluded.last_read_at > session_index.last_read_at)
            THEN excluded.last_read_at
            ELSE session_index.last_read_at
          END`,
-      session.session_id,
-      session.encrypted_project_id,
-      session.project_id_iv,
-      session.encrypted_title ?? null,
-      session.title_iv ?? null,
+      session.sessionId,
+      session.encryptedProjectId,
+      session.projectIdIv,
+      session.encryptedTitle ?? null,
+      session.titleIv ?? null,
       session.provider,
       session.model ?? null,
       session.mode ?? null,
-      session.message_count,
-      session.last_message_at,
-      session.created_at,
-      session.updated_at,
-      session.isExecuting ? 1 : 0,
+      session.messageCount,
+      session.lastMessageAt,
+      session.createdAt,
+      session.updatedAt,
+      session.isExecuting != null ? (session.isExecuting ? 1 : 0) : null,
       session.lastReadAt ?? null
     );
 
     // Read back the effective last_read_at (may be the existing value if it was newer)
     const effectiveRow = sql.exec<{ last_read_at: number | null }>(
       `SELECT last_read_at FROM session_index WHERE session_id = ?`,
-      session.session_id
+      session.sessionId
     ).toArray();
     const effectiveLastReadAt = effectiveRow[0]?.last_read_at ?? undefined;
 
@@ -457,15 +458,15 @@ export class IndexRoom implements DurableObject {
     const broadcastSession = { ...session, lastReadAt: effectiveLastReadAt ?? session.lastReadAt };
 
     // Update project stats (and broadcast if new project)
-    // Pass encrypted_project_id as the opaque key for matching
-    await this.updateProjectStats(session.encrypted_project_id, session.project_id_iv, ws);
+    // Pass encryptedProjectId as the opaque key for matching
+    await this.updateProjectStats(session.encryptedProjectId, session.projectIdIv, ws);
 
     // Broadcast to other connections
     this.broadcast(
       {
-        type: 'index_broadcast',
+        type: 'indexBroadcast',
         session: broadcastSession,
-        from_connection_id: this.getConnectionId(ws),
+        fromConnectionId: this.getConnectionId(ws),
       },
       ws
     );
@@ -505,29 +506,33 @@ export class IndexRoom implements DurableObject {
              last_message_at = excluded.last_message_at,
              created_at = excluded.created_at,
              updated_at = excluded.updated_at,
-             is_executing = excluded.is_executing,
+             is_executing = CASE
+               WHEN excluded.is_executing IS NOT NULL
+               THEN excluded.is_executing
+               ELSE session_index.is_executing
+             END,
              last_read_at = CASE
                WHEN excluded.last_read_at IS NOT NULL AND (session_index.last_read_at IS NULL OR excluded.last_read_at > session_index.last_read_at)
                THEN excluded.last_read_at
                ELSE session_index.last_read_at
              END`,
-          session.session_id,
-          session.encrypted_project_id,
-          session.project_id_iv,
-          session.encrypted_title ?? null,
-          session.title_iv ?? null,
+          session.sessionId,
+          session.encryptedProjectId,
+          session.projectIdIv,
+          session.encryptedTitle ?? null,
+          session.titleIv ?? null,
           session.provider,
           session.model ?? null,
           session.mode ?? null,
-          session.message_count,
-          session.last_message_at,
-          session.created_at,
-          session.updated_at,
-          session.isExecuting ? 1 : 0,
+          session.messageCount,
+          session.lastMessageAt,
+          session.createdAt,
+          session.updatedAt,
+          session.isExecuting != null ? (session.isExecuting ? 1 : 0) : null,
           session.lastReadAt ?? null
         );
-        affectedProjects.add(session.encrypted_project_id);
-        affectedProjectIvs.set(session.encrypted_project_id, session.project_id_iv);
+        affectedProjects.add(session.encryptedProjectId);
+        affectedProjectIvs.set(session.encryptedProjectId, session.projectIdIv);
       }
     });
     log.debug('Batch update committed successfully');
@@ -544,15 +549,13 @@ export class IndexRoom implements DurableObject {
     for (const session of sessions) {
       this.broadcast(
         {
-          type: 'index_broadcast',
+          type: 'indexBroadcast',
           session,
-          from_connection_id: connectionId,
+          fromConnectionId: connectionId,
         },
         ws
       );
     }
-
-    // console.log('[IndexRoom] Batch update complete:', sessions.length, 'sessions,', affectedProjects.size, 'projects');
   }
 
   /**
@@ -573,7 +576,6 @@ export class IndexRoom implements DurableObject {
 
     if (!session) {
       // Session not found in index, nothing to delete
-      // console.log('[IndexRoom] Session not found for deletion:', sessionId);
       return;
     }
 
@@ -586,14 +588,12 @@ export class IndexRoom implements DurableObject {
     // Broadcast deletion to other connections
     this.broadcast(
       {
-        type: 'index_delete_broadcast',
-        session_id: sessionId,
-        from_connection_id: this.getConnectionId(ws),
+        type: 'indexDeleteBroadcast',
+        sessionId,
+        fromConnectionId: this.getConnectionId(ws),
       },
       ws
     );
-
-    // console.log('[IndexRoom] Deleted session from index:', sessionId);
   }
 
   /**
@@ -608,22 +608,20 @@ export class IndexRoom implements DurableObject {
     connState.device = device;
 
     // Store device info in DO storage for hibernation recovery
-    // Key by device_id so it persists across reconnections
-    await this.state.storage.put(`device:${device.device_id}`, device);
-
-    // console.log('[IndexRoom] Device announced:', device.name, device.type, device.platform);
+    // Key by deviceId so it persists across reconnections
+    await this.state.storage.put(`device:${device.deviceId}`, device);
 
     // Send current devices list to the connecting client
     const devicesList = this.getConnectedDevices();
     const listMessage: DevicesListMessage = {
-      type: 'devices_list',
+      type: 'devicesList',
       devices: devicesList,
     };
     ws.send(JSON.stringify(listMessage));
 
     // Broadcast device joined to other connections
     const joinedMessage: DeviceJoinedMessage = {
-      type: 'device_joined',
+      type: 'deviceJoined',
       device,
     };
     this.broadcast(joinedMessage, ws);
@@ -637,17 +635,17 @@ export class IndexRoom implements DurableObject {
     connState: ConnectionState,
     request: EncryptedCreateSessionRequest
   ): Promise<void> {
-    log.debug('Received create_session_request:', request.request_id);
+    log.debug('Received createSessionRequest:', request.requestId);
 
     // Broadcast the request to all other connections (desktop will pick it up)
     const broadcastMessage: CreateSessionRequestBroadcastMessage = {
-      type: 'create_session_request_broadcast',
+      type: 'createSessionRequestBroadcast',
       request,
-      from_connection_id: this.getConnectionId(ws),
+      fromConnectionId: this.getConnectionId(ws),
     };
     this.broadcast(broadcastMessage, ws);
 
-    log.debug('Broadcast create_session_request to', this.connections.size - 1, 'other connections');
+    log.debug('Broadcast createSessionRequest to', this.connections.size - 1, 'other connections');
   }
 
   /**
@@ -658,17 +656,17 @@ export class IndexRoom implements DurableObject {
     connState: ConnectionState,
     response: EncryptedCreateSessionResponse
   ): Promise<void> {
-    log.debug('Received create_session_response:', response.request_id, 'success:', response.success);
+    log.debug('Received createSessionResponse:', response.requestId, 'success:', response.success);
 
     // Broadcast the response to all other connections (mobile will pick it up)
     const broadcastMessage: CreateSessionResponseBroadcastMessage = {
-      type: 'create_session_response_broadcast',
+      type: 'createSessionResponseBroadcast',
       response,
-      from_connection_id: this.getConnectionId(ws),
+      fromConnectionId: this.getConnectionId(ws),
     };
     this.broadcast(broadcastMessage, ws);
 
-    log.debug('Broadcast create_session_response to', this.connections.size - 1, 'other connections');
+    log.debug('Broadcast createSessionResponse to', this.connections.size - 1, 'other connections');
   }
 
   /**
@@ -679,17 +677,17 @@ export class IndexRoom implements DurableObject {
     connState: ConnectionState,
     message: SessionControlMessage
   ): Promise<void> {
-    log.debug('Received session_control:', message.session_id, message.message_type);
+    log.debug('Received sessionControl:', message.sessionId, message.messageType);
 
     // Just broadcast - we don't interpret the message
     const broadcastMessage: SessionControlBroadcastMessage = {
-      type: 'session_control_broadcast',
+      type: 'sessionControlBroadcast',
       message,
-      from_connection_id: this.getConnectionId(ws),
+      fromConnectionId: this.getConnectionId(ws),
     };
     this.broadcast(broadcastMessage, ws);
 
-    log.debug('Broadcast session_control to', this.connections.size - 1, 'other connections');
+    log.debug('Broadcast sessionControl to', this.connections.size - 1, 'other connections');
   }
 
   /**
@@ -700,17 +698,17 @@ export class IndexRoom implements DurableObject {
     connState: ConnectionState,
     settings: EncryptedSettingsPayload
   ): Promise<void> {
-    log.debug('Received settings_sync from device:', settings.device_id, 'version:', settings.version);
+    log.debug('Received settingsSync from device:', settings.deviceId, 'version:', settings.version);
 
     // Broadcast encrypted settings to all other connections
     const broadcastMessage: SettingsSyncBroadcastMessage = {
-      type: 'settings_sync_broadcast',
+      type: 'settingsSyncBroadcast',
       settings,
-      from_connection_id: this.getConnectionId(ws),
+      fromConnectionId: this.getConnectionId(ws),
     };
     this.broadcast(broadcastMessage, ws);
 
-    log.debug('Broadcast settings_sync to', this.connections.size - 1, 'other connections');
+    log.debug('Broadcast settingsSync to', this.connections.size - 1, 'other connections');
   }
 
   /**
@@ -720,15 +718,15 @@ export class IndexRoom implements DurableObject {
     connState: ConnectionState,
     message: RegisterPushTokenMessage
   ): Promise<void> {
-    console.log('[IndexRoom] Registering push token for device:', message.device_id, 'platform:', message.platform);
+    console.log('[IndexRoom] Registering push token for device:', message.deviceId, 'platform:', message.platform);
     console.log('[IndexRoom] Full token:', message.token, 'length:', message.token.length);
 
     // Store the token in DO storage
-    const key = `push_token:${message.device_id}`;
+    const key = `push_token:${message.deviceId}`;
     const value = {
       token: message.token,
       platform: message.platform,
-      device_id: message.device_id,
+      deviceId: message.deviceId,
       registered_at: Date.now(),
     };
 
@@ -743,7 +741,7 @@ export class IndexRoom implements DurableObject {
   /**
    * Handle request to send push notification to mobile devices.
    * Uses "most recently active device" routing: finds the device with the
-   * highest last_active_at timestamp and only sends push to devices that
+   * highest lastActiveAt timestamp and only sends push to devices that
    * are NOT the most recently active one. This way, if the user picks up
    * their phone while a session runs on desktop, the system knows to push
    * to mobile because it has the freshest activity.
@@ -752,13 +750,13 @@ export class IndexRoom implements DurableObject {
     connState: ConnectionState,
     message: RequestMobilePushMessage
   ): Promise<void> {
-    console.log('[IndexRoom] Received push request for session:', message.session_id);
+    console.log('[IndexRoom] Received push request for session:', message.sessionId);
 
     // Get all registered push tokens for mobile devices
     const pushTokens = await this.state.storage.list<{
       token: string;
       platform: 'ios' | 'android';
-      device_id: string;
+      deviceId: string;
       registered_at: number;
     }>({ prefix: 'push_token:' });
 
@@ -773,7 +771,7 @@ export class IndexRoom implements DurableObject {
     const connectedDevices = this.getConnectedDevices();
     let mostRecentDevice: DeviceInfo | null = null;
     for (const device of connectedDevices) {
-      if (!mostRecentDevice || device.last_active_at > mostRecentDevice.last_active_at) {
+      if (!mostRecentDevice || device.lastActiveAt > mostRecentDevice.lastActiveAt) {
         mostRecentDevice = device;
       }
     }
@@ -781,32 +779,32 @@ export class IndexRoom implements DurableObject {
     if (mostRecentDevice) {
       console.log('[IndexRoom] Most recently active device:', mostRecentDevice.name,
         'type:', mostRecentDevice.type, 'status:', mostRecentDevice.status,
-        'last_active_at:', mostRecentDevice.last_active_at);
+        'lastActiveAt:', mostRecentDevice.lastActiveAt);
     }
 
     // Route push notifications based on active device
     for (const [key, tokenData] of pushTokens) {
       // Skip the device that is most recently active - user is already there
-      if (mostRecentDevice && tokenData.device_id === mostRecentDevice.device_id) {
-        console.log('[IndexRoom] Skipping push to most recently active device:', tokenData.device_id);
+      if (mostRecentDevice && tokenData.deviceId === mostRecentDevice.deviceId) {
+        console.log('[IndexRoom] Skipping push to most recently active device:', tokenData.deviceId);
         continue;
       }
 
       // Skip the requesting device (desktop that triggered the push)
-      if (message.requesting_device_id && tokenData.device_id === message.requesting_device_id) {
-        console.log('[IndexRoom] Skipping push to requesting device:', tokenData.device_id);
+      if (message.requestingDeviceId && tokenData.deviceId === message.requestingDeviceId) {
+        console.log('[IndexRoom] Skipping push to requesting device:', tokenData.deviceId);
         continue;
       }
 
-      console.log('[IndexRoom] Sending push to device:', tokenData.device_id, 'platform:', tokenData.platform);
+      console.log('[IndexRoom] Sending push to device:', tokenData.deviceId, 'platform:', tokenData.platform);
       if (tokenData.platform === 'ios') {
         const result = await this.sendAPNsPush(tokenData.token, {
           title: message.title,
           body: message.body,
-          sessionId: message.session_id,
+          sessionId: message.sessionId,
         });
         if (result.badToken) {
-          console.log('[IndexRoom] Removing bad token for device:', tokenData.device_id);
+          console.log('[IndexRoom] Removing bad token for device:', tokenData.deviceId);
           await this.state.storage.delete(key);
         }
       }
@@ -970,9 +968,9 @@ export class IndexRoom implements DurableObject {
     const seenIds = new Set<string>();
 
     for (const [, state] of this.connections) {
-      if (state.device && !seenIds.has(state.device.device_id)) {
+      if (state.device && !seenIds.has(state.device.deviceId)) {
         devices.push(state.device);
-        seenIds.add(state.device.device_id);
+        seenIds.add(state.device.deviceId);
       }
     }
     return devices;
@@ -1012,10 +1010,6 @@ export class IndexRoom implements DurableObject {
         encryptedProjectId
       );
     } else {
-      // Create project entry - name will be encrypted same as project_id
-      // The server stores encrypted values opaquely, clients decrypt
-      // Use the encrypted project_id as both the key and as a placeholder for name
-      // (clients will provide proper encrypted name in subsequent updates)
       sql.exec(
         `INSERT INTO project_index (project_id, project_id_iv, name, name_iv, session_count, last_activity_at, sync_enabled)
          VALUES (?, ?, ?, ?, ?, ?, 1)`,
@@ -1029,7 +1023,6 @@ export class IndexRoom implements DurableObject {
     }
 
     // Broadcast project update to all connected clients when a new project is created
-    // This ensures mobile clients see new projects immediately
     if (isNewProject) {
       const updatedProject = sql.exec<ProjectIndexRow>(
         `SELECT * FROM project_index WHERE project_id = ?`,
@@ -1040,9 +1033,9 @@ export class IndexRoom implements DurableObject {
         const projectEntry = rowToProjectEntry(updatedProject);
         this.broadcast(
           {
-            type: 'project_broadcast',
+            type: 'projectBroadcast',
             project: projectEntry,
-            from_connection_id: originatingWs ? this.getConnectionId(originatingWs) : undefined,
+            fromConnectionId: originatingWs ? this.getConnectionId(originatingWs) : undefined,
           },
           originatingWs
         );
@@ -1069,20 +1062,20 @@ export class IndexRoom implements DurableObject {
           `INSERT OR REPLACE INTO session_index
            (session_id, project_id, project_id_iv, encrypted_title, title_iv, provider, model, mode, message_count, last_message_at, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          session.session_id,
-          session.encrypted_project_id,
-          session.project_id_iv,
-          session.encrypted_title ?? null,
-          session.title_iv ?? null,
+          session.sessionId,
+          session.encryptedProjectId,
+          session.projectIdIv,
+          session.encryptedTitle ?? null,
+          session.titleIv ?? null,
           session.provider,
           session.model ?? null,
           session.mode ?? null,
-          session.message_count,
-          session.last_message_at,
-          session.created_at,
-          session.updated_at
+          session.messageCount,
+          session.lastMessageAt,
+          session.createdAt,
+          session.updatedAt
         );
-        affectedProjectIvs.set(session.encrypted_project_id, session.project_id_iv);
+        affectedProjectIvs.set(session.encryptedProjectId, session.projectIdIv);
       }
       sql.exec('COMMIT');
     } catch (err) {
@@ -1126,7 +1119,7 @@ export class IndexRoom implements DurableObject {
   private getConnectionId(ws: WebSocket): string {
     for (const [conn, state] of this.connections) {
       if (conn === ws) {
-        return state.auth.user_id + '_' + Date.now();
+        return state.auth.userId + '_' + Date.now();
       }
     }
     return 'unknown';
@@ -1141,11 +1134,10 @@ export class IndexRoom implements DurableObject {
     // If this connection had device info, broadcast that it left
     if (connState?.device) {
       const leftMessage: DeviceLeftMessage = {
-        type: 'device_left',
-        device_id: connState.device.device_id,
+        type: 'deviceLeft',
+        deviceId: connState.device.deviceId,
       };
       this.broadcast(leftMessage, ws);
-      // console.log('[IndexRoom] Device disconnected:', connState.device.name);
     }
 
     this.connections.delete(ws);
@@ -1161,8 +1153,8 @@ export class IndexRoom implements DurableObject {
     // If this connection had device info, broadcast that it left
     if (connState?.device) {
       const leftMessage: DeviceLeftMessage = {
-        type: 'device_left',
-        device_id: connState.device.device_id,
+        type: 'deviceLeft',
+        deviceId: connState.device.deviceId,
       };
       this.broadcast(leftMessage, ws);
     }
@@ -1187,10 +1179,10 @@ export class IndexRoom implements DurableObject {
 
     return new Response(
       JSON.stringify({
-        room_id: this.state.id.toString(),
+        roomId: this.state.id.toString(),
         connections: this.connections.size,
-        session_count: sessionCount,
-        project_count: projectCount,
+        sessionCount,
+        projectCount,
         devices: this.getConnectedDevices(),
       }),
       { headers: { 'Content-Type': 'application/json' } }
@@ -1202,11 +1194,11 @@ export class IndexRoom implements DurableObject {
 // Helper Types and Functions
 // ============================================================================
 
-// Use index signature for Cloudflare SQL compatibility
+// SQL row types use snake_case to match column names (internal, not on wire)
 type SessionIndexRow = {
   [key: string]: SqlStorageValue;
   session_id: string;
-  project_id: string; // Stores encrypted_project_id
+  project_id: string;
   project_id_iv: string | null;
   title: string | null;
   encrypted_title: string | null;
@@ -1224,33 +1216,32 @@ type SessionIndexRow = {
 
 type ProjectIndexRow = {
   [key: string]: SqlStorageValue;
-  project_id: string; // Stores encrypted_project_id
+  project_id: string;
   project_id_iv: string | null;
-  name: string; // Stores encrypted_name
+  name: string;
   name_iv: string | null;
-  path: string | null; // Stores encrypted_path
+  path: string | null;
   path_iv: string | null;
   session_count: number;
   last_activity_at: number | null;
   sync_enabled: number;
 };
 
+// Map SQL rows (snake_case) to wire format (camelCase)
 function rowToSessionEntry(row: SessionIndexRow): SessionIndexEntry {
   return {
-    session_id: row.session_id,
-    // Pass through encrypted project_id - clients decrypt as needed
-    encrypted_project_id: row.project_id,
-    project_id_iv: row.project_id_iv ?? '',
-    // Pass through encrypted title - clients decrypt as needed
-    encrypted_title: row.encrypted_title ?? undefined,
-    title_iv: row.title_iv ?? undefined,
+    sessionId: row.session_id,
+    encryptedProjectId: row.project_id,
+    projectIdIv: row.project_id_iv ?? '',
+    encryptedTitle: row.encrypted_title ?? undefined,
+    titleIv: row.title_iv ?? undefined,
     provider: row.provider ?? 'unknown',
     model: row.model ?? undefined,
     mode: (row.mode as SessionIndexEntry['mode']) ?? undefined,
-    message_count: row.message_count,
-    last_message_at: row.last_message_at ?? 0,
-    created_at: row.created_at,
-    updated_at: row.updated_at,
+    messageCount: row.message_count,
+    lastMessageAt: row.last_message_at ?? 0,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
     isExecuting: row.is_executing === 1,
     lastReadAt: row.last_read_at ?? undefined,
   };
@@ -1258,15 +1249,14 @@ function rowToSessionEntry(row: SessionIndexRow): SessionIndexEntry {
 
 function rowToProjectEntry(row: ProjectIndexRow): ProjectIndexEntry {
   return {
-    // Pass through encrypted values - clients decrypt as needed
-    encrypted_project_id: row.project_id,
-    project_id_iv: row.project_id_iv ?? '',
-    encrypted_name: row.name,
-    name_iv: row.name_iv ?? '',
-    encrypted_path: row.path ?? undefined,
-    path_iv: row.path_iv ?? undefined,
-    session_count: row.session_count,
-    last_activity_at: row.last_activity_at ?? 0,
-    sync_enabled: row.sync_enabled === 1,
+    encryptedProjectId: row.project_id,
+    projectIdIv: row.project_id_iv ?? '',
+    encryptedName: row.name,
+    nameIv: row.name_iv ?? '',
+    encryptedPath: row.path ?? undefined,
+    pathIv: row.path_iv ?? undefined,
+    sessionCount: row.session_count,
+    lastActivityAt: row.last_activity_at ?? 0,
+    syncEnabled: row.sync_enabled === 1,
   };
 }

@@ -187,7 +187,7 @@ export default {
       const authConfig = getAuthConfig(env);
       const auth = await parseAuthJWT(request, authConfig);
       log.debug('Auth result:', auth, 'Room userId:', parsed.userId);
-      if (!auth || auth.user_id !== parsed.userId) {
+      if (!auth || auth.userId !== parsed.userId) {
         log.warn('Auth failed. auth:', auth, 'parsed.userId:', parsed.userId);
         return new Response('Unauthorized', { status: 401 });
       }
@@ -211,7 +211,7 @@ export default {
       // Forward request to DO with user_id added to URL
       // (DOs use simpler auth parsing that expects user_id in query params)
       const forwardUrl = new URL(request.url);
-      forwardUrl.searchParams.set('user_id', auth.user_id);
+      forwardUrl.searchParams.set('user_id', auth.userId);
       const forwardRequest = new Request(forwardUrl.toString(), request);
       return stub.fetch(forwardRequest);
     }
@@ -268,7 +268,7 @@ async function handleApiRequest(
 
   // GET /api/sessions - List sessions for user
   if (url.pathname === '/api/sessions' && request.method === 'GET') {
-    const indexId = env.INDEX_ROOM.idFromName(`user:${auth.user_id}:index`);
+    const indexId = env.INDEX_ROOM.idFromName(`user:${auth.userId}:index`);
     const stub = env.INDEX_ROOM.get(indexId);
 
     // Forward to status endpoint for now (could add dedicated list endpoint)
@@ -278,7 +278,7 @@ async function handleApiRequest(
   // GET /api/session/{sessionId}/status - Get session status
   if (url.pathname.startsWith('/api/session/') && url.pathname.endsWith('/status')) {
     const sessionId = url.pathname.slice(13, -7); // Extract session ID
-    const roomId = `user:${auth.user_id}:session:${sessionId}`;
+    const roomId = `user:${auth.userId}:session:${sessionId}`;
     const id = env.SESSION_ROOM.idFromName(roomId);
     const stub = env.SESSION_ROOM.get(id);
 
@@ -290,7 +290,7 @@ async function handleApiRequest(
     try {
       const body = await request.json() as { sessions: unknown[] };
 
-      const indexId = env.INDEX_ROOM.idFromName(`user:${auth.user_id}:index`);
+      const indexId = env.INDEX_ROOM.idFromName(`user:${auth.userId}:index`);
       const stub = env.INDEX_ROOM.get(indexId);
 
       // For bulk operations, we need to call the DO method directly

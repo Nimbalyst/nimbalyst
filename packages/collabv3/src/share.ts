@@ -87,7 +87,7 @@ export async function handleShareUpload(
     const existing = sessionId
       ? await env.DB.prepare(
           `SELECT id, r2_key FROM shared_sessions WHERE user_id = ? AND session_id = ? AND is_deleted = 0`
-        ).bind(auth.user_id, sessionId).first<{ id: string; r2_key: string }>()
+        ).bind(auth.userId, sessionId).first<{ id: string; r2_key: string }>()
       : null;
 
     if (existing) {
@@ -117,7 +117,7 @@ export async function handleShareUpload(
       await env.DB.prepare(
         `INSERT INTO shared_sessions (id, user_id, session_id, title, r2_key, size_bytes, created_at, expires_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-      ).bind(shareId, auth.user_id, sessionId, title, r2Key, html.length, now.toISOString(), expiresAt.toISOString()).run();
+      ).bind(shareId, auth.userId, sessionId, title, r2Key, html.length, now.toISOString(), expiresAt.toISOString()).run();
     }
 
     // Build share URL - use share.nimbalyst.com in production, request origin otherwise
@@ -126,7 +126,7 @@ export async function handleShareUpload(
     const shareBase = isProduction ? 'https://share.nimbalyst.com' : url.origin;
     const shareUrl = `${shareBase}/share/${shareId}`;
 
-    log.debug('Share', isUpdate ? 'updated' : 'created', ':', shareId, 'size:', html.length, 'user:', auth.user_id);
+    log.debug('Share', isUpdate ? 'updated' : 'created', ':', shareId, 'size:', html.length, 'user:', auth.userId);
 
     return new Response(
       JSON.stringify({ shareId, url: shareUrl, isUpdate }),
@@ -210,7 +210,7 @@ export async function handleShareList(
        FROM shared_sessions
        WHERE user_id = ? AND is_deleted = 0
        ORDER BY created_at DESC`
-    ).bind(auth.user_id).all();
+    ).bind(auth.userId).all();
 
     const url_origin = ''; // Will be set by client based on server URL
     const shares = (result.results || []).map((row: any) => ({
@@ -270,7 +270,7 @@ export async function handleShareDelete(
       );
     }
 
-    if (record.user_id !== auth.user_id) {
+    if (record.user_id !== auth.userId) {
       return new Response(
         JSON.stringify({ error: 'Unauthorized' }),
         { status: 403, headers: jsonHeaders }
@@ -285,7 +285,7 @@ export async function handleShareDelete(
     // Delete from R2
     await env.SESSION_SHARES.delete(record.r2_key);
 
-    log.debug('Share deleted:', shareId, 'user:', auth.user_id);
+    log.debug('Share deleted:', shareId, 'user:', auth.userId);
 
     return new Response(
       JSON.stringify({ success: true }),

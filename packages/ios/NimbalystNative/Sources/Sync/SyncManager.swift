@@ -30,6 +30,10 @@ public final class SyncManager: ObservableObject {
     /// The session ID currently connected to the session room, if any.
     @Published public var activeSessionId: String?
 
+    /// Called when a session transitions from executing to idle (isExecuting: true -> false).
+    /// Parameters: (sessionId, lastAssistantMessageSummary)
+    public var onSessionCompleted: ((String, String) -> Void)?
+
     private var serverUrl: String
     private var userId: String
     /// The Stytch user ID for room routing (from JWT sub claim). May differ from pairing userId.
@@ -149,21 +153,21 @@ public final class SyncManager: ObservableObject {
         }
 
         switch envelope.type {
-        case "index_sync_response":
+        case "indexSyncResponse":
             handleIndexSyncResponse(data)
-        case "index_broadcast":
+        case "indexBroadcast":
             handleIndexBroadcast(data)
-        case "index_delete_broadcast":
+        case "indexDeleteBroadcast":
             handleIndexDeleteBroadcast(data)
-        case "project_broadcast":
+        case "projectBroadcast":
             handleProjectBroadcast(data)
-        case "create_session_response_broadcast":
+        case "createSessionResponseBroadcast":
             handleCreateSessionResponse(data)
-        case "devices_list":
+        case "devicesList":
             handleDevicesList(data)
-        case "device_joined":
+        case "deviceJoined":
             handleDeviceJoined(data)
-        case "device_left":
+        case "deviceLeft":
             handleDeviceLeft(data)
         case "error":
             handleServerError(data)
@@ -360,9 +364,6 @@ public final class SyncManager: ObservableObject {
     private func handleDeviceLeft(_ data: Data) {
         struct DeviceLeftMessage: Codable {
             let deviceId: String
-            enum CodingKeys: String, CodingKey {
-                case deviceId = "device_id"
-            }
         }
         guard let msg = try? decoder.decode(DeviceLeftMessage.self, from: data) else { return }
         connectedDevices.removeAll { $0.deviceId == msg.deviceId }
@@ -418,11 +419,11 @@ public final class SyncManager: ObservableObject {
         }
 
         switch envelope.type {
-        case "sync_response":
+        case "syncResponse":
             handleSessionSyncResponse(data)
-        case "message_broadcast":
+        case "messageBroadcast":
             handleMessageBroadcast(data)
-        case "metadata_broadcast":
+        case "metadataBroadcast":
             handleMetadataBroadcast(data)
         case "error":
             handleServerError(data)
@@ -525,6 +526,8 @@ public final class SyncManager: ObservableObject {
         // Update session metadata in the database
         do {
             if var session = try database.session(byId: sessionId) {
+                let wasExecuting = session.isExecuting
+
                 if let isExecuting = broadcast.metadata.isExecuting {
                     session.isExecuting = isExecuting
                 }
@@ -541,6 +544,14 @@ public final class SyncManager: ObservableObject {
                     session.updatedAt = updatedAt
                 }
                 try database.upsertSession(session)
+
+                // Detect execution completion (isExecuting: true -> false)
+                if wasExecuting && !session.isExecuting {
+                    let messages = try database.messages(forSession: sessionId)
+                    let lastAssistant = messages.last { $0.source == "assistant" }
+                    let summary = String((lastAssistant?.contentDecrypted ?? "Task completed").prefix(200))
+                    onSessionCompleted?(sessionId, summary)
+                }
             }
         } catch {
             logger.error("Failed to update session metadata: \(error.localizedDescription)")
@@ -614,9 +625,6 @@ public final class SyncManager: ObservableObject {
             encryptedQueuedPrompts: [queuedPrompt]
         )
 
-        // Encode without .convertToSnakeCase - IndexUpdateEntry uses explicit
-        // CodingKeys for snake_case fields while keeping camelCase for fields
-        // the server/desktop expect in camelCase (isExecuting, encryptedQueuedPrompts)
         let indexMessage = IndexUpdateMessage(session: indexEntry)
         if let data = try? JSONEncoder().encode(indexMessage),
            let json = String(data: data, encoding: .utf8) {
@@ -683,9 +691,7 @@ public final class SyncManager: ObservableObject {
         )
 
         let request = AppendMessageRequest(message: entry)
-        let encoder = JSONEncoder()
-        encoder.keyEncodingStrategy = .convertToSnakeCase
-        if let data = try? encoder.encode(request),
+        if let data = try? JSONEncoder().encode(request),
            let json = String(data: data, encoding: .utf8) {
             sessionClient.sendRaw(json)
             logger.info("Appended tool result \(toolResultId) to session room")
@@ -745,14 +751,14 @@ public final class SyncManager: ObservableObject {
 
             // Build a minimal index update with lastReadAt
             var entry: [String: Any] = [
-                "session_id": session.id,
-                "encrypted_project_id": encryptedProjectId,
-                "project_id_iv": CryptoManager.projectIdIvBase64,
+                "sessionId": session.id,
+                "encryptedProjectId": encryptedProjectId,
+                "projectIdIv": CryptoManager.projectIdIvBase64,
                 "provider": session.provider ?? "unknown",
-                "message_count": 0,
-                "last_message_at": session.lastMessageAt ?? session.updatedAt,
-                "created_at": session.createdAt,
-                "updated_at": now,
+                "messageCount": 0,
+                "lastMessageAt": session.lastMessageAt ?? session.updatedAt,
+                "createdAt": session.createdAt,
+                "updatedAt": now,
                 "isExecuting": session.isExecuting,
                 "lastReadAt": now,
             ]
@@ -760,12 +766,12 @@ public final class SyncManager: ObservableObject {
             // Encrypt title if available
             if let title = session.titleDecrypted {
                 let result = try crypto.encrypt(plaintext: title)
-                entry["encrypted_title"] = result.encrypted
-                entry["title_iv"] = result.iv
+                entry["encryptedTitle"] = result.encrypted
+                entry["titleIv"] = result.iv
             }
 
             let message: [String: Any] = [
-                "type": "index_update",
+                "type": "indexUpdate",
                 "session": entry,
             ]
 

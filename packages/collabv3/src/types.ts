@@ -47,141 +47,141 @@ export interface PingMessage {
 
 /** Request messages since a cursor */
 export interface SyncRequestMessage {
-  type: 'sync_request';
-  since_id?: string;
-  since_seq?: number;
+  type: 'syncRequest';
+  sinceId?: string;
+  sinceSeq?: number;
 }
 
 /** Append a new message to the session */
 export interface AppendMessageMessage {
-  type: 'append_message';
+  type: 'appendMessage';
   message: EncryptedMessage;
 }
 
 /** Update session metadata */
 export interface UpdateMetadataMessage {
-  type: 'update_metadata';
+  type: 'updateMetadata';
   metadata: Partial<SessionMetadata>;
 }
 
 /** Delete a session */
 export interface DeleteSessionMessage {
-  type: 'delete_session';
+  type: 'deleteSession';
 }
 
 /** Request full index sync */
 export interface IndexSyncRequestMessage {
-  type: 'index_sync_request';
-  project_id?: string; // Filter by project
+  type: 'indexSyncRequest';
+  projectId?: string;
 }
 
 /** Update session in index (from desktop after local change) */
 export interface IndexUpdateMessage {
-  type: 'index_update';
+  type: 'indexUpdate';
   session: SessionIndexEntry;
 }
 
 /** Batch update sessions in index (for efficient bulk sync) */
 export interface IndexBatchUpdateMessage {
-  type: 'index_batch_update';
+  type: 'indexBatchUpdate';
   sessions: SessionIndexEntry[];
 }
 
 /** Delete session from index */
 export interface IndexDeleteMessage {
-  type: 'index_delete';
-  session_id: string;
+  type: 'indexDelete';
+  sessionId: string;
 }
 
 /** Announce device presence and info */
 export interface DeviceAnnounceMessage {
-  type: 'device_announce';
+  type: 'deviceAnnounce';
   device: DeviceInfo;
 }
 
 /** Request session creation from mobile to desktop */
 export interface CreateSessionRequestMessage {
-  type: 'create_session_request';
+  type: 'createSessionRequest';
   request: EncryptedCreateSessionRequest;
 }
 
 /** Response to session creation request from desktop */
 export interface CreateSessionResponseMessage {
-  type: 'create_session_response';
+  type: 'createSessionResponse';
   response: EncryptedCreateSessionResponse;
 }
 
 /** Encrypted session creation request (sent over wire) */
 export interface EncryptedCreateSessionRequest {
-  request_id: string;
+  requestId: string;
   /** Encrypted project ID (base64) - required for wire protocol */
-  encrypted_project_id: string;
+  encryptedProjectId: string;
   /** IV for project_id decryption (base64) */
-  project_id_iv: string;
+  projectIdIv: string;
   /** Base64 encoded encrypted initial prompt (optional) */
-  encrypted_initial_prompt?: string;
+  encryptedInitialPrompt?: string;
   /** Base64 encoded IV for initial prompt decryption */
-  initial_prompt_iv?: string;
+  initialPromptIv?: string;
   timestamp: number;
 }
 
 /** Encrypted session creation response (sent over wire) */
 export interface EncryptedCreateSessionResponse {
-  request_id: string;
+  requestId: string;
   success: boolean;
-  session_id?: string;
+  sessionId?: string;
   error?: string;
 }
 
 /** Generic session control command - the sync layer just passes these through */
 export interface SessionControlCommandMessage {
-  type: 'session_control';
+  type: 'sessionControl';
   message: SessionControlMessage;
 }
 
 /** Generic session control message payload */
 export interface SessionControlMessage {
-  session_id: string;
+  sessionId: string;
   /** Message type - receiver decides how to handle */
-  message_type: string;
-  /** Arbitrary payload - receiver interprets based on message_type */
+  messageType: string;
+  /** Arbitrary payload - receiver interprets based on messageType */
   payload?: Record<string, unknown>;
   timestamp: number;
-  sent_by: 'desktop' | 'mobile';
+  sentBy: 'desktop' | 'mobile';
 }
 
 /** Register a push notification token for this device */
 export interface RegisterPushTokenMessage {
-  type: 'register_push_token';
+  type: 'registerPushToken';
   token: string;
   platform: 'ios' | 'android';
-  device_id: string;
+  deviceId: string;
 }
 
 /** Request to send a push notification to mobile devices */
 export interface RequestMobilePushMessage {
-  type: 'request_mobile_push';
-  session_id: string;
+  type: 'requestMobilePush';
+  sessionId: string;
   title: string;
   body: string;
   /** Device ID of the requesting device, used for active-device routing */
-  requesting_device_id?: string;
+  requestingDeviceId?: string;
 }
 
 /** Sync encrypted settings to other devices */
 export interface SettingsSyncMessage {
-  type: 'settings_sync';
+  type: 'settingsSync';
   settings: EncryptedSettingsPayload;
 }
 
 /** Encrypted settings payload for wire transmission */
 export interface EncryptedSettingsPayload {
   /** Encrypted JSON blob containing settings (base64) */
-  encrypted_settings: string;
+  encryptedSettings: string;
   /** IV for settings decryption (base64) */
-  settings_iv: string;
+  settingsIv: string;
   /** Device ID of sender */
-  device_id: string;
+  deviceId: string;
   /** Timestamp of settings sync */
   timestamp: number;
   /** Version for handling upgrades */
@@ -209,101 +209,101 @@ export type ServerMessage =
   | SettingsSyncBroadcastMessage
   | ErrorMessage;
 
-/** Response to sync_request */
+/** Response to syncRequest */
 export interface SyncResponseMessage {
-  type: 'sync_response';
+  type: 'syncResponse';
   messages: EncryptedMessage[];
   metadata: SessionMetadata | null;
-  has_more: boolean;
+  hasMore: boolean;
   cursor: string | null;
 }
 
 /** Broadcast new message to other devices */
 export interface MessageBroadcastMessage {
-  type: 'message_broadcast';
+  type: 'messageBroadcast';
   message: EncryptedMessage;
-  from_connection_id?: string;
+  fromConnectionId?: string;
 }
 
 /** Broadcast metadata change to other devices */
 export interface MetadataBroadcastMessage {
-  type: 'metadata_broadcast';
+  type: 'metadataBroadcast';
   metadata: Partial<SessionMetadata>;
-  from_connection_id?: string;
+  fromConnectionId?: string;
 }
 
-/** Response to index_sync_request */
+/** Response to indexSyncRequest */
 export interface IndexSyncResponseMessage {
-  type: 'index_sync_response';
+  type: 'indexSyncResponse';
   sessions: SessionIndexEntry[];
   projects: ProjectIndexEntry[];
 }
 
 /** Broadcast index update to other devices */
 export interface IndexBroadcastMessage {
-  type: 'index_broadcast';
+  type: 'indexBroadcast';
   session: SessionIndexEntry;
-  from_connection_id?: string;
+  fromConnectionId?: string;
 }
 
 /** Broadcast session deletion to other devices */
 export interface IndexDeleteBroadcastMessage {
-  type: 'index_delete_broadcast';
-  session_id: string;
-  from_connection_id?: string;
+  type: 'indexDeleteBroadcast';
+  sessionId: string;
+  fromConnectionId?: string;
 }
 
 /** Broadcast project update (new or updated) to other devices */
 export interface ProjectBroadcastMessage {
-  type: 'project_broadcast';
+  type: 'projectBroadcast';
   project: ProjectIndexEntry;
-  from_connection_id?: string;
+  fromConnectionId?: string;
 }
 
 /** List of currently connected devices (sent on connect and device changes) */
 export interface DevicesListMessage {
-  type: 'devices_list';
+  type: 'devicesList';
   devices: DeviceInfo[];
 }
 
 /** Broadcast when a device joins */
 export interface DeviceJoinedMessage {
-  type: 'device_joined';
+  type: 'deviceJoined';
   device: DeviceInfo;
 }
 
 /** Broadcast when a device leaves */
 export interface DeviceLeftMessage {
-  type: 'device_left';
-  device_id: string;
+  type: 'deviceLeft';
+  deviceId: string;
 }
 
 /** Broadcast session creation request to other devices (desktop receives this) */
 export interface CreateSessionRequestBroadcastMessage {
-  type: 'create_session_request_broadcast';
+  type: 'createSessionRequestBroadcast';
   request: EncryptedCreateSessionRequest;
-  from_connection_id?: string;
+  fromConnectionId?: string;
 }
 
 /** Broadcast session creation response to other devices (mobile receives this) */
 export interface CreateSessionResponseBroadcastMessage {
-  type: 'create_session_response_broadcast';
+  type: 'createSessionResponseBroadcast';
   response: EncryptedCreateSessionResponse;
-  from_connection_id?: string;
+  fromConnectionId?: string;
 }
 
 /** Broadcast generic session control message to other devices */
 export interface SessionControlBroadcastMessage {
-  type: 'session_control_broadcast';
+  type: 'sessionControlBroadcast';
   message: SessionControlMessage;
-  from_connection_id?: string;
+  fromConnectionId?: string;
 }
 
 /** Broadcast encrypted settings to other devices (mobile receives this) */
 export interface SettingsSyncBroadcastMessage {
-  type: 'settings_sync_broadcast';
+  type: 'settingsSyncBroadcast';
   settings: EncryptedSettingsPayload;
-  from_connection_id?: string;
+  fromConnectionId?: string;
 }
 
 /** Error response */
@@ -323,7 +323,7 @@ export interface ErrorMessage {
  */
 export interface DeviceInfo {
   /** Unique device ID (stable across sessions, generated per device) */
-  device_id: string;
+  deviceId: string;
   /** Human-readable device name (e.g., "MacBook Pro", "iPhone 15") */
   name: string;
   /** Device type for icon display */
@@ -331,13 +331,13 @@ export interface DeviceInfo {
   /** Platform (e.g., "macos", "ios", "windows", "android", "web") */
   platform: string;
   /** App version */
-  app_version?: string;
+  appVersion?: string;
   /** When this device connected (Unix timestamp ms) */
-  connected_at: number;
+  connectedAt: number;
   /** Last activity timestamp (Unix timestamp ms) - updated on user interaction */
-  last_active_at: number;
+  lastActiveAt: number;
   /** Whether the app window is currently focused (optional for backwards compatibility) */
-  is_focused?: boolean;
+  isFocused?: boolean;
   /** Derived status for presence display (optional for backwards compatibility) */
   status?: 'active' | 'idle' | 'away';
 }
@@ -352,13 +352,13 @@ export interface EncryptedMessage {
   /** Monotonic sequence within session */
   sequence: number;
   /** Unix timestamp ms */
-  created_at: number;
+  createdAt: number;
   /** Message source */
   source: 'user' | 'assistant' | 'tool' | 'system';
   /** Direction of message */
   direction: 'input' | 'output';
   /** Base64 encoded encrypted content */
-  encrypted_content: string;
+  encryptedContent: string;
   /** Base64 encoded IV for decryption */
   iv: string;
   /** Empty metadata object (all sensitive data is in encrypted_content) */
@@ -372,33 +372,33 @@ export interface SessionMetadata {
   model?: string;
   mode?: 'agent' | 'planning';
   /** Encrypted project ID (base64) - required for wire protocol */
-  encrypted_project_id: string;
+  encryptedProjectId: string;
   /** IV for project_id decryption (base64) */
-  project_id_iv: string;
-  created_at: number;
-  updated_at: number;
+  projectIdIv: string;
+  createdAt: number;
+  updatedAt: number;
   /** Whether the session is currently executing (processing AI request) */
   isExecuting?: boolean;
 }
 
 /** Session entry in the IndexRoom */
 export interface SessionIndexEntry {
-  session_id: string;
+  sessionId: string;
   /** Encrypted project ID (base64) - required for wire protocol */
-  encrypted_project_id: string;
+  encryptedProjectId: string;
   /** IV for project_id decryption (base64) */
-  project_id_iv: string;
+  projectIdIv: string;
   /** Encrypted title (base64) */
-  encrypted_title?: string;
+  encryptedTitle?: string;
   /** IV for title decryption (base64) */
-  title_iv?: string;
+  titleIv?: string;
   provider: string;
   model?: string;
   mode?: 'agent' | 'planning';
-  message_count: number;
-  last_message_at: number;
-  created_at: number;
-  updated_at: number;
+  messageCount: number;
+  lastMessageAt: number;
+  createdAt: number;
+  updatedAt: number;
   /** Whether the session is currently executing (processing AI request) */
   isExecuting?: boolean;
   /** Unix timestamp ms when this session was last read by any device */
@@ -408,20 +408,20 @@ export interface SessionIndexEntry {
 /** Project entry in the IndexRoom */
 export interface ProjectIndexEntry {
   /** Encrypted project ID (base64) - required for wire protocol */
-  encrypted_project_id: string;
+  encryptedProjectId: string;
   /** IV for project_id decryption (base64) */
-  project_id_iv: string;
+  projectIdIv: string;
   /** Encrypted project name (base64) - required for wire protocol */
-  encrypted_name: string;
+  encryptedName: string;
   /** IV for name decryption (base64) */
-  name_iv: string;
+  nameIv: string;
   /** Encrypted project path (base64) - optional */
-  encrypted_path?: string;
+  encryptedPath?: string;
   /** IV for path decryption (base64) */
-  path_iv?: string;
-  session_count: number;
-  last_activity_at: number;
-  sync_enabled: boolean;
+  pathIv?: string;
+  sessionCount: number;
+  lastActivityAt: number;
+  syncEnabled: boolean;
 }
 
 // ============================================================================
@@ -430,9 +430,9 @@ export interface ProjectIndexEntry {
 
 /** Decoded auth token from WebSocket connection */
 export interface AuthContext {
-  user_id: string;
-  /** Optional org_id for future multi-tenant support */
-  org_id?: string;
+  userId: string;
+  /** Optional orgId for future multi-tenant support */
+  orgId?: string;
 }
 
 // ============================================================================

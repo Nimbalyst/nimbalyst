@@ -121,9 +121,7 @@ final class WebSocketClient: @unchecked Sendable {
         }
 
         do {
-            let encoder = JSONEncoder()
-            encoder.keyEncodingStrategy = .convertToSnakeCase
-            let data = try encoder.encode(message)
+            let data = try JSONEncoder().encode(message)
             let string = String(data: data, encoding: .utf8) ?? ""
             task.send(.string(string)) { [weak self] error in
                 if let error = error {

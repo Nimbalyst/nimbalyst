@@ -58,7 +58,7 @@ export class SessionRoom implements DurableObject {
         // After hibernation, assume all connections are synced
         // (they completed initial sync before hibernation occurred)
         this.connections.set(ws, {
-          auth: { user_id: userId },
+          auth: { userId },
           synced: true,
         });
       }
@@ -103,7 +103,7 @@ export class SessionRoom implements DurableObject {
     `);
 
     // Migration: Delete old sessions that have plaintext project_id
-    // New sessions use encrypted_project_id instead
+    // New sessions use encryptedProjectId instead
     const hasOldProjectId = sql.exec<{ value: string }>(
       `SELECT value FROM metadata WHERE key = 'project_id'`
     ).toArray()[0];
@@ -158,7 +158,7 @@ export class SessionRoom implements DurableObject {
 
     // Accept with hibernation support, storing auth in tags for recovery
     // Tags persist across hibernation and allow us to restore connection state
-    this.state.acceptWebSocket(server, [`${TAG_USER}${auth.user_id}`]);
+    this.state.acceptWebSocket(server, [`${TAG_USER}${auth.userId}`]);
 
     // Store connection state in memory (will be restored from tags after hibernation)
     this.connections.set(server, {
@@ -178,7 +178,7 @@ export class SessionRoom implements DurableObject {
     if (authHeader?.startsWith('Bearer ')) {
       const [userId] = authHeader.slice(7).split(':');
       if (userId) {
-        return { user_id: userId };
+        return { userId };
       }
     }
 
@@ -186,7 +186,7 @@ export class SessionRoom implements DurableObject {
     const url = new URL(request.url);
     const userId = url.searchParams.get('user_id');
     if (userId) {
-      return { user_id: userId };
+      return { userId };
     }
 
     return null;
@@ -209,19 +209,19 @@ export class SessionRoom implements DurableObject {
       const message: ClientMessage = JSON.parse(rawData);
 
       switch (message.type) {
-        case 'sync_request':
-          await this.handleSyncRequest(ws, connState, message.since_id, message.since_seq);
+        case 'syncRequest':
+          await this.handleSyncRequest(ws, connState, message.sinceId, message.sinceSeq);
           break;
 
-        case 'append_message':
+        case 'appendMessage':
           await this.handleAppendMessage(ws, connState, message.message);
           break;
 
-        case 'update_metadata':
+        case 'updateMetadata':
           await this.handleUpdateMetadata(ws, connState, message.metadata);
           break;
 
-        case 'delete_session':
+        case 'deleteSession':
           await this.handleDeleteSession(ws, connState);
           break;
 
@@ -274,10 +274,10 @@ export class SessionRoom implements DurableObject {
       messages = resultRows.map((row) => ({
         id: row.id,
         sequence: row.sequence,
-        created_at: row.created_at,
+        createdAt: row.created_at,
         source: row.source as EncryptedMessage['source'],
         direction: row.direction as EncryptedMessage['direction'],
-        encrypted_content: row.encrypted_content,
+        encryptedContent: row.encrypted_content,
         iv: row.iv,
         metadata: row.metadata_json ? JSON.parse(row.metadata_json) : {},
       }));
@@ -307,10 +307,10 @@ export class SessionRoom implements DurableObject {
       messages = resultRows.map((row) => ({
         id: row.id,
         sequence: row.sequence,
-        created_at: row.created_at,
+        createdAt: row.created_at,
         source: row.source as EncryptedMessage['source'],
         direction: row.direction as EncryptedMessage['direction'],
-        encrypted_content: row.encrypted_content,
+        encryptedContent: row.encrypted_content,
         iv: row.iv,
         metadata: row.metadata_json ? JSON.parse(row.metadata_json) : {},
       }));
@@ -324,17 +324,15 @@ export class SessionRoom implements DurableObject {
     const metadata = this.getMetadata();
 
     const response: SyncResponseMessage = {
-      type: 'sync_response',
+      type: 'syncResponse',
       messages,
       metadata,
-      has_more: cursor !== null,
+      hasMore: cursor !== null,
       cursor,
     };
 
     ws.send(JSON.stringify(response));
     connState.synced = true;
-    // Note: synced state is not persisted in tags, but after hibernation we assume
-    // all restored connections are synced (they wouldn't still be connected otherwise)
   }
 
   /**
@@ -377,10 +375,10 @@ export class SessionRoom implements DurableObject {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       storedMessage.id,
       storedMessage.sequence,
-      storedMessage.created_at,
+      storedMessage.createdAt,
       storedMessage.source,
       storedMessage.direction,
-      storedMessage.encrypted_content,
+      storedMessage.encryptedContent,
       storedMessage.iv,
       JSON.stringify(storedMessage.metadata)
     );
@@ -391,9 +389,9 @@ export class SessionRoom implements DurableObject {
     // Broadcast to other connections
     this.broadcast(
       {
-        type: 'message_broadcast',
+        type: 'messageBroadcast',
         message: storedMessage,
-        from_connection_id: this.getConnectionId(ws),
+        fromConnectionId: this.getConnectionId(ws),
       },
       ws
     );
@@ -420,9 +418,9 @@ export class SessionRoom implements DurableObject {
     // Broadcast to other connections
     this.broadcast(
       {
-        type: 'metadata_broadcast',
-        metadata: { ...updates, updated_at: now },
-        from_connection_id: this.getConnectionId(ws),
+        type: 'metadataBroadcast',
+        metadata: { ...updates, updatedAt: now },
+        fromConnectionId: this.getConnectionId(ws),
       },
       ws
     );
@@ -472,10 +470,10 @@ export class SessionRoom implements DurableObject {
       model: metadata.model,
       mode: metadata.mode as SessionMetadata['mode'],
       // Server stores encrypted values opaquely - pass through as-is
-      encrypted_project_id: metadata.encrypted_project_id ?? '',
-      project_id_iv: metadata.project_id_iv ?? '',
-      created_at: parseInt(metadata.created_at ?? '0', 10),
-      updated_at: parseInt(metadata.updated_at ?? '0', 10),
+      encryptedProjectId: metadata.encrypted_project_id ?? '',
+      projectIdIv: metadata.project_id_iv ?? '',
+      createdAt: parseInt(metadata.created_at ?? '0', 10),
+      updatedAt: parseInt(metadata.updated_at ?? '0', 10),
       // Include executing state for mobile sync
       isExecuting: metadata.isExecuting === 'true',
     };
@@ -525,7 +523,7 @@ export class SessionRoom implements DurableObject {
     // Use object identity as a simple ID
     for (const [conn, state] of this.connections) {
       if (conn === ws) {
-        return state.auth.user_id + '_' + Date.now();
+        return state.auth.userId + '_' + Date.now();
       }
     }
     return 'unknown';
@@ -560,9 +558,9 @@ export class SessionRoom implements DurableObject {
 
     return new Response(
       JSON.stringify({
-        room_id: this.state.id.toString(),
+        roomId: this.state.id.toString(),
         connections: this.connections.size,
-        message_count: messageCount,
+        messageCount,
         metadata,
       }),
       { headers: { 'Content-Type': 'application/json' } }

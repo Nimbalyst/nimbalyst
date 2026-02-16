@@ -249,14 +249,14 @@ function getDeviceInfo(userId: string): DeviceInfo {
     .replace(/\b\w/g, c => c.toUpperCase());
 
   return {
-    device_id: getDeviceId(userId),
+    deviceId: getDeviceId(userId),
     name: friendlyName || 'Desktop',
     type: 'desktop',
     platform,
-    app_version: app.getVersion(),
-    connected_at: connectionTime,
-    last_active_at: lastActivityAt,
-    is_focused: isAnyWindowFocused,
+    appVersion: app.getVersion(),
+    connectedAt: connectionTime,
+    lastActiveAt: lastActivityAt,
+    isFocused: isAnyWindowFocused,
     status: deriveDeviceStatus(),
   };
 }
@@ -424,7 +424,7 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
 
         // Build a map of server sessions for quick lookup
         const serverSessionMap = new Map(
-          serverIndex.sessions.map(s => [s.session_id, s])
+          serverIndex.sessions.map(s => [s.sessionId, s])
         );
 
         // Step 2: Get local sessions (without messages first for comparison)
@@ -445,7 +445,7 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
           : null; // null means all projects enabled
 
         // Step 4: Find sessions that need syncing using timestamp comparison
-        // Compare local updated_at vs server updated_at - if local is newer, we have changes to sync
+        // Compare local updatedAt vs server updatedAt - if local is newer, we have changes to sync
         const sessionsNeedingIndexUpdate: typeof allLocalSessions = [];
         const sessionsNeedingMessageSync: string[] = [];
 
@@ -469,7 +469,7 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
             sessionsNeedingMessageSync.push(localSession.id);
           } else {
             // Compare timestamps - if local is newer than server's last sync, we have new messages
-            const serverUpdatedAt = serverSession.updated_at || 0;
+            const serverUpdatedAt = serverSession.updatedAt || 0;
             const localUpdatedAt = localSession.updatedAt || 0;
 
             if (localUpdatedAt > serverUpdatedAt) {
@@ -499,9 +499,9 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
 
             for (const session of sessionsNeedingIndexUpdate) {
               if (sessionsNeedingMessageSync.includes(session.id)) {
-                // Get the server's last_message_at timestamp - only fetch messages after that
+                // Get the server's lastMessageAt timestamp - only fetch messages after that
                 const serverSession = serverSessionMap.get(session.id);
-                const sinceTimestamp = serverSession?.last_message_at || 0;
+                const sinceTimestamp = serverSession?.lastMessageAt || 0;
 
                 // Only load messages newer than server's last message
                 const newMessages = await getSessionMessagesForSync(session.id, sinceTimestamp);
@@ -547,11 +547,11 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
     if (provider.onDeviceStatusChange) {
       provider.onDeviceStatusChange((devices) => {
         const mobileDevices = devices.filter(d => d.type === 'mobile');
-        const currentMobileIds = new Set(mobileDevices.map(d => d.device_id));
+        const currentMobileIds = new Set(mobileDevices.map(d => d.deviceId));
 
         // Check for mobile devices that just connected (weren't in the previous set)
         for (const device of mobileDevices) {
-          if (!previousMobileDeviceIds.has(device.device_id)) {
+          if (!previousMobileDeviceIds.has(device.deviceId)) {
             logger.main.info(`[SyncManager] Mobile device connected: ${device.name}, syncing settings...`);
             // On first callback, add a small delay to ensure WebSocket is fully ready
             // This handles the case where mobile connected before desktop registered the listener
@@ -673,7 +673,7 @@ export async function triggerIncrementalSync(): Promise<void> {
 
     // Build a map of server sessions for quick lookup
     const serverSessionMap = new Map(
-      serverIndex.sessions.map(s => [s.session_id, s])
+      serverIndex.sessions.map(s => [s.sessionId, s])
     );
 
     // Get local sessions
@@ -713,7 +713,7 @@ export async function triggerIncrementalSync(): Promise<void> {
         sessionsNeedingMessageSync.push(localSession.id);
       } else {
         // Compare timestamps - if local is newer than server's last sync, we have new messages
-        const serverUpdatedAt = serverSession.updated_at || 0;
+        const serverUpdatedAt = serverSession.updatedAt || 0;
         const localUpdatedAt = localSession.updatedAt || 0;
 
         if (localUpdatedAt > serverUpdatedAt) {
@@ -740,7 +740,7 @@ export async function triggerIncrementalSync(): Promise<void> {
         for (const session of sessionsNeedingIndexUpdate) {
           if (sessionsNeedingMessageSync.includes(session.id)) {
             const serverSession = serverSessionMap.get(session.id);
-            const sinceTimestamp = serverSession?.last_message_at || 0;
+            const sinceTimestamp = serverSession?.lastMessageAt || 0;
             const newMessages = await getSessionMessagesForSync(session.id, sinceTimestamp);
             session.messages = newMessages;
             logger.main.info(`[SyncManager] Session ${session.id}: syncing ${newMessages.length} new messages (since ${new Date(sinceTimestamp).toISOString()})`);
