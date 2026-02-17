@@ -1,5 +1,43 @@
 import SwiftUI
 import GRDB
+#if canImport(UIKit)
+import UIKit
+#endif
+
+// MARK: - Session Load Error
+
+enum SessionLoadError {
+    case decryptionFailed(decryptedCount: Int, totalCount: Int)
+    case syncFailed(String)
+    case webViewFailed(String)
+    case noMessages
+    case timeout(messageCount: Int, webViewReady: Bool, isTranscriptReady: Bool)
+
+    var title: String {
+        switch self {
+        case .decryptionFailed: return "Decryption Failed"
+        case .syncFailed: return "Sync Failed"
+        case .webViewFailed: return "Display Error"
+        case .noMessages: return "No Messages"
+        case .timeout: return "Load Timeout"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .decryptionFailed(let decrypted, let total):
+            return "Only \(decrypted) of \(total) messages could be decrypted. The encryption key may be out of sync."
+        case .syncFailed(let detail):
+            return "Failed to sync session data: \(detail)"
+        case .webViewFailed(let detail):
+            return "Transcript display error: \(detail)"
+        case .noMessages:
+            return "No messages received from server. The transcript may not exist yet."
+        case .timeout(let msgCount, let wvReady, let trReady):
+            return "Transcript did not load within 15s. Local messages: \(msgCount), WebView ready: \(wvReady), Transcript ready: \(trReady)"
+        }
+    }
+}
 
 /// Session detail view with an embedded web transcript and native compose bar.
 ///
@@ -38,6 +76,15 @@ public struct SessionDetailView: View {
     /// Whether the transcript web view has loaded and rendered its first data.
     @State private var isTranscriptReady = false
 
+    /// Error state for diagnosing load failures.
+    @State private var loadError: SessionLoadError?
+
+    /// Timeout work item for detecting stuck loads.
+    @State private var timeoutWorkItem: DispatchWorkItem?
+
+    /// Diagnostic info from sync, used in debug copy.
+    @State private var lastDiagnostic: SyncManager.SessionSyncDiagnostic?
+
     private var displaySession: Session {
         liveSession ?? session
     }
@@ -63,21 +110,34 @@ public struct SessionDetailView: View {
                     onReady: {
                         withAnimation(.easeOut(duration: 0.2)) {
                             isTranscriptReady = true
+                            loadError = nil
+                        }
+                        timeoutWorkItem?.cancel()
+                    },
+                    onError: { errorMessage in
+                        if loadError == nil {
+                            withAnimation {
+                                loadError = .webViewFailed(errorMessage)
+                            }
                         }
                     }
                 )
 
                 if !isTranscriptReady {
-                    VStack(spacing: 12) {
-                        ProgressView()
-                            .controlSize(.regular)
-                            .tint(NimbalystColors.primary)
-                        Text("Loading transcript...")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                    if let error = loadError {
+                        errorBanner(error: error)
+                    } else {
+                        VStack(spacing: 12) {
+                            ProgressView()
+                                .controlSize(.regular)
+                                .tint(NimbalystColors.primary)
+                            Text("Loading transcript...")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(Color(red: 0x1a/255, green: 0x1a/255, blue: 0x1a/255))
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color(red: 0x1a/255, green: 0x1a/255, blue: 0x1a/255))
                 }
             }
             #else
@@ -114,6 +174,8 @@ public struct SessionDetailView: View {
         }
         .onAppear {
             startObserving()
+            startLoadTimeout()
+            subscribeToDiagnostics()
             // Mark session as read when viewing it
             appState.syncManager?.markSessionRead(sessionId: session.id)
             AnalyticsManager.shared.capture("mobile_session_viewed")
@@ -125,6 +187,8 @@ public struct SessionDetailView: View {
         .onDisappear {
             sessionCancellable?.cancel()
             messagesCancellable?.cancel()
+            timeoutWorkItem?.cancel()
+            appState.syncManager?.onSessionSyncDiagnostic = nil
             appState.syncManager?.leaveSessionRoom()
         }
         .onChange(of: messages.count) { _ in
@@ -264,6 +328,154 @@ public struct SessionDetailView: View {
                 }
             }
         }
+        #endif
+    }
+
+    // MARK: - Error Banner
+
+    @ViewBuilder
+    private func errorBanner(error: SessionLoadError) -> some View {
+        VStack(spacing: 16) {
+            Spacer()
+
+            VStack(spacing: 12) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 32))
+                    .foregroundStyle(NimbalystColors.warning)
+
+                Text(error.title)
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+
+                Text(error.description)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 24)
+
+                Text("Session: \(session.id.prefix(12))...")
+                    .font(.caption)
+                    .monospaced()
+                    .foregroundStyle(NimbalystColors.textFaint)
+
+                HStack(spacing: 12) {
+                    Button {
+                        copyDebugInfo(error: error)
+                    } label: {
+                        Label("Copy Debug Info", systemImage: "doc.on.clipboard")
+                            .font(.subheadline)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.secondary)
+
+                    Button {
+                        retryLoad()
+                    } label: {
+                        Label("Retry", systemImage: "arrow.clockwise")
+                            .font(.subheadline)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(NimbalystColors.primary)
+                }
+                .padding(.top, 4)
+            }
+
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(red: 0x1a/255, green: 0x1a/255, blue: 0x1a/255))
+    }
+
+    // MARK: - Load Timeout
+
+    private func startLoadTimeout() {
+        timeoutWorkItem?.cancel()
+        let item = DispatchWorkItem { [self] in
+            guard !isTranscriptReady else { return }
+            withAnimation {
+                loadError = .timeout(
+                    messageCount: messages.count,
+                    webViewReady: true, // We can't easily read coordinator state, but the detail is in the description
+                    isTranscriptReady: isTranscriptReady
+                )
+            }
+        }
+        timeoutWorkItem = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + 15, execute: item)
+    }
+
+    // MARK: - Diagnostic Subscription
+
+    private func subscribeToDiagnostics() {
+        appState.syncManager?.onSessionSyncDiagnostic = { [self] sessionId, diagnostic in
+            guard sessionId == session.id else { return }
+            lastDiagnostic = diagnostic
+
+            if let error = diagnostic.error {
+                if diagnostic.decryptedCount == 0 && diagnostic.totalServerMessages > 0 {
+                    withAnimation {
+                        loadError = .decryptionFailed(
+                            decryptedCount: diagnostic.decryptedCount,
+                            totalCount: diagnostic.totalServerMessages
+                        )
+                    }
+                } else if diagnostic.totalServerMessages == 0 && diagnostic.error == nil {
+                    // No error but also no messages — could be normal for a brand new session
+                } else {
+                    withAnimation {
+                        loadError = .syncFailed(error)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Retry
+
+    private func retryLoad() {
+        loadError = nil
+        isTranscriptReady = false
+        lastDiagnostic = nil
+        startLoadTimeout()
+        appState.syncManager?.leaveSessionRoom()
+        appState.syncManager?.joinSessionRoom(sessionId: session.id)
+    }
+
+    // MARK: - Copy Debug Info
+
+    private func copyDebugInfo(error: SessionLoadError) {
+        var lines: [String] = [
+            "Session Load Error Report",
+            "========================",
+            "Error: \(error.title)",
+            "Detail: \(error.description)",
+            "Session ID: \(session.id)",
+            "Project ID: \(session.projectId)",
+            "Local message count: \(messages.count)",
+            "Provider: \(session.provider ?? "nil")",
+            "Model: \(session.model ?? "nil")",
+            "Created: \(session.createdAt)",
+            "Updated: \(session.updatedAt)",
+        ]
+
+        if let diag = lastDiagnostic {
+            lines.append("")
+            lines.append("Sync Diagnostic:")
+            lines.append("  Server messages: \(diag.totalServerMessages)")
+            lines.append("  Decrypted: \(diag.decryptedCount)")
+            lines.append("  Stored: \(diag.storedCount)")
+            if !diag.failedMessageIds.isEmpty {
+                lines.append("  Failed IDs: \(diag.failedMessageIds.prefix(5).joined(separator: ", "))")
+                lines.append("  Failed sequences: \(diag.failedSequences.prefix(5).map(String.init).joined(separator: ", "))")
+            }
+            if let syncError = diag.error {
+                lines.append("  Sync error: \(syncError)")
+            }
+        }
+
+        let text = lines.joined(separator: "\n")
+        #if canImport(UIKit)
+        UIPasteboard.general.string = text
         #endif
     }
 
