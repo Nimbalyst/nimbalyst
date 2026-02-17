@@ -20,7 +20,7 @@ import {
   wrapWithPrintStyles,
 } from 'rexical';
 import { $generateHtmlFromNodes } from '@lexical/html';
-import { revealFolderAtom, openFileRequestAtom, setWindowModeAtom } from '../../store';
+import { revealFolderAtom, revealFileAtom, openFileRequestAtom, setWindowModeAtom } from '../../store';
 import { getDocumentService } from '../../services/RendererDocumentService';
 import { isWorktreePath } from '../../../shared/pathUtils';
 
@@ -248,6 +248,7 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
 }) => {
   // Jotai atom for folder navigation and mode switching
   const revealFolder = useSetAtom(revealFolderAtom);
+  const revealFile = useSetAtom(revealFileAtom);
   const setOpenFileRequest = useSetAtom(openFileRequestAtom);
   const setWindowMode = useSetAtom(setWindowModeAtom);
 
@@ -318,10 +319,12 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
       return;
     }
     if (targetFilePath) {
-      // Filename segment: open the file in files mode (handles mode switch + tab opening)
+      // Filename segment: open the file in files mode and reveal it in the tree
+      // (reveal clears any active filter so the file becomes visible)
       setOpenFileRequest({ path: targetFilePath, ts: Date.now() });
+      revealFile(targetFilePath);
     }
-  }, [revealFolder, setOpenFileRequest, setWindowMode]);
+  }, [revealFolder, revealFile, setOpenFileRequest, setWindowMode]);
 
   // Load AI sessions
   const loadAISessions = useCallback(async () => {
