@@ -2547,12 +2547,15 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
   /**
    * Check if the lead will resume after the current query completes.
    * Unlike isLeadBusy(), this does NOT check leadQuery (which is still set
-   * when called from inside the generator's for-await loop). Only checks
-   * whether a re-trigger is pending that will start a new sendMessage.
+   * when called from inside the generator's for-await loop). Checks both:
+   * - teammateIdleMessagePending: a re-trigger event was already emitted
+   * - hasPendingTeammateMessages: messages are queued but not yet triggered
+   *   (e.g., interruptWithMessage queued a message and called interrupt(),
+   *   but the finally block hasn't run yet to re-trigger delivery)
    * Used by AIService's 'complete' chunk handler.
    */
   public willResumeAfterCompletion(): boolean {
-    return this.teammateIdleMessagePending;
+    return this.teammateIdleMessagePending || this.teammateManager.hasPendingTeammateMessages();
   }
 
   /**
