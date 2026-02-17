@@ -374,31 +374,38 @@ export class IndexRoom implements DurableObject {
   ): Promise<void> {
     const sql = this.state.storage.sql;
 
-    // Get sessions (optionally filtered by project)
-    let sessions: SessionIndexEntry[];
-    if (projectId) {
-      const rows = sql.exec<SessionIndexRow>(
-        `SELECT * FROM session_index WHERE project_id = ? ORDER BY updated_at DESC`,
-        projectId
-      ).toArray();
-      sessions = rows.map(rowToSessionEntry);
-    } else {
-      const rows = sql.exec<SessionIndexRow>(
-        `SELECT * FROM session_index ORDER BY updated_at DESC`
-      ).toArray();
-      sessions = rows.map(rowToSessionEntry);
+    // Get total count first for diagnostic purposes
+    const totalCount = projectId
+      ? sql.exec<{ count: number }>(`SELECT COUNT(*) as count FROM session_index WHERE project_id = ?`, projectId).one().count
+      : sql.exec<{ count: number }>(`SELECT COUNT(*) as count FROM session_index`).one().count;
+
+    // Get sessions using cursor iteration instead of toArray() to avoid
+    // potential undocumented row limits in the CF DO runtime.
+    const sessions: SessionIndexEntry[] = [];
+    const cursor = projectId
+      ? sql.exec<SessionIndexRow>(`SELECT * FROM session_index WHERE project_id = ? ORDER BY updated_at DESC`, projectId)
+      : sql.exec<SessionIndexRow>(`SELECT * FROM session_index ORDER BY updated_at DESC`);
+    for (const row of cursor) {
+      sessions.push(rowToSessionEntry(row));
     }
 
-    // Get projects
-    const projectRows = sql.exec<ProjectIndexRow>(
-      `SELECT * FROM project_index ORDER BY last_activity_at DESC`
-    ).toArray();
-    const projects = projectRows.map(rowToProjectEntry);
+    // Log diagnostic info about session counts
+    if (totalCount !== sessions.length) {
+      log.warn('Session count mismatch! COUNT(*):', totalCount, 'cursor iteration length:', sessions.length);
+    }
+    log.info('Index sync request: COUNT(*)=', totalCount, 'returned=', sessions.length);
+
+    // Get projects using cursor iteration
+    const projects: ProjectIndexEntry[] = [];
+    for (const row of sql.exec<ProjectIndexRow>(`SELECT * FROM project_index ORDER BY last_activity_at DESC`)) {
+      projects.push(rowToProjectEntry(row));
+    }
 
     const response: IndexSyncResponseMessage = {
       type: 'indexSyncResponse',
       sessions,
       projects,
+      totalSessionCount: totalCount,
     };
 
     ws.send(JSON.stringify(response));

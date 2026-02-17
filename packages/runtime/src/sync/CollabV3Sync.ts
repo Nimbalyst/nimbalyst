@@ -580,6 +580,29 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
   let indexReconnectAttempts = 0;
   let indexReconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
+  /** Schedule a reconnect attempt for the index WebSocket with exponential backoff. */
+  function scheduleIndexReconnect(): void {
+    // Exponential backoff: 2s, 4s, 8s, 16s, 30s max
+    const delay = Math.min(2000 * Math.pow(2, indexReconnectAttempts), 30000);
+    indexReconnectAttempts++;
+    console.log(`[CollabV3] Scheduling index reconnect attempt ${indexReconnectAttempts} in ${delay}ms`);
+
+    if (indexReconnectTimer) clearTimeout(indexReconnectTimer);
+    indexReconnectTimer = setTimeout(() => {
+      indexReconnectTimer = null;
+      if (!indexWs && !indexConnected) {
+        console.log('[CollabV3] Attempting to reconnect to index...');
+        connectToIndex().catch(err => {
+          console.error('[CollabV3] Failed to reconnect to index:', err);
+          // Schedule another attempt - connectToIndex() may have failed before
+          // creating a WebSocket (e.g. JWT refresh failed), so onclose won't fire
+          // and we'd never retry without this.
+          scheduleIndexReconnect();
+        });
+      }
+    }, delay);
+  }
+
   // Listeners for index changes (session updates broadcast to all connected clients)
   // Listeners receive decrypted data (CachedSessionIndex format)
   const indexChangeListeners = new Set<(sessionId: string, entry: CachedSessionIndex) => void>();
@@ -1093,21 +1116,8 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       indexWs = null;
       stopDeviceAnnounceInterval();
 
-      // Exponential backoff: 2s, 4s, 8s, 16s, 30s max
-      const delay = Math.min(2000 * Math.pow(2, indexReconnectAttempts), 30000);
-      indexReconnectAttempts++;
-      console.log(`[CollabV3] Disconnected from index, reconnect attempt ${indexReconnectAttempts} in ${delay}ms`);
-
-      if (indexReconnectTimer) clearTimeout(indexReconnectTimer);
-      indexReconnectTimer = setTimeout(() => {
-        indexReconnectTimer = null;
-        if (!indexWs && !indexConnected) {
-          console.log('[CollabV3] Attempting to reconnect to index...');
-          connectToIndex().catch(err => {
-            console.error('[CollabV3] Failed to reconnect to index:', err);
-          });
-        }
-      }, delay);
+      console.log('[CollabV3] Disconnected from index');
+      scheduleIndexReconnect();
     };
 
     indexWs.onerror = (event) => {
@@ -1126,7 +1136,12 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
 
         switch (message.type) {
           case 'indexSyncResponse': {
-            // console.log('[CollabV3] Received indexSyncResponse:', message.sessions.length, 'sessions');
+            const totalCount = (message as any).totalSessionCount;
+            if (totalCount !== undefined && totalCount !== message.sessions.length) {
+              console.warn(`[CollabV3] INDEX TRUNCATION DETECTED! Server COUNT(*)=${totalCount} but received ${message.sessions.length} sessions`);
+            } else {
+              console.log(`[CollabV3] Received indexSyncResponse: ${message.sessions.length} sessions (server total: ${totalCount ?? 'unknown'})`);
+            }
             if (pendingIndexFetch) {
               // Decrypt sensitive fields before returning
               const decryptedSessions: DecryptedSessionIndexEntry[] = await Promise.all(
@@ -2481,12 +2496,22 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
         return;
       }
 
+      // Cancel any pending backoff reconnect - this is an explicit reconnect request
+      // (e.g. from network change / resume) that should take priority
+      if (indexReconnectTimer) {
+        clearTimeout(indexReconnectTimer);
+        indexReconnectTimer = null;
+      }
+      indexReconnectAttempts = 0;
+
       console.log('[CollabV3] Network available, attempting to reconnect index...');
       try {
         await connectToIndex();
         console.log('[CollabV3] Successfully reconnected to index after network restoration');
       } catch (err) {
         console.error('[CollabV3] Failed to reconnect to index:', err);
+        // Start the backoff retry loop since the explicit reconnect failed
+        scheduleIndexReconnect();
       }
     },
   };

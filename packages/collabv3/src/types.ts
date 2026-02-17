@@ -237,6 +237,8 @@ export interface IndexSyncResponseMessage {
   type: 'indexSyncResponse';
   sessions: SessionIndexEntry[];
   projects: ProjectIndexEntry[];
+  /** Total session count from COUNT(*) - used to detect if toArray() truncated results */
+  totalSessionCount?: number;
 }
 
 /** Broadcast index update to other devices */

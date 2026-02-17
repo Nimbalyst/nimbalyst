@@ -67,6 +67,7 @@ interface SyncManagerState {
   connected: boolean;
   syncing: boolean;
   error: string | null;
+  sessionKeepAliveInterval: ReturnType<typeof setInterval> | null;
 }
 
 const state: SyncManagerState = {
@@ -76,6 +77,7 @@ const state: SyncManagerState = {
   connected: false,
   syncing: false,
   error: null,
+  sessionKeepAliveInterval: null,
 };
 
 // Event emitter for sync status changes
@@ -386,6 +388,24 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
     // Create message sync handler
     const messageSyncHandler = createMessageSyncHandler(provider);
 
+    // Keep the Stytch session token alive while sync is active.
+    // The WebSocket only refreshes JWT on reconnect, so if it stays connected
+    // for hours the session token can expire. This breaks HTTP endpoints
+    // (share links, shared links list) that need a fresh JWT via refresh.
+    // Refresh every 30 minutes to keep the session token valid.
+    if (state.sessionKeepAliveInterval) {
+      clearInterval(state.sessionKeepAliveInterval);
+    }
+    state.sessionKeepAliveInterval = setInterval(async () => {
+      try {
+        const { refreshSession: doRefresh } = await import('./StytchAuthService');
+        await doRefresh(serverUrl);
+      } catch {
+        // Refresh failure is non-fatal here -- just means the session token
+        // may expire if this keeps failing, but sync stays connected.
+      }
+    }, 30 * 60 * 1000);
+
     // Store state
     state.provider = provider;
     state.config = config;
@@ -620,6 +640,10 @@ export function isSyncProviderReady(): boolean {
  * Shutdown sync and disconnect all sessions.
  */
 export function shutdownSync(): void {
+  if (state.sessionKeepAliveInterval) {
+    clearInterval(state.sessionKeepAliveInterval);
+    state.sessionKeepAliveInterval = null;
+  }
   if (state.provider) {
     logger.main.info('[SyncManager] Shutting down session sync...');
     state.provider.disconnectAll();
@@ -668,8 +692,14 @@ export async function triggerIncrementalSync(): Promise<void> {
       logger.main.info(`[SyncManager] Triggered sync: server has ${serverIndex.sessions.length} sessions (fetch took ${fetchTime.toFixed(1)}ms)`);
     } catch (fetchError) {
       // Don't fall back to full sync - that would load ALL messages for ALL sessions into memory
-      // and cause OOM crashes. Instead, skip sync and wait for connection to be restored.
+      // and cause OOM crashes. Instead, attempt to reconnect and skip this sync cycle.
       logger.main.warn('[SyncManager] Failed to fetch server index, skipping incremental sync:', fetchError);
+      // Attempt to reconnect in background so the next sync has a live connection
+      if (provider.reconnectIndex) {
+        provider.reconnectIndex().catch(err => {
+          logger.main.debug('[SyncManager] Background reconnect attempt failed:', err);
+        });
+      }
       return;
     }
 

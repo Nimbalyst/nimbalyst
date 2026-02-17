@@ -37,6 +37,10 @@ public final class SyncManager: ObservableObject {
     /// Called when settings are synced from the desktop (e.g., OpenAI API key, voice mode config).
     public var onSettingsSynced: ((SyncedSettings) -> Void)?
 
+    /// Called with diagnostic info when session message sync completes (success or failure).
+    /// Parameters: (sessionId, diagnostic)
+    public var onSessionSyncDiagnostic: ((String, SessionSyncDiagnostic) -> Void)?
+
     private var serverUrl: String
     private var userId: String
     /// The Stytch user ID for room routing (from JWT sub claim). May differ from pairing userId.
@@ -189,16 +193,28 @@ public final class SyncManager: ObservableObject {
             return
         }
 
-        logger.info("Index sync received: \(response.sessions.count) sessions, \(response.projects.count) projects")
+        if let total = response.totalSessionCount, total != response.sessions.count {
+            logger.warning("INDEX TRUNCATION DETECTED! Server COUNT(*)=\(total) but received \(response.sessions.count) sessions")
+        }
+        logger.info("Index sync received: \(response.sessions.count) sessions, \(response.projects.count) projects (server total: \(response.totalSessionCount.map(String.init) ?? "unknown"))")
 
         // Process projects
         for serverProject in response.projects {
             processServerProject(serverProject)
         }
 
-        // Process sessions
+        // Process sessions - track success/failure counts
+        var processedCount = 0
+        var failedDecryptCount = 0
         for serverSession in response.sessions {
-            processServerSession(serverSession)
+            if processServerSessionWithResult(serverSession) {
+                processedCount += 1
+            } else {
+                failedDecryptCount += 1
+            }
+        }
+        if failedDecryptCount > 0 {
+            logger.warning("Session processing: \(processedCount) succeeded, \(failedDecryptCount) failed to decrypt")
         }
 
         // Recalculate project stats from session data (more reliable than server-side stats)
@@ -246,13 +262,19 @@ public final class SyncManager: ObservableObject {
     }
 
     private func processServerSession(_ entry: ServerSessionEntry) {
+        _ = processServerSessionWithResult(entry)
+    }
+
+    /// Process a server session entry, returning true on success, false on decrypt failure.
+    @discardableResult
+    private func processServerSessionWithResult(_ entry: ServerSessionEntry) -> Bool {
         // Decrypt project ID to find the parent project
         guard let projectId = crypto.decryptOrNil(
             encryptedBase64: entry.encryptedProjectId,
             ivBase64: entry.projectIdIv
         ) else {
             logger.warning("Failed to decrypt project ID for session \(entry.sessionId)")
-            return
+            return false
         }
 
         // Ensure the project exists (don't overwrite if it already has data from processServerProject)
@@ -294,8 +316,10 @@ public final class SyncManager: ObservableObject {
             try database.upsertSession(session)
             // Update the project's lastUpdatedAt if this session is more recent
             try database.updateProjectLastActivity(projectId: projectId, activityAt: entry.updatedAt)
+            return true
         } catch {
             logger.error("Failed to upsert session: \(error.localizedDescription)")
+            return false
         }
     }
 
@@ -474,7 +498,8 @@ public final class SyncManager: ObservableObject {
 
     private func handleSessionMessage(_ data: Data) {
         guard let envelope = try? decoder.decode(ServerMessage.self, from: data) else {
-            logger.warning("Could not decode session message type")
+            let rawPreview = String(data: data.prefix(200), encoding: .utf8) ?? "<binary>"
+            logger.warning("Could not decode session message type — raw: \(rawPreview)")
             return
         }
 
@@ -495,8 +520,19 @@ public final class SyncManager: ObservableObject {
     // MARK: - Session Sync Response
 
     private func handleSessionSyncResponse(_ data: Data) {
-        guard let response = try? decoder.decode(SessionSyncResponse.self, from: data) else {
-            logger.error("Failed to decode session sync_response")
+        let response: SessionSyncResponse
+        do {
+            response = try decoder.decode(SessionSyncResponse.self, from: data)
+        } catch {
+            let rawPreview = String(data: data.prefix(500), encoding: .utf8) ?? "<binary>"
+            logger.error("Failed to decode session syncResponse: \(error.localizedDescription) — raw: \(rawPreview)")
+            if let sessionId = activeSessionId {
+                onSessionSyncDiagnostic?(sessionId, SessionSyncDiagnostic(
+                    totalServerMessages: 0, decryptedCount: 0, storedCount: 0,
+                    failedMessageIds: [], failedSequences: [],
+                    error: "Sync response decode failed: \(error.localizedDescription)"
+                ))
+            }
             return
         }
 
@@ -520,11 +556,25 @@ public final class SyncManager: ObservableObject {
     private func commitSessionMessages() {
         guard let sessionId = activeSessionId else { return }
 
+        let totalCount = sessionSyncBuffer.count
+        var failedIds: [String] = []
+        var failedSeqs: [Int] = []
+
         let messages = sessionSyncBuffer.compactMap { entry -> Message? in
-            decryptServerMessage(entry, sessionId: sessionId)
+            let msg = decryptServerMessage(entry, sessionId: sessionId)
+            if msg == nil {
+                failedIds.append(entry.id)
+                failedSeqs.append(entry.sequence)
+            }
+            return msg
         }
 
         sessionSyncBuffer = []
+
+        // Log decryption results
+        if !failedIds.isEmpty {
+            logger.error("Decryption failed for \(failedIds.count)/\(totalCount) messages in session \(sessionId). Failed sequences: \(failedSeqs.prefix(10))")
+        }
 
         do {
             try database.appendMessages(messages)
@@ -541,9 +591,45 @@ public final class SyncManager: ObservableObject {
                 try database.updateSyncState(syncState)
             }
 
-            logger.info("Stored \(messages.count) messages for session \(sessionId)")
+            logger.info("Stored \(messages.count)/\(totalCount) messages for session \(sessionId)")
+
+            // Report diagnostics
+            if messages.isEmpty && totalCount > 0 {
+                logger.error("All \(totalCount) messages failed decryption for session \(sessionId)")
+                onSessionSyncDiagnostic?(sessionId, SessionSyncDiagnostic(
+                    totalServerMessages: totalCount, decryptedCount: 0, storedCount: 0,
+                    failedMessageIds: failedIds, failedSequences: failedSeqs,
+                    error: "All \(totalCount) messages failed decryption"
+                ))
+            } else if messages.isEmpty && totalCount == 0 {
+                logger.info("Session sync returned 0 messages for session \(sessionId) — transcript may not exist on server")
+                onSessionSyncDiagnostic?(sessionId, SessionSyncDiagnostic(
+                    totalServerMessages: 0, decryptedCount: 0, storedCount: 0,
+                    failedMessageIds: [], failedSequences: [],
+                    error: nil
+                ))
+            } else if !failedIds.isEmpty {
+                onSessionSyncDiagnostic?(sessionId, SessionSyncDiagnostic(
+                    totalServerMessages: totalCount, decryptedCount: messages.count,
+                    storedCount: messages.count,
+                    failedMessageIds: failedIds, failedSequences: failedSeqs,
+                    error: "\(failedIds.count) of \(totalCount) messages failed decryption"
+                ))
+            } else {
+                onSessionSyncDiagnostic?(sessionId, SessionSyncDiagnostic(
+                    totalServerMessages: totalCount, decryptedCount: messages.count,
+                    storedCount: messages.count,
+                    failedMessageIds: [], failedSequences: [],
+                    error: nil
+                ))
+            }
         } catch {
             logger.error("Failed to store session messages: \(error.localizedDescription)")
+            onSessionSyncDiagnostic?(sessionId, SessionSyncDiagnostic(
+                totalServerMessages: totalCount, decryptedCount: messages.count, storedCount: 0,
+                failedMessageIds: failedIds, failedSequences: failedSeqs,
+                error: "Database write failed: \(error.localizedDescription)"
+            ))
         }
     }
 
@@ -552,11 +638,13 @@ public final class SyncManager: ObservableObject {
     private func handleMessageBroadcast(_ data: Data) {
         guard let broadcast = try? decoder.decode(MessageBroadcast.self, from: data),
               let sessionId = activeSessionId else {
-            logger.error("Failed to decode message_broadcast")
+            let rawPreview = String(data: data.prefix(200), encoding: .utf8) ?? "<binary>"
+            logger.error("Failed to decode messageBroadcast — raw: \(rawPreview)")
             return
         }
 
         guard let message = decryptServerMessage(broadcast.message, sessionId: sessionId) else {
+            // decryptServerMessage already logs the specific error
             return
         }
 
@@ -621,10 +709,13 @@ public final class SyncManager: ObservableObject {
     // MARK: - Message Decryption
 
     private func decryptServerMessage(_ entry: ServerMessageEntry, sessionId: String) -> Message? {
-        let decrypted = crypto.decryptOrNil(
-            encryptedBase64: entry.encryptedContent,
-            ivBase64: entry.iv
-        )
+        let decrypted: String?
+        do {
+            decrypted = try crypto.decrypt(encryptedBase64: entry.encryptedContent, ivBase64: entry.iv)
+        } catch {
+            logger.error("Failed to decrypt message \(entry.id) seq=\(entry.sequence) in session \(sessionId): \(error.localizedDescription). encryptedContent length=\(entry.encryptedContent.count), iv length=\(entry.iv.count)")
+            return nil
+        }
 
         return Message(
             id: entry.id,
@@ -760,6 +851,16 @@ public final class SyncManager: ObservableObject {
 
     enum SyncError: Error {
         case sessionNotFound
+    }
+
+    /// Diagnostic information from a session message sync operation.
+    public struct SessionSyncDiagnostic {
+        public let totalServerMessages: Int
+        public let decryptedCount: Int
+        public let storedCount: Int
+        public let failedMessageIds: [String]
+        public let failedSequences: [Int]
+        public let error: String?
     }
 
     // MARK: - Session Actions

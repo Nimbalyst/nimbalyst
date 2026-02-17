@@ -12,6 +12,8 @@ struct IndexSyncResponse: Codable {
     let type: String
     let sessions: [ServerSessionEntry]
     let projects: [ServerProjectEntry]
+    /// Total session count from server COUNT(*) - used to detect truncation
+    let totalSessionCount: Int?
 }
 
 /// A session entry as received from the server (encrypted fields).
