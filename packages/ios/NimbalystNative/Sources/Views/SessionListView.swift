@@ -287,14 +287,14 @@ struct SessionRow: View {
                     ContextUsageBadge(percent: pct)
                 }
 
-                // Status indicators
-                if session.isExecuting {
-                    ProgressView()
-                        .controlSize(.small)
-                } else if session.hasQueuedPrompts {
+                // Status indicators - pending prompt takes priority (it's actionable)
+                if session.hasQueuedPrompts {
                     Image(systemName: "clock.fill")
                         .foregroundStyle(.orange)
                         .font(.caption)
+                } else if session.isExecuting {
+                    ProgressView()
+                        .controlSize(.small)
                 }
             }
         }

@@ -8,7 +8,7 @@ struct ServerMessage: Codable {
 }
 
 /// Full index sync response from the server.
-struct IndexSyncResponse: Codable {
+struct IndexSyncResponse: Codable, @unchecked Sendable {
     let type: String
     let sessions: [ServerSessionEntry]
     let projects: [ServerProjectEntry]
@@ -63,6 +63,7 @@ struct ContextInfo: Codable {
 /// Add new display-only fields here without touching the server.
 struct ClientMetadata: Codable {
     let currentContext: ContextInfo?
+    let hasPendingPrompt: Bool?
 }
 
 /// A project entry as received from the server (encrypted fields).

@@ -208,21 +208,21 @@ public struct SessionDetailView: View {
     private var statusBar: some View {
         if hasStatusInfo {
             HStack(spacing: 12) {
-                if displaySession.isExecuting {
+                if displaySession.hasQueuedPrompts {
+                    HStack(spacing: 6) {
+                        Image(systemName: "clock.fill")
+                            .foregroundStyle(NimbalystColors.warning)
+                            .font(.caption)
+                        Text("Waiting for response")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } else if displaySession.isExecuting {
                     HStack(spacing: 6) {
                         ProgressView()
                             .controlSize(.small)
                             .tint(NimbalystColors.primary)
                         Text("Executing...")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                } else if displaySession.hasQueuedPrompts {
-                    HStack(spacing: 6) {
-                        Image(systemName: "clock.fill")
-                            .foregroundStyle(NimbalystColors.warning)
-                            .font(.caption)
-                        Text("Prompt queued")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }

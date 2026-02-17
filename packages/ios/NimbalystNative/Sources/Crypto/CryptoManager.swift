@@ -11,7 +11,7 @@ import CommonCrypto
 ///   - Encryption: AES-256-GCM
 ///   - IV: 12 bytes, base64-encoded
 ///   - Ciphertext: base64-encoded (ciphertext || 16-byte auth tag)
-public final class CryptoManager {
+public final class CryptoManager: @unchecked Sendable {
     private let key: SymmetricKey
 
     /// Fixed IV for deterministic project ID encryption (base64 of "project_id_i").

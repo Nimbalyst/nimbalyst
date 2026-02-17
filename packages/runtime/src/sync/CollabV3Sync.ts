@@ -406,6 +406,8 @@ interface ClientMetadata {
     tokens: number;
     contextWindow: number;
   };
+  /** Whether there are pending interactive prompts (permissions, questions, plan approvals, git commits) */
+  hasPendingPrompt?: boolean;
 }
 
 /**
@@ -723,6 +725,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       pendingExecution: 'pendingExecution' in pending ? pending.pendingExecution : cached.pendingExecution,
       isExecuting: 'isExecuting' in pending ? pending.isExecuting : cached.isExecuting,
       currentContext: 'currentContext' in pending ? pending.currentContext : cached.currentContext,
+      hasPendingPrompt: 'hasPendingPrompt' in pending ? pending.hasPendingPrompt : cached.hasPendingPrompt,
     };
 
     // Update cache with decrypted values
@@ -760,9 +763,12 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       indexEntry.titleIv = titleIv;
     }
 
-    // Encrypt client metadata (context usage, etc.)
-    if (updatedCache.currentContext) {
-      const clientMeta: ClientMetadata = { currentContext: updatedCache.currentContext };
+    // Encrypt client metadata (context usage, pending prompt state, etc.)
+    if (updatedCache.currentContext || updatedCache.hasPendingPrompt !== undefined) {
+      const clientMeta: ClientMetadata = {
+        currentContext: updatedCache.currentContext,
+        hasPendingPrompt: updatedCache.hasPendingPrompt,
+      };
       const { encryptedClientMetadata, clientMetadataIv } = await encryptClientMetadata(clientMeta, config.encryptionKey);
       indexEntry.encryptedClientMetadata = encryptedClientMetadata;
       indexEntry.clientMetadataIv = clientMetadataIv;
@@ -1079,11 +1085,12 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       isExecuting: broadcast.metadata.isExecuting,
     };
 
-    // Decrypt client metadata (context usage, etc.)
+    // Decrypt client metadata (context usage, pending prompt state, etc.)
     if (broadcast.metadata.encryptedClientMetadata && broadcast.metadata.clientMetadataIv && session.encryptionKey) {
       try {
         const clientMeta = await decryptClientMetadata(broadcast.metadata.encryptedClientMetadata, broadcast.metadata.clientMetadataIv, session.encryptionKey);
         metadata.currentContext = clientMeta.currentContext;
+        metadata.hasPendingPrompt = clientMeta.hasPendingPrompt;
       } catch (err) {
         console.error('[CollabV3] Failed to decrypt client metadata from broadcast:', err);
       }
@@ -1254,12 +1261,14 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
                     }
                   }
 
-                  // Decrypt client metadata (context usage, etc.)
+                  // Decrypt client metadata (context usage, pending prompt state, etc.)
                   let currentContext: CachedSessionIndex['currentContext'];
+                  let hasPendingPrompt: boolean | undefined;
                   if (entry.encryptedClientMetadata && entry.clientMetadataIv && config.encryptionKey) {
                     try {
                       const clientMeta = await decryptClientMetadata(entry.encryptedClientMetadata, entry.clientMetadataIv, config.encryptionKey);
                       currentContext = clientMeta.currentContext;
+                      hasPendingPrompt = clientMeta.hasPendingPrompt;
                     } catch (err) {
                       console.error('[CollabV3] Failed to decrypt client metadata:', err);
                     }
@@ -1280,7 +1289,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
                     isExecuting: entry.isExecuting,
                     queuedPromptCount: entry.queuedPromptCount,
                     queuedPrompts,
-                    hasPendingPrompt: entry.hasPendingPrompt,
+                    hasPendingPrompt: hasPendingPrompt ?? entry.hasPendingPrompt,
                     currentContext,
                     lastReadAt: entry.lastReadAt,
                   };
@@ -1392,11 +1401,14 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
               lastReadAt: entry.lastReadAt,
             };
 
-            // Decrypt client metadata (context usage, etc.)
+            // Decrypt client metadata (context usage, pending prompt state, etc.)
             if (entry.encryptedClientMetadata && entry.clientMetadataIv && config.encryptionKey) {
               try {
                 const clientMeta = await decryptClientMetadata(entry.encryptedClientMetadata, entry.clientMetadataIv, config.encryptionKey);
                 decryptedEntry.currentContext = clientMeta.currentContext;
+                if (clientMeta.hasPendingPrompt !== undefined) {
+                  decryptedEntry.hasPendingPrompt = clientMeta.hasPendingPrompt;
+                }
               } catch (err) {
                 console.error('[CollabV3] Failed to decrypt client metadata:', err);
               }
@@ -1785,10 +1797,11 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       }
       const { encryptedProjectId, projectIdIv } = await encryptProjectId(projectId, config.encryptionKey);
 
-      // Check if we have cached execution state for this session
+      // Check if we have cached execution/prompt state for this session
       const existingCache = sessionIndexCache.get(session.id);
       const pending = pendingMetadataUpdates.get(session.id);
       const cachedIsExecuting = pending?.isExecuting ?? existingCache?.isExecuting;
+      const cachedHasPendingPrompt = pending?.hasPendingPrompt ?? existingCache?.hasPendingPrompt;
 
       const entry: SessionIndexEntry = {
         sessionId: session.id,
@@ -1811,8 +1824,12 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
         entry.titleIv = titleIv;
       }
 
-      // Encrypt client metadata (context usage, etc.) - extracted from raw PGLite metadata
-      const clientMeta = buildClientMetadataFromRaw(session.metadata);
+      // Encrypt client metadata (context usage, pending prompt state, etc.)
+      const rawClientMeta = buildClientMetadataFromRaw(session.metadata);
+      // Merge in cached hasPendingPrompt (transient state not stored in PGLite)
+      const clientMeta: ClientMetadata | undefined = (rawClientMeta || cachedHasPendingPrompt !== undefined)
+        ? { ...rawClientMeta, hasPendingPrompt: cachedHasPendingPrompt }
+        : undefined;
       if (clientMeta) {
         const { encryptedClientMetadata, clientMetadataIv } = await encryptClientMetadata(clientMeta, config.encryptionKey);
         entry.encryptedClientMetadata = encryptedClientMetadata;
@@ -1820,7 +1837,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       }
 
       // Cache the entry with DECRYPTED values for local use
-      // Preserve isExecuting from existing cache or pending updates
+      // Preserve isExecuting and hasPendingPrompt from existing cache or pending updates
       const cacheEntry: CachedSessionIndex = {
         sessionId: session.id,
         projectId: projectId, // Store decrypted
@@ -1834,6 +1851,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
         updatedAt: session.updatedAt,
         currentContext: clientMeta?.currentContext,
         isExecuting: cachedIsExecuting,
+        hasPendingPrompt: cachedHasPendingPrompt,
       };
       sessionIndexCache.set(session.id, cacheEntry);
 
@@ -2028,17 +2046,26 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
 
     async pushChange(sessionId: string, change: SessionChange): Promise<void> {
       const session = sessions.get(sessionId);
-      if (!session || !session.status.connected) {
-        console.warn('[CollabV3] Cannot push change - not connected:', sessionId);
+      const sessionConnected = session?.status.connected;
+
+      // For metadata-only updates (like hasPendingPrompt, isExecuting), we can push to the
+      // index room even without a session room connection. The session room is only opened
+      // when a user enters a session to sync messages - but index metadata updates should
+      // always go through as long as the index WebSocket is connected.
+      const canPushIndexOnly = change.type === 'metadata_updated' && indexWs && indexConnected && config.encryptionKey;
+
+      if (!sessionConnected && !canPushIndexOnly) {
+        console.warn('[CollabV3] Cannot push change - not connected:', sessionId, 'sessionExists:', !!session, 'indexConnected:', indexConnected, 'hasKey:', !!config.encryptionKey);
         return;
       }
+      // console.log('[CollabV3] pushChange:', sessionId, 'type:', change.type, 'sessionConnected:', sessionConnected, 'indexOnly:', !sessionConnected && canPushIndexOnly);
 
-      let clientMessage: ClientMessage;
+      let clientMessage: ClientMessage | undefined;
 
       switch (change.type) {
         case 'message_added': {
-          if (!session.encryptionKey) {
-            console.warn('[CollabV3] Cannot push message - no encryption key');
+          if (!session?.encryptionKey) {
+            console.warn('[CollabV3] Cannot push message - no encryption key or session room not connected');
             return;
           }
           try {
@@ -2061,48 +2088,50 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
         case 'metadata_updated': {
           const metadata: Partial<SessionMetadata> = {};
 
-          // Encrypt title - encryption is required
-          if (change.metadata.title) {
-            if (!session.encryptionKey) {
-              console.error('[CollabV3] Cannot send session title: no encryption key');
-            } else {
-              const { encryptedTitle, titleIv } = await encryptTitle(change.metadata.title, session.encryptionKey);
-              metadata.encryptedTitle = encryptedTitle;
-              metadata.titleIv = titleIv;
-            }
+          // Encrypt title
+          if (change.metadata.title && config.encryptionKey) {
+            const { encryptedTitle, titleIv } = await encryptTitle(change.metadata.title, config.encryptionKey);
+            metadata.encryptedTitle = encryptedTitle;
+            metadata.titleIv = titleIv;
           }
 
           if (change.metadata.provider) metadata.provider = change.metadata.provider;
           if (change.metadata.model) metadata.model = change.metadata.model;
           if (change.metadata.mode) metadata.mode = change.metadata.mode as SessionMetadata['mode'];
-          // pendingExecution can be set or explicitly cleared (undefined)
           if ('pendingExecution' in change.metadata) {
             metadata.pendingExecution = change.metadata.pendingExecution;
           }
-          // isExecuting can be set or explicitly cleared
           if ('isExecuting' in change.metadata) {
             metadata.isExecuting = change.metadata.isExecuting;
           }
-          // Encrypt queued prompts - encryption is required
+          // Encrypt queued prompts
           if ('queuedPrompts' in change.metadata) {
             if (change.metadata.queuedPrompts && change.metadata.queuedPrompts.length > 0) {
-              if (!session.encryptionKey) {
+              if (!config.encryptionKey) {
                 throw new Error('[CollabV3] Cannot send queued prompts: no encryption key available');
               }
-              metadata.encryptedQueuedPrompts = await encryptQueuedPrompts(change.metadata.queuedPrompts, session.encryptionKey);
+              metadata.encryptedQueuedPrompts = await encryptQueuedPrompts(change.metadata.queuedPrompts, config.encryptionKey);
             } else {
-              // Explicitly cleared (undefined, null, or empty array)
               metadata.encryptedQueuedPrompts = undefined;
             }
           }
-          // Encrypt client metadata (context usage, etc.)
-          if ('currentContext' in change.metadata && change.metadata.currentContext && session.encryptionKey) {
-            const clientMeta: ClientMetadata = { currentContext: change.metadata.currentContext };
-            const encrypted = await encryptClientMetadata(clientMeta, session.encryptionKey);
+          // Encrypt client metadata (context usage, pending prompt state, etc.)
+          const hasClientMetaFields = ('currentContext' in change.metadata && change.metadata.currentContext) ||
+            ('hasPendingPrompt' in change.metadata);
+          if (hasClientMetaFields && config.encryptionKey) {
+            const cached = sessionIndexCache.get(sessionId);
+            const clientMeta: ClientMetadata = {
+              currentContext: ('currentContext' in change.metadata ? change.metadata.currentContext : cached?.currentContext) || undefined,
+              hasPendingPrompt: 'hasPendingPrompt' in change.metadata ? change.metadata.hasPendingPrompt : cached?.hasPendingPrompt,
+            };
+            const encrypted = await encryptClientMetadata(clientMeta, config.encryptionKey);
             metadata.encryptedClientMetadata = encrypted.encryptedClientMetadata;
             metadata.clientMetadataIv = encrypted.clientMetadataIv;
           }
-          clientMessage = { type: 'updateMetadata', metadata };
+          // Only send to session room if connected; index-only updates skip this
+          if (sessionConnected) {
+            clientMessage = { type: 'updateMetadata', metadata };
+          }
           break;
         }
 
@@ -2112,14 +2141,17 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
           break;
       }
 
-      try {
-        const json = JSON.stringify(clientMessage);
-        // console.log('[CollabV3] Sending message, length:', json.length);
-        session.ws.send(json);
-        // Update activity timestamp on message send
-        session.lastActivity = Date.now();
-      } catch (err) {
-        console.error('[CollabV3] Failed to send message:', err);
+      // Send to session room (if connected and we have a message to send)
+      if (clientMessage && sessionConnected) {
+        try {
+          const json = JSON.stringify(clientMessage);
+          // console.log('[CollabV3] Sending message, length:', json.length);
+          session.ws.send(json);
+          // Update activity timestamp on message send
+          session.lastActivity = Date.now();
+        } catch (err) {
+          console.error('[CollabV3] Failed to send message:', err);
+        }
       }
 
       // Handle index updates based on change type
@@ -2137,14 +2169,13 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
 
           // Helper to build and send encrypted index entry
           const sendIndexUpdate = async (baseEntry: CachedSessionIndex) => {
-            // Encryption is required for all entries
-            if (!session.encryptionKey) {
+            if (!config.encryptionKey) {
               console.error('[CollabV3] Cannot send session update: no encryption key');
               return;
             }
 
             // Encrypt projectId for wire
-            const { encryptedProjectId, projectIdIv } = await encryptProjectId(baseEntry.projectId, session.encryptionKey);
+            const { encryptedProjectId, projectIdIv } = await encryptProjectId(baseEntry.projectId, config.encryptionKey);
 
             // Start with the cache entry (stores decrypted values)
             const indexEntry: SessionIndexEntry = {
@@ -2165,15 +2196,18 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
 
             // Encrypt title for wire
             if (baseEntry.title) {
-              const { encryptedTitle, titleIv } = await encryptTitle(baseEntry.title, session.encryptionKey);
+              const { encryptedTitle, titleIv } = await encryptTitle(baseEntry.title, config.encryptionKey);
               indexEntry.encryptedTitle = encryptedTitle;
               indexEntry.titleIv = titleIv;
             }
 
             // Encrypt client metadata for wire
-            if (baseEntry.currentContext) {
-              const clientMeta: ClientMetadata = { currentContext: baseEntry.currentContext };
-              const { encryptedClientMetadata, clientMetadataIv } = await encryptClientMetadata(clientMeta, session.encryptionKey);
+            if (baseEntry.currentContext || baseEntry.hasPendingPrompt !== undefined) {
+              const clientMeta: ClientMetadata = {
+                currentContext: baseEntry.currentContext,
+                hasPendingPrompt: baseEntry.hasPendingPrompt,
+              };
+              const { encryptedClientMetadata, clientMetadataIv } = await encryptClientMetadata(clientMeta, config.encryptionKey);
               indexEntry.encryptedClientMetadata = encryptedClientMetadata;
               indexEntry.clientMetadataIv = clientMetadataIv;
             }
@@ -2181,6 +2215,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
             // Update local cache with decrypted values
             sessionIndexCache.set(sessionId, baseEntry);
 
+            // console.log('[CollabV3] sendIndexUpdate:', sessionId, 'hasPendingPrompt:', baseEntry.hasPendingPrompt, 'hasEncryptedClientMeta:', !!indexEntry.encryptedClientMetadata);
             const indexMsg: ClientMessage = { type: 'indexUpdate', session: indexEntry };
             indexWs!.send(JSON.stringify(indexMsg));
           };
@@ -2201,6 +2236,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
               pendingExecution: 'pendingExecution' in meta ? meta.pendingExecution : cached.pendingExecution,
               isExecuting: 'isExecuting' in meta ? meta.isExecuting : cached.isExecuting,
               currentContext: 'currentContext' in meta ? meta.currentContext : cached.currentContext,
+              hasPendingPrompt: 'hasPendingPrompt' in meta ? meta.hasPendingPrompt : cached.hasPendingPrompt,
               lastReadAt: 'lastReadAt' in meta ? (meta as any).lastReadAt : cached.lastReadAt,
             };
             await sendIndexUpdate(updatedCache);
@@ -2220,6 +2256,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
               pendingExecution: meta.pendingExecution,
               isExecuting: meta.isExecuting,
               currentContext: meta.currentContext,
+              hasPendingPrompt: meta.hasPendingPrompt,
               lastReadAt: (meta as any).lastReadAt,
             };
             await sendIndexUpdate(newEntry);

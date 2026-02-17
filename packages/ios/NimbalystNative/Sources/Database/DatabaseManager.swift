@@ -3,7 +3,7 @@ import GRDB
 
 /// Manages the local SQLite database using GRDB.
 /// Provides database access, migrations, and observation for reactive UI updates.
-public final class DatabaseManager {
+public final class DatabaseManager: @unchecked Sendable {
     /// The underlying database writer (DatabasePool for file, DatabaseQueue for in-memory).
     public let writer: any DatabaseWriter
 

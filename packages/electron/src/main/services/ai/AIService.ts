@@ -1835,10 +1835,22 @@ export class AIService {
       provider.removeAllListeners('message:logged');
       provider.on('message:logged', onMessageLogged);
 
+      // Helper to sync pending prompt state to mobile
+      const syncPendingPrompt = (sessionId: string, hasPendingPrompt: boolean) => {
+        const sp = getSyncProvider();
+        if (sp) {
+          sp.pushChange(sessionId, {
+            type: 'metadata_updated',
+            metadata: { hasPendingPrompt, updatedAt: Date.now() },
+          });
+        }
+      };
+
       // Listen for ExitPlanMode confirmation requests and forward to renderer
       const onExitPlanModeConfirm = (data: { requestId: string; sessionId: string; planSummary: string; timestamp: number }) => {
         logger.main.info('[AIService] ExitPlanMode confirmation requested:', data.requestId);
         safeSend(event, 'ai:exitPlanModeConfirm', data);
+        syncPendingPrompt(data.sessionId, true);
 
         // Show OS notification if app is backgrounded
         const sessionTitle = session.title || 'AI Session';
@@ -1856,6 +1868,7 @@ export class AIService {
       const onAskUserQuestion = (data: { questionId: string; sessionId: string; questions: any[]; timestamp: number }) => {
         // logger.main.info('[AIService] AskUserQuestion requested:', data.questionId);
         safeSend(event, 'ai:askUserQuestion', data);
+        syncPendingPrompt(data.sessionId, true);
 
         // Show OS notification if app is backgrounded
         const sessionTitle = session.title || 'AI Session';
@@ -1873,6 +1886,7 @@ export class AIService {
       const onAskUserQuestionAnswered = (data: { questionId: string; sessionId: string; questions: any[]; answers: Record<string, string>; timestamp: number }) => {
         // logger.main.info('[AIService] AskUserQuestion answered:', data.questionId);
         safeSend(event, 'ai:askUserQuestionAnswered', data);
+        syncPendingPrompt(data.sessionId, false);
       };
       provider.removeAllListeners('askUserQuestion:answered');
       provider.on('askUserQuestion:answered', onAskUserQuestionAnswered);
@@ -1881,6 +1895,7 @@ export class AIService {
       const onToolPermissionPending = (data: { requestId: string; sessionId: string; workspacePath: string; request: any; timestamp: number }) => {
         logger.main.info('[AIService] Tool permission requested:', data.requestId);
         safeSend(event, 'ai:toolPermission', data);
+        syncPendingPrompt(data.sessionId, true);
 
         // Show OS notification if app is backgrounded
         const sessionTitle = session.title || 'AI Session';
@@ -1902,6 +1917,7 @@ export class AIService {
       const onToolPermissionResolved = (data: { requestId: string; sessionId: string; response: any; timestamp: number }) => {
         logger.main.info('[AIService] Tool permission resolved:', data.requestId);
         safeSend(event, 'ai:toolPermissionResolved', data);
+        syncPendingPrompt(data.sessionId, false);
       };
       provider.removeAllListeners('toolPermission:resolved');
       provider.on('toolPermission:resolved', onToolPermissionResolved);
@@ -2851,11 +2867,11 @@ export class AIService {
           }
         }
 
-        // Clear executing flag for mobile sync
+        // Clear executing and pending prompt flags for mobile sync
         if (syncProvider) {
           syncProvider.pushChange(session.id, {
             type: 'metadata_updated',
-            metadata: { isExecuting: false } as any,
+            metadata: { isExecuting: false, hasPendingPrompt: false, updatedAt: Date.now() },
           });
         }
 
@@ -2969,11 +2985,11 @@ export class AIService {
             await stateManager.endSession(session.id);
           }
 
-          // Clear executing flag for mobile sync on error
+          // Clear executing and pending prompt flags for mobile sync on error
           if (syncProvider) {
             syncProvider.pushChange(session.id, {
               type: 'metadata_updated',
-              metadata: { isExecuting: false } as any,
+              metadata: { isExecuting: false, hasPendingPrompt: false, updatedAt: Date.now() },
             });
 
             // Request mobile push notification for agent error
@@ -3428,6 +3444,15 @@ export class AIService {
           if (!win.webContents.isDestroyed()) {
             win.webContents.send('ai:exitPlanModeResolved', { sessionId, approved: response.approved });
           }
+        }
+
+        // Clear pending prompt state for mobile sync
+        const syncProvider = getSyncProvider();
+        if (syncProvider) {
+          syncProvider.pushChange(sessionId, {
+            type: 'metadata_updated',
+            metadata: { hasPendingPrompt: false, updatedAt: Date.now() },
+          });
         }
 
         return { success: true };

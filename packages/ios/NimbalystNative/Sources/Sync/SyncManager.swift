@@ -198,36 +198,136 @@ public final class SyncManager: ObservableObject {
         }
         logger.info("Index sync received: \(response.sessions.count) sessions, \(response.projects.count) projects (server total: \(response.totalSessionCount.map(String.init) ?? "unknown"))")
 
-        // Process projects
-        for serverProject in response.projects {
-            processServerProject(serverProject)
-        }
-
-        // Process sessions - track success/failure counts
-        var processedCount = 0
-        var failedDecryptCount = 0
-        for serverSession in response.sessions {
-            if processServerSessionWithResult(serverSession) {
-                processedCount += 1
-            } else {
-                failedDecryptCount += 1
+        // Heavy crypto + DB work runs off the main thread to avoid UI freezes
+        let crypto = self.crypto
+        let database = self.database
+        Task.detached {
+            // Process projects
+            for serverProject in response.projects {
+                Self.processServerProjectBackground(serverProject, crypto: crypto, database: database)
             }
+
+            // Process sessions - track success/failure counts
+            var processedCount = 0
+            var failedDecryptCount = 0
+            for serverSession in response.sessions {
+                if Self.processServerSessionBackground(serverSession, crypto: crypto, database: database) {
+                    processedCount += 1
+                } else {
+                    failedDecryptCount += 1
+                }
+            }
+            if failedDecryptCount > 0 {
+                let logger = Logger(subsystem: "com.nimbalyst.app", category: "SyncManager")
+                logger.warning("Session processing: \(processedCount) succeeded, \(failedDecryptCount) failed to decrypt")
+            }
+
+            // Recalculate project stats from session data (more reliable than server-side stats)
+            do {
+                try database.refreshAllProjectStats()
+            } catch {
+                let logger = Logger(subsystem: "com.nimbalyst.app", category: "SyncManager")
+                logger.error("Failed to refresh project stats: \(error.localizedDescription)")
+            }
+
+            // Update sync state watermark
+            let now = Int(Date().timeIntervalSince1970 * 1000)
+            let syncState = SyncState(roomId: "index", lastCursor: nil, lastSequence: 0, lastSyncedAt: now)
+            try? database.updateSyncState(syncState)
         }
-        if failedDecryptCount > 0 {
-            logger.warning("Session processing: \(processedCount) succeeded, \(failedDecryptCount) failed to decrypt")
+    }
+
+    // MARK: - Background Processing Helpers
+
+    /// Process a server project entry on a background thread.
+    private nonisolated static func processServerProjectBackground(_ entry: ServerProjectEntry, crypto: CryptoManager, database: DatabaseManager) {
+        let logger = Logger(subsystem: "com.nimbalyst.app", category: "SyncManager")
+
+        guard let projectId = crypto.decryptOrNil(
+            encryptedBase64: entry.encryptedProjectId,
+            ivBase64: entry.projectIdIv
+        ) else {
+            logger.warning("Failed to decrypt project ID")
+            return
         }
 
-        // Recalculate project stats from session data (more reliable than server-side stats)
+        let name = (projectId as NSString).lastPathComponent
+        let project = Project(
+            id: projectId,
+            name: name,
+            sessionCount: entry.sessionCount ?? 0,
+            lastUpdatedAt: entry.lastActivityAt
+        )
+
         do {
-            try database.refreshAllProjectStats()
+            try database.upsertProject(project)
         } catch {
-            logger.error("Failed to refresh project stats: \(error.localizedDescription)")
+            logger.error("Failed to upsert project: \(error.localizedDescription)")
+        }
+    }
+
+    /// Process a server session entry on a background thread. Returns true on success.
+    @discardableResult
+    private nonisolated static func processServerSessionBackground(_ entry: ServerSessionEntry, crypto: CryptoManager, database: DatabaseManager) -> Bool {
+        let logger = Logger(subsystem: "com.nimbalyst.app", category: "SyncManager")
+
+        guard let projectId = crypto.decryptOrNil(
+            encryptedBase64: entry.encryptedProjectId,
+            ivBase64: entry.projectIdIv
+        ) else {
+            logger.warning("Failed to decrypt project ID for session \(entry.sessionId)")
+            return false
         }
 
-        // Update sync state watermark
-        let now = Int(Date().timeIntervalSince1970 * 1000)
-        let syncState = SyncState(roomId: "index", lastCursor: nil, lastSequence: 0, lastSyncedAt: now)
-        try? database.updateSyncState(syncState)
+        // Ensure the project exists
+        if (try? database.writer.read({ db in try Project.fetchOne(db, id: projectId) })) == nil {
+            let projectName = (projectId as NSString).lastPathComponent
+            let project = Project(id: projectId, name: projectName, lastUpdatedAt: entry.updatedAt)
+            try? database.upsertProject(project)
+        }
+
+        let titleDecrypted = crypto.decryptOrNil(
+            encryptedBase64: entry.encryptedTitle,
+            ivBase64: entry.titleIv
+        )
+
+        let existing = try? database.session(byId: entry.sessionId)
+
+        var clientMeta: ClientMetadata?
+        if let encryptedMeta = entry.encryptedClientMetadata,
+           let metaIv = entry.clientMetadataIv,
+           let metaJson = crypto.decryptOrNil(encryptedBase64: encryptedMeta, ivBase64: metaIv),
+           let metaData = metaJson.data(using: .utf8) {
+            clientMeta = try? JSONDecoder().decode(ClientMetadata.self, from: metaData)
+        }
+
+        let session = Session(
+            id: entry.sessionId,
+            projectId: projectId,
+            titleEncrypted: entry.encryptedTitle,
+            titleIv: entry.titleIv,
+            titleDecrypted: titleDecrypted,
+            provider: entry.provider,
+            model: entry.model,
+            mode: entry.mode,
+            isExecuting: entry.isExecuting ?? existing?.isExecuting ?? false,
+            hasQueuedPrompts: clientMeta?.hasPendingPrompt ?? entry.hasPendingPrompt ?? existing?.hasQueuedPrompts ?? false,
+            contextTokens: clientMeta?.currentContext?.tokens ?? existing?.contextTokens,
+            contextWindow: clientMeta?.currentContext?.contextWindow ?? existing?.contextWindow,
+            createdAt: entry.createdAt,
+            updatedAt: entry.updatedAt,
+            lastReadAt: entry.lastReadAt ?? existing?.lastReadAt,
+            lastMessageAt: entry.lastMessageAt ?? existing?.lastMessageAt
+        )
+
+        do {
+            try database.upsertSession(session)
+            try database.updateProjectLastActivity(projectId: projectId, activityAt: entry.updatedAt)
+            return true
+        } catch {
+            logger.error("Failed to upsert session: \(error.localizedDescription)")
+            return false
+        }
     }
 
     // MARK: - Process Server Entries
@@ -312,7 +412,7 @@ public final class SyncManager: ObservableObject {
             model: entry.model,
             mode: entry.mode,
             isExecuting: entry.isExecuting ?? existing?.isExecuting ?? false,
-            hasQueuedPrompts: entry.hasPendingPrompt ?? false,
+            hasQueuedPrompts: clientMeta?.hasPendingPrompt ?? entry.hasPendingPrompt ?? existing?.hasQueuedPrompts ?? false,
             contextTokens: clientMeta?.currentContext?.tokens ?? existing?.contextTokens,
             contextWindow: clientMeta?.currentContext?.contextWindow ?? existing?.contextWindow,
             createdAt: entry.createdAt,
@@ -697,7 +797,7 @@ public final class SyncManager: ObservableObject {
                 if let mode = broadcast.metadata.mode {
                     session.mode = mode
                 }
-                // Decrypt client metadata (context usage, etc.)
+                // Decrypt client metadata (context usage, pending prompt state, etc.)
                 if let encryptedMeta = broadcast.metadata.encryptedClientMetadata,
                    let metaIv = broadcast.metadata.clientMetadataIv,
                    let metaJson = crypto.decryptOrNil(encryptedBase64: encryptedMeta, ivBase64: metaIv),
@@ -706,6 +806,9 @@ public final class SyncManager: ObservableObject {
                     if let ctx = clientMeta.currentContext {
                         session.contextTokens = ctx.tokens
                         session.contextWindow = ctx.contextWindow
+                    }
+                    if let pending = clientMeta.hasPendingPrompt {
+                        session.hasQueuedPrompts = pending
                     }
                 }
                 if let updatedAt = broadcast.metadata.updatedAt {

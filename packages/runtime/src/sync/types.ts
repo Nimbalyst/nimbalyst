@@ -304,6 +304,8 @@ export interface SyncedSessionMetadata {
     tokens: number;         // Current tokens in context window
     contextWindow: number;  // Max context window size
   };
+  /** Whether there are pending interactive prompts (permissions, questions, plan approvals, git commits) */
+  hasPendingPrompt?: boolean;
   /** Unix timestamp ms when this session was last read by any device */
   lastReadAt?: number;
 }
