@@ -48,6 +48,7 @@ import { errorNotificationService } from '../../services/ErrorNotificationServic
 import { initWorkstreamState, loadWorkstreamStates, workstreamStateAtom, workstreamActiveChildAtom, setWorkstreamActiveChildAtom, setWorktreeActiveSessionAtom } from '../../store/atoms/workstreamState';
 import { initSessionStateListeners } from '../../store/sessionStateListeners';
 import { initFileStateListeners } from '../../store/listeners/fileStateListeners';
+import { initFileTreeListeners } from '../../store/listeners/fileTreeListeners';
 import { initSessionListListeners } from '../../store/listeners/sessionListListeners';
 import { initSessionTranscriptListeners } from '../../store/listeners/sessionTranscriptListeners';
 import { initClaudeUsageListeners } from '../../store/listeners/claudeUsageListeners';
@@ -194,6 +195,13 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
   useEffect(() => {
     if (!workspacePath) return;
     const cleanup = initFileStateListeners(workspacePath);
+    return cleanup;
+  }, [workspacePath]);
+
+  // Initialize file tree listeners (global, runs once per workspace)
+  useEffect(() => {
+    if (!workspacePath) return;
+    const cleanup = initFileTreeListeners(workspacePath);
     return cleanup;
   }, [workspacePath]);
 

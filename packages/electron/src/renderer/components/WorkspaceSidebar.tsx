@@ -1,5 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback, useSyncExternalStore } from 'react';
-import { FileTree, FileGitStatus } from './FileTree';
+import { useAtomValue } from 'jotai';
+import { FlatFileTree } from './FlatFileTree';
+import type { RendererFileTreeItem } from '../store';
 import { InputModal } from './InputModal';
 import { NewFileDialog } from './NewFileDialog';
 import { PlansPanel } from './PlansPanel/PlansPanel';
@@ -10,15 +12,14 @@ import { getFileName } from '../utils/pathUtils';
 import { getExtensionLoader } from '@nimbalyst/runtime';
 import { KeyboardShortcuts } from '../../shared/KeyboardShortcuts';
 import { HelpTooltip } from '../help';
-import { store, gitStatusMapAtom, type FileGitStatus as AtomFileGitStatus } from '../store';
+import { store, gitStatusMapAtom, revealRequestAtom, rawFileTreeAtom, type FileGitStatus as AtomFileGitStatus } from '../store';
+import { refreshFileTree } from '../store/listeners/fileTreeListeners';
 import { useTabsActions } from '../contexts/TabsContext';
 
-interface FileTreeItem {
-  name: string;
-  path: string;
-  type: 'file' | 'directory';
-  children?: FileTreeItem[];
-}
+type FileTreeItem = RendererFileTreeItem;
+
+/** Legacy git status type used for prop-based filtering. */
+type FileGitStatus = 'modified' | 'staged' | 'untracked' | 'deleted';
 
 interface WorkspaceSidebarProps {
   workspaceName: string;
@@ -157,8 +158,8 @@ export function WorkspaceSidebar({
   const activeTab = tabsStore.activeTabId ? tabsStore.tabs.get(tabsStore.activeTabId) : null;
   const currentFilePath = activeTab?.filePath ?? currentFilePathProp;
 
-  // File tree state - managed internally to avoid parent re-renders
-  const [fileTree, setFileTree] = useState<FileTreeItem[]>([]);
+  // File tree state - read from centralized atom (populated by fileTreeListeners.ts)
+  const fileTree = useAtomValue(rawFileTreeAtom);
   const [isFileModalOpen, setIsFileModalOpen] = useState(false);
   const [isFolderModalOpen, setIsFolderModalOpen] = useState(false);
   const [isDragOverRoot, setIsDragOverRoot] = useState(false);
@@ -209,43 +210,9 @@ export function WorkspaceSidebar({
     return unsubscribe;
   }, []);
 
-  // Load file tree and subscribe to updates
-  useEffect(() => {
-    if (!workspacePath || !window.electronAPI?.getFolderContents) return undefined;
-
-    const loadFileTree = async () => {
-      try {
-        const tree = await window.electronAPI.getFolderContents(workspacePath);
-        setFileTree(tree);
-      } catch (error) {
-        console.error('Error loading file tree:', error);
-      }
-    };
-
-    loadFileTree();
-
-    // Listen for file tree updates via the proper IPC handler
-    if (window.electronAPI?.onWorkspaceFileTreeUpdated) {
-      const cleanup = window.electronAPI.onWorkspaceFileTreeUpdated((data) => {
-        setFileTree(data.fileTree);
-      });
-
-      return cleanup;
-    }
-
-    return undefined;
-  }, [workspacePath]);
-
-  // Refresh file tree handler
+  // Refresh file tree handler -- delegates to centralized listener
   const handleRefreshFileTree = useCallback(async () => {
-    if (workspacePath && window.electronAPI?.getFolderContents) {
-      try {
-        const tree = await window.electronAPI.getFolderContents(workspacePath);
-        setFileTree(tree);
-      } catch (error) {
-        console.error('Error refreshing file tree:', error);
-      }
-    }
+    await refreshFileTree(workspacePath);
   }, [workspacePath]);
 
   const handleFolderContentsLoaded = useCallback((folderPath: string, contents: FileTreeItem[]) => {
@@ -254,14 +221,16 @@ export function WorkspaceSidebar({
     const normalizedFolderPath = normalizeFilePath(folderPath);
     const normalizedWorkspacePath = workspacePath ? normalizeFilePath(workspacePath) : '';
 
-    setFileTree(prevTree => {
-      if (normalizedWorkspacePath && normalizedFolderPath === normalizedWorkspacePath) {
-        return contents;
-      }
+    const prevTree = store.get(rawFileTreeAtom);
+    if (normalizedWorkspacePath && normalizedFolderPath === normalizedWorkspacePath) {
+      store.set(rawFileTreeAtom, contents);
+      return;
+    }
 
-      const [updatedTree, changed] = replaceFolderChildren(prevTree, normalizedFolderPath, contents);
-      return changed ? updatedTree : prevTree;
-    });
+    const [updatedTree, changed] = replaceFolderChildren(prevTree, normalizedFolderPath, contents);
+    if (changed) {
+      store.set(rawFileTreeAtom, updatedTree);
+    }
   }, [workspacePath]);
 
   // Load file tree settings from workspace state
@@ -619,6 +588,19 @@ export function WorkspaceSidebar({
       }
     };
   }, [currentAISessionId, loadClaudeSessionFiles]);
+
+  // Clear file tree filter when a reveal request comes in (so the target file is visible)
+  const fileTreeFilterRef = useRef(fileTreeFilter);
+  fileTreeFilterRef.current = fileTreeFilter;
+  useEffect(() => {
+    const unsub = store.sub(revealRequestAtom, () => {
+      const req = store.get(revealRequestAtom);
+      if (req && fileTreeFilterRef.current !== 'all') {
+        setFileTreeFilter('all');
+      }
+    });
+    return unsub;
+  }, []);
 
   // Check if workspace is a git repository
   useEffect(() => {
@@ -1211,11 +1193,10 @@ export function WorkspaceSidebar({
                 </button>
               </div>
             ) : (
-              <FileTree
+              <FlatFileTree
                 items={filteredFileTree}
                 currentFilePath={currentFilePath}
                 onFileSelect={handleFileSelect}
-                level={0}
                 showIcons={showFileIcons}
                 enableAutoScroll={enableAutoScroll}
                 onNewFile={handleNewFileInFolder}
@@ -1224,9 +1205,7 @@ export function WorkspaceSidebar({
                 onFolderContentsLoaded={handleFolderContentsLoaded}
                 onViewHistory={onViewHistory}
                 onViewWorkspaceHistory={onViewWorkspaceHistory}
-                selectedFolder={selectedFolder}
                 onFolderSelect={handleSelectedFolderChange}
-                gitStatusMap={showGitStatus ? gitFileStatuses : undefined}
                 extensionFileTypes={extensionFileTypes}
               />
             )}

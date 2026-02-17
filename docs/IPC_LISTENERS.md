@@ -50,6 +50,7 @@ DO NOT add component-level IPC subscriptions for these events:
 - **Session state** (`store/sessionStateListeners.ts`): Session-level state updates
 - **Session transcript** (`store/listeners/sessionTranscriptListeners.ts`): Message reloads
 - **Claude usage** (`store/listeners/claudeUsageListeners.ts`): Usage tracking
+- **File tree** (`store/listeners/fileTreeListeners.ts`): `workspace-file-tree-updated` → `rawFileTreeAtom`
 
 ## When Adding New IPC Events
 
