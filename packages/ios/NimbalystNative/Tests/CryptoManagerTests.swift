@@ -12,7 +12,7 @@ final class CryptoManagerTests: XCTestCase {
     static let salt = "nimbalyst:user-test-12345"
     static let expectedKeyBase64 = "cVkuSqOYHOm1+QB5kTWOvRCHFzqKzjtsU+7XVBvX8fg="
 
-    static var crypto: CryptoManager!
+    nonisolated(unsafe) static var crypto: CryptoManager!
 
     override class func setUp() {
         super.setUp()

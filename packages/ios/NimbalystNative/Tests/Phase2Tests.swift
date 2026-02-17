@@ -144,7 +144,7 @@ final class Phase2Tests: XCTestCase {
 
     // MARK: - GRDB ValueObservation
 
-    func testValueObservationDetectsInsert() throws {
+    @MainActor func testValueObservationDetectsInsert() throws {
         let db = try DatabaseManager()
         let expectation = XCTestExpectation(description: "Observation fires on insert")
 
@@ -180,7 +180,7 @@ final class Phase2Tests: XCTestCase {
         XCTAssertEqual(observedProjects.last?.first?.name, "TestProject")
     }
 
-    func testValueObservationDetectsSessionDelete() throws {
+    @MainActor func testValueObservationDetectsSessionDelete() throws {
         let db = try DatabaseManager()
 
         // Pre-populate

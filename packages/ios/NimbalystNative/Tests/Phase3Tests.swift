@@ -29,7 +29,7 @@ final class Phase3Tests: XCTestCase {
 
     // MARK: - Message Observation
 
-    func testMessageObservationDetectsNewMessages() throws {
+    @MainActor func testMessageObservationDetectsNewMessages() throws {
         let db = try makeDB()
         let session = try makeSession(db: db)
 

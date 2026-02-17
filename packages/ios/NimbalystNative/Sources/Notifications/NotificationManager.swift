@@ -90,7 +90,7 @@ public final class NotificationManager: NSObject, ObservableObject {
     }
 
     /// Build the `register_push_token` message for the sync server.
-    public static func makeRegisterTokenMessage(token: String, deviceId: String) -> RegisterPushTokenMessage {
+    nonisolated public static func makeRegisterTokenMessage(token: String, deviceId: String) -> RegisterPushTokenMessage {
         return RegisterPushTokenMessage(
             token: token,
             platform: "ios",
