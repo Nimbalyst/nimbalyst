@@ -67,7 +67,10 @@ interface AgentTranscriptPanelProps {
   // Note: Interactive widgets read their host from interactiveWidgetHostAtom(sessionId)
 }
 
-const AgentTranscriptPanelComponent: React.FC<AgentTranscriptPanelProps> = ({
+const AgentTranscriptPanelComponent = React.forwardRef<
+  { scrollToMessage: (index: number) => void; scrollToTop: () => void },
+  AgentTranscriptPanelProps
+>(({
   sessionId,
   sessionData,
   todos = [],
@@ -93,7 +96,7 @@ const AgentTranscriptPanelComponent: React.FC<AgentTranscriptPanelProps> = ({
   externalEditorName,
   onCompact,
   promptAdditions
-}) => {
+}, ref) => {
   // Show floating actions if explicitly enabled, otherwise default to showing when sidebar is visible
   const shouldShowFloatingActions = showFloatingActions ?? !hideSidebar;
   // Prefer worktree path for worktree sessions, then prop, then sessionData
@@ -112,7 +115,7 @@ const AgentTranscriptPanelComponent: React.FC<AgentTranscriptPanelProps> = ({
 
   const [prompts, setPrompts] = useState<PromptMarker[]>([]);
   const [fileEdits, setFileEdits] = useState<FileEditSummary[]>([]);
-  const transcriptRef = useRef<{ scrollToMessage: (index: number) => void }>(null);
+  const transcriptRef = useRef<{ scrollToMessage: (index: number) => void; scrollToTop: () => void }>(null);
 
   // Resize logic
   const [isDragging, setIsDragging] = useState(false);
@@ -249,6 +252,16 @@ const AgentTranscriptPanelComponent: React.FC<AgentTranscriptPanelProps> = ({
   const handleNavigateToPrompt = useCallback((marker: PromptMarker) => {
     transcriptRef.current?.scrollToMessage(marker.outputIndex);
   }, []);
+
+  // Expose methods to parent via ref
+  React.useImperativeHandle(ref, () => ({
+    scrollToMessage: (index: number) => {
+      transcriptRef.current?.scrollToMessage(index);
+    },
+    scrollToTop: () => {
+      transcriptRef.current?.scrollToTop();
+    }
+  }), []);
 
   // Handle resize drag
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -402,7 +415,7 @@ const AgentTranscriptPanelComponent: React.FC<AgentTranscriptPanelProps> = ({
       )}
     </div>
   );
-};
+});
 
 /**
  * Memoized version of AgentTranscriptPanel.

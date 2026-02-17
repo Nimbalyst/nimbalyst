@@ -157,6 +157,7 @@ function TranscriptApp() {
   const [rawMessages, setRawMessages] = useState<BridgeMessage[]>([]);
   const [metadata, setMetadata] = useState<BridgeMetadataUpdate>({});
   const rawMessagesRef = useRef<BridgeMessage[]>([]);
+  const transcriptRef = useRef<{ scrollToMessage: (index: number) => void; scrollToTop: () => void }>(null);
 
   // Track sessionId in a ref so clearSession can access it without re-running the effect
   const sessionIdRef = useRef<string | null>(null);
@@ -203,16 +204,14 @@ function TranscriptApp() {
       },
 
       scrollToTop() {
-        const scrollContainer = document.querySelector('.rich-transcript-scroll-container');
-        if (scrollContainer) {
-          scrollContainer.scrollTo({ top: 0, behavior: 'smooth' });
-        }
+        transcriptRef.current?.scrollToTop();
       },
 
       scrollToMessage(messageId: string) {
-        const el = document.querySelector(`[data-message-id="${messageId}"]`);
-        if (el) {
-          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        // Messages are keyed by index, not ID, so we need to find the index
+        const index = rawMessagesRef.current.findIndex(m => m.id === messageId);
+        if (index !== -1) {
+          transcriptRef.current?.scrollToMessage(index);
         }
       },
 
@@ -296,6 +295,7 @@ function TranscriptApp() {
 
   return (
     <AgentTranscriptPanel
+      ref={transcriptRef}
       key={sessionId}
       sessionId={sessionId}
       sessionData={sessionData}

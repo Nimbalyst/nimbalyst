@@ -531,7 +531,7 @@ const extractEditsFromToolMessage = (message: Message): any[] => {
 };
 
 export const RichTranscriptView = React.forwardRef<
-  { scrollToMessage: (index: number) => void },
+  { scrollToMessage: (index: number) => void; scrollToTop: () => void },
   RichTranscriptViewProps
 >(({ sessionId, sessionStatus, isProcessing, messages, provider, settings: propsSettings, onSettingsChange, showSettings, documentContext, workspacePath, renderEmptyExtra, readFile, onOpenFile, onCompact, promptAdditions, currentTeammates }, ref) => {
   const [collapsedMessages, setCollapsedMessages] = useState<Set<number>>(new Set());
@@ -621,6 +621,11 @@ export const RichTranscriptView = React.forwardRef<
             }, 2000);
           }
         }, 100);
+      }
+    },
+    scrollToTop: () => {
+      if (vlistRef.current) {
+        vlistRef.current.scrollToIndex(0, { align: 'start' });
       }
     }
   }), []);
