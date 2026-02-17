@@ -293,6 +293,15 @@ public final class SyncManager: ObservableObject {
         // Preserve local isExecuting/lastReadAt when the server entry doesn't include them
         let existing = try? database.session(byId: entry.sessionId)
 
+        // Decrypt client metadata (context usage, etc.)
+        var clientMeta: ClientMetadata?
+        if let encryptedMeta = entry.encryptedClientMetadata,
+           let metaIv = entry.clientMetadataIv,
+           let metaJson = crypto.decryptOrNil(encryptedBase64: encryptedMeta, ivBase64: metaIv),
+           let metaData = metaJson.data(using: .utf8) {
+            clientMeta = try? JSONDecoder().decode(ClientMetadata.self, from: metaData)
+        }
+
         let session = Session(
             id: entry.sessionId,
             projectId: projectId,
@@ -304,8 +313,8 @@ public final class SyncManager: ObservableObject {
             mode: entry.mode,
             isExecuting: entry.isExecuting ?? existing?.isExecuting ?? false,
             hasQueuedPrompts: entry.hasPendingPrompt ?? false,
-            contextTokens: entry.currentContext?.tokens,
-            contextWindow: entry.currentContext?.contextWindow,
+            contextTokens: clientMeta?.currentContext?.tokens ?? existing?.contextTokens,
+            contextWindow: clientMeta?.currentContext?.contextWindow ?? existing?.contextWindow,
             createdAt: entry.createdAt,
             updatedAt: entry.updatedAt,
             lastReadAt: entry.lastReadAt ?? existing?.lastReadAt,
@@ -687,6 +696,17 @@ public final class SyncManager: ObservableObject {
                 }
                 if let mode = broadcast.metadata.mode {
                     session.mode = mode
+                }
+                // Decrypt client metadata (context usage, etc.)
+                if let encryptedMeta = broadcast.metadata.encryptedClientMetadata,
+                   let metaIv = broadcast.metadata.clientMetadataIv,
+                   let metaJson = crypto.decryptOrNil(encryptedBase64: encryptedMeta, ivBase64: metaIv),
+                   let metaData = metaJson.data(using: .utf8),
+                   let clientMeta = try? JSONDecoder().decode(ClientMetadata.self, from: metaData) {
+                    if let ctx = clientMeta.currentContext {
+                        session.contextTokens = ctx.tokens
+                        session.contextWindow = ctx.contextWindow
+                    }
                 }
                 if let updatedAt = broadcast.metadata.updatedAt {
                     session.updatedAt = updatedAt

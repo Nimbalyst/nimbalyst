@@ -252,11 +252,8 @@ export interface SessionIndexData {
   messageCount: number;
   updatedAt: number;
   createdAt: number;
-  /** Current context usage (from /context command for Claude Code) */
-  currentContext?: {
-    tokens: number;
-    contextWindow: number;
-  };
+  /** Raw metadata from PGLite - CollabV3Sync extracts what it needs for encrypted client metadata */
+  metadata?: Record<string, any>;
   /** Optional messages to sync to the session Y.Doc */
   messages?: AgentMessage[];
 }

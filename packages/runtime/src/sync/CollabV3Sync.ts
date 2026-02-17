@@ -93,11 +93,10 @@ interface SessionMetadata {
   isExecuting?: boolean;
   /** Encrypted queued prompts */
   encryptedQueuedPrompts?: EncryptedQueuedPrompt[];
-  /** Current context usage (from /context command for Claude Code) */
-  currentContext?: {
-    tokens: number;
-    contextWindow: number;
-  };
+  /** Encrypted client metadata blob (base64) - opaque to server */
+  encryptedClientMetadata?: string;
+  /** IV for client metadata decryption (base64) */
+  clientMetadataIv?: string;
 }
 
 interface SessionIndexEntry {
@@ -132,20 +131,20 @@ interface SessionIndexEntry {
   encryptedQueuedPrompts?: EncryptedQueuedPrompt[];
   /** Whether there are pending interactive prompts (permissions or questions) waiting for response */
   hasPendingPrompt?: boolean;
-  /** Current context usage (from /context command for Claude Code) */
-  currentContext?: {
-    tokens: number;
-    contextWindow: number;
-  };
+  /** Encrypted client metadata blob (base64) - opaque to server */
+  encryptedClientMetadata?: string;
+  /** IV for client metadata decryption (base64) */
+  clientMetadataIv?: string;
   /** Unix timestamp ms when this session was last read by any device */
   lastReadAt?: number;
 }
 
 /** Decrypted session index entry with required title and projectId - used for return values */
-type DecryptedSessionIndexEntry = Omit<SessionIndexEntry, 'title' | 'encryptedTitle' | 'titleIv' | 'encryptedProjectId' | 'projectIdIv' | 'encryptedQueuedPrompts'> & {
+type DecryptedSessionIndexEntry = Omit<SessionIndexEntry, 'title' | 'encryptedTitle' | 'titleIv' | 'encryptedProjectId' | 'projectIdIv' | 'encryptedQueuedPrompts' | 'encryptedClientMetadata' | 'clientMetadataIv'> & {
   title: string;  // Required after decryption
   projectId: string;  // Decrypted project ID
   queuedPrompts?: PlaintextQueuedPrompt[];  // Decrypted queued prompts
+  currentContext?: { tokens: number; contextWindow: number };  // Decrypted from client metadata
 };
 
 /** Encrypted create session request for wire protocol */
@@ -395,6 +394,56 @@ async function decryptTitle(
   key: CryptoKey
 ): Promise<string> {
   return decrypt(encryptedTitle, titleIv, key);
+}
+
+/**
+ * Client metadata that gets encrypted and synced opaquely through the server.
+ * The server never reads this — only clients encrypt/decrypt it.
+ * Add new display-only fields here without touching the server.
+ */
+interface ClientMetadata {
+  currentContext?: {
+    tokens: number;
+    contextWindow: number;
+  };
+}
+
+/**
+ * Extract ClientMetadata from raw PGLite metadata.
+ * This is the single place that maps database schema -> encrypted client metadata.
+ */
+function buildClientMetadataFromRaw(metadata?: Record<string, any>): ClientMetadata | undefined {
+  const tokenUsage = metadata?.tokenUsage;
+  if (!tokenUsage?.totalTokens || !tokenUsage?.contextWindow) return undefined;
+  return {
+    currentContext: {
+      tokens: tokenUsage.totalTokens,
+      contextWindow: tokenUsage.contextWindow,
+    },
+  };
+}
+
+/**
+ * Encrypt client metadata for wire transmission.
+ */
+async function encryptClientMetadata(
+  metadata: ClientMetadata,
+  key: CryptoKey
+): Promise<{ encryptedClientMetadata: string; clientMetadataIv: string }> {
+  const { encrypted, iv } = await encrypt(JSON.stringify(metadata), key);
+  return { encryptedClientMetadata: encrypted, clientMetadataIv: iv };
+}
+
+/**
+ * Decrypt client metadata received from wire.
+ */
+async function decryptClientMetadata(
+  encryptedClientMetadata: string,
+  clientMetadataIv: string,
+  key: CryptoKey
+): Promise<ClientMetadata> {
+  const json = await decrypt(encryptedClientMetadata, clientMetadataIv, key);
+  return JSON.parse(json);
 }
 
 /**
@@ -673,6 +722,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       updatedAt: Date.now(),
       pendingExecution: 'pendingExecution' in pending ? pending.pendingExecution : cached.pendingExecution,
       isExecuting: 'isExecuting' in pending ? pending.isExecuting : cached.isExecuting,
+      currentContext: 'currentContext' in pending ? pending.currentContext : cached.currentContext,
     };
 
     // Update cache with decrypted values
@@ -708,6 +758,14 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       const { encryptedTitle, titleIv } = await encryptTitle(updatedCache.title, config.encryptionKey);
       indexEntry.encryptedTitle = encryptedTitle;
       indexEntry.titleIv = titleIv;
+    }
+
+    // Encrypt client metadata (context usage, etc.)
+    if (updatedCache.currentContext) {
+      const clientMeta: ClientMetadata = { currentContext: updatedCache.currentContext };
+      const { encryptedClientMetadata, clientMetadataIv } = await encryptClientMetadata(clientMeta, config.encryptionKey);
+      indexEntry.encryptedClientMetadata = encryptedClientMetadata;
+      indexEntry.clientMetadataIv = clientMetadataIv;
     }
 
     // Send to server
@@ -1021,6 +1079,16 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       isExecuting: broadcast.metadata.isExecuting,
     };
 
+    // Decrypt client metadata (context usage, etc.)
+    if (broadcast.metadata.encryptedClientMetadata && broadcast.metadata.clientMetadataIv && session.encryptionKey) {
+      try {
+        const clientMeta = await decryptClientMetadata(broadcast.metadata.encryptedClientMetadata, broadcast.metadata.clientMetadataIv, session.encryptionKey);
+        metadata.currentContext = clientMeta.currentContext;
+      } catch (err) {
+        console.error('[CollabV3] Failed to decrypt client metadata from broadcast:', err);
+      }
+    }
+
     // Decrypt title - encrypted titles are required
     if (broadcast.metadata.encryptedTitle && broadcast.metadata.titleIv && session.encryptionKey) {
       try {
@@ -1186,6 +1254,17 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
                     }
                   }
 
+                  // Decrypt client metadata (context usage, etc.)
+                  let currentContext: CachedSessionIndex['currentContext'];
+                  if (entry.encryptedClientMetadata && entry.clientMetadataIv && config.encryptionKey) {
+                    try {
+                      const clientMeta = await decryptClientMetadata(entry.encryptedClientMetadata, entry.clientMetadataIv, config.encryptionKey);
+                      currentContext = clientMeta.currentContext;
+                    } catch (err) {
+                      console.error('[CollabV3] Failed to decrypt client metadata:', err);
+                    }
+                  }
+
                   const decrypted: DecryptedSessionIndexEntry = {
                     sessionId: entry.sessionId,
                     projectId: projectId,
@@ -1202,6 +1281,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
                     queuedPromptCount: entry.queuedPromptCount,
                     queuedPrompts,
                     hasPendingPrompt: entry.hasPendingPrompt,
+                    currentContext,
                     lastReadAt: entry.lastReadAt,
                   };
 
@@ -1220,6 +1300,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
                     pendingExecution: decrypted.pendingExecution,
                     isExecuting: decrypted.isExecuting,
                     queuedPrompts: decrypted.queuedPrompts,
+                    currentContext: decrypted.currentContext,
                     lastReadAt: decrypted.lastReadAt,
                   };
                   sessionIndexCache.set(entry.sessionId, cacheEntry);
@@ -1310,6 +1391,16 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
               hasPendingPrompt: entry.hasPendingPrompt,
               lastReadAt: entry.lastReadAt,
             };
+
+            // Decrypt client metadata (context usage, etc.)
+            if (entry.encryptedClientMetadata && entry.clientMetadataIv && config.encryptionKey) {
+              try {
+                const clientMeta = await decryptClientMetadata(entry.encryptedClientMetadata, entry.clientMetadataIv, config.encryptionKey);
+                decryptedEntry.currentContext = clientMeta.currentContext;
+              } catch (err) {
+                console.error('[CollabV3] Failed to decrypt client metadata:', err);
+              }
+            }
 
             // Decrypt title - encrypted titles are required
             if (entry.encryptedTitle && entry.titleIv && config.encryptionKey) {
@@ -1710,7 +1801,6 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
         lastMessageAt: session.updatedAt,
         createdAt: session.createdAt,
         updatedAt: session.updatedAt,
-        currentContext: session.currentContext,
         isExecuting: cachedIsExecuting,
       };
 
@@ -1719,6 +1809,14 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
         const { encryptedTitle, titleIv } = await encryptTitle(session.title, config.encryptionKey);
         entry.encryptedTitle = encryptedTitle;
         entry.titleIv = titleIv;
+      }
+
+      // Encrypt client metadata (context usage, etc.) - extracted from raw PGLite metadata
+      const clientMeta = buildClientMetadataFromRaw(session.metadata);
+      if (clientMeta) {
+        const { encryptedClientMetadata, clientMetadataIv } = await encryptClientMetadata(clientMeta, config.encryptionKey);
+        entry.encryptedClientMetadata = encryptedClientMetadata;
+        entry.clientMetadataIv = clientMetadataIv;
       }
 
       // Cache the entry with DECRYPTED values for local use
@@ -1734,7 +1832,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
         lastMessageAt: session.updatedAt,
         createdAt: session.createdAt,
         updatedAt: session.updatedAt,
-        currentContext: session.currentContext,
+        currentContext: clientMeta?.currentContext,
         isExecuting: cachedIsExecuting,
       };
       sessionIndexCache.set(session.id, cacheEntry);
@@ -1997,6 +2095,13 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
               metadata.encryptedQueuedPrompts = undefined;
             }
           }
+          // Encrypt client metadata (context usage, etc.)
+          if ('currentContext' in change.metadata && change.metadata.currentContext && session.encryptionKey) {
+            const clientMeta: ClientMetadata = { currentContext: change.metadata.currentContext };
+            const encrypted = await encryptClientMetadata(clientMeta, session.encryptionKey);
+            metadata.encryptedClientMetadata = encrypted.encryptedClientMetadata;
+            metadata.clientMetadataIv = encrypted.clientMetadataIv;
+          }
           clientMessage = { type: 'updateMetadata', metadata };
           break;
         }
@@ -2055,7 +2160,6 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
               updatedAt: baseEntry.updatedAt,
               pendingExecution: baseEntry.pendingExecution,
               isExecuting: baseEntry.isExecuting,
-              currentContext: baseEntry.currentContext,
               lastReadAt: baseEntry.lastReadAt,
             };
 
@@ -2064,6 +2168,14 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
               const { encryptedTitle, titleIv } = await encryptTitle(baseEntry.title, session.encryptionKey);
               indexEntry.encryptedTitle = encryptedTitle;
               indexEntry.titleIv = titleIv;
+            }
+
+            // Encrypt client metadata for wire
+            if (baseEntry.currentContext) {
+              const clientMeta: ClientMetadata = { currentContext: baseEntry.currentContext };
+              const { encryptedClientMetadata, clientMetadataIv } = await encryptClientMetadata(clientMeta, session.encryptionKey);
+              indexEntry.encryptedClientMetadata = encryptedClientMetadata;
+              indexEntry.clientMetadataIv = clientMetadataIv;
             }
 
             // Update local cache with decrypted values

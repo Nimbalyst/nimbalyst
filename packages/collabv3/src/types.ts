@@ -403,6 +403,10 @@ export interface SessionIndexEntry {
   updatedAt: number;
   /** Whether the session is currently executing (processing AI request) */
   isExecuting?: boolean;
+  /** Encrypted client metadata blob (base64) - opaque to server, decrypted by clients */
+  encryptedClientMetadata?: string;
+  /** IV for client metadata decryption (base64) */
+  clientMetadataIv?: string;
   /** Unix timestamp ms when this session was last read by any device */
   lastReadAt?: number;
 }

@@ -35,7 +35,8 @@ struct ServerSessionEntry: Codable {
     let queuedPromptCount: Int?
     let encryptedQueuedPrompts: [EncryptedQueuedPrompt]?
     let hasPendingPrompt: Bool?
-    let currentContext: ContextInfo?
+    let encryptedClientMetadata: String?
+    let clientMetadataIv: String?
     let lastReadAt: Int?
 }
 
@@ -56,6 +57,12 @@ struct EncryptedQueuedPrompt: Codable {
 struct ContextInfo: Codable {
     let tokens: Int
     let contextWindow: Int
+}
+
+/// Decrypted client metadata blob - opaque to server, only clients read it.
+/// Add new display-only fields here without touching the server.
+struct ClientMetadata: Codable {
+    let currentContext: ContextInfo?
 }
 
 /// A project entry as received from the server (encrypted fields).
@@ -277,6 +284,8 @@ struct SessionRoomMetadata: Codable {
     let updatedAt: Int?
     let encryptedProjectId: String?
     let projectIdIv: String?
+    let encryptedClientMetadata: String?
+    let clientMetadataIv: String?
 }
 
 /// Real-time message broadcast in a session room.

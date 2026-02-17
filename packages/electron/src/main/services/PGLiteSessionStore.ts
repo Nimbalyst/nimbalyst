@@ -69,6 +69,7 @@ export async function getAllSessionsForSync(includeMessages = false): Promise<Ar
   messageCount: number;
   updatedAt: number;
   createdAt: number;
+  metadata?: Record<string, any>;
   messages?: SyncedMessage[];
 }>> {
   // Log stack trace to identify callers
@@ -87,11 +88,11 @@ export async function getAllSessionsForSync(includeMessages = false): Promise<Ar
   const queryStart = performance.now();
   const { rows } = await moduleDb.query<any>(
     `SELECT s.id, s.provider, s.model, s.mode, s.title, s.workspace_id, s.draft_input,
-            s.created_at, s.updated_at, COUNT(m.id) as message_count
+            s.created_at, s.updated_at, s.metadata, COUNT(m.id) as message_count
      FROM ai_sessions s
      LEFT JOIN ai_agent_messages m ON s.id = m.session_id AND m.direction = 'input' AND (m.hidden = FALSE OR m.hidden IS NULL)
      WHERE (s.is_archived = FALSE OR s.is_archived IS NULL)
-     GROUP BY s.id, s.provider, s.model, s.mode, s.title, s.workspace_id, s.draft_input, s.created_at, s.updated_at
+     GROUP BY s.id, s.provider, s.model, s.mode, s.title, s.workspace_id, s.draft_input, s.created_at, s.updated_at, s.metadata
      ORDER BY s.updated_at DESC`
   );
   const queryTime = performance.now() - queryStart;
@@ -106,22 +107,25 @@ export async function getAllSessionsForSync(includeMessages = false): Promise<Ar
     return true;
   });
 
-  const sessions = validRows.map((row: any) => ({
-    id: row.id,
-    title: row.title || 'Untitled',
-    provider: row.provider || 'unknown',
-    model: row.model,
-    mode: row.mode,
-    // workspace_id is required - we filtered out sessions without it above
-    workspaceId: row.workspace_id,
-    workspacePath: row.workspace_id, // workspace_id is the path in this system
-    // NOTE: Do NOT include draftInput in bulk sync - it should only sync when actually changed
-    // Including it here causes spurious metadata_updated events for all sessions on startup
-    messageCount: parseInt(row.message_count) || 0,
-    updatedAt: toMillis(row.updated_at),
-    createdAt: toMillis(row.created_at),
-    messages: undefined as SyncedMessage[] | undefined,
-  }));
+  const sessions = validRows.map((row: any) => {
+    return {
+      id: row.id,
+      title: row.title || 'Untitled',
+      provider: row.provider || 'unknown',
+      model: row.model,
+      mode: row.mode,
+      // workspace_id is required - we filtered out sessions without it above
+      workspaceId: row.workspace_id,
+      workspacePath: row.workspace_id, // workspace_id is the path in this system
+      // NOTE: Do NOT include draftInput in bulk sync - it should only sync when actually changed
+      // Including it here causes spurious metadata_updated events for all sessions on startup
+      messageCount: parseInt(row.message_count) || 0,
+      updatedAt: toMillis(row.updated_at),
+      createdAt: toMillis(row.created_at),
+      metadata: row.metadata,
+      messages: undefined as SyncedMessage[] | undefined,
+    };
+  });
 
   // Optionally fetch messages for each session (include hidden - mobile filters client-side)
   if (includeMessages) {

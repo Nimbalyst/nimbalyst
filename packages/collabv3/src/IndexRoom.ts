@@ -152,6 +152,17 @@ export class IndexRoom implements DurableObject {
     } catch {
       // Column already exists
     }
+    // Migration: Add encrypted client metadata (opaque blob for client-only display data)
+    try {
+      sql.exec(`ALTER TABLE session_index ADD COLUMN encrypted_client_metadata TEXT`);
+    } catch {
+      // Column already exists
+    }
+    try {
+      sql.exec(`ALTER TABLE session_index ADD COLUMN client_metadata_iv TEXT`);
+    } catch {
+      // Column already exists
+    }
 
     // Project index table
     // Note: project_id column stores encrypted value (encryptedProjectId)
@@ -426,8 +437,8 @@ export class IndexRoom implements DurableObject {
     // For last_read_at, only update if incoming value is newer (prevents stale reads from overwriting)
     sql.exec(
       `INSERT INTO session_index
-       (session_id, project_id, project_id_iv, encrypted_title, title_iv, provider, model, mode, message_count, last_message_at, created_at, updated_at, is_executing, last_read_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       (session_id, project_id, project_id_iv, encrypted_title, title_iv, provider, model, mode, message_count, last_message_at, created_at, updated_at, is_executing, last_read_at, encrypted_client_metadata, client_metadata_iv)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(session_id) DO UPDATE SET
          project_id = excluded.project_id,
          project_id_iv = excluded.project_id_iv,
@@ -449,6 +460,16 @@ export class IndexRoom implements DurableObject {
            WHEN excluded.last_read_at IS NOT NULL AND (session_index.last_read_at IS NULL OR excluded.last_read_at > session_index.last_read_at)
            THEN excluded.last_read_at
            ELSE session_index.last_read_at
+         END,
+         encrypted_client_metadata = CASE
+           WHEN excluded.encrypted_client_metadata IS NOT NULL
+           THEN excluded.encrypted_client_metadata
+           ELSE session_index.encrypted_client_metadata
+         END,
+         client_metadata_iv = CASE
+           WHEN excluded.client_metadata_iv IS NOT NULL
+           THEN excluded.client_metadata_iv
+           ELSE session_index.client_metadata_iv
          END`,
       session.sessionId,
       session.encryptedProjectId,
@@ -463,7 +484,9 @@ export class IndexRoom implements DurableObject {
       session.createdAt,
       session.updatedAt,
       session.isExecuting != null ? (session.isExecuting ? 1 : 0) : null,
-      session.lastReadAt ?? null
+      session.lastReadAt ?? null,
+      session.encryptedClientMetadata ?? null,
+      session.clientMetadataIv ?? null
     );
 
     // Read back the effective last_read_at (may be the existing value if it was newer)
@@ -1278,6 +1301,8 @@ type SessionIndexRow = {
   updated_at: number;
   is_executing: number;
   last_read_at: number | null;
+  encrypted_client_metadata: string | null;
+  client_metadata_iv: string | null;
 };
 
 type ProjectIndexRow = {
@@ -1309,6 +1334,8 @@ function rowToSessionEntry(row: SessionIndexRow): SessionIndexEntry {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     isExecuting: row.is_executing === 1,
+    encryptedClientMetadata: row.encrypted_client_metadata ?? undefined,
+    clientMetadataIv: row.client_metadata_iv ?? undefined,
     lastReadAt: row.last_read_at ?? undefined,
   };
 }
