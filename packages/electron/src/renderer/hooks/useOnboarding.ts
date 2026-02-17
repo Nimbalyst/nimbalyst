@@ -76,6 +76,11 @@ export function useOnboarding({
       }
       if (data.referralSource) {
         personProperties.referral_source = data.referralSource;
+        if (data.referralSource.startsWith('ai:')) {
+          personProperties.referral_ai_detail = data.referralSource.substring('ai:'.length);
+        } else if (data.referralSource.startsWith('other:')) {
+          personProperties.referral_other_detail = data.referralSource.substring('other:'.length);
+        }
       }
       posthog.people.set(personProperties);
 
@@ -114,12 +119,15 @@ export function useOnboarding({
           surveyPayload['$survey_response'] = data.customRole || roleLabels[data.role] || data.role;
         }
         if (data.referralSource) {
-          // Handle social:Platform and other:CustomText formats
+          // Handle social:Platform, ai:Detail, and other:CustomText formats
           if (data.referralSource.startsWith('social:')) {
             surveyPayload['$survey_response_1'] = referralLabels['social'] || data.referralSource;
+          } else if (data.referralSource.startsWith('ai:')) {
+            surveyPayload['$survey_response_1'] = referralLabels['ai'] || 'AI';
+            surveyPayload['referral_ai_detail'] = data.referralSource.substring('ai:'.length);
           } else if (data.referralSource.startsWith('other:')) {
-            const customText = data.referralSource.substring('other:'.length);
-            surveyPayload['$survey_response_1'] = `Other: ${customText}`;
+            surveyPayload['$survey_response_1'] = referralLabels['other'] || 'Other';
+            surveyPayload['referral_other_detail'] = data.referralSource.substring('other:'.length);
           } else {
             surveyPayload['$survey_response_1'] = referralLabels[data.referralSource] || data.referralSource;
           }

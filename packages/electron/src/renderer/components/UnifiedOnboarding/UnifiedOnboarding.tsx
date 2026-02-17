@@ -72,6 +72,7 @@ export const UnifiedOnboarding: React.FC<UnifiedOnboardingProps> = ({
   const [customRole, setCustomRole] = useState<string>('');
   const [referralSource, setReferralSource] = useState<string>('');
   const [customReferral, setCustomReferral] = useState<string>('');
+  const [aiDetail, setAiDetail] = useState<string>('');
   const [socialMediaPlatform, setSocialMediaPlatform] = useState<string>('');
   const [email, setEmail] = useState<string>('');
   const [emailError, setEmailError] = useState<string>('');
@@ -107,6 +108,7 @@ export const UnifiedOnboarding: React.FC<UnifiedOnboardingProps> = ({
       setCustomRole('');
       setReferralSource('');
       setCustomReferral('');
+      setAiDetail('');
       setSocialMediaPlatform('');
       setEmail('');
       setEmailError('');
@@ -154,6 +156,8 @@ export const UnifiedOnboarding: React.FC<UnifiedOnboardingProps> = ({
     let finalReferralSource = referralSource || null;
     if (referralSource === 'social' && socialMediaPlatform) {
       finalReferralSource = `social:${socialMediaPlatform}`;
+    } else if (referralSource === 'ai' && aiDetail.trim()) {
+      finalReferralSource = `ai:${aiDetail.trim()}`;
     } else if (referralSource === 'other' && customReferral.trim()) {
       finalReferralSource = `other:${customReferral.trim()}`;
     }
@@ -308,6 +312,9 @@ export const UnifiedOnboarding: React.FC<UnifiedOnboardingProps> = ({
                     if (e.target.value !== 'other') {
                       setCustomReferral('');
                     }
+                    if (e.target.value !== 'ai') {
+                      setAiDetail('');
+                    }
                   }}
                   className="unified-onboarding-select"
                   disabled={!isModeSelected}
@@ -327,6 +334,21 @@ export const UnifiedOnboarding: React.FC<UnifiedOnboardingProps> = ({
                       placeholder="e.g. Podcast, Blog, Conference"
                       value={customReferral}
                       onChange={(e) => setCustomReferral(e.target.value)}
+                      className="unified-onboarding-input"
+                      disabled={!isModeSelected}
+                      autoFocus
+                    />
+                  </div>
+                )}
+
+                {referralSource === 'ai' && (
+                  <div className="custom-role-input">
+                    <input
+                      id="ai-detail-input"
+                      type="text"
+                      placeholder="What model and prompt did you use?"
+                      value={aiDetail}
+                      onChange={(e) => setAiDetail(e.target.value)}
                       className="unified-onboarding-input"
                       disabled={!isModeSelected}
                       autoFocus
