@@ -36,7 +36,7 @@ import { windowStates, findWindowByWorkspace } from '../../window/WindowManager'
 import { sessionFileTracker } from '../SessionFileTracker';
 import {AnalyticsService} from "../analytics/AnalyticsService.ts";
 import { historyManager } from '../../HistoryManager';
-import { getAIProviderOverrides, saveAIProviderOverrides, clearAIProviderOverrides, getWorkspaceState, getBetaFeatures } from '../../utils/store';
+import { getAIProviderOverrides, saveAIProviderOverrides, clearAIProviderOverrides, getWorkspaceState, getBetaFeatures, getDefaultAIModel } from '../../utils/store';
 import { mergeAISettings } from '../../utils/aiSettingsMerge';
 import { DocumentContextService, type RawDocumentContext, type PreparedDocumentContext } from '@nimbalyst/runtime';
 import { getMessageSyncHandler, getSyncProvider } from '../SyncManager';
@@ -971,12 +971,14 @@ export class AIService {
 
             // Create the session using the SessionManager
             // Use claude-code as the default provider for mobile-created sessions
+            // Use the user's default model preference (same as desktop "New Session")
+            const defaultModel = getDefaultAIModel() || 'claude-code:opus';
             const session = await this.sessionManager.createSession(
               'claude-code',  // provider
               undefined,      // documentContext
               workspacePath,  // workspacePath
               undefined,      // providerConfig
-              undefined,      // model
+              defaultModel,   // model - use user's configured default
               'chat',         // sessionType
               'agent'         // mode
             );
@@ -1192,6 +1194,21 @@ export class AIService {
 
             // Persist token usage to session metadata
             await this.sessionManager.updateSessionTokenUsage(session.id, tokenUsage);
+
+            // Push context usage to mobile sync
+            const syncProvider = getSyncProvider();
+            if (syncProvider) {
+              syncProvider.pushChange(session.id, {
+                type: 'metadata_updated',
+                metadata: {
+                  currentContext: {
+                    tokens: parsedUsage.totalTokens,
+                    contextWindow: parsedUsage.contextWindow,
+                  },
+                  updatedAt: Date.now(),
+                } as any,
+              });
+            }
 
             // Also send IPC event to update UI immediately
             safeSend(event, 'ai:tokenUsageUpdated', {
