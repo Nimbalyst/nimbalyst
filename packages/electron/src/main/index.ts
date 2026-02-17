@@ -97,6 +97,7 @@ import { registerAnalyticsHandlers } from "./ipc/AnalyticsHandlers.ts";
 import { shutdownStytchAuth, handleAuthCallback } from './services/StytchAuthService';
 import { getPermissionService } from './services/PermissionService';
 import { ClaudeSettingsManager } from './services/ClaudeSettingsManager';
+import { pathToFileURL } from 'url';
 
 // CRITICAL: Hide dock icon when running as background Node process
 // This prevents Terminal icon from appearing when Claude Code spawns child processes
@@ -842,16 +843,61 @@ app.whenReady().then(async () => {
     OpenAICodexProvider.setEnhancedPathLoader(() => getEnhancedPath());
 
     // Inject SDK module loader for packaged builds where dynamic import('@openai/codex-sdk')
-    // can't resolve the package from within app.asar
+    // can't resolve the package from within app.asar.
+    // Note: @openai/codex-sdk is ESM-only, so requiring the package directory fails.
     if (app.isPackaged) {
-      const sdkPath = path.join(
-        process.resourcesPath,
-        'app.asar.unpacked', 'node_modules', '@openai', 'codex-sdk'
-      );
+      const sdkEntryCandidates = [
+        path.join(
+          process.resourcesPath,
+          'app.asar.unpacked',
+          'node_modules',
+          '@openai',
+          'codex-sdk',
+          'dist',
+          'index.js'
+        ),
+        path.join(
+          process.resourcesPath,
+          'node_modules',
+          '@openai',
+          'codex-sdk',
+          'dist',
+          'index.js'
+        ),
+        path.join(
+          process.resourcesPath,
+          'app.asar.unpacked',
+          '@openai',
+          'codex-sdk',
+          'dist',
+          'index.js'
+        ),
+      ];
       OpenAICodexProvider.setSdkModuleLoader(async () => {
-        const { createRequire } = await import('module');
-        const req = createRequire(import.meta.url);
-        return req(sdkPath);
+        let lastError: unknown = null;
+        for (const entryPath of sdkEntryCandidates) {
+          if (!existsSync(entryPath)) {
+            continue;
+          }
+
+          try {
+            const sdkModule = await import(pathToFileURL(entryPath).href);
+            if ((sdkModule as any).Codex) {
+              return sdkModule as any;
+            }
+            if ((sdkModule as any).default?.Codex) {
+              return (sdkModule as any).default;
+            }
+          } catch (error) {
+            lastError = error;
+          }
+        }
+
+        const lastMessage = lastError instanceof Error ? lastError.message : String(lastError ?? 'unknown');
+        throw new Error(
+          `[OpenAICodexProvider] Failed to load @openai/codex-sdk from packaged resources. ` +
+          `Checked: ${sdkEntryCandidates.join(', ')}. Last error: ${lastMessage}`
+        );
       });
     }
 
