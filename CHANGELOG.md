@@ -20,6 +20,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.53.7] - 2026-02-17
+
+
+### Added
+- Brand iOS projects list with app icon and Nimbalyst name
+- Sync AI session context usage to iOS via encrypted client metadata
+- Agent-readable decryption instructions and session keep-alive
+
+### Fixed
+- iOS scroll to top functionality in session detail view
+- Reduce sync spam by increasing message sync debounce to 10s
+- Enable horizontal scrolling in database browser table rows
+- Mobile-created sessions now use user's default model preference
+- Breadcrumb filename click now clears file tree filter
+
 ## [0.53.6] - 2026-02-17
 
 
