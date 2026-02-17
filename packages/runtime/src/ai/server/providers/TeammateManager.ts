@@ -139,6 +139,21 @@ export class TeammateManager {
     return this.managedTeammates.size > 0 || this.idleTeammates.size > 0;
   }
 
+  /** Check if all active agents are background-only (sub-agents or background agents, no idle teammates). */
+  hasOnlyBackgroundAgents(): boolean {
+    if (this.idleTeammates.size > 0) return false;
+    if (this.managedTeammates.size === 0) return false;
+    for (const tm of this.managedTeammates.values()) {
+      if (!tm.isBackgroundAgent) return false;
+    }
+    return true;
+  }
+
+  /** Get count of active agents (running + idle). */
+  getActiveAgentCount(): number {
+    return this.managedTeammates.size + this.idleTeammates.size;
+  }
+
   /**
    * Abandon all idle teammates (mark completed, clear from idle map).
    * Called when the lead's transport dies and idle teammates can no longer
@@ -1161,7 +1176,7 @@ export class TeammateManager {
     agentId: string,
     teamName: string,
     idleTemplate: IdleTeammate,
-    result: { capturedSessionId: string | undefined; approvedShutdown: boolean },
+    result: { capturedSessionId: string | undefined; approvedShutdown: boolean; capturedResultText: string | undefined },
   ): void {
     const managed = this.managedTeammates.get(agentId);
     const isBackground = managed?.isBackgroundAgent ?? false;
@@ -1189,6 +1204,17 @@ export class TeammateManager {
       const reason = isBackground ? 'background agent completed' : 'no session ID';
       console.log(`[MANAGED-TEAMMATE] "${agentId}" completed (${reason})`);
       this.scheduleEmitTeammateUpdate(sessionId, new Map([[agentId, 'completed']]));
+
+      // Deliver sub-agent/background agent result to lead so it can present findings to the user.
+      // This reuses the same deliverMessageToLead path that teammates use for SendMessage.
+      if (isBackground && result.capturedResultText) {
+        const displayName = idleTemplate.name;
+        this.deliverMessageToLead(
+          sessionId, agentId, displayName,
+          result.capturedResultText,
+          `${displayName} completed`,
+        );
+      }
     }
 
     // If no more active teammates remain, notify the host so the session can end
@@ -1342,7 +1368,7 @@ export class TeammateManager {
     color: string,
     abortController: AbortController,
     resumeSessionId?: string,
-  ): Promise<{ capturedSessionId: string | undefined; approvedShutdown: boolean }> {
+  ): Promise<{ capturedSessionId: string | undefined; approvedShutdown: boolean; capturedResultText: string | undefined }> {
     const cwd = this.lastUsedCwd || process.cwd();
     const teammateAdditionalDirectories = [os.tmpdir()];
 
@@ -1398,6 +1424,7 @@ export class TeammateManager {
 
     let capturedSessionId: string | undefined;
     let approvedShutdown = false;
+    let capturedResultText: string | undefined;
 
     for await (const chunk of teammateQuery) {
       if (chunk.session_id && !capturedSessionId) {
@@ -1454,6 +1481,10 @@ export class TeammateManager {
       }
 
       if (chunk.type === 'result') {
+        // Capture result text for sub-agents to deliver to lead on completion
+        if (typeof (chunk as any).result === 'string') {
+          capturedResultText = (chunk as any).result;
+        }
         if (sessionId) {
           const completionChunk = {
             ...chunk,
@@ -1478,7 +1509,7 @@ export class TeammateManager {
       );
     }
 
-    return { capturedSessionId, approvedShutdown };
+    return { capturedSessionId, approvedShutdown, capturedResultText };
   }
 
   // ─── Lifecycle: resume ──────────────────────────────────────────────────

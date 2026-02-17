@@ -150,7 +150,7 @@ export function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
                     const resultContent = typeof block.content === 'string'
                       ? JSON.parse(block.content)
                       : block.content;
-                    if ((resultContent.status === 'teammate_spawned' || resultContent.status === 'background_agent_spawned') && resultContent.agent_id && block.tool_use_id) {
+                    if ((resultContent.status === 'teammate_spawned' || resultContent.status === 'background_agent_spawned' || resultContent.status === 'subagent_spawned') && resultContent.agent_id && block.tool_use_id) {
                       teammateParentMap.set(resultContent.agent_id, block.tool_use_id);
                     }
                   } catch { /* not JSON */ }

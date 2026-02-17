@@ -2392,19 +2392,24 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
       } else if (this.teammateManager.hasActiveTeammates() && !hideMessages) {
         // Skip for hidden commands (e.g., /context auto-fetch) — those are internal
         // bookkeeping calls that shouldn't drive teammate lifecycle.
-        if (!this.continuationTriggered) {
-          // The lead's turn ended naturally but teammates are still active (idle).
-          // The lead may have intended to continue (e.g., send shutdown messages)
-          // but the SDK closed the response. Trigger a single continuation so the
-          // lead gets another turn to manage its teammates.
+        if (this.teammateManager.hasOnlyBackgroundAgents()) {
+          // Only background agents (sub-agents) remain — no idle teammates to manage.
+          // Don't trigger a continuation; the lead can't do anything useful for sub-agents.
+          // The session stays deferred; teammates:allCompleted will fire when they finish
+          // and deliverMessageToLead will restart the lead if there are results to deliver.
+          console.log(`[CLAUDE-CODE] Lead turn ended with ${this.teammateManager.getActiveAgentCount()} background agent(s) still running, waiting for completion`);
+          this.continuationTriggered = false;
+        } else if (!this.continuationTriggered) {
+          // The lead's turn ended naturally but idle teammates exist that need managing.
+          // Trigger a single continuation so the lead gets another turn.
           // Guard: continuationTriggered prevents infinite loops if the lead's
-          // continuation turn also ends without resolving teammates.
-          console.log('[CLAUDE-CODE] Lead turn ended with active teammates, triggering continuation');
+          // continuation turn also ends without resolving agents.
+          console.log('[CLAUDE-CODE] Lead turn ended with active agents, triggering continuation');
           this.continuationTriggered = true;
           this.teammateIdleMessagePending = true;
           this.emit('teammate:messageWhileIdle', {
             sessionId: this.teammateManager.lastUsedSessionId,
-            message: '[System: Your previous turn ended but you still have active teammates. Continue managing your team — send shutdown messages or take other actions as needed.]',
+            message: '[System: Your previous turn ended but you still have active agents. Wait for their results, or take other actions as needed.]',
           });
         } else {
           // Continuation already fired and the lead still didn't resolve teammates.
