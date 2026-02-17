@@ -12,17 +12,25 @@ public struct ProjectListView: View {
     public init() {}
 
     public var body: some View {
-        List(projects) { project in
-            NavigationLink(value: project) {
-                ProjectRow(project: project)
+        List {
+            Section {
+                ForEach(projects) { project in
+                    NavigationLink(value: project) {
+                        ProjectRow(project: project)
+                    }
+                }
+            } header: {
+                brandingHeader
+                    .textCase(nil)
+                    .listRowInsets(EdgeInsets())
             }
         }
         #if os(iOS)
         .listStyle(.insetGrouped)
         #endif
-        .navigationTitle("Projects")
+        .navigationTitle("Nimbalyst")
         #if os(iOS)
-        .navigationBarTitleDisplayMode(.large)
+        .navigationBarTitleDisplayMode(.inline)
         #endif
         .refreshable {
             appState.requestSync()
@@ -89,6 +97,44 @@ public struct ProjectListView: View {
             cancellable?.cancel()
         }
     }
+
+    private var brandingHeader: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                #if os(iOS)
+                if let icon = appIcon {
+                    Image(uiImage: icon)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 36, height: 36)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+                #endif
+                Text("Nimbalyst")
+                    .font(.title.bold())
+                    .foregroundStyle(.primary)
+            }
+            Text("Projects")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+                .tracking(0.5)
+        }
+        .padding(.top, 8)
+        .padding(.bottom, 4)
+    }
+
+    #if os(iOS)
+    private var appIcon: UIImage? {
+        guard let iconName = Bundle.main.object(forInfoDictionaryKey: "CFBundleIcons") as? [String: Any],
+              let primaryIcon = iconName["CFBundlePrimaryIcon"] as? [String: Any],
+              let iconFiles = primaryIcon["CFBundleIconFiles"] as? [String],
+              let lastIcon = iconFiles.last else {
+            return nil
+        }
+        return UIImage(named: lastIcon)
+    }
+    #endif
 
     private var isDesktopConnected: Bool {
         if appState.screenshotMode { return true }

@@ -204,12 +204,14 @@ public struct MainNavigationView: View {
                 }
             }
         }
+        #if os(iOS)
         .overlay(alignment: .bottom) {
             if let voice = appState.voiceAgent, voice.state != .disconnected {
                 VoiceOverlay(voiceAgent: voice)
                     .padding(.bottom, 8)
             }
         }
+        #endif
         .onChange(of: notificationManager.pendingSessionId) { _, newValue in
             guard let sessionId = newValue else { return }
             navigateToSession(sessionId)
@@ -333,7 +335,9 @@ struct IPadNavigationView: View {
                 }
             }
             .navigationTitle("Switch Project")
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { showProjectPicker = false }
@@ -392,6 +396,14 @@ struct IPadSessionSidebar: View {
     @State private var isCreatingSession = false
     @State private var isLoadingSessions = true
 
+    private var voiceFocusedSessionId: String? {
+        #if os(iOS)
+        return appState.voiceAgent?.activeSessionId
+        #else
+        return nil
+        #endif
+    }
+
     private var filteredSessions: [Session] {
         if searchText.isEmpty { return sessions }
         return sessions.filter {
@@ -416,7 +428,7 @@ struct IPadSessionSidebar: View {
                     ForEach(group.sessions) { session in
                         SessionRow(
                             session: session,
-                            voiceFocusedSessionId: appState.voiceAgent?.activeSessionId
+                            voiceFocusedSessionId: voiceFocusedSessionId
                         )
                         .tag(session)
                     }
@@ -428,18 +440,28 @@ struct IPadSessionSidebar: View {
         }
         .listStyle(.sidebar)
         .navigationTitle(project.name)
+        #if os(iOS)
         .navigationBarTitleDisplayMode(.large)
+        #endif
         .searchable(text: $searchText, prompt: "Search sessions")
         .refreshable {
             appState.requestSync()
             try? await Task.sleep(nanoseconds: 500_000_000)
         }
         .toolbar {
+            #if os(iOS)
             ToolbarItem(placement: .topBarLeading) {
                 Button { onSwitchProject() } label: {
                     Image(systemName: "folder")
                 }
             }
+            #else
+            ToolbarItem {
+                Button { onSwitchProject() } label: {
+                    Image(systemName: "folder")
+                }
+            }
+            #endif
             ToolbarItem(placement: .primaryAction) {
                 HStack(spacing: 12) {
                     connectionIndicator

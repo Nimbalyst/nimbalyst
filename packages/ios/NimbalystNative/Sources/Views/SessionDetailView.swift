@@ -163,11 +163,13 @@ public struct SessionDetailView: View {
         }
         #endif
         .toolbar {
+            #if os(iOS)
             if let voice = appState.voiceAgent, voice.state != .disconnected {
                 ToolbarItem(placement: .principal) {
                     VoiceStatusPill(state: voice.state)
                 }
             }
+            #endif
             ToolbarItem(placement: .primaryAction) {
                 sessionMenu
             }
@@ -259,6 +261,7 @@ public struct SessionDetailView: View {
             }
             #endif
 
+            #if os(iOS)
             if let voice = appState.voiceAgent {
                 Button {
                     if voice.state == .disconnected {
@@ -275,6 +278,7 @@ public struct SessionDetailView: View {
                     }
                 }
             }
+            #endif
 
             if let provider = displaySession.provider,
                let model = displaySession.model {

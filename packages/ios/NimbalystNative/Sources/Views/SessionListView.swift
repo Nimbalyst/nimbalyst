@@ -60,6 +60,14 @@ public struct SessionListView: View {
     @State private var searchText = ""
     @State private var isCreatingSession = false
 
+    private var voiceFocusedSessionId: String? {
+        #if os(iOS)
+        return appState.voiceAgent?.activeSessionId
+        #else
+        return nil
+        #endif
+    }
+
     private var filteredSessions: [Session] {
         if searchText.isEmpty {
             return sessions
@@ -87,7 +95,7 @@ public struct SessionListView: View {
                         NavigationLink(value: session) {
                             SessionRow(
                                 session: session,
-                                voiceFocusedSessionId: appState.voiceAgent?.activeSessionId
+                                voiceFocusedSessionId: voiceFocusedSessionId
                             )
                         }
                     }
@@ -113,9 +121,11 @@ public struct SessionListView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 HStack(spacing: 12) {
+                    #if os(iOS)
                     if let voice = appState.voiceAgent, voice.state != .disconnected {
                         VoiceStatusPill(state: voice.state)
                     }
+                    #endif
                     connectionIndicator
                     Button {
                         createAndNavigateToSession()

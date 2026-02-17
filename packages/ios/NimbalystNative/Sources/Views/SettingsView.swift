@@ -9,8 +9,10 @@ public struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
 
     // Voice mode settings
+    #if os(iOS)
     @State private var hasOpenAIApiKey = KeychainManager.getOpenAIApiKey() != nil
     @State private var voiceSettings = VoiceModeSettings.load()
+    #endif
 
     public init() {}
 
