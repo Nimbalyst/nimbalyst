@@ -598,8 +598,8 @@ export function DatabaseBrowser() {
                   const visibleColumns = getVisibleColumns(selectedTable, allColumns);
 
                   return (
-                    <div className="virtual-table-container flex-1 flex flex-col border border-[var(--nim-border)] rounded overflow-hidden min-h-0 bg-nim">
-                      <div className="virtual-table-header shrink-0 overflow-x-auto bg-nim-tertiary">
+                    <div className="virtual-table-container flex-1 flex flex-col border border-[var(--nim-border)] rounded overflow-x-auto min-h-0 bg-nim">
+                      <div className="virtual-table-header shrink-0 bg-nim-tertiary" style={{ minWidth: `${visibleColumns.length * 180}px` }}>
                         <table className="data-table w-full border-collapse text-[13px] table-fixed">
                           <thead>
                             <tr>
@@ -617,7 +617,7 @@ export function DatabaseBrowser() {
                           </thead>
                         </table>
                       </div>
-                      <VList className="virtual-table-body flex-1 min-h-0">
+                      <VList className="virtual-table-body flex-1 min-h-0" style={{ minWidth: `${visibleColumns.length * 180}px` }}>
                         {tableData.rows.map((row, idx) => (
                           <div key={idx} className="virtual-table-row flex border-b border-[var(--nim-border)] hover:bg-[var(--nim-bg-hover)]">
                             {visibleColumns.map(col => {
@@ -625,7 +625,7 @@ export function DatabaseBrowser() {
                               return (
                                 <div
                                   key={col}
-                                  className="virtual-table-cell clickable flex-1 min-w-[120px] max-w-[300px] py-2 px-3 text-[13px] border-r border-[var(--nim-border)] overflow-hidden text-ellipsis whitespace-nowrap last:border-r-0 cursor-pointer hover:bg-[var(--nim-bg-hover)]"
+                                  className="virtual-table-cell clickable flex-1 min-w-[180px] py-2 px-3 text-[13px] border-r border-[var(--nim-border)] overflow-hidden text-ellipsis whitespace-nowrap last:border-r-0 cursor-pointer hover:bg-[var(--nim-bg-hover)]"
                                   onClick={() => handleCellClick(col, value)}
                                   title="Click to expand"
                                 >
@@ -667,8 +667,8 @@ export function DatabaseBrowser() {
               const sortedRows = getSortedQueryResults();
 
               return (
-                <div className="virtual-table-container flex-1 flex flex-col border border-[var(--nim-border)] rounded overflow-hidden min-h-0 bg-nim">
-                  <div className="virtual-table-header shrink-0 overflow-x-auto bg-nim-tertiary">
+                <div className="virtual-table-container flex-1 flex flex-col border border-[var(--nim-border)] rounded overflow-x-auto min-h-0 bg-nim">
+                  <div className="virtual-table-header shrink-0 bg-nim-tertiary" style={{ minWidth: `${columns.length * 180}px` }}>
                     <table className="data-table w-full border-collapse text-[13px] table-fixed">
                       <thead>
                         <tr>
@@ -686,7 +686,7 @@ export function DatabaseBrowser() {
                       </thead>
                     </table>
                   </div>
-                  <VList className="virtual-table-body flex-1 min-h-0">
+                  <VList className="virtual-table-body flex-1 min-h-0" style={{ minWidth: `${columns.length * 180}px` }}>
                     {sortedRows.map((row, idx) => (
                       <div key={idx} className="virtual-table-row flex border-b border-[var(--nim-border)] hover:bg-[var(--nim-bg-hover)]">
                         {columns.map((col, colIdx) => {
@@ -694,7 +694,7 @@ export function DatabaseBrowser() {
                           return (
                             <div
                               key={colIdx}
-                              className="virtual-table-cell clickable flex-1 min-w-[120px] max-w-[300px] py-2 px-3 text-[13px] border-r border-[var(--nim-border)] overflow-hidden text-ellipsis whitespace-nowrap last:border-r-0 cursor-pointer hover:bg-[var(--nim-bg-hover)]"
+                              className="virtual-table-cell clickable flex-1 min-w-[180px] py-2 px-3 text-[13px] border-r border-[var(--nim-border)] overflow-hidden text-ellipsis whitespace-nowrap last:border-r-0 cursor-pointer hover:bg-[var(--nim-bg-hover)]"
                               onClick={() => handleCellClick(col, value)}
                               title="Click to expand"
                             >
