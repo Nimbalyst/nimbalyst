@@ -1244,6 +1244,11 @@ export class AIService {
         if (hasOpenAI) return true;
       }
 
+      // Check OpenAI Codex (uses its own auth, doesn't need API key in settings)
+      const hasCodex = providerSettings['openai-codex']?.enabled === true &&
+                       getBetaFeatures()['codex'] === true;
+      if (hasCodex) return true;
+
       // Check LM Studio (doesn't need API key but needs enabled models)
       const hasLMStudio = providerSettings['lmstudio']?.enabled === true &&
                          providerSettings['lmstudio']?.models?.length > 0;
@@ -1654,9 +1659,13 @@ export class AIService {
             requiresApiKey = false;
             break;
           case 'openai':
-          case 'openai-codex':
             apiKey = apiKeys['openai'] || process.env.OPENAI_API_KEY;
             errorMessage = 'OpenAI API key not configured';
+            break;
+          case 'openai-codex':
+            // Codex SDK uses its own auth (codex auth login), API key is optional
+            apiKey = apiKeys['openai'] || process.env.OPENAI_API_KEY;
+            requiresApiKey = false;
             break;
           case 'lmstudio':
             // LMStudio doesn't need an API key, just the base URL
@@ -4002,7 +4011,8 @@ export class AIService {
           models: providerSettings['openai']?.models
         },
         'openai-codex': {
-          enabled: providerSettings['openai-codex']?.enabled === true && !!(apiKeys['openai'] || process.env.OPENAI_API_KEY) && getBetaFeatures()['codex'] === true,
+          // Codex SDK uses its own auth (codex auth login), so don't require apiKeys['openai']
+          enabled: providerSettings['openai-codex']?.enabled === true && getBetaFeatures()['codex'] === true,
         },
         'lmstudio': {
           enabled: providerSettings['lmstudio']?.enabled === true,
