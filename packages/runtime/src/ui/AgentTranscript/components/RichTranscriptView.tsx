@@ -572,6 +572,21 @@ export const RichTranscriptView = React.forwardRef<
     return false;
   }, [messages, sessionStatus, isProcessing]);
 
+  // Compute waiting indicator text — show agent/teammate count when lead is idle but agents are running
+  const waitingText = useMemo(() => {
+    if (!isWaitingForResponse) return '';
+    const runningAgents = currentTeammates?.filter(t => t.status === 'running') ?? [];
+    if (runningAgents.length > 0) {
+      // Check if the last message is from the assistant (lead finished, waiting for agents)
+      const lastMsg = messages[messages.length - 1];
+      if (lastMsg?.role === 'assistant') {
+        const label = runningAgents.length === 1 ? 'agent' : 'agents';
+        return `Waiting for ${runningAgents.length} ${label} to finish`;
+      }
+    }
+    return 'Thinking...';
+  }, [isWaitingForResponse, currentTeammates, messages]);
+
 
   // Compute effective target index for prompt additions display
   // Use the stored messageIndex if valid, otherwise find the last user message
@@ -1525,7 +1540,7 @@ export const RichTranscriptView = React.forwardRef<
                         <div className="rich-transcript-waiting-dot w-2 h-2 rounded-full bg-[var(--nim-primary)]" />
                         <div className="rich-transcript-waiting-dot w-2 h-2 rounded-full bg-[var(--nim-primary)]" />
                       </div>
-                      <span className="rich-transcript-waiting-text">Thinking...</span>
+                      <span className="rich-transcript-waiting-text">{waitingText}</span>
                     </div>
                   )}
               </VList>
