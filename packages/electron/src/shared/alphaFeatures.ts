@@ -49,6 +49,12 @@ export const ALPHA_FEATURES: readonly AlphaFeatureDefinition[] = [
     description: 'Enable card view mode for agent sessions panel.',
     icon: 'grid_view',
   },
+  {
+    tag: 'super-loops',
+    name: 'Super Loops',
+    description: 'Enable Super Loops for iterative agent workflows in dedicated worktrees.',
+    icon: 'sync',
+  },
 ] as const;
 
 /**

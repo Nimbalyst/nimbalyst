@@ -393,12 +393,12 @@ const defaultAdvancedSettings: AdvancedSettings = {
     'voice-mode': false,
     'claude-plugins': false,
     'card-mode': false,
+    'super-loops': false,
   } as Record<AlphaFeatureTag, boolean>,
   enableAllAlphaFeatures: false,
   betaFeatures: {
     blitz: false,
     codex: false,
-    'super-loops': false,
   } as Record<BetaFeatureTag, boolean>,
   enableAllBetaFeatures: false,
   customPathDirs: '',

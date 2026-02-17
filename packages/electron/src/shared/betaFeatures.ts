@@ -38,12 +38,6 @@ export const BETA_FEATURES: readonly BetaFeatureDefinition[] = [
     description: 'Enable OpenAI Codex agent provider for code generation tasks.',
     icon: 'terminal',
   },
-  {
-    tag: 'super-loops',
-    name: 'Super Loops',
-    description: 'Enable Super Loops for iterative agent workflows in dedicated worktrees.',
-    icon: 'sync',
-  },
 ] as const;
 
 /**

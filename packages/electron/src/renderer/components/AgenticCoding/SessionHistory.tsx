@@ -32,7 +32,7 @@ import {
   worktreeActiveSessionAtom,
   type SessionListItem as SessionListItemType,
 } from '../../store';
-import { alphaFeatureEnabledAtom, betaFeatureEnabledAtom, worktreesFeatureAvailableAtom } from '../../store/atoms/appSettings';
+import { alphaFeatureEnabledAtom, worktreesFeatureAvailableAtom } from '../../store/atoms/appSettings';
 import { superLoopListAtom, upsertSuperLoopAtom, removeSuperLoopAtom } from '../../store/atoms/superLoop';
 import { useSuperLoopDialog } from '../../hooks/useSuperLoop';
 import type { SuperLoop } from '../../../shared/types/superLoop';
@@ -293,8 +293,8 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   const removeSessionFromAtom = useSetAtom(removeSessionFullAtom);
 
   const isWorktreesAvailable = useAtomValue(worktreesFeatureAvailableAtom);
-  const isSuperLoopsBetaEnabled = useAtomValue(betaFeatureEnabledAtom('super-loops'));
-  const isSuperLoopsAvailable = isWorktreesAvailable && isSuperLoopsBetaEnabled;
+  const isSuperLoopsAlphaEnabled = useAtomValue(alphaFeatureEnabledAtom('super-loops'));
+  const isSuperLoopsAvailable = isWorktreesAvailable && isSuperLoopsAlphaEnabled;
 
   // === Super Loop state ===
   const superLoops = useAtomValue(superLoopListAtom);
