@@ -545,6 +545,35 @@ body[data-dev-mode="true"] .nav-quick-access::before {
   opacity: 0.5;
 }
 
+/* Flat virtualized file tree container */
+.file-tree-container {
+  height: 100%;
+  position: relative;
+  font-size: 13px;
+  outline: none;
+}
+
+/* Keyboard focus indicator (distinct from selection) */
+.file-tree-file.focused,
+.file-tree-directory.focused {
+  outline: 1px solid var(--nim-primary);
+  outline-offset: -1px;
+}
+
+/* Inline rename input */
+.file-tree-rename-input {
+  background: var(--nim-bg);
+  border: 1px solid var(--nim-primary);
+  border-radius: 2px;
+  color: var(--nim-text);
+  font-size: 13px;
+  font-family: inherit;
+  padding: 0 4px;
+  height: 22px;
+  width: 100%;
+  outline: none;
+}
+
 /* Drag and drop styles */
 .file-tree-directory.drag-over {
   background-color: var(--nim-bg-selected) !important;
