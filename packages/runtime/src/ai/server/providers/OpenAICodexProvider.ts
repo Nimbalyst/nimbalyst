@@ -78,6 +78,14 @@ export class OpenAICodexProvider extends BaseAgentProvider {
   private readonly permissionService: ToolPermissionService;
   private readonly mcpConfigService: McpConfigService;
 
+  // Analytics initialization data, captured during first sendMessage call
+  private _initData: {
+    model: string;
+    mcpServerCount: number;
+    isResumedThread: boolean;
+    permissionMode: string | null;
+  } | null = null;
+
   // Shared MCP server port (injected from electron main process)
   // This server provides capture_editor_screenshot tool.
   private static mcpServerPort: number | null = null;
@@ -629,6 +637,19 @@ export class OpenAICodexProvider extends BaseAgentProvider {
     };
   }
 
+  /**
+   * Get initialization data for analytics tracking.
+   * Returns session init properties captured during the most recent sendMessage call.
+   */
+  getInitData(): {
+    model: string;
+    mcpServerCount: number;
+    isResumedThread: boolean;
+    permissionMode: string | null;
+  } | null {
+    return this._initData;
+  }
+
   async handleToolCall(
     toolCall: AIToolCall,
     _options?: {
@@ -749,9 +770,11 @@ export class OpenAICodexProvider extends BaseAgentProvider {
       // Merge in shell env vars and the enhanced PATH so the Codex agent can see system tools.
       const codexEnv = OpenAICodexProvider.buildCodexEnvironment();
 
+      const resolvedModel = await this.getConfiguredModel();
+
       const sessionOptions = {
         workspacePath,
-        model: await this.getConfiguredModel(),
+        model: resolvedModel,
         ...(permissionDecision.permissionMode ? { permissionMode: permissionDecision.permissionMode } : {}),
         mcpServers,
         raw: {
@@ -762,9 +785,18 @@ export class OpenAICodexProvider extends BaseAgentProvider {
         },
       };
 
-      const session = existingSessionId
+      const isResumedThread = !!existingSessionId;
+      const session = isResumedThread
         ? await this.protocol.resumeSession(existingSessionId, sessionOptions)
         : await this.protocol.createSession(sessionOptions);
+
+      // Store initialization data for analytics (picked up by AIService)
+      this._initData = {
+        model: resolvedModel,
+        mcpServerCount: Object.keys(mcpServers).length,
+        isResumedThread,
+        permissionMode: permissionDecision.permissionMode ?? null,
+      };
 
       console.log('[CODEX] Session after create/resume:', {
         sessionId,

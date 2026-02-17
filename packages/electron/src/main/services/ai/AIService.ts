@@ -2746,6 +2746,19 @@ export class AIService {
                 }
               }
 
+              // Track Codex session initialization if this is the first message
+              if (session.provider === 'openai-codex' && session.messages.length === 0) {
+                const initData = (provider as any).getInitData?.();
+                if (initData) {
+                  this.analytics.sendEvent('codex_session_started', {
+                    model: initData.model,
+                    mcpServerCount: initData.mcpServerCount,
+                    isResumedThread: initData.isResumedThread,
+                    ...(initData.permissionMode && { permissionMode: initData.permissionMode })
+                  });
+                }
+              }
+
               // Send complete response
               safeSend(event, 'ai:streamResponse', {
                 sessionId: session.id,
