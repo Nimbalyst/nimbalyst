@@ -20,6 +20,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.53.4] - 2026-02-16
+
+
+### Added
+- Show "Waiting for N agents to finish" instead of generic "Thinking..." during multi-agent sessions
+- Codex usage indicator in sidebar for subscription users
+- Codex CLI prerequisites section in settings panel
+- Teammate spawn cards now show live status instead of error icon
+- Teammate messages now show as distinct notifications in chat
+- Share markdown files as encrypted links
+- Show expiry date in share link toast notifications
+
+### Changed
+- Move Super Loops from beta to alpha channel
+- Make Codex beta status notice more prominent in settings
+
+### Fixed
+- Alpha features now properly hide when switching off alpha channel
+- Fix endSession race when lead completes inside generator loop
+- Fix sub-agent output nesting and session lifecycle
+- Prevent BlitzDialog from overflowing viewport
+- OpenAI Codex provider now loads in packaged builds
+- Fix handleShutdownResult so it emits teammates:allCompleted when last teammate removed
+- Cancelled parallel agent spawns no longer show in transcript
+- Teammate messages no longer get dropped or stuck
+- Always attempt interrupt() for teammate messages instead of queueing
+- Cancelling rebase/merge no longer leaves conflict markers in files
+- Disable development environment toggle in SyncPanel
+- Prevent share operations from signing user out on JWT refresh failure
+- QR scanner reliability in release builds
+- Show provider icon and name in assistant transcript avatar
+- Make transcript avatar icons perfectly round
+- Skip TestFlight encryption compliance questions on upload
+
 ## [0.53.3] - 2026-02-16
 
 
