@@ -1176,7 +1176,7 @@ export class TeammateManager {
     agentId: string,
     teamName: string,
     idleTemplate: IdleTeammate,
-    result: { capturedSessionId: string | undefined; approvedShutdown: boolean; capturedResultText: string | undefined },
+    result: { capturedSessionId: string | undefined; approvedShutdown: boolean; capturedResultText: string | undefined; sentMessageToLead: boolean },
   ): void {
     const managed = this.managedTeammates.get(agentId);
     const isBackground = managed?.isBackgroundAgent ?? false;
@@ -1207,7 +1207,9 @@ export class TeammateManager {
 
       // Deliver sub-agent/background agent result to lead so it can present findings to the user.
       // This reuses the same deliverMessageToLead path that teammates use for SendMessage.
-      if (isBackground && result.capturedResultText) {
+      // Skip if the agent already sent a SendMessage to the lead during its stream —
+      // that message IS the result and delivering capturedResultText would duplicate it.
+      if (isBackground && result.capturedResultText && !result.sentMessageToLead) {
         const displayName = idleTemplate.name;
         this.deliverMessageToLead(
           sessionId, agentId, displayName,
@@ -1368,7 +1370,7 @@ export class TeammateManager {
     color: string,
     abortController: AbortController,
     resumeSessionId?: string,
-  ): Promise<{ capturedSessionId: string | undefined; approvedShutdown: boolean; capturedResultText: string | undefined }> {
+  ): Promise<{ capturedSessionId: string | undefined; approvedShutdown: boolean; capturedResultText: string | undefined; sentMessageToLead: boolean }> {
     const cwd = this.lastUsedCwd || process.cwd();
     const teammateAdditionalDirectories = [os.tmpdir()];
 
@@ -1425,6 +1427,7 @@ export class TeammateManager {
     let capturedSessionId: string | undefined;
     let approvedShutdown = false;
     let capturedResultText: string | undefined;
+    let sentMessageToLead = false;
 
     for await (const chunk of teammateQuery) {
       if (chunk.session_id && !capturedSessionId) {
@@ -1469,6 +1472,7 @@ export class TeammateManager {
                 const messageSummary = toolInput.summary || '';
                 console.log(`[MANAGED-TEAMMATE] "${name}" (${agentId}) sent message to lead: "${messageSummary}"`);
                 this.deliverMessageToLead(sessionId, agentId, name, messageContent, messageSummary);
+                sentMessageToLead = true;
               }
 
               if (messageType === 'shutdown_response' && toolInput.approve === true) {
@@ -1509,7 +1513,7 @@ export class TeammateManager {
       );
     }
 
-    return { capturedSessionId, approvedShutdown, capturedResultText };
+    return { capturedSessionId, approvedShutdown, capturedResultText, sentMessageToLead };
   }
 
   // ─── Lifecycle: resume ──────────────────────────────────────────────────

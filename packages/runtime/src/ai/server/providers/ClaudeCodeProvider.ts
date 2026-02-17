@@ -2537,10 +2537,22 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
    * Check if the lead is currently processing or about to process a message.
    * True when leadQuery is set (actively streaming) or when a
    * teammate:messageWhileIdle event was emitted but sendMessage hasn't started yet.
-   * Used by AIService to avoid ending the session prematurely.
+   * Used by the teammates:allCompleted handler to avoid ending the session
+   * while the lead is mid-turn.
    */
   public isLeadBusy(): boolean {
     return this.leadQuery !== null || this.teammateIdleMessagePending;
+  }
+
+  /**
+   * Check if the lead will resume after the current query completes.
+   * Unlike isLeadBusy(), this does NOT check leadQuery (which is still set
+   * when called from inside the generator's for-await loop). Only checks
+   * whether a re-trigger is pending that will start a new sendMessage.
+   * Used by AIService's 'complete' chunk handler.
+   */
+  public willResumeAfterCompletion(): boolean {
+    return this.teammateIdleMessagePending;
   }
 
   /**

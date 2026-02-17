@@ -2729,17 +2729,20 @@ export class AIService {
               });
 
               // Mark session as complete so UI shows agent is ready.
-              // Skip if teammates are still active OR if the lead is about to
-              // resume (teammateIdleMessagePending). The session will be ended
-              // when the last teammate completes (via teammates:allCompleted event)
-              // or when the resumed sendMessage finishes.
+              // Skip if teammates are still active OR if the lead will resume
+              // after this query completes (e.g., pending teammate messages).
+              // NOTE: Use willResumeAfterCompletion() here, NOT isLeadBusy().
+              // isLeadBusy() checks leadQuery which is still set at this point
+              // (we're inside the generator's for-await, before the finally block
+              // clears it). willResumeAfterCompletion() only checks the pending
+              // re-trigger flag.
               const hasTeammates = session.provider === 'claude-code'
                 && typeof (provider as any).hasActiveTeammates === 'function'
                 && (provider as any).hasActiveTeammates();
-              const isLeadBusy = session.provider === 'claude-code'
-                && typeof (provider as any).isLeadBusy === 'function'
-                && (provider as any).isLeadBusy();
-              if (hasTeammates || isLeadBusy) {
+              const willResume = session.provider === 'claude-code'
+                && typeof (provider as any).willResumeAfterCompletion === 'function'
+                && (provider as any).willResumeAfterCompletion();
+              if (hasTeammates || willResume) {
                 logger.main.info(`[AIService] Deferring endSession for ${session.id} - ${hasTeammates ? 'teammates still active' : 'lead resuming'}`);
               } else {
                 await stateManager.endSession(session.id);
@@ -2913,13 +2916,15 @@ export class AIService {
 
           // End the session to remove it from active sessions.
           // Skip if teammates are still active or lead is resuming - deferred to teammates:allCompleted.
+          // NOTE: Use willResumeAfterCompletion() not isLeadBusy() — we're inside the
+          // generator's for-await so leadQuery is still set (same issue as 'complete' handler).
           const hasTeammatesOnError = session.provider === 'claude-code'
             && typeof (provider as any).hasActiveTeammates === 'function'
             && (provider as any).hasActiveTeammates();
-          const isLeadBusyOnError = session.provider === 'claude-code'
-            && typeof (provider as any).isLeadBusy === 'function'
-            && (provider as any).isLeadBusy();
-          if (hasTeammatesOnError || isLeadBusyOnError) {
+          const willResumeOnError = session.provider === 'claude-code'
+            && typeof (provider as any).willResumeAfterCompletion === 'function'
+            && (provider as any).willResumeAfterCompletion();
+          if (hasTeammatesOnError || willResumeOnError) {
             logger.main.info(`[AIService] Deferring endSession for ${session.id} on error - ${hasTeammatesOnError ? 'teammates still active' : 'lead resuming'}`);
           } else {
             await stateManager.endSession(session.id);
