@@ -74,7 +74,30 @@ export class SessionNamingService {
             console.error('[SessionNamingService] Failed to check blitz membership:', error);
           }
 
-          // Always update the session title (child worktree sessions get named normally)
+          if (parentBlitzId) {
+            // Blitz child session: propagate AI-chosen name to blitz parent (first-wins),
+            // but keep the child's model-based title unchanged
+            try {
+              const updated = await AISessionsRepository.updateTitleIfNotNamed(parentBlitzId, title);
+              if (updated) {
+                console.log(`[SessionNamingService] Updated blitz ${parentBlitzId} display name to: "${title}"`);
+                for (const window of windows) {
+                  window.webContents.send('blitz:display-name-updated', {
+                    blitzId: parentBlitzId,
+                    displayName: title
+                  });
+                }
+              }
+            } catch (error) {
+              console.error('[SessionNamingService] Failed to update blitz display name:', error);
+            }
+
+            // Mark child as named so name_session won't be called again, but keep model-based title
+            await AISessionsRepository.updateMetadata(sessionId, { hasBeenNamed: true } as any);
+            return;
+          }
+
+          // Normal (non-blitz) session: update title and propagate to worktree
           await sessionManager.updateSessionTitle(sessionId, title);
           for (const window of windows) {
             window.webContents.send('session:title-updated', { sessionId, title });
@@ -99,24 +122,6 @@ export class SessionNamingService {
               }
             } catch (error) {
               console.error('[SessionNamingService] Failed to update worktree display name:', error);
-            }
-          }
-
-          // Propagate to blitz session title (use updateTitleIfNotNamed for first-wins semantics)
-          if (parentBlitzId) {
-            try {
-              const updated = await AISessionsRepository.updateTitleIfNotNamed(parentBlitzId, title);
-              if (updated) {
-                console.log(`[SessionNamingService] Updated blitz ${parentBlitzId} display name to: "${title}"`);
-                for (const window of windows) {
-                  window.webContents.send('blitz:display-name-updated', {
-                    blitzId: parentBlitzId,
-                    displayName: title
-                  });
-                }
-              }
-            } catch (error) {
-              console.error('[SessionNamingService] Failed to update blitz display name:', error);
             }
           }
         });

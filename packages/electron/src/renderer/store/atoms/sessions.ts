@@ -41,6 +41,7 @@ export interface SessionMeta {
   createdAt: number;
   updatedAt: number;
   provider: string;
+  model?: string;
   sessionType: 'chat' | 'planning' | 'coding' | 'terminal' | 'blitz';
   messageCount: number;
   isArchived: boolean;
@@ -540,6 +541,7 @@ export const updateSessionStoreAtom = atom(
         ...(updates.parentSessionId !== undefined && { parentSessionId: updates.parentSessionId }),
         ...(updates.worktreeId !== undefined && { worktreeId: updates.worktreeId }),
         ...(updates.provider !== undefined && { provider: updates.provider }),
+        ...(updates.model !== undefined && { model: updates.model }),
         ...(updates.sessionType !== undefined && { sessionType: updates.sessionType }),
         ...(updates.uncommittedCount !== undefined && { uncommittedCount: updates.uncommittedCount }),
         // Note: messageCount is not in SessionData, only in SessionListItem
@@ -1691,6 +1693,7 @@ function sessionMetaToListItem(meta: SessionMeta, projectPath: string): SessionL
     createdAt: meta.createdAt,
     updatedAt: meta.updatedAt,
     provider: meta.provider,
+    model: meta.model,
     sessionType: meta.sessionType,
     messageCount: meta.messageCount,
     projectPath,
@@ -1827,6 +1830,7 @@ export const refreshSessionListAtom = atom(
             createdAt: s.createdAt,
             updatedAt: s.updatedAt,
             provider: s.provider,
+            model: s.model,
             sessionType: s.sessionType || 'chat',
             messageCount: s.messageCount,
             isArchived: s.isArchived || false,
@@ -1923,6 +1927,7 @@ export const addSessionFullAtom = atom(
       createdAt: session.createdAt,
       updatedAt: session.updatedAt,
       provider: session.provider,
+      model: session.model,
       sessionType: session.sessionType || 'chat',
       messageCount: session.messageCount,
       isArchived: session.isArchived || false,

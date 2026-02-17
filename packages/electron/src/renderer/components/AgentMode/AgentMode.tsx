@@ -456,7 +456,7 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
   const handleBlitzCreated = useCallback(async (result: any) => {
     if (!result.success) return;
 
-    const { blitzSessionId, worktrees: worktreeResults, sessionIds } = result;
+    const { blitzSessionId, worktrees: worktreeResults, sessionIds, models } = result;
 
     // Add blitz parent session to registry so sessionListRootAtom can identify blitz children
     addSession({
@@ -489,7 +489,7 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
           createdAt: Date.now(),
           updatedAt: Date.now(),
           provider: 'claude-code',
-          model: defaultModel,
+          model: models?.[i] || defaultModel,
           sessionType: 'coding',
           messageCount: 0,
           projectPath: workspacePath,

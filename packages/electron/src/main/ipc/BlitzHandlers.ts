@@ -24,6 +24,33 @@ const logger = log.scope('BlitzHandlers');
 
 const MAX_BLITZ_WORKTREES = 10;
 
+/**
+ * Convert a model ID to a human-readable label for blitz session titles.
+ * Mirrors the renderer's modelUtils.ts logic but runs in main process.
+ */
+function getBlitzSessionModelLabel(model: string): string {
+  const CLAUDE_CODE_LABELS: Record<string, string> = {
+    'opus': 'Opus 4.6',
+    'sonnet': 'Sonnet 4.6',
+    'haiku': 'Haiku 3.5',
+  };
+
+  // Try parsing as provider:model via ModelIdentifier
+  const parsed = ModelIdentifier.tryParse(model);
+  if (parsed && parsed.provider === 'claude-code') {
+    const variant = parsed.baseVariant;
+    return CLAUDE_CODE_LABELS[variant] || variant.charAt(0).toUpperCase() + variant.slice(1);
+  }
+
+  // For other providers, extract the model part
+  if (model.includes(':')) {
+    const [, modelPart] = model.split(':', 2);
+    return modelPart;
+  }
+
+  return model;
+}
+
 export interface BlitzModelConfig {
   provider: string;
   model: string;
@@ -114,6 +141,15 @@ export function registerBlitzHandlers(): void {
         }
       }
 
+      // Pre-compute model label counts for session title deduplication
+      // If a model appears more than once, suffix with -1, -2, etc.
+      const modelLabelCounts = new Map<string, number>();
+      for (const a of worktreeAssignments) {
+        const label = getBlitzSessionModelLabel(a.model);
+        modelLabelCounts.set(label, (modelLabelCounts.get(label) || 0) + 1);
+      }
+      const modelLabelIndexes = new Map<string, number>();
+
       // Gather existing names once for de-duplication across all worktrees
       const [dbNames, filesystemNames, branchNames] = await Promise.all([
         worktreeStore.getAllNames(),
@@ -153,12 +189,19 @@ export function registerBlitzHandlers(): void {
             provider = modelId.provider;
           }
 
+          // Compute model-based session title with deduplication
+          const baseLabel = getBlitzSessionModelLabel(assignment.model);
+          const totalForLabel = modelLabelCounts.get(baseLabel) || 1;
+          const labelIndex = (modelLabelIndexes.get(baseLabel) || 0) + 1;
+          modelLabelIndexes.set(baseLabel, labelIndex);
+          const sessionTitle = totalForLabel > 1 ? `${baseLabel}-${labelIndex}` : baseLabel;
+
           await AISessionsRepository.create({
             id: sessionId,
             provider,
             model,
             sessionType: 'coding',
-            title: `Session ${i + 1}`,
+            title: sessionTitle,
             workspaceId: workspacePath,
             worktreeId: gitWorktree.id,
             parentSessionId: blitzId,
@@ -245,6 +288,7 @@ export function registerBlitzHandlers(): void {
         blitzSessionId: blitzId,
         worktrees: worktreeResults,
         sessionIds,
+        models: worktreeAssignments.map(a => a.model),
         errors: errors.length > 0 ? errors : undefined,
       };
     } catch (error) {

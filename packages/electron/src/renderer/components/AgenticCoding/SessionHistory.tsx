@@ -1577,6 +1577,15 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
       }
     }
 
+    // Sort blitz worktrees by creation time (oldest first) for stable ordering
+    for (const worktrees of blitzWorktrees.values()) {
+      worktrees.sort((a, b) => {
+        const aMin = Math.min(...a.sessions.map(s => s.createdAt));
+        const bMin = Math.min(...b.sessions.map(s => s.createdAt));
+        return aMin - bMin;
+      });
+    }
+
     // Add blitz groups
     for (const [blitzId, worktrees] of blitzWorktrees) {
       const blitzData = blitzCache.get(blitzId);

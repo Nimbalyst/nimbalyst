@@ -30,6 +30,7 @@ export interface BlitzCreateResult {
   blitzSessionId?: string;
   worktrees?: WorktreeCreateResult[];
   sessionIds?: string[];
+  models?: string[];
   errors?: string[];
   error?: string;
 }
