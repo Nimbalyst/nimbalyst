@@ -22,7 +22,7 @@ function scheduleIndexSync() {
     triggerIncrementalSync().catch(err => {
       logger.main.warn('[SyncedAgentMessagesStore] Failed to sync index:', err);
     });
-  }, 1000); // Wait 1 second after last message before syncing index
+  }, 10000); // Wait 10 seconds after last message before syncing index
 }
 
 /**
