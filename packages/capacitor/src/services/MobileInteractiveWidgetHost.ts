@@ -219,6 +219,19 @@ export function createMobileInteractiveWidgetHost(
     },
 
     // ============================================================
+    // Super Loop Blocked Feedback (not supported on mobile)
+    // ============================================================
+
+    async superLoopBlockedFeedback(_feedback: string): Promise<{ success: boolean; error?: string }> {
+      // Mobile cannot handle super loop feedback directly - send to desktop
+      sendControlMessage(sessionId, 'prompt_response', {
+        promptType: 'super_loop_blocked_feedback',
+        response: { feedback: _feedback },
+      });
+      return { success: false, error: 'Not supported on mobile' };
+    },
+
+    // ============================================================
     // Common Operations
     // ============================================================
 

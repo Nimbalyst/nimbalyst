@@ -322,7 +322,7 @@ export const SuperLoopProgressWidget: React.FC<CustomToolWidgetProps> = ({ messa
   const tool = message.toolCall;
   if (!tool?.arguments) return null;
 
-  const args = tool.arguments as ProgressUpdateArgs;
+  const args = tool.arguments as unknown as ProgressUpdateArgs;
   if (!args.status) return null;
 
   if (args.status === 'blocked') {
