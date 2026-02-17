@@ -20,6 +20,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.53.5] - 2026-02-16
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- Codex models now appear without an OpenAI API key
+- Sub-agent messages no longer lost when session ends early
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.53.4] - 2026-02-16
 
 
