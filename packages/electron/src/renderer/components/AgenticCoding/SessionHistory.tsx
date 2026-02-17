@@ -46,7 +46,7 @@ interface SessionItem {
   updatedAt: number;
   provider: string;
   model?: string;
-  sessionType?: 'chat' | 'planning' | 'coding' | 'terminal';
+  sessionType?: 'chat' | 'planning' | 'coding' | 'terminal' | 'blitz';
   messageCount: number;
   isProcessing?: boolean;
   hasUnread?: boolean;
@@ -74,7 +74,6 @@ interface WorktreeData {
   createdAt?: number;
   isPinned?: boolean; // Whether this worktree is pinned to the top
   isArchived?: boolean; // Whether this worktree is archived
-  blitzId?: string; // Associated blitz ID if this worktree was created as part of a blitz
 }
 
 interface BlitzData {
@@ -1126,11 +1125,14 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   // Archive all worktrees in a blitz except the one to keep
   const handleArchiveOtherBlitzWorktrees = useCallback(async (blitzId: string, keepWorktreeId: string) => {
     try {
-      // Find all worktrees belonging to this blitz
-      const blitzWorktreeIds: string[] = [];
-      for (const [worktreeId, wtData] of worktreeCache) {
-        if (wtData.blitzId === blitzId && worktreeId !== keepWorktreeId && !wtData.isArchived) {
-          blitzWorktreeIds.push(worktreeId);
+      // Find worktree IDs belonging to this blitz from sessions with parentSessionId === blitzId
+      const blitzWorktreeIds = new Set<string>();
+      for (const session of sessions) {
+        if (session.parentSessionId === blitzId && session.worktree_id && session.worktree_id !== keepWorktreeId) {
+          const worktreeData = worktreeCache.get(session.worktree_id);
+          if (!worktreeData?.isArchived) {
+            blitzWorktreeIds.add(session.worktree_id);
+          }
         }
       }
 
@@ -1153,7 +1155,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     } catch (error) {
       console.error('[SessionHistory] Failed to archive other blitz worktrees:', error);
     }
-  }, [worktreeCache, workspacePath]);
+  }, [sessions, worktreeCache, workspacePath]);
 
   // Super Loop handlers
   const handleSuperLoopUpdate = useCallback(async (
@@ -1510,6 +1512,9 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
 
     // Add regular sessions and workstreams (those without worktree_id)
     for (const session of sessions) {
+      // Skip blitz sessions - they're rendered via BlitzGroup, not as individual items
+      if (session.sessionType === 'blitz') continue;
+
       if (!session.worktree_id) {
         // Check if this is a workstream (has children)
         const isWorkstream = (session.childCount ?? 0) > 0;
@@ -1550,7 +1555,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     // Exclude worktrees that belong to Super Loops - those are rendered via SuperLoopGroup
     const superLoopWorktreeIds = new Set(superLoops.map(loop => loop.worktreeId));
 
-    // Group blitz worktrees by blitzId, keep standalone worktrees separate
+    // Group blitz worktrees by blitz parent session ID, keep standalone worktrees separate
     const blitzWorktrees = new Map<string, { worktreeId: string; sessions: SessionItem[] }[]>();
     const standaloneWorktrees: [string, { sessions: SessionItem[]; timestamp: number }][] = [];
 
@@ -1560,12 +1565,13 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
         continue;
       }
 
-      const worktreeData = worktreeCache.get(worktreeId);
-      if (worktreeData?.blitzId) {
+      // Check if any session in this worktree has a parentSessionId pointing to a blitz session
+      const blitzParentId = data.sessions.find(s => s.parentSessionId && blitzCache.has(s.parentSessionId))?.parentSessionId;
+      if (blitzParentId) {
         // This worktree belongs to a blitz
-        const existing = blitzWorktrees.get(worktreeData.blitzId) || [];
+        const existing = blitzWorktrees.get(blitzParentId) || [];
         existing.push({ worktreeId, sessions: data.sessions });
-        blitzWorktrees.set(worktreeData.blitzId, existing);
+        blitzWorktrees.set(blitzParentId, existing);
       } else {
         standaloneWorktrees.push([worktreeId, data]);
       }
@@ -1733,43 +1739,48 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     fetchBatch();
   }, [sortedWorktreeIds, worktreeCache]);
 
-  // Fetch blitz data when worktree cache has blitz IDs we haven't loaded yet
-  useEffect(() => {
-    const blitzIds = new Set<string>();
-    for (const worktree of worktreeCache.values()) {
-      if (worktree.blitzId && !blitzCache.has(worktree.blitzId)) {
-        blitzIds.add(worktree.blitzId);
+  // Fetch blitz sessions (ai_sessions with session_type='blitz') for this workspace
+  const fetchBlitzes = useCallback(async () => {
+    if (!workspacePath) return;
+    try {
+      const result = await window.electronAPI.invoke('blitz:list', workspacePath);
+      if (result.success && result.blitzes) {
+        setBlitzCache(prev => {
+          const updated = new Map(prev);
+          for (const blitz of result.blitzes) {
+            updated.set(blitz.id, {
+              id: blitz.id,
+              prompt: blitz.prompt,
+              displayName: blitz.displayName,
+              isPinned: blitz.isPinned,
+              isArchived: blitz.isArchived,
+              createdAt: blitz.createdAt,
+            });
+          }
+          return updated;
+        });
       }
+    } catch (err) {
+      console.error('[SessionHistory] Failed to fetch blitzes:', err);
     }
+  }, [workspacePath]);
 
-    if (blitzIds.size === 0) return;
-
-    const fetchBlitzes = async () => {
-      try {
-        const result = await window.electronAPI.invoke('blitz:list', workspacePath);
-        if (result.success && result.blitzes) {
-          setBlitzCache(prev => {
-            const updated = new Map(prev);
-            for (const blitz of result.blitzes) {
-              updated.set(blitz.id, {
-                id: blitz.id,
-                prompt: blitz.prompt,
-                displayName: blitz.displayName,
-                isPinned: blitz.isPinned,
-                isArchived: blitz.isArchived,
-                createdAt: blitz.createdAt,
-              });
-            }
-            return updated;
-          });
-        }
-      } catch (err) {
-        console.error('[SessionHistory] Failed to fetch blitzes:', err);
-      }
-    };
+  // Initial fetch + re-fetch when blitz:created event fires
+  useEffect(() => {
+    if (!workspacePath) return;
 
     fetchBlitzes();
-  }, [worktreeCache, blitzCache, workspacePath]);
+
+    const unsubscribe = window.electronAPI?.on?.('blitz:created',
+      (data: { blitzId: string; workspacePath: string }) => {
+        if (data.workspacePath === workspacePath) {
+          fetchBlitzes();
+        }
+      }
+    );
+
+    return () => unsubscribe?.();
+  }, [workspacePath, fetchBlitzes]);
 
   // Fetch children for expanded workstreams
   useEffect(() => {

@@ -87,7 +87,7 @@ interface SessionListItemProps {
   provider?: string;
   model?: string;
   messageCount?: number;
-  sessionType?: 'chat' | 'planning' | 'coding' | 'terminal'; // Type of session
+  sessionType?: 'chat' | 'planning' | 'coding' | 'terminal' | 'blitz'; // Type of session
   isWorkstream?: boolean; // Whether this session is a workstream (has children)
   isWorktreeSession?: boolean; // Whether this session belongs to a worktree (shows worktree icon)
   parentSessionId?: string | null; // Parent session ID for hierarchical workstreams

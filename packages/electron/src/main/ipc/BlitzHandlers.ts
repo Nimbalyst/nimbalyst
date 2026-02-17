@@ -3,14 +3,16 @@
  *
  * A blitz runs the same prompt across multiple worktrees simultaneously.
  * Each worktree gets its own session with a specific model assignment.
+ *
+ * Blitzes are modeled as ai_sessions with session_type='blitz'. The blitz
+ * session stores the prompt and model config in its metadata JSONB column.
+ * Child worktree sessions point back via parent_session_id.
  */
 
 import { ipcMain, BrowserWindow } from 'electron';
 import log from 'electron-log/main';
 import { GitWorktreeService } from '../services/GitWorktreeService';
-import { createWorktreeStore, type Worktree } from '../services/WorktreeStore';
-import { createBlitzStore } from '../services/BlitzStore';
-import type { BlitzModelConfig } from '../services/BlitzStore';
+import { createWorktreeStore } from '../services/WorktreeStore';
 import { getDatabase } from '../database/initialize';
 import { getQueuedPromptsStore } from '../services/RepositoryManager';
 import { AISessionsRepository } from '@nimbalyst/runtime/storage/repositories/AISessionsRepository';
@@ -21,6 +23,12 @@ import type { BlitzCreateResult, WorktreeCreateResult } from '../../shared/ipc/t
 const logger = log.scope('BlitzHandlers');
 
 const MAX_BLITZ_WORKTREES = 10;
+
+export interface BlitzModelConfig {
+  provider: string;
+  model: string;
+  count: number;
+}
 
 /**
  * Emit blitz:created event to all windows
@@ -76,25 +84,22 @@ export function registerBlitzHandlers(): void {
         throw new Error('Database not initialized');
       }
 
-      const blitzStore = createBlitzStore(db);
       const worktreeStore = createWorktreeStore(db);
 
-      // Create blitz record
+      // Create blitz session (ai_session with session_type='blitz')
       const blitzId = crypto.randomUUID();
       const now = Date.now();
-      const blitz = {
-        id: blitzId,
-        workspaceId: workspacePath,
-        prompt: prompt.trim(),
-        modelConfig,
-        isPinned: false,
-        isArchived: false,
-        createdAt: now,
-        updatedAt: now,
-      };
 
-      await blitzStore.create(blitz);
-      logger.info('Blitz record created', { blitzId, totalWorktrees });
+      await AISessionsRepository.create({
+        id: blitzId,
+        provider: 'system',
+        sessionType: 'blitz',
+        title: 'New blitz',
+        workspaceId: workspacePath,
+        metadata: { prompt: prompt.trim(), modelConfig },
+      } as any);
+
+      logger.info('Blitz session created', { blitzId, totalWorktrees });
 
       // Create worktrees and sessions sequentially (git operations need serialization)
       const worktreeResults: WorktreeCreateResult[] = [];
@@ -132,13 +137,12 @@ export function registerBlitzHandlers(): void {
           // Create git worktree (createWorktree handles locking internally)
           const gitWorktree = await gitWorktreeService.createWorktree(workspacePath, { name: worktreeName });
 
-          // Store worktree with blitz association
-          const worktree: Worktree = { ...gitWorktree, blitzId };
-          await worktreeStore.create(worktree);
+          // Store worktree record
+          await worktreeStore.create(gitWorktree);
 
-          worktreeResults.push({ success: true, worktree });
+          worktreeResults.push({ success: true, worktree: gitWorktree });
 
-          // Create session for this worktree using AISessionsRepository directly
+          // Create session for this worktree, linked to blitz via parent_session_id
           const sessionId = crypto.randomUUID();
 
           // Parse provider from model ID if needed
@@ -153,9 +157,11 @@ export function registerBlitzHandlers(): void {
             id: sessionId,
             provider,
             model,
+            sessionType: 'coding',
             title: `Session ${i + 1}`,
             workspaceId: workspacePath,
-            worktreeId: worktree.id,
+            worktreeId: gitWorktree.id,
+            parentSessionId: blitzId,
           });
 
           sessionIds.push(sessionId);
@@ -172,7 +178,7 @@ export function registerBlitzHandlers(): void {
             logger.info('Queued prompt for blitz session', {
               blitzId,
               sessionId,
-              worktreeName: worktree.name,
+              worktreeName: gitWorktree.name,
             });
           } catch (queueError) {
             logger.error('Failed to queue prompt for blitz session', {
@@ -180,14 +186,14 @@ export function registerBlitzHandlers(): void {
               sessionId,
               error: queueError,
             });
-            errors.push(`Failed to queue prompt for ${worktree.name}: ${queueError instanceof Error ? queueError.message : String(queueError)}`);
+            errors.push(`Failed to queue prompt for ${gitWorktree.name}: ${queueError instanceof Error ? queueError.message : String(queueError)}`);
           }
 
           logger.info('Blitz worktree created', {
             blitzId,
             worktreeIndex: i + 1,
             totalWorktrees,
-            worktreeName: worktree.name,
+            worktreeName: gitWorktree.name,
             model: assignment.model,
           });
         } catch (worktreeError) {
@@ -236,7 +242,7 @@ export function registerBlitzHandlers(): void {
 
       return {
         success: true,
-        blitz,
+        blitzSessionId: blitzId,
         worktrees: worktreeResults,
         sessionIds,
         errors: errors.length > 0 ? errors : undefined,
@@ -251,15 +257,35 @@ export function registerBlitzHandlers(): void {
   });
 
   /**
-   * List all blitzes for a workspace
+   * List all blitz sessions for a workspace
    */
-  ipcMain.handle('blitz:list', async (_event, workspacePath: string, includeArchived = false) => {
+  ipcMain.handle('blitz:list', async (_event, workspacePath: string, _includeArchived = false) => {
     try {
       const db = getDatabase();
       if (!db) throw new Error('Database not initialized');
 
-      const blitzStore = createBlitzStore(db);
-      const blitzes = await blitzStore.list(workspacePath, includeArchived);
+      // Query ai_sessions with session_type='blitz' for this workspace
+      const { rows } = await db.query<any>(
+        `SELECT id, title, session_type, metadata, is_pinned, is_archived, created_at, updated_at
+         FROM ai_sessions
+         WHERE workspace_id = $1 AND session_type = 'blitz'
+         ORDER BY created_at DESC`,
+        [workspacePath]
+      );
+
+      const blitzes = rows.map((row: any) => {
+        const metadata = typeof row.metadata === 'string' ? JSON.parse(row.metadata) : (row.metadata ?? {});
+        return {
+          id: row.id,
+          prompt: metadata.prompt ?? '',
+          modelConfig: metadata.modelConfig ?? [],
+          displayName: row.title !== 'New blitz' ? row.title : undefined,
+          isPinned: row.is_pinned ?? false,
+          isArchived: row.is_archived ?? false,
+          createdAt: row.created_at instanceof Date ? row.created_at.getTime() : new Date(row.created_at).getTime(),
+          updatedAt: row.updated_at instanceof Date ? row.updated_at.getTime() : new Date(row.updated_at).getTime(),
+        };
+      });
 
       return { success: true, blitzes };
     } catch (error) {
@@ -273,21 +299,25 @@ export function registerBlitzHandlers(): void {
    */
   ipcMain.handle('blitz:get', async (_event, blitzId: string) => {
     try {
-      const db = getDatabase();
-      if (!db) throw new Error('Database not initialized');
+      const session = await AISessionsRepository.get(blitzId);
 
-      const blitzStore = createBlitzStore(db);
-      const blitz = await blitzStore.get(blitzId);
-
-      if (!blitz) {
+      if (!session || session.sessionType !== 'blitz') {
         return { success: false, error: 'Blitz not found' };
       }
 
-      // Also get associated worktrees
-      const worktreeStore = createWorktreeStore(db);
-      const worktrees = await worktreeStore.listByBlitz(blitzId);
+      const metadata = session.metadata ?? {};
+      const blitz = {
+        id: session.id,
+        prompt: (metadata as any).prompt ?? '',
+        modelConfig: (metadata as any).modelConfig ?? [],
+        displayName: session.title !== 'New blitz' ? session.title : undefined,
+        isPinned: session.isPinned ?? false,
+        isArchived: session.isArchived ?? false,
+        createdAt: session.createdAt,
+        updatedAt: session.updatedAt,
+      };
 
-      return { success: true, blitz, worktrees };
+      return { success: true, blitz };
     } catch (error) {
       logger.error('Failed to get blitz:', error);
       return { success: false, error: String(error) };
@@ -295,28 +325,39 @@ export function registerBlitzHandlers(): void {
   });
 
   /**
-   * Archive a blitz and all its worktrees
+   * Archive a blitz and all its child worktree sessions
    */
-  ipcMain.handle('blitz:archive', async (_event, blitzId: string, workspacePath: string) => {
+  ipcMain.handle('blitz:archive', async (_event, blitzId: string, _workspacePath: string) => {
     try {
       const db = getDatabase();
       if (!db) throw new Error('Database not initialized');
 
-      const blitzStore = createBlitzStore(db);
       const worktreeStore = createWorktreeStore(db);
 
-      // Archive all child worktrees
-      const worktrees = await worktreeStore.listByBlitz(blitzId);
-      for (const worktree of worktrees) {
-        if (!worktree.isArchived) {
-          await worktreeStore.updateArchived(worktree.id, true);
+      // Find all child sessions and their worktrees
+      const { rows: childSessions } = await db.query<{ id: string; worktree_id: string }>(
+        `SELECT id, worktree_id FROM ai_sessions WHERE parent_session_id = $1`,
+        [blitzId]
+      );
+
+      // Archive child worktrees
+      const archivedWorktreeIds = new Set<string>();
+      for (const child of childSessions) {
+        if (child.worktree_id && !archivedWorktreeIds.has(child.worktree_id)) {
+          await worktreeStore.updateArchived(child.worktree_id, true);
+          archivedWorktreeIds.add(child.worktree_id);
         }
       }
 
-      // Archive the blitz itself
-      await blitzStore.updateArchived(blitzId, true);
+      // Archive child sessions
+      for (const child of childSessions) {
+        await AISessionsRepository.updateMetadata(child.id, { isArchived: true });
+      }
 
-      logger.info('Blitz archived', { blitzId, worktreeCount: worktrees.length });
+      // Archive the blitz session itself
+      await AISessionsRepository.updateMetadata(blitzId, { isArchived: true });
+
+      logger.info('Blitz archived', { blitzId, childCount: childSessions.length });
       return { success: true };
     } catch (error) {
       logger.error('Failed to archive blitz:', error);
@@ -329,12 +370,7 @@ export function registerBlitzHandlers(): void {
    */
   ipcMain.handle('blitz:update-pinned', async (_event, blitzId: string, isPinned: boolean) => {
     try {
-      const db = getDatabase();
-      if (!db) throw new Error('Database not initialized');
-
-      const blitzStore = createBlitzStore(db);
-      await blitzStore.updatePinned(blitzId, isPinned);
-
+      await AISessionsRepository.updateMetadata(blitzId, { isPinned } as any);
       return { success: true };
     } catch (error) {
       logger.error('Failed to update blitz pinned status:', error);
@@ -347,12 +383,7 @@ export function registerBlitzHandlers(): void {
    */
   ipcMain.handle('blitz:update-display-name', async (_event, blitzId: string, displayName: string) => {
     try {
-      const db = getDatabase();
-      if (!db) throw new Error('Database not initialized');
-
-      const blitzStore = createBlitzStore(db);
-      await blitzStore.updateDisplayName(blitzId, displayName);
-
+      await AISessionsRepository.updateMetadata(blitzId, { title: displayName });
       return { success: true };
     } catch (error) {
       logger.error('Failed to update blitz display name:', error);

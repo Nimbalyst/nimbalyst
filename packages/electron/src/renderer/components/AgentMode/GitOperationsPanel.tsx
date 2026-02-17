@@ -592,16 +592,18 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
           if (statusResult.success && statusResult.status?.hasUncommittedChanges) {
             // Don't show archive dialog - user has uncommitted changes
           } else {
-            // Check if this worktree belongs to a blitz - if so, offer to archive the whole blitz
-            if (worktreeId) {
+            // Check if this session belongs to a blitz (parent_session_id -> blitz session)
+            if (sessionId) {
               try {
-                const wtResult = await window.electronAPI.invoke('worktree:get', worktreeId);
-                if (wtResult?.worktree?.blitzId) {
-                  const blitzResult = await window.electronAPI.invoke('blitz:get', wtResult.worktree.blitzId);
-                  setBlitzId(wtResult.worktree.blitzId);
-                  setBlitzName(blitzResult?.blitz?.displayName || blitzResult?.blitz?.prompt?.slice(0, 60) || 'Blitz');
-                  setShowArchiveBlitzDialog(true);
-                  return;
+                const sessionResult = await window.electronAPI.invoke('sessions:get', sessionId);
+                if (sessionResult?.session?.parentSessionId) {
+                  const blitzResult = await window.electronAPI.invoke('blitz:get', sessionResult.session.parentSessionId);
+                  if (blitzResult?.success && blitzResult?.blitz) {
+                    setBlitzId(sessionResult.session.parentSessionId);
+                    setBlitzName(blitzResult.blitz.displayName || blitzResult.blitz.prompt?.slice(0, 60) || 'Blitz');
+                    setShowArchiveBlitzDialog(true);
+                    return;
+                  }
                 }
               } catch (err) {
                 console.error('[GitOperationsPanel] Failed to check blitz membership:', err);

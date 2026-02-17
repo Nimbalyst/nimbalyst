@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { VList } from 'virtua';
 import { DatabaseDashboard } from './DatabaseDashboard';
 
@@ -180,6 +180,30 @@ export function DatabaseBrowser() {
     return {};
   });
   const [showColumnPicker, setShowColumnPicker] = useState(false);
+
+  const tableHeaderRef = useRef<HTMLDivElement>(null);
+  const queryHeaderRef = useRef<HTMLDivElement>(null);
+
+  // Callback ref: attach to a wrapper div around VList.
+  // Finds VList's root scrollable element (first child) and syncs its horizontal scroll to the header.
+  const syncHeaderScroll = useCallback((headerRef: React.RefObject<HTMLDivElement | null>) => {
+    return (wrapper: HTMLDivElement | null) => {
+      if (!wrapper) return;
+      // VList renders as a single child div of our wrapper
+      const vlistEl = wrapper.firstElementChild as HTMLElement | null;
+      if (!vlistEl) return;
+      const handler = () => {
+        if (headerRef.current) {
+          headerRef.current.scrollLeft = vlistEl.scrollLeft;
+        }
+      };
+      if ((vlistEl as any).__syncHandler) {
+        vlistEl.removeEventListener('scroll', (vlistEl as any).__syncHandler);
+      }
+      (vlistEl as any).__syncHandler = handler;
+      vlistEl.addEventListener('scroll', handler, { passive: true });
+    };
+  }, []);
 
   // Save hidden columns to localStorage whenever they change
   useEffect(() => {
@@ -598,50 +622,48 @@ export function DatabaseBrowser() {
                   const visibleColumns = getVisibleColumns(selectedTable, allColumns);
 
                   return (
-                    <div className="virtual-table-container flex-1 flex flex-col border border-[var(--nim-border)] rounded overflow-x-auto min-h-0 bg-nim">
-                      <div className="virtual-table-header shrink-0 bg-nim-tertiary" style={{ minWidth: `${visibleColumns.length * 180}px` }}>
-                        <table className="data-table w-full border-collapse text-[13px] table-fixed">
-                          <thead>
-                            <tr>
-                              {visibleColumns.map(key => (
-                                <th key={key} onClick={() => handleSort(key)} className="sortable py-2 px-3 text-left border-b border-r border-[var(--nim-border)] font-semibold text-nim-muted cursor-pointer select-none static hover:bg-nim-hover bg-nim-tertiary">
-                                  {key}
-                                  {sortColumn === key && (
-                                    <span className="sort-indicator text-[10px] ml-1">
-                                      {sortDirection === 'asc' ? ' ↑' : ' ↓'}
-                                    </span>
-                                  )}
-                                </th>
-                              ))}
-                            </tr>
-                          </thead>
-                        </table>
+                    <div className="virtual-table-container flex-1 border border-[var(--nim-border)] rounded overflow-hidden min-h-0 bg-nim" style={{ display: 'grid', gridTemplateRows: 'auto 1fr' }}>
+                      <div ref={tableHeaderRef} className="virtual-table-header bg-nim-tertiary overflow-hidden">
+                        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${visibleColumns.length}, 150px)`, width: visibleColumns.length * 150 }}>
+                          {visibleColumns.map(key => (
+                            <div key={key} onClick={() => handleSort(key)} className="py-2 px-3 text-[13px] text-left border-b border-r border-[var(--nim-border)] font-semibold text-nim-muted cursor-pointer select-none hover:bg-nim-hover bg-nim-tertiary overflow-hidden text-ellipsis whitespace-nowrap last:border-r-0">
+                              {key}
+                              {sortColumn === key && (
+                                <span className="text-[10px] ml-1">
+                                  {sortDirection === 'asc' ? ' ↑' : ' ↓'}
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                      <VList className="virtual-table-body flex-1 min-h-0" style={{ minWidth: `${visibleColumns.length * 180}px` }}>
-                        {tableData.rows.map((row, idx) => (
-                          <div key={idx} className="virtual-table-row flex border-b border-[var(--nim-border)] hover:bg-[var(--nim-bg-hover)]">
-                            {visibleColumns.map(col => {
-                              const value = row[col];
-                              return (
-                                <div
-                                  key={col}
-                                  className="virtual-table-cell clickable flex-1 min-w-[180px] py-2 px-3 text-[13px] border-r border-[var(--nim-border)] overflow-hidden text-ellipsis whitespace-nowrap last:border-r-0 cursor-pointer hover:bg-[var(--nim-bg-hover)]"
-                                  onClick={() => handleCellClick(col, value)}
-                                  title="Click to expand"
-                                >
-                                  {value === null ? (
-                                    <span className="null-value text-[var(--nim-text-faint)] italic">NULL</span>
-                                  ) : typeof value === 'object' ? (
-                                    <span className="json-preview text-[var(--nim-text-muted)] font-mono text-xs">{JSON.stringify(value)}</span>
-                                  ) : (
-                                    String(value)
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        ))}
-                      </VList>
+                      <div className="min-h-0" ref={syncHeaderScroll(tableHeaderRef)}>
+                        <VList className="virtual-table-body !h-full" style={{ overflow: 'auto' }}>
+                          {tableData.rows.map((row, idx) => (
+                            <div key={idx} className="virtual-table-row border-b border-[var(--nim-border)] hover:bg-[var(--nim-bg-hover)]" style={{ display: 'grid', gridTemplateColumns: `repeat(${visibleColumns.length}, 150px)`, width: visibleColumns.length * 150 }}>
+                              {visibleColumns.map(col => {
+                                const value = row[col];
+                                return (
+                                  <div
+                                    key={col}
+                                    className="virtual-table-cell clickable py-2 px-3 text-[13px] border-r border-[var(--nim-border)] overflow-hidden text-ellipsis whitespace-nowrap last:border-r-0 cursor-pointer hover:bg-[var(--nim-bg-hover)]"
+                                    onClick={() => handleCellClick(col, value)}
+                                    title="Click to expand"
+                                  >
+                                    {value === null ? (
+                                      <span className="null-value text-[var(--nim-text-faint)] italic">NULL</span>
+                                    ) : typeof value === 'object' ? (
+                                      <span className="json-preview text-[var(--nim-text-muted)] font-mono text-xs">{JSON.stringify(value)}</span>
+                                    ) : (
+                                      String(value)
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ))}
+                        </VList>
+                      </div>
                     </div>
                   );
                 })()}
@@ -667,50 +689,48 @@ export function DatabaseBrowser() {
               const sortedRows = getSortedQueryResults();
 
               return (
-                <div className="virtual-table-container flex-1 flex flex-col border border-[var(--nim-border)] rounded overflow-x-auto min-h-0 bg-nim">
-                  <div className="virtual-table-header shrink-0 bg-nim-tertiary" style={{ minWidth: `${columns.length * 180}px` }}>
-                    <table className="data-table w-full border-collapse text-[13px] table-fixed">
-                      <thead>
-                        <tr>
-                          {columns.map(key => (
-                            <th key={key} onClick={() => handleSort(key)} className="sortable py-2 px-3 text-left border-b border-r border-[var(--nim-border)] font-semibold text-nim-muted cursor-pointer select-none static hover:bg-nim-hover bg-nim-tertiary">
-                              {key}
-                              {sortColumn === key && (
-                                <span className="sort-indicator text-[10px] ml-1">
-                                  {sortDirection === 'asc' ? ' ↑' : ' ↓'}
-                                </span>
-                              )}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                    </table>
+                <div className="virtual-table-container flex-1 border border-[var(--nim-border)] rounded overflow-hidden min-h-0 bg-nim" style={{ display: 'grid', gridTemplateRows: 'auto 1fr' }}>
+                  <div ref={queryHeaderRef} className="virtual-table-header bg-nim-tertiary overflow-hidden">
+                    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${columns.length}, 150px)`, width: columns.length * 150 }}>
+                      {columns.map(key => (
+                        <div key={key} onClick={() => handleSort(key)} className="py-2 px-3 text-[13px] text-left border-b border-r border-[var(--nim-border)] font-semibold text-nim-muted cursor-pointer select-none hover:bg-nim-hover bg-nim-tertiary overflow-hidden text-ellipsis whitespace-nowrap last:border-r-0">
+                          {key}
+                          {sortColumn === key && (
+                            <span className="text-[10px] ml-1">
+                              {sortDirection === 'asc' ? ' ↑' : ' ↓'}
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <VList className="virtual-table-body flex-1 min-h-0" style={{ minWidth: `${columns.length * 180}px` }}>
-                    {sortedRows.map((row, idx) => (
-                      <div key={idx} className="virtual-table-row flex border-b border-[var(--nim-border)] hover:bg-[var(--nim-bg-hover)]">
-                        {columns.map((col, colIdx) => {
-                          const value = row[col];
-                          return (
-                            <div
-                              key={colIdx}
-                              className="virtual-table-cell clickable flex-1 min-w-[180px] py-2 px-3 text-[13px] border-r border-[var(--nim-border)] overflow-hidden text-ellipsis whitespace-nowrap last:border-r-0 cursor-pointer hover:bg-[var(--nim-bg-hover)]"
-                              onClick={() => handleCellClick(col, value)}
-                              title="Click to expand"
-                            >
-                              {value === null ? (
-                                <span className="null-value text-[var(--nim-text-faint)] italic">NULL</span>
-                              ) : typeof value === 'object' ? (
-                                <span className="json-preview text-[var(--nim-text-muted)] font-mono text-xs">{JSON.stringify(value)}</span>
-                              ) : (
-                                String(value)
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ))}
-                  </VList>
+                  <div className="min-h-0" ref={syncHeaderScroll(queryHeaderRef)}>
+                    <VList className="virtual-table-body !h-full" style={{ overflow: 'auto' }}>
+                      {sortedRows.map((row, idx) => (
+                        <div key={idx} className="virtual-table-row border-b border-[var(--nim-border)] hover:bg-[var(--nim-bg-hover)]" style={{ display: 'grid', gridTemplateColumns: `repeat(${columns.length}, 150px)`, width: columns.length * 150 }}>
+                          {columns.map((col, colIdx) => {
+                            const value = row[col];
+                            return (
+                              <div
+                                key={colIdx}
+                                className="virtual-table-cell clickable py-2 px-3 text-[13px] border-r border-[var(--nim-border)] overflow-hidden text-ellipsis whitespace-nowrap last:border-r-0 cursor-pointer hover:bg-[var(--nim-bg-hover)]"
+                                onClick={() => handleCellClick(col, value)}
+                                title="Click to expand"
+                              >
+                                {value === null ? (
+                                  <span className="null-value text-[var(--nim-text-faint)] italic">NULL</span>
+                                ) : typeof value === 'object' ? (
+                                  <span className="json-preview text-[var(--nim-text-muted)] font-mono text-xs">{JSON.stringify(value)}</span>
+                                ) : (
+                                  String(value)
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ))}
+                    </VList>
+                  </div>
                 </div>
               );
             })()}

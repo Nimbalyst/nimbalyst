@@ -3,7 +3,6 @@
  */
 
 import type { Worktree } from '../../main/services/WorktreeStore';
-import type { Blitz } from '../../main/services/BlitzStore';
 
 /**
  * Response from worktree:create IPC handler
@@ -28,7 +27,7 @@ export interface SessionCreateResult {
  */
 export interface BlitzCreateResult {
   success: boolean;
-  blitz?: Blitz;
+  blitzSessionId?: string;
   worktrees?: WorktreeCreateResult[];
   sessionIds?: string[];
   errors?: string[];

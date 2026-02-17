@@ -456,9 +456,22 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
   const handleBlitzCreated = useCallback(async (result: any) => {
     if (!result.success) return;
 
-    const { worktrees: worktreeResults, sessionIds } = result;
+    const { blitzSessionId, worktrees: worktreeResults, sessionIds } = result;
 
-    // Add each session to the session registry
+    // Add blitz parent session to registry so sessionListRootAtom can identify blitz children
+    addSession({
+      id: blitzSessionId,
+      name: 'Blitz',
+      title: 'Blitz',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      provider: 'claude-code',
+      sessionType: 'blitz',
+      messageCount: 0,
+      projectPath: workspacePath,
+    });
+
+    // Add each child session to the session registry
     if (worktreeResults && sessionIds) {
       for (let i = 0; i < worktreeResults.length; i++) {
         const wResult = worktreeResults[i];
@@ -481,6 +494,7 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
           messageCount: 0,
           projectPath: workspacePath,
           worktreeId: worktree.id,
+          parentSessionId: blitzSessionId,
         });
 
         // Initialize workstream state with worktree type

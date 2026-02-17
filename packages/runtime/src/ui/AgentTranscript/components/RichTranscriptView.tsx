@@ -68,13 +68,32 @@ const injectRichTranscriptStyles = () => {
 
     /* Teammate message notification styling */
     .rich-transcript-teammate-notification {
-      background-color: color-mix(in srgb, var(--nim-primary) 5%, var(--nim-bg));
-      border-left: 3px solid color-mix(in srgb, var(--nim-primary) 40%, transparent);
-      padding: 0.5rem 0.75rem;
+      background-color: transparent;
+      border-left: 2px solid color-mix(in srgb, var(--nim-primary) 25%, transparent);
+      padding: 0.25rem 0.5rem;
     }
-    .rich-transcript-message-avatar.teammate-notification {
-      background-color: color-mix(in srgb, var(--nim-primary) 15%, transparent);
-      color: var(--nim-primary);
+    .rich-transcript-teammate-notification details > summary {
+      cursor: pointer;
+      user-select: none;
+    }
+    .rich-transcript-teammate-notification details > summary::-webkit-details-marker,
+    .rich-transcript-teammate-notification details > summary::marker {
+      display: none;
+      content: '';
+    }
+    .rich-transcript-teammate-notification .teammate-content {
+      font-size: 0.8125rem;
+      line-height: 1.5;
+      color: var(--nim-text-muted);
+    }
+    .rich-transcript-teammate-notification .teammate-content p:first-child {
+      margin-top: 0;
+    }
+    .rich-transcript-teammate-notification .teammate-content p:last-child {
+      margin-bottom: 0;
+    }
+    .rich-transcript-teammate-notification details[open] > summary .teammate-chevron {
+      transform: rotate(90deg);
     }
 
     /* VList scrollbar styling */
@@ -1323,6 +1342,27 @@ export const RichTranscriptView = React.forwardRef<
                       );
                     }
 
+                    // Hide assistant/tool messages that sit between agent notifications.
+                    // These are the agent's internal processing turns after receiving a teammate/sub-agent
+                    // message - they appear as dark bars with scrollbars and add visual noise.
+                    if (message.role === 'assistant' || message.role === 'tool') {
+                      // Walk back to find the nearest user message (skipping tool and assistant messages)
+                      let prevIdx = index - 1;
+                      while (prevIdx >= 0 && messages[prevIdx].role !== 'user') prevIdx--;
+                      if (prevIdx >= 0 && messages[prevIdx].metadata?.isTeammateMessage) {
+                        // The most recent user message before this is a teammate notification.
+                        // Also check: is there a teammate notification after this? (i.e., we're between two)
+                        // OR is there no substantive assistant content worth showing?
+                        let nextUserIdx = index + 1;
+                        while (nextUserIdx < messages.length && messages[nextUserIdx].role !== 'user') nextUserIdx++;
+                        const nextIsTeammate = nextUserIdx < messages.length && messages[nextUserIdx].metadata?.isTeammateMessage;
+                        const hasNoContent = !message.content?.trim();
+                        if (nextIsTeammate || hasNoContent) {
+                          return <div key={`${sessionId}-${index}`} style={{ display: 'none' }} />;
+                        }
+                      }
+                    }
+
                     // Find tool messages that should be grouped with this message
                     const toolMessagesBefore: { message: Message, index: number }[] = [];
                     if (message.role === 'assistant') {
@@ -1365,9 +1405,15 @@ export const RichTranscriptView = React.forwardRef<
                       );
                     }
 
-                    // Render teammate messages as compact inline notifications
+                    // Render teammate/sub-agent messages as compact inline notifications
                     if (isUser && message.metadata?.isTeammateMessage) {
-                      const teammateName = (message.metadata?.teammateName as string) || 'Teammate';
+                      const teammateName = (message.metadata?.teammateName as string) || 'agent';
+                      const label = `Received message from agent ${teammateName}`;
+                      const content = message.content?.trim();
+                      // Show first line as preview (truncated)
+                      const firstLine = content?.split('\n')[0] || '';
+                      const preview = firstLine.length > 100 ? firstLine.slice(0, 100) + '...' : firstLine;
+                      const hasMoreContent = content && (content.includes('\n') || content.length > 100);
                       return (
                         <div
                           key={`${sessionId}-${index}`}
@@ -1375,41 +1421,26 @@ export const RichTranscriptView = React.forwardRef<
                           ref={(el) => {
                             if (el) messageRefs.current.set(index, el);
                           }}
-                          className="rich-transcript-message rich-transcript-teammate-notification rounded-md relative max-w-full overflow-x-hidden break-words mb-2"
+                          className="rich-transcript-message rich-transcript-teammate-notification rounded-md relative max-w-full overflow-x-hidden break-words mb-1"
                         >
-                          <div className="flex items-start gap-2">
-                            <div className="rich-transcript-message-avatar teammate-notification rounded-full p-1 shrink-0">
-                              <MaterialSymbol icon="forum" size={14} />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-baseline gap-2 mb-0.5">
-                                <span className="text-xs font-medium text-[var(--nim-text-muted)]">
-                                  Message received from {teammateName}
-                                </span>
-                                <span className="text-[10px] text-[var(--nim-text-faint)]">
-                                  {formatMessageTime(message.timestamp)}
-                                </span>
+                          {hasMoreContent ? (
+                            <details>
+                              <summary className="flex items-center gap-1.5 py-0.5 text-xs text-[var(--nim-text-faint)] hover:text-[var(--nim-text-muted)]">
+                                <MaterialSymbol icon="chevron_right" size={14} className="teammate-chevron transition-transform shrink-0 w-3.5" />
+                                <span className="flex-1 truncate">{label}: {preview}</span>
+                                <span className="text-[10px] shrink-0">{formatMessageTime(message.timestamp)}</span>
+                              </summary>
+                              <div className="teammate-content ml-5 mt-1 mb-0.5">
+                                <MarkdownRenderer content={content} isUser={false} />
                               </div>
-                              <div className="text-xs text-[var(--nim-text-muted)]">
-                                <MessageSegment
-                                  message={message}
-                                  isUser={true}
-                                  isCollapsed={isCollapsed}
-                                  showToolCalls={false}
-                                  showThinking={settings.showThinking}
-                                  expandedTools={expandedTools}
-                                  onToggleToolExpand={toggleToolExpand}
-                                  documentContext={documentContext}
-                                  shouldShowLoginWidget={false}
-                                  sessionId={sessionId}
-                                  isLastMessage={index === messages.length - 1}
-                                  onOpenFile={onOpenFile}
-                                  onCompact={onCompact}
-                                  provider={provider}
-                                />
-                              </div>
+                            </details>
+                          ) : (
+                            <div className="flex items-center gap-1.5 py-0.5 text-xs text-[var(--nim-text-faint)]">
+                              <MaterialSymbol icon="chevron_right" size={14} className="shrink-0 w-3.5 invisible" />
+                              <span className="flex-1 truncate">{label}: {content}</span>
+                              <span className="text-[10px] shrink-0">{formatMessageTime(message.timestamp)}</span>
                             </div>
-                          </div>
+                          )}
                         </div>
                       );
                     }

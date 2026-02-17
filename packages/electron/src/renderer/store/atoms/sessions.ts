@@ -41,7 +41,7 @@ export interface SessionMeta {
   createdAt: number;
   updatedAt: number;
   provider: string;
-  sessionType: 'chat' | 'planning' | 'coding' | 'terminal';
+  sessionType: 'chat' | 'planning' | 'coding' | 'terminal' | 'blitz';
   messageCount: number;
   isArchived: boolean;
   isPinned: boolean;
@@ -80,7 +80,12 @@ export const sessionListFromRegistryAtom = atom((get) => {
 export const sessionListRootFromRegistryAtom = atom((get) => {
   const registry = get(sessionRegistryAtom);
   return Array.from(registry.values())
-    .filter(s => !s.parentSessionId) // Root sessions only
+    .filter(s => {
+      if (!s.parentSessionId) return true;
+      // Include blitz children (their parent has sessionType='blitz')
+      const parent = registry.get(s.parentSessionId);
+      return parent?.sessionType === 'blitz';
+    })
     .sort((a, b) => b.updatedAt - a.updatedAt);
 });
 
@@ -1662,7 +1667,7 @@ export interface SessionListItem {
   updatedAt: number;
   provider: string;
   model?: string;
-  sessionType?: 'chat' | 'planning' | 'coding' | 'terminal';
+  sessionType?: 'chat' | 'planning' | 'coding' | 'terminal' | 'blitz';
   messageCount: number;
   projectPath: string;
   isArchived?: boolean;
@@ -1711,7 +1716,15 @@ export const sessionListRootAtom = atom<SessionListItem[]>((get) => {
   const showArchived = get(showArchivedSessionsAtom);
 
   return Array.from(registry.values())
-    .filter(s => !s.parentSessionId && (showArchived || !s.isArchived))
+    .filter(s => {
+      if (!showArchived && s.isArchived) return false;
+      // Root sessions (no parent) are always included
+      if (!s.parentSessionId) return true;
+      // Blitz child sessions must also be included so they appear in worktreeGroupsData
+      // and can be grouped into BlitzGroup via their parentSessionId
+      const parent = registry.get(s.parentSessionId);
+      return parent?.sessionType === 'blitz';
+    })
     .sort((a, b) => b.updatedAt - a.updatedAt)
     .map(meta => sessionMetaToListItem(meta, workspacePath));
 });

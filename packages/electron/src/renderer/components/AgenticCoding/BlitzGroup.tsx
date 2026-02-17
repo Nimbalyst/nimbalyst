@@ -23,7 +23,6 @@ interface WorktreeWithStatus {
   displayName?: string;
   path: string;
   branch: string;
-  blitzId?: string;
   gitStatus?: {
     ahead?: number;
     behind?: number;

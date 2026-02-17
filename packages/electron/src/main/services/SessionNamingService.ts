@@ -8,7 +8,6 @@ import {
 } from '../mcp/sessionNamingServer';
 import { getDatabase } from '../database/initialize';
 import { createWorktreeStore } from './WorktreeStore';
-import { createBlitzStore } from './BlitzStore';
 
 /**
  * Service to manage the session naming MCP server
@@ -57,40 +56,31 @@ export class SessionNamingService {
         setUpdateSessionTitleFn(async (sessionId: string, title: string) => {
           const windows = BrowserWindow.getAllWindows();
 
-          // Check if this session belongs to a blitz worktree before updating the session title.
-          // For blitz sessions, we keep the numbered title (e.g. "Session 1") and only
-          // propagate the name to the worktree and blitz display names.
-          let isBlitzSession = false;
+          // Check if this session belongs to a blitz (parent_session_id points to a blitz session)
+          let parentBlitzId: string | undefined;
           let worktreeId: string | undefined;
-          let blitzId: string | undefined;
 
           try {
             const session = await AISessionsRepository.get(sessionId);
-            if (session?.worktreeId) {
-              worktreeId = session.worktreeId;
-              const db = getDatabase();
-              if (db) {
-                const worktreeStore = createWorktreeStore(db);
-                const worktree = await worktreeStore.get(session.worktreeId);
-                if (worktree?.blitzId) {
-                  isBlitzSession = true;
-                  blitzId = worktree.blitzId;
-                }
+            worktreeId = session?.worktreeId;
+
+            if (session?.parentSessionId) {
+              const parent = await AISessionsRepository.get(session.parentSessionId);
+              if (parent?.sessionType === 'blitz') {
+                parentBlitzId = parent.id;
               }
             }
           } catch (error) {
             console.error('[SessionNamingService] Failed to check blitz membership:', error);
           }
 
-          if (!isBlitzSession) {
-            // Non-blitz session: update the session title as usual
-            await sessionManager.updateSessionTitle(sessionId, title);
-            for (const window of windows) {
-              window.webContents.send('session:title-updated', { sessionId, title });
-            }
+          // Always update the session title (child worktree sessions get named normally)
+          await sessionManager.updateSessionTitle(sessionId, title);
+          for (const window of windows) {
+            window.webContents.send('session:title-updated', { sessionId, title });
           }
 
-          // Propagate to worktree and blitz display names regardless
+          // Propagate to worktree display name
           if (worktreeId) {
             try {
               const db = getDatabase();
@@ -106,23 +96,27 @@ export class SessionNamingService {
                     });
                   }
                 }
+              }
+            } catch (error) {
+              console.error('[SessionNamingService] Failed to update worktree display name:', error);
+            }
+          }
 
-                if (blitzId) {
-                  const blitzStore = createBlitzStore(db);
-                  const blitzUpdated = await blitzStore.updateDisplayNameIfEmpty(blitzId, title);
-                  if (blitzUpdated) {
-                    console.log(`[SessionNamingService] Updated blitz ${blitzId} display name to: "${title}"`);
-                    for (const window of windows) {
-                      window.webContents.send('blitz:display-name-updated', {
-                        blitzId,
-                        displayName: title
-                      });
-                    }
-                  }
+          // Propagate to blitz session title (use updateTitleIfNotNamed for first-wins semantics)
+          if (parentBlitzId) {
+            try {
+              const updated = await AISessionsRepository.updateTitleIfNotNamed(parentBlitzId, title);
+              if (updated) {
+                console.log(`[SessionNamingService] Updated blitz ${parentBlitzId} display name to: "${title}"`);
+                for (const window of windows) {
+                  window.webContents.send('blitz:display-name-updated', {
+                    blitzId: parentBlitzId,
+                    displayName: title
+                  });
                 }
               }
             } catch (error) {
-              console.error('[SessionNamingService] Failed to update worktree/blitz display name:', error);
+              console.error('[SessionNamingService] Failed to update blitz display name:', error);
             }
           }
         });

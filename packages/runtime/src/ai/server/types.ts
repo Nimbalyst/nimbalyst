@@ -139,7 +139,7 @@ export interface AIModel {
   contextWindow?: number;
 }
 
-export type SessionType = 'chat' | 'planning' | 'coding' | 'terminal';
+export type SessionType = 'chat' | 'planning' | 'coding' | 'terminal' | 'blitz';
 
 export type SessionMode = 'planning' | 'agent';
 

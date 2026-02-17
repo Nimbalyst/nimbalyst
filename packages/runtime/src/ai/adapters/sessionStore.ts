@@ -31,7 +31,7 @@ export interface CreateSessionPayload {
   id: string;
   provider: string;
   model?: string;
-  sessionType?: 'chat' | 'planning' | 'coding' | 'terminal';
+  sessionType?: 'chat' | 'planning' | 'coding' | 'terminal' | 'blitz';
   mode?: SessionMode;
   title?: string;
   workspaceId: string;
