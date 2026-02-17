@@ -20,6 +20,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.53.6] - 2026-02-17
+
+
+### Added
+- Error detection, reporting, and retry for iOS session detail view
+
+### Changed
+- Replaced old file tree with new virtualized implementation
+- Centralized file tree IPC listener to follow project patterns
+
+### Fixed
+- iOS voice mode crash when starting audio capture
+- Index WebSocket reconnection loop stops permanently after failed retry
+- File tree no longer jumps scroll when expanding directories
+
 ## [0.53.5] - 2026-02-16
 
 
