@@ -361,6 +361,41 @@ export async function handleShareDelete(
  */
 function getDecryptionViewerHtml(shareId: string): string {
   return `<!DOCTYPE html>
+<!--
+AGENT DECRYPTION INSTRUCTIONS
+==============================
+This page contains AES-256-GCM encrypted content. To extract the plaintext
+programmatically (e.g. from a CLI agent or script), follow these steps:
+
+1. EXTRACT THE KEY from the URL fragment (the part after #key=).
+   The key is URL-safe base64: replace - with +, _ with /, and pad with =
+   to get standard base64. Decode to get the raw 32-byte AES key.
+
+2. FETCH THE ENCRYPTED CONTENT:
+   GET https://sync.nimbalyst.com/share/${shareId}/content
+   This returns raw binary (application/octet-stream). No auth required.
+
+3. PARSE THE BINARY FORMAT:
+   Bytes  0-11:  IV (initialization vector, 12 bytes)
+   Bytes 12-end: Ciphertext with appended GCM auth tag (last 16 bytes)
+
+4. DECRYPT with AES-256-GCM using the IV and key.
+   In Node.js:
+     const crypto = require('crypto');
+     const keyB64url = url.split('#key=')[1];
+     const keyB64 = keyB64url.replace(/-/g,'+').replace(/_/g,'/');
+     const key = Buffer.from(keyB64, 'base64');
+     const data = await fetch('https://sync.nimbalyst.com/share/${shareId}/content').then(r=>r.arrayBuffer());
+     const buf = Buffer.from(data);
+     const iv = buf.subarray(0, 12);
+     const authTag = buf.subarray(buf.length - 16);
+     const ciphertext = buf.subarray(12, buf.length - 16);
+     const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+     decipher.setAuthTag(authTag);
+     const html = Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8');
+
+5. The result is an HTML document containing the shared content.
+-->
 <html lang="en">
 <head>
 <meta charset="utf-8">

@@ -80,6 +80,11 @@ const state: SyncManagerState = {
   sessionKeepAliveInterval: null,
 };
 
+// Guard against overlapping incremental syncs (initial + triggered) and enforce minimum interval
+let incrementalSyncInFlight = false;
+let lastIncrementalSyncAt = 0;
+const MIN_INCREMENTAL_SYNC_INTERVAL = 5000; // 5 seconds minimum between syncs
+
 // Event emitter for sync status changes
 type SyncStatusListener = (status: { connected: boolean; syncing: boolean; error: string | null }) => void;
 const statusListeners = new Set<SyncStatusListener>();
@@ -420,7 +425,9 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
     logger.main.info('[SyncManager] Setting up incremental sync...');
     setTimeout(async () => {
       const syncStart = performance.now();
-      logger.main.info('[SyncManager] Starting incremental sync...');
+      logger.main.info('[SyncManager] Starting initial incremental sync...');
+      // Prevent triggered syncs from overlapping with the initial sync
+      incrementalSyncInFlight = true;
       try {
         if (!provider.syncSessionsToIndex || !provider.fetchIndex) {
           logger.main.warn('[SyncManager] Provider missing required sync methods');
@@ -537,6 +544,9 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
         logger.main.info(`[SyncManager] Incremental sync completed in ${totalSyncTime.toFixed(1)}ms`);
       } catch (error) {
         logger.main.warn('[SyncManager] Failed to sync sessions:', error);
+      } finally {
+        incrementalSyncInFlight = false;
+        lastIncrementalSyncAt = Date.now();
       }
     }, 2000); // Wait for index connection
 
@@ -679,6 +689,22 @@ export async function triggerIncrementalSync(): Promise<void> {
     return;
   }
 
+  // Skip if a sync is already in flight
+  if (incrementalSyncInFlight) {
+    logger.main.debug('[SyncManager] Incremental sync already in flight, skipping');
+    return;
+  }
+
+  // Enforce minimum interval between syncs
+  const now = Date.now();
+  if (now - lastIncrementalSyncAt < MIN_INCREMENTAL_SYNC_INTERVAL) {
+    logger.main.debug('[SyncManager] Incremental sync too soon after last sync, skipping');
+    return;
+  }
+
+  incrementalSyncInFlight = true;
+  lastIncrementalSyncAt = now;
+
   const syncStart = performance.now();
   logger.main.info('[SyncManager] Starting triggered incremental sync...');
 
@@ -786,6 +812,8 @@ export async function triggerIncrementalSync(): Promise<void> {
     // logger.main.info(`[SyncManager] Triggered sync completed in ${totalSyncTime.toFixed(1)}ms`);
   } catch (error) {
     logger.main.error('[SyncManager] Triggered sync failed:', error);
+  } finally {
+    incrementalSyncInFlight = false;
   }
 }
 
