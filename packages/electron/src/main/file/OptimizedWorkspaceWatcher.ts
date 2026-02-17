@@ -86,6 +86,26 @@ export class OptimizedWorkspaceWatcher {
                         return true;
                     }
 
+                    // Ignore macOS system/protected directories and unwatchable paths.
+                    // These cause EPERM/EACCES errors and are never useful in a file tree.
+                    const topSegment = relativePath.split('/')[1];
+                    if (topSegment) {
+                        const ignoredTopDirs = new Set([
+                            '.Trash', 'Library', 'Applications', 'Documents',
+                            'Downloads', 'Music', 'Pictures', 'Movies', 'Public',
+                            '.Spotlight-V100', '.TemporaryItems', '.fseventsd',
+                        ]);
+                        if (ignoredTopDirs.has(topSegment)) {
+                            return true;
+                        }
+                    }
+
+                    // Ignore Unix socket files (e.g. .gnupg/S.gpg-agent) - not watchable
+                    const basename = relativePath.split('/').pop() || '';
+                    if (basename.startsWith('S.')) {
+                        return true;
+                    }
+
                     // Watch all files - filtering happens in the UI
                     return false;
                 },
@@ -153,6 +173,10 @@ export class OptimizedWorkspaceWatcher {
                     const code = error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined;
                     if (code === 'EMFILE' || code === 'ENFILE') {
                         logger.workspaceWatcher.warn(`Too many open files - some file tree changes may not be detected. Try closing other workspaces or collapsing large folders.`);
+                    } else if (code === 'EPERM' || code === 'EACCES' || code === 'UNKNOWN') {
+                        // Permission errors and unwatchable paths (sockets, protected dirs) are
+                        // expected when watching broad directories. Log at debug, not error.
+                        logger.workspaceWatcher.debug(`Skipping unwatchable path: ${error}`);
                     } else {
                         logger.workspaceWatcher.error('Watcher error:', error);
                         console.error(`[WorkspaceWatcher] Error:`, error);
@@ -174,9 +198,17 @@ export class OptimizedWorkspaceWatcher {
     addWatchedFolder(windowId: number, folderPath: string) {
         const watcher = this.watchers.get(windowId);
         const watchedPaths = this.watchedPaths.get(windowId);
+        const workspacePath = this.workspacePaths.get(windowId);
 
         if (!watcher || !watchedPaths) {
             console.log(`[WorkspaceWatcher] No watcher found for window ${windowId}`);
+            return;
+        }
+
+        // Guard: only watch folders within the workspace to prevent watching
+        // arbitrary filesystem paths (e.g. /var, /tmp) which flood the watcher
+        if (workspacePath && !folderPath.startsWith(workspacePath + '/') && folderPath !== workspacePath) {
+            console.log(`[WorkspaceWatcher] Rejecting folder outside workspace: ${folderPath}`);
             return;
         }
 

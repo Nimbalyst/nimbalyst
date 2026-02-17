@@ -9,12 +9,16 @@ const naturalCollator = new Intl.Collator(undefined, {
     sensitivity: 'base'
 });
 
-// Performance limits to prevent freezing on huge directories
+// Performance limits -- all per-directory, no global cap.
+// A single large directory can never prevent the rest of the tree from loading.
+//
+// MAX_DEPTH: deepest we'll recurse from workspace root. Prevents infinite loops
+//   in circular symlinks and limits scan cost on deeply nested trees.
+// MAX_ITEMS_PER_DIR: max immediate children shown in a single directory.
+//   If a directory has more than this many entries, only the first N are shown.
+//   This handles flat-huge directories (e.g., a folder with 50,000 images).
 const MAX_DEPTH = 8;
-const MAX_FILES_PER_DIR = 1000;
-const MAX_TOTAL_ITEMS = 10000;
-
-let totalItemCount = 0;
+const MAX_ITEMS_PER_DIR = 200;
 
 // Special directories that should always appear first
 const SPECIAL_DIRECTORIES = ['nimbalyst-local'];
@@ -23,115 +27,73 @@ function isSpecialDirectory(name: string): boolean {
     return SPECIAL_DIRECTORIES.includes(name);
 }
 
+function sortItems(items: FileTreeItem[]): void {
+    items.sort((a, b) => {
+        const aIsSpecial = a.type === 'directory' && isSpecialDirectory(a.name);
+        const bIsSpecial = b.type === 'directory' && isSpecialDirectory(b.name);
+
+        if (aIsSpecial && !bIsSpecial) return -1;
+        if (!aIsSpecial && bIsSpecial) return 1;
+        if (aIsSpecial && bIsSpecial) {
+            return SPECIAL_DIRECTORIES.indexOf(a.name) - SPECIAL_DIRECTORIES.indexOf(b.name);
+        }
+        if (a.type !== b.type) {
+            return a.type === 'directory' ? -1 : 1;
+        }
+        return naturalCollator.compare(a.name, b.name);
+    });
+}
+
 export function getFolderContents(dirPath: string, depth: number = 0): FileTreeItem[] {
     const result: FileTreeItem[] = [];
     const directoriesToPopulate: FileTreeItem[] = [];
 
-    // Reset counter on top-level call
-    if (depth === 0) {
-        totalItemCount = 0;
-    }
-
-    // Stop if we've hit limits
     if (depth > MAX_DEPTH) {
-        // console.warn(`[FileTree] Stopped scanning at depth ${depth} for: ${dirPath}`);
-        return result;
-    }
-
-    if (totalItemCount > MAX_TOTAL_ITEMS) {
-        console.warn(`[FileTree] Stopped scanning after ${totalItemCount} items`);
         return result;
     }
 
     try {
-        const items = readdirSync(dirPath);
+        const entries = readdirSync(dirPath);
+        let visibleCount = 0;
 
-        // Limit items per directory
-        const limitedItems = items.slice(0, MAX_FILES_PER_DIR);
-        if (items.length > MAX_FILES_PER_DIR) {
-            console.warn(`[FileTree] Directory has ${items.length} items, only showing first ${MAX_FILES_PER_DIR}: ${dirPath}`);
-        }
+        for (const entry of entries) {
+            if (entry === '.DS_Store' || shouldExcludeDir(entry)) continue;
+            if (visibleCount >= MAX_ITEMS_PER_DIR) continue;
 
-        let truncatedCurrentDir = false;
-
-        for (const item of limitedItems) {
-            // Check global limit
-            if (totalItemCount >= MAX_TOTAL_ITEMS) {
-                truncatedCurrentDir = true;
-                break;
-            }
-
-            // Skip system files and excluded directories
-            if (item === '.DS_Store' || shouldExcludeDir(item)) {
-                continue;
-            }
-
-            const fullPath = join(dirPath, item);
+            const fullPath = join(dirPath, entry);
 
             try {
                 const stats = statSync(fullPath);
 
                 if (stats.isDirectory()) {
                     const dirItem: FileTreeItem = {
-                        name: item,
+                        name: entry,
                         type: 'directory',
                         path: fullPath,
                         children: []
                     };
                     directoriesToPopulate.push(dirItem);
                     result.push(dirItem);
-                    totalItemCount++;
+                    visibleCount++;
                 } else if (stats.isFile()) {
-                    totalItemCount++;
-                    // Include all files - filtering happens in the UI
-                    result.push({
-                        name: item,
-                        type: 'file',
-                        path: fullPath
-                    });
+                    result.push({ name: entry, type: 'file', path: fullPath });
+                    visibleCount++;
                 }
-            } catch (error) {
+            } catch {
                 // Skip files/dirs we can't stat (permissions, broken symlinks)
             }
         }
 
-        if (truncatedCurrentDir) {
-            console.warn(`[FileTree] Hit MAX_TOTAL_ITEMS (${MAX_TOTAL_ITEMS}) while listing: ${dirPath}`);
-        }
+        sortItems(result);
 
-        // Sort: special directories first, then regular directories, then files
-        result.sort((a, b) => {
-            const aIsSpecial = a.type === 'directory' && isSpecialDirectory(a.name);
-            const bIsSpecial = b.type === 'directory' && isSpecialDirectory(b.name);
-
-            // Special directories always come first
-            if (aIsSpecial && !bIsSpecial) return -1;
-            if (!aIsSpecial && bIsSpecial) return 1;
-
-            // If both are special, maintain their defined order
-            if (aIsSpecial && bIsSpecial) {
-                return SPECIAL_DIRECTORIES.indexOf(a.name) - SPECIAL_DIRECTORIES.indexOf(b.name);
-            }
-
-            // Regular directories before files
-            if (a.type !== b.type) {
-                return a.type === 'directory' ? -1 : 1;
-            }
-
-            // Natural sort within same type
-            return naturalCollator.compare(a.name, b.name);
-        });
-
-        // Populate directory children after all siblings are registered so folders never disappear
+        // Recurse into each child directory.
+        // MAX_DEPTH + MAX_ITEMS_PER_DIR bound the total work per branch:
+        //   worst case is 200^8 but in practice it's far less because most
+        //   entries are files (not directories) and excluded dirs are pruned.
         for (const directory of directoriesToPopulate) {
-            if (totalItemCount >= MAX_TOTAL_ITEMS) {
-                break;
-            }
             directory.children = getFolderContents(directory.path, depth + 1);
         }
     } catch (error: any) {
-        // Silently handle ENOENT errors (directory doesn't exist)
-        // This is expected when scanning directories that may not be created yet
         if (error.code !== 'ENOENT') {
             console.error('Error reading folder contents:', error);
         }

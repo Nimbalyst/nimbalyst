@@ -59,4 +59,5 @@ export interface FileTreeItem {
     type: 'file' | 'directory';
     path: string;
     children?: FileTreeItem[];
+    truncated?: number; // Number of items hidden when directory was too large
 }

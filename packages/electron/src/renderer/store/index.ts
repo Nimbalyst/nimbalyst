@@ -169,12 +169,14 @@ export {
 // File tree atoms (Electron file watcher)
 export {
   fileTreeAtom,
+  rawFileTreeAtom,
   gitStatusMapAtom,
   fileGitStatusAtom,
   expandedDirsAtom,
   isDirExpandedAtom,
   selectedFilePathAtom,
   selectedFolderPathAtom,
+  revealRequestAtom,
   activeFilePathAtom,
   fileTreeFilterAtom,
   directoryGitStatusAtom,
@@ -183,9 +185,22 @@ export {
   toggleDirExpandedAtom,
   revealFileAtom,
   revealFolderAtom,
+  openFileRequestAtom,
+  // Flat virtualized file tree atoms
+  flatTreeActiveFileAtom,
+  fileTreeItemsAtom,
+  selectedPathsAtom,
+  lastSelectedPathAtom,
+  focusedIndexAtom,
+  dragStateAtom,
+  visibleNodesAtom,
+  type RevealRequest,
   type GitStatusCode,
   type FileGitStatus,
   type FileTreeItem,
+  type RendererFileTreeItem,
+  type DragState,
+  type FlatTreeNode,
 } from './atoms/fileTree';
 
 // Tracker atoms (Electron-specific)
@@ -385,6 +400,12 @@ export {
   loadInitialQueuedPrompts,
   clearSessionError,
 } from './listeners/sessionTranscriptListeners';
+
+// File tree listeners (centralized IPC handlers)
+export {
+  initFileTreeListeners,
+  refreshFileTree,
+} from './listeners/fileTreeListeners';
 
 // Session files atoms (file edits, git status, worktree changes)
 export {

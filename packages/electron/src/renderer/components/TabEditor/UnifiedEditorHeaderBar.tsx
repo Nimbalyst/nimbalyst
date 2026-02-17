@@ -20,7 +20,7 @@ import {
   wrapWithPrintStyles,
 } from 'rexical';
 import { $generateHtmlFromNodes } from '@lexical/html';
-import { revealFolderAtom } from '../../store';
+import { revealFolderAtom, openFileRequestAtom, setWindowModeAtom } from '../../store';
 import { getDocumentService } from '../../services/RendererDocumentService';
 import { isWorktreePath } from '../../../shared/pathUtils';
 
@@ -246,8 +246,10 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
   onToggleDebugTree,
   onContentChanged,
 }) => {
-  // Jotai atom for folder navigation
+  // Jotai atom for folder navigation and mode switching
   const revealFolder = useSetAtom(revealFolderAtom);
+  const setOpenFileRequest = useSetAtom(openFileRequestAtom);
+  const setWindowMode = useSetAtom(setWindowModeAtom);
 
   // Dropdown states
   const [showAISessions, setShowAISessions] = useState(false);
@@ -307,12 +309,19 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
     });
   }, [filePath, workspacePath, fileName]);
 
-  // Handle breadcrumb folder click
-  const handleBreadcrumbClick = useCallback((folderPath: string | null) => {
+  // Handle breadcrumb click - switches to files mode and opens the file/folder
+  const handleBreadcrumbClick = useCallback((folderPath: string | null, targetFilePath?: string) => {
     if (folderPath) {
+      // Folder segment: switch to files mode and reveal the folder in the tree
+      setWindowMode('files');
       revealFolder(folderPath);
+      return;
     }
-  }, [revealFolder]);
+    if (targetFilePath) {
+      // Filename segment: open the file in files mode (handles mode switch + tab opening)
+      setOpenFileRequest({ path: targetFilePath, ts: Date.now() });
+    }
+  }, [revealFolder, setOpenFileRequest, setWindowMode]);
 
   // Load AI sessions
   const loadAISessions = useCallback(async () => {
@@ -652,7 +661,7 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
       <div className="unified-header-breadcrumb flex items-center gap-1.5 text-[13px] min-w-0 overflow-hidden">
         {breadcrumbSegments.map((segment, index) => {
           const isLast = index === breadcrumbSegments.length - 1;
-          const isClickable = !isLast && segment.folderPath;
+          const isClickable = (!isLast && segment.folderPath) || (isLast && Boolean(filePath));
           return (
             <React.Fragment key={index}>
               <span
@@ -665,7 +674,7 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
                     ? 'breadcrumb-clickable cursor-pointer rounded py-0.5 px-1 -my-0.5 -mx-1 transition-colors duration-150 hover:text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]'
                     : ''
                 }`}
-                onClick={isClickable ? () => handleBreadcrumbClick(segment.folderPath) : undefined}
+                onClick={isClickable ? () => handleBreadcrumbClick(segment.folderPath, isLast ? filePath : undefined) : undefined}
                 title={isClickable ? `Go to ${segment.name} in file tree` : undefined}
               >
                 {!isLast && (

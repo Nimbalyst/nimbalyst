@@ -62,6 +62,8 @@ import {
   selectedWorkstreamAtom,
   // Session draft utilities
   setSessionDraftInputAtom,
+  // File navigation
+  openFileRequestAtom,
 } from './store';
 import { TrackerBottomPanel } from './components/TrackerBottomPanel/TrackerBottomPanel.tsx';
 import { TerminalBottomPanel } from './components/TerminalBottomPanel';
@@ -716,6 +718,18 @@ export default function App() {
   // Configure aiToolService with handleWorkspaceFileSelect
   useEffect(() => {
     aiToolService.setHandleWorkspaceFileSelectFunction(handleWorkspaceFileSelect);
+  }, [handleWorkspaceFileSelect]);
+
+  // Subscribe to openFileRequestAtom (breadcrumb clicks from any mode)
+  useEffect(() => {
+    const unsub = store.sub(openFileRequestAtom, () => {
+      const req = store.get(openFileRequestAtom);
+      if (req) {
+        handleWorkspaceFileSelect(req.path);
+        store.set(openFileRequestAtom, null);
+      }
+    });
+    return unsub;
   }, [handleWorkspaceFileSelect]);
 
   // File opener - delegates to EditorMode in workspace mode
