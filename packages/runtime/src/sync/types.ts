@@ -189,6 +189,9 @@ export interface SyncProvider {
     queuedPrompts?: Array<{ id: string; prompt: string; timestamp: number }>;
   } | undefined;
 
+  /** Clear isExecuting in all cached index entries (for startup cleanup) */
+  clearAllExecutingState?(): void;
+
   /** Subscribe to session creation requests from other devices (e.g., mobile) */
   onCreateSessionRequest?(callback: (request: CreateSessionRequest) => void): () => void;
 

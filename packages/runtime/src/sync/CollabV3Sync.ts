@@ -2337,6 +2337,21 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       return sessionIndexCache.get(sessionId);
     },
 
+    /** Clear isExecuting in all cached index entries (for startup cleanup) */
+    clearAllExecutingState(): void {
+      for (const [, entry] of sessionIndexCache) {
+        if (entry.isExecuting) {
+          entry.isExecuting = false;
+        }
+      }
+      // Also clear any pending metadata updates that have isExecuting set
+      for (const [, pending] of pendingMetadataUpdates) {
+        if ('isExecuting' in pending) {
+          pending.isExecuting = false;
+        }
+      }
+    },
+
     /** Subscribe to session creation requests from other devices (e.g., mobile) */
     onCreateSessionRequest(callback: (request: CreateSessionRequest) => void): () => void {
       createSessionRequestListeners.add(callback);

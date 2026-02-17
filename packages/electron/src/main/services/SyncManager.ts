@@ -540,6 +540,27 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
             syncMessages: sessionsNeedingMessageSync.length > 0,
           });
         }
+        // Clear stale isExecuting flags: on startup, no sessions are running yet.
+        // If the app crashed or the WebSocket disconnected before isExecuting:false
+        // was pushed, the server retains the stale flag permanently.
+        // Clear the local cache and re-sync affected sessions to push isExecuting:false.
+        const staleExecutingSessions = serverIndex.sessions.filter(s => s.isExecuting);
+        if (staleExecutingSessions.length > 0) {
+          logger.main.info(`[SyncManager] Clearing stale isExecuting for ${staleExecutingSessions.length} sessions`);
+          // Clear isExecuting in the provider's local cache so syncSessionsToIndex
+          // builds entries with isExecuting:false
+          if (provider.clearAllExecutingState) {
+            provider.clearAllExecutingState();
+          }
+          // Re-sync these sessions to push the cleared flag to the server
+          const staleLocalSessions = staleExecutingSessions
+            .map(s => allLocalSessions.find(ls => ls.id === s.sessionId))
+            .filter((s): s is NonNullable<typeof s> => s != null);
+          if (staleLocalSessions.length > 0) {
+            provider.syncSessionsToIndex(staleLocalSessions, { syncMessages: false });
+          }
+        }
+
         const totalSyncTime = performance.now() - syncStart;
         logger.main.info(`[SyncManager] Incremental sync completed in ${totalSyncTime.toFixed(1)}ms`);
       } catch (error) {
