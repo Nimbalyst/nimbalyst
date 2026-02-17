@@ -543,7 +543,10 @@ export function alphaFeatureEnabledAtom(tag: AlphaFeatureTag): Atom<boolean> {
   let cached = alphaFeatureAtomCache.get(tag);
   if (!cached) {
     cached = atom(
-      (get) => get(advancedSettingsAtom).alphaFeatures[tag] ?? false
+      (get) => {
+        const settings = get(advancedSettingsAtom);
+        return settings.releaseChannel === 'alpha' && (settings.alphaFeatures[tag] ?? false);
+      }
     );
     alphaFeatureAtomCache.set(tag, cached);
   }
