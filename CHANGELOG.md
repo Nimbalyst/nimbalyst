@@ -20,6 +20,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.53.8] - 2026-02-17
+
+
+### Added
+- Super Loop iterations now enforce progress reporting via MCP tool
+- Blocked Super Loop sessions show inline feedback widget
+- Onboarding survey asks AI referrals what model/prompt they used
+- Blitz sessions show model names instead of AI-chosen titles
+- Track Codex session starts in PostHog
+- Sync pending prompt state to iOS and show indicator
+
+### Changed
+- Model blitzes stored as ai_sessions instead of separate table
+
+### Fixed
+- Fix packaged Codex SDK loading in Electron
+- Resolve TypeScript errors in Super Loop blocked feedback
+- Clear stale isExecuting flags on startup and prevent sync overlap
+- Add missed files for FileTreeRow tree keyboard handler
+
 ## [0.53.7] - 2026-02-17
 
 
