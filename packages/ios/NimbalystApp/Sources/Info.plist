@@ -29,6 +29,8 @@
 	</dict>
 	<key>NSCameraUsageDescription</key>
 	<string>Nimbalyst uses the camera to scan QR codes for pairing with your Mac.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Nimbalyst uses the microphone for voice mode to communicate with your coding agent.</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

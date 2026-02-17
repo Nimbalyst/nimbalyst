@@ -64,10 +64,12 @@ final class AudioPipeline: @unchecked Sendable {
     private var isCapturing = false
     private var isPlaying = false
     private var scheduledBufferCount = 0
+    private var isPlaybackEnginePrepared = false
 
     init() {
-        playbackEngine.attach(playerNode)
-        playbackEngine.connect(playerNode, to: playbackEngine.outputNode, format: playbackFormat)
+        // Don't connect the playback engine here - accessing outputNode before the
+        // audio session is configured causes AudioToolbox to initialize its internal
+        // graph with the wrong hardware configuration. This conflicts with VPIO later.
     }
 
     // MARK: - Audio Session
@@ -85,6 +87,11 @@ final class AudioPipeline: @unchecked Sendable {
 
         logger.info("Audio session configured: sampleRate=\(session.sampleRate), route=\(session.currentRoute.inputs.map { $0.portName })")
 
+        // Now that the audio session is active with the correct category/mode,
+        // it's safe to set up the playback engine (accessing outputNode will use
+        // the correct hardware configuration).
+        preparePlaybackEngine()
+
         NotificationCenter.default.addObserver(
             forName: AVAudioSession.interruptionNotification, object: session, queue: .main
         ) { [weak self] notification in
@@ -97,6 +104,15 @@ final class AudioPipeline: @unchecked Sendable {
                 }
             }
         }
+    }
+
+    /// Set up AVAudioEngine node connections. Must be called AFTER configureAudioSession()
+    /// so that outputNode reflects the correct hardware format for .voiceChat mode.
+    private func preparePlaybackEngine() {
+        guard !isPlaybackEnginePrepared else { return }
+        playbackEngine.attach(playerNode)
+        playbackEngine.connect(playerNode, to: playbackEngine.outputNode, format: playbackFormat)
+        isPlaybackEnginePrepared = true
     }
 
     func deactivateAudioSession() {

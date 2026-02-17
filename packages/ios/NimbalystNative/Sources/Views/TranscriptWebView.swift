@@ -34,6 +34,7 @@ public struct TranscriptWebView: UIViewRepresentable {
     let onInteractiveResponse: (String, String, [String: Any]) -> Void
     let controller: TranscriptController?
     let onReady: (() -> Void)?
+    let onError: ((String) -> Void)?
 
     public init(
         session: Session,
@@ -41,7 +42,8 @@ public struct TranscriptWebView: UIViewRepresentable {
         onSendPrompt: @escaping (String) -> Void,
         onInteractiveResponse: @escaping (String, String, [String: Any]) -> Void,
         controller: TranscriptController? = nil,
-        onReady: (() -> Void)? = nil
+        onReady: (() -> Void)? = nil,
+        onError: ((String) -> Void)? = nil
     ) {
         self.session = session
         self.messages = messages
@@ -49,6 +51,7 @@ public struct TranscriptWebView: UIViewRepresentable {
         self.onInteractiveResponse = onInteractiveResponse
         self.controller = controller
         self.onReady = onReady
+        self.onError = onError
     }
 
     private static let logger = Logger(subsystem: "com.nimbalyst.app", category: "TranscriptWebView")
@@ -58,7 +61,8 @@ public struct TranscriptWebView: UIViewRepresentable {
             session: session,
             onSendPrompt: onSendPrompt,
             onInteractiveResponse: onInteractiveResponse,
-            onReady: onReady
+            onReady: onReady,
+            onError: onError
         )
         // Wire up the external controller
         controller?.coordinator = coordinator
@@ -91,6 +95,10 @@ public struct TranscriptWebView: UIViewRepresentable {
                     let htmlURL = distURL.appendingPathComponent("transcript.html")
                     if FileManager.default.fileExists(atPath: htmlURL.path) {
                         pooled.loadFileURL(htmlURL, allowingReadAccessTo: distURL)
+                        context.coordinator.startReadyTimeout()
+                    } else {
+                        Self.logger.error("transcript.html not found during pool recovery at: \(htmlURL.path)")
+                        context.coordinator.onError?("transcript.html not found in app bundle")
                     }
                     return
                 }
@@ -159,6 +167,9 @@ public struct TranscriptWebView: UIViewRepresentable {
 
         // Load the transcript HTML from the app bundle
         loadTranscriptHTML(webView: webView)
+
+        // Start readiness timeout for cold-start path
+        context.coordinator.startReadyTimeout()
 
         return webView
     }
@@ -250,17 +261,23 @@ public struct TranscriptWebView: UIViewRepresentable {
         private let onSendPrompt: (String) -> Void
         private let onInteractiveResponse: (String, String, [String: Any]) -> Void
         private let onReady: (() -> Void)?
+        fileprivate let onError: ((String) -> Void)?
+
+        /// Timer for detecting web view initialization timeout.
+        private var readyTimeoutItem: DispatchWorkItem?
 
         init(
             session: Session,
             onSendPrompt: @escaping (String) -> Void,
             onInteractiveResponse: @escaping (String, String, [String: Any]) -> Void,
-            onReady: (() -> Void)? = nil
+            onReady: (() -> Void)? = nil,
+            onError: ((String) -> Void)? = nil
         ) {
             self.session = session
             self.onSendPrompt = onSendPrompt
             self.onInteractiveResponse = onInteractiveResponse
             self.onReady = onReady
+            self.onError = onError
         }
 
         // MARK: - WKScriptMessageHandler
@@ -278,6 +295,7 @@ public struct TranscriptWebView: UIViewRepresentable {
             switch type {
             case "ready":
                 webViewReady = true
+                readyTimeoutItem?.cancel()
                 // Load pending session if we have one
                 if let (session, messages) = pendingSession {
                     loadSessionIntoWebView(session: session, messages: messages)
@@ -322,10 +340,12 @@ public struct TranscriptWebView: UIViewRepresentable {
 
         public func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
             logger.error("Navigation failed: \(error.localizedDescription)")
+            onError?("WebView navigation failed: \(error.localizedDescription)")
         }
 
         public func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
             logger.error("Provisional navigation failed: \(error.localizedDescription)")
+            onError?("WebView failed to load transcript: \(error.localizedDescription)")
         }
 
         /// Track content process terminations to avoid crash loops.
@@ -346,6 +366,7 @@ public struct TranscriptWebView: UIViewRepresentable {
             // iOS will kill the app if WKWebView content process crashes repeatedly.
             guard contentProcessTerminationCount <= 2 else {
                 logger.error("Content process terminated too many times, not reloading")
+                onError?("WebView content process crashed \(contentProcessTerminationCount) times — not reloading")
                 return
             }
 
@@ -354,6 +375,19 @@ public struct TranscriptWebView: UIViewRepresentable {
                 guard let webView, self?.webViewReady == false else { return }
                 webView.reload()
             }
+        }
+
+        /// Start a 10-second timeout for the web view to become ready.
+        /// If it doesn't send a "ready" bridge message in time, report an error.
+        func startReadyTimeout() {
+            readyTimeoutItem?.cancel()
+            let item = DispatchWorkItem { [weak self] in
+                guard let self, !self.webViewReady else { return }
+                self.logger.error("WebView readiness timeout after 10s (webViewReady=\(self.webViewReady), isReady=\(self.isReady), hasPendingSession=\(self.pendingSession != nil))")
+                self.onError?("WebView failed to initialize after 10s")
+            }
+            readyTimeoutItem = item
+            DispatchQueue.main.asyncAfter(deadline: .now() + 10, execute: item)
         }
 
         // MARK: - Swift -> JS
@@ -395,6 +429,7 @@ public struct TranscriptWebView: UIViewRepresentable {
             callJS("window.nimbalyst?.loadSession(data);", arguments: ["data": sessionData], in: webView) { [weak self] error in
                 if let error = error {
                     self?.logger.error("loadSession JS error: \(error.localizedDescription)")
+                    self?.onError?("loadSession JS failed: \(error.localizedDescription)")
                 } else {
                     self?.isReady = true
                     self?.lastMessageCount = messages.count
