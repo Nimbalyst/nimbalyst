@@ -336,42 +336,72 @@ export const SessionQuickOpen: React.FC<SessionQuickOpenProps> = ({
         <div className="session-quick-open-header p-3 border-b border-[var(--nim-border)]">
           <div className="text-[11px] font-medium text-[var(--nim-text-faint)] uppercase tracking-wide mb-2">Sessions</div>
           <div className="relative">
-            <input
-              ref={searchInputRef}
-              type="text"
-              className="session-quick-open-search w-full py-2 px-3 text-base rounded-md outline-none box-border bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] text-[var(--nim-text)] focus:border-[#007aff] focus:shadow-[0_0_0_3px_rgba(0,122,255,0.1)]"
-              placeholder="Search sessions... (@ to search by file edited)"
-              value={searchQuery}
-              onChange={(e) => {
-                const val = e.target.value;
-                setSearchQuery(val);
-                setSelectedIndex(0);
-                // If user edits away from the confirmed file path, clear the selection
-                if (selectedFilePath && val !== `@${selectedFilePath}`) {
-                  setSelectedFilePath(null);
-                  setFileFilteredSessionIds(null);
-                }
-                // Reset typeahead index when typing
-                if (val.startsWith('@')) {
-                  setTypeaheadIndex(0);
-                }
-              }}
-            />
-            {isFileSearchMode && selectedFilePath && (
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] flex items-center gap-1.5 text-[var(--nim-primary)]">
-                <MaterialSymbol icon="filter_alt" size={14} />
-                File search
-              </span>
-            )}
-            {searchQuery && onSwitchToPrompts && !isFileSearchMode && (
-              <button
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-xs flex items-center gap-1 px-2 py-1 rounded cursor-pointer border-none transition-colors duration-150 bg-transparent text-[var(--nim-text-faint)] hover:bg-[var(--nim-accent-subtle)] hover:text-[var(--nim-primary)]"
-                onClick={() => onSwitchToPrompts(searchQuery)}
-                title="Search in prompts"
-              >
-                <kbd className="px-1.5 py-0.5 rounded font-mono text-[10px] bg-[var(--nim-bg)] border border-[var(--nim-border)] text-[var(--nim-text)]">Tab</kbd>
-                Search prompts
-              </button>
+            {isFileSearchMode && selectedFilePath ? (
+              <div className="session-quick-open-search flex items-center gap-2 w-full py-2 px-3 text-base rounded-md box-border bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] focus-within:border-[#007aff] focus-within:shadow-[0_0_0_3px_rgba(0,122,255,0.1)]">
+                <span
+                  className="shrink-0 flex items-center gap-1.5 max-w-[80%] px-2 py-0.5 rounded bg-[rgba(0,122,255,0.1)] text-[var(--nim-primary)] text-sm cursor-default"
+                  title={selectedFilePath}
+                >
+                  <MaterialSymbol icon="description" size={14} className="shrink-0" />
+                  <span className="overflow-hidden text-ellipsis whitespace-nowrap direction-rtl text-left">
+                    {selectedFilePath}
+                  </span>
+                  <button
+                    className="shrink-0 flex items-center justify-center w-4 h-4 rounded-full border-none bg-transparent text-[var(--nim-text-faint)] hover:text-[var(--nim-text)] hover:bg-[var(--nim-bg-tertiary)] cursor-pointer p-0"
+                    onClick={() => {
+                      setSearchQuery('');
+                      setSelectedFilePath(null);
+                      setFileFilteredSessionIds(null);
+                      setTimeout(() => searchInputRef.current?.focus(), 0);
+                    }}
+                    title="Clear file filter"
+                  >
+                    <MaterialSymbol icon="close" size={12} />
+                  </button>
+                </span>
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  className="flex-1 min-w-0 bg-transparent border-none outline-none text-[var(--nim-text)] text-sm p-0"
+                  placeholder="Filter sessions..."
+                  value=""
+                  readOnly
+                />
+              </div>
+            ) : (
+              <>
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  className="session-quick-open-search w-full py-2 px-3 text-base rounded-md outline-none box-border bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] text-[var(--nim-text)] focus:border-[#007aff] focus:shadow-[0_0_0_3px_rgba(0,122,255,0.1)]"
+                  placeholder="Search sessions... (@ to search by file edited)"
+                  value={searchQuery}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setSearchQuery(val);
+                    setSelectedIndex(0);
+                    // If user edits away from the confirmed file path, clear the selection
+                    if (selectedFilePath && val !== `@${selectedFilePath}`) {
+                      setSelectedFilePath(null);
+                      setFileFilteredSessionIds(null);
+                    }
+                    // Reset typeahead index when typing
+                    if (val.startsWith('@')) {
+                      setTypeaheadIndex(0);
+                    }
+                  }}
+                />
+                {searchQuery && onSwitchToPrompts && !isFileSearchMode && (
+                  <button
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-xs flex items-center gap-1 px-2 py-1 rounded cursor-pointer border-none transition-colors duration-150 bg-transparent text-[var(--nim-text-faint)] hover:bg-[var(--nim-accent-subtle)] hover:text-[var(--nim-primary)]"
+                    onClick={() => onSwitchToPrompts(searchQuery)}
+                    title="Search in prompts"
+                  >
+                    <kbd className="px-1.5 py-0.5 rounded font-mono text-[10px] bg-[var(--nim-bg)] border border-[var(--nim-border)] text-[var(--nim-text)]">Tab</kbd>
+                    Search prompts
+                  </button>
+                )}
+              </>
             )}
           </div>
         </div>
