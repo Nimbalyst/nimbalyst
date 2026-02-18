@@ -20,6 +20,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.53.9] - 2026-02-18
+
+
+### Added
+- Track sharing, export, and feature toggle usage in PostHog
+- OpenAI Codex 401 errors now show setup instructions
+- Teammates now require user approval for tool use
+- Queued prompts now show attachment indicators
+- Session open buttons now appear in agent mode file headers
+- File paths in FILE CHANGES widget are clickable
+
+### Changed
+- Unify session types and sync sessionType to iOS
+- Revert claude-agent-sdk 0.2.45 to 0.2.42
+- Update codex-sdk 0.101.0 to 0.104.0
+
+### Fixed
+- Codex beta toggle now enables the provider automatically
+- Teammate permission widgets no longer hidden by noise filter
+- Worktree file paths now persist correctly when navigating away and back
+- AI Sessions popover now groups worktree sessions correctly
+- Second queued prompt no longer gets empty response
+- Deny button in tool permission widget is now clearly visible
+- File-session links now work correctly for agent mode in worktrees
+- Hide system-generated user messages from transcript view
+- Exclude system-generated user messages from prompt history
+- Prevent tool calls from being hidden after teammate notifications
+- iOS session list shows model info and readable timestamps
+- Show file path as chip in session quick open to prevent text overlap
+- Restore horizontal scrolling in database browser tables
+- Resolve iOS test runtime crash from Int16 overflow and static var
+- Resolve Swift 6 strict concurrency errors in iOS tests
+
 ## [0.53.8] - 2026-02-17
 
 
