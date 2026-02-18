@@ -2272,15 +2272,26 @@ export class AIService {
 
                 // Track file interactions for all tool calls
                 // Also attach file watchers for edited files to detect subsequent changes
-                if (workspacePath && chunk.toolCall.arguments) {
+                if (effectiveWorkspacePath && chunk.toolCall.arguments) {
                   try {
                     // Get window from event sender to enable file watcher attachment
                     const window = BrowserWindow.fromWebContents(event.sender);
+
+                    // Normalize Codex command_execution tool names to 'Bash' so the
+                    // tracker's existing shell-command file extraction logic applies.
+                    // Codex emits these with the raw command as the tool name (e.g. "/bin/zsh -lc ls").
+                    let trackToolName = chunk.toolCall.name;
+                    let trackArgs = chunk.toolCall.arguments;
+                    if (/^\/(?:bin|usr\/bin)\//.test(trackToolName) || /\/(?:bash|zsh|sh)\b/.test(trackToolName)) {
+                      trackArgs = { command: trackToolName };
+                      trackToolName = 'Bash';
+                    }
+
                     await sessionFileTracker.trackToolExecution(
                       session.id,
-                      workspacePath,
-                      chunk.toolCall.name,
-                      chunk.toolCall.arguments,
+                      effectiveWorkspacePath,
+                      trackToolName,
+                      trackArgs,
                       chunk.toolCall.result,
                       window  // Pass window to enable file watcher attachment for edited files
                     );
@@ -2489,13 +2500,13 @@ export class AIService {
 
               // Track the streamContent file interaction
               // Also attach file watcher for the edited file
-              if (documentContext?.filePath && workspacePath) {
+              if (documentContext?.filePath && effectiveWorkspacePath) {
                 try {
                   // Get window from event sender to enable file watcher attachment
                   const window = BrowserWindow.fromWebContents(event.sender);
                   await sessionFileTracker.trackToolExecution(
                     session.id,
-                    workspacePath,
+                    effectiveWorkspacePath,
                     'streamContent',
                     { file_path: documentContext.filePath },
                     { success: !chunk.error },
