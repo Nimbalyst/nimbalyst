@@ -1410,6 +1410,12 @@ export const RichTranscriptView = React.forwardRef<
                       );
                     }
 
+                    // Hide system-generated user-role messages (tool results, slash command output)
+                    // These have isUserInput explicitly set to false and aren't teammate messages
+                    if (isUser && message.isUserInput === false && !message.metadata?.isTeammateMessage) {
+                      return <div key={`${sessionId}-${index}`} style={{ display: 'none' }} />;
+                    }
+
                     // Render teammate/sub-agent messages as compact inline notifications
                     if (isUser && message.metadata?.isTeammateMessage) {
                       const teammateName = (message.metadata?.teammateName as string) || 'agent';
