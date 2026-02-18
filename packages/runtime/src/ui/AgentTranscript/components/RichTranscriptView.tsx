@@ -1503,9 +1503,10 @@ export const RichTranscriptView = React.forwardRef<
                       );
                     }
 
-                    // Hide system-generated user-role messages (tool results, slash command output)
-                    // These have isUserInput explicitly set to false and aren't teammate messages
-                    if (isUser && message.isUserInput === false && !message.metadata?.isTeammateMessage) {
+                    // Hide system-generated user-role messages that have no meaningful content
+                    // (tool results, slash command output). These have isUserInput explicitly set to false.
+                    // But keep messages with actual text content (e.g., compaction summaries).
+                    if (isUser && message.isUserInput === false && !message.metadata?.isTeammateMessage && !message.content?.trim()) {
                       return <div key={`${sessionId}-${index}`} style={{ display: 'none' }} />;
                     }
 
