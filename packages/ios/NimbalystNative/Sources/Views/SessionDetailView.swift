@@ -65,6 +65,10 @@ public struct SessionDetailView: View {
     /// Compose bar state.
     @State private var composeText = ""
 
+    /// Slash commands synced from desktop for this project.
+    @State private var projectCommands: [SyncedSlashCommand] = []
+    @State private var projectCancellable: AnyDatabaseCancellable?
+
     /// Controller for transcript web view actions (scroll, prompts).
     #if canImport(UIKit)
     @StateObject private var transcriptController = TranscriptController()
@@ -104,7 +108,7 @@ public struct SessionDetailView: View {
                 TranscriptWebView(
                     session: displaySession,
                     messages: messages,
-                    onSendPrompt: sendPrompt,
+                    onSendPrompt: { text in sendPrompt(text) },
                     onInteractiveResponse: handleInteractiveResponse,
                     controller: transcriptController,
                     onReady: {
@@ -148,6 +152,7 @@ public struct SessionDetailView: View {
             ComposeBar(
                 text: $composeText,
                 isExecuting: displaySession.isExecuting,
+                commands: projectCommands,
                 onSend: sendPrompt
             )
         }
@@ -189,6 +194,7 @@ public struct SessionDetailView: View {
         .onDisappear {
             sessionCancellable?.cancel()
             messagesCancellable?.cancel()
+            projectCancellable?.cancel()
             timeoutWorkItem?.cancel()
             appState.syncManager?.onSessionSyncDiagnostic = nil
             appState.syncManager?.leaveSessionRoom()
@@ -520,17 +526,33 @@ public struct SessionDetailView: View {
                 messages = newMessages
             }
         )
+
+        // Observe project commands (for slash command typeahead)
+        let projectId = session.projectId
+        let projectObservation = ValueObservation.tracking { db in
+            try Project.fetchOne(db, id: projectId)
+        }
+        projectCancellable = projectObservation.start(
+            in: db.writer,
+            onError: { error in
+                print("Project observation error: \(error)")
+            },
+            onChange: { project in
+                projectCommands = project?.commands ?? []
+            }
+        )
     }
 
     // MARK: - Actions
 
-    private func sendPrompt(_ text: String) {
+    private func sendPrompt(_ text: String, _ attachments: [PendingAttachment] = []) {
         guard let syncManager = appState.syncManager else { return }
 
         do {
-            try syncManager.sendPrompt(sessionId: session.id, text: text)
+            try syncManager.sendPrompt(sessionId: session.id, text: text, attachments: attachments)
             AnalyticsManager.shared.capture("mobile_ai_message_sent", properties: [
-                "hasAttachments": false,
+                "hasAttachments": !attachments.isEmpty,
+                "attachmentCount": attachments.count,
             ])
         } catch {
             print("Failed to send prompt: \(error)")

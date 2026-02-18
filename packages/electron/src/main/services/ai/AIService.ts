@@ -833,7 +833,7 @@ export class AIService {
                     id: prompt.id,
                     sessionId,
                     prompt: prompt.prompt,
-                    // TODO: Handle attachments and documentContext when mobile supports them
+                    attachments: prompt.attachments,
                   });
                   newPromptsCount++;
                 }
@@ -1568,7 +1568,19 @@ export class AIService {
       }
 
       // Extract attachments from documentContext if present
-      const attachments = (documentContext as any)?.attachments;
+      // Mobile attachments arrive as EncryptedAttachment[] (with encryptedData/iv fields)
+      // and need decryption + temp file writing before they can be used as ChatAttachments
+      let attachments = (documentContext as any)?.attachments;
+      if (attachments && attachments.length > 0 && attachments[0].encryptedData && workspacePath) {
+        try {
+          const { decryptMobileAttachments } = await import('../SyncManager');
+          attachments = await decryptMobileAttachments(attachments, workspacePath, sessionId!);
+          logger.main.info(`[AIService] Decrypted ${attachments.length} mobile attachments`);
+        } catch (err) {
+          logger.main.error('[AIService] Failed to decrypt mobile attachments:', err);
+          attachments = undefined;
+        }
+      }
       const startTime = Date.now();
       const perfLog: any = {
         startTime,

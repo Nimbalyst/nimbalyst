@@ -114,6 +114,18 @@ public final class CryptoManager: @unchecked Sendable {
         return (combined.base64EncodedString(), ivBase64)
     }
 
+    /// Encrypt raw data using AES-GCM with a random IV.
+    /// Returns a tuple of (encryptedBase64, ivBase64).
+    public func encryptData(_ data: Data) throws -> (encrypted: String, iv: String) {
+        let sealedBox = try AES.GCM.seal(data, using: key)
+
+        var combined = Data(sealedBox.ciphertext)
+        combined.append(contentsOf: sealedBox.tag)
+
+        let ivBase64 = Data(sealedBox.nonce).base64EncodedString()
+        return (combined.base64EncodedString(), ivBase64)
+    }
+
     /// Encrypt with a fixed IV for deterministic output (e.g., project IDs).
     public func encryptDeterministic(plaintext: String, ivBase64: String) throws -> String {
         guard let ivData = Data(base64Encoded: ivBase64) else {

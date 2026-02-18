@@ -102,6 +102,9 @@ export interface SyncProvider {
   /** Sync projects to the ProjectsIndex (tells mobile which projects exist and are enabled) */
   syncProjectsToIndex?(projects: ProjectIndexEntry[]): void;
 
+  /** Sync project config (commands, settings) to the index room for mobile access */
+  syncProjectConfig?(projectId: string, config: ProjectConfig): void;
+
   /** Fetch the current server index to compare with local state */
   fetchIndex?(): Promise<{
     sessions: Array<{
@@ -152,7 +155,7 @@ export interface SyncProvider {
     /** Number of prompts queued from mobile, waiting for desktop to process */
     queuedPromptCount?: number;
     /** Full queue of prompts (sent via indexUpdate for desktop to process) */
-    queuedPrompts?: Array<{ id: string; prompt: string; timestamp: number }>;
+    queuedPrompts?: Array<{ id: string; prompt: string; timestamp: number; attachments?: EncryptedAttachment[] }>;
   }) => void): () => void;
 
   /** Get cached metadata for a session (populated from syncResponse and metadataBroadcast) */
@@ -161,6 +164,7 @@ export interface SyncProvider {
       id: string;
       prompt: string;
       timestamp: number;
+      attachments?: EncryptedAttachment[];
     }>;
     [key: string]: unknown;
   } | undefined;
@@ -277,7 +281,29 @@ export interface SyncedQueuedPrompt {
   id: string;           // Unique ID for this queued item
   prompt: string;       // The user's message
   timestamp: number;    // When queued
-  // Note: documentContext and attachments are NOT synced - they're device-local
+  // Note: documentContext is NOT synced - it's device-local
+  /** Encrypted image attachments from mobile */
+  attachments?: EncryptedAttachment[];
+}
+
+/**
+ * Encrypted image attachment sent from mobile via queued prompts.
+ * Desktop decrypts the data, writes to temp file, and creates a ChatAttachment.
+ */
+export interface EncryptedAttachment {
+  id: string;
+  filename: string;
+  mimeType: string;
+  /** Base64 AES-GCM ciphertext of the image data */
+  encryptedData: string;
+  /** Base64 IV for decryption */
+  iv: string;
+  /** Original size in bytes (before encryption) */
+  size: number;
+  /** Image width in pixels */
+  width?: number;
+  /** Image height in pixels */
+  height?: number;
 }
 
 /** Session metadata that gets synced */
@@ -361,6 +387,30 @@ export interface ProjectIndexEntry {
   sessionCount: number; // number of sessions in this project
   lastActivityAt: number; // timestamp of most recent session activity
   enabled: boolean; // whether this project is enabled for sync (user controlled)
+  /** Project config (decrypted on client, encrypted on wire) */
+  config?: ProjectConfig;
+}
+
+/**
+ * Project-level config synced from desktop to mobile via the index room.
+ * Encrypted as a blob in project_index.encrypted_config.
+ * Extensible: add more project-level config here as needed.
+ */
+export interface ProjectConfig {
+  /** Available slash commands for this project */
+  commands: SyncedSlashCommand[];
+  /** Timestamp of last commands update */
+  lastCommandsUpdate: number;
+}
+
+/**
+ * Lightweight slash command manifest for sync.
+ * Name and description only -- content stays on desktop.
+ */
+export interface SyncedSlashCommand {
+  name: string;
+  description?: string;
+  source: 'builtin' | 'project' | 'user' | 'plugin';
 }
 
 /**

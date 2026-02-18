@@ -251,12 +251,27 @@ public final class SyncManager: ObservableObject {
             return
         }
 
+        // Decrypt project config if present
+        var commandsJson: String? = nil
+        if let encryptedConfig = entry.encryptedConfig,
+           let configIv = entry.configIv,
+           let configJson = crypto.decryptOrNil(encryptedBase64: encryptedConfig, ivBase64: configIv),
+           let configData = configJson.data(using: .utf8),
+           let config = try? JSONDecoder().decode(ProjectConfig.self, from: configData) {
+            // Encode just the commands array as JSON for storage
+            if let encoded = try? JSONEncoder().encode(config.commands),
+               let jsonStr = String(data: encoded, encoding: .utf8) {
+                commandsJson = jsonStr
+            }
+        }
+
         let name = (projectId as NSString).lastPathComponent
         let project = Project(
             id: projectId,
             name: name,
             sessionCount: entry.sessionCount ?? 0,
-            lastUpdatedAt: entry.lastActivityAt
+            lastUpdatedAt: entry.lastActivityAt,
+            commandsJson: commandsJson
         )
 
         do {
@@ -348,11 +363,25 @@ public final class SyncManager: ObservableObject {
         // so decrypting it gives the full workspace path (not a human-friendly name).
         let name = (projectId as NSString).lastPathComponent
 
+        // Decrypt project config if present
+        var commandsJson: String? = nil
+        if let encryptedConfig = entry.encryptedConfig,
+           let configIv = entry.configIv,
+           let configJson = crypto.decryptOrNil(encryptedBase64: encryptedConfig, ivBase64: configIv),
+           let configData = configJson.data(using: .utf8),
+           let config = try? JSONDecoder().decode(ProjectConfig.self, from: configData) {
+            if let encoded = try? JSONEncoder().encode(config.commands),
+               let jsonStr = String(data: encoded, encoding: .utf8) {
+                commandsJson = jsonStr
+            }
+        }
+
         let project = Project(
             id: projectId,
             name: name,
             sessionCount: entry.sessionCount ?? 0,
-            lastUpdatedAt: entry.lastActivityAt
+            lastUpdatedAt: entry.lastActivityAt,
+            commandsJson: commandsJson
         )
 
         do {
@@ -860,7 +889,7 @@ public final class SyncManager: ObservableObject {
 
     /// Send a prompt to the current session via the queued prompts system.
     /// Desktop picks up prompts from index_update broadcasts (not session room messages).
-    public func sendPrompt(sessionId: String, text: String) throws {
+    public func sendPrompt(sessionId: String, text: String, attachments: [PendingAttachment] = []) throws {
         guard let session = try database.session(byId: sessionId) else {
             throw SyncError.sessionNotFound
         }
@@ -871,13 +900,35 @@ public final class SyncManager: ObservableObject {
         // Encrypt the prompt text
         let encryptedPrompt = try crypto.encrypt(plaintext: text)
 
-        let queuedPrompt = EncryptedQueuedPrompt(
+        // Encrypt image attachments
+        var encryptedAttachments: [WireEncryptedAttachment]? = nil
+        #if canImport(UIKit)
+        if !attachments.isEmpty {
+            encryptedAttachments = try attachments.compactMap { attachment in
+                guard let compressed = ImageCompressor.compress(attachment.image) else { return nil }
+                let encrypted = try crypto.encryptData(compressed.data)
+                return WireEncryptedAttachment(
+                    id: attachment.id,
+                    filename: attachment.filename,
+                    mimeType: "image/jpeg",
+                    encryptedData: encrypted.encrypted,
+                    iv: encrypted.iv,
+                    size: compressed.data.count,
+                    width: compressed.width,
+                    height: compressed.height
+                )
+            }
+        }
+        #endif
+
+        var queuedPrompt = EncryptedQueuedPrompt(
             id: promptId,
             encryptedPrompt: encryptedPrompt.encrypted,
             iv: encryptedPrompt.iv,
             timestamp: now,
             source: "keyboard"
         )
+        queuedPrompt.encryptedAttachments = encryptedAttachments
 
         // Build the encrypted project ID for the index entry
         let encryptedProjectId = try crypto.encryptProjectId(session.projectId)

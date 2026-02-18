@@ -5,6 +5,7 @@
 import { SlashCommandService, SlashCommand } from '../services/SlashCommandService';
 import { safeHandle, safeOn } from '../utils/ipcRegistry';
 import { getExtensionPluginCommands } from './ExtensionHandlers';
+import { syncProjectCommandsToMobile } from '../services/SyncManager';
 
 // Cache services by workspace path
 const servicesByWorkspace = new Map<string, SlashCommandService>();
@@ -61,6 +62,12 @@ export function registerSlashCommandHandlers() {
       });
 
       // console.log(`[SlashCommandHandlers] Returning ${deduplicatedCommands.length} slash commands (deduped from ${allCommands.length}) for workspace: ${workspacePath}`);
+
+      // Fire-and-forget: sync commands to mobile via index room
+      syncProjectCommandsToMobile(workspacePath, deduplicatedCommands).catch(() => {
+        // Silently ignore - sync is best-effort
+      });
+
       return deduplicatedCommands;
     } catch (error) {
       console.error('[SlashCommandHandlers] Error listing slash commands:', error);

@@ -54,6 +54,23 @@ struct EncryptedQueuedPrompt: Codable {
     let iv: String
     let timestamp: Int
     let source: String?
+    /// Encrypted image attachments (each independently encrypted).
+    var encryptedAttachments: [WireEncryptedAttachment]?
+}
+
+/// An encrypted image attachment on the wire. Desktop decrypts and writes to temp file.
+public struct WireEncryptedAttachment: Codable {
+    public let id: String
+    public let filename: String
+    public let mimeType: String
+    /// Base64 AES-GCM ciphertext of the compressed image data.
+    public let encryptedData: String
+    /// Base64 IV for decryption.
+    public let iv: String
+    /// Original size in bytes (before encryption).
+    public let size: Int
+    public let width: Int?
+    public let height: Int?
 }
 
 struct ContextInfo: Codable {
@@ -79,6 +96,24 @@ struct ServerProjectEntry: Codable {
     let sessionCount: Int?
     let lastActivityAt: Int?
     let syncEnabled: Bool?
+    /// Encrypted project config blob (commands, settings, etc.)
+    let encryptedConfig: String?
+    /// IV for config decryption
+    let configIv: String?
+}
+
+/// Decrypted project config containing commands and future project-level settings.
+struct ProjectConfig: Codable {
+    let commands: [SyncedSlashCommand]
+    let lastCommandsUpdate: Int
+}
+
+/// Lightweight slash command manifest synced from desktop.
+public struct SyncedSlashCommand: Codable, Identifiable {
+    public let name: String
+    public let description: String?
+    public let source: String  // "builtin" | "project" | "user" | "plugin"
+    public var id: String { name }
 }
 
 /// Session broadcast from index room.

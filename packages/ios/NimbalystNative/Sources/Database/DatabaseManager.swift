@@ -177,6 +177,12 @@ public final class DatabaseManager: @unchecked Sendable {
             }
         }
 
+        migrator.registerMigration("v5_project_commands") { db in
+            try db.alter(table: "projects") { t in
+                t.add(column: "commandsJson", .text)
+            }
+        }
+
         try migrator.migrate(writer)
     }
 

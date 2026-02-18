@@ -10,13 +10,26 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
     public var sessionCount: Int
     public var lastUpdatedAt: Int?
     public var sortOrder: Int
+    /// JSON-encoded array of SyncedSlashCommand synced from desktop
+    public var commandsJson: String?
 
-    public init(id: String, name: String, sessionCount: Int = 0, lastUpdatedAt: Int? = nil, sortOrder: Int = 0) {
+    public init(id: String, name: String, sessionCount: Int = 0, lastUpdatedAt: Int? = nil, sortOrder: Int = 0, commandsJson: String? = nil) {
         self.id = id
         self.name = name
         self.sessionCount = sessionCount
         self.lastUpdatedAt = lastUpdatedAt
         self.sortOrder = sortOrder
+        self.commandsJson = commandsJson
+    }
+
+    /// Decoded slash commands from the commandsJson blob.
+    public var commands: [SyncedSlashCommand] {
+        guard let json = commandsJson,
+              let data = json.data(using: .utf8),
+              let commands = try? JSONDecoder().decode([SyncedSlashCommand].self, from: data) else {
+            return []
+        }
+        return commands
     }
 
     /// Create a Project from a workspace path, deriving the name from the last path component.
@@ -32,6 +45,6 @@ extension Project: FetchableRecord, PersistableRecord {
     public static let databaseTableName = "projects"
 
     public enum Columns: String, ColumnExpression {
-        case id, name, sessionCount, lastUpdatedAt, sortOrder
+        case id, name, sessionCount, lastUpdatedAt, sortOrder, commandsJson
     }
 }

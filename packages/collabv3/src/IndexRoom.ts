@@ -25,6 +25,7 @@ import type {
   SessionControlBroadcastMessage,
   RegisterPushTokenMessage,
   RequestMobilePushMessage,
+  ProjectConfigUpdateMessage,
   EncryptedSettingsPayload,
   SettingsSyncBroadcastMessage,
 } from './types';
@@ -197,6 +198,17 @@ export class IndexRoom implements DurableObject {
     } catch {
       // Column already exists
     }
+    // Migration: Add encrypted config blob for project-level config (commands, etc.)
+    try {
+      sql.exec(`ALTER TABLE project_index ADD COLUMN encrypted_config TEXT`);
+    } catch {
+      // Column already exists
+    }
+    try {
+      sql.exec(`ALTER TABLE project_index ADD COLUMN config_iv TEXT`);
+    } catch {
+      // Column already exists
+    }
 
     // Migration: Delete old unencrypted sessions and projects
     // Old data has NULL project_id_iv (encrypted data always has an IV)
@@ -341,6 +353,10 @@ export class IndexRoom implements DurableObject {
 
         case 'sessionControl':
           await this.handleSessionControl(ws, connState, message.message);
+          break;
+
+        case 'projectConfigUpdate':
+          await this.handleProjectConfigUpdate(ws, connState, message);
           break;
 
         case 'settingsSync':
@@ -730,6 +746,67 @@ export class IndexRoom implements DurableObject {
     this.broadcast(broadcastMessage, ws);
 
     log.debug('Broadcast sessionControl to', this.connections.size - 1, 'other connections');
+  }
+
+  /**
+   * Handle project config update from desktop.
+   * Stores encrypted config blob on the project_index entry and broadcasts to other devices.
+   */
+  private async handleProjectConfigUpdate(
+    ws: WebSocket,
+    connState: ConnectionState,
+    message: ProjectConfigUpdateMessage
+  ): Promise<void> {
+    const sql = this.state.storage.sql;
+
+    // Upsert the config on the project entry
+    // If the project doesn't exist yet, create it with the config
+    const existing = sql.exec<ProjectIndexRow>(
+      `SELECT * FROM project_index WHERE project_id = ?`,
+      message.encryptedProjectId
+    ).toArray()[0];
+
+    if (existing) {
+      sql.exec(
+        `UPDATE project_index SET encrypted_config = ?, config_iv = ? WHERE project_id = ?`,
+        message.encryptedConfig,
+        message.configIv,
+        message.encryptedProjectId
+      );
+    } else {
+      // Project doesn't exist yet - create a minimal entry
+      sql.exec(
+        `INSERT INTO project_index (project_id, project_id_iv, name, name_iv, session_count, last_activity_at, sync_enabled, encrypted_config, config_iv)
+         VALUES (?, ?, ?, ?, 0, ?, 1, ?, ?)`,
+        message.encryptedProjectId,
+        message.projectIdIv,
+        message.encryptedProjectId, // placeholder name
+        message.projectIdIv,
+        Date.now(),
+        message.encryptedConfig,
+        message.configIv
+      );
+    }
+
+    // Read back the full project entry and broadcast
+    const updatedProject = sql.exec<ProjectIndexRow>(
+      `SELECT * FROM project_index WHERE project_id = ?`,
+      message.encryptedProjectId
+    ).toArray()[0];
+
+    if (updatedProject) {
+      const projectEntry = rowToProjectEntry(updatedProject);
+      this.broadcast(
+        {
+          type: 'projectBroadcast',
+          project: projectEntry,
+          fromConnectionId: this.getConnectionId(ws),
+        },
+        ws
+      );
+    }
+
+    log.debug('Updated project config and broadcast');
   }
 
   /**
@@ -1316,6 +1393,8 @@ type ProjectIndexRow = {
   session_count: number;
   last_activity_at: number | null;
   sync_enabled: number;
+  encrypted_config: string | null;
+  config_iv: string | null;
 };
 
 // Map SQL rows (snake_case) to wire format (camelCase)
@@ -1351,5 +1430,7 @@ function rowToProjectEntry(row: ProjectIndexRow): ProjectIndexEntry {
     sessionCount: row.session_count,
     lastActivityAt: row.last_activity_at ?? 0,
     syncEnabled: row.sync_enabled === 1,
+    encryptedConfig: row.encrypted_config ?? undefined,
+    configIv: row.config_iv ?? undefined,
   };
 }

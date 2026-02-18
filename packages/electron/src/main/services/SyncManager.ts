@@ -64,6 +64,7 @@ interface SyncManagerState {
   provider: import('@nimbalyst/runtime/sync').SyncProvider | null;
   config: SessionSyncConfig | null;
   messageSyncHandler: ReturnType<typeof import('@nimbalyst/runtime/sync').createMessageSyncHandler> | null;
+  encryptionKey: CryptoKey | null;
   connected: boolean;
   syncing: boolean;
   error: string | null;
@@ -74,6 +75,7 @@ const state: SyncManagerState = {
   provider: null,
   config: null,
   messageSyncHandler: null,
+  encryptionKey: null,
   connected: false,
   syncing: false,
   error: null,
@@ -336,6 +338,7 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
     // CollabV3 uses the encryption key seed from CredentialService for E2E encryption
     // Note: We use stytchUserId for salt to ensure same encryption key across devices
     const encryptionKey = await deriveEncryptionKey(credentials.encryptionKeySeed, `nimbalyst:${stytchUserId}`);
+    state.encryptionKey = encryptionKey;
 
     // Cache user ID for dynamic device info callback
     cachedUserId = stytchUserId;
@@ -898,6 +901,108 @@ export async function syncSettingsToMobile(openaiApiKey?: string): Promise<void>
   } catch (error) {
     logger.main.error('[SyncManager] Failed to sync settings:', error);
   }
+}
+
+// ============================================================================
+// Project Config Sync (commands, etc.)
+// ============================================================================
+
+/**
+ * Sync slash commands for a workspace to mobile via the index room.
+ * Called after commands are discovered/updated.
+ * @param workspacePath The workspace path (used as project ID)
+ * @param commands Array of slash commands to sync (name + description + source only)
+ */
+export async function syncProjectCommandsToMobile(
+  workspacePath: string,
+  commands: Array<{ name: string; description?: string; source: string }>
+): Promise<void> {
+  const provider = state.provider;
+  if (!provider) {
+    return; // Sync not initialized, silently skip
+  }
+
+  if (!provider.syncProjectConfig) {
+    return;
+  }
+
+  try {
+    await provider.syncProjectConfig(workspacePath, {
+      commands: commands.map(cmd => ({
+        name: cmd.name,
+        description: cmd.description,
+        source: cmd.source as 'builtin' | 'project' | 'user' | 'plugin',
+      })),
+      lastCommandsUpdate: Date.now(),
+    });
+  } catch (error) {
+    logger.main.error('[SyncManager] Failed to sync project commands:', error);
+  }
+}
+
+/**
+ * Decrypt mobile image attachments and convert to ChatAttachment format.
+ * Each EncryptedAttachment has independently encrypted image data (AES-GCM).
+ * Decrypts the data, writes to temp files via AttachmentService, returns ChatAttachments.
+ */
+export async function decryptMobileAttachments(
+  encryptedAttachments: Array<{
+    id: string;
+    filename: string;
+    mimeType: string;
+    encryptedData: string;
+    iv: string;
+    size: number;
+    width?: number;
+    height?: number;
+  }>,
+  workspacePath: string,
+  sessionId: string,
+): Promise<import('@nimbalyst/runtime').ChatAttachment[]> {
+  const key = state.encryptionKey;
+  if (!key) {
+    logger.main.warn('[SyncManager] No encryption key available for attachment decryption');
+    return [];
+  }
+
+  const { AttachmentService } = await import('./AttachmentService');
+  const userDataPath = app.getPath('userData');
+  const attachmentService = new AttachmentService(workspacePath, userDataPath);
+
+  const results: import('@nimbalyst/runtime').ChatAttachment[] = [];
+
+  for (const att of encryptedAttachments) {
+    try {
+      // Decode base64 ciphertext and IV
+      const ciphertext = Buffer.from(att.encryptedData, 'base64');
+      const iv = Buffer.from(att.iv, 'base64');
+
+      // Decrypt using AES-GCM (same format as iOS CryptoManager: ciphertext + tag concatenated)
+      const decrypted = await crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv },
+        key,
+        ciphertext,
+      );
+
+      const imageBuffer = Buffer.from(decrypted);
+      const result = await attachmentService.saveAttachment(
+        imageBuffer,
+        att.filename,
+        att.mimeType,
+        sessionId,
+      );
+
+      if (result.success && result.attachment) {
+        results.push(result.attachment);
+      } else {
+        logger.main.warn('[SyncManager] Failed to save decrypted attachment:', result.error);
+      }
+    } catch (err) {
+      logger.main.error('[SyncManager] Failed to decrypt attachment:', att.id, err);
+    }
+  }
+
+  return results;
 }
 
 // ============================================================================

@@ -37,6 +37,7 @@ export type ClientMessage =
   | SessionControlCommandMessage
   | RegisterPushTokenMessage
   | RequestMobilePushMessage
+  | ProjectConfigUpdateMessage
   | SettingsSyncMessage
   | PingMessage;
 
@@ -166,6 +167,18 @@ export interface RequestMobilePushMessage {
   body: string;
   /** Device ID of the requesting device, used for active-device routing */
   requestingDeviceId?: string;
+}
+
+/** Update project config (encrypted blob with commands, etc.) */
+export interface ProjectConfigUpdateMessage {
+  type: 'projectConfigUpdate';
+  /** Encrypted project ID (must match existing project_index entry) */
+  encryptedProjectId: string;
+  projectIdIv: string;
+  /** Encrypted project config blob (base64 AES-GCM) */
+  encryptedConfig: string;
+  /** IV for config decryption (base64) */
+  configIv: string;
 }
 
 /** Sync encrypted settings to other devices */
@@ -428,6 +441,10 @@ export interface ProjectIndexEntry {
   sessionCount: number;
   lastActivityAt: number;
   syncEnabled: boolean;
+  /** Encrypted project config blob (base64) - contains commands, settings, etc. */
+  encryptedConfig?: string;
+  /** IV for config decryption (base64) */
+  configIv?: string;
 }
 
 // ============================================================================

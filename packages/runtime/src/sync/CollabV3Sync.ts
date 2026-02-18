@@ -25,12 +25,14 @@ import type {
   SyncedSessionMetadata,
   SessionIndexData,
   ProjectIndexEntry,
+  ProjectConfig,
   DeviceInfo,
   CreateSessionRequest,
   CreateSessionResponse,
   EncryptedSettingsPayload,
   SyncedSettings,
   SessionControlMessage,
+  EncryptedAttachment,
 } from './types';
 
 // ============================================================================
@@ -60,6 +62,23 @@ interface EncryptedQueuedPrompt {
   /** IV for prompt decryption (base64) */
   iv: string;
   timestamp: number;
+  /** Encrypted image attachments from mobile (each independently encrypted) */
+  encryptedAttachments?: WireEncryptedAttachment[];
+}
+
+/** An encrypted image attachment on the wire */
+interface WireEncryptedAttachment {
+  id: string;
+  filename: string;
+  mimeType: string;
+  /** Base64 AES-GCM ciphertext of the compressed image data */
+  encryptedData: string;
+  /** Base64 IV for decryption */
+  iv: string;
+  /** Original size in bytes (before encryption) */
+  size: number;
+  width?: number;
+  height?: number;
 }
 
 /** Plaintext queued prompt (after decryption) */
@@ -67,6 +86,8 @@ interface PlaintextQueuedPrompt {
   id: string;
   prompt: string;
   timestamp: number;
+  /** Decrypted image attachments from mobile */
+  attachments?: EncryptedAttachment[];
 }
 
 interface SessionMetadata {
@@ -364,11 +385,16 @@ async function decryptQueuedPrompts(
   return Promise.all(
     prompts.map(async (prompt) => {
       const decryptedPrompt = await decrypt(prompt.encryptedPrompt, prompt.iv, key);
-      return {
+      const result: PlaintextQueuedPrompt = {
         id: prompt.id,
         prompt: decryptedPrompt,
         timestamp: prompt.timestamp,
       };
+      // Pass through encrypted attachments (desktop decrypts them when processing)
+      if (prompt.encryptedAttachments && prompt.encryptedAttachments.length > 0) {
+        result.attachments = prompt.encryptedAttachments;
+      }
+      return result;
     })
   );
 }
@@ -2314,6 +2340,35 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       // Projects are derived from sessions in CollabV3
       // The index room calculates project stats from session data
       // console.log('[CollabV3] Projects are auto-calculated from sessions');
+    },
+
+    async syncProjectConfig(projectId: string, projectConfig: ProjectConfig): Promise<void> {
+      if (!indexWs || !indexConnected) {
+        console.log('[CollabV3] Index not connected, cannot sync project config');
+        return;
+      }
+      if (!config.encryptionKey) {
+        console.error('[CollabV3] Cannot sync project config: no encryption key');
+        return;
+      }
+
+      // Encrypt project ID (deterministic)
+      const { encryptedProjectId, projectIdIv } = await encryptProjectId(projectId, config.encryptionKey);
+
+      // Encrypt the config blob
+      const configJson = JSON.stringify(projectConfig);
+      const { encrypted: encryptedConfig, iv: configIv } = await encrypt(configJson, config.encryptionKey);
+
+      const message = {
+        type: 'projectConfigUpdate',
+        encryptedProjectId,
+        projectIdIv,
+        encryptedConfig,
+        configIv,
+      };
+
+      indexWs.send(JSON.stringify(message));
+      // console.log('[CollabV3] Sent projectConfigUpdate with', projectConfig.commands.length, 'commands');
     },
 
     async fetchIndex(): Promise<{ sessions: DecryptedSessionIndexEntry[]; projects: Array<{ projectId: string; name: string; sessionCount: number; lastActivityAt: number; syncEnabled: boolean }> }> {
