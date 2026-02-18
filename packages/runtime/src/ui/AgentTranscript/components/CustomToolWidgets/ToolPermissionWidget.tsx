@@ -459,7 +459,7 @@ export const ToolPermissionWidget: React.FC<CustomToolWidgetProps> = ({
             data-testid="tool-permission-deny"
             onClick={handleDeny}
             disabled={isSubmitting}
-            className="px-3 py-1.5 rounded-md text-[11px] font-medium cursor-pointer border-none bg-transparent text-nim-muted whitespace-nowrap transition-all duration-150 hover:bg-nim-hover hover:text-nim disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-3 py-1.5 rounded-md text-[11px] font-medium cursor-pointer border border-nim bg-nim-tertiary text-nim whitespace-nowrap transition-all duration-150 hover:bg-nim-hover disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Deny
           </button>
