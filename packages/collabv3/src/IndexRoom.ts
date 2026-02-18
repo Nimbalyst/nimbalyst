@@ -56,6 +56,9 @@ export class IndexRoom implements DurableObject {
   // Note: This map is rebuilt after hibernation using getWebSockets() and tags
   private connections: Map<WebSocket, ConnectionState> = new Map();
   private initialized = false;
+  // Devices loaded from DO storage during initialization, used as fallback
+  // for connections that haven't re-announced after hibernation recovery
+  private storedDevices: Map<string, DeviceInfo> = new Map();
 
   // APNs JWT cache - JWTs are valid for 1 hour, we refresh every 50 minutes
   private cachedAPNsJWT: string | null = null;
@@ -71,9 +74,9 @@ export class IndexRoom implements DurableObject {
   }
 
   /**
-   * Restore connection state from WebSocket tags after hibernation
-   * Note: Device info is NOT restored here because we can't map WebSockets to device IDs.
-   * Clients will need to re-announce their device after reconnection.
+   * Restore connection state from WebSocket tags after hibernation.
+   * Device info is restored separately in ensureInitialized() from DO storage
+   * and used as a fallback in getConnectedDevices() until clients re-announce.
    */
   private restoreConnectionsFromHibernation(): void {
     const webSockets = this.state.getWebSockets();
@@ -89,7 +92,6 @@ export class IndexRoom implements DurableObject {
         this.connections.set(ws, {
           auth: { userId, orgId },
           synced: true,
-          device: undefined,
         });
       }
     }
@@ -238,6 +240,15 @@ export class IndexRoom implements DurableObject {
     const existingAlarm = await this.state.storage.getAlarm();
     if (!existingAlarm) {
       await this.state.storage.setAlarm(Date.now() + INDEX_CLEANUP_INTERVAL_MS);
+    }
+
+    // Restore stored device info for hibernation recovery.
+    // After hibernation, connections are restored from tags but lose their device info.
+    // Load all device:* entries from storage so getConnectedDevices() can include them
+    // until clients re-announce (every 30s).
+    const storedEntries = await this.state.storage.list<DeviceInfo>({ prefix: 'device:' });
+    for (const [, device] of storedEntries) {
+      this.storedDevices.set(device.deviceId, device);
     }
 
     this.initialized = true;
@@ -665,6 +676,8 @@ export class IndexRoom implements DurableObject {
     // Store device info in DO storage for hibernation recovery
     // Key by deviceId so it persists across reconnections
     await this.state.storage.put(`device:${device.deviceId}`, device);
+    // Keep in-memory cache in sync (used as fallback in getConnectedDevices)
+    this.storedDevices.set(device.deviceId, device);
 
     // Send current devices list to the connecting client
     const devicesList = this.getConnectedDevices();
@@ -1072,18 +1085,34 @@ export class IndexRoom implements DurableObject {
 
   /**
    * Get list of all connected devices
-   * Returns devices from active connections that have announced themselves
+   * Returns devices from active connections that have announced themselves,
+   * plus stored devices as fallback for connections recovering from hibernation.
    */
   private getConnectedDevices(): DeviceInfo[] {
     const devices: DeviceInfo[] = [];
     const seenIds = new Set<string>();
 
+    // First: devices from active connections (fresh announcements)
     for (const [, state] of this.connections) {
       if (state.device && !seenIds.has(state.device.deviceId)) {
         devices.push(state.device);
         seenIds.add(state.device.deviceId);
       }
     }
+
+    // Fallback: include stored devices for connections that haven't re-announced
+    // after hibernation recovery. Only use the fallback when some connections are
+    // missing device info (indicating they were restored from hibernation).
+    const connectionsWithoutDevice = [...this.connections.values()].filter(s => !s.device).length;
+    if (connectionsWithoutDevice > 0) {
+      for (const [, device] of this.storedDevices) {
+        if (!seenIds.has(device.deviceId)) {
+          devices.push(device);
+          seenIds.add(device.deviceId);
+        }
+      }
+    }
+
     return devices;
   }
 
@@ -1289,13 +1318,16 @@ export class IndexRoom implements DurableObject {
   async webSocketClose(ws: WebSocket): Promise<void> {
     const connState = this.connections.get(ws);
 
-    // If this connection had device info, broadcast that it left
+    // If this connection had device info, broadcast that it left and clean up storage
     if (connState?.device) {
       const leftMessage: DeviceLeftMessage = {
         type: 'deviceLeft',
         deviceId: connState.device.deviceId,
       };
       this.broadcast(leftMessage, ws);
+      // Remove from stored devices so it's not returned as a stale fallback
+      this.storedDevices.delete(connState.device.deviceId);
+      await this.state.storage.delete(`device:${connState.device.deviceId}`);
     }
 
     this.connections.delete(ws);
@@ -1308,13 +1340,15 @@ export class IndexRoom implements DurableObject {
     console.error('WebSocket error:', error);
     const connState = this.connections.get(ws);
 
-    // If this connection had device info, broadcast that it left
+    // If this connection had device info, broadcast that it left and clean up storage
     if (connState?.device) {
       const leftMessage: DeviceLeftMessage = {
         type: 'deviceLeft',
         deviceId: connState.device.deviceId,
       };
       this.broadcast(leftMessage, ws);
+      this.storedDevices.delete(connState.device.deviceId);
+      await this.state.storage.delete(`device:${connState.device.deviceId}`);
     }
 
     this.connections.delete(ws);
