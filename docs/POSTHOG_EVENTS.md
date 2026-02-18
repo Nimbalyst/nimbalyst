@@ -314,6 +314,18 @@ The `known_error` event uses an `errorId` property to identify specific error co
 | `quit_confirmation_shown` | `index.ts:757` | User attempts quit with active AI session | `reason` (active_ai_session) | v0.45.25 (2025-11-14) |  |
 | `quit_confirmation_result` | `index.ts:774, 783` | User responds to quit confirmation dialog | `result` (quit_anyway/cancelled) | v0.45.25 (2025-11-14) |  |
 
+### Account & Sync
+
+| Event Name | File(s) | Trigger | Properties | First Added (Public) | Significant Changes |
+| --- | --- | --- | --- | --- | --- |
+| `sync_sign_in_started` | `SyncPanel.tsx` | User clicks Google sign-in or sends magic link | `method` (google/magic_link) | (pending release) |  |
+| `sync_sign_in_completed` | `SyncPanel.tsx` | Auth state transitions from unauthenticated to authenticated | None | (pending release) |  |
+| `sync_sign_out` | `SyncPanel.tsx` | User clicks sign out | None | (pending release) |  |
+| `sync_enabled` | `SyncPanel.tsx` | User enables session sync toggle | `projectCount` (exact number) | (pending release) |  |
+| `sync_disabled` | `SyncPanel.tsx` | User disables session sync toggle | `projectCount` (exact number) | (pending release) |  |
+| `sync_qr_pairing_opened` | `SyncPanel.tsx` | User opens the QR pairing modal | None | (pending release) |  |
+| `sync_auth_callback_completed` | `StytchAuthService.ts` | Deep link auth callback completes successfully (authoritative sign-in) | None | (pending release) |  |
+
 ### Voice Mode
 
 | Event Name | File(s) | Trigger | Properties | First Added (Public) | Significant Changes |
@@ -342,9 +354,9 @@ Events from the iOS companion app. These events share the same PostHog project a
 
 ## Event Summary Statistics
 
-- **Total Events**: 102 unique event names
-- **Main Process Events**: 55 (via AnalyticsService)
-- **Renderer Process Events**: 40 (via usePostHog hook)
+- **Total Events**: 109 unique event names
+- **Main Process Events**: 56 (via AnalyticsService)
+- **Renderer Process Events**: 46 (via usePostHog hook)
 - **Mobile Events**: 7 (via Capacitor AnalyticsService)
 - **File Operations**: 7 events
 - **Workspace Operations**: 4 events
@@ -358,6 +370,7 @@ Events from the iOS companion app. These events share the same PostHog project a
 - **MCP Configuration**: 3 events
 - **Terminal**: 1 event
 - **Extensions**: 1 event
+- **Account & Sync**: 7 events
 - **Onboarding**: 8 events
 - **Surveys & Feedback**: 3 events
 - **Permissions**: 4 events

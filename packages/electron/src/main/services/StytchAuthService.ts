@@ -24,6 +24,7 @@ import * as path from 'path';
 import { logger } from '../utils/logger';
 import { STYTCH_CONFIG } from '@nimbalyst/runtime';
 import { getSessionSyncConfig } from '../utils/store';
+import { AnalyticsService } from './analytics/AnalyticsService';
 
 // Stytch types
 interface StytchUser {
@@ -302,6 +303,9 @@ export async function handleAuthCallback(params: {
     email: email || '',
     expiresAt: expiresAtMs,
   });
+
+  // Track auth callback completion (authoritative sign-in event from deep link)
+  AnalyticsService.getInstance().sendEvent('sync_auth_callback_completed');
 
   logger.main.info('[StytchAuthService] Auth callback processed:', {
     userId,

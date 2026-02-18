@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { usePostHog } from 'posthog-js/react';
 import { useAtom } from 'jotai';
 import { QRPairingModal } from './QRPairingModal';
@@ -189,6 +189,9 @@ export function SyncPanel() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [magicLinkSent, setMagicLinkSent] = useState(false);
 
+  const wasAuthenticatedRef = useRef(stytchAuth.isAuthenticated);
+  useEffect(() => { wasAuthenticatedRef.current = stytchAuth.isAuthenticated; }, [stytchAuth.isAuthenticated]);
+
   const isStytchAvailable = !!window.electronAPI?.stytch;
 
   // Load Stytch auth state on mount
@@ -215,6 +218,11 @@ export function SyncPanel() {
 
     // Listen for auth state change IPC events
     const unsubscribe = window.electronAPI.stytch.onAuthStateChange((state: StytchAuthState) => {
+      // Track sign-in completion (transition from not authenticated to authenticated)
+      if (!wasAuthenticatedRef.current && state.isAuthenticated && posthog) {
+        posthog.capture('sync_sign_in_completed');
+      }
+
       setStytchAuth({
         isAuthenticated: state.isAuthenticated,
         user: state.user,
@@ -284,6 +292,12 @@ export function SyncPanel() {
   }, [config.enabled, effectiveServerUrl]);
 
   const handleFieldChange = (field: keyof SyncConfig, value: string | boolean | number) => {
+    if (field === 'enabled') {
+      const projectCount = config.enabledProjects
+        ? config.enabledProjects.length
+        : projects.length;
+      posthog?.capture(value ? 'sync_enabled' : 'sync_disabled', { projectCount });
+    }
     updateConfig({ [field]: value });
   };
 
@@ -344,6 +358,7 @@ export function SyncPanel() {
     if (!window.electronAPI?.stytch) return;
     setAuthLoading(true);
     setAuthError(null);
+    posthog?.capture('sync_sign_in_started', { method: 'google' });
     try {
       const result = await window.electronAPI.stytch.signInWithGoogle();
       if (!result.success && result.error) {
@@ -368,6 +383,7 @@ export function SyncPanel() {
 
     setAuthLoading(true);
     setAuthError(null);
+    posthog?.capture('sync_sign_in_started', { method: 'magic_link' });
     try {
       const result = await window.electronAPI.stytch.sendMagicLink(email);
 
@@ -385,6 +401,7 @@ export function SyncPanel() {
 
   const handleSignOut = async () => {
     if (!window.electronAPI?.stytch) return;
+    posthog?.capture('sync_sign_out');
     try {
       await window.electronAPI.stytch.signOut();
     } catch (err) {
@@ -683,7 +700,10 @@ export function SyncPanel() {
               <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">Mobile Device</h4>
               <button
                 className="pair-device-button w-full flex items-center justify-center px-4 py-2.5 bg-nim-secondary border border-nim rounded-md text-nim font-medium text-[13px] cursor-pointer hover:bg-nim-hover disabled:opacity-50 disabled:cursor-not-allowed"
-                onClick={() => setShowQRModal(true)}
+                onClick={() => {
+                  posthog?.capture('sync_qr_pairing_opened');
+                  setShowQRModal(true);
+                }}
                 disabled={!effectiveServerUrl}
               >
                 <svg className="w-[18px] h-[18px] mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
