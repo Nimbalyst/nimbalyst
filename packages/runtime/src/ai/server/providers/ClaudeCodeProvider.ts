@@ -76,7 +76,7 @@ type ClaudeCodeVariant = typeof CLAUDE_CODE_VARIANTS[number];
 // These correspond to the underlying Claude models used by Claude Code
 const CLAUDE_CODE_VARIANT_VERSIONS: Record<ClaudeCodeVariant, string> = {
   opus: '4.6',
-  sonnet: '4.5',
+  sonnet: '4.6',
   haiku: '3.5'
 };
 
@@ -504,13 +504,17 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
     this.markMessagesAsHidden = hidden;
   }
 
-  private resolveModelVariant(): ClaudeCodeVariant {
+  private resolveModelVariant(): string {
     const fallback: ClaudeCodeVariant = 'sonnet';
     const configured = this.config.model || ClaudeCodeProvider.DEFAULT_MODEL;
 
     // Try parsing with ModelIdentifier
     const parsed = ModelIdentifier.tryParse(configured);
     if (parsed && parsed.provider === 'claude-code') {
+      // For 1M context: pin to Sonnet 4.5 since the 1M beta isn't supported on Sonnet 4.6 yet
+      if (parsed.isExtendedContext && parsed.baseVariant === 'sonnet') {
+        return 'claude-sonnet-4-5-20250929';
+      }
       // baseVariant strips suffixes like -1m
       const variant = parsed.baseVariant as ClaudeCodeVariant;
       if ((CLAUDE_CODE_VARIANTS as readonly string[]).includes(variant)) {
@@ -982,7 +986,7 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
         // Enable MCP tool search when MCP tools exceed 10% of context (same as CLI default)
         // Options: 'auto' (10%), 'auto:N' (custom N%), 'true' (always), 'false' (never)
         ENABLE_TOOL_SEARCH: 'auto:10',
-        // Set effort level for Opus 4.6 adaptive reasoning (same as CLI's /model effort slider)
+        // Set effort level for adaptive reasoning (same as CLI's /model effort slider)
         // Only set when not 'high' (the default) to avoid overriding CLI defaults
         ...(this.config.effortLevel && this.config.effortLevel !== DEFAULT_EFFORT_LEVEL && {
           CLAUDE_CODE_EFFORT_LEVEL: this.config.effortLevel
@@ -3698,10 +3702,11 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
       // Add 1M variant right after Sonnet
       // Access is controlled by Anthropic via account permissions
       // If user doesn't have access, the SDK will return an error when they try to use it
+      // Note: 1M beta is pinned to Sonnet 4.5 since the API doesn't support 1M for Sonnet 4.6 yet
       if (variant === 'sonnet') {
         models.push({
           id: ModelIdentifier.create('claude-code', 'sonnet-1m').combined,
-          name: `Claude Agent · Sonnet ${CLAUDE_CODE_VARIANT_VERSIONS.sonnet} (1M)`,
+          name: 'Claude Agent · Sonnet 4.5 (1M)',
           provider: 'claude-code' as const,
           maxTokens: 8192,
           contextWindow: 1000000

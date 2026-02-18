@@ -1,8 +1,8 @@
 /**
- * Effort level constants for Opus 4.6 adaptive reasoning.
+ * Effort level constants for adaptive reasoning (Opus 4.6 and Sonnet 4.6).
  * Matches the Claude Code CLI's /model effort slider and CLAUDE_CODE_EFFORT_LEVEL env var.
  *
- * Levels: low, medium, high (default), max (Opus 4.6 only)
+ * Levels: low, medium, high (default), max
  */
 
 export type EffortLevel = 'low' | 'medium' | 'high' | 'max';

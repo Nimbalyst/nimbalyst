@@ -334,9 +334,9 @@ struct ProviderBadge: View {
         }
     }
 
-    /// Extract Claude Code variant from model field and format as "Opus 4.6", "Sonnet 4.5", etc.
+    /// Extract Claude Code variant from model field and format as "Opus 4.6", "Sonnet 4.6", etc.
     private var claudeCodeVariantLabel: String {
-        guard let model = model?.lowercased() else { return "Sonnet 4.5" }
+        guard let model = model?.lowercased() else { return "Sonnet 4.6" }
 
         // Model can be "claude-code:opus", "claude-code:sonnet-1m", "opus", "sonnet", etc.
         let variant: String
@@ -353,9 +353,10 @@ struct ProviderBadge: View {
 
         switch baseVariant {
         case "opus": return "Opus 4.6\(suffix)"
-        case "sonnet": return "Sonnet 4.5\(suffix)"
+        // 1M is pinned to Sonnet 4.5 since the API doesn't support 1M for Sonnet 4.6 yet
+        case "sonnet": return "Sonnet \(isExtended ? "4.5" : "4.6")\(suffix)"
         case "haiku": return "Haiku 3.5\(suffix)"
-        default: return "Sonnet 4.5\(suffix)"
+        default: return "Sonnet 4.6\(suffix)"
         }
     }
 

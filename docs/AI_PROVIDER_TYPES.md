@@ -66,7 +66,7 @@ Direct Anthropic API integration for standard chat:
 - **Implementation**: `packages/runtime/src/ai/server/providers/ClaudeProvider.ts`
 - **SDK**: Uses official Anthropic SDK (`@anthropic-ai/sdk`)
 - **Features**:
-  - Standard Claude models (Opus 4.1, Opus 4, Sonnet 4, Sonnet 3.7)
+  - Standard Claude models (Opus 4.6, Sonnet 4.6, Opus 4.5, Sonnet 4.5, etc.)
   - Streaming responses with tool use support
   - Direct API key authentication
   - Full control over model selection

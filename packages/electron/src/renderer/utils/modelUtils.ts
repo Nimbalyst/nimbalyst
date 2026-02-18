@@ -20,7 +20,7 @@ type ClaudeCodeVariant = 'opus' | 'sonnet' | 'haiku';
 // These correspond to the underlying Claude models used by Claude Code
 const CLAUDE_CODE_VARIANT_VERSIONS: Record<ClaudeCodeVariant, string> = {
   opus: '4.6',
-  sonnet: '4.5',
+  sonnet: '4.6',
   haiku: '3.5'
 };
 
@@ -56,11 +56,12 @@ function formatVariantLabel(variant: ClaudeCodeVariant): string {
 export function getClaudeCodeModelLabel(modelId?: string): string {
   const variant = extractClaudeCodeVariant(modelId);
   // If no variant detected (shouldn't happen with legacy handling), default to Sonnet
-  if (!variant) return 'Claude Agent (Sonnet 4.5)';
-  const version = CLAUDE_CODE_VARIANT_VERSIONS[variant];
+  if (!variant) return 'Claude Agent (Sonnet 4.6)';
 
   // Check for extended context (1M) variant
   const parsed = modelId ? ModelIdentifier.tryParse(modelId) : null;
+  // 1M is pinned to Sonnet 4.5 since the API doesn't support 1M for Sonnet 4.6 yet
+  const version = (parsed?.isExtendedContext && variant === 'sonnet') ? '4.5' : CLAUDE_CODE_VARIANT_VERSIONS[variant];
   const suffix = parsed?.isExtendedContext ? ' (1M)' : '';
 
   return `Claude Agent (${formatVariantLabel(variant)} ${version}${suffix})`;
@@ -69,11 +70,12 @@ export function getClaudeCodeModelLabel(modelId?: string): string {
 export function getClaudeCodeModelShortLabel(modelId?: string): string {
   const variant = extractClaudeCodeVariant(modelId);
   // If no variant detected (shouldn't happen with legacy handling), default to Sonnet
-  if (!variant) return 'Sonnet 4.5';
-  const version = CLAUDE_CODE_VARIANT_VERSIONS[variant];
+  if (!variant) return 'Sonnet 4.6';
 
   // Check for extended context (1M) variant
   const parsed = modelId ? ModelIdentifier.tryParse(modelId) : null;
+  // 1M is pinned to Sonnet 4.5 since the API doesn't support 1M for Sonnet 4.6 yet
+  const version = (parsed?.isExtendedContext && variant === 'sonnet') ? '4.5' : CLAUDE_CODE_VARIANT_VERSIONS[variant];
   const suffix = parsed?.isExtendedContext ? ' (1M)' : '';
 
   return `${formatVariantLabel(variant)} ${version}${suffix}`;
@@ -225,8 +227,15 @@ export function getModelShortName(provider: string, modelId: string): string {
 }
 
 /**
- * Check if a model supports effort level configuration (Opus 4.6 only).
+ * Check if a model supports effort level configuration (Opus 4.6 and Sonnet 4.6).
+ * Excludes the Sonnet 1M variant which is pinned to Sonnet 4.5.
  */
 export function supportsEffortLevel(modelId?: string): boolean {
-  return extractClaudeCodeVariant(modelId) === 'opus';
+  const variant = extractClaudeCodeVariant(modelId);
+  if (variant === 'opus') return true;
+  if (variant === 'sonnet') {
+    const parsed = modelId ? ModelIdentifier.tryParse(modelId) : null;
+    return !parsed?.isExtendedContext;
+  }
+  return false;
 }
