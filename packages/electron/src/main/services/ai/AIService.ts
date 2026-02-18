@@ -457,6 +457,11 @@ export class AIService {
   // but the same prompt ID is somehow passed to sendMessage twice
   private processingQueuedPromptIds = new Set<string>();
 
+  // Track sessions currently processing a queued prompt to prevent concurrent execution.
+  // Without this, the completion handler and triggerQueueProcessing IPC can race,
+  // each claiming a different prompt and sending both to the AI concurrently.
+  private sessionsProcessingQueue = new Set<string>();
+
   // Track mobile session creation requests to prevent duplicate processing
   // (can happen if the same request is delivered multiple times)
   private processingMobileSessionRequests = new Set<string>();
@@ -653,6 +658,14 @@ export class AIService {
    * Also used by the ai:triggerQueueProcessing IPC handler.
    */
   private async processQueuedPrompt(sessionId: string, workspacePath: string, targetWindow: Electron.BrowserWindow): Promise<boolean> {
+    // Prevent concurrent queue processing for the same session.
+    // Multiple callers (completion handler, triggerQueueProcessing IPC, mobile sync)
+    // can race here - only one should process at a time.
+    if (this.sessionsProcessingQueue.has(sessionId)) {
+      logger.main.info(`[AIService] processQueuedPrompt: session ${sessionId} already processing a queued prompt, skipping`);
+      return false;
+    }
+
     const { getQueuedPromptsStore } = await import('../RepositoryManager');
     const queueStore = getQueuedPromptsStore();
     const pendingPrompts = await queueStore.listPending(sessionId);
@@ -671,6 +684,9 @@ export class AIService {
       logger.main.info(`[AIService] processQueuedPrompt: prompt ${nextPrompt.id} already claimed`);
       return false;
     }
+
+    // Mark session as processing before the setImmediate
+    this.sessionsProcessingQueue.add(sessionId);
 
     // Notify renderer that prompt was claimed (so UI removes it from queue list)
     if (targetWindow && !targetWindow.isDestroyed()) {
@@ -705,6 +721,8 @@ export class AIService {
       } catch (queueError) {
         logger.main.error(`[AIService] Failed to process queued prompt ${claimed.id}:`, queueError);
         await queueStore.fail(claimed.id, queueError instanceof Error ? queueError.message : 'Unknown error');
+      } finally {
+        this.sessionsProcessingQueue.delete(sessionId);
       }
     });
 
@@ -2890,42 +2908,52 @@ export class AIService {
         // TESTING: Queue processing from main process instead of renderer
         // OLD: Queue processing is handled by the renderer (AgenticPanel) to keep SDK instantiation in one place
         try {
-          const { getQueuedPromptsStore } = await import('../RepositoryManager');
-          const queueStore = getQueuedPromptsStore();
-          const pendingPrompts = await queueStore.listPending(session.id);
+          // Check the per-session guard before processing - triggerQueueProcessing IPC may already be handling this
+          if (!this.sessionsProcessingQueue.has(session.id)) {
+            const { getQueuedPromptsStore } = await import('../RepositoryManager');
+            const queueStore = getQueuedPromptsStore();
+            const pendingPrompts = await queueStore.listPending(session.id);
 
-          if (pendingPrompts.length > 0) {
-            const nextPrompt = pendingPrompts[0];
-            logger.main.info(`[AIService] Processing next queued prompt from main process: ${nextPrompt.id} for session ${session.id}`);
+            if (pendingPrompts.length > 0) {
+              const nextPrompt = pendingPrompts[0];
+              logger.main.info(`[AIService] Processing next queued prompt from main process: ${nextPrompt.id} for session ${session.id}`);
 
-            // Claim the prompt atomically
-            const claimed = await queueStore.claim(nextPrompt.id);
-            if (claimed) {
-              // Notify renderer that prompt was claimed (so UI removes it from queue list)
-              safeSend(event, 'ai:promptClaimed', {
-                sessionId: session.id,
-                promptId: claimed.id,
-              });
+              // Claim the prompt atomically
+              const claimed = await queueStore.claim(nextPrompt.id);
+              if (claimed) {
+                // Mark session as processing before the setImmediate
+                this.sessionsProcessingQueue.add(session.id);
 
-              // Recursively call sendMessage with the queued prompt
-              const docContext = {
-                ...claimed.documentContext,
-                queuedPromptId: claimed.id,
-                attachments: claimed.attachments,
-              };
+                // Notify renderer that prompt was claimed (so UI removes it from queue list)
+                safeSend(event, 'ai:promptClaimed', {
+                  sessionId: session.id,
+                  promptId: claimed.id,
+                });
 
-              // Use setImmediate to avoid stack overflow and let this response complete first
-              setImmediate(async () => {
-                try {
-                  await this.sendMessageHandler!(event, claimed.prompt, docContext as any, session.id, workspacePath);
-                  // Mark as completed
-                  await queueStore.complete(claimed.id);
-                } catch (queueError) {
-                  logger.main.error(`[AIService] Failed to process queued prompt ${claimed.id}:`, queueError);
-                  await queueStore.fail(claimed.id, queueError instanceof Error ? queueError.message : 'Unknown error');
-                }
-              });
+                // Recursively call sendMessage with the queued prompt
+                const docContext = {
+                  ...claimed.documentContext,
+                  queuedPromptId: claimed.id,
+                  attachments: claimed.attachments,
+                };
+
+                // Use setImmediate to avoid stack overflow and let this response complete first
+                setImmediate(async () => {
+                  try {
+                    await this.sendMessageHandler!(event, claimed.prompt, docContext as any, session.id, workspacePath);
+                    // Mark as completed
+                    await queueStore.complete(claimed.id);
+                  } catch (queueError) {
+                    logger.main.error(`[AIService] Failed to process queued prompt ${claimed.id}:`, queueError);
+                    await queueStore.fail(claimed.id, queueError instanceof Error ? queueError.message : 'Unknown error');
+                  } finally {
+                    this.sessionsProcessingQueue.delete(session.id);
+                  }
+                });
+              }
             }
+          } else {
+            logger.main.info(`[AIService] Skipping completion-handler queue processing for session ${session.id} - already processing`);
           }
         } catch (queueError) {
           logger.main.error('[AIService] Error checking queued prompts:', queueError);
@@ -3036,7 +3064,7 @@ export class AIService {
 
         // Process next queued prompt even on error/abort
         // This ensures queued prompts fire when user cancels a question
-        if (session?.id && event?.sender) {
+        if (session?.id && event?.sender && !this.sessionsProcessingQueue.has(session.id)) {
           try {
             const { getQueuedPromptsStore } = await import('../RepositoryManager');
             const queueStore = getQueuedPromptsStore();
@@ -3049,6 +3077,9 @@ export class AIService {
               // Claim the prompt atomically
               const claimed = await queueStore.claim(nextPrompt.id);
               if (claimed) {
+                // Mark session as processing before the setImmediate
+                this.sessionsProcessingQueue.add(session.id);
+
                 // Notify renderer that prompt was claimed (so UI removes it from queue list)
                 safeSend(event, 'ai:promptClaimed', {
                   sessionId: session.id,
@@ -3071,6 +3102,8 @@ export class AIService {
                   } catch (queueError) {
                     logger.main.error(`[AIService] Failed to process queued prompt ${claimed.id}:`, queueError);
                     await queueStore.fail(claimed.id, queueError instanceof Error ? queueError.message : 'Unknown error');
+                  } finally {
+                    this.sessionsProcessingQueue.delete(session.id);
                   }
                 });
               }
@@ -3340,6 +3373,12 @@ export class AIService {
       sessionId: string,
       workspacePath: string
     ) => {
+      // Check per-session guard - the completion handler may already be processing for this session
+      if (this.sessionsProcessingQueue.has(sessionId)) {
+        logger.main.info(`[AIService] triggerQueueProcessing: session ${sessionId} already processing a queued prompt, skipping`);
+        return { processed: false };
+      }
+
       const { getQueuedPromptsStore } = await import('../RepositoryManager');
       const queueStore = getQueuedPromptsStore();
       const pendingPrompts = await queueStore.listPending(sessionId);
@@ -3358,6 +3397,9 @@ export class AIService {
         logger.main.info(`[AIService] triggerQueueProcessing: prompt ${nextPrompt.id} already claimed`);
         return { processed: false };
       }
+
+      // Mark session as processing before the setImmediate
+      this.sessionsProcessingQueue.add(sessionId);
 
       // Notify renderer that prompt was claimed (so UI removes it from queue list)
       safeSend(event, 'ai:promptClaimed', {
@@ -3381,6 +3423,8 @@ export class AIService {
         } catch (queueError) {
           logger.main.error(`[AIService] Failed to process queued prompt ${claimed.id}:`, queueError);
           await queueStore.fail(claimed.id, queueError instanceof Error ? queueError.message : 'Unknown error');
+        } finally {
+          this.sessionsProcessingQueue.delete(sessionId);
         }
       });
 
