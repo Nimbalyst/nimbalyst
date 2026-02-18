@@ -20,6 +20,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.53.11] - 2026-02-18
+
+
+### Added
+- Sonnet 4.6 support with effort slider, pin 1M context to Sonnet 4.5
+- Prompt for push notifications after iOS pairing
+- Redesigned Account & Sync settings panel, removed alpha gate
+
+### Changed
+- Migrate from Stytch B2C to B2B Discovery OAuth
+
+### Fixed
+- iOS push notifications suppressed because device always reported as active
+- Stale "waiting for response" indicator after git commit proposal
+- Stytch auth deep link now opens Nimbalyst instead of bare Electron
+- Codex 401 errors now show the OpenAI auth setup widget
+
 ## [0.53.10] - 2026-02-18
 
 
