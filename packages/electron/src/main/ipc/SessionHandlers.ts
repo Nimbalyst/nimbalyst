@@ -1153,6 +1153,25 @@ export async function registerSessionHandlers() {
 
                         // Only include if no response exists
                         if (responseRows.length === 0) {
+                            // For git_commit_proposal, also check if the MCP tool already
+                            // returned a result via Claude Code SDK. The tool_result message
+                            // contains the tool_use_id matching the proposalId. If present,
+                            // the proposal is resolved even if no explicit response was persisted.
+                            if (content.type === 'git_commit_proposal' && promptId) {
+                                const { rows: toolResultRows } = await database.query(
+                                    `SELECT id FROM ai_agent_messages
+                                     WHERE session_id = $1
+                                       AND source = 'claude-code'
+                                       AND content LIKE $2
+                                       AND content LIKE '%"type":"tool_result"%'
+                                     LIMIT 1`,
+                                    [sessionId, `%"tool_use_id":"${promptId}"%`]
+                                );
+                                if (toolResultRows.length > 0) {
+                                    continue; // Tool already completed - skip
+                                }
+                            }
+
                             pendingPrompts.push({
                                 id: row.id,
                                 sessionId: row.session_id,
