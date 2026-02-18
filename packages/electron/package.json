@@ -149,6 +149,14 @@
     "nodeGypRebuild": false,
     "buildDependenciesFromSource": false,
     "npmRebuild": true,
+    "protocols": [
+      {
+        "name": "Nimbalyst URL",
+        "schemes": [
+          "nimbalyst"
+        ]
+      }
+    ],
     "directories": {
       "output": "release"
     },
