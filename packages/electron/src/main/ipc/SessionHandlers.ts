@@ -699,7 +699,7 @@ export async function registerSessionHandlers() {
     safeHandle('sessions:get-by-file', async (event, workspaceId: string, filePath: string) => {
         try {
             const { database } = await import('../database/PGLiteDatabaseWorker');
-            const { resolveProjectPath } = await import('../utils/workspaceDetection');
+            const { resolveProjectPath, isWorktreePath } = await import('../utils/workspaceDetection');
 
             // Compute relative path for cross-workspace matching
             const relativePath = filePath.startsWith(workspaceId)
@@ -750,6 +750,12 @@ export async function registerSessionHandlers() {
                 .map(session => {
                     const entry = entriesMap.get(session.id);
                     const sessionWorkspaceId = session.workspacePath || '';
+                    // Worktree-aware matching: when viewing from a worktree, match
+                    // sessions whose worktreePath equals this worktree. When viewing
+                    // from the main project, match sessions with no worktree association.
+                    const isCurrentWs = isWorktreePath(workspaceId)
+                        ? session.worktreePath === workspaceId
+                        : !session.worktreePath && sessionWorkspaceId === workspaceId;
                     return {
                         id: session.id,
                         title: session.title || 'Untitled Session',
@@ -759,7 +765,7 @@ export async function registerSessionHandlers() {
                         updatedAt: session.updatedAt,
                         messageCount: entry?.messageCount || 0,
                         worktreeId: (session as any).worktreeId || null,
-                        isCurrentWorkspace: sessionWorkspaceId === workspaceId
+                        isCurrentWorkspace: isCurrentWs
                     };
                 })
                 .sort((a, b) => {

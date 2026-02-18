@@ -745,7 +745,7 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
                       <>
                         {/* Current workspace sessions */}
                         <div className="ai-sessions-group-header px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--nim-text-faint)] bg-[var(--nim-bg-secondary)]">
-                          {isInWorktree ? 'This branch' : 'This project'}
+                          {isInWorktree ? 'This worktree' : 'This project'}
                         </div>
                         {currentWorkspaceSessions.map((session) => (
                           <SessionItem key={session.id} session={session} hasActions={hasSessionActions} onLoadAgent={onSwitchToAgentMode ? handleLoadSessionInAgentMode : undefined} onLoadChat={onOpenSessionInChat ? handleLoadSessionInChat : undefined} formatTime={formatRelativeTime} />
