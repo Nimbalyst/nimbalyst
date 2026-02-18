@@ -189,6 +189,9 @@ public struct SessionListView: View {
         let observation = ValueObservation.tracking { db in
             try Session
                 .filter(Session.Columns.projectId == projectId)
+                // Hide workstream/blitz parent sessions - structural containers on desktop.
+                // NULL sessionType = legacy session before type field existed, treat as normal session.
+                .filter(Session.Columns.sessionType == nil || (Session.Columns.sessionType != "workstream" && Session.Columns.sessionType != "blitz"))
                 .order(Session.Columns.updatedAt.desc)
                 .fetchAll(db)
         }
@@ -256,19 +259,11 @@ struct SessionRow: View {
                     .lineLimit(1)
 
                 HStack(spacing: 8) {
-                    if let provider = session.provider {
-                        ProviderBadge(provider: provider)
-                    }
-
-                    if let mode = session.mode {
-                        Text(mode)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
+                    ProviderBadge(provider: session.provider, model: session.model)
 
                     Text(RelativeTimestamp.format(epochMs: session.updatedAt))
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
 
@@ -302,9 +297,10 @@ struct SessionRow: View {
     }
 }
 
-/// Badge showing the AI provider name with appropriate color.
+/// Badge showing the AI provider name with model info and appropriate color.
 struct ProviderBadge: View {
-    let provider: String
+    let provider: String?
+    let model: String?
 
     var body: some View {
         Text(displayName)
@@ -318,17 +314,54 @@ struct ProviderBadge: View {
     }
 
     private var displayName: String {
-        switch provider.lowercased() {
-        case "claude-code": return "Claude Code"
+        let prov = provider?.lowercased() ?? ""
+
+        if prov == "claude-code" {
+            // Format like electron: "Claude Agent (Opus 4.6)"
+            let variantLabel = claudeCodeVariantLabel
+            return "Claude Agent (\(variantLabel))"
+        }
+
+        switch prov {
         case "claude": return "Claude"
         case "openai": return "OpenAI"
         case "lm-studio": return "LM Studio"
-        default: return provider
+        default:
+            if let provider = provider, !provider.isEmpty {
+                return provider
+            }
+            return "AI"
+        }
+    }
+
+    /// Extract Claude Code variant from model field and format as "Opus 4.6", "Sonnet 4.5", etc.
+    private var claudeCodeVariantLabel: String {
+        guard let model = model?.lowercased() else { return "Sonnet 4.5" }
+
+        // Model can be "claude-code:opus", "claude-code:sonnet-1m", "opus", "sonnet", etc.
+        let variant: String
+        if model.contains(":") {
+            variant = String(model.split(separator: ":").last ?? "sonnet")
+        } else {
+            variant = model
+        }
+
+        // Strip suffixes like "-1m" for extended context
+        let baseVariant = variant.split(separator: "-").first.map(String.init) ?? variant
+        let isExtended = variant.contains("-1m")
+        let suffix = isExtended ? " (1M)" : ""
+
+        switch baseVariant {
+        case "opus": return "Opus 4.6\(suffix)"
+        case "sonnet": return "Sonnet 4.5\(suffix)"
+        case "haiku": return "Haiku 3.5\(suffix)"
+        default: return "Sonnet 4.5\(suffix)"
         }
     }
 
     private var badgeColor: Color {
-        switch provider.lowercased() {
+        let prov = provider?.lowercased() ?? ""
+        switch prov {
         case "claude-code", "claude": return NimbalystColors.primary
         case "openai": return .green
         case "lm-studio": return .purple
