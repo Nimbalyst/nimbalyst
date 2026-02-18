@@ -188,6 +188,7 @@ public struct MainNavigationView: View {
     @EnvironmentObject var appState: AppState
     @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var navigationPath = NavigationPath()
+    @State private var showNotificationPrompt = false
     @ObservedObject private var notificationManager = NotificationManager.shared
 
     public init() {}
@@ -229,6 +230,26 @@ public struct MainNavigationView: View {
                 navigateToSession(sessionId)
                 notificationManager.pendingSessionId = nil
             }
+
+            // Show one-time push notification prompt after pairing + auth
+            if notificationManager.shouldPromptForNotifications {
+                // Small delay so the main view finishes rendering first
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                    showNotificationPrompt = true
+                }
+            }
+        }
+        .alert("Enable Notifications?", isPresented: $showNotificationPrompt) {
+            Button("Enable") {
+                notificationManager.markPromptShown()
+                UserDefaults.standard.set(true, forKey: "pushNotificationsEnabled")
+                notificationManager.requestPermission()
+            }
+            Button("Not Now", role: .cancel) {
+                notificationManager.markPromptShown()
+            }
+        } message: {
+            Text("Get notified when your AI sessions complete or need your attention, even when Nimbalyst is in the background.")
         }
     }
 

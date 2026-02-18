@@ -22,6 +22,19 @@ public final class NotificationManager: NSObject, ObservableObject {
     /// Callback to send the push token to the server. Set by SyncManager.
     public var onTokenReceived: ((String) -> Void)?
 
+    private static let hasPromptedKey = "hasPromptedForNotifications"
+
+    /// Whether we should show the one-time notification prompt.
+    /// True only if we haven't prompted before and the user hasn't already authorized.
+    public var shouldPromptForNotifications: Bool {
+        !UserDefaults.standard.bool(forKey: Self.hasPromptedKey) && !isAuthorized
+    }
+
+    /// Mark that we've shown the prompt so it doesn't appear again.
+    public func markPromptShown() {
+        UserDefaults.standard.set(true, forKey: Self.hasPromptedKey)
+    }
+
     private override init() {
         super.init()
         UNUserNotificationCenter.current().delegate = self

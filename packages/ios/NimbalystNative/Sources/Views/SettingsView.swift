@@ -118,6 +118,7 @@ public struct SettingsView: View {
                 .onChange(of: pushEnabled) { newValue in
                     UserDefaults.standard.set(newValue, forKey: "pushNotificationsEnabled")
                     if newValue {
+                        NotificationManager.shared.markPromptShown()
                         NotificationManager.shared.requestPermission()
                     }
                 }
