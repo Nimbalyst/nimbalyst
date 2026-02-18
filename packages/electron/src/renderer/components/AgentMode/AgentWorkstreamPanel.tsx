@@ -77,6 +77,10 @@ export interface AgentWorkstreamPanelProps {
   onWorktreeArchived?: () => void;
   /** Whether the workspace is a git repository */
   isGitRepo?: boolean;
+  /** Open a session in agent mode (navigates to session tab) */
+  onSwitchToAgentMode?: (planDocumentPath?: string, sessionId?: string) => void;
+  /** Open a session in the chat sidebar */
+  onOpenSessionInChat?: (sessionId: string) => void;
 }
 
 /**
@@ -364,6 +368,8 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
   onCreateWorktreeSession,
   onWorktreeArchived,
   isGitRepo = false,
+  onSwitchToAgentMode,
+  onOpenSessionInChat,
 }, ref) => {
   // Ref to the workstream editor tabs for opening files
   const editorTabsRef = useRef<WorkstreamEditorTabsRef>(null);
@@ -958,6 +964,8 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
                 workspacePath={workspacePath}
                 basePath={worktreePath || workspacePath}
                 isActive={true}
+                onSwitchToAgentMode={onSwitchToAgentMode}
+                onOpenSessionInChat={onOpenSessionInChat}
               />
             </div>
           )}

@@ -74,6 +74,8 @@ export interface AgentModeProps {
   onFileOpen?: (filePath: string) => Promise<void>;
   onOpenQuickSearch?: () => void;
   onReady?: () => void;
+  onSwitchToAgentMode?: (planDocumentPath?: string, sessionId?: string) => void;
+  onOpenSessionInChat?: (sessionId: string) => void;
 }
 
 /**
@@ -93,6 +95,8 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
   onFileOpen,
   onOpenQuickSearch,
   onReady,
+  onSwitchToAgentMode,
+  onOpenSessionInChat,
 }, ref) {
   // Ref to the workstream panel for closing tabs
   const workstreamPanelRef = useRef<AgentWorkstreamPanelRef>(null);
@@ -854,6 +858,8 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
       onCreateWorktreeSession={createWorktreeSession}
       onWorktreeArchived={handleWorktreeArchived}
       isGitRepo={isGitRepo}
+      onSwitchToAgentMode={onSwitchToAgentMode}
+      onOpenSessionInChat={onOpenSessionInChat}
     />
   ) : (
     <div className="agent-mode-empty flex flex-col items-center justify-center h-full gap-4 text-nim-muted">

@@ -1570,6 +1570,7 @@ export default function App() {
                       });
                     }
                   }}
+                  onSwitchToAgentMode={handleSwitchToAgentMode}
                 />
               ) : (
                 <div className="flex-1 flex items-center justify-center text-nim-muted">

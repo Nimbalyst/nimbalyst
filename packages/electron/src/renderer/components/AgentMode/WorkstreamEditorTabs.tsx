@@ -193,6 +193,8 @@ interface WorkstreamEditorTabsProps {
   workspacePath: string;
   basePath?: string; // Optional base path for file operations (defaults to workspacePath). Used for worktrees.
   isActive?: boolean;
+  onSwitchToAgentMode?: (planDocumentPath?: string, sessionId?: string) => void;
+  onOpenSessionInChat?: (sessionId: string) => void;
 }
 
 /**
@@ -204,10 +206,12 @@ interface WorkstreamEditorTabsInnerProps {
   workspacePath: string;
   basePath: string; // Base path for TabContent (workspacePath or worktreePath)
   isActive: boolean;
+  onSwitchToAgentMode?: (planDocumentPath?: string, sessionId?: string) => void;
+  onOpenSessionInChat?: (sessionId: string) => void;
 }
 
 const WorkstreamEditorTabsInner = forwardRef<WorkstreamEditorTabsRef, WorkstreamEditorTabsInnerProps>(
-  function WorkstreamEditorTabsInner({ workstreamId, workspacePath, basePath, isActive }, ref) {
+  function WorkstreamEditorTabsInner({ workstreamId, workspacePath, basePath, isActive, onSwitchToAgentMode, onOpenSessionInChat }, ref) {
     const { tabs, activeTabId } = useTabs();
     const tabsActions = useTabsActions();
     const setTabCount = useSetAtom(setSessionTabCountAtom);
@@ -362,7 +366,7 @@ const WorkstreamEditorTabsInner = forwardRef<WorkstreamEditorTabsRef, Workstream
           </TabManager>
         </div>
         <div className="workstream-editor-tabs-content flex-1 min-h-0 overflow-hidden">
-          <TabContent workspaceId={basePath} />
+          <TabContent workspaceId={basePath} onSwitchToAgentMode={onSwitchToAgentMode} onOpenSessionInChat={onOpenSessionInChat} />
         </div>
       </div>
     );
@@ -378,7 +382,7 @@ const WorkstreamEditorTabsInner = forwardRef<WorkstreamEditorTabsRef, Workstream
  * Tab state is persisted to workstreamEditorStates in workspace state.
  */
 export const WorkstreamEditorTabs = forwardRef<WorkstreamEditorTabsRef, WorkstreamEditorTabsProps>(
-  function WorkstreamEditorTabs({ workstreamId, workspacePath, basePath, isActive = true }, ref) {
+  function WorkstreamEditorTabs({ workstreamId, workspacePath, basePath, isActive = true, onSwitchToAgentMode, onOpenSessionInChat }, ref) {
     const innerRef = useRef<WorkstreamEditorTabsRef>(null);
     // Use basePath if provided, otherwise fall back to workspacePath
     const effectiveBasePath = basePath || workspacePath;
@@ -400,6 +404,8 @@ export const WorkstreamEditorTabs = forwardRef<WorkstreamEditorTabsRef, Workstre
           workspacePath={workspacePath}
           basePath={effectiveBasePath}
           isActive={isActive}
+          onSwitchToAgentMode={onSwitchToAgentMode}
+          onOpenSessionInChat={onOpenSessionInChat}
         />
       </TabsProvider>
     );

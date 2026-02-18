@@ -143,8 +143,8 @@ const SessionItem: React.FC<{
   session: AISession;
   isLast?: boolean;
   hasActions?: boolean;
-  onLoadAgent: (id: string) => void;
-  onLoadChat: (id: string) => void;
+  onLoadAgent?: (id: string) => void;
+  onLoadChat?: (id: string) => void;
   formatTime: (ts: number) => string;
 }> = ({ session, isLast, hasActions = true, onLoadAgent, onLoadChat, formatTime }) => (
   <div className={`ai-session-item py-3 px-4 flex flex-col gap-2 border-b border-[var(--nim-border)] ${isLast ? 'last:border-b-0' : ''} hover:bg-[var(--nim-bg-hover)]`}>
@@ -156,20 +156,24 @@ const SessionItem: React.FC<{
     </div>
     {hasActions && (
       <div className="ai-session-actions flex gap-1.5">
-        <button
-          className="ai-session-action-button flex-1 py-1.5 px-2.5 text-xs font-medium rounded cursor-pointer transition-all duration-150 bg-[var(--nim-bg)] text-[var(--nim-text)] border border-[var(--nim-border)] hover:bg-[var(--nim-bg-secondary)] hover:border-[var(--nim-primary)]"
-          onClick={() => onLoadAgent(session.id)}
-          title="Open in Agent mode"
-        >
-          Agent
-        </button>
-        <button
-          className="ai-session-action-button flex-1 py-1.5 px-2.5 text-xs font-medium rounded cursor-pointer transition-all duration-150 bg-[var(--nim-bg)] text-[var(--nim-text)] border border-[var(--nim-border)] hover:bg-[var(--nim-bg-secondary)] hover:border-[var(--nim-primary)]"
-          onClick={() => onLoadChat(session.id)}
-          title="Open in Chat panel"
-        >
-          Chat
-        </button>
+        {onLoadAgent && (
+          <button
+            className="ai-session-action-button flex-1 py-1.5 px-2.5 text-xs font-medium rounded cursor-pointer transition-all duration-150 bg-[var(--nim-bg)] text-[var(--nim-text)] border border-[var(--nim-border)] hover:bg-[var(--nim-bg-secondary)] hover:border-[var(--nim-primary)]"
+            onClick={() => onLoadAgent(session.id)}
+            title="Open in Agent mode"
+          >
+            Agent
+          </button>
+        )}
+        {onLoadChat && (
+          <button
+            className="ai-session-action-button flex-1 py-1.5 px-2.5 text-xs font-medium rounded cursor-pointer transition-all duration-150 bg-[var(--nim-bg)] text-[var(--nim-text)] border border-[var(--nim-border)] hover:bg-[var(--nim-bg-secondary)] hover:border-[var(--nim-primary)]"
+            onClick={() => onLoadChat(session.id)}
+            title="Open in Chat panel"
+          >
+            Chat
+          </button>
+        )}
       </div>
     )}
   </div>
@@ -744,19 +748,19 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
                           {isInWorktree ? 'This branch' : 'This project'}
                         </div>
                         {currentWorkspaceSessions.map((session) => (
-                          <SessionItem key={session.id} session={session} hasActions={hasSessionActions} onLoadAgent={handleLoadSessionInAgentMode} onLoadChat={handleLoadSessionInChat} formatTime={formatRelativeTime} />
+                          <SessionItem key={session.id} session={session} hasActions={hasSessionActions} onLoadAgent={onSwitchToAgentMode ? handleLoadSessionInAgentMode : undefined} onLoadChat={onOpenSessionInChat ? handleLoadSessionInChat : undefined} formatTime={formatRelativeTime} />
                         ))}
                         {/* Other sessions */}
                         <div className="ai-sessions-group-header px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--nim-text-faint)] bg-[var(--nim-bg-secondary)]">
                           Other sessions
                         </div>
                         {otherSessions.map((session) => (
-                          <SessionItem key={session.id} session={session} isLast hasActions={hasSessionActions} onLoadAgent={handleLoadSessionInAgentMode} onLoadChat={handleLoadSessionInChat} formatTime={formatRelativeTime} />
+                          <SessionItem key={session.id} session={session} isLast hasActions={hasSessionActions} onLoadAgent={onSwitchToAgentMode ? handleLoadSessionInAgentMode : undefined} onLoadChat={onOpenSessionInChat ? handleLoadSessionInChat : undefined} formatTime={formatRelativeTime} />
                         ))}
                       </>
                     ) : (
                       aiSessions.map((session) => (
-                        <SessionItem key={session.id} session={session} isLast hasActions={hasSessionActions} onLoadAgent={handleLoadSessionInAgentMode} onLoadChat={handleLoadSessionInChat} formatTime={formatRelativeTime} />
+                        <SessionItem key={session.id} session={session} isLast hasActions={hasSessionActions} onLoadAgent={onSwitchToAgentMode ? handleLoadSessionInAgentMode : undefined} onLoadChat={onOpenSessionInChat ? handleLoadSessionInChat : undefined} formatTime={formatRelativeTime} />
                       ))
                     )}
                   </div>
