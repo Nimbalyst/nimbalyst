@@ -276,6 +276,72 @@ describe('parseCodexRawEvents', () => {
     });
   });
 
+  it('renders OpenAI 401 error as openai_auth_error section', () => {
+    const events: Message[] = [
+      buildRawMessage(
+        {
+          type: 'error',
+          message: 'Reconnecting... 5/5 (unexpected status 401 Unauthorized: Missing bearer or basic authentication in header, url: https://api.openai.com/v1/responses, cf-ray: abc123)',
+        },
+        1
+      ),
+    ];
+
+    const parsed = parseCodexRawEvents(events);
+
+    expect(parsed.sections).toHaveLength(1);
+    expect(parsed.sections[0].type).toBe('openai_auth_error');
+  });
+
+  it('deduplicates consecutive OpenAI 401 errors into one section', () => {
+    const events: Message[] = [
+      buildRawMessage(
+        {
+          type: 'error',
+          message: 'Reconnecting... 1/5 (unexpected status 401 Unauthorized: Missing bearer or basic authentication in header, url: https://api.openai.com/v1/responses)',
+        },
+        1
+      ),
+      buildRawMessage(
+        {
+          type: 'error',
+          message: 'Reconnecting... 2/5 (unexpected status 401 Unauthorized: Missing bearer or basic authentication in header, url: https://api.openai.com/v1/responses)',
+        },
+        2
+      ),
+      buildRawMessage(
+        {
+          type: 'error',
+          message: 'Reconnecting... 5/5 (unexpected status 401 Unauthorized: Missing bearer or basic authentication in header, url: https://api.openai.com/v1/responses)',
+        },
+        3
+      ),
+    ];
+
+    const parsed = parseCodexRawEvents(events);
+
+    expect(parsed.sections).toHaveLength(1);
+    expect(parsed.sections[0].type).toBe('openai_auth_error');
+  });
+
+  it('renders non-OpenAI errors as regular output', () => {
+    const events: Message[] = [
+      buildRawMessage(
+        {
+          type: 'error',
+          message: 'Connection timeout',
+        },
+        1
+      ),
+    ];
+
+    const parsed = parseCodexRawEvents(events);
+
+    expect(parsed.sections).toHaveLength(1);
+    expect(parsed.sections[0].type).toBe('output');
+    expect((parsed.sections[0] as Extract<CodexSection, { type: 'output' }>).content).toBe('Connection timeout');
+  });
+
   it('returns empty sections for empty input', () => {
     const parsed = parseCodexRawEvents([]);
     expect(parsed.sections).toEqual([]);

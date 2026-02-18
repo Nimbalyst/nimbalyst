@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { MarkdownRenderer } from './MarkdownRenderer';
+import { OpenAIAuthWidget } from './OpenAIAuthWidget';
 import { MaterialSymbol } from '../../icons/MaterialSymbol';
 import { JSONViewer } from './JSONViewer';
 import { formatToolDisplayName } from '../utils/toolNameFormatter';
@@ -33,7 +34,8 @@ interface CodexOutputRendererProps {
 export type CodexSection =
   | { type: 'reasoning'; blocks: string[] }
   | { type: 'output'; content: string }
-  | { type: 'tool_call'; toolCall: ToolCall };
+  | { type: 'tool_call'; toolCall: ToolCall }
+  | { type: 'openai_auth_error' };
 
 interface ParsedCodexOutput {
   /** Ordered sections preserving the temporal sequence of reasoning, tool calls, and output. */
@@ -51,6 +53,18 @@ function getEventItem(rawEvent: Record<string, unknown>): Record<string, unknown
 function getItemType(item: Record<string, unknown> | null): string {
   if (!item) return '';
   return extractStringField(item, 'type') ?? '';
+}
+
+/**
+ * Check if text content indicates an OpenAI authentication error (401 from api.openai.com).
+ * Matches the same patterns as MessageSegment.isOpenAIAuthError.
+ */
+function isOpenAIAuthError(text: string): boolean {
+  const lower = text.toLowerCase();
+  return (
+    lower.includes('api.openai.com') &&
+    (lower.includes('401 unauthorized') || (lower.includes('401') && lower.includes('authentication')))
+  );
 }
 
 function isToolItemType(itemType: string): boolean {
@@ -283,6 +297,17 @@ export function parseCodexRawEvents(rawEvents: Message[]): ParsedCodexOutput {
       const text = extractTextFromCodexEvent(rawEvent);
 
       if (!text) continue;
+
+      // Check for OpenAI auth errors - show setup widget instead of plain text.
+      // Deduplicate consecutive auth errors (e.g. "Reconnecting... 1/5" through "5/5").
+      if (rawEventType === 'error' && isOpenAIAuthError(text)) {
+        currentOutputParts = null;
+        const last = lastSection();
+        if (!last || last.type !== 'openai_auth_error') {
+          sections.push({ type: 'openai_auth_error' });
+        }
+        continue;
+      }
 
       // Categorize based on raw event shape (with metadata fallback for older rows)
       const isReasoningEvent =
@@ -528,6 +553,11 @@ export const CodexOutputRenderer: React.FC<CodexOutputRendererProps> = ({
     return null;
   }
 
+  // Single OpenAI auth error: render widget directly
+  if (sections.length === 1 && sections[0].type === 'openai_auth_error') {
+    return <OpenAIAuthWidget />;
+  }
+
   // Plain output-only: single output section with no reasoning or tools
   const isPlainOutput = sections.length === 1 && sections[0].type === 'output';
   if (isPlainOutput) {
@@ -549,6 +579,9 @@ export const CodexOutputRenderer: React.FC<CodexOutputRendererProps> = ({
         }
         if (section.type === 'tool_call') {
           return renderToolCall(section.toolCall, sectionIndex);
+        }
+        if (section.type === 'openai_auth_error') {
+          return <OpenAIAuthWidget key={`auth-error-${sectionIndex}`} />;
         }
         if (section.type === 'output') {
           const isLastSection = sectionIndex === sections.length - 1;

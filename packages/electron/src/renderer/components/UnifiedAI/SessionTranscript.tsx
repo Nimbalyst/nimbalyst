@@ -429,21 +429,31 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
         });
       }
 
-      // Add error as an assistant message so user can see what went wrong
-      const errorMessage = {
-        id: `error-${Date.now()}`,
-        role: 'assistant' as const,
-        content: `Error: ${sessionError.message}`,
-        timestamp: Date.now(),
-        isError: true,
-        ...(sessionError.isAuthError && { isAuthError: true }),
-      };
-      updateSessionStore({
-        sessionId,
-        updates: {
-          messages: [...(sessionData?.messages || []), errorMessage],
-        },
-      });
+      // For Codex sessions, OpenAI auth errors are already displayed by the
+      // CodexOutputRenderer (via the persisted raw event). Skip creating a
+      // duplicate in-memory error message that would show two auth widgets.
+      const isCodexOpenAIAuthError = sessionData?.provider === 'openai-codex' &&
+        sessionError.message.toLowerCase().includes('api.openai.com') &&
+        (sessionError.message.toLowerCase().includes('401 unauthorized') ||
+         (sessionError.message.toLowerCase().includes('401') && sessionError.message.toLowerCase().includes('authentication')));
+
+      if (!isCodexOpenAIAuthError) {
+        // Add error as an assistant message so user can see what went wrong
+        const errorMessage = {
+          id: `error-${Date.now()}`,
+          role: 'assistant' as const,
+          content: `Error: ${sessionError.message}`,
+          timestamp: Date.now(),
+          isError: true,
+          ...(sessionError.isAuthError && { isAuthError: true }),
+        };
+        updateSessionStore({
+          sessionId,
+          updates: {
+            messages: [...(sessionData?.messages || []), errorMessage],
+          },
+        });
+      }
       setIsProcessing(false);
 
       // Clear the error from the atom after handling
