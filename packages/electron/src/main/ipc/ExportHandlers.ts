@@ -2,6 +2,7 @@ import { dialog, BrowserWindow, clipboard } from 'electron';
 import { safeHandle } from '../utils/ipcRegistry';
 import { writeFile } from 'fs/promises';
 import { logger } from '../utils/logger';
+import { AnalyticsService } from '../services/analytics/AnalyticsService';
 import { AISessionsRepository, AgentMessagesRepository, transformAgentMessagesToUI } from '@nimbalyst/runtime';
 import type { SessionData } from '@nimbalyst/runtime/ai/server/types';
 import { exportSessionToHtml, getExportFilename } from '../services/SessionHtmlExporter';
@@ -190,6 +191,12 @@ export function registerExportHandlers() {
         await writeFile(result.filePath, html, 'utf-8');
 
         logger.file.info(`[ExportHandlers] Session HTML exported: ${result.filePath}`);
+
+        // Track successful session export
+        AnalyticsService.getInstance().sendEvent('session_exported', {
+          format: 'html',
+        });
+
         return { success: true, filePath: result.filePath };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
@@ -254,6 +261,12 @@ export function registerExportHandlers() {
         }
 
         clipboard.writeText(lines.join('\n'));
+
+        // Track successful session export to clipboard
+        AnalyticsService.getInstance().sendEvent('session_exported', {
+          format: 'clipboard',
+        });
+
         return { success: true };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);

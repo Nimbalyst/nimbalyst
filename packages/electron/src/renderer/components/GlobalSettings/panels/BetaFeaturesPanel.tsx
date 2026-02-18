@@ -1,5 +1,6 @@
 import React from 'react';
 import { useAtom, useSetAtom } from 'jotai';
+import { usePostHog } from 'posthog-js/react';
 import {
   advancedSettingsAtom,
   setAdvancedSettingsAtom,
@@ -20,6 +21,7 @@ import {
  * are user-facing and discoverable.
  */
 export function BetaFeaturesPanel() {
+  const posthog = usePostHog();
   const [settings] = useAtom(advancedSettingsAtom);
   const [, updateSettings] = useAtom(setAdvancedSettingsAtom);
   const updateProviderConfig = useSetAtom(setProviderConfigAtom);
@@ -56,6 +58,10 @@ export function BetaFeaturesPanel() {
                   if (newFeatures.codex !== undefined) {
                     updateProviderConfig({ providerId: 'openai-codex', config: { enabled: newFeatures.codex } });
                   }
+                  posthog?.capture('beta_feature_toggled', {
+                    feature_tag: 'all',
+                    enabled,
+                  });
                 }}
                 className="setting-checkbox w-4 h-4 mt-0.5 cursor-pointer shrink-0 accent-[var(--nim-primary)]"
               />
@@ -85,6 +91,10 @@ export function BetaFeaturesPanel() {
                     if (feature.tag === 'codex') {
                       updateProviderConfig({ providerId: 'openai-codex', config: { enabled: checked } });
                     }
+                    posthog?.capture('beta_feature_toggled', {
+                      feature_tag: feature.tag,
+                      enabled: checked,
+                    });
                   }}
                   className="setting-checkbox w-4 h-4 mt-0.5 cursor-pointer shrink-0 accent-[var(--nim-primary)]"
                   disabled={enableAllBetaFeatures}

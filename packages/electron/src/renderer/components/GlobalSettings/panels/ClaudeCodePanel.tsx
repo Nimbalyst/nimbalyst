@@ -355,7 +355,12 @@ export function ClaudeCodePanel({
           <input
             type="checkbox"
             checked={autoCommitEnabled}
-            onChange={(e) => setAutoCommitEnabled(e.target.checked)}
+            onChange={(e) => {
+              setAutoCommitEnabled(e.target.checked);
+              posthog?.capture('auto_commit_toggled', {
+                enabled: e.target.checked,
+              });
+            }}
             className="hidden peer"
           />
           <span className="provider-toggle-slider absolute cursor-pointer inset-0 rounded-full transition-all bg-[var(--nim-bg-tertiary)] before:absolute before:content-[''] before:h-5 before:w-5 before:left-0.5 before:bottom-0.5 before:rounded-full before:transition-all before:bg-white before:shadow-sm peer-checked:bg-[var(--nim-primary)] peer-checked:before:translate-x-5"></span>

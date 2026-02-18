@@ -4,6 +4,7 @@ import { randomBytes, createCipheriv, createHash } from 'crypto';
 import { promises as fs } from 'fs';
 import { safeHandle } from '../utils/ipcRegistry';
 import { logger } from '../utils/logger';
+import { AnalyticsService } from '../services/analytics/AnalyticsService';
 import { AISessionsRepository, AgentMessagesRepository, transformAgentMessagesToUI } from '@nimbalyst/runtime';
 import type { SessionData } from '@nimbalyst/runtime/ai/server/types';
 import { exportSessionToHtml } from '../services/SessionHtmlExporter';
@@ -117,6 +118,11 @@ export function registerShareHandlers() {
       // Check auth
       const jwt = await getValidJwt();
       if (!jwt) {
+        AnalyticsService.getInstance().sendEvent('known_error', {
+          errorId: 'share_not_signed_in',
+          context: 'share',
+          content_type: 'session',
+        });
         return { success: false, error: 'Not signed in. Sign in via Settings > Account & Sync.' };
       }
 
@@ -179,10 +185,25 @@ export function registerShareHandlers() {
         clipboard.writeText(fullUrl);
 
         logger.file.info(`[ShareHandlers] Session ${data.isUpdate ? 'updated' : 'shared'}: ${data.url}`);
+
+        // Track successful session share
+        AnalyticsService.getInstance().sendEvent('content_shared', {
+          content_type: 'session',
+          is_update: !!data.isUpdate,
+        });
+
         return { success: true, url: fullUrl, shareId: data.shareId, isUpdate: data.isUpdate, encryptionKey: urlSafeKey };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         logger.file.error(`[ShareHandlers] Share failed: ${errorMessage}`);
+
+        // Track share upload failure
+        AnalyticsService.getInstance().sendEvent('known_error', {
+          errorId: 'share_upload_failed',
+          context: 'share',
+          content_type: 'session',
+        });
+
         return { success: false, error: errorMessage };
       }
     }
@@ -270,6 +291,10 @@ export function registerShareHandlers() {
         }
 
         logger.file.info(`[ShareHandlers] Share deleted: ${shareId}`);
+
+        // Track successful share deletion
+        AnalyticsService.getInstance().sendEvent('share_deleted');
+
         return { success: true };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
@@ -298,6 +323,11 @@ export function registerShareHandlers() {
 
       const jwt = await getValidJwt();
       if (!jwt) {
+        AnalyticsService.getInstance().sendEvent('known_error', {
+          errorId: 'share_not_signed_in',
+          context: 'share',
+          content_type: 'file',
+        });
         return { success: false, error: 'Not signed in. Sign in via Settings > Account & Sync.' };
       }
 
@@ -345,10 +375,25 @@ export function registerShareHandlers() {
         clipboard.writeText(fullUrl);
 
         logger.file.info(`[ShareHandlers] File ${data.isUpdate ? 'updated' : 'shared'}: ${data.url}`);
+
+        // Track successful file share
+        AnalyticsService.getInstance().sendEvent('content_shared', {
+          content_type: 'file',
+          is_update: !!data.isUpdate,
+        });
+
         return { success: true, url: fullUrl, shareId: data.shareId, isUpdate: data.isUpdate, encryptionKey: urlSafeKey };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         logger.file.error(`[ShareHandlers] File share failed: ${errorMessage}`);
+
+        // Track file share upload failure
+        AnalyticsService.getInstance().sendEvent('known_error', {
+          errorId: 'share_upload_failed',
+          context: 'share',
+          content_type: 'file',
+        });
+
         return { success: false, error: errorMessage };
       }
     }

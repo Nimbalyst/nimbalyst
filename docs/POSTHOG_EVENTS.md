@@ -142,6 +142,33 @@ All events include `$session_id` property automatically. Dev users are marked wi
 | --- | --- | --- | --- | --- | --- |
 | `codex_session_started` | `AIService.ts` | Codex provider initializes session (first message) | `model` (e.g., gpt-5.3-codex)<br/>`mcpServerCount`<br/>`isResumedThread` (boolean)<br/>`permissionMode` (optional: allow-all/bypass-all) | (pending release) |  |
 
+### Blitz Mode
+
+| Event Name | File(s) | Trigger | Properties | First Added (Public) | Significant Changes |
+| --- | --- | --- | --- | --- | --- |
+| `blitz_created` | `BlitzHandlers.ts:275` | User creates a blitz (parallel worktree sessions) | `worktree_count`<br/>`model_count`<br/>`prompt_length`<br/>`duration_ms`<br/>`error_count` | (pending release) |  |
+
+### Session/File Sharing
+
+| Event Name | File(s) | Trigger | Properties | First Added (Public) | Significant Changes |
+| --- | --- | --- | --- | --- | --- |
+| `content_shared` | `ShareHandlers.ts` | User shares a session or file as an encrypted link | `content_type` (session/file)<br/>`is_update` (boolean) | (pending release as of c28302ea) |  |
+| `share_deleted` | `ShareHandlers.ts` | User deletes (unshares) a shared session or file | None | (pending release as of c28302ea) |  |
+
+### Session Export
+
+| Event Name | File(s) | Trigger | Properties | First Added (Public) | Significant Changes |
+| --- | --- | --- | --- | --- | --- |
+| `session_exported` | `ExportHandlers.ts` | User exports a session as HTML file or copies to clipboard | `format` (html/clipboard/pdf) | (pending release as of c28302ea) |  |
+
+### Feature Toggles
+
+| Event Name | File(s) | Trigger | Properties | First Added (Public) | Significant Changes |
+| --- | --- | --- | --- | --- | --- |
+| `beta_feature_toggled` | `BetaFeaturesPanel.tsx` | User toggles a beta feature or "Enable All" | `feature_tag` (e.g., blitz/codex or 'all')<br/>`enabled` (boolean) | (pending release as of c28302ea) |  |
+| `alpha_feature_toggled` | `AdvancedPanel.tsx` | User toggles an alpha feature, "Enable All", or switches release channel | `feature_tag` (e.g., sync/voice-mode/super-loops or 'all')<br/>`enabled` (boolean)<br/>`source` (toggle/channel_switch) | (pending release as of c28302ea) |  |
+| `auto_commit_toggled` | `ClaudeCodePanel.tsx` | User toggles auto-approve commits setting | `enabled` (boolean) | (pending release as of c28302ea) |  |
+
 ### MCP Server Configuration
 
 | Event Name | File(s) | Trigger | Properties | First Added (Public) | Significant Changes |
@@ -228,6 +255,8 @@ The `known_error` event uses an `errorId` property to identify specific error co
 | `pglite_wasm_runtime_crash` | `index.ts:418` | PGLite WASM runtime crashed during database initialization (often resolved by restarting computer) | `context`: database_initialization |
 | `database_initialization_failed` | `index.ts:424` | Database initialization failed for unknown reasons | `context`: database_initialization<br/>`errorMessage`: truncated error |
 | `image_compression_failed` | `AttachmentService.ts:136` | Image compression failed when saving attachment (original image is used as fallback) | `context`: attachment_save<br/>`errorType`: heic_decode_failed/unsupported_format/compression_failed/unexpected<br/>`mimeType`: original image mime type |
+| `share_upload_failed` | `ShareHandlers.ts` | Share upload failed (session or file) | `context`: share<br/>`content_type`: session/file |
+| `share_not_signed_in` | `ShareHandlers.ts` | User attempted to share but is not signed in | `context`: share<br/>`content_type`: session/file |
 
 ### Onboarding & Walkthrough
 
@@ -313,15 +342,19 @@ Events from the iOS companion app. These events share the same PostHog project a
 
 ## Event Summary Statistics
 
-- **Total Events**: 95 unique event names
-- **Main Process Events**: 51 (via AnalyticsService)
-- **Renderer Process Events**: 37 (via usePostHog hook)
+- **Total Events**: 102 unique event names
+- **Main Process Events**: 55 (via AnalyticsService)
+- **Renderer Process Events**: 40 (via usePostHog hook)
 - **Mobile Events**: 7 (via Capacitor AnalyticsService)
 - **File Operations**: 7 events
 - **Workspace Operations**: 4 events
 - **Navigation & Editor Mode**: 3 events
 - **File History**: 2 events
 - **AI-Related**: 23 events
+- **Blitz Mode**: 1 event
+- **Session/File Sharing**: 2 events
+- **Session Export**: 1 event
+- **Feature Toggles**: 3 events
 - **MCP Configuration**: 3 events
 - **Terminal**: 1 event
 - **Extensions**: 1 event

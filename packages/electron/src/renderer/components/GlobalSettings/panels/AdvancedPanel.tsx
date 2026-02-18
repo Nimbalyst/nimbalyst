@@ -390,12 +390,22 @@ export function AdvancedPanel() {
                     enableAllAlphaFeatures: true,
                     alphaFeatures: enableAllAlphaFeaturesUtil(),
                   });
+                  posthog?.capture('alpha_feature_toggled', {
+                    feature_tag: 'all',
+                    enabled: true,
+                    source: 'channel_switch',
+                  });
                 } else {
                   // Disable all alpha features when switching back to stable
                   updateSettings({
                     releaseChannel: newChannel,
                     enableAllAlphaFeatures: false,
                     alphaFeatures: disableAllAlphaFeatures(),
+                  });
+                  posthog?.capture('alpha_feature_toggled', {
+                    feature_tag: 'all',
+                    enabled: false,
+                    source: 'channel_switch',
                   });
                 }
               }}
@@ -422,6 +432,11 @@ export function AdvancedPanel() {
                           enableAllAlphaFeatures: enabled,
                           alphaFeatures: newFeatures
                         });
+                        posthog?.capture('alpha_feature_toggled', {
+                          feature_tag: 'all',
+                          enabled,
+                          source: 'toggle',
+                        });
                       }}
                       className="setting-checkbox"
                     />
@@ -443,7 +458,14 @@ export function AdvancedPanel() {
                       <input
                         type="checkbox"
                         checked={alphaFeatures[feature.tag] ?? false}
-                        onChange={(e) => updateSettings({ alphaFeatures: { ...alphaFeatures, [feature.tag]: e.target.checked } })}
+                        onChange={(e) => {
+                        updateSettings({ alphaFeatures: { ...alphaFeatures, [feature.tag]: e.target.checked } });
+                        posthog?.capture('alpha_feature_toggled', {
+                          feature_tag: feature.tag,
+                          enabled: e.target.checked,
+                          source: 'toggle',
+                        });
+                      }}
                         className="setting-checkbox"
                         disabled={enableAllAlphaFeatures}
                       />
