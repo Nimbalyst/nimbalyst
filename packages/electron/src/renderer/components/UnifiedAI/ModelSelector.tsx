@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useAtomValue } from 'jotai';
 import { MaterialSymbol, getProviderIcon } from '@nimbalyst/runtime';
 import { getClaudeCodeModelLabel } from '../../utils/modelUtils';
-import { betaFeatureEnabledAtom } from '../../store/atoms/appSettings';
+import { betaFeatureEnabledAtom, providersAtom } from '../../store/atoms/appSettings';
 
 interface Model {
   id: string;
@@ -31,6 +31,12 @@ export function ModelSelector({
   const dropdownRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const isCodexBetaEnabled = useAtomValue(betaFeatureEnabledAtom('codex'));
+  const providers = useAtomValue(providersAtom);
+
+  // Clear cached models when provider settings change so next dropdown open fetches fresh data
+  useEffect(() => {
+    setModels({});
+  }, [providers]);
 
   // Close dropdown when clicking outside
   useEffect(() => {

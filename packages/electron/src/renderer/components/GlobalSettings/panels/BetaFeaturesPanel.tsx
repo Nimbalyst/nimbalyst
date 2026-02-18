@@ -1,8 +1,9 @@
 import React from 'react';
-import { useAtom } from 'jotai';
+import { useAtom, useSetAtom } from 'jotai';
 import {
   advancedSettingsAtom,
   setAdvancedSettingsAtom,
+  setProviderConfigAtom,
 } from '../../../store/atoms/appSettings';
 import {
   BETA_FEATURES,
@@ -21,6 +22,7 @@ import {
 export function BetaFeaturesPanel() {
   const [settings] = useAtom(advancedSettingsAtom);
   const [, updateSettings] = useAtom(setAdvancedSettingsAtom);
+  const updateProviderConfig = useSetAtom(setProviderConfigAtom);
 
   const { betaFeatures, enableAllBetaFeatures } = settings;
 
@@ -50,6 +52,10 @@ export function BetaFeaturesPanel() {
                     enableAllBetaFeatures: enabled,
                     betaFeatures: newFeatures,
                   });
+                  // Sync codex provider enabled state with the beta feature
+                  if (newFeatures.codex !== undefined) {
+                    updateProviderConfig({ providerId: 'openai-codex', config: { enabled: newFeatures.codex } });
+                  }
                 }}
                 className="setting-checkbox w-4 h-4 mt-0.5 cursor-pointer shrink-0 accent-[var(--nim-primary)]"
               />
@@ -72,7 +78,14 @@ export function BetaFeaturesPanel() {
                 <input
                   type="checkbox"
                   checked={betaFeatures[feature.tag] ?? false}
-                  onChange={(e) => updateSettings({ betaFeatures: { ...betaFeatures, [feature.tag]: e.target.checked } })}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    updateSettings({ betaFeatures: { ...betaFeatures, [feature.tag]: checked } });
+                    // Sync codex provider enabled state with the beta feature
+                    if (feature.tag === 'codex') {
+                      updateProviderConfig({ providerId: 'openai-codex', config: { enabled: checked } });
+                    }
+                  }}
                   className="setting-checkbox w-4 h-4 mt-0.5 cursor-pointer shrink-0 accent-[var(--nim-primary)]"
                   disabled={enableAllBetaFeatures}
                 />
