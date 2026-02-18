@@ -1313,7 +1313,11 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
 
       // Common operations
       openFile: async (filePath: string) => {
-        await window.electronAPI.invoke('workspace:openFile', filePath);
+        if (onFileClick) {
+          onFileClick(filePath);
+        } else {
+          await window.electronAPI.invoke('workspace:open-file', { workspacePath, filePath });
+        }
       },
       trackEvent: (eventName: string, properties?: Record<string, unknown>) => {
         posthog?.capture(eventName, properties);
@@ -1340,6 +1344,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     posthog,
     autoCommitEnabled,
     setAutoCommitEnabled,
+    onFileClick,
   ]);
 
   // Feature flags

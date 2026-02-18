@@ -9,7 +9,9 @@
  */
 
 import React, { useState, useCallback } from 'react';
+import { useAtomValue } from 'jotai';
 import type { CustomToolWidgetProps } from './index';
+import { interactiveWidgetHostAtom } from '../../../../store/atoms/interactiveWidgetHost';
 
 /**
  * Maximum number of lines to show before adding "show more"
@@ -133,7 +135,9 @@ export const FileChangeWidget: React.FC<CustomToolWidgetProps> = ({
   onToggle,
   workspacePath,
   readFile,
+  sessionId,
 }) => {
+  const host = useAtomValue(interactiveWidgetHostAtom(sessionId));
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [contentExpanded, setContentExpanded] = useState(false);
   const [liveContent, setLiveContent] = useState<Record<string, { content: string | null; error?: string }>>({});
@@ -179,6 +183,13 @@ export const FileChangeWidget: React.FC<CustomToolWidgetProps> = ({
       }
     }
   }, [selectedFile, snapshots, readFile, liveContent]);
+
+  const handlePathClick = useCallback((e: React.MouseEvent, filePath: string) => {
+    e.stopPropagation();
+    if (host) {
+      host.openFile(filePath);
+    }
+  }, [host]);
 
   const getBorderClass = () => {
     if (hasError) return 'border-[color-mix(in_srgb,var(--nim-error)_40%,var(--nim-border))]';
@@ -341,8 +352,12 @@ export const FileChangeWidget: React.FC<CustomToolWidgetProps> = ({
               <span className={`w-2 h-2 rounded-full shrink-0 ${getKindBgClass(change.kind)} ${getKindColorClass(change.kind)}`}
                 style={{ backgroundColor: `var(--nim-${change.kind === 'create' ? 'success' : change.kind === 'delete' ? 'error' : 'primary'})` }}
               />
-              {/* File path */}
-              <code className="text-[0.75rem] text-nim-muted flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
+              {/* File path - clickable to open in editor */}
+              <code
+                className="text-[0.75rem] text-nim-muted flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap hover:text-nim-primary hover:underline cursor-pointer"
+                onClick={(e) => handlePathClick(e, change.path)}
+                title={`Open ${relPath}`}
+              >
                 {relPath}
               </code>
               {/* Kind badge */}

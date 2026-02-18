@@ -233,11 +233,6 @@ export const ExitPlanModeWidget: React.FC<CustomToolWidgetProps> = ({
 
     if (host) {
       host.openFile(absolutePath);
-    } else if (window.electronAPI?.invoke) {
-      // Fallback to direct IPC
-      window.electronAPI.invoke('workspace:openFile', absolutePath).catch(err => {
-        console.error('[ExitPlanModeWidget] Failed to open plan file:', err);
-      });
     }
   }, [planFilePath, workspacePath, host]);
 
