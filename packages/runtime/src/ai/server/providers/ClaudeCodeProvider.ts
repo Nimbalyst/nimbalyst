@@ -149,6 +149,8 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
       },
       getAbortSignal: () => this.abortController?.signal,
       interruptWithMessage: (message) => this.interruptWithMessage(message),
+      createCanUseToolHandler: (sessionId, workspacePath, permissionsPath, teammateName) =>
+        this.createCanUseToolHandler(sessionId, workspacePath, permissionsPath, teammateName),
     });
 
     // Initialize permission service if all dependencies are available
@@ -916,6 +918,7 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
       // Capture lead config for teammate spawning
       this.teammateManager.lastUsedCwd = workspacePath;
       this.teammateManager.lastUsedSessionId = sessionId;
+      this.teammateManager.lastUsedPermissionsPath = permissionsPath;
 
       // Load extension plugins if available
       // These are Claude SDK plugins bundled with Nimbalyst extensions
@@ -2817,17 +2820,41 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
     // Try ToolPermissionService first (primary path when service is available)
     if (this.permissionService) {
       this.permissionService.resolvePermission(requestId, response);
-      // Persist the response as nimbalyst_tool_result for widget rendering
-      if (sessionId) {
-        this.logAgentMessage(
-          sessionId,
-          'claude-code',
-          'output',
-          this.createPermissionResultMessage(requestId, response, respondedBy)
-        ).catch(err => {
-          console.error('[CLAUDE-CODE] Failed to persist permission response:', err);
-        });
-      }
+    }
+
+    // Also check the inline pending map (used by AgentToolHooks compound bash checks,
+    // including those from teammate sessions which create promises in this map)
+    if (this.permissions.pendingToolPermissions.has(requestId)) {
+      this.permissions.resolveToolPermission(
+        requestId,
+        response,
+        (_reqId, resp, by) => {
+          if (sessionId) {
+            this.logAgentMessage(
+              sessionId,
+              'claude-code',
+              'output',
+              this.createPermissionResultMessage(_reqId, resp, by)
+            ).catch(err => {
+              console.error('[CLAUDE-CODE] Failed to persist permission response:', err);
+            });
+          }
+        },
+        respondedBy
+      );
+      return;
+    }
+
+    // Persist the response as nimbalyst_tool_result for widget rendering
+    if (this.permissionService && sessionId) {
+      this.logAgentMessage(
+        sessionId,
+        'claude-code',
+        'output',
+        this.createPermissionResultMessage(requestId, response, respondedBy)
+      ).catch(err => {
+        console.error('[CLAUDE-CODE] Failed to persist permission response:', err);
+      });
       return;
     }
 
@@ -3062,7 +3089,7 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
    *
    * Our job is to show UI, wait for user response, and save patterns if "Always" is chosen.
    */
-  private createCanUseToolHandler(sessionId?: string, workspacePath?: string, permissionsPath?: string) {
+  private createCanUseToolHandler(sessionId?: string, workspacePath?: string, permissionsPath?: string, teammateName?: string) {
     // Use permissionsPath for trust checks (parent project for worktrees), workspacePath for everything else
     const pathForTrust = permissionsPath || workspacePath;
 
@@ -3203,6 +3230,7 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
                 isDestructive,
                 warnings: [],
                 workspacePath,
+                ...(teammateName && { teammateName }),
               }
             })
           );
@@ -3221,6 +3249,7 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
             isDestructive,
             warnings: [],
             signal: options.signal,
+            teammateName,
           });
 
           if (response.decision === 'allow') {

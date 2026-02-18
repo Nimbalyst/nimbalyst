@@ -558,6 +558,8 @@ export const RichTranscriptView = React.forwardRef<
   const scrollButtonRef = useRef<HTMLDivElement>(null);
   const [copiedMessageIndex, setCopiedMessageIndex] = useState<number | null>(null);
   const [showSearchBar, setShowSearchBar] = useState(false);
+  const pendingPermissionsVisibleRef = useRef(true);
+  const [showPermissionBanner, setShowPermissionBanner] = useState(false);
   const [isScrollReady, setIsScrollReady] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const vlistRef = useRef<VListHandle>(null);
@@ -624,6 +626,49 @@ export const RichTranscriptView = React.forwardRef<
     }
     return -1;
   }, [messages, promptAdditions]);
+
+  // Find pending (unresolved) ToolPermission widgets and the VList indices where they're actually rendered.
+  // Tool messages are hidden (display:none) and rendered inside the next assistant message via toolMessagesBefore,
+  // so we need to find the assistant message index for scroll targeting.
+  const pendingPermissionIndices = useMemo(() => {
+    // Don't show banner for stopped/completed sessions.
+    // Session is active if processing, running/waiting status, or teammates are still running.
+    const hasActiveTeammates = currentTeammates?.some(t => t.status === 'running' || t.status === 'idle') ?? false;
+    const sessionActive = isProcessing || sessionStatus === 'running' || sessionStatus === 'waiting' || hasActiveTeammates;
+    if (!sessionActive) return [];
+    const indices: number[] = [];
+    for (let i = 0; i < messages.length; i++) {
+      const msg = messages[i];
+      if (msg.role === 'tool' && msg.toolCall?.name === 'ToolPermission' && !msg.toolCall.result) {
+        // Find the next assistant message that renders this tool via toolMessagesBefore
+        let targetIdx = i + 1;
+        while (targetIdx < messages.length && messages[targetIdx].role === 'tool') {
+          targetIdx++;
+        }
+        if (targetIdx < messages.length && messages[targetIdx].role === 'assistant') {
+          indices.push(targetIdx); // Scroll to the assistant message that contains this widget
+        } else {
+          indices.push(i); // Orphaned tool - rendered at its own index
+        }
+      }
+    }
+    return indices;
+  }, [messages, isProcessing, sessionStatus, currentTeammates]);
+
+  // Update banner visibility when pending permissions are resolved or new ones appear
+  useEffect(() => {
+    if (pendingPermissionIndices.length === 0) {
+      setShowPermissionBanner(false);
+      pendingPermissionsVisibleRef.current = true;
+    } else {
+      // New pending permission appeared - show banner if user is scrolled up
+      const isAtBottom = getSessionIsAtBottom(sessionId);
+      if (!isAtBottom) {
+        setShowPermissionBanner(true);
+        pendingPermissionsVisibleRef.current = false;
+      }
+    }
+  }, [pendingPermissionIndices, sessionId]);
 
   // Expose scroll method via ref
   React.useImperativeHandle(ref, () => ({
@@ -1252,6 +1297,20 @@ export const RichTranscriptView = React.forwardRef<
                         scrollButtonRef.current.style.opacity = show ? '1' : '0';
                         scrollButtonRef.current.style.pointerEvents = show ? '' : 'none';
                       }
+                      // Check if any pending permission widgets are visible in viewport
+                      if (pendingPermissionIndices.length > 0) {
+                        const firstVisibleIdx = vlistRef.current.findItemIndex(offset);
+                        const lastVisibleIdx = vlistRef.current.findItemIndex(offset + viewportSize);
+                        const anyVisible = pendingPermissionIndices.some(
+                          idx => idx >= firstVisibleIdx && idx <= lastVisibleIdx
+                        );
+                        if (pendingPermissionsVisibleRef.current !== anyVisible) {
+                          pendingPermissionsVisibleRef.current = anyVisible;
+                          setShowPermissionBanner(!anyVisible);
+                        }
+                      } else if (showPermissionBanner) {
+                        setShowPermissionBanner(false);
+                      }
                     }
                   }}
                 >
@@ -1594,6 +1653,21 @@ export const RichTranscriptView = React.forwardRef<
             </div>
           )}
         </div>
+
+        {/* Pending permissions banner - shown when pending permission widgets are scrolled out of view */}
+        {showPermissionBanner && pendingPermissionIndices.length > 0 && (
+          <div className="sticky bottom-12 flex justify-center z-10 pointer-events-none">
+            <button
+              onClick={() => {
+                vlistRef.current?.scrollToIndex(pendingPermissionIndices[0], { align: 'center' });
+              }}
+              className="pointer-events-auto flex items-center gap-2 px-4 py-2 bg-[var(--nim-primary)] text-white rounded-full shadow-lg text-sm font-medium cursor-pointer border-none transition-all hover:brightness-110"
+            >
+              <MaterialSymbol icon="shield" size={16} />
+              {pendingPermissionIndices.length} pending permission{pendingPermissionIndices.length > 1 ? 's' : ''} — click to review
+            </button>
+          </div>
+        )}
 
         {/* Scroll to bottom button - uses ref + opacity/pointer-events to avoid layout shifts that interfere with text selection */}
         <div ref={scrollButtonRef} className="rich-transcript-scroll-button-container sticky bottom-3 flex justify-center opacity-0 transition-opacity">

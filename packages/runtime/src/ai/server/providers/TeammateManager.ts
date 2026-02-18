@@ -72,6 +72,14 @@ export interface TeammateManagerDeps {
   getAbortSignal(): AbortSignal | undefined;
   /** Interrupt the lead agent and deliver a teammate message */
   interruptWithMessage(message: string): Promise<void>;
+  /** Create a canUseTool handler that delegates to the lead's permission system */
+  createCanUseToolHandler(
+    sessionId: string | undefined,
+    workspacePath: string,
+    permissionsPath: string | undefined,
+    teammateName?: string,
+  ): (toolName: string, input: any, options: { signal: AbortSignal; toolUseID?: string }) =>
+    Promise<{ behavior: 'allow' | 'deny'; updatedInput?: any; message?: string }>;
 }
 
 // ─── Class ──────────────────────────────────────────────────────────────────
@@ -109,6 +117,7 @@ export class TeammateManager {
   /** Captured from lead's sendMessage() for teammate spawning. */
   lastUsedCwd?: string;
   lastUsedSessionId?: string;
+  lastUsedPermissionsPath?: string;
 
   constructor(private readonly deps: TeammateManagerDeps) {}
 
@@ -1374,11 +1383,12 @@ export class TeammateManager {
     const cwd = this.lastUsedCwd || process.cwd();
     const teammateAdditionalDirectories = [os.tmpdir()];
 
+    const permissionsPath = this.lastUsedPermissionsPath;
+
     const options: any = {
       model: model || 'haiku',
       maxTurns: 20,
-      permissionMode: 'bypassPermissions',
-      allowDangerouslySkipPermissions: true,
+      permissionMode: 'default',
       persistSession: true,
       cwd,
       abortController,
@@ -1400,13 +1410,10 @@ export class TeammateManager {
         CLAUDE_CODE_AGENT_TYPE: agentType,
       },
       hooks: {
-        'PreToolUse': [{ hooks: [this.deps.createPreToolUseHook(cwd, sessionId, undefined, { isTeammateSession: true })] }],
+        'PreToolUse': [{ hooks: [this.deps.createPreToolUseHook(cwd, sessionId, permissionsPath, { isTeammateSession: true })] }],
         'PostToolUse': [{ hooks: [this.deps.createPostToolUseHook(cwd, sessionId)] }],
       },
-      canUseTool: async (_toolName: string, toolInput: any) => ({
-        behavior: 'allow',
-        updatedInput: toolInput,
-      }),
+      canUseTool: this.deps.createCanUseToolHandler(sessionId, cwd, permissionsPath, name),
       additionalDirectories: teammateAdditionalDirectories,
     };
 

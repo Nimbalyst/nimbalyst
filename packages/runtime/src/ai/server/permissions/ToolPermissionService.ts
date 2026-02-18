@@ -350,6 +350,8 @@ export class ToolPermissionService {
     isDestructive: boolean;
     warnings?: string[];
     signal: AbortSignal;
+    /** Name of the teammate requesting permission (undefined for lead agent) */
+    teammateName?: string;
   }): Promise<PermissionDecision> {
     const {
       requestId,
@@ -364,6 +366,7 @@ export class ToolPermissionService {
       isDestructive,
       warnings = [],
       signal,
+      teammateName,
     } = options;
 
     const pathForTrust = permissionsPath || workspacePath;
@@ -480,6 +483,7 @@ export class ToolPermissionService {
       sessionId,
       workspacePath,
       request,
+      teammateName,
       timestamp: Date.now(),
     });
 

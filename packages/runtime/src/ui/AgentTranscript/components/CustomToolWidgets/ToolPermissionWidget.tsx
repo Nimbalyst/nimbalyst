@@ -121,6 +121,8 @@ export const ToolPermissionWidget: React.FC<CustomToolWidgetProps> = ({
   const warnings: string[] = (args.warnings || []) as string[];
   const workspacePath = (args.workspacePath || '') as string;
 
+  const teammateName = (args.teammateName || '') as string;
+
   // Check if WebFetch request (for "All Domains" button)
   const isWebFetchRequest = toolName === 'WebFetch' || pattern.startsWith('WebFetch');
 
@@ -304,6 +306,11 @@ export const ToolPermissionWidget: React.FC<CustomToolWidgetProps> = ({
           </span>
           <span className="text-sm font-semibold text-nim flex-1">
             {statusText}
+            {teammateName && (
+              <span className="ml-2 text-xs font-normal text-nim-muted">
+                (from teammate: {teammateName})
+              </span>
+            )}
           </span>
           <span
             data-testid={displayResult?.decision === 'allow' ? 'tool-permission-granted' : 'tool-permission-denied'}
@@ -387,6 +394,11 @@ export const ToolPermissionWidget: React.FC<CustomToolWidgetProps> = ({
         </span>
         <span className="text-sm font-semibold text-nim flex-1">
           Allow this tool?
+          {teammateName && (
+            <span className="ml-2 text-xs font-normal text-nim-muted">
+              (from teammate: {teammateName})
+            </span>
+          )}
         </span>
         <span
           className="relative flex items-center cursor-pointer text-nim-faint hover:text-nim-muted"

@@ -276,12 +276,6 @@ export class AgentToolHooks {
       // like "git add file && rm -rf /". PreToolUse runs BEFORE SDK's allow rules, so we can catch this.
       // See: https://github.com/anthropics/claude-code/issues/4956
       if (toolName === 'Bash') {
-        // Managed teammates run without interactive approval flow.
-        // If we prompt here, the teammate can deadlock indefinitely waiting for a UI response.
-        if (this.isTeammateSession) {
-          return {};
-        }
-
         // In bypass-all mode, skip compound command checking entirely
         if (pathForTrust && this.trustChecker) {
           const trustStatus = this.trustChecker(pathForTrust);
