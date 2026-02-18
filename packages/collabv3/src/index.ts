@@ -600,7 +600,7 @@ async function handleAuthRoutes(
 
       // Desktop: return a page that redirects to the deep link
       // Always show session copy option for manual setup on devices that can't use deep links
-      return new Response(renderSuccessPage(deepLinkUrl, sessionData, true), {
+      return new Response(renderSuccessPage(deepLinkUrl, sessionData, false), {
         status: 200,
         headers: { 'Content-Type': 'text/html' },
       });

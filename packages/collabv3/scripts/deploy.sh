@@ -30,22 +30,23 @@ PKG_DIR="$(dirname "$SCRIPT_DIR")"
 
 cd "$PKG_DIR"
 
-# Bump version in package.json (no git tag from npm)
-NEW_VERSION=$(npm version "$BUMP_TYPE" --no-git-tag-version)
-# npm version returns "vX.Y.Z", strip the v
-VERSION="${NEW_VERSION#v}"
+# Bump version in package.json (suppress npm output, no git tag)
+npm version "$BUMP_TYPE" --no-git-tag-version > /dev/null 2>&1
 
-echo "Deploying collabv3 $VERSION to $ENV_NAME..."
+# Read the version back from package.json
+VERSION=$(node -p "require('./package.json').version")
+
+echo "Deploying collabv3 v$VERSION to $ENV_NAME..."
 
 # Deploy with version injected as a build-time define
 npx wrangler deploy --env "$ENV_NAME" --define "COLLABV3_VERSION:\"$VERSION\""
 
 echo ""
-echo "Deployed collabv3 $VERSION to $ENV_NAME"
+echo "Deployed collabv3 v$VERSION to $ENV_NAME"
 echo ""
 echo "Verify: curl https://sync.nimbalyst.com/health"
 echo ""
 echo "To tag this deploy:"
 echo "  git add packages/collabv3/package.json"
-echo "  git commit -m \"collabv3: deploy $VERSION to $ENV_NAME\""
+echo "  git commit -m \"collabv3: deploy v$VERSION to $ENV_NAME\""
 echo "  git tag collabv3-v$VERSION"

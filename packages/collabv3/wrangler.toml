@@ -49,6 +49,8 @@ ENVIRONMENT = "development"
 # Staging environment
 [env.staging]
 name = "nimbalyst-collabv3-staging"
+[env.staging.define]
+COLLABV3_VERSION = '"0.0.0-dev"'
 [env.staging.vars]
 ENVIRONMENT = "staging"
 
@@ -85,6 +87,8 @@ database_id = "c3b3979d-e20c-4547-a103-91c1a0b32388"
 tag = "v1"
 new_sqlite_classes = ["SessionRoom", "IndexRoom"]
 
+[env.production.define]
+COLLABV3_VERSION = '"0.0.0-dev"'
 [env.production.vars]
 ENVIRONMENT = "production"
 STYTCH_PROJECT_ID = "project-live-bc85edd6-90a8-43a0-b9e3-1315bbed6650"
