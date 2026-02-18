@@ -1022,6 +1022,8 @@ export async function registerSessionHandlers() {
                  WHERE m.direction = 'input'
                    AND (m.hidden = FALSE OR m.hidden IS NULL)
                    AND s.workspace_id = $1
+                   AND (m.metadata IS NULL OR m.metadata->>'messageType' IS NULL
+                        OR m.metadata->>'messageType' NOT IN ('teammate_message_injected'))
                  ORDER BY m.created_at DESC
                  LIMIT $2`,
                 [workspacePath, limit]

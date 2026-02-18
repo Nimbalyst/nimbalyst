@@ -532,7 +532,8 @@ export function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
               uiMessages.push({
                 role: msg.role || 'user',
                 content: content,
-                timestamp
+                timestamp,
+                isUserInput: false,
               });
             }
           } else if (parsed.type === 'tool_progress') {
