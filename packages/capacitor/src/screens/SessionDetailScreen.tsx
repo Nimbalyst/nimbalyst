@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useSync } from '../contexts/CollabV3SyncContext';
-import { getSessionJwt } from '../services/StytchAuthService';
+import { getSessionJwt, getOrgId } from '../services/StytchAuthService';
 import { analyticsService } from '../services/AnalyticsService';
 import { AgentTranscriptPanel, transformAgentMessagesToUI, PromptsMenuButton } from '@nimbalyst/runtime';
 import { setInteractiveWidgetHost } from '@nimbalyst/runtime/store';
@@ -428,10 +428,13 @@ export function SessionDetailScreen({ hiddenBackButton, voiceModeActive }: Sessi
 
       if (cancelled) return;
 
-      // Build WebSocket URL
+      // Build WebSocket URL with optional org-scoped room ID
       const baseUrl = config.serverUrl.replace(/\/$/, '');
       const wsBase = baseUrl.replace(/^http/, 'ws');
-      const roomId = `user:${config.userId}:session:${sessionId}`;
+      const orgId = await getOrgId();
+      const roomId = orgId
+        ? `org:${orgId}:user:${config.userId}:session:${sessionId}`
+        : `user:${config.userId}:session:${sessionId}`;
       const wsUrl = `${wsBase}/sync/${roomId}?user_id=${config.userId}&token=${freshToken}`;
 
       ws = new WebSocket(wsUrl);

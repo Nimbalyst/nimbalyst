@@ -28,6 +28,7 @@ interface ConnectionState {
 
 // WebSocket tag prefixes for hibernation recovery
 const TAG_USER = 'user:';
+const TAG_ORG = 'org:';
 
 // Message batch size for sync responses
 const SYNC_BATCH_SIZE = 100;
@@ -56,12 +57,12 @@ export class SessionRoom implements DurableObject {
     for (const ws of webSockets) {
       const tags = this.state.getTags(ws);
       const userTag = tags.find(t => t.startsWith(TAG_USER));
-      if (userTag) {
+      const orgTag = tags.find(t => t.startsWith(TAG_ORG));
+      if (userTag && orgTag) {
         const userId = userTag.slice(TAG_USER.length);
-        // After hibernation, assume all connections are synced
-        // (they completed initial sync before hibernation occurred)
+        const orgId = orgTag.slice(TAG_ORG.length);
         this.connections.set(ws, {
-          auth: { userId },
+          auth: { userId, orgId },
           synced: true,
         });
       }
@@ -176,7 +177,11 @@ export class SessionRoom implements DurableObject {
 
     // Accept with hibernation support, storing auth in tags for recovery
     // Tags persist across hibernation and allow us to restore connection state
-    this.state.acceptWebSocket(server, [`${TAG_USER}${auth.userId}`]);
+    const tags = [`${TAG_USER}${auth.userId}`];
+    if (auth.orgId) {
+      tags.push(`${TAG_ORG}${auth.orgId}`);
+    }
+    this.state.acceptWebSocket(server, tags);
 
     // Store connection state in memory (will be restored from tags after hibernation)
     this.connections.set(server, {
@@ -188,25 +193,15 @@ export class SessionRoom implements DurableObject {
   }
 
   /**
-   * Parse auth context from request
+   * Parse auth context from query params (set by the main worker after JWT validation).
    */
   private parseAuth(request: Request): AuthContext | null {
-    // Try Authorization header first: "Bearer {userId}:{token}"
-    const authHeader = request.headers.get('Authorization');
-    if (authHeader?.startsWith('Bearer ')) {
-      const [userId] = authHeader.slice(7).split(':');
-      if (userId) {
-        return { userId };
-      }
-    }
-
-    // Try query param
     const url = new URL(request.url);
     const userId = url.searchParams.get('user_id');
-    if (userId) {
-      return { userId };
+    const orgId = url.searchParams.get('org_id');
+    if (userId && orgId) {
+      return { userId, orgId };
     }
-
     return null;
   }
 

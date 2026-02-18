@@ -18,7 +18,7 @@ import type { DeviceInfo } from '@nimbalyst/runtime/sync';
 import { getSessionSyncConfig, type SessionSyncConfig } from '../utils/store';
 import { logger } from '../utils/logger';
 import { getCredentials } from './CredentialService';
-import { getStytchUserId, isAuthenticated } from './StytchAuthService';
+import { getStytchUserId, isAuthenticated, getOrgId } from './StytchAuthService';
 import { app } from 'electron';
 import * as os from 'os';
 
@@ -360,6 +360,7 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
 
     const provider = createCollabV3Sync({
       serverUrl,
+      orgId: getOrgId() || '',
       getJwt: async () => {
         const { refreshSession: doRefresh, getSessionJwt: getJwt } = await import('./StytchAuthService');
 

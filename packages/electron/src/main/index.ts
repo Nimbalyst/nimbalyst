@@ -370,9 +370,14 @@ function initializeLogging() {
 // Must be done before app is ready on macOS
 if (process.defaultApp) {
     if (process.argv.length >= 2) {
+        // Remove any stale registration first (e.g. from packaged builds or Electron Fiddle)
+        app.removeAsDefaultProtocolClient('nimbalyst', process.execPath, [path.resolve(process.argv[1])]);
         app.setAsDefaultProtocolClient('nimbalyst', process.execPath, [path.resolve(process.argv[1])]);
+        logger.main.info(`[DeepLink] Registered nimbalyst:// protocol for dev mode (exec: ${process.execPath}, arg: ${path.resolve(process.argv[1])})`);
+        logger.main.info(`[DeepLink] isDefaultProtocolClient: ${app.isDefaultProtocolClient('nimbalyst', process.execPath, [path.resolve(process.argv[1])])}`);
     }
 } else {
+    app.removeAsDefaultProtocolClient('nimbalyst');
     app.setAsDefaultProtocolClient('nimbalyst');
 }
 
@@ -406,18 +411,29 @@ async function handleDeepLink(url: string): Promise<void> {
             const expiresAt = parsed.searchParams.get('expires_at');
 
             if (sessionToken) {
+                const orgId = parsed.searchParams.get('org_id');
+
+                // B2B auth requires org_id - reject callbacks without it
+                if (!orgId) {
+                    logger.main.error('[DeepLink] Auth callback missing org_id - B2B auth requires organization context');
+                    return;
+                }
+
                 logger.main.info('[DeepLink] Auth callback params:', {
                     hasSessionToken: !!sessionToken,
                     hasSessionJwt: !!sessionJwt,
                     userId,
                     email,
+                    orgId,
                 });
+
                 await handleAuthCallback({
                     sessionToken,
                     sessionJwt: sessionJwt || undefined,
                     userId: userId || undefined,
                     email: email || undefined,
                     expiresAt: expiresAt || undefined,
+                    orgId,
                 });
                 logger.main.info('[DeepLink] Auth callback handled successfully');
 

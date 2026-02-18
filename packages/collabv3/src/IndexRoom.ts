@@ -47,6 +47,7 @@ interface ConnectionState {
 
 // WebSocket tag prefixes for hibernation recovery
 const TAG_USER = 'user:';
+const TAG_ORG = 'org:';
 const TAG_DEVICE = 'device:';
 
 export class IndexRoom implements DurableObject {
@@ -79,16 +80,16 @@ export class IndexRoom implements DurableObject {
     for (const ws of webSockets) {
       const tags = this.state.getTags(ws);
       const userTag = tags.find(t => t.startsWith(TAG_USER));
+      const orgTag = tags.find(t => t.startsWith(TAG_ORG));
 
-      if (userTag) {
+      if (userTag && orgTag) {
         const userId = userTag.slice(TAG_USER.length);
+        const orgId = orgTag.slice(TAG_ORG.length);
 
-        // After hibernation, connections are restored but device info is lost
-        // Clients will re-announce when they detect the connection is still open
         this.connections.set(ws, {
-          auth: { userId },
+          auth: { userId, orgId },
           synced: true,
-          device: undefined, // Will be set when client re-announces
+          device: undefined,
         });
       }
     }
@@ -274,7 +275,11 @@ export class IndexRoom implements DurableObject {
     const [client, server] = Object.values(pair);
 
     // Accept with hibernation support, storing auth in tags for recovery
-    this.state.acceptWebSocket(server, [`${TAG_USER}${auth.userId}`]);
+    const tags = [`${TAG_USER}${auth.userId}`];
+    if (auth.orgId) {
+      tags.push(`${TAG_ORG}${auth.orgId}`);
+    }
+    this.state.acceptWebSocket(server, tags);
 
     this.connections.set(server, {
       auth,
@@ -285,23 +290,15 @@ export class IndexRoom implements DurableObject {
   }
 
   /**
-   * Parse auth context from request
+   * Parse auth context from query params (set by the main worker after JWT validation).
    */
   private parseAuth(request: Request): AuthContext | null {
-    const authHeader = request.headers.get('Authorization');
-    if (authHeader?.startsWith('Bearer ')) {
-      const [userId] = authHeader.slice(7).split(':');
-      if (userId) {
-        return { userId };
-      }
-    }
-
     const url = new URL(request.url);
     const userId = url.searchParams.get('user_id');
-    if (userId) {
-      return { userId };
+    const orgId = url.searchParams.get('org_id');
+    if (userId && orgId) {
+      return { userId, orgId };
     }
-
     return null;
   }
 
@@ -837,8 +834,7 @@ export class IndexRoom implements DurableObject {
     connState: ConnectionState,
     message: RegisterPushTokenMessage
   ): Promise<void> {
-    console.log('[IndexRoom] Registering push token for device:', message.deviceId, 'platform:', message.platform);
-    console.log('[IndexRoom] Full token:', message.token, 'length:', message.token.length);
+    console.log('[IndexRoom] Registering push token for device:', message.deviceId, 'platform:', message.platform, 'token length:', message.token.length);
 
     // Store the token in DO storage
     const key = `push_token:${message.deviceId}`;
@@ -850,11 +846,7 @@ export class IndexRoom implements DurableObject {
     };
 
     await this.state.storage.put(key, value);
-    console.log('[IndexRoom] Push token stored with key:', key);
-
-    // Verify it was stored
-    const stored = await this.state.storage.get(key);
-    console.log('[IndexRoom] Verified stored token:', stored ? 'exists' : 'NOT FOUND');
+    console.log('[IndexRoom] Push token stored for device:', message.deviceId);
   }
 
   /**
@@ -948,7 +940,7 @@ export class IndexRoom implements DurableObject {
     try {
       const jwt = await this.generateAPNsJWT(env.APNS_KEY, env.APNS_KEY_ID, env.APNS_TEAM_ID);
       const normalizedToken = deviceToken.toLowerCase();
-      console.log('[IndexRoom] Sending APNs push, full token:', normalizedToken, 'length:', normalizedToken.length, 'topic:', env.APNS_BUNDLE_ID || 'com.nimbalyst.app');
+      console.log('[IndexRoom] Sending APNs push, token length:', normalizedToken.length, 'topic:', env.APNS_BUNDLE_ID || 'com.nimbalyst.app');
 
       const response = await fetch(
         `https://api.push.apple.com/3/device/${normalizedToken}`,

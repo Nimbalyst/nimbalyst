@@ -15,23 +15,23 @@ import type {
 describe('Room ID formats', () => {
   it('should match SessionRoomId pattern', () => {
     const validIds: SessionRoomId[] = [
-      'user:abc123:session:sess456',
-      'user:user-with-dashes:session:session-id',
+      'org:org1:user:abc123:session:sess456',
+      'org:org-2:user:user-with-dashes:session:session-id',
     ];
 
     for (const id of validIds) {
-      expect(id).toMatch(/^user:[^:]+:session:[^:]+$/);
+      expect(id).toMatch(/^org:[^:]+:user:[^:]+:session:[^:]+$/);
     }
   });
 
   it('should match IndexRoomId pattern', () => {
     const validIds: IndexRoomId[] = [
-      'user:abc123:index',
-      'user:user-with-dashes:index',
+      'org:org1:user:abc123:index',
+      'org:org-2:user:user-with-dashes:index',
     ];
 
     for (const id of validIds) {
-      expect(id).toMatch(/^user:[^:]+:index$/);
+      expect(id).toMatch(/^org:[^:]+:user:[^:]+:index$/);
     }
   });
 });

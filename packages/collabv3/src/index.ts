@@ -81,19 +81,21 @@ function isOriginAllowed(origin: string | null, env: Env): boolean {
   }
 
   // Allow local network IPs for Capacitor dev testing (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
-  // This is needed when running Capacitor on a device connecting to local dev server
-  try {
-    const url = new URL(origin);
-    const host = url.hostname;
-    if (
-      host.startsWith('192.168.') ||
-      host.startsWith('10.') ||
-      /^172\.(1[6-9]|2[0-9]|3[01])\./.test(host)
-    ) {
-      return true;
+  // Only in development/local environments - never in production
+  if (env.ENVIRONMENT === 'development' || env.ENVIRONMENT === 'local') {
+    try {
+      const url = new URL(origin);
+      const host = url.hostname;
+      if (
+        host.startsWith('192.168.') ||
+        host.startsWith('10.') ||
+        /^172\.(1[6-9]|2[0-9]|3[01])\./.test(host)
+      ) {
+        return true;
+      }
+    } catch {
+      // Invalid URL, not allowed
     }
-  } catch {
-    // Invalid URL, not allowed
   }
 
   return false;
@@ -123,40 +125,36 @@ function getCorsHeaders(request: Request, env: Env): Record<string, string> {
   };
 }
 
-// Room ID parsing
+// Room ID parsing: org:{orgId}:user:{userId}:{suffix}
 interface ParsedRoomId {
   type: 'session' | 'index' | 'projects';
   userId: string;
+  orgId: string;
   sessionId?: string;
 }
 
 function parseRoomId(roomId: string): ParsedRoomId | null {
-  // Format: user:{userId}:session:{sessionId}
-  const sessionMatch = roomId.match(/^user:([^:]+):session:([^:]+)$/);
+  const sessionMatch = roomId.match(/^org:([^:]+):user:([^:]+):session:([^:]+)$/);
   if (sessionMatch) {
-    return { type: 'session', userId: sessionMatch[1], sessionId: sessionMatch[2] };
+    return { type: 'session', orgId: sessionMatch[1], userId: sessionMatch[2], sessionId: sessionMatch[3] };
   }
 
-  // Format: user:{userId}:index
-  const indexMatch = roomId.match(/^user:([^:]+):index$/);
+  const indexMatch = roomId.match(/^org:([^:]+):user:([^:]+):index$/);
   if (indexMatch) {
-    return { type: 'index', userId: indexMatch[1] };
+    return { type: 'index', orgId: indexMatch[1], userId: indexMatch[2] };
   }
 
-  // Format: user:{userId}:projects
-  const projectsMatch = roomId.match(/^user:([^:]+):projects$/);
+  const projectsMatch = roomId.match(/^org:([^:]+):user:([^:]+):projects$/);
   if (projectsMatch) {
-    return { type: 'projects', userId: projectsMatch[1] };
+    return { type: 'projects', orgId: projectsMatch[1], userId: projectsMatch[2] };
   }
 
   return null;
 }
 
-// Get auth configuration from environment
 function getAuthConfig(env: Env): AuthConfig {
   return {
-    // Read Stytch project ID from environment
-    stytchProjectId: (env as any).STYTCH_PROJECT_ID,
+    stytchProjectId: env.STYTCH_PROJECT_ID,
   };
 }
 
@@ -198,6 +196,12 @@ export default {
         log.warn('Auth failed. auth:', auth, 'parsed.userId:', parsed.userId);
         return new Response('Unauthorized', { status: 401 });
       }
+
+      // Validate the org in the room matches the JWT
+      if (auth.orgId !== parsed.orgId) {
+        log.warn('Org mismatch. Room orgId:', parsed.orgId, 'JWT orgId:', auth.orgId);
+        return new Response('Unauthorized: org mismatch', { status: 401 });
+      }
       log.debug('Auth passed, forwarding to DO');
 
       // Route to appropriate DO
@@ -215,10 +219,10 @@ export default {
         return new Response('Invalid room type', { status: 400 });
       }
 
-      // Forward request to DO with user_id added to URL
-      // (DOs use simpler auth parsing that expects user_id in query params)
+      // Forward request to DO with user_id and org_id in query params
       const forwardUrl = new URL(request.url);
       forwardUrl.searchParams.set('user_id', auth.userId);
+      forwardUrl.searchParams.set('org_id', auth.orgId);
       const forwardRequest = new Request(forwardUrl.toString(), request);
       return stub.fetch(forwardRequest);
     }
@@ -426,10 +430,6 @@ async function handleMagicLinkRequest(
       );
     }
 
-    // Determine API base from project ID
-    const isTestProject = env.STYTCH_PROJECT_ID.startsWith('project-test-');
-    const apiBase = isTestProject ? 'https://test.stytch.com/v1' : 'https://api.stytch.com/v1';
-
     // Determine magic link redirect URL
     let magicLinkUrl: string;
     const isDev = env.ENVIRONMENT === 'development' || env.ENVIRONMENT === 'local';
@@ -454,17 +454,20 @@ async function handleMagicLinkRequest(
       );
     }
 
-    // Call Stytch API with secret key
-    const stytchResponse = await fetch(`${apiBase}/magic_links/email/login_or_create`, {
+    // Call Stytch B2B Discovery magic link API
+    // Discovery flow: sends a magic link that returns an intermediate session
+    const magicLinkIsTest = env.STYTCH_PROJECT_ID.startsWith('project-test-');
+    const b2bApiBase = magicLinkIsTest ? 'https://test.stytch.com/v1/b2b' : 'https://api.stytch.com/v1/b2b';
+
+    const stytchResponse = await fetch(`${b2bApiBase}/magic_links/email/discovery/send`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Basic ${btoa(`${env.STYTCH_PROJECT_ID}:${env.STYTCH_SECRET_KEY}`)}`,
       },
       body: JSON.stringify({
-        email: body.email,
-        login_magic_link_url: magicLinkUrl,
-        signup_magic_link_url: magicLinkUrl,
+        email_address: body.email,
+        discovery_redirect_url: magicLinkUrl,
       }),
     });
 
@@ -482,8 +485,9 @@ async function handleMagicLinkRequest(
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (err) {
+    log.error('Magic link error:', err);
     return new Response(
-      JSON.stringify({ error: `Server error: ${err}` }),
+      JSON.stringify({ error: 'Internal server error' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
@@ -510,8 +514,9 @@ async function handleAuthRoutes(
     return new Response('Stytch not configured', { status: 500, headers: corsHeaders });
   }
 
-  const isTestProject = env.STYTCH_PROJECT_ID.startsWith('project-test-');
-  const apiBase = isTestProject ? 'https://test.stytch.com/v1' : 'https://api.stytch.com/v1';
+  const b2bApiBase = env.STYTCH_PROJECT_ID.startsWith('project-test-')
+    ? 'https://test.stytch.com/v1/b2b'
+    : 'https://api.stytch.com/v1/b2b';
 
   // GET /auth/callback - OAuth/Magic Link callback from Stytch
   // Stytch redirects here with ?token=xxx&stytch_token_type=oauth|magic_links
@@ -527,61 +532,25 @@ async function handleAuthRoutes(
     }
 
     try {
-      // Authenticate the token with Stytch
-      let stytchEndpoint: string;
-      if (tokenType === 'oauth') {
-        stytchEndpoint = `${apiBase}/oauth/authenticate`;
-      } else if (tokenType === 'magic_links') {
-        stytchEndpoint = `${apiBase}/magic_links/authenticate`;
-      } else {
-        return new Response(renderErrorPage(`Unknown token type: ${tokenType}`), {
-          status: 400,
-          headers: { 'Content-Type': 'text/html' },
-        });
-      }
+      // B2B Discovery flow: OAuth returns an intermediate session token.
+      // We need to: 1) authenticate via discovery, 2) list orgs, 3) exchange for org-scoped session.
+      // For users with a single org, this is transparent.
+      const result = await authenticateB2BToken(token, tokenType, b2bApiBase, env);
 
-      const stytchResponse = await fetch(stytchEndpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Basic ${btoa(`${env.STYTCH_PROJECT_ID}:${env.STYTCH_SECRET_KEY}`)}`,
-        },
-        body: JSON.stringify({
-          token,
-          session_duration_minutes: 60 * 24 * 7, // 1 week
-        }),
-      });
-
-      const stytchData = await stytchResponse.json() as {
-        user?: { user_id: string; emails?: Array<{ email: string }> };
-        session?: { expires_at: string };
-        session_token?: string;
-        session_jwt?: string;
-        error_message?: string;
-      };
-
-      if (!stytchResponse.ok || !stytchData.session_token) {
+      if (!result.ok) {
         return new Response(
-          renderErrorPage(stytchData.error_message || 'Authentication failed'),
+          renderErrorPage(result.error || 'Authentication failed'),
           { status: 401, headers: { 'Content-Type': 'text/html' } }
         );
       }
 
-      // Build deep link URL with session data
-      const sessionData = {
-        sessionToken: stytchData.session_token,
-        sessionJwt: stytchData.session_jwt || '',
-        userId: stytchData.user?.user_id || '',
-        email: stytchData.user?.emails?.[0]?.email || '',
-        expiresAt: stytchData.session?.expires_at || '',
-      };
-
       const deepLinkParams = new URLSearchParams({
-        session_token: sessionData.sessionToken,
-        session_jwt: sessionData.sessionJwt,
-        user_id: sessionData.userId,
-        email: sessionData.email,
-        expires_at: sessionData.expiresAt,
+        session_token: result.sessionToken,
+        session_jwt: result.sessionJwt,
+        user_id: result.userId,
+        email: result.email,
+        expires_at: result.expiresAt,
+        org_id: result.orgId,
       });
 
       const deepLinkUrl = `nimbalyst://auth/callback?${deepLinkParams.toString()}`;
@@ -599,21 +568,20 @@ async function handleAuthRoutes(
       }
 
       // Desktop: return a page that redirects to the deep link
-      // Always show session copy option for manual setup on devices that can't use deep links
-      return new Response(renderSuccessPage(deepLinkUrl, sessionData, false), {
+      return new Response(renderSuccessPage(deepLinkUrl), {
         status: 200,
         headers: { 'Content-Type': 'text/html' },
       });
     } catch (err) {
-      return new Response(renderErrorPage(`Server error: ${err}`), {
+      log.error('Auth callback error:', err);
+      return new Response(renderErrorPage('An unexpected error occurred. Please try again.'), {
         status: 500,
         headers: { 'Content-Type': 'text/html' },
       });
     }
   }
 
-  // POST /auth/refresh - Refresh session and get new JWT
-  // Desktop app calls this when JWT is missing or expired
+  // POST /auth/refresh - Refresh B2B session and get new JWT
   if (url.pathname === '/auth/refresh' && request.method === 'POST') {
     try {
       const body = await request.json() as { session_token: string };
@@ -626,8 +594,7 @@ async function handleAuthRoutes(
         });
       }
 
-      // Authenticate the session token to get a fresh JWT
-      const stytchResponse = await fetch(`${apiBase}/sessions/authenticate`, {
+      const stytchResponse = await fetch(`${b2bApiBase}/sessions/authenticate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -640,8 +607,9 @@ async function handleAuthRoutes(
       });
 
       const stytchData = await stytchResponse.json() as {
-        user?: { user_id: string; emails?: Array<{ email: string }> };
-        session?: { expires_at: string };
+        member?: { member_id: string; email_address?: string; name?: string };
+        member_session?: { expires_at: string };
+        organization?: { organization_id: string };
         session_token?: string;
         session_jwt?: string;
         error_message?: string;
@@ -661,42 +629,36 @@ async function handleAuthRoutes(
       return new Response(JSON.stringify({
         session_token: stytchData.session_token,
         session_jwt: stytchData.session_jwt,
-        user_id: stytchData.user?.user_id,
-        email: stytchData.user?.emails?.[0]?.email,
-        expires_at: stytchData.session?.expires_at,
+        user_id: stytchData.member?.member_id || '',
+        email: stytchData.member?.email_address || '',
+        expires_at: stytchData.member_session?.expires_at || '',
+        org_id: stytchData.organization?.organization_id || '',
       }), {
         status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     } catch (err) {
-      return new Response(JSON.stringify({ error: `Server error: ${err}` }), {
+      log.error('Session refresh error:', err);
+      return new Response(JSON.stringify({ error: 'Internal server error' }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
   }
 
-  // GET /auth/login/google - Initiate Google OAuth
+  // GET /auth/login/google - Initiate Google OAuth via B2B Discovery
   // Desktop app opens this URL in browser
-  // Pass ?showTokens=1 to show session tokens on callback page (for browser testing)
   if (url.pathname === '/auth/login/google') {
-    // Pass showTokens param through to callback if present
-    const showTokens = url.searchParams.get('showTokens') === '1';
-    const callbackUrl = showTokens
-      ? `${url.origin}/auth/callback?showTokens=1`
-      : `${url.origin}/auth/callback`;
+    const callbackUrl = `${url.origin}/auth/callback`;
 
     if (!env.STYTCH_PUBLIC_TOKEN) {
       return new Response('Stytch public token not configured', { status: 500 });
     }
 
-    // Note: We need the public token, not project ID, for OAuth start
-    // The public token should be passed as a query param or stored in env
-    // For now, construct the OAuth URL that Stytch expects
-    const oauthUrl = new URL(`${apiBase}/public/oauth/google/start`);
+    // B2B discovery OAuth - authenticate first, then select/create org
+    const oauthUrl = new URL(`${b2bApiBase}/public/oauth/google/discovery/start`);
     oauthUrl.searchParams.set('public_token', env.STYTCH_PUBLIC_TOKEN);
-    oauthUrl.searchParams.set('login_redirect_url', callbackUrl);
-    oauthUrl.searchParams.set('signup_redirect_url', callbackUrl);
+    oauthUrl.searchParams.set('discovery_redirect_url', callbackUrl);
     // Force Google to show account picker instead of auto-selecting
     oauthUrl.searchParams.set('provider_prompt', 'select_account');
 
@@ -706,54 +668,176 @@ async function handleAuthRoutes(
   return new Response('Not Found', { status: 404 });
 }
 
-/**
- * Render success page that redirects to deep link
- * Shows session data for manual setup on devices that can't use deep links
- */
-function renderSuccessPage(deepLinkUrl: string, sessionData: {
+interface B2BAuthResult {
+  ok: boolean;
+  error?: string;
   sessionToken: string;
   sessionJwt: string;
   userId: string;
   email: string;
   expiresAt: string;
-}, showManualSetup: boolean = false): string {
-  const sessionJson = showManualSetup ? JSON.stringify({
-    sessionToken: sessionData.sessionToken,
-    sessionJwt: sessionData.sessionJwt,
-    userId: sessionData.userId,
-    email: sessionData.email,
-    expiresAt: sessionData.expiresAt,
-  }, null, 2) : '';
+  orgId: string;
+}
 
-  // Escape JSON for embedding in HTML attribute
-  const escapedJson = sessionJson.replace(/'/g, '&#39;').replace(/"/g, '&quot;');
+/**
+ * Authenticate a B2B token from OAuth or magic link callback.
+ *
+ * Discovery flow:
+ * 1. Authenticate the intermediate token
+ * 2. List discovered organizations
+ * 3. If user has orgs, exchange for org-scoped session (auto-select first org)
+ * 4. If user has no orgs, create a personal organization first
+ */
+async function authenticateB2BToken(
+  token: string,
+  tokenType: string,
+  b2bApiBase: string,
+  env: Env
+): Promise<B2BAuthResult> {
+  const failResult = (error: string): B2BAuthResult => ({
+    ok: false, error, sessionToken: '', sessionJwt: '', userId: '', email: '', expiresAt: '', orgId: '',
+  });
 
-  const manualSetupHtml = showManualSetup ? `
-    <div class="manual-setup-section">
-      <p class="manual-setup-desc">App didn't open? Copy session data for manual setup.</p>
-      <button class="button secondary-btn copy-btn" onclick="copyTokens()">Copy Session Data</button>
-      <input type="hidden" id="tokenData" value="${escapedJson}" />
-    </div>
-  ` : '';
+  const b2bAuth = `Basic ${btoa(`${env.STYTCH_PROJECT_ID}:${env.STYTCH_SECRET_KEY}`)}`;
 
-  const copyScriptHtml = showManualSetup ? `
-    function copyTokens() {
-      const tokenData = document.getElementById('tokenData').value;
-      // Unescape HTML entities
-      const textarea = document.createElement('textarea');
-      textarea.innerHTML = tokenData;
-      const json = textarea.value;
-      navigator.clipboard.writeText(json).then(() => {
-        const btn = document.querySelector('.copy-btn');
-        btn.textContent = 'Copied!';
-        btn.classList.add('copied');
-        setTimeout(() => {
-          btn.textContent = 'Copy Session Data';
-          btn.classList.remove('copied');
-        }, 2000);
-      });
+  // Step 1: Authenticate via B2B discovery
+  let discoveryEndpoint: string;
+  let discoveryBody: Record<string, string>;
+  if (tokenType === 'discovery_oauth' || tokenType === 'oauth') {
+    discoveryEndpoint = `${b2bApiBase}/oauth/discovery/authenticate`;
+    discoveryBody = { discovery_oauth_token: token };
+  } else if (tokenType === 'discovery' || tokenType === 'magic_links') {
+    discoveryEndpoint = `${b2bApiBase}/magic_links/discovery/authenticate`;
+    discoveryBody = { discovery_magic_links_token: token };
+  } else {
+    return failResult(`Unknown token type: ${tokenType}`);
+  }
+
+  const discoveryResponse = await fetch(discoveryEndpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': b2bAuth,
+    },
+    body: JSON.stringify(discoveryBody),
+  });
+
+  if (!discoveryResponse.ok) {
+    const errData = await discoveryResponse.json().catch(() => ({})) as { error_message?: string };
+    return failResult(errData.error_message || 'Discovery authentication failed');
+  }
+
+  const discoveryData = await discoveryResponse.json() as {
+    intermediate_session_token?: string;
+    email_address?: string;
+    discovered_organizations?: Array<{
+      organization?: {
+        organization_id: string;
+        organization_name: string;
+      };
+      membership?: { type: string };
+    }>;
+    error_message?: string;
+  };
+
+  if (!discoveryData.intermediate_session_token) {
+    return failResult(discoveryData.error_message || 'Discovery authentication failed');
+  }
+
+  const intermediateToken = discoveryData.intermediate_session_token;
+  const email = discoveryData.email_address || '';
+  const discoveredOrgs = discoveryData.discovered_organizations || [];
+
+  // Step 2: Select or create organization
+  let targetOrgId: string;
+
+  if (discoveredOrgs.length > 0) {
+    targetOrgId = discoveredOrgs[0].organization?.organization_id || '';
+  } else {
+    // New user with no orgs - create a personal organization
+    const createOrgResponse = await fetch(`${b2bApiBase}/discovery/organizations/create`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': b2bAuth,
+      },
+      body: JSON.stringify({
+        intermediate_session_token: intermediateToken,
+        organization_name: `${email.split('@')[0]}'s Workspace`,
+        session_duration_minutes: 60 * 24 * 7, // 1 week
+      }),
+    });
+
+    if (!createOrgResponse.ok) {
+      const errData = await createOrgResponse.json() as { error_message?: string };
+      return failResult(errData.error_message || 'Failed to create personal organization');
     }
-  ` : '';
+
+    const createData = await createOrgResponse.json() as {
+      member?: { member_id: string; email_address?: string };
+      member_session?: { expires_at: string };
+      organization?: { organization_id: string };
+      session_token?: string;
+      session_jwt?: string;
+    };
+
+    return {
+      ok: true,
+      sessionToken: createData.session_token || '',
+      sessionJwt: createData.session_jwt || '',
+      userId: createData.member?.member_id || '',
+      email: createData.member?.email_address || email,
+      expiresAt: createData.member_session?.expires_at || '',
+      orgId: createData.organization?.organization_id || '',
+    };
+  }
+
+  // Step 3: Exchange intermediate session for org-scoped session
+  const exchangeResponse = await fetch(`${b2bApiBase}/discovery/intermediate_sessions/exchange`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': b2bAuth,
+    },
+    body: JSON.stringify({
+      intermediate_session_token: intermediateToken,
+      organization_id: targetOrgId,
+      session_duration_minutes: 60 * 24 * 7, // 1 week
+    }),
+  });
+
+  if (!exchangeResponse.ok) {
+    const errData = await exchangeResponse.json() as { error_message?: string };
+    return failResult(errData.error_message || 'Session exchange failed');
+  }
+
+  const exchangeData = await exchangeResponse.json() as {
+    member?: { member_id: string; email_address?: string };
+    member_session?: { expires_at: string };
+    organization?: { organization_id: string };
+    session_token?: string;
+    session_jwt?: string;
+  };
+
+  return {
+    ok: true,
+    sessionToken: exchangeData.session_token || '',
+    sessionJwt: exchangeData.session_jwt || '',
+    userId: exchangeData.member?.member_id || '',
+    email: exchangeData.member?.email_address || email,
+    expiresAt: exchangeData.member_session?.expires_at || '',
+    orgId: exchangeData.organization?.organization_id || '',
+  };
+}
+
+/**
+ * Render success page that redirects to deep link
+ * Shows session data for manual setup on devices that can't use deep links
+ */
+function renderSuccessPage(deepLinkUrl: string): string {
+  // Escape deep link URL for HTML attribute and JS string contexts
+  const safeDeepLinkHtml = escapeHtml(deepLinkUrl);
+  const safeDeepLinkJs = escapeJsString(deepLinkUrl);
 
   return `<!DOCTYPE html>
 <html>
@@ -800,49 +884,56 @@ function renderSuccessPage(deepLinkUrl: string, sessionData: {
     }
     .button:hover { transform: scale(1.05); }
     .auto-redirect { font-size: 12px; opacity: 0.7; margin-top: 16px; }
-    .manual-setup-section {
-      margin-top: 32px;
-      padding-top: 24px;
-      border-top: 1px solid rgba(255,255,255,0.2);
-    }
-    .manual-setup-desc {
-      font-size: 12px;
-      opacity: 0.7;
-      margin-bottom: 12px;
-      margin-top: 0;
-    }
-    .secondary-btn {
-      background: rgba(255,255,255,0.15);
-      color: white;
-      font-size: 13px;
-    }
-    .secondary-btn:hover { background: rgba(255,255,255,0.25); }
-    .copied { background: #22c55e !important; }
   </style>
 </head>
 <body>
   <div class="container">
     <h1>Successfully Signed In</h1>
     <p>Click the button below to return to Nimbalyst, or it will open automatically.</p>
-    <a href="${deepLinkUrl}" class="button">Open Nimbalyst</a>
+    <a href="${safeDeepLinkHtml}" class="button">Open Nimbalyst</a>
     <p class="auto-redirect">Redirecting automatically...</p>
-    ${manualSetupHtml}
   </div>
   <script>
     // Try to open the deep link automatically
     setTimeout(() => {
-      window.location.href = "${deepLinkUrl}";
+      window.location.href = "${safeDeepLinkJs}";
     }, 1500);
-    ${copyScriptHtml}
   </script>
 </body>
 </html>`;
 }
 
 /**
+ * Escape a string for safe embedding in HTML content.
+ */
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
+ * Escape a string for safe embedding in a JavaScript string literal (inside double quotes).
+ */
+function escapeJsString(str: string): string {
+  return str
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .replace(/'/g, "\\'")
+    .replace(/</g, '\\x3c')
+    .replace(/>/g, '\\x3e')
+    .replace(/\n/g, '\\n')
+    .replace(/\r/g, '\\r');
+}
+
+/**
  * Render error page
  */
 function renderErrorPage(error: string): string {
+  const safeError = escapeHtml(error);
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -877,7 +968,7 @@ function renderErrorPage(error: string): string {
   <div class="container">
     <h1>Sign In Failed</h1>
     <p>Please close this window and try again.</p>
-    <p class="error">${error}</p>
+    <p class="error">${safeError}</p>
   </div>
 </body>
 </html>`;

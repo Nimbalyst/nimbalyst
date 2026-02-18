@@ -15,6 +15,7 @@ enum KeychainManager {
         case authUserId = "stytch_user_id"
         case authEmail = "stytch_email"
         case authExpiresAt = "stytch_expires_at"
+        case authOrgId = "stytch_org_id"
         case openAIApiKey = "openai_api_key"
         case analyticsId = "analytics_id"
     }
@@ -61,13 +62,15 @@ enum KeychainManager {
         sessionJwt: String,
         userId: String,
         email: String,
-        expiresAt: String
+        expiresAt: String,
+        orgId: String
     ) throws {
         try store(key: .sessionToken, value: sessionToken)
         try store(key: .sessionJwt, value: sessionJwt)
         try store(key: .authUserId, value: userId)
         try store(key: .authEmail, value: email)
         try store(key: .authExpiresAt, value: expiresAt)
+        try store(key: .authOrgId, value: orgId)
     }
 
     static func getSessionJwt() -> String? {
@@ -86,6 +89,10 @@ enum KeychainManager {
         retrieve(key: .authEmail)
     }
 
+    static func getAuthOrgId() -> String? {
+        retrieve(key: .authOrgId)
+    }
+
     static func hasAuthSession() -> Bool {
         getSessionJwt() != nil
     }
@@ -96,6 +103,7 @@ enum KeychainManager {
         delete(key: .authUserId)
         delete(key: .authEmail)
         delete(key: .authExpiresAt)
+        delete(key: .authOrgId)
     }
 
     // MARK: - OpenAI API Key

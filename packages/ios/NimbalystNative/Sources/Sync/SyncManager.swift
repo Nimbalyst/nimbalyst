@@ -46,6 +46,8 @@ public final class SyncManager: ObservableObject {
     /// The Stytch user ID for room routing (from JWT sub claim). May differ from pairing userId.
     private var authUserId: String?
     private var authToken: String?
+    /// The Stytch organization ID for org-scoped room IDs.
+    private var orgId: String?
 
     /// Buffer for paginated sync responses before committing to DB.
     private var sessionSyncBuffer: [ServerMessageEntry] = []
@@ -66,11 +68,12 @@ public final class SyncManager: ObservableObject {
     /// Connect to the index room and begin syncing.
     /// The `authUserId` is the Stytch user ID from the JWT's `sub` claim, used for room ID construction.
     /// This may differ from the pairing `userId` (which can be an email or analytics ID).
-    public func connect(authToken: String, authUserId: String? = nil) {
+    /// The `orgId` is the Stytch organization ID from B2B discovery, required for org-scoped room IDs.
+    public func connect(authToken: String, authUserId: String? = nil, orgId: String) {
         self.authToken = authToken
         self.authUserId = authUserId
-        // Use the auth user ID for room routing (must match JWT), fall back to pairing userId
-        let roomId = "user:\(effectiveUserId):index"
+        self.orgId = orgId
+        let roomId = "org:\(orgId):user:\(effectiveUserId):index"
         indexClient.connect(serverUrl: serverUrl, roomId: roomId, authToken: authToken)
     }
 
@@ -102,7 +105,7 @@ public final class SyncManager: ObservableObject {
         activeSessionId = sessionId
         sessionSyncBuffer = []
 
-        let roomId = "user:\(effectiveUserId):session:\(sessionId)"
+        let roomId = "org:\(orgId ?? ""):user:\(effectiveUserId):session:\(sessionId)"
         sessionClient.connect(serverUrl: serverUrl, roomId: roomId, authToken: authToken)
     }
 

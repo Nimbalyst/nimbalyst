@@ -91,6 +91,6 @@ new_sqlite_classes = ["SessionRoom", "IndexRoom"]
 COLLABV3_VERSION = '"0.0.0-dev"'
 [env.production.vars]
 ENVIRONMENT = "production"
-STYTCH_PROJECT_ID = "project-live-bc85edd6-90a8-43a0-b9e3-1315bbed6650"
+STYTCH_PROJECT_ID = "project-live-70b810e0-b201-4cf4-b8e8-2b694fd4515f"
 ALLOWED_ORIGINS = "https://app.nimbalyst.com,https://nimbalyst.com,capacitor://localhost"
-STYTCH_PUBLIC_TOKEN = "public-token-live-28108ebb-471e-4366-89fe-77d0e0d4a270"
+STYTCH_PUBLIC_TOKEN = "public-token-live-db5dfb0e-6423-4166-8366-164f4138e0ff"

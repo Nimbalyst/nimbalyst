@@ -8,13 +8,10 @@
 // Room ID Types
 // ============================================================================
 
-/**
- * Room ID format: user:{userId}:session:{sessionId}
- * Future: org:{orgId}:user:{userId}:session:{sessionId}
- */
-export type SessionRoomId = `user:${string}:session:${string}`;
-export type IndexRoomId = `user:${string}:index`;
-export type ProjectsRoomId = `user:${string}:projects`;
+/** Room ID format: org:{orgId}:user:{userId}:{suffix} */
+export type SessionRoomId = `org:${string}:user:${string}:session:${string}`;
+export type IndexRoomId = `org:${string}:user:${string}:index`;
+export type ProjectsRoomId = `org:${string}:user:${string}:projects`;
 
 export type RoomId = SessionRoomId | IndexRoomId | ProjectsRoomId;
 
@@ -454,8 +451,8 @@ export interface ProjectIndexEntry {
 /** Decoded auth token from WebSocket connection */
 export interface AuthContext {
   userId: string;
-  /** Optional orgId for future multi-tenant support */
-  orgId?: string;
+  /** Organization ID from B2B JWT. */
+  orgId: string;
 }
 
 // ============================================================================
@@ -468,7 +465,7 @@ export interface Env {
   DB: D1Database;
   SESSION_SHARES: R2Bucket;
   ENVIRONMENT: string;
-  // Stytch auth
+  // Stytch B2B auth
   STYTCH_PROJECT_ID?: string;
   STYTCH_PUBLIC_TOKEN?: string;
   STYTCH_SECRET_KEY?: string;

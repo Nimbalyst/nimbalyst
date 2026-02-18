@@ -1,10 +1,11 @@
 /**
- * StytchAuthService - Manages user authentication via Stytch Consumer platform.
+ * StytchAuthService - Manages user authentication via Stytch B2B platform.
  *
  * This service handles:
  * - Google OAuth sign-in/sign-up (via browser redirect to collabv3 server)
  * - Email magic link authentication (via collabv3 server)
  * - Session token/JWT management
+ * - Organization context (B2B org_id)
  *
  * Security architecture:
  * - All authentication flows go through the collabv3 Cloudflare Worker
@@ -12,9 +13,9 @@
  * - OAuth flow: opens browser -> collabv3/auth/login/google -> Stytch -> collabv3/auth/callback -> nimbalyst:// deep link
  * - Magic links: collabv3 sends email (has secret key), callback to collabv3, then deep link to app
  * - Session tokens received via deep link are stored securely using Electron's safeStorage
- * - JWT is used for sync server authentication
+ * - JWT is used for sync server authentication, includes org context for B2B
  *
- * Deep link format: nimbalyst://auth/callback?session_token=...&session_jwt=...&user_id=...&email=...
+ * Deep link format: nimbalyst://auth/callback?session_token=...&session_jwt=...&user_id=...&email=...&org_id=...
  */
 
 import { safeStorage, shell, net } from 'electron';
@@ -61,6 +62,8 @@ interface StytchAuthState {
   session: StytchSession | null;
   sessionToken: string | null;
   sessionJwt: string | null;
+  /** Organization ID from B2B auth. */
+  orgId: string | null;
 }
 
 interface StoredStytchCredentials {
@@ -69,6 +72,8 @@ interface StoredStytchCredentials {
   userId: string;
   email?: string;
   expiresAt: number;
+  /** Organization ID from B2B auth */
+  orgId?: string;
 }
 
 
@@ -89,6 +94,7 @@ let authState: StytchAuthState = {
   session: null,
   sessionToken: null,
   sessionJwt: null,
+  orgId: null,
 };
 
 let stytchConfig: StytchConfig | null = null;
@@ -212,7 +218,7 @@ export function initializeStytchAuth(config: StytchConfig): void {
 
   // Try to restore session from saved credentials
   const savedCredentials = loadStytchCredentials();
-  if (savedCredentials && savedCredentials.expiresAt > Date.now()) {
+  if (savedCredentials && savedCredentials.expiresAt > Date.now() && savedCredentials.orgId) {
     // Validate JWT format (must be 3 parts separated by dots)
     const hasValidJwt = savedCredentials.sessionJwt && savedCredentials.sessionJwt.split('.').length === 3;
 
@@ -228,9 +234,11 @@ export function initializeStytchAuth(config: StytchConfig): void {
       session: null,
       sessionToken: savedCredentials.sessionToken,
       sessionJwt: hasValidJwt ? savedCredentials.sessionJwt : null,
+      orgId: savedCredentials.orgId,
     });
     logger.main.info('[StytchAuthService] Restored session for user:', savedCredentials.userId, savedCredentials.email, {
       hasValidJwt,
+      orgId: savedCredentials.orgId,
     });
 
     // If JWT is missing or invalid, try to refresh the session
@@ -247,7 +255,8 @@ export function initializeStytchAuth(config: StytchConfig): void {
       });
     }
   } else if (savedCredentials) {
-    logger.main.info('[StytchAuthService] Saved session has expired, clearing');
+    const reason = !savedCredentials.orgId ? 'missing orgId (pre-B2B credential)' : 'expired';
+    logger.main.info(`[StytchAuthService] Saved session invalid: ${reason}, clearing`);
     clearStytchCredentials();
   }
 }
@@ -262,8 +271,9 @@ export async function handleAuthCallback(params: {
   userId?: string;
   email?: string;
   expiresAt?: string;
+  orgId?: string;
 }): Promise<void> {
-  const { sessionToken, sessionJwt, userId, email, expiresAt } = params;
+  const { sessionToken, sessionJwt, userId, email, expiresAt, orgId } = params;
 
   // Calculate expiry time
   let expiresAtMs = Date.now() + (7 * 24 * 60 * 60 * 1000); // Default: 1 week
@@ -293,6 +303,7 @@ export async function handleAuthCallback(params: {
     session: null,
     sessionToken,
     sessionJwt: validatedJwt,
+    orgId: orgId || null,
   });
 
   // Save credentials for persistence
@@ -302,6 +313,7 @@ export async function handleAuthCallback(params: {
     userId: userId || '',
     email: email || '',
     expiresAt: expiresAtMs,
+    orgId,
   });
 
   // Track auth callback completion (authoritative sign-in event from deep link)
@@ -351,6 +363,13 @@ export function getStytchUserId(): string | null {
  */
 export function getUserEmail(): string | null {
   return authState.user?.emails?.[0]?.email || null;
+}
+
+/**
+ * Get the current organization ID.
+ */
+export function getOrgId(): string | null {
+  return authState.orgId;
 }
 
 /**
@@ -482,6 +501,7 @@ export async function signOut(): Promise<void> {
     session: null,
     sessionToken: null,
     sessionJwt: null,
+    orgId: null,
   });
 
   logger.main.info('[StytchAuthService] User signed out');
@@ -543,6 +563,7 @@ export async function refreshSession(serverUrl?: string): Promise<boolean> {
       user_id: string;
       email?: string;
       expires_at: string;
+      org_id?: string;
     };
 
     // Validate the new JWT
@@ -561,7 +582,7 @@ export async function refreshSession(serverUrl?: string): Promise<boolean> {
       }
     }
 
-    // Update auth state with new JWT
+    const refreshedOrgId = data.org_id || null;
     updateAuthState({
       isAuthenticated: true,
       user: data.user_id ? {
@@ -572,6 +593,7 @@ export async function refreshSession(serverUrl?: string): Promise<boolean> {
       } : authState.user,
       sessionToken: data.session_token,
       sessionJwt: data.session_jwt,
+      orgId: refreshedOrgId,
     });
 
     // Save updated credentials
@@ -581,6 +603,7 @@ export async function refreshSession(serverUrl?: string): Promise<boolean> {
       userId: data.user_id || creds.userId,
       email: data.email || creds.email,
       expiresAt: expiresAtMs,
+      orgId: refreshedOrgId || undefined,
     });
 
     // logger.main.info('[StytchAuthService] Session refreshed successfully');
@@ -631,27 +654,18 @@ export function shutdownStytchAuth(): void {
 }
 
 /**
- * Switch to a different Stytch environment (test vs live).
- * This will sign out the current user and reinitialize with the new config.
- *
- * @param environment - 'development' for test Stytch, 'production' for live Stytch
+ * Switch Stytch environment. Signs out and reinitializes.
  */
-export async function switchStytchEnvironment(environment: 'development' | 'production'): Promise<void> {
-  logger.main.info('[StytchAuthService] Switching to environment:', environment);
-
-  // Sign out current user (clears credentials)
+export async function switchStytchEnvironment(_environment: 'development' | 'production'): Promise<void> {
   await signOut();
 
-  // Get the appropriate config (STYTCH_CONFIG is statically imported to avoid dynamic import issues)
-  const config = environment === 'production' ? STYTCH_CONFIG.live : STYTCH_CONFIG.test;
-
-  // Reinitialize with new config
+  const config = STYTCH_CONFIG.live;
   initializeStytchAuth({
     projectId: config.projectId,
     publicToken: config.publicToken,
     apiBase: config.apiBase,
   });
 
-  logger.main.info('[StytchAuthService] Switched to environment:', environment, 'projectId:', config.projectId);
+  logger.main.info('[StytchAuthService] Reinitialized with projectId:', config.projectId);
 }
 

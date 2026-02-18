@@ -19,6 +19,9 @@ export interface SyncConfig {
    */
   getJwt: () => Promise<string>;
 
+  /** B2B organization ID for org-scoped room IDs. */
+  orgId: string;
+
   /** Optional encryption key for E2E encryption */
   encryptionKey?: CryptoKey;
 

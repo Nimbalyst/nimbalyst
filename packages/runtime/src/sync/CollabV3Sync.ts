@@ -876,12 +876,16 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
     }
   }
 
+  function buildRoomId(userId: string, suffix: string): string {
+    return `org:${config.orgId}:user:${userId}:${suffix}`;
+  }
+
   function getRoomId(sessionId: string): string {
-    return `user:${getUserId()}:session:${sessionId}`;
+    return buildRoomId(getUserId(), `session:${sessionId}`);
   }
 
   function getIndexRoomId(): string {
-    return `user:${getUserId()}:index`;
+    return buildRoomId(getUserId(), 'index');
   }
 
   function getWebSocketUrl(roomId: string): string {

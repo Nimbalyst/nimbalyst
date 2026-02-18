@@ -30,6 +30,7 @@ export interface StytchSession {
   email: string;
   expiresAt: string;
   refreshedAt: number; // When we last refreshed the JWT
+  orgId?: string; // B2B organization ID
 }
 
 let cachedSession: StytchSession | null = null;
@@ -107,6 +108,14 @@ export async function isAuthenticated(): Promise<boolean> {
 export async function getUserId(): Promise<string | null> {
   const session = await loadSession();
   return session?.userId ?? null;
+}
+
+/**
+ * Get current organization ID (for B2B).
+ */
+export async function getOrgId(): Promise<string | null> {
+  const session = await loadSession();
+  return session?.orgId ?? null;
 }
 
 /**
@@ -203,6 +212,7 @@ async function doRefreshSession(serverUrl: string): Promise<boolean> {
       email: data.email || session.email,
       expiresAt: data.expires_at || session.expiresAt,
       refreshedAt: Date.now(),
+      orgId: data.org_id || session.orgId,
     };
 
     await saveSession(updatedSession);
@@ -293,6 +303,7 @@ export async function handleAuthCallback(url: string): Promise<{ success: boolea
     const userId = urlObj.searchParams.get('user_id');
     const email = urlObj.searchParams.get('email');
     const expiresAt = urlObj.searchParams.get('expires_at');
+    const orgId = urlObj.searchParams.get('org_id');
 
     if (!sessionToken || !sessionJwt || !userId) {
       console.error('[StytchAuth] Missing required params in callback:', url);
@@ -326,6 +337,7 @@ export async function handleAuthCallback(url: string): Promise<{ success: boolea
       email: email || '',
       expiresAt: expiresAt || '',
       refreshedAt: Date.now(),
+      ...(orgId ? { orgId } : {}),
     };
 
     await saveSession(session);

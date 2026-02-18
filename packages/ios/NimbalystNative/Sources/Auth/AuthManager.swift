@@ -33,6 +33,11 @@ public final class AuthManager: ObservableObject {
         KeychainManager.getAuthUserId()
     }
 
+    /// The Stytch organization ID (from B2B discovery flow).
+    public var orgId: String? {
+        KeychainManager.getAuthOrgId()
+    }
+
     public init() {
         // Check for existing session
         isAuthenticated = KeychainManager.hasAuthSession()
@@ -93,7 +98,8 @@ public final class AuthManager: ObservableObject {
         }
 
         // Present the auth session
-        authSession?.prefersEphemeralWebBrowserSession = false
+        // Use ephemeral session to avoid stale cookies from previous auth projects
+        authSession?.prefersEphemeralWebBrowserSession = true
         authSession?.presentationContextProvider = ASWebAuthPresentationContext.shared
         authSession?.start()
     }
@@ -192,7 +198,8 @@ public final class AuthManager: ObservableObject {
 
         guard let sessionToken = params["session_token"],
               let sessionJwt = params["session_jwt"],
-              let userId = params["user_id"] else {
+              let userId = params["user_id"],
+              let orgId = params["org_id"] else {
             authError = "Missing required auth parameters"
             NSLog("[AuthManager] handleCallback MISSING params. Got: \(params.keys.joined(separator: ", "))")
             return
@@ -220,12 +227,13 @@ public final class AuthManager: ObservableObject {
                 sessionJwt: sessionJwt,
                 userId: userId,
                 email: email,
-                expiresAt: expiresAt
+                expiresAt: expiresAt,
+                orgId: orgId
             )
             isAuthenticated = true
             self.email = email
             authError = nil
-            NSLog("[AuthManager] Authentication SUCCESS for \(email)")
+            NSLog("[AuthManager] Authentication SUCCESS for \(email) orgId=\(orgId)")
         } catch {
             authError = "Failed to store auth session: \(error.localizedDescription)"
             NSLog("[AuthManager] Authentication FAILED: \(error.localizedDescription)")
@@ -275,13 +283,15 @@ public final class AuthManager: ObservableObject {
             let userId = json["user_id"] as? String ?? KeychainManager.getAuthUserId() ?? ""
             let email = json["email"] as? String ?? KeychainManager.getAuthEmail() ?? ""
             let expiresAt = json["expires_at"] as? String ?? ""
+            let orgId = json["org_id"] as? String ?? KeychainManager.getAuthOrgId() ?? ""
 
             try KeychainManager.storeAuthSession(
                 sessionToken: sessionToken,
                 sessionJwt: sessionJwt,
                 userId: userId,
                 email: email,
-                expiresAt: expiresAt
+                expiresAt: expiresAt,
+                orgId: orgId
             )
 
             logger.info("JWT refreshed successfully")

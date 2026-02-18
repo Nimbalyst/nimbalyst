@@ -216,8 +216,29 @@ public final class AppState: ObservableObject {
             return
         }
 
+        // Get orgId from keychain, or extract from JWT's organization claim
+        let orgId: String
+        if let stored = authManager.orgId {
+            orgId = stored
+        } else if let extracted = extractOrgIdFromJWT(jwt) {
+            orgId = extracted
+            // Backfill keychain so we don't need to extract again
+            try? KeychainManager.storeAuthSession(
+                sessionToken: KeychainManager.getSessionToken() ?? "",
+                sessionJwt: jwt,
+                userId: authUserId,
+                email: authManager.email ?? "",
+                expiresAt: "",
+                orgId: extracted
+            )
+            logger.info("Backfilled orgId from JWT: \(extracted)")
+        } else {
+            logger.warning("connectIfReady: no orgId in keychain or JWT, re-login required")
+            return
+        }
+
         logger.info("Connecting to sync server")
-        sync.connect(authToken: jwt, authUserId: authUserId)
+        sync.connect(authToken: jwt, authUserId: authUserId, orgId: orgId)
         startJWTRefreshTimer()
     }
 
@@ -240,6 +261,26 @@ public final class AppState: ObservableObject {
         }
 
         return Date(timeIntervalSince1970: exp).timeIntervalSinceNow < margin
+    }
+
+    /// Extract the organization_id from a B2B JWT's `https://stytch.com/organization` claim.
+    private func extractOrgIdFromJWT(_ jwt: String) -> String? {
+        let parts = jwt.split(separator: ".")
+        guard parts.count == 3 else { return nil }
+
+        var base64 = String(parts[1])
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+        let pad = base64.count % 4
+        if pad > 0 { base64 += String(repeating: "=", count: 4 - pad) }
+
+        guard let data = Data(base64Encoded: base64),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let orgClaim = json["https://stytch.com/organization"] as? [String: Any],
+              let orgId = orgClaim["organization_id"] as? String else {
+            return nil
+        }
+        return orgId
     }
 
     // MARK: - JWT Refresh

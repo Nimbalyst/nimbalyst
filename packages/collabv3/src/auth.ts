@@ -1,8 +1,8 @@
 /**
  * Authentication module for CollabV3 server.
  *
- * All authentication is done via Stytch session JWTs validated using JWKS.
- * The JWT 'sub' claim contains the user ID used for room authorization.
+ * Validates Stytch B2B session JWTs using JWKS.
+ * B2B JWT: 'sub' = member_id, claim 'https://stytch.com/organization' has organization_id.
  */
 
 import type { AuthContext } from './types';
@@ -11,8 +11,7 @@ import { createLogger } from './logger';
 const log = createLogger('auth');
 
 // JWKS cache for Stytch public keys
-let jwksCache: JsonWebKeySet | null = null;
-let jwksCacheTime = 0;
+const jwksCaches = new Map<string, { keys: JsonWebKeySet; time: number }>();
 const JWKS_CACHE_TTL = 60 * 60 * 1000; // 1 hour
 
 interface JsonWebKeySet {
@@ -37,14 +36,41 @@ interface JWTHeader {
   kid: string;
 }
 
+/** Stytch B2B JWT payload. */
 interface StytchJWTPayload {
-  sub: string; // User ID
+  sub: string; // Member ID
   aud: string | string[]; // Project ID (can be array)
   iss: string; // Issuer
   iat: number; // Issued at
   exp: number; // Expiration
   nbf: number; // Not before
   session_id?: string;
+  /** B2B: Stytch organization claim (reserved namespace) */
+  'https://stytch.com/organization'?: {
+    organization_id: string;
+    slug?: string;
+  };
+  /** Custom claims may also carry org info */
+  [key: string]: unknown;
+}
+
+/**
+ * Check if a JWT issuer is a legitimate Stytch domain.
+ * Matches exact Stytch domains rather than substring to prevent spoofing
+ * (e.g., "evil-stytch.com" or "stytch.com.evil.com").
+ */
+function isStytchIssuer(issuer: string): boolean {
+  try {
+    const url = new URL(issuer);
+    const host = url.hostname;
+    return host === 'stytch.com' ||
+           host.endsWith('.stytch.com');
+  } catch {
+    // Not a valid URL - check as a plain string for Stytch's issuer format
+    // Stytch issues JWTs with issuer like "stytch.com/{project_id}"
+    return issuer === 'stytch.com' ||
+           issuer.startsWith('stytch.com/');
+  }
 }
 
 /**
@@ -58,7 +84,7 @@ export interface AuthResult extends AuthContext {
  * Configuration for authentication
  */
 export interface AuthConfig {
-  /** Stytch project ID for JWT validation (required) */
+  /** Stytch B2B project ID for JWT validation */
   stytchProjectId?: string;
   /** Stytch JWKS URL (defaults to Stytch's standard endpoint) */
   stytchJwksUrl?: string;
@@ -107,7 +133,7 @@ export async function parseAuth(
 }
 
 /**
- * Validate a Stytch JWT.
+ * Validate a Stytch B2B JWT.
  *
  * @param token - The JWT token string
  * @param config - Authentication configuration
@@ -132,35 +158,31 @@ async function validateJWT(
 
     log.debug('JWT sub:', payload.sub, 'exp:', payload.exp);
 
-    // Basic validation
+    // Basic validation (allow 30s clock skew for distributed systems)
     const now = Math.floor(Date.now() / 1000);
+    const CLOCK_SKEW_SECONDS = 30;
 
-    // Check expiration
-    if (payload.exp && payload.exp < now) {
+    if (payload.exp && payload.exp < now - CLOCK_SKEW_SECONDS) {
       log.warn('JWT expired');
       return null;
     }
 
-    // Check not before
-    if (payload.nbf && payload.nbf > now) {
+    if (payload.nbf && payload.nbf > now + CLOCK_SKEW_SECONDS) {
       log.warn('JWT not yet valid');
       return null;
     }
 
-    // Check issuer
-    if (!payload.iss?.includes('stytch.com')) {
-      log.warn('JWT issuer not Stytch');
+    // Validate issuer is a legitimate Stytch domain (exact match on host, not substring)
+    if (!payload.iss || !isStytchIssuer(payload.iss)) {
+      log.warn('JWT issuer not Stytch:', payload.iss);
       return null;
     }
 
-    // Validate audience if config has project ID
-    // Note: Stytch JWT 'aud' can be a string or array of strings
-    if (config.stytchProjectId) {
-      const audiences = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
-      if (!audiences.includes(config.stytchProjectId)) {
-        log.warn('JWT audience mismatch. Expected:', config.stytchProjectId, 'Got:', payload.aud);
-        return null;
-      }
+    // Validate audience matches our project
+    const audiences = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
+    if (config.stytchProjectId && !audiences.includes(config.stytchProjectId)) {
+      log.warn('JWT audience mismatch. Expected:', config.stytchProjectId, 'Got:', payload.aud);
+      return null;
     }
 
     // Verify signature using JWKS
@@ -170,9 +192,21 @@ async function validateJWT(
       return null;
     }
 
-    // Extract user ID from 'sub' claim
+    // Extract org ID from B2B JWT
+    const orgClaim = payload['https://stytch.com/organization'];
+    let orgId: string | undefined;
+    if (orgClaim && typeof orgClaim === 'object' && 'organization_id' in orgClaim) {
+      orgId = orgClaim.organization_id;
+    }
+
+    if (!orgId) {
+      log.warn('JWT missing organization claim');
+      return null;
+    }
+
     return {
       userId: payload.sub,
+      orgId,
       session_id: payload.session_id,
     };
   } catch (error) {
@@ -217,6 +251,10 @@ async function verifyJWTSignature(
     const signature = base64UrlToArrayBuffer(parts[2]);
 
     const algorithm = getVerifyAlgorithm(header.alg);
+    if (!algorithm) {
+      log.warn('Unsupported algorithm for verification:', header.alg);
+      return false;
+    }
     const isValid = await crypto.subtle.verify(
       algorithm,
       cryptoKey,
@@ -238,28 +276,27 @@ async function verifyJWTSignature(
  * Fetch JWKS from Stytch (with caching).
  */
 async function fetchJWKS(config: AuthConfig): Promise<JsonWebKeySet | null> {
-  // Check cache
-  if (jwksCache && Date.now() - jwksCacheTime < JWKS_CACHE_TTL) {
-    return jwksCache;
+  // Determine JWKS URL
+  let jwksUrl = config.stytchJwksUrl;
+
+  if (!jwksUrl && config.stytchProjectId) {
+    const isTestProject = config.stytchProjectId.startsWith('project-test-');
+    const apiBase = isTestProject ? 'https://test.stytch.com' : 'https://api.stytch.com';
+    jwksUrl = `${apiBase}/v1/b2b/sessions/jwks/${config.stytchProjectId}`;
+  }
+
+  if (!jwksUrl) {
+    log.warn('No JWKS URL configured');
+    return null;
+  }
+
+  // Check per-URL cache
+  const cached = jwksCaches.get(jwksUrl);
+  if (cached && Date.now() - cached.time < JWKS_CACHE_TTL) {
+    return cached.keys;
   }
 
   try {
-    // Stytch JWKS URL format depends on test vs live project
-    // Test: https://test.stytch.com/v1/sessions/jwks/{project_id}
-    // Live: https://api.stytch.com/v1/sessions/jwks/{project_id}
-    let jwksUrl = config.stytchJwksUrl;
-
-    if (!jwksUrl && config.stytchProjectId) {
-      const isTestProject = config.stytchProjectId.startsWith('project-test-');
-      const apiBase = isTestProject ? 'https://test.stytch.com' : 'https://api.stytch.com';
-      jwksUrl = `${apiBase}/v1/sessions/jwks/${config.stytchProjectId}`;
-    }
-
-    if (!jwksUrl) {
-      log.warn('No JWKS URL configured');
-      return null;
-    }
-
     log.debug('Fetching JWKS from:', jwksUrl);
     const response = await fetch(jwksUrl);
     if (!response.ok) {
@@ -267,9 +304,9 @@ async function fetchJWKS(config: AuthConfig): Promise<JsonWebKeySet | null> {
       return null;
     }
 
-    jwksCache = await response.json();
-    jwksCacheTime = Date.now();
-    return jwksCache;
+    const keys: JsonWebKeySet = await response.json();
+    jwksCaches.set(jwksUrl, { keys, time: Date.now() });
+    return keys;
   } catch (error) {
     log.error('JWKS fetch error:', error);
     return null;
@@ -333,7 +370,7 @@ function getImportAlgorithm(
  */
 function getVerifyAlgorithm(
   alg: string
-): { name: string; hash?: string } {
+): { name: string; hash?: string } | null {
   switch (alg) {
     case 'RS256':
     case 'RS384':
@@ -346,7 +383,8 @@ function getVerifyAlgorithm(
     case 'ES512':
       return { name: 'ECDSA', hash: 'SHA-512' };
     default:
-      return { name: 'RSASSA-PKCS1-v1_5' };
+      log.error('Unsupported verify algorithm:', alg);
+      return null;
   }
 }
 

@@ -4,6 +4,7 @@ import {
   getSessionJwt,
   isAuthenticated,
   loadSession,
+  getOrgId,
   type StytchSession,
 } from '../services/StytchAuthService';
 import { loadCredentials } from '../services/CredentialService';
@@ -1376,10 +1377,21 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
       encryptionKeyRef.current = null;
     }
 
-    // Build WebSocket URL
+    // Build WebSocket URL with org-scoped room ID (required for B2B auth)
     const baseUrl = serverUrl.replace(/\/$/, '');
     const wsBase = baseUrl.replace(/^http/, 'ws');
-    const roomId = `user:${userId}:index`;
+    const orgId = await getOrgId();
+    if (!orgId) {
+      console.error('[CollabV3] No orgId available - B2B auth requires organization context');
+      setStatus((prev) => ({
+        ...prev,
+        connected: false,
+        error: 'Missing organization ID. Please sign out and sign in again.',
+      }));
+      setConnectionConfig(null);
+      return;
+    }
+    const roomId = `org:${orgId}:user:${userId}:index`;
     // Pass JWT via query parameter (WebSocket doesn't support custom headers in browsers)
     const wsUrl = `${wsBase}/sync/${roomId}?token=${encodeURIComponent(jwt)}`;
 
