@@ -75,8 +75,9 @@ The dev server runs on `http://localhost:8790` by default.
 | Command | Description |
 | --- | --- |
 | `npm run dev` | Start local development server |
-| `npm run deploy` | Deploy to production |
-| `npm run deploy:staging` | Deploy to staging environment |
+| `npm run deploy:production` | Bump version, deploy to production, print tag commands |
+| `npm run deploy:staging` | Bump version, deploy to staging, print tag commands |
+| `npm run deploy` | Raw deploy (no version bump, for manual use) |
 | `npm run test` | Run tests |
 | `npm run test:watch` | Run tests in watch mode |
 | `npm run typecheck` | Type check without emitting |
@@ -189,17 +190,27 @@ wrangler secret put STYTCH_SECRET_KEY
 npm run deploy
 ```
 
-### Staging Deployment
+### Versioned Deployment
+
+Deployments use `scripts/deploy.sh` which bumps the version in `package.json`, injects it at build time via wrangler `--define`, and deploys. The version is exposed on the `/health` endpoint.
 
 ```bash
+# Patch bump + deploy (default)
+npm run deploy:production
 npm run deploy:staging
+
+# Minor or major bump
+./scripts/deploy.sh minor --env production
+./scripts/deploy.sh major --env production
 ```
 
-### Production Deployment
-
+After deploying, verify the version:
 ```bash
-npm run deploy
+curl https://sync.nimbalyst.com/health
+# → {"status":"ok","version":"0.2.0","environment":"production"}
 ```
+
+The script prints git commands to commit and tag the deploy. Tags use the format `collabv3-vX.Y.Z`.
 
 After deployment, the worker is available at:
 - **Default**: `nimbalyst-collabv3.workers.dev`
