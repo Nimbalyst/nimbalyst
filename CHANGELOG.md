@@ -20,6 +20,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.53.10] - 2026-02-18
+
+
+### Added
+- iOS slash command typeahead and image attachments
+- Session search walkthrough with HelpTooltip
+- PostHog analytics for sync account flows
+- Version tracking for collabv3 deploys
+
+### Fixed
+- Context window usage tracking from SDK per-step usage
+- Show compaction summary in transcript instead of hiding it
+- Collabv3 deploy script version parsing and wrangler define inheritance
+- Revert claude-agent-sdk downgrade (restore 0.2.45)
+
 ## [0.53.9] - 2026-02-18
 
 
