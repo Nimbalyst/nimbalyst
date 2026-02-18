@@ -1,6 +1,38 @@
 import SwiftUI
 import GRDB
 
+#if canImport(UIKit)
+/// Invisible UIView overlay that intercepts all touches to report user activity
+/// for device presence tracking. Passes all touches through without consuming them.
+/// This mirrors how the Electron app uses document-level event listeners.
+class ActivityTrackingView: UIView {
+    var onActivity: (() -> Void)?
+
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        // Report activity on any touch, then return nil to pass through
+        onActivity?()
+        return nil
+    }
+}
+
+/// SwiftUI wrapper for the activity tracking overlay.
+struct ActivityTrackingOverlay: UIViewRepresentable {
+    let onActivity: () -> Void
+
+    func makeUIView(context: Context) -> ActivityTrackingView {
+        let view = ActivityTrackingView()
+        view.onActivity = onActivity
+        view.isUserInteractionEnabled = true
+        view.backgroundColor = .clear
+        return view
+    }
+
+    func updateUIView(_ uiView: ActivityTrackingView, context: Context) {
+        uiView.onActivity = onActivity
+    }
+}
+#endif
+
 /// Root content view that handles navigation based on pairing and auth state.
 public struct ContentView: View {
     @EnvironmentObject var appState: AppState
@@ -18,6 +50,16 @@ public struct ContentView: View {
             }
         }
         .preferredColorScheme(.dark)
+        #if canImport(UIKit)
+        .overlay {
+            // Invisible overlay that reports user activity on any touch.
+            // Throttling is handled inside WebSocketClient.reportActivity().
+            ActivityTrackingOverlay {
+                appState.syncManager?.reportUserActivity()
+            }
+            .allowsHitTesting(true)
+        }
+        #endif
     }
 }
 

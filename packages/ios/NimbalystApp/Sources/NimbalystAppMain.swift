@@ -79,6 +79,14 @@ struct NimbalystAppMain: App {
         }
         .onChange(of: scenePhase) { _, newPhase in
             NSLog("[ScenePhase] changed to: \(String(describing: newPhase))")
+            switch newPhase {
+            case .active:
+                appState.syncManager?.setAppInForeground(true)
+            case .inactive, .background:
+                appState.syncManager?.setAppInForeground(false)
+            @unknown default:
+                break
+            }
         }
     }
 

@@ -63,6 +63,20 @@ public final class SyncManager: ObservableObject {
         setupPushTokenForwarding()
     }
 
+    // MARK: - Activity Tracking
+
+    /// Report actual user interaction (touch, scroll, tap, etc.).
+    /// Call this from views when the user actively interacts with the app.
+    public func reportUserActivity() {
+        indexClient.reportActivity()
+    }
+
+    /// Update whether the app is in the foreground.
+    /// Coming to foreground counts as user activity.
+    public func setAppInForeground(_ inForeground: Bool) {
+        indexClient.setAppInForeground(inForeground)
+    }
+
     // MARK: - Connection
 
     /// Connect to the index room and begin syncing.

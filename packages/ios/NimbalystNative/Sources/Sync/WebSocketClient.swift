@@ -30,6 +30,57 @@ final class WebSocketClient: @unchecked Sendable {
         task?.state == .running
     }
 
+    // MARK: - Activity Tracking
+
+    /// Timestamp of last actual user interaction (touch, scroll, etc.)
+    private var lastActivityAt: Int = Int(Date().timeIntervalSince1970 * 1000)
+
+    /// Timestamp when this device first connected
+    private var connectionTime: Int = Int(Date().timeIntervalSince1970 * 1000)
+
+    /// Whether the app is currently in the foreground
+    private var isAppInForeground: Bool = true
+
+    /// Idle threshold: 5 minutes (matches desktop and Capacitor)
+    private static let idleThresholdMs: Int = 5 * 60 * 1000
+
+    /// Throttle interval for activity reports (1 second, matches Electron)
+    private static let activityThrottleMs: Int = 1000
+
+    /// Report actual user activity (touch, scroll, interaction).
+    /// Throttled to max once per second to avoid excessive updates.
+    func reportActivity() {
+        let now = Int(Date().timeIntervalSince1970 * 1000)
+        if now - lastActivityAt >= Self.activityThrottleMs {
+            lastActivityAt = now
+        }
+    }
+
+    /// Update app foreground state. Coming to foreground counts as activity.
+    func setAppInForeground(_ inForeground: Bool) {
+        isAppInForeground = inForeground
+        if inForeground {
+            reportActivity()
+        }
+    }
+
+    /// Derive device status from actual activity and foreground state,
+    /// matching the logic in desktop SyncManager and Capacitor CollabV3SyncContext.
+    private func deriveDeviceStatus() -> String {
+        let now = Int(Date().timeIntervalSince1970 * 1000)
+        let idleTime = now - lastActivityAt
+
+        if !isAppInForeground {
+            return "away"
+        }
+
+        if idleTime > Self.idleThresholdMs {
+            return "idle"
+        }
+
+        return "active"
+    }
+
     init() {
         let config = URLSessionConfiguration.default
         config.waitsForConnectivity = true
@@ -208,17 +259,16 @@ final class WebSocketClient: @unchecked Sendable {
     }
 
     private func sendDeviceAnnounce() {
-        let now = Int(Date().timeIntervalSince1970 * 1000)
         let device = DeviceInfo(
             deviceId: Self.deviceId,
             name: Self.deviceName,
             type: Self.deviceType,
             platform: "ios",
             appVersion: Self.appVersion,
-            connectedAt: now,
-            lastActiveAt: now,
-            isFocused: true,
-            status: "active"
+            connectedAt: connectionTime,
+            lastActiveAt: lastActivityAt,
+            isFocused: isAppInForeground,
+            status: deriveDeviceStatus()
         )
         let message = DeviceAnnounceMessage(device: device)
 
