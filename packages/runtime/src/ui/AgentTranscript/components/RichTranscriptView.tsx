@@ -661,12 +661,32 @@ export const RichTranscriptView = React.forwardRef<
       setShowPermissionBanner(false);
       pendingPermissionsVisibleRef.current = true;
     } else {
-      // New pending permission appeared - show banner if user is scrolled up
-      const isAtBottom = getSessionIsAtBottom(sessionId);
-      if (!isAtBottom) {
-        setShowPermissionBanner(true);
-        pendingPermissionsVisibleRef.current = false;
-      }
+      // Always show banner initially when pending permissions exist.
+      // The onScroll handler will hide it if the permissions are actually visible.
+      // This fixes the case where auto-scroll pushes past the permission widget
+      // while isAtBottom is true (making us incorrectly assume visibility).
+      setShowPermissionBanner(true);
+      pendingPermissionsVisibleRef.current = false;
+
+      // Schedule a visibility check after auto-scroll completes (auto-scroll uses double RAF).
+      // Triple RAF ensures we run after auto-scroll's double RAF + the resulting scroll event.
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            if (vlistRef.current && pendingPermissionIndices.length > 0) {
+              const offset = vlistRef.current.scrollOffset;
+              const viewportSize = vlistRef.current.viewportSize;
+              const firstVisibleIdx = vlistRef.current.findItemIndex(offset);
+              const lastVisibleIdx = vlistRef.current.findItemIndex(offset + viewportSize);
+              const anyVisible = pendingPermissionIndices.some(
+                idx => idx >= firstVisibleIdx && idx <= lastVisibleIdx
+              );
+              pendingPermissionsVisibleRef.current = anyVisible;
+              setShowPermissionBanner(!anyVisible);
+            }
+          });
+        });
+      });
     }
   }, [pendingPermissionIndices, sessionId]);
 
@@ -1404,11 +1424,25 @@ export const RichTranscriptView = React.forwardRef<
                     // Hide assistant/tool messages that sit between agent notifications.
                     // These are the agent's internal processing turns after receiving a teammate/sub-agent
                     // message - they appear as dark bars with scrollbars and add visual noise.
+                    // NEVER hide interactive tool widgets (ToolPermission, ExitPlanMode, etc.) that require user action.
+                    // Also never hide assistant messages that would carry interactive widgets in toolMessagesBefore.
                     if (message.role === 'assistant' || message.role === 'tool') {
-                      // Never hide tool messages with actual tool call data (Write, ExitPlanMode, etc.)
-                      // These are real tool invocations, not empty internal processing turns
-                      const hasToolCall = message.role === 'tool' && message.toolCall;
-                      if (!hasToolCall) {
+                      const INTERACTIVE_WIDGETS = ['ToolPermission', 'ExitPlanMode', 'AskUserQuestion', 'GitCommitProposal'];
+                      const isInteractiveWidget = message.role === 'tool' && message.toolCall?.name &&
+                        INTERACTIVE_WIDGETS.includes(message.toolCall.name);
+                      // For assistant messages, check if preceding tool messages contain interactive widgets
+                      let hasInteractiveToolsBefore = false;
+                      if (message.role === 'assistant') {
+                        let checkPrev = index - 1;
+                        while (checkPrev >= 0 && messages[checkPrev].role === 'tool') {
+                          if (messages[checkPrev].toolCall?.name && INTERACTIVE_WIDGETS.includes(messages[checkPrev].toolCall!.name)) {
+                            hasInteractiveToolsBefore = true;
+                            break;
+                          }
+                          checkPrev--;
+                        }
+                      }
+                      if (!isInteractiveWidget && !hasInteractiveToolsBefore) {
                         // Walk back to find the nearest user message (skipping tool and assistant messages)
                         let prevIdx = index - 1;
                         while (prevIdx >= 0 && messages[prevIdx].role !== 'user') prevIdx--;
