@@ -27,7 +27,7 @@ final class AudioPipelineTests: XCTestCase {
         pcm16.withUnsafeBytes { raw in
             let ptr = raw.bindMemory(to: Int16.self)
             for i in 0..<frameCount {
-                let v = ptr[i] < 0 ? -ptr[i] : ptr[i]
+                let v = ptr[i] == Int16.min ? Int16.max : (ptr[i] < 0 ? -ptr[i] : ptr[i])
                 if v > peak { peak = v }
             }
         }

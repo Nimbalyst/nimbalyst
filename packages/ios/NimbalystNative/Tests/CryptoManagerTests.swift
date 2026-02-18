@@ -12,11 +12,11 @@ final class CryptoManagerTests: XCTestCase {
     static let salt = "nimbalyst:user-test-12345"
     static let expectedKeyBase64 = "cVkuSqOYHOm1+QB5kTWOvRCHFzqKzjtsU+7XVBvX8fg="
 
-    nonisolated(unsafe) static var crypto: CryptoManager!
+    private var crypto: CryptoManager!
 
-    override class func setUp() {
+    override func setUp() {
         super.setUp()
-        let key = CryptoManager.deriveKey(passphrase: passphrase, salt: salt)
+        let key = CryptoManager.deriveKey(passphrase: Self.passphrase, salt: Self.salt)
         crypto = CryptoManager(key: key)
     }
 
@@ -44,7 +44,7 @@ final class CryptoManagerTests: XCTestCase {
     // MARK: - Decryption (JS-produced ciphertexts)
 
     func testDecryptSimpleShortText() throws {
-        let plaintext = try Self.crypto.decrypt(
+        let plaintext = try crypto.decrypt(
             encryptedBase64: "07DfjrYjG0f1/3swnwWVpq6LsGZnw02+Kx4vzmu78YPm",
             ivBase64: "AQIDBAUGBwgJCgsM"
         )
@@ -52,7 +52,7 @@ final class CryptoManagerTests: XCTestCase {
     }
 
     func testDecryptUnicodeText() throws {
-        let plaintext = try Self.crypto.decrypt(
+        let plaintext = try crypto.decrypt(
             encryptedBase64: "p7FcYa3KkKtIwUjEMQg5g6rjfd02RAyJo1z3joLvbl/Zi+lZ8CfCLJTHkS/aCK2KaSsrPH4fv7jnuTZE9ZfBR1MdZF4SpvYCdXXKhBb8",
             ivBase64: "FBUWFxgZGhscHR4f"
         )
@@ -60,7 +60,7 @@ final class CryptoManagerTests: XCTestCase {
     }
 
     func testDecryptJSONMessage() throws {
-        let plaintext = try Self.crypto.decrypt(
+        let plaintext = try crypto.decrypt(
             encryptedBase64: "T6DMLttdGBVKtagXpQDopEcg4SXI94PGQaYOnCqFqnb52DGkNUuziPnWxc98mLWzlxfCSnJSdpRWGk1oNj66muBha4aegwZN+Riok5kKvxiIKMc3trMudMZvfFUb3DI/cwKIdGYM4Wu6wjkG6ZMJQgu9I/tQojmpeA92GCdrHOZmTigOr6wC8GWhBmTxAU04WnAiznQmdw1DxBGNMCqpkDekEDoXaKGjd0gAYIoCkmE=",
             ivBase64: "ZGVmZ2hpamtsbW5v"
         )
@@ -72,7 +72,7 @@ final class CryptoManagerTests: XCTestCase {
     }
 
     func testDecryptEmptyString() throws {
-        let plaintext = try Self.crypto.decrypt(
+        let plaintext = try crypto.decrypt(
             encryptedBase64: "f1NWNoC52uksPpTiUS+JsQ==",
             ivBase64: "yMnKy8zNzs/Q0dLT"
         )
@@ -80,7 +80,7 @@ final class CryptoManagerTests: XCTestCase {
     }
 
     func testDecryptProjectIdFixedIV() throws {
-        let plaintext = try Self.crypto.decrypt(
+        let plaintext = try crypto.decrypt(
             encryptedBase64: "H1T7Lpn6jiQaYXIFnwfeUGC5RmzhJP2NN1XvmexO3MDcJqIRur7fEhX0gu/nFZclT4WlhA==",
             ivBase64: "cHJvamVjdF9pZF9p"
         )
@@ -91,14 +91,14 @@ final class CryptoManagerTests: XCTestCase {
 
     func testRoundtrip() throws {
         let original = "Swift CryptoManager roundtrip test"
-        let (encrypted, iv) = try Self.crypto.encrypt(plaintext: original)
-        let decrypted = try Self.crypto.decrypt(encryptedBase64: encrypted, ivBase64: iv)
+        let (encrypted, iv) = try crypto.encrypt(plaintext: original)
+        let decrypted = try crypto.decrypt(encryptedBase64: encrypted, ivBase64: iv)
         XCTAssertEqual(decrypted, original)
     }
 
     func testDeterministicEncryptionMatchesJS() throws {
         let projectId = "/Users/ghinkle/sources/stravu-editor"
-        let encrypted = try Self.crypto.encryptProjectId(projectId)
+        let encrypted = try crypto.encryptProjectId(projectId)
         XCTAssertEqual(encrypted, "H1T7Lpn6jiQaYXIFnwfeUGC5RmzhJP2NN1XvmexO3MDcJqIRur7fEhX0gu/nFZclT4WlhA==",
                        "Deterministic encryption output should match JS exactly")
     }
@@ -119,7 +119,7 @@ final class CryptoManagerTests: XCTestCase {
         tamperedData[0] ^= 0xFF
         let tampered = tamperedData.base64EncodedString()
 
-        XCTAssertThrowsError(try Self.crypto.decrypt(
+        XCTAssertThrowsError(try crypto.decrypt(
             encryptedBase64: tampered,
             ivBase64: "AQIDBAUGBwgJCgsM"
         ))
@@ -128,17 +128,17 @@ final class CryptoManagerTests: XCTestCase {
     // MARK: - Convenience Methods
 
     func testDecryptOrNilReturnsNilOnFailure() {
-        let result = Self.crypto.decryptOrNil(encryptedBase64: "invalid", ivBase64: "also-invalid")
+        let result = crypto.decryptOrNil(encryptedBase64: "invalid", ivBase64: "also-invalid")
         XCTAssertNil(result)
     }
 
     func testDecryptOrNilReturnsNilForNilInputs() {
-        let result = Self.crypto.decryptOrNil(encryptedBase64: nil, ivBase64: nil)
+        let result = crypto.decryptOrNil(encryptedBase64: nil, ivBase64: nil)
         XCTAssertNil(result)
     }
 
     func testDecryptOrNilReturnsValueOnSuccess() {
-        let result = Self.crypto.decryptOrNil(
+        let result = crypto.decryptOrNil(
             encryptedBase64: "07DfjrYjG0f1/3swnwWVpq6LsGZnw02+Kx4vzmu78YPm",
             ivBase64: "AQIDBAUGBwgJCgsM"
         )
