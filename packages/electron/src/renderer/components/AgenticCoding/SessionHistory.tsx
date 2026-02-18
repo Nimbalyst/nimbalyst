@@ -37,6 +37,7 @@ import { superLoopListAtom, upsertSuperLoopAtom, removeSuperLoopAtom } from '../
 import { useSuperLoopDialog } from '../../hooks/useSuperLoop';
 import type { SuperLoop } from '../../../shared/types/superLoop';
 import { store } from '@nimbalyst/runtime/store';
+import { HelpTooltip } from '../../help';
 import './SessionHistory.css';
 
 // SessionItem is the shared SessionMeta type from the store atoms.
@@ -1810,18 +1811,19 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
           </div>
           <div className="session-history-header-buttons flex items-center gap-1.5 shrink-0">
             {onOpenQuickSearch && (
-              <button
-                className="session-history-search-button flex items-center justify-center p-1.5 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded text-[var(--nim-text)] cursor-pointer transition-colors duration-150 shrink-0 hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-primary)] active:bg-[var(--nim-bg-tertiary)] [&_svg]:block"
-                data-testid="session-quick-search-button"
-                onClick={onOpenQuickSearch}
-                title={`Search sessions (${getShortcutDisplay(KeyboardShortcuts.window.sessionQuickOpen)})`}
-                aria-label="Search sessions"
-              >
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <circle cx="7" cy="7" r="4.5" stroke="currentColor" strokeWidth="1.5"/>
-                  <path d="M10.5 10.5L14 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                </svg>
-              </button>
+              <HelpTooltip testId="session-quick-search-button">
+                <button
+                  className="session-history-search-button flex items-center justify-center p-1.5 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded text-[var(--nim-text)] cursor-pointer transition-colors duration-150 shrink-0 hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-primary)] active:bg-[var(--nim-bg-tertiary)] [&_svg]:block"
+                  data-testid="session-quick-search-button"
+                  onClick={onOpenQuickSearch}
+                  aria-label="Search sessions"
+                >
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="7" cy="7" r="4.5" stroke="currentColor" strokeWidth="1.5"/>
+                    <path d="M10.5 10.5L14 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                  </svg>
+                </button>
+              </HelpTooltip>
             )}
             {onImportSessions && (
               <button
@@ -2028,18 +2030,19 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
         </div>
         <div className="session-history-header-buttons flex items-center gap-1.5 shrink-0">
           {onOpenQuickSearch && (
-            <button
-              className="session-history-search-button flex items-center justify-center p-1.5 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded text-[var(--nim-text)] cursor-pointer transition-colors duration-150 shrink-0 hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-primary)] active:bg-[var(--nim-bg-tertiary)] [&_svg]:block"
-              data-testid="session-quick-search-button"
-              onClick={onOpenQuickSearch}
-              title={`Search sessions (${getShortcutDisplay(KeyboardShortcuts.window.sessionQuickOpen)})`}
-              aria-label="Search sessions"
-            >
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="7" cy="7" r="4.5" stroke="currentColor" strokeWidth="1.5"/>
-                <path d="M10.5 10.5L14 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-              </svg>
-            </button>
+            <HelpTooltip testId="session-quick-search-button">
+              <button
+                className="session-history-search-button flex items-center justify-center p-1.5 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded text-[var(--nim-text)] cursor-pointer transition-colors duration-150 shrink-0 hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-primary)] active:bg-[var(--nim-bg-tertiary)] [&_svg]:block"
+                data-testid="session-quick-search-button"
+                onClick={onOpenQuickSearch}
+                aria-label="Search sessions"
+              >
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="7" cy="7" r="4.5" stroke="currentColor" strokeWidth="1.5"/>
+                  <path d="M10.5 10.5L14 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                </svg>
+              </button>
+            </HelpTooltip>
           )}
           {onImportSessions && (
             <button

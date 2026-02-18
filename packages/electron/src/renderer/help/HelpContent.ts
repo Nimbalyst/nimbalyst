@@ -150,8 +150,8 @@ export const HelpContent: Record<string, HelpEntry> = {
     shortcut: KeyboardShortcuts.window.sessionQuickOpen,
   },
   'session-quick-search-button': {
-    title: 'Quick Open Session',
-    body: 'Search and jump to any AI session by content or title. Much faster than scrolling through history.',
+    title: 'Search Sessions',
+    body: `Quickly find any AI session by name. Type **@** to search by file edited -- find every session that touched a specific file. Press **Tab** to switch to prompt search and find sessions by what you asked.`,
     shortcut: KeyboardShortcuts.window.sessionQuickOpen,
   },
   'session-archive-button': {

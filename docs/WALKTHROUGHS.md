@@ -8,7 +8,7 @@ This document explains how to create and maintain walkthrough guides and help co
 | --- | --- | --- | --- | --- | --- |
 | `agent-welcome-intro` | Agent Mode Welcome | 1 | agent | 50 | Session history is empty (first-time users) |
 | `navigation-intro` | Navigation Introduction | 2 | any | 5 | Always available |
-| `session-quick-open-intro` | Session Quick Open | 1 | agent | 12 | Session search button is visible |
+| `session-quick-open-intro` | Session Quick Open | 1 | agent | 12 | Session search button is visible (v2: covers @file and prompt search) |
 | `diff-mode-intro` | Reviewing AI Changes | 2 | files | 15 | Diff approval bar is visible |
 | `git-commit-mode-intro` | Git Commit Modes | 1 | agent | 15 | Commit mode toggle is visible (has changes) |
 | `attach-files-intro` | Attach Files | 1 | agent | 18 | AI input is visible |
@@ -126,13 +126,15 @@ For elements that don't have their own tooltip:
 import { HelpTooltip } from '../../help';
 
 <HelpTooltip testId="my-feature-button">
-  <button data-testid="my-feature-button" onClick={handleClick}>
+  <button data-testid="my-feature-button" onClick={handleClick} aria-label="Feature">
     Feature
   </button>
 </HelpTooltip>
 ```
 
 The tooltip appears on hover after a short delay, showing title, body, and keyboard shortcut.
+
+**IMPORTANT: Remove the `title` attribute** from elements wrapped with `HelpTooltip`. The browser's native `title` tooltip will appear alongside the HelpTooltip, creating a duplicate. Use `aria-label` instead for accessibility.
 
 #### Pattern B: Inline help icon
 
@@ -160,6 +162,11 @@ const helpContent = getHelpContent('my-feature-button');
 ## Creating Walkthroughs
 
 Walkthroughs are multi-step guides that highlight UI elements and provide contextual help.
+
+**Before creating a walkthrough**, ensure that every target element:
+1. Has a `HelpTooltip` wrapper (Pattern A above) so users get a hover tooltip too
+2. Has the `title` attribute removed (to avoid duplicate tooltips)
+3. Has a `data-testid` matching its HelpContent key
 
 ### Step 1: Create a walkthrough definition
 
@@ -345,6 +352,7 @@ Walkthroughs automatically track PostHog events:
 3. **Use appropriate triggers**: Don't interrupt users at bad times. Use `delay` and `condition`.
 4. **Test visibility**: Ensure target elements are actually visible when the walkthrough triggers.
 5. **Pull from HelpContent**: Always use `getHelpContent()` instead of hardcoding text.
+6. **Always add HelpTooltip**: Every walkthrough target element must also have a `HelpTooltip` wrapper so users get a hover tooltip. Remove any `title` attribute from the element to avoid duplicate native + custom tooltips.
 
 ### Element Targeting
 
