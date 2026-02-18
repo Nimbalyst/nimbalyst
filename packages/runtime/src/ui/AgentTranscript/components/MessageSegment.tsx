@@ -4,6 +4,7 @@ import { MarkdownRenderer } from './MarkdownRenderer';
 import { JSONViewer } from './JSONViewer';
 import { DiffViewer } from './DiffViewer';
 import { LoginRequiredWidget } from './LoginRequiredWidget';
+import { OpenAIAuthWidget } from './OpenAIAuthWidget';
 import { ContextLimitWidget } from './ContextLimitWidget';
 import { FullscreenModal } from './FullscreenModal';
 import { MaterialSymbol } from '../../icons/MaterialSymbol';
@@ -105,6 +106,16 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
     return false;
   };
 
+  // Helper function to check if content indicates an OpenAI authentication error
+  // Matches 401 Unauthorized responses from api.openai.com
+  const isOpenAIAuthError = (text: string): boolean => {
+    const lowerText = text.toLowerCase();
+    return (
+      lowerText.includes('api.openai.com') &&
+      (lowerText.includes('401 unauthorized') || (lowerText.includes('401') && lowerText.includes('authentication')))
+    );
+  };
+
   // Helper function to check if content indicates context limit exceeded
   const isContextLimitError = (text: string): boolean => {
     const lowerText = text.toLowerCase();
@@ -134,6 +145,11 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
     // Skip if this is an error message - renderError() will handle it
     // This prevents duplicate LoginRequiredWidget rendering
     if (message.isError) return null;
+
+    // Check if this is an OpenAI auth error in the message content
+    if (!isUser && isOpenAIAuthError(message.content)) {
+      return shouldShowLoginWidget ? <OpenAIAuthWidget /> : null;
+    }
 
     // Check if this is a login-required error in the message content
     const isLoginRequired = isLoginRequiredError(message.content);
@@ -259,6 +275,14 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
     if (!message.isError || message.role === 'tool') return null;
 
     const errorMessage = message.errorMessage || message.content || 'Error';
+
+    // Check if this is an OpenAI authentication error
+    if (isOpenAIAuthError(errorMessage) && shouldShowLoginWidget) {
+      return <OpenAIAuthWidget />;
+    }
+    if (isOpenAIAuthError(errorMessage) && !shouldShowLoginWidget) {
+      return null;
+    }
 
     // Check if this is a login-required error for Claude Code
     const isLoginRequired = isLoginRequiredError(errorMessage);
