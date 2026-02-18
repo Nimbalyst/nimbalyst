@@ -30,7 +30,7 @@ import {
   viewModeAtom,
   setViewModeAtom,
   worktreeActiveSessionAtom,
-  type SessionListItem as SessionListItemType,
+  type SessionMeta,
 } from '../../store';
 import { alphaFeatureEnabledAtom, worktreesFeatureAvailableAtom } from '../../store/atoms/appSettings';
 import { superLoopListAtom, upsertSuperLoopAtom, removeSuperLoopAtom } from '../../store/atoms/superLoop';
@@ -39,30 +39,8 @@ import type { SuperLoop } from '../../../shared/types/superLoop';
 import { store } from '@nimbalyst/runtime/store';
 import './SessionHistory.css';
 
-interface SessionItem {
-  id: string;
-  title?: string;
-  createdAt: number;
-  updatedAt: number;
-  provider: string;
-  model?: string;
-  sessionType?: 'chat' | 'planning' | 'coding' | 'terminal' | 'blitz';
-  messageCount: number;
-  isProcessing?: boolean;
-  hasUnread?: boolean;
-  hasPendingPrompt?: boolean;
-  isArchived?: boolean;
-  isPinned?: boolean; // Whether this session is pinned to the top
-  worktree_id?: string | null; // Associated worktree ID if this is a worktree session
-  childCount?: number; // Number of child sessions (workstream indicator)
-  parentSessionId?: string | null; // Parent session ID for hierarchical workstreams
-  projectPath?: string; // Workspace path for drag-drop validation
-  uncommittedCount?: number; // Number of uncommitted files in this session
-  // Branch tracking - SEPARATE from hierarchical parentSessionId
-  branchedFromSessionId?: string; // ID of session this was forked from
-  branchPointMessageId?: number; // Message ID where this branch diverged
-  branchedAt?: number; // Timestamp when this session was branched
-}
+// SessionItem is the shared SessionMeta type from the store atoms.
+type SessionItem = SessionMeta;
 
 interface WorktreeData {
   id: string;
@@ -309,28 +287,8 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     ? sessionRegistry.get(activeSessionId)?.parentSessionId ?? null
     : null;
 
-  // Convert atom sessions to local SessionItem format
-  // Note: isProcessing, hasUnread, hasPendingPrompt are no longer set here
-  // SessionListItem subscribes directly to Jotai atoms for these states
-  const allSessions = useMemo<SessionItem[]>(() => {
-    return allSessionsFromAtom.map((s) => ({
-      id: s.id,
-      title: s.title || s.name || 'Untitled Session',
-      createdAt: s.createdAt,
-      updatedAt: s.updatedAt,
-      provider: s.provider || 'claude',
-      model: s.model,
-      sessionType: s.sessionType || 'chat',
-      messageCount: s.messageCount || 0,
-      isArchived: s.isArchived || false,
-      isPinned: s.isPinned || false,
-      worktree_id: s.worktreeId || null,
-      childCount: s.childCount || 0,
-      parentSessionId: s.parentSessionId || null,
-      projectPath: s.projectPath,
-      uncommittedCount: s.uncommittedCount || 0,
-    }));
-  }, [allSessionsFromAtom]);
+  // Use atom sessions directly - no conversion needed
+  const allSessions = allSessionsFromAtom;
 
   const [sessions, setSessions] = useState<SessionItem[]>([]); // Filtered sessions to display
   const loading = atomLoading && allSessions.length === 0; // Only show loading on initial load
@@ -457,27 +415,27 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
       });
 
       if (result.success && Array.isArray(result.sessions)) {
-        let searchResults = result.sessions.map((s: any) => ({
+        let searchResults: SessionItem[] = result.sessions.map((s: any) => ({
           id: s.id,
-          title: s.title || s.name || 'Untitled Session',
+          title: s.title || 'Untitled Session',
           createdAt: s.createdAt,
           updatedAt: s.updatedAt,
           provider: s.provider || 'claude',
           model: s.model,
-          sessionType: s.sessionType || 'chat',
+          sessionType: s.sessionType || 'session',
           messageCount: s.messageCount || 0,
-          isProcessing: false,
-          hasUnread: false,
           isArchived: s.isArchived || false,
-          worktree_id: s.worktreeId || null,
+          isPinned: s.isPinned || false,
+          worktreeId: s.worktreeId || null,
           childCount: s.childCount || 0,
+          uncommittedCount: s.uncommittedCount || 0,
           parentSessionId: s.parentSessionId || null,
-          projectPath: s.projectPath,
+          workspaceId: s.workspaceId || workspacePath,
         }));
 
         // Filter out worktree sessions in non-agent mode
         if (mode !== 'agent') {
-          searchResults = searchResults.filter((session: SessionItem) => !session.worktree_id);
+          searchResults = searchResults.filter((session: SessionItem) => !session.worktreeId);
         }
 
         setSessions(searchResults);
@@ -865,7 +823,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     const worktreeId = archiveWorktreeDialogState.worktreeId;
 
     // Get sessions for this worktree to notify parent to close tabs
-    const worktreeSessions = allSessions.filter(s => s.worktree_id === worktreeId);
+    const worktreeSessions = allSessions.filter(s => s.worktreeId === worktreeId);
 
     await confirmArchiveWorktree(workspacePath, () => {
       // Remove worktree sessions from atom state immediately (optimistic update)
@@ -873,7 +831,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
         removeSessionFromAtom(session.id);
       });
       // Also remove from filtered list for immediate feedback
-      setSessions(prev => prev.filter(s => s.worktree_id !== worktreeId));
+      setSessions(prev => prev.filter(s => s.worktreeId !== worktreeId));
 
       // Notify parent to close tabs for archived sessions
       worktreeSessions.forEach(session => {
@@ -1128,10 +1086,10 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
       // Find worktree IDs belonging to this blitz from sessions with parentSessionId === blitzId
       const blitzWorktreeIds = new Set<string>();
       for (const session of sessions) {
-        if (session.parentSessionId === blitzId && session.worktree_id && session.worktree_id !== keepWorktreeId) {
-          const worktreeData = worktreeCache.get(session.worktree_id);
+        if (session.parentSessionId === blitzId && session.worktreeId && session.worktreeId !== keepWorktreeId) {
+          const worktreeData = worktreeCache.get(session.worktreeId);
           if (!worktreeData?.isArchived) {
-            blitzWorktreeIds.add(session.worktree_id);
+            blitzWorktreeIds.add(session.worktreeId);
           }
         }
       }
@@ -1306,10 +1264,10 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
 
       // If this session belongs to a worktree and is the only session in that worktree,
       // also rename the worktree to keep them in sync
-      if (session?.worktree_id) {
-        const worktreeSessionCount = sessions.filter(s => s.worktree_id === session.worktree_id).length;
+      if (session?.worktreeId) {
+        const worktreeSessionCount = sessions.filter(s => s.worktreeId === session.worktreeId).length;
         if (worktreeSessionCount === 1) {
-          handleWorktreeRename(session.worktree_id, trimmedValue);
+          handleWorktreeRename(session.worktreeId, trimmedValue);
         }
       }
     }
@@ -1468,12 +1426,12 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     }
   }, [cardContextMenu]);
 
-  // Group worktree sessions by worktree_id and compute worktree timestamps
+  // Group worktree sessions by worktreeId and compute worktree timestamps
   const worktreeGroupsData = useMemo(() => {
     const groups = new Map<string, { sessions: SessionItem[]; timestamp: number }>();
     for (const session of sessions) {
-      if (session.worktree_id) {
-        const existing = groups.get(session.worktree_id);
+      if (session.worktreeId) {
+        const existing = groups.get(session.worktreeId);
         if (existing) {
           existing.sessions.push(session);
           // For 'updated', track the latest session update. For 'created', we'll use worktree.createdAt later
@@ -1484,7 +1442,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
         } else {
           // Initial timestamp (will be replaced with worktree.createdAt for 'created' sort)
           const initialTimestamp = sortBy === 'updated' ? (session.updatedAt || session.createdAt) : 0;
-          groups.set(session.worktree_id, { sessions: [session], timestamp: initialTimestamp });
+          groups.set(session.worktreeId, { sessions: [session], timestamp: initialTimestamp });
         }
       }
     }
@@ -1510,12 +1468,12 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     const items: UnifiedListItem[] = [];
     const pinnedItems: UnifiedListItem[] = [];
 
-    // Add regular sessions and workstreams (those without worktree_id)
+    // Add regular sessions and workstreams (those without worktreeId)
     for (const session of sessions) {
       // Skip blitz sessions - they're rendered via BlitzGroup, not as individual items
       if (session.sessionType === 'blitz') continue;
 
-      if (!session.worktree_id) {
+      if (!session.worktreeId) {
         // Check if this is a workstream (has children)
         const isWorkstream = (session.childCount ?? 0) > 0;
         if (isWorkstream) {
@@ -1795,7 +1753,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   useEffect(() => {
     // Find workstream sessions that are expanded
     const workstreamSessions = sessions.filter(s =>
-      !s.worktree_id &&
+      !s.worktreeId &&
       (s.childCount ?? 0) > 0 &&
       !collapsedGroups.includes(`workstream:${s.id}`)
     );
@@ -1811,15 +1769,19 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
           if (result.success && Array.isArray(result.children)) {
             const children: SessionItem[] = result.children.map((c: any) => ({
               id: c.id,
-              title: c.title || c.name || 'Untitled Session',
+              title: c.title || 'Untitled Session',
               createdAt: c.createdAt,
               updatedAt: c.updatedAt,
               provider: c.provider || 'claude',
               model: c.model,
-              sessionType: c.sessionType || 'chat',
+              sessionType: c.sessionType || 'session',
               messageCount: c.messageCount || 0,
+              workspaceId: workspacePath,
               isArchived: c.isArchived || false,
               isPinned: c.isPinned || false,
+              worktreeId: c.worktreeId || null,
+              parentSessionId: c.parentSessionId || null,
+              childCount: c.childCount || 0,
               uncommittedCount: c.uncommittedCount || 0,
             }));
             setWorkstreamChildrenCache(prev => {
@@ -2499,17 +2461,10 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                         onContextMenu={(e) => handleCardContextMenu(e, 'session', session.id, undefined, session.isPinned, session.isArchived)}
                       >
                         <div className="session-history-card-icon">
-                          {session.sessionType === 'terminal' ? (
-                            <svg width="32" height="32" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                              <path d="M3 5L7 9L3 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                              <path d="M9 13H13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                            </svg>
-                          ) : (
                             <svg width="32" height="32" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                               <path d="M4 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z" stroke="currentColor" strokeWidth="1.2"/>
                               <path d="M5 6h6M5 9h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
                             </svg>
-                          )}
                           {loadedSessionIds.includes(session.id) && (
                             <div className="session-history-card-loaded-dot"></div>
                           )}
@@ -2690,7 +2645,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                       isPinned={session.isPinned}
                       isArchived={session.isArchived}
                       childCount={session.childCount}
-                      projectPath={session.projectPath}
+                      projectPath={session.workspaceId}
                       onWorkstreamArchive={handleArchiveSession}
                       onWorkstreamPinToggle={handleSessionPinToggle}
                     />
@@ -2742,14 +2697,11 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                     provider={session.provider}
                     model={session.model}
                     messageCount={session.messageCount}
-                    isProcessing={session.isProcessing}
-                    hasUnread={session.hasUnread}
-                    hasPendingPrompt={session.hasPendingPrompt}
                     sessionType={session.sessionType}
                     isWorkstream={false}
                     isWorktreeSession={item.isWorktreeSession}
                     parentSessionId={session.parentSessionId}
-                    projectPath={session.projectPath}
+                    projectPath={session.workspaceId}
                     uncommittedCount={session.uncommittedCount}
                     branchedAt={session.branchedAt}
                   />

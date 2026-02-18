@@ -10,10 +10,10 @@ import {
   hasSessionStore,
   setSessionStore,
   type SessionStore,
-  type SessionListItem,
+  type SessionMeta,
   type UpdateSessionMetadataPayload,
 } from '../adapters/sessionStore';
-import { SessionData, Message, DocumentContext, AIProviderType } from './types';
+import { SessionData, Message, DocumentContext, AIProviderType, SessionType } from './types';
 import type { SessionData as ChatSession } from './types';
 import { parseContextUsageMessage } from './utils/contextUsage';
 
@@ -703,7 +703,7 @@ export class SessionManager {
     workspacePath?: string,
     providerConfig?: any,
     model?: string,
-    sessionType?: 'chat' | 'planning' | 'coding' | 'terminal',
+    sessionType?: SessionType,
     mode?: 'planning' | 'agent',
     worktreeId?: string,
     worktreePath?: string,
@@ -975,7 +975,7 @@ export class SessionManager {
    * Get lightweight session list (just metadata, no messages).
    * Much faster than getSessions() - use when you only need id/title.
    */
-  async getSessionList(workspacePath?: string): Promise<SessionListItem[]> {
+  async getSessionList(workspacePath?: string): Promise<SessionMeta[]> {
     // workspacePath is REQUIRED - sessions are always scoped to a workspace
     if (!workspacePath && !this.currentWorkspacePath) {
       throw new Error('workspacePath is required to get session list - cannot fall back to default');

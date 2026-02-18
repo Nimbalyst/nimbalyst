@@ -200,7 +200,7 @@ export function registerBlitzHandlers(): void {
             id: sessionId,
             provider,
             model,
-            sessionType: 'coding',
+            sessionType: 'session',
             title: sessionTitle,
             workspaceId: workspacePath,
             worktreeId: gitWorktree.id,

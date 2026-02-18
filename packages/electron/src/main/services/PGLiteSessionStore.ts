@@ -4,7 +4,7 @@
 
 import type {
   SessionStore,
-  SessionListItem,
+  SessionMeta,
   SessionListOptions,
   SessionSearchOptions,
   CreateSessionPayload,
@@ -64,6 +64,7 @@ export async function getAllSessionsForSync(includeMessages = false): Promise<Ar
   provider: string;
   model?: string;
   mode?: string;
+  sessionType?: string;
   workspaceId?: string;
   workspacePath?: string;
   messageCount: number;
@@ -87,12 +88,12 @@ export async function getAllSessionsForSync(includeMessages = false): Promise<Ar
 
   const queryStart = performance.now();
   const { rows } = await moduleDb.query<any>(
-    `SELECT s.id, s.provider, s.model, s.mode, s.title, s.workspace_id, s.draft_input,
+    `SELECT s.id, s.provider, s.model, s.mode, s.session_type, s.title, s.workspace_id, s.draft_input,
             s.created_at, s.updated_at, s.metadata, COUNT(m.id) as message_count
      FROM ai_sessions s
      LEFT JOIN ai_agent_messages m ON s.id = m.session_id AND m.direction = 'input' AND (m.hidden = FALSE OR m.hidden IS NULL)
      WHERE (s.is_archived = FALSE OR s.is_archived IS NULL)
-     GROUP BY s.id, s.provider, s.model, s.mode, s.title, s.workspace_id, s.draft_input, s.created_at, s.updated_at, s.metadata
+     GROUP BY s.id, s.provider, s.model, s.mode, s.session_type, s.title, s.workspace_id, s.draft_input, s.created_at, s.updated_at, s.metadata
      ORDER BY s.updated_at DESC`
   );
   const queryTime = performance.now() - queryStart;
@@ -114,6 +115,7 @@ export async function getAllSessionsForSync(includeMessages = false): Promise<Ar
       provider: row.provider || 'unknown',
       model: row.model,
       mode: row.mode,
+      sessionType: row.session_type || 'session',
       // workspace_id is required - we filtered out sessions without it above
       workspaceId: row.workspace_id,
       workspacePath: row.workspace_id, // workspace_id is the path in this system
@@ -266,7 +268,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
           payload.provider,
           payload.model ?? null,
           payload.title ?? 'New conversation',
-          (payload as any).sessionType ?? 'chat',
+          (payload as any).sessionType ?? 'session',
           (payload as any).mode ?? 'agent',
           payload.documentContext ?? null,
           payload.providerConfig ?? null,
@@ -443,7 +445,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
       });
     },
 
-    async list(workspaceId: string, options?: SessionListOptions): Promise<SessionListItem[]> {
+    async list(workspaceId: string, options?: SessionListOptions): Promise<SessionMeta[]> {
       const startTime = performance.now();
       await ensureReady();
       const ensureTime = performance.now() - startTime;
@@ -480,13 +482,14 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
           id: row.id,
           provider: row.provider,
           model: row.model ?? undefined,
-          sessionType: row.session_type ?? undefined,
+          sessionType: row.session_type || 'session',
           mode: row.mode ?? undefined,
-          title: row.title ?? undefined,
+          title: row.title || 'Untitled Session',
           workspaceId: row.workspace_id,
-          worktreeId: row.worktree_id ?? undefined,
-          parentSessionId: row.parent_session_id ?? null,  // Hierarchical workstream support
-          childCount,  // Number of child sessions
+          worktreeId: row.worktree_id ?? null,
+          parentSessionId: row.parent_session_id ?? null,
+          childCount,
+          uncommittedCount: 0,
           createdAt,
           updatedAt,
           messageCount: 0,  // Not computed in list query for performance - loaded lazily if needed
@@ -496,16 +499,14 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
           branchedFromSessionId: row.branched_from_session_id ?? undefined,
           branchPointMessageId: row.branch_point_message_id ? parseInt(row.branch_point_message_id) : undefined,
           branchedAt,
-          // UI state from metadata (for cross-device sync)
-          // Note: hasUnread is nested under metadata.metadata due to how updateSessionMetadata works
           hasUnread: metadata.metadata?.hasUnread ?? metadata.hasUnread ?? false,
           // Check if session has a pending AskUserQuestion (for sidebar indicator persistence)
           hasPendingQuestion: !!(metadata.pendingAskUserQuestion),
-        };
+        } satisfies SessionMeta & { hasPendingQuestion?: boolean };
       });
     },
 
-    async search(workspaceId: string, query: string, options?: SessionSearchOptions): Promise<SessionListItem[]> {
+    async search(workspaceId: string, query: string, options?: SessionSearchOptions): Promise<SessionMeta[]> {
       await ensureReady();
 
       // If query is empty, return all sessions (same as list)
@@ -670,27 +671,27 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
           id: row.id,
           provider: row.provider,
           model: row.model ?? undefined,
-          sessionType: row.session_type ?? undefined,
+          sessionType: row.session_type || 'session',
           mode: row.mode ?? undefined,
-          title: row.title ?? undefined,
+          title: row.title || 'Untitled Session',
           workspaceId: row.workspace_id,
-          worktreeId: row.worktree_id ?? undefined,
-          parentSessionId: row.parent_session_id ?? null,  // Hierarchical workstream support
-          childCount,  // Number of child sessions
+          worktreeId: row.worktree_id ?? null,
+          parentSessionId: row.parent_session_id ?? null,
+          childCount,
+          uncommittedCount: 0,
           createdAt,
           updatedAt,
           messageCount: 0,  // Not computed in search query for performance
           isArchived: row.is_archived ?? false,
           isPinned: row.is_pinned ?? false,
-          // Branch tracking - SEPARATE from hierarchical parentSessionId
           branchedFromSessionId: row.branched_from_session_id ?? undefined,
           branchPointMessageId: row.branch_point_message_id ? parseInt(row.branch_point_message_id) : undefined,
           branchedAt,
-        };
+        } satisfies SessionMeta;
       });
     },
 
-    async getBranches(sessionId: string): Promise<SessionListItem[]> {
+    async getBranches(sessionId: string): Promise<SessionMeta[]> {
       await ensureReady();
       // Find all sessions that were branched FROM this session (not hierarchical children)
       const { rows } = await db.query<any>(
@@ -715,22 +716,23 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
           id: row.id,
           provider: row.provider,
           model: row.model ?? undefined,
-          sessionType: row.session_type ?? undefined,
+          sessionType: row.session_type || 'session',
           mode: row.mode ?? undefined,
-          title: row.title ?? undefined,
+          title: row.title || 'Untitled Session',
           workspaceId: row.workspace_id,
-          worktreeId: row.worktree_id ?? undefined,
-          parentSessionId: row.parent_session_id ?? null,  // Hierarchical (separate from branch)
+          worktreeId: row.worktree_id ?? null,
+          parentSessionId: row.parent_session_id ?? null,
+          childCount: 0,  // Not computed in branch query
+          uncommittedCount: 0,
           createdAt,
           updatedAt,
           messageCount,
           isArchived: row.is_archived ?? false,
           isPinned: row.is_pinned ?? false,
-          // Branch tracking
           branchedFromSessionId: row.branched_from_session_id ?? undefined,
           branchPointMessageId: row.branch_point_message_id ? parseInt(row.branch_point_message_id) : undefined,
           branchedAt,
-        };
+        } satisfies SessionMeta;
       });
     },
 

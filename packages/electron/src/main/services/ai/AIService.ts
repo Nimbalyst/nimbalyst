@@ -25,6 +25,7 @@ import {
   type AIProviderType,
   type AIModel,
   type SessionData,
+  type SessionType,
 } from '@nimbalyst/runtime/ai/server/types';
 // MCP imports removed - no longer using MCP HTTP server
 import { ToolExecutor, toolRegistry, BUILT_IN_TOOLS } from './tools';
@@ -979,7 +980,7 @@ export class AIService {
               workspacePath,  // workspacePath
               undefined,      // providerConfig
               defaultModel,   // model - use user's configured default
-              'chat',         // sessionType
+              'session',      // sessionType
               'agent'         // mode
             );
 
@@ -1293,7 +1294,7 @@ export class AIService {
       documentContext?: DocumentContext,
       workspacePath?: string,
       modelId?: string,
-      sessionType?: 'chat' | 'planning' | 'coding' | 'terminal',
+      sessionType?: string,
       worktreeId?: string
     ) => {
       // TODO: Debug logging - uncomment if needed
@@ -1422,7 +1423,7 @@ export class AIService {
         workspacePath,
         providerConfig,
         model,
-        sessionType || 'chat', // Default to 'chat' if not specified
+        (sessionType || 'session') as SessionType, // Default to 'session' if not specified
         undefined, // mode
         worktreeId,
         worktreePath,

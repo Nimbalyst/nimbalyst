@@ -271,15 +271,20 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
         // Add to session list
         addSession({
           id: result.id,
-          name: 'New Session',
           title: 'New Session',
           createdAt: Date.now(),
           updatedAt: Date.now(),
           provider: 'claude-code',
           model: defaultModel,
-          sessionType: 'coding',
+          sessionType: 'session',
           messageCount: 0,
-          projectPath: workspacePath,
+          workspaceId: workspacePath,
+          isArchived: false,
+          isPinned: false,
+          parentSessionId: null,
+          worktreeId: null,
+          childCount: 0,
+          uncommittedCount: 0,
         });
 
         // Select the new session
@@ -329,16 +334,20 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
         // Add to session list
         addSession({
           id: result.id,
-          name: `Worktree: ${worktree.name}`,
           title: `Worktree: ${worktree.name}`,
           createdAt: Date.now(),
           updatedAt: Date.now(),
           provider: 'claude-code',
           model: defaultModel,
-          sessionType: 'coding',
+          sessionType: 'session',
           messageCount: 0,
-          projectPath: workspacePath,
+          workspaceId: workspacePath,
+          isArchived: false,
+          isPinned: false,
+          parentSessionId: null,
           worktreeId: worktree.id,
+          childCount: 0,
+          uncommittedCount: 0,
         });
 
         // Initialize workstream state with worktree type
@@ -388,16 +397,20 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
       // Add to session list
       addSession({
         id: result.id,
-        name: 'New Session',
         title: 'New Session',
         createdAt: Date.now(),
         updatedAt: Date.now(),
         provider: 'claude-code',
         model: defaultModel,
-        sessionType: 'coding',
+        sessionType: 'session',
         messageCount: 0,
-        projectPath: workspacePath,
+        workspaceId: workspacePath,
+        isArchived: false,
+        isPinned: false,
+        parentSessionId: null,
         worktreeId: worktree.id,
+        childCount: 0,
+        uncommittedCount: 0,
       });
 
       // Initialize workstream state with worktree type
@@ -461,14 +474,19 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
     // Add blitz parent session to registry so sessionListRootAtom can identify blitz children
     addSession({
       id: blitzSessionId,
-      name: 'Blitz',
       title: 'Blitz',
       createdAt: Date.now(),
       updatedAt: Date.now(),
       provider: 'claude-code',
       sessionType: 'blitz',
       messageCount: 0,
-      projectPath: workspacePath,
+      workspaceId: workspacePath,
+      isArchived: false,
+      isPinned: false,
+      parentSessionId: null,
+      worktreeId: null,
+      childCount: 0,
+      uncommittedCount: 0,
     });
 
     // Add each child session to the session registry
@@ -484,17 +502,20 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
 
         addSession({
           id: sessionId,
-          name: `Blitz: ${worktree.name}`,
           title: `Blitz: ${worktree.name}`,
           createdAt: Date.now(),
           updatedAt: Date.now(),
           provider: 'claude-code',
           model: models?.[i] || defaultModel,
-          sessionType: 'coding',
+          sessionType: 'session',
           messageCount: 0,
-          projectPath: workspacePath,
+          workspaceId: workspacePath,
+          isArchived: false,
+          isPinned: false,
           worktreeId: worktree.id,
           parentSessionId: blitzSessionId,
+          childCount: 0,
+          uncommittedCount: 0,
         });
 
         // Initialize workstream state with worktree type
@@ -546,20 +567,20 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
         console.log('[AgentMode] Session not in registry, adding it');
         addSession({
           id: sessionListItem.id,
-          name: sessionListItem.title || sessionListItem.name || 'Untitled Session',
-          title: sessionListItem.title || sessionListItem.name || 'Untitled Session',
+          title: sessionListItem.title || 'Untitled Session',
           createdAt: sessionListItem.createdAt,
           updatedAt: sessionListItem.updatedAt,
           provider: sessionListItem.provider || 'claude-code',
           model: sessionListItem.model,
-          sessionType: sessionListItem.sessionType || 'coding',
+          sessionType: sessionListItem.sessionType || 'session',
           messageCount: sessionListItem.messageCount || 0,
-          projectPath: workspacePath,
+          workspaceId: workspacePath,
           isArchived: sessionListItem.isArchived || false,
           isPinned: sessionListItem.isPinned || false,
           worktreeId: sessionListItem.worktreeId || null,
           parentSessionId: sessionListItem.parentSessionId || null,
           childCount: sessionListItem.childCount || 0,
+          uncommittedCount: sessionListItem.uncommittedCount || 0,
         });
 
         // If it's a worktree session, initialize workstream state

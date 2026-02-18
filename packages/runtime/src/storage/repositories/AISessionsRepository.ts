@@ -1,7 +1,7 @@
 import type { Message, SessionData } from '../../ai/server/types';
 import {
   type CreateSessionPayload,
-  type SessionListItem,
+  type SessionMeta,
   type SessionListOptions,
   type SessionStore,
   type UpdateSessionMetadataPayload,
@@ -62,11 +62,11 @@ export const AISessionsRepository = {
     return results.filter((s): s is SessionData => s !== null);
   },
 
-  async list(workspaceId: string, options?: SessionListOptions): Promise<SessionListItem[]> {
+  async list(workspaceId: string, options?: SessionListOptions): Promise<SessionMeta[]> {
     return await requireStore().list(workspaceId, options);
   },
 
-  async search(workspaceId: string, query: string, options?: SessionListOptions): Promise<SessionListItem[]> {
+  async search(workspaceId: string, query: string, options?: SessionListOptions): Promise<SessionMeta[]> {
     return await requireStore().search(workspaceId, query, options);
   },
 
@@ -88,7 +88,7 @@ export const AISessionsRepository = {
     return true;
   },
 
-  async getBranches(sessionId: string): Promise<SessionListItem[]> {
+  async getBranches(sessionId: string): Promise<SessionMeta[]> {
     const store = requireStore();
     if (store.getBranches) {
       return await store.getBranches(sessionId);
@@ -100,6 +100,6 @@ export const AISessionsRepository = {
 
 export type {
   CreateSessionPayload,
-  SessionListItem,
+  SessionMeta,
   UpdateSessionMetadataPayload,
 };

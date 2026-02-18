@@ -3,7 +3,7 @@ import { SessionManager } from '../SessionManager';
 import type {
   SessionStore,
   CreateSessionPayload,
-  SessionListItem,
+  SessionMeta,
   UpdateSessionMetadataPayload,
 } from '../../adapters/sessionStore';
 import type { Message, SessionData } from '../types';
@@ -65,22 +65,34 @@ class InMemorySessionStore implements SessionStore {
     return this.sessions.get(sessionId) ?? null;
   }
 
-  async list(workspaceId: string): Promise<SessionListItem[]> {
+  private toMeta(session: SessionData): SessionMeta {
+    return {
+      id: session.id,
+      provider: session.provider,
+      model: session.model,
+      title: session.title || 'Untitled Session',
+      sessionType: session.sessionType || 'session',
+      workspaceId: (session.metadata as any)?.workspaceId || '',
+      worktreeId: session.worktreeId || null,
+      parentSessionId: session.parentSessionId || null,
+      childCount: 0,
+      uncommittedCount: 0,
+      createdAt: session.createdAt || 0,
+      updatedAt: session.updatedAt || 0,
+      messageCount: session.messages.length,
+      isArchived: session.isArchived || false,
+      isPinned: session.isPinned || false,
+    };
+  }
+
+  async list(workspaceId: string): Promise<SessionMeta[]> {
     return [...this.sessions.values()]
       .filter(session => (session.metadata as any)?.workspaceId === workspaceId)
-      .map(session => ({
-        id: session.id,
-        provider: session.provider,
-        model: session.model,
-        title: session.title,
-        workspaceId: (session.metadata as any)?.workspaceId,
-        createdAt: session.createdAt || 0,
-        updatedAt: session.updatedAt || 0,
-      }))
+      .map(session => this.toMeta(session))
       .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
   }
 
-  async search(workspaceId: string, query: string): Promise<SessionListItem[]> {
+  async search(workspaceId: string, query: string): Promise<SessionMeta[]> {
     // Simple in-memory search for testing
     if (!query || query.trim().length === 0) {
       return this.list(workspaceId);
@@ -102,15 +114,7 @@ class InMemorySessionStore implements SessionStore {
           return content.toLowerCase().includes(lowerQuery);
         });
       })
-      .map(session => ({
-        id: session.id,
-        provider: session.provider,
-        model: session.model,
-        title: session.title,
-        workspaceId: (session.metadata as any)?.workspaceId,
-        createdAt: session.createdAt || 0,
-        updatedAt: session.updatedAt || 0,
-      }))
+      .map(session => this.toMeta(session))
       .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
   }
 

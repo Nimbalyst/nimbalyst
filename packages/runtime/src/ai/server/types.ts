@@ -139,7 +139,8 @@ export interface AIModel {
   contextWindow?: number;
 }
 
-export type SessionType = 'chat' | 'planning' | 'coding' | 'terminal' | 'blitz';
+/** Structural type describing what role a session plays in the hierarchy */
+export type SessionType = 'session' | 'workstream' | 'blitz';
 
 export type SessionMode = 'planning' | 'agent';
 
@@ -161,12 +162,11 @@ export interface SessionData {
   id: string;  // Our session ID
   provider: AIProviderType | string;  // Provider type
   model?: string;  // Specific model used (e.g., 'gpt-4', 'claude-3-5-sonnet')
-  sessionType?: SessionType;  // Type of session: 'chat', 'planning', 'coding' (deprecated, use mode instead)
+  sessionType?: SessionType;  // Structural type: 'session', 'workstream', 'blitz'
   mode?: SessionMode;  // Session behavior mode: 'planning' | 'agent'
   messages: Message[];
   documentContext?: DocumentContext;
   workspacePath?: string;
-  name?: string;
   title?: string;
   draftInput?: string;
 

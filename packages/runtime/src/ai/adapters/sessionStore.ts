@@ -1,37 +1,45 @@
-import type { Message, SessionData, SessionMode } from '../server/types';
+import type { Message, SessionData, SessionMode, SessionType } from '../server/types';
 
 // Type aliases for compatibility
 export type ChatMessage = Message;
 export type ChatSession = SessionData;
 
-export interface SessionListItem {
+/**
+ * Canonical session metadata type used across all layers (data, IPC, UI).
+ * This is the single source of truth for session list/registry items.
+ */
+export interface SessionMeta {
   id: string;
+  title: string;
   provider: string;
   model?: string;
-  title?: string;
-  sessionType?: string;
+  sessionType: SessionType;
   mode?: SessionMode;
   workspaceId: string;
-  worktreeId?: string;  // ID of the associated worktree if this is a worktree session
-  parentSessionId?: string | null;  // Parent session ID for hierarchical workstreams
-  childCount?: number;  // Number of child sessions (0 for leaf sessions)
+  worktreeId: string | null;
+  parentSessionId: string | null;
+  childCount: number;
+  uncommittedCount: number;
   createdAt: number;
   updatedAt: number;
-  messageCount?: number;
-  isArchived?: boolean;
-  isPinned?: boolean;  // Whether this session is pinned to the top of the list
-  hasUnread?: boolean;  // Whether this session has unread messages (from metadata, for cross-device sync)
+  messageCount: number;
+  isArchived: boolean;
+  isPinned: boolean;
+  hasUnread?: boolean;
   // Branch tracking - SEPARATE from hierarchical parentSessionId
-  branchedFromSessionId?: string;  // ID of the session this was forked from
-  branchPointMessageId?: number;  // Message ID where this branch diverged
-  branchedAt?: number;  // Timestamp when the branch was created
+  branchedFromSessionId?: string;
+  branchPointMessageId?: number;
+  branchedAt?: number;
 }
+
+/** @deprecated Use SessionMeta */
+export type SessionListItem = SessionMeta;
 
 export interface CreateSessionPayload {
   id: string;
   provider: string;
   model?: string;
-  sessionType?: 'chat' | 'planning' | 'coding' | 'terminal' | 'blitz';
+  sessionType?: SessionType;
   mode?: SessionMode;
   title?: string;
   workspaceId: string;
@@ -90,8 +98,8 @@ export interface SessionStore {
    * Returns sessions in arbitrary order (not necessarily matching input order).
    */
   getMany?(sessionIds: string[]): Promise<SessionData[]>;
-  list(workspaceId: string, options?: SessionListOptions): Promise<SessionListItem[]>;
-  search(workspaceId: string, query: string, options?: SessionSearchOptions): Promise<SessionListItem[]>;
+  list(workspaceId: string, options?: SessionListOptions): Promise<SessionMeta[]>;
+  search(workspaceId: string, query: string, options?: SessionSearchOptions): Promise<SessionMeta[]>;
   delete(sessionId: string): Promise<void>;
   /**
    * Atomically update session title if it has not been named yet.
@@ -102,7 +110,7 @@ export interface SessionStore {
    * Get all branches for a given session.
    * Returns sessions that have this session as their parent.
    */
-  getBranches?(sessionId: string): Promise<SessionListItem[]>;
+  getBranches?(sessionId: string): Promise<SessionMeta[]>;
 }
 
 let activeSessionStore: SessionStore | null = null;

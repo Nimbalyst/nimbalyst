@@ -48,7 +48,7 @@ export interface ClaudeCodePromptOptions {
   enableAgentTeams?: boolean;
   // Legacy fields - kept for backward compatibility but no longer used in prompt building
   /** @deprecated No longer used - prompt is now static for all session types */
-  sessionType?: 'chat' | 'coding' | 'planning' | 'terminal';
+  sessionType?: string;
   /** @deprecated Document context is now passed via user messages, not system prompt */
   documentContext?: DocumentContext;
   /** @deprecated Document context is now passed via user messages, not system prompt */
@@ -188,14 +188,14 @@ export function buildSystemPrompt(documentContextOrOptions?: DocumentContext | B
   }
 
   // Check if this is an agentic coding session (no specific document context)
-  const sessionType = (documentContext as any)?.sessionType;
+  const mode = documentContext?.mode;
   const hasDocument = !!(documentContext && (documentContext.filePath || documentContext.content));
 
   let base = `You are an AI assistant integrated into the Nimbalyst editor, a markdown-focused text editor.
 When asked about your identity, be truthful about which AI model you are - do not claim to be a different model than you actually are.`;
 
   // In agentic coding mode, there's no specific document - agent works across codebase
-  if (sessionType === 'coding') {
+  if (mode === 'agent' && !hasDocument) {
     return base + `
 
 You are working in agentic coding mode with access to the entire workspace.

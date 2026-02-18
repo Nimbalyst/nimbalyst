@@ -147,7 +147,7 @@ export {
   workstreamPendingInteractivePromptAtom,
   workstreamTitleAtom,
   type SessionInfo,
-  type SessionListItem,
+  type SessionMeta,
   type OpenSession,
   type WorkstreamType,
   reparentSessionAtom,

@@ -192,7 +192,7 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
         undefined, // documentContext
         workspacePath, // workspacePath (main repo - so session appears in main session list)
         undefined, // modelId (use default)
-        'coding', // sessionType
+        'session', // sessionType
         worktreeId ?? undefined  // worktreeId (associate with the worktree)
       );
 

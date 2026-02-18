@@ -322,7 +322,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         if (sessionData) {
           setDiffSessionInfo({
             sessionId,
-            sessionTitle: sessionData.title || sessionData.name || 'AI Session',
+            sessionTitle: sessionData.title || 'AI Session',
             editedAt: editedAt || Date.now(),
             provider: sessionData.provider
           });

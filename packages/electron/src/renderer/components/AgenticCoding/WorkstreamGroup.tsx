@@ -57,21 +57,7 @@ const WorkstreamGroupStatusIndicator: React.FC<{ sessionIds: string[] }> = memo(
   return null;
 });
 
-interface SessionItem {
-  id: string;
-  title?: string;
-  createdAt: number;
-  updatedAt: number;
-  provider: string;
-  model?: string;
-  messageCount: number;
-  isProcessing?: boolean;
-  hasUnread?: boolean;
-  hasPendingPrompt?: boolean;
-  isArchived?: boolean;
-  isPinned?: boolean;
-  uncommittedCount?: number; // Number of uncommitted files in this session
-}
+import type { SessionMeta as SessionItem } from '../../store';
 
 interface GitStatus {
   ahead?: number;

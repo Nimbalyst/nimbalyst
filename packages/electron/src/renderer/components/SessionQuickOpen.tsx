@@ -6,17 +6,7 @@ import { sessionOrChildProcessingAtom, sessionUnreadAtom, sessionPendingPromptAt
 import { fileMentionOptionsAtom, searchFileMentionAtom } from '../store/atoms/fileMention';
 import type { TypeaheadOption } from './Typeahead/GenericTypeahead';
 
-interface SessionItem {
-  id: string;
-  title?: string;
-  createdAt: number;
-  updatedAt: number;
-  provider: string;
-  model?: string;
-  messageCount: number;
-  parentSessionId?: string | null;
-  uncommittedCount?: number;
-}
+import type { SessionMeta as SessionItem } from '../store';
 
 /**
  * Status indicator that shows processing, pending prompt, or unread status.
@@ -483,6 +473,11 @@ export const SessionQuickOpen: React.FC<SessionQuickOpenProps> = ({
                       {session.parentSessionId && (
                         <span className="session-quick-open-badge workstream-badge shrink-0 text-[10px] py-0.5 px-1.5 rounded-[3px] font-semibold bg-[var(--nim-primary)] text-white">
                           In Workstream
+                        </span>
+                      )}
+                      {session.worktreeId && (
+                        <span className="session-quick-open-badge worktree-badge shrink-0 text-[10px] py-0.5 px-1.5 rounded-[3px] font-semibold bg-[var(--nim-success)] text-white">
+                          Worktree
                         </span>
                       )}
                       {session.messageCount > 0 && (

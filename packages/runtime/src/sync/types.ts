@@ -250,6 +250,8 @@ export interface SessionIndexData {
   provider: string;
   model?: string;
   mode?: string;
+  /** Structural type: 'session' (normal), 'workstream' (parent container), 'blitz' (quick task) */
+  sessionType?: string;
   workspaceId?: string;
   workspacePath?: string;
   messageCount: number;
@@ -282,6 +284,8 @@ export interface SyncedQueuedPrompt {
 export interface SyncedSessionMetadata {
   title?: string;
   mode?: string;
+  /** Structural type: 'session' | 'workstream' | 'blitz' */
+  sessionType?: string;
   provider?: string;
   model?: string;
   workspaceId?: string;

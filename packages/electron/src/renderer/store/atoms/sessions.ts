@@ -18,43 +18,25 @@ import { atom } from 'jotai';
 import { atomFamily } from 'jotai/utils';
 import { store } from '@nimbalyst/runtime/store';
 import type { ChatAttachment, Message } from '@nimbalyst/runtime/ai/server/types';
+import type { SessionMeta } from '@nimbalyst/runtime';
 import { workstreamStateAtom, setWorkstreamActiveChildAtom } from './workstreamState';
 
-/**
- * Session info stored in the session list.
- */
-export interface SessionInfo {
-  id: string;
-  name: string;
-  createdAt: number;
-  updatedAt: number;
-  projectPath: string;
-}
+// SessionMeta is imported from @nimbalyst/runtime (canonical type).
+// Re-export for consumers that import from the store.
+export type { SessionMeta };
+
+/** @deprecated Use SessionMeta directly */
+export type SessionListItem = SessionMeta;
 
 /**
- * Lightweight session metadata for the registry.
- * Minimal fields needed for sorting/filtering in the list view.
+ * @deprecated Use SessionMeta and sessionRegistryAtom instead
  */
-export interface SessionMeta {
+export interface    SessionInfo {
   id: string;
   title: string;
   createdAt: number;
   updatedAt: number;
-  provider: string;
-  model?: string;
-  sessionType: 'chat' | 'planning' | 'coding' | 'terminal' | 'blitz';
-  messageCount: number;
-  isArchived: boolean;
-  isPinned: boolean;
-  parentSessionId: string | null;
-  worktreeId: string | null;
-  childCount: number;
-  uncommittedCount: number;
-  // Transient state (not persisted, computed from atoms)
-  isProcessing?: boolean;
-  childProcessing?: boolean;
-  hasPendingPrompt?: boolean;
-  hasUnread?: boolean;
+  workspaceId: string;
 }
 
 /**
@@ -478,7 +460,7 @@ import type { AIMode } from '../../components/UnifiedAI/ModeTag';
  */
 export interface OpenSession {
   id: string;
-  name: string;
+  title: string;
   isPinned?: boolean;
 }
 
@@ -645,8 +627,8 @@ export const sessionActiveAtom = atomFamily((_sessionId: string) =>
 export const sessionTitleAtom = atomFamily((sessionId: string) =>
   atom((get) => {
     const data = get(sessionStoreAtom(sessionId));
-    if (data?.title || data?.name) {
-      return data.title || data.name;
+    if (data?.title) {
+      return data.title;
     }
     // Fall back to registry for sessions that haven't been fully loaded yet
     const registry = get(sessionRegistryAtom);
@@ -880,8 +862,9 @@ export const loadSessionChildrenAtom = atom(
               createdAt: child.createdAt,
               updatedAt: child.updatedAt,
               provider: child.provider,
-              sessionType: child.sessionType || 'chat',
+              sessionType: child.sessionType || 'session',
               messageCount: child.messageCount || 0,
+              workspaceId: get(sessionListWorkspaceAtom) || '',
               isArchived: child.isArchived || false,
               isPinned: child.isPinned || false,
               worktreeId: child.worktreeId,
@@ -1199,6 +1182,7 @@ export const convertToWorkstreamAtom = atom(
           provider: sessionData.provider || 'claude-code',
           model: sessionData.model,
           title: sessionData.title || 'Workstream',
+          sessionType: 'workstream',
           metadata: {
             isWorkstreamRoot: true,
           },
@@ -1330,19 +1314,20 @@ export const convertToWorkstreamAtom = atom(
       const now = Date.now();
       set(addSessionFullAtom, {
         id: parentSessionId,
-        name: sessionData.title || 'Workstream',
         title: sessionData.title || 'Workstream',
         provider: sessionData.provider || 'claude-code',
         model: sessionData.model,
+        sessionType: 'workstream',
         createdAt: now,
         updatedAt: now,
-        projectPath: workspacePath,
+        workspaceId: workspacePath,
         messageCount: 0,
         isArchived: false,
         isPinned: originalWasPinned,
         worktreeId: sessionData.worktreeId || null,
         parentSessionId: null, // This is the root
         childCount: children.length,
+        uncommittedCount: 0,
       });
 
       // Update the original session in the list to show it now has a parent
@@ -1657,54 +1642,8 @@ export const setActiveSessionAtom = atom(
 // Session list loading and refresh
 // ============================================================
 
-/**
- * Extended session info returned from the database.
- * Contains more fields than SessionInfo for display purposes.
- */
-export interface SessionListItem {
-  id: string;
-  name: string;
-  title?: string;
-  createdAt: number;
-  updatedAt: number;
-  provider: string;
-  model?: string;
-  sessionType?: 'chat' | 'planning' | 'coding' | 'terminal' | 'blitz';
-  messageCount: number;
-  projectPath: string;
-  isArchived?: boolean;
-  isPinned?: boolean;
-  worktreeId?: string | null;
-  // Hierarchical session support (workstreams)
-  parentSessionId?: string | null;  // Parent session ID (null for root sessions)
-  childCount?: number;  // Number of child sessions (0 for leaf sessions)
-  uncommittedCount?: number;  // Number of uncommitted files in this session
-}
-
-/**
- * Convert SessionMeta to SessionListItem format.
- * Helper for derived atoms that need SessionListItem[] format.
- */
-function sessionMetaToListItem(meta: SessionMeta, projectPath: string): SessionListItem {
-  return {
-    id: meta.id,
-    name: meta.title,
-    title: meta.title,
-    createdAt: meta.createdAt,
-    updatedAt: meta.updatedAt,
-    provider: meta.provider,
-    model: meta.model,
-    sessionType: meta.sessionType,
-    messageCount: meta.messageCount,
-    projectPath,
-    isArchived: meta.isArchived,
-    isPinned: meta.isPinned,
-    worktreeId: meta.worktreeId,
-    parentSessionId: meta.parentSessionId,
-    childCount: meta.childCount,
-    uncommittedCount: meta.uncommittedCount,
-  };
-}
+// SessionListItem interface and sessionMetaToListItem conversion deleted.
+// SessionMeta IS the list item type now. See SessionListItem type alias above.
 
 /**
  * Derived: Root sessions only (no parent).
@@ -1728,8 +1667,7 @@ export const sessionListRootAtom = atom<SessionListItem[]>((get) => {
       const parent = registry.get(s.parentSessionId);
       return parent?.sessionType === 'blitz';
     })
-    .sort((a, b) => b.updatedAt - a.updatedAt)
-    .map(meta => sessionMetaToListItem(meta, workspacePath));
+    .sort((a, b) => b.updatedAt - a.updatedAt);
 });
 
 /**
@@ -1739,9 +1677,8 @@ export const sessionListRootAtom = atom<SessionListItem[]>((get) => {
  * - Worktree sessions (they're against different directories)
  * Now derives from sessionRegistryAtom instead of sessionListFullAtom.
  */
-export const sessionListChatAtom = atom<SessionListItem[]>((get) => {
+export const sessionListChatAtom = atom<SessionMeta[]>((get) => {
   const registry = get(sessionRegistryAtom);
-  const workspacePath = get(sessionListWorkspaceAtom) || '';
 
   return Array.from(registry.values())
     .filter(s => {
@@ -1751,8 +1688,7 @@ export const sessionListChatAtom = atom<SessionListItem[]>((get) => {
       if (s.childCount && s.childCount > 0) return false;
       return true;
     })
-    .sort((a, b) => b.updatedAt - a.updatedAt)
-    .map(meta => sessionMetaToListItem(meta, workspacePath));
+    .sort((a, b) => b.updatedAt - a.updatedAt);
 });
 
 /**
@@ -1795,44 +1731,19 @@ export const refreshSessionListAtom = atom(
       });
 
       if (result.success && Array.isArray(result.sessions)) {
-        const sessions: (SessionListItem & { hasUnread?: boolean; hasPendingQuestion?: boolean })[] = result.sessions.map((s: any) => ({
-          id: s.id,
-          name: s.title || s.name || 'Untitled Session',
-          title: s.title || s.name || 'Untitled Session',
-          createdAt: s.createdAt,
-          updatedAt: s.updatedAt,
-          provider: s.provider || 'claude',
-          model: s.model,
-          sessionType: s.sessionType || 'chat',
-          messageCount: s.messageCount || 0,
-          projectPath: workspacePath,
-          isArchived: s.isArchived || false,
-          isPinned: s.isPinned || false,
-          worktreeId: s.worktreeId || null,
-          parentSessionId: s.parentSessionId || null,
-          childCount: s.childCount || 0,
-          uncommittedCount: s.uncommittedCount || 0,
-          hasUnread: s.hasUnread || false,  // For initializing unread atom from database
-          hasPendingQuestion: s.hasPendingQuestion || false,  // For initializing pending question atom from database
-        }));
-
-        // Debug: log sessions with uncommittedCount
-        const withCounts = sessions.filter(s => s.uncommittedCount && s.uncommittedCount > 0);
-        // console.log(`[refreshSessionListAtom] Received ${sessions.length} sessions, ${withCounts.length} have uncommittedCount:`,
-        //   withCounts.slice(0, 3).map(s => ({ id: s.id.substring(0, 8), title: s.title?.substring(0, 30), uncommittedCount: s.uncommittedCount })));
-
-        // Populate the session registry with metadata (single source of truth)
+        // Map IPC results directly into registry (single pass, no intermediate type)
         const registry = new Map<string, SessionMeta>();
-        for (const s of sessions) {
+        for (const s of result.sessions) {
           registry.set(s.id, {
             id: s.id,
-            title: s.title || s.name || 'Untitled Session',
+            title: s.title || 'Untitled Session',
             createdAt: s.createdAt,
             updatedAt: s.updatedAt,
-            provider: s.provider,
+            provider: s.provider || 'claude',
             model: s.model,
-            sessionType: s.sessionType || 'chat',
-            messageCount: s.messageCount,
+            sessionType: s.sessionType || 'session',
+            messageCount: s.messageCount || 0,
+            workspaceId: workspacePath,
             isArchived: s.isArchived || false,
             isPinned: s.isPinned || false,
             parentSessionId: s.parentSessionId || null,
@@ -1846,7 +1757,7 @@ export const refreshSessionListAtom = atom(
             set(sessionUnreadAtom(s.id), true);
           }
           // Initialize pending interactive prompt state from database metadata (for sidebar indicator persistence)
-          if ((s as any).hasPendingQuestion || (s as any).hasPendingInteractivePrompt) {
+          if (s.hasPendingQuestion || s.hasPendingInteractivePrompt) {
             set(sessionHasPendingInteractivePromptAtom(s.id), true);
           }
         }
@@ -1921,22 +1832,7 @@ export const addSessionFullAtom = atom(
     if (registry.has(session.id)) {
       return;
     }
-    registry.set(session.id, {
-      id: session.id,
-      title: session.title || session.name || 'Untitled Session',
-      createdAt: session.createdAt,
-      updatedAt: session.updatedAt,
-      provider: session.provider,
-      model: session.model,
-      sessionType: session.sessionType || 'chat',
-      messageCount: session.messageCount,
-      isArchived: session.isArchived || false,
-      isPinned: session.isPinned || false,
-      parentSessionId: session.parentSessionId || null,
-      worktreeId: session.worktreeId || null,
-      childCount: session.childCount || 0,
-      uncommittedCount: session.uncommittedCount || 0,
-    });
+    registry.set(session.id, session);
     set(sessionRegistryAtom, registry);
 
     // Initialize sessionStoreAtom with minimal data so derived atoms (mode, model) work
@@ -1945,7 +1841,7 @@ export const addSessionFullAtom = atom(
     if (!existingStore) {
       set(sessionStoreAtom(session.id), {
         id: session.id,
-        title: session.title || session.name || 'Untitled Session',
+        title: session.title || 'Untitled Session',
         provider: session.provider || 'claude-code',
         model: session.model || 'claude-code:sonnet',
         mode: 'agent',
@@ -2193,8 +2089,8 @@ export const workstreamPendingInteractivePromptAtom = atomFamily((workstreamId: 
 export const workstreamTitleAtom = atomFamily((workstreamId: string) =>
   atom((get) => {
     const sessionData = get(sessionStoreAtom(workstreamId));
-    if (sessionData?.title || sessionData?.name) {
-      return sessionData.title || sessionData.name;
+    if (sessionData?.title) {
+      return sessionData.title;
     }
     // Fallback to registry if session data not loaded yet
     const registry = get(sessionRegistryAtom);

@@ -368,7 +368,7 @@ export async function registerSessionHandlers() {
                     title: entry.title,
                     provider: entry.provider,
                     model: entry.model,
-                    sessionType: entry.sessionType || 'chat',
+                    sessionType: entry.sessionType || 'session',
                     messageCount: entry.messageCount || 0,
                     isArchived: entry.isArchived || false,
                     isPinned: (entry as any).isPinned || false,  // Include isPinned from repository
@@ -571,7 +571,7 @@ export async function registerSessionHandlers() {
                         title: session.title,
                         provider: session.provider,
                         model: session.model,
-                        sessionType: session.sessionType || 'chat',
+                        sessionType: session.sessionType || 'session',
                         messageCount: entry.messageCount || 0,
                         isArchived: entry.isArchived || false,
                         worktreeId: session.worktreeId,

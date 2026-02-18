@@ -171,6 +171,12 @@ public final class DatabaseManager: @unchecked Sendable {
             }
         }
 
+        migrator.registerMigration("v4_session_type") { db in
+            try db.alter(table: "sessions") { t in
+                t.add(column: "sessionType", .text)
+            }
+        }
+
         try migrator.migrate(writer)
     }
 
@@ -208,7 +214,9 @@ public final class DatabaseManager: @unchecked Sendable {
                         SELECT MAX(updatedAt) FROM sessions WHERE sessions.projectId = projects.id
                     ),
                     sessionCount = (
-                        SELECT COUNT(*) FROM sessions WHERE sessions.projectId = projects.id
+                        SELECT COUNT(*) FROM sessions
+                        WHERE sessions.projectId = projects.id
+                          AND COALESCE(sessions.sessionType, 'session') NOT IN ('workstream', 'blitz')
                     )
             """)
         }
@@ -220,6 +228,9 @@ public final class DatabaseManager: @unchecked Sendable {
         try writer.read { db in
             try Session
                 .filter(Session.Columns.projectId == projectId)
+                // Hide workstream/blitz parent sessions - structural containers on desktop.
+                // NULL = legacy session before type field existed, treat as normal.
+                .filter(Session.Columns.sessionType == nil || (Session.Columns.sessionType != "workstream" && Session.Columns.sessionType != "blitz"))
                 .order(Session.Columns.updatedAt.desc)
                 .fetchAll(db)
         }

@@ -422,7 +422,7 @@ class PGLiteWorker {
         provider TEXT NOT NULL,
         model TEXT,
         title TEXT NOT NULL DEFAULT 'New conversation',
-        session_type TEXT DEFAULT 'chat',
+        session_type TEXT DEFAULT 'session',
         document_context JSONB,
         provider_config JSONB,
         provider_session_id TEXT,
@@ -1230,6 +1230,30 @@ class PGLiteWorker {
     } catch (error) {
       console.error('[PGLite Worker] Failed to add title/is_archived/is_pinned columns to super_loops:', error);
       throw error;
+    }
+
+    // Migration: Repurpose session_type from interaction mode (chat/coding/terminal/planning)
+    // to structural type (session/workstream/worktree/blitz).
+    // The old values were redundant with provider + mode columns.
+    // New values describe what the session IS in the hierarchy.
+    try {
+      await this.db.exec(`
+        -- Step 1: Mark workstream parents (sessions that have children pointing to them)
+        -- but only if they aren't already 'blitz' (blitz is already a structural type)
+        UPDATE ai_sessions
+        SET session_type = 'workstream'
+        WHERE session_type != 'blitz'
+          AND id IN (SELECT DISTINCT parent_session_id FROM ai_sessions WHERE parent_session_id IS NOT NULL);
+
+        -- Step 2: Everything else that isn't blitz or workstream becomes 'session'
+        UPDATE ai_sessions
+        SET session_type = 'session'
+        WHERE session_type NOT IN ('blitz', 'workstream');
+      `);
+      console.log('[PGLite Worker] Migrated session_type to structural types (session/workstream/blitz)');
+    } catch (error) {
+      console.error('[PGLite Worker] Failed to migrate session_type:', error);
+      // Non-fatal - old values still work, just not meaningful
     }
   }
 

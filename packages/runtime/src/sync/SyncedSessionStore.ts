@@ -16,7 +16,7 @@ import type {
   SessionStore,
   CreateSessionPayload,
   UpdateSessionMetadataPayload,
-  SessionListItem,
+  SessionMeta,
   SessionListOptions,
   ChatSession,
 } from '../ai/adapters/sessionStore';
@@ -160,7 +160,7 @@ export function createSyncedSessionStore(
     async list(
       workspaceId: string,
       options?: SessionListOptions
-    ): Promise<SessionListItem[]> {
+    ): Promise<SessionMeta[]> {
       // List is read-only, just delegate
       return baseStore.list(workspaceId, options);
     },
@@ -169,7 +169,7 @@ export function createSyncedSessionStore(
       workspaceId: string,
       query: string,
       options?: SessionListOptions
-    ): Promise<SessionListItem[]> {
+    ): Promise<SessionMeta[]> {
       // Search is read-only, just delegate
       return baseStore.search(workspaceId, query, options);
     },

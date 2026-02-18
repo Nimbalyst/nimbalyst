@@ -26,6 +26,8 @@ struct ServerSessionEntry: Codable {
     let provider: String?
     let model: String?
     let mode: String?
+    /// Structural type: "session", "workstream", or "blitz"
+    let sessionType: String?
     let messageCount: Int?
     let lastMessageAt: Int?
     let createdAt: Int

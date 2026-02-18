@@ -11,6 +11,8 @@ public struct Session: Codable, Identifiable, Hashable, Sendable {
     public var provider: String?
     public var model: String?
     public var mode: String?          // "agent" | "planning"
+    /// Structural type: "session" (normal), "workstream" (parent container), "blitz" (quick task)
+    public var sessionType: String?
     public var isExecuting: Bool
     public var hasQueuedPrompts: Bool
     public var contextTokens: Int?
@@ -45,6 +47,7 @@ public struct Session: Codable, Identifiable, Hashable, Sendable {
         provider: String? = nil,
         model: String? = nil,
         mode: String? = nil,
+        sessionType: String? = nil,
         isExecuting: Bool = false,
         hasQueuedPrompts: Bool = false,
         contextTokens: Int? = nil,
@@ -63,6 +66,7 @@ public struct Session: Codable, Identifiable, Hashable, Sendable {
         self.provider = provider
         self.model = model
         self.mode = mode
+        self.sessionType = sessionType
         self.isExecuting = isExecuting
         self.hasQueuedPrompts = hasQueuedPrompts
         self.contextTokens = contextTokens
@@ -82,7 +86,7 @@ extension Session: FetchableRecord, PersistableRecord {
 
     public enum Columns: String, ColumnExpression {
         case id, projectId, titleEncrypted, titleIv, titleDecrypted
-        case provider, model, mode, isExecuting, hasQueuedPrompts
+        case provider, model, mode, sessionType, isExecuting, hasQueuedPrompts
         case contextTokens, contextWindow
         case createdAt, updatedAt, lastSyncedSeq
         case lastReadAt, lastMessageAt

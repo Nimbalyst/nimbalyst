@@ -114,6 +114,8 @@ interface SessionIndexEntry {
   provider: string;
   model?: string;
   mode?: 'agent' | 'planning';
+  /** Structural type: 'session' | 'workstream' | 'blitz' */
+  sessionType?: string;
   messageCount: number;
   lastMessageAt: number;
   createdAt: number;
@@ -571,6 +573,8 @@ interface CachedSessionIndex {
   provider: string;
   model?: string;
   mode?: 'agent' | 'planning';
+  /** Structural type: 'session' | 'workstream' | 'blitz' */
+  sessionType?: string;
   messageCount: number;
   lastMessageAt: number;
   createdAt: number;
@@ -748,6 +752,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       provider: updatedCache.provider,
       model: updatedCache.model,
       mode: updatedCache.mode,
+      sessionType: updatedCache.sessionType,
       messageCount: updatedCache.messageCount,
       lastMessageAt: updatedCache.lastMessageAt,
       createdAt: updatedCache.createdAt,
@@ -1281,6 +1286,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
                     provider: entry.provider,
                     model: entry.model,
                     mode: entry.mode,
+                    sessionType: entry.sessionType,
                     messageCount: entry.messageCount,
                     lastMessageAt: entry.lastMessageAt,
                     createdAt: entry.createdAt,
@@ -1302,6 +1308,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
                     provider: decrypted.provider,
                     model: decrypted.model,
                     mode: decrypted.mode,
+                    sessionType: decrypted.sessionType,
                     messageCount: decrypted.messageCount,
                     lastMessageAt: decrypted.lastMessageAt,
                     createdAt: decrypted.createdAt,
@@ -1391,6 +1398,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
               provider: entry.provider,
               model: entry.model,
               mode: entry.mode,
+              sessionType: entry.sessionType,
               messageCount: entry.messageCount,
               lastMessageAt: entry.lastMessageAt,
               createdAt: entry.createdAt,
@@ -1810,6 +1818,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
         provider: session.provider,
         model: session.model,
         mode: session.mode as SessionIndexEntry['mode'],
+        sessionType: session.sessionType,
         messageCount: session.messageCount,
         lastMessageAt: session.updatedAt,
         createdAt: session.createdAt,
@@ -1845,6 +1854,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
         provider: session.provider,
         model: session.model,
         mode: session.mode as CachedSessionIndex['mode'],
+        sessionType: session.sessionType,
         messageCount: session.messageCount,
         lastMessageAt: session.updatedAt,
         createdAt: session.createdAt,
@@ -2185,6 +2195,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
               provider: baseEntry.provider,
               model: baseEntry.model,
               mode: baseEntry.mode,
+              sessionType: baseEntry.sessionType,
               messageCount: baseEntry.messageCount,
               lastMessageAt: baseEntry.lastMessageAt,
               createdAt: baseEntry.createdAt,
@@ -2249,6 +2260,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
               provider: meta.provider,
               model: meta.model,
               mode: meta.mode as CachedSessionIndex['mode'],
+              sessionType: meta.sessionType,
               messageCount: 0,
               lastMessageAt: updatedAt,
               createdAt: updatedAt,

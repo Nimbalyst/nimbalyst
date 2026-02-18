@@ -34,7 +34,7 @@ const SessionStatusIndicator = memo<{ sessionId: string }>(({ sessionId }) => {
 });
 
 // SessionDropdownItem extends SessionData with message count for display
-type SessionDropdownItem = Pick<SessionData, 'id' | 'createdAt' | 'name' | 'title' | 'provider' | 'model'> & {
+type SessionDropdownItem = Pick<SessionData, 'id' | 'createdAt' | 'title' | 'provider' | 'model'> & {
   messageCount?: number;
 };
 
@@ -86,20 +86,18 @@ export function SessionDropdown({
     const session = getCurrentSession();
     if (!session) return 'New Session';
     if (session.title) return session.title;
-    if (session.name) return session.name;
     return formatDate(session.createdAt);
   };
 
   const formatSessionName = (session: SessionDropdownItem) => {
     if (session.title) return session.title;
-    if (session.name) return session.name;
     return formatDate(session.createdAt);
   };
 
   const handleRename = (sessionId: string) => {
     const session = sessions.find(s => s.id === sessionId);
     setRenamingId(sessionId);
-    setRenameValue(session?.name || formatSessionName(session!));
+    setRenameValue(session?.title || formatSessionName(session!));
   };
 
   const submitRename = () => {

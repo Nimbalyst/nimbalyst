@@ -290,7 +290,7 @@ export async function syncSession(
         workspaceId: metadata.workspacePath,
         provider: 'claude-code',
         title: metadata.title || 'Imported Session',
-        sessionType: 'chat',
+        sessionType: 'session',
         providerSessionId: metadata.sessionId, // CRITICAL: Pass the Claude Code session ID so SDK can resume
         providerConfig: {
           imported: true,

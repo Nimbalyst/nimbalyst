@@ -4,18 +4,7 @@ import { MaterialSymbol, ProviderIcon } from '@nimbalyst/runtime';
 import { groupSessionStatusAtom, sessionProcessingAtom, sessionUnreadAtom, sessionPendingPromptAtom } from '../../store';
 import { getRelativeTimeString } from '../../utils/dateFormatting';
 
-interface SessionItem {
-  id: string;
-  title?: string;
-  createdAt: number;
-  updatedAt: number;
-  provider: string;
-  model?: string;
-  messageCount: number;
-  isArchived?: boolean;
-  isPinned?: boolean;
-  uncommittedCount?: number;
-}
+import type { SessionMeta as SessionItem } from '../../store';
 
 interface WorktreeWithStatus {
   id: string;

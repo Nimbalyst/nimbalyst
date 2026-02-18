@@ -323,7 +323,7 @@ class AIApi {
     workspacePath?: string,
     provider?: 'claude' | 'claude-code' | 'openai' | 'lmstudio',
     modelId?: string,
-    sessionType?: 'chat' | 'planning' | 'coding' | 'terminal'
+    sessionType?: string
   ): Promise<SessionData> {
     // Provider must be explicitly specified, no default
     if (!provider) {
@@ -338,7 +338,7 @@ class AIApi {
     documentContext?: DocumentContext,
     workspacePath?: string,
     modelId?: string,
-    sessionType?: 'chat' | 'planning' | 'coding' | 'terminal'
+    sessionType?: string
   ): Promise<SessionData> {
     return window.electronAPI.aiCreateSession(provider, documentContext, workspacePath, modelId, sessionType);
   }

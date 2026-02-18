@@ -103,7 +103,7 @@ Stores AI chat conversation sessions with complete message history and provider 
 - `provider` (TEXT): AI provider name (claude, openai, claude-code, lmstudio)
 - `model` (TEXT): AI model identifier
 - `title` (TEXT): Human-readable session title
-- `session_type` (TEXT): Type of session (default: 'chat')
+- `session_type` (TEXT): Structural type of session ('session', 'workstream', 'blitz')
 - `document_context` (JSONB): Document context sent with messages
 - `provider_config` (JSONB): Provider-specific configuration
 - `provider_session_id` (TEXT): External provider session ID
