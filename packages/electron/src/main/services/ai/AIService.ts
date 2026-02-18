@@ -2113,7 +2113,6 @@ export class AIService {
 
       // Mark session as running/active
       const stateManager = getSessionStateManager();
-      let autoContextPromise: Promise<void> | null = null;
       await stateManager.startSession({ sessionId: session.id });
 
       // Mark session as executing for mobile sync (shows "Running" indicator)
@@ -2599,6 +2598,10 @@ export class AIService {
               const tokenUsage = chunk.usage;
               // Capture modelUsage for claude-code provider (provides per-model breakdown with input/output tokens)
               const modelUsage = chunk.modelUsage;
+              // Context fill from last assistant message (actual tokens in context window)
+              const contextFillTokens: number | undefined = chunk.contextFillTokens;
+              // Whether context was compacted this turn (clear stale currentContext)
+              const contextCompacted: boolean = chunk.contextCompacted === true;
 
               // if (tokenUsage) {
               // }
@@ -2657,7 +2660,7 @@ export class AIService {
               });
 
               // Update session token usage if available
-              // For claude-code: use modelUsage for cumulative tokens, /context for currentContext
+              // For claude-code: use modelUsage for cumulative tokens and contextWindow
               // For other providers: use tokenUsage from chunk.usage
               if (session.provider === 'claude-code' && modelUsage) {
                 // For claude-code, accumulate tokens from modelUsage (SDK provides per-model breakdown)
@@ -2667,27 +2670,65 @@ export class AIService {
                   totalTokens: 0
                 };
 
-                // Sum up tokens from all models in modelUsage
+                // Sum up tokens from all models in modelUsage and extract contextWindow
+                // Note: modelUsage tokens are CUMULATIVE across all steps (for billing).
+                // For context window display, use contextFillTokens from last assistant message.
                 let newInputTokens = 0;
                 let newOutputTokens = 0;
                 let newCostUSD = 0;
+                let contextWindowFromResult: number | undefined;
                 for (const modelName of Object.keys(modelUsage)) {
                   const modelStats = modelUsage[modelName];
                   newInputTokens += modelStats.inputTokens || 0;
                   newOutputTokens += modelStats.outputTokens || 0;
                   newCostUSD += modelStats.costUSD || 0;
+                  // The SDK provides contextWindow per-model in modelUsage
+                  if (modelStats.contextWindow) {
+                    contextWindowFromResult = modelStats.contextWindow;
+                  }
                 }
 
-                const updatedUsage = {
+                const updatedUsage: NonNullable<SessionData['tokenUsage']> = {
                   inputTokens: currentUsage.inputTokens + newInputTokens,
                   outputTokens: currentUsage.outputTokens + newOutputTokens,
                   totalTokens: currentUsage.totalTokens + newInputTokens + newOutputTokens,
-                  contextWindow: currentUsage.contextWindow,
                   costUSD: (currentUsage.costUSD || 0) + newCostUSD,
-                  currentContext: currentUsage.currentContext  // Preserve existing currentContext
+                  // Use contextWindow from modelUsage (replaces broken /context command)
+                  contextWindow: contextWindowFromResult || currentUsage.contextWindow,
+                  // contextFillTokens = input + cacheRead + cacheCreation from last assistant message
+                  // This is the actual context fill, not cumulative - updates correctly after compaction
+                  // After compaction, clear stale currentContext (next real turn will set accurate value)
+                  currentContext: contextCompacted
+                    ? undefined
+                    : (contextFillTokens !== undefined && contextWindowFromResult)
+                      ? { tokens: contextFillTokens, contextWindow: contextWindowFromResult }
+                      : currentUsage.currentContext,
                 };
 
                 await this.sessionManager.updateSessionTokenUsage(session.id, updatedUsage);
+
+                // Send IPC event to update UI immediately
+                safeSend(event, 'ai:tokenUsageUpdated', {
+                  sessionId: session.id,
+                  tokenUsage: updatedUsage
+                });
+
+                // Push context usage to mobile sync
+                if (contextFillTokens !== undefined && contextWindowFromResult) {
+                  const syncProvider = getSyncProvider();
+                  if (syncProvider) {
+                    syncProvider.pushChange(session.id, {
+                      type: 'metadata_updated',
+                      metadata: {
+                        currentContext: {
+                          tokens: contextFillTokens,
+                          contextWindow: contextWindowFromResult,
+                        },
+                        updatedAt: Date.now(),
+                      } as any,
+                    });
+                  }
+                }
 
                 // Update local session reference for next iteration
                 session.tokenUsage = updatedUsage;
@@ -2875,37 +2916,17 @@ export class AIService {
                   logger.main.info('[AIService] No syncProvider for mobile push');
                 }
 
-                // AUTO-FETCH CONTEXT USAGE: For claude-code provider, automatically send /context to get accurate token usage.
-                // We defer awaiting the promise until after streaming completes so that queued prompts don't start early.
-                // Skip if the response ended with an error (e.g., context overflow) to avoid showing the /context request to the user.
-                // Skip if there are queued prompts waiting - prioritize responsiveness over context accuracy.
-                // CRITICAL: Use effectiveWorkspacePath so /context runs in the worktree directory for worktree sessions
-                if (session.provider === 'claude-code' && !hadError) {
-                  // Check if there are queued prompts waiting - skip /context to prioritize responsiveness
-                  const { getQueuedPromptsStore } = await import('../RepositoryManager');
-                  const queueStore = getQueuedPromptsStore();
-                  const pendingPrompts = await queueStore.listPending(session.id);
-
-                  if (pendingPrompts.length > 0) {
-                    console.log('[AIService] Skipping auto /context - queued prompts waiting');
-                  } else {
-                    autoContextPromise = this.runAutoContextCommand(session, effectiveWorkspacePath, event);
-                  }
-                } else if (session.provider === 'claude-code' && hadError) {
-                  console.log('[AIService] Skipping auto /context due to error in response');
-                }
+                // AUTO-FETCH CONTEXT USAGE: Previously used /context command to get token usage.
+                // Now context window data comes from modelUsage in the result chunk (set above),
+                // so /context is no longer needed. The SDK's /context command no longer returns
+                // parseable output as of agent-sdk 0.2.x.
+                // Kept as commented code for reference in case /context is restored in a future SDK version.
+                // if (session.provider === 'claude-code' && !hadError) {
+                //   autoContextPromise = this.runAutoContextCommand(session, effectiveWorkspacePath, event);
+                // }
               }
 
               break;
-          }
-        }
-
-        if (autoContextPromise) {
-          try {
-            await autoContextPromise;
-          } catch (contextError) {
-            console.error('[AIService] Auto /context fetch promise rejected:', contextError);
-            logger.main.error('Auto /context fetch promise rejected', contextError);
           }
         }
 

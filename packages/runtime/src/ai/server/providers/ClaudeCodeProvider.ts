@@ -1189,13 +1189,16 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
       let receivedCompactBoundary = false;
       // Track tool calls by ID so we can update them with results
       const toolCallsById: Map<string, any> = new Map();
-      // Track usage data from the SDK
+      // Track usage data from the SDK (gets overwritten by cumulative result.usage)
       let usageData: {
         input_tokens?: number;
         output_tokens?: number;
         cache_read_input_tokens?: number;
         cache_creation_input_tokens?: number;
       } | undefined;
+      // Track the last assistant message's usage separately (per-step, not cumulative).
+      // Used for context window fill calculation: input + cacheRead + cacheCreation = actual context size.
+      let lastAssistantUsage: typeof usageData | undefined;
       // Track per-model usage from SDK result (contains inputTokens, outputTokens, costUSD, etc.)
       let modelUsageData: Record<string, {
         inputTokens?: number;
@@ -1306,6 +1309,8 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
             // Capture usage data from the message if available
             if (chunk.message.usage) {
               usageData = chunk.message.usage;
+              // Track per-step usage from assistant messages (not overwritten by cumulative result.usage)
+              lastAssistantUsage = chunk.message.usage;
             }
 
             const content = chunk.message.content as any;
@@ -1843,6 +1848,11 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
               // Mark that we received a compact boundary (prevents false "no output" error)
               receivedCompactBoundary = true;
 
+              // Reset lastAssistantUsage so we don't report stale pre-compaction context fill.
+              // The compaction turn has no assistant message, so this will be undefined,
+              // and we won't emit contextFillTokens. The next real turn will have accurate data.
+              lastAssistantUsage = undefined;
+
               // Display compact completion message to user
               const preTokens = chunk.compact_metadata?.pre_tokens || 'unknown';
               yield {
@@ -2288,6 +2298,16 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
         }
       }
 
+      // Compute context fill from last assistant message's usage (not cumulative result.usage).
+      // Formula: input_tokens + cache_read_input_tokens + cache_creation_input_tokens
+      // This reflects actual tokens in context window and updates after compaction.
+      // CRITICAL: Use lastAssistantUsage, NOT usageData (which gets overwritten by cumulative result.usage).
+      const lastMessageContextTokens = lastAssistantUsage
+        ? (lastAssistantUsage.input_tokens || 0)
+          + (lastAssistantUsage.cache_read_input_tokens || 0)
+          + (lastAssistantUsage.cache_creation_input_tokens || 0)
+        : undefined;
+
       yield {
         type: 'complete',
         // Don't send content here - it's already been sent in chunks
@@ -2303,7 +2323,11 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
           }
         } : {}),
         // Include modelUsage for detailed per-model breakdown and cost tracking
-        ...(modelUsageData ? { modelUsage: modelUsageData } : {})
+        ...(modelUsageData ? { modelUsage: modelUsageData } : {}),
+        // Context fill from last assistant message (for context window display)
+        ...(lastMessageContextTokens !== undefined ? { contextFillTokens: lastMessageContextTokens } : {}),
+        // Signal that compaction happened so AIService clears stale currentContext
+        ...(receivedCompactBoundary ? { contextCompacted: true } : {})
       };
 
 

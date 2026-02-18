@@ -211,7 +211,7 @@ export interface SessionData {
     categories?: TokenUsageCategory[]; // Breakdown parsed from /context output (legacy, use currentContext)
     costUSD?: number;         // Total cost in USD (from SDK modelUsage)
     webSearchRequests?: number; // Number of web searches performed (from SDK modelUsage)
-    // Current context window snapshot (from /context command for Claude Code)
+    // Current context window snapshot (from SDK modelUsage for Claude Code)
     // This is separate from cumulative tokens - resets on compaction
     currentContext?: {
       tokens: number;         // Current tokens in context window
@@ -312,6 +312,11 @@ export interface StreamChunk {
     contextWindow?: number;
     webSearchRequests?: number;
   }>;
+  // Actual tokens in context window from last assistant message (input + cacheRead + cacheCreation).
+  // Unlike modelUsage which is cumulative, this reflects the real context fill level per turn.
+  contextFillTokens?: number;
+  // Set to true when context was compacted this turn. Signals AIService to clear stale currentContext.
+  contextCompacted?: boolean;
 }
 
 export interface DiffArgs {
