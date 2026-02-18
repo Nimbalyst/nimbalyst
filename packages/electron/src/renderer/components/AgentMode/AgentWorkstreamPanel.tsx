@@ -50,6 +50,7 @@ import {
   toggleWorkstreamFilesSidebarAtom,
   loadWorkstreamState,
   workstreamStatesLoadedAtom,
+  workstreamWorktreePathAtom,
   type WorkstreamLayoutMode,
 } from '../../store/atoms/workstreamState';
 import {
@@ -379,8 +380,9 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
   const activeSessionId = useAtomValue(workstreamActiveChildAtom(workstreamId));
   const setActiveSession = useSetAtom(setActiveSessionInWorkstreamAtom);
 
-  // Worktree state - resolve worktree path if this is a worktree session
-  const [worktreePath, setWorktreePath] = useState<string | null>(null);
+  // Worktree state - read cached worktree path from atom (available synchronously on remount)
+  const worktreePath = useAtomValue(workstreamWorktreePathAtom(workstreamId));
+  const setWorkstreamState = useSetAtom(workstreamStateAtom(workstreamId));
   const sessionParentId = useAtomValue(sessionParentIdDerivedAtom(workstreamId));
   const sessionWorktreeId = useAtomValue(sessionWorktreeIdAtom(workstreamId));
 
@@ -482,29 +484,32 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
     }
   }, [workstreamId, workspacePath, sessionDataLoaded, sessionParentId, workstreamStatesLoaded, loadSessionChildren]);
 
-  // Resolve worktree path if this is a worktree session
+  // Resolve worktree path if this is a worktree session and not yet cached in atom
   useEffect(() => {
     if (!sessionWorktreeId) {
-      setWorktreePath(null);
+      if (worktreePath) {
+        setWorkstreamState({ worktreePath: null });
+      }
       return;
     }
 
-    // Query worktree path via IPC
+    // Skip IPC if already cached in workstream state
+    if (worktreePath) return;
+
+    // Query worktree path via IPC and cache in workstream state atom
     (async () => {
       try {
         const result = await window.electronAPI.invoke('worktree:get', sessionWorktreeId);
         if (result?.success && result.worktree) {
-          setWorktreePath(result.worktree.path);
+          setWorkstreamState({ worktreePath: result.worktree.path });
         } else {
           console.error('[AgentWorkstreamPanel] Failed to resolve worktree path:', result?.error);
-          setWorktreePath(null);
         }
       } catch (error) {
         console.error('[AgentWorkstreamPanel] Error resolving worktree path:', error);
-        setWorktreePath(null);
       }
     })();
-  }, [sessionWorktreeId]);
+  }, [sessionWorktreeId, worktreePath, setWorkstreamState]);
 
   // Local state for drag states
   const [isDraggingVertical, setIsDraggingVertical] = useState(false);
@@ -724,8 +729,10 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
   }, [workspacePath, sessionWorktreeId, worktreePath]);
 
   // Determine what to show based on layout mode
-  // Editor tabs are shown in editor and split modes
-  const showEditorTabs = layoutMode === 'split' || layoutMode === 'editor';
+  // Editor tabs are shown in editor and split modes, but wait for worktree path to resolve
+  // before rendering (TabContent captures workspaceId permanently on first render)
+  const worktreePathReady = !sessionWorktreeId || worktreePath;
+  const showEditorTabs = (layoutMode === 'split' || layoutMode === 'editor') && worktreePathReady;
   // Session tabs are always shown - in editor mode, the transcript is collapsed but tabs + input remain visible
   const showSessionTabs = true;
   // Collapse the transcript content (hide messages) when in editor mode

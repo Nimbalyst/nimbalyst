@@ -338,6 +338,7 @@ export {
   workstreamOpenFilesAtom,
   workstreamActiveFileAtom,
   workstreamWorktreeIdAtom,
+  workstreamWorktreePathAtom,
   workstreamHasChildrenAtom,
   workstreamHasOpenFilesAtom,
   worktreeActiveSessionAtom,

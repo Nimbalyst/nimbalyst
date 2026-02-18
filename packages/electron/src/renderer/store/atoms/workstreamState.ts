@@ -117,6 +117,8 @@ export interface WorkstreamState {
   // ===== Worktree Info (for worktrees) =====
   /** Worktree ID if this is a worktree session */
   worktreeId: string | null;
+  /** Resolved worktree path (cached so it's available synchronously on remount) */
+  worktreePath: string | null;
 
   // ===== UI State (persisted per-workstream) =====
   /** Layout mode (split/editor/transcript) */
@@ -155,6 +157,7 @@ function createDefaultState(id: string): WorkstreamState {
     childSessionIds: [],
     activeChildId: null,
     worktreeId: null,
+    worktreePath: null,
     layoutMode: 'transcript', // Start with transcript maximized
     splitRatio: 0.5,
     filesSidebarVisible: true,
@@ -299,6 +302,14 @@ export const workstreamActiveFileAtom = atomFamily((id: string) =>
  */
 export const workstreamWorktreeIdAtom = atomFamily((id: string) =>
   atom((get) => get(workstreamStateAtom(id)).worktreeId)
+);
+
+/**
+ * Resolved worktree path for a workstream (null if not a worktree).
+ * Cached in state so it's available synchronously on remount.
+ */
+export const workstreamWorktreePathAtom = atomFamily((id: string) =>
+  atom((get) => get(workstreamStateAtom(id)).worktreePath)
 );
 
 /**
@@ -600,6 +611,7 @@ export const convertToWorkstreamAtom = atom(
       childSessionIds: [sessionId, siblingId],
       activeChildId: siblingId,
       worktreeId: null,
+      worktreePath: null,
       // Inherit UI state from original session
       layoutMode: currentState.layoutMode,
       splitRatio: currentState.splitRatio,
@@ -621,6 +633,7 @@ export const convertToWorkstreamAtom = atom(
       childSessionIds: [],
       activeChildId: null,
       worktreeId: null,
+      worktreePath: null,
       layoutMode: 'transcript',
       splitRatio: 0.5,
       filesSidebarVisible: true,
@@ -797,6 +810,8 @@ export async function loadWorkstreamState(workstreamId: string): Promise<void> {
         filesSidebarVisible: (saved as WorkstreamState).filesSidebarVisible ?? current.filesSidebarVisible,
         openFilePaths: (saved as WorkstreamState).openFilePaths ?? current.openFilePaths,
         activeFilePath: (saved as WorkstreamState).activeFilePath ?? current.activeFilePath,
+        // Cached worktree path (available synchronously on remount)
+        worktreePath: (saved as WorkstreamState).worktreePath ?? current.worktreePath,
         // Hierarchy state preserved from current in-memory state
         // (id, type, childSessionIds, activeChildId, worktreeId)
       };
