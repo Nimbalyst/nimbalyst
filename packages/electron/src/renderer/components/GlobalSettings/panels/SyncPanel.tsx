@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { usePostHog } from 'posthog-js/react';
 import { useAtom } from 'jotai';
 import { QRPairingModal } from './QRPairingModal';
@@ -65,94 +65,8 @@ interface StytchAuthState {
   } | null;
 }
 
-// Project Picker Popup Component
-function ProjectPickerPopup({
-  isOpen,
-  onClose,
-  projects,
-  enabledProjects,
-  onToggle,
-}: {
-  isOpen: boolean;
-  onClose: () => void;
-  projects: Project[];
-  enabledProjects: string[];
-  onToggle: (path: string, enabled: boolean) => void;
-}) {
-  if (!isOpen) return null;
-
-  const enabledCount = projects.filter(p => enabledProjects.includes(p.path)).length;
-
-  return (
-    <div
-      className="fixed inset-0 bg-black/50 flex items-center justify-center z-[1000]"
-      onClick={onClose}
-    >
-      <div
-        className="bg-nim rounded-xl w-[400px] max-h-[500px] overflow-hidden shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="px-5 py-4 border-b border-nim flex items-center justify-between">
-          <div>
-            <h3 className="m-0 text-[15px] font-semibold text-nim">
-              Projects to Sync
-            </h3>
-            <p className="mt-1 mb-0 text-xs text-nim-faint">
-              {enabledCount} of {projects.length} projects enabled
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            className="bg-transparent border-none cursor-pointer p-1 text-nim-faint hover:text-nim"
-          >
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M15 5L5 15M5 5l10 10" />
-            </svg>
-          </button>
-        </div>
-
-        <div className="px-5 py-3 max-h-[350px] overflow-y-auto">
-          {projects.length === 0 ? (
-            <p className="text-nim-faint text-[13px] text-center py-5">
-              No projects found. Open a workspace to see projects here.
-            </p>
-          ) : (
-            projects.map((project) => (
-              <label
-                key={project.path}
-                className="flex items-start gap-3 py-2.5 cursor-pointer border-b border-nim last:border-b-0"
-              >
-                <input
-                  type="checkbox"
-                  checked={enabledProjects.includes(project.path)}
-                  onChange={(e) => onToggle(project.path, e.target.checked)}
-                  className="mt-0.5"
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="text-[13px] font-medium text-nim">
-                    {project.name}
-                  </div>
-                  <div className="text-[11px] text-nim-faint overflow-hidden text-ellipsis whitespace-nowrap">
-                    {project.path}
-                  </div>
-                </div>
-              </label>
-            ))
-          )}
-        </div>
-
-        <div className="px-5 py-3 border-t border-nim flex justify-end">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 bg-nim-primary border-none rounded-md text-white text-[13px] font-medium cursor-pointer hover:bg-nim-primary-hover"
-          >
-            Done
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
+/** Maximum number of projects to show inline before collapsing */
+const INLINE_PROJECT_LIMIT = 5;
 
 export function SyncPanel() {
   const posthog = usePostHog();
@@ -173,7 +87,7 @@ export function SyncPanel() {
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [showQRModal, setShowQRModal] = useState(false);
-  const [showProjectPicker, setShowProjectPicker] = useState(false);
+  const [showAllProjects, setShowAllProjects] = useState(false);
   const [connectedDevices, setConnectedDevices] = useState<DeviceInfo[]>([]);
   const [devicesLoading, setDevicesLoading] = useState(false);
   const [devicesError, setDevicesError] = useState<string | null>(null);
@@ -193,6 +107,12 @@ export function SyncPanel() {
   useEffect(() => { wasAuthenticatedRef.current = stytchAuth.isAuthenticated; }, [stytchAuth.isAuthenticated]);
 
   const isStytchAvailable = !!window.electronAPI?.stytch;
+
+  const enabledProjects = config.enabledProjects ?? [];
+  const enabledProjectCount = enabledProjects.length;
+
+  // Derive whether sync is effectively active (has projects selected)
+  const isSyncActive = config.enabled && enabledProjectCount > 0;
 
   // Load Stytch auth state on mount
   useEffect(() => {
@@ -291,24 +211,20 @@ export function SyncPanel() {
     }
   }, [config.enabled, effectiveServerUrl]);
 
-  const handleFieldChange = (field: keyof SyncConfig, value: string | boolean | number) => {
-    if (field === 'enabled') {
-      const projectCount = config.enabledProjects
-        ? config.enabledProjects.length
-        : projects.length;
-      posthog?.capture(value ? 'sync_enabled' : 'sync_disabled', { projectCount });
-    }
-    updateConfig({ [field]: value });
-  };
-
   const handleProjectToggle = async (projectPath: string, enabled: boolean) => {
-    // Update local atom for immediate UI feedback (set atom directly to avoid
-    // the debounced sync:set-config path which does a full teardown/reinit)
-    const enabledProjects = config.enabledProjects || projects.map(p => p.path);
+    // Compute updated project list from current enabledProjects (default to empty, not all)
+    const currentEnabled = config.enabledProjects ?? [];
     const updated = enabled
-      ? [...enabledProjects, projectPath]
-      : enabledProjects.filter(p => p !== projectPath);
-    setConfig({ ...config, enabledProjects: updated });
+      ? [...currentEnabled, projectPath]
+      : currentEnabled.filter(p => p !== projectPath);
+
+    // Auto-enable/disable sync based on whether any projects are selected
+    const shouldEnable = updated.length > 0;
+    setConfig({ ...config, enabledProjects: updated, enabled: shouldEnable });
+
+    if (shouldEnable !== config.enabled) {
+      posthog?.capture(shouldEnable ? 'sync_enabled' : 'sync_disabled', { projectCount: updated.length });
+    }
 
     // Call sync:toggle-project to persist config and trigger immediate incremental sync
     try {
@@ -316,6 +232,10 @@ export function SyncPanel() {
     } catch (error) {
       console.error('[SyncPanel] Failed to toggle project sync:', error);
     }
+  };
+
+  const handleFieldChange = (field: keyof SyncConfig, value: string | boolean | number) => {
+    updateConfig({ [field]: value });
   };
 
   // Environment switch handler (dev only)
@@ -409,16 +329,17 @@ export function SyncPanel() {
     }
   };
 
-  const enabledProjectCount = config.enabledProjects
-    ? config.enabledProjects.length
-    : projects.length;
+  // Determine which projects to show inline
+  const visibleProjects = showAllProjects ? projects : projects.slice(0, INLINE_PROJECT_LIMIT);
+  const hasMoreProjects = projects.length > INLINE_PROJECT_LIMIT;
 
   return (
     <div className="provider-panel flex flex-col">
-      <div className="provider-panel-header mb-6 pb-4 border-b border-[var(--nim-border)]">
-        <h3 className="provider-panel-title text-xl font-semibold leading-tight mb-2 text-[var(--nim-text)]">Account & Sync</h3>
-        <p className="provider-panel-description text-sm leading-relaxed text-[var(--nim-text-muted)]">
-          Sign in to sync AI sessions across devices with end-to-end encryption.
+      {/* Header */}
+      <div className="provider-panel-header mb-5 pb-4 border-b border-[var(--nim-border)]">
+        <h3 className="provider-panel-title text-xl font-semibold leading-tight mb-1.5 text-[var(--nim-text)]">Account & Sync</h3>
+        <p className="provider-panel-description text-[13px] leading-relaxed text-[var(--nim-text-muted)]">
+          Sync AI sessions to your phone and share encrypted sessions and docs with collaborators. All data is end-to-end encrypted.
         </p>
       </div>
 
@@ -459,11 +380,9 @@ export function SyncPanel() {
 
       {/* Account Section */}
       <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
-        <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">Account</h4>
-
         {stytchAuth.isAuthenticated && stytchAuth.user ? (
-          <div className="flex items-center gap-3 p-3 bg-nim-secondary rounded-lg">
-            <div className="w-10 h-10 rounded-full bg-nim-primary flex items-center justify-center text-white font-semibold text-base">
+          <div className="flex items-center gap-3 p-2.5 bg-nim-secondary rounded-lg">
+            <div className="w-9 h-9 rounded-full bg-nim-primary flex items-center justify-center text-white font-semibold text-sm">
               {(stytchAuth.user.name?.first_name?.[0] || stytchAuth.user.emails[0]?.email[0] || '?').toUpperCase()}
             </div>
             <div className="flex-1">
@@ -599,212 +518,190 @@ export function SyncPanel() {
         )}
       </div>
 
-      {/* Sync Settings */}
+      {/* Projects to Sync */}
       <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
-        <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">Sync Settings</h4>
+        <h4 className="provider-panel-section-title text-[15px] font-semibold mb-2 text-[var(--nim-text)]">Projects to Sync</h4>
+        <p className="text-[13px] leading-relaxed text-[var(--nim-text-muted)] mb-3">
+          Select which projects sync their AI sessions to your mobile device. No projects sync by default.
+        </p>
 
-        <div className="setting-item py-3">
-          <label className="setting-label flex items-start gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={config.enabled}
-              onChange={(e) => handleFieldChange('enabled', e.target.checked)}
-              className="setting-checkbox w-4 h-4 mt-0.5 cursor-pointer shrink-0 accent-[var(--nim-primary)]"
-            />
-            <div className="setting-text flex flex-col gap-0.5">
-              <span className="setting-name text-sm font-medium text-[var(--nim-text)]">Enable Session Sync</span>
-              <span className="setting-description text-xs leading-relaxed text-[var(--nim-text-muted)]">
-                Sync AI sessions to other devices connected to the same server.
-              </span>
-            </div>
-          </label>
+        <div className="bg-nim-secondary rounded-lg overflow-hidden">
+          {projects.length === 0 ? (
+            <p className="text-nim-faint text-[13px] text-center py-5 m-0">
+              No projects found. Open a workspace to see projects here.
+            </p>
+          ) : (
+            <>
+              {visibleProjects.map((project) => (
+                <label
+                  key={project.path}
+                  className="flex items-center gap-2.5 px-3 py-2 cursor-pointer border-b border-[var(--nim-border)] last:border-b-0 hover:bg-nim-hover"
+                >
+                  <input
+                    type="checkbox"
+                    checked={enabledProjects.includes(project.path)}
+                    onChange={(e) => handleProjectToggle(project.path, e.target.checked)}
+                    className="w-4 h-4 cursor-pointer shrink-0 accent-[var(--nim-primary)]"
+                  />
+                  <span className="text-[13px] font-medium text-nim flex-1">
+                    {project.name}
+                  </span>
+                  <span className="text-[11px] text-nim-faint max-w-[200px] overflow-hidden text-ellipsis whitespace-nowrap">
+                    {project.path.replace(/^\/Users\/[^/]+/, '~')}
+                  </span>
+                </label>
+              ))}
+              {hasMoreProjects && !showAllProjects && (
+                <button
+                  onClick={() => setShowAllProjects(true)}
+                  className="w-full py-2 text-[12px] text-nim-primary bg-transparent border-none border-t border-[var(--nim-border)] cursor-pointer hover:bg-nim-hover"
+                >
+                  Show all {projects.length} projects...
+                </button>
+              )}
+            </>
+          )}
         </div>
 
-        {config.enabled && (
-          <div className="setting-item py-3 mt-3">
-            <div className="setting-text flex flex-col gap-0.5 mb-2">
-              <span className="setting-name text-sm font-medium text-[var(--nim-text)]">Idle Timeout</span>
-              <span className="setting-description text-xs leading-relaxed text-[var(--nim-text-muted)]">
-                Minutes of inactivity before mobile push notifications are sent.
-              </span>
-            </div>
-            <select
-              value={config.idleTimeoutMinutes ?? 5}
-              onChange={(e) => handleFieldChange('idleTimeoutMinutes', Number(e.target.value))}
-              className="w-full px-3 py-2 text-[13px] bg-nim-secondary border border-nim rounded-md text-nim cursor-pointer"
-            >
-              <option value={1}>1 minute (for testing)</option>
-              <option value={2}>2 minutes</option>
-              <option value={5}>5 minutes (default)</option>
-              <option value={10}>10 minutes</option>
-              <option value={15}>15 minutes</option>
-              <option value={30}>30 minutes</option>
-            </select>
-          </div>
-        )}
+        {/* Idle timeout - compact row below projects */}
+        <div className="flex items-center justify-between mt-3">
+          <span className="text-[12px] text-nim-faint">Push notification delay after idle</span>
+          <select
+            value={config.idleTimeoutMinutes ?? 5}
+            onChange={(e) => handleFieldChange('idleTimeoutMinutes', Number(e.target.value))}
+            className="px-2 py-1 text-[12px] bg-nim-secondary border border-nim rounded text-nim-muted cursor-pointer"
+          >
+            <option value={1}>1 min</option>
+            <option value={2}>2 min</option>
+            <option value={5}>5 min</option>
+            <option value={10}>10 min</option>
+            <option value={15}>15 min</option>
+            <option value={30}>30 min</option>
+          </select>
+        </div>
       </div>
 
-      {config.enabled && (
-        <>
-          {/* Projects */}
-          <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
-            <div className="flex items-center justify-between">
-              <h4 className="provider-panel-section-title text-base font-semibold text-[var(--nim-text)] m-0">Projects</h4>
-              <button
-                onClick={() => setShowProjectPicker(true)}
-                className="px-2.5 py-1 text-xs bg-nim-secondary border border-nim rounded text-nim-muted cursor-pointer hover:bg-nim-hover"
-              >
-                {enabledProjectCount} of {projects.length} enabled
-              </button>
+      {/* Mobile App - compact card combining app info + QR pairing */}
+      {stytchAuth.isAuthenticated && (
+        <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
+          <h4 className="provider-panel-section-title text-[15px] font-semibold mb-3 text-[var(--nim-text)]">Mobile App</h4>
+          <div className="flex gap-3.5 p-3.5 bg-nim-secondary rounded-lg">
+            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center shrink-0">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+                <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
+                <line x1="12" y1="18" x2="12" y2="18"/>
+              </svg>
             </div>
-            <p className="text-sm leading-relaxed text-[var(--nim-text-muted)] mt-1">
-              Choose which projects sync their AI sessions.
-            </p>
-          </div>
-
-          {/* Get the Mobile App - only show when authenticated */}
-          {stytchAuth.isAuthenticated && (
-            <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
-              <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">Get the Mobile App</h4>
-              <div className="flex items-center gap-4 p-4 bg-gradient-to-br from-blue-500/15 to-blue-500/5 rounded-lg border border-blue-500/20">
-                <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center shrink-0">
-                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
-                    <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
-                    <line x1="12" y1="18" x2="12" y2="18"/>
-                  </svg>
-                </div>
-                <div className="flex-1">
-                  <div className="text-sm font-semibold text-nim mb-1">
-                    Nimbalyst for iOS
-                  </div>
-                  <div className="text-xs text-nim-muted mb-2">
-                    View AI sessions on your iPhone or iPad
-                  </div>
-                  <button
-                    onClick={() => window.electronAPI.openExternal('https://apps.apple.com/app/nimbalyst')}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-md text-xs font-medium text-gray-900 border-none cursor-pointer hover:bg-gray-100"
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
-                    </svg>
-                    Download on App Store
-                  </button>
-                </div>
+            <div className="flex-1">
+              <div className="text-[13px] font-semibold text-nim mb-0.5">
+                Nimbalyst for iOS
               </div>
-            </div>
-          )}
-
-          {/* Mobile Pairing - only show when authenticated */}
-          {stytchAuth.isAuthenticated ? (
-            <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
-              <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">Mobile Device</h4>
-              <button
-                className="pair-device-button w-full flex items-center justify-center px-4 py-2.5 bg-nim-secondary border border-nim rounded-md text-nim font-medium text-[13px] cursor-pointer hover:bg-nim-hover disabled:opacity-50 disabled:cursor-not-allowed"
-                onClick={() => {
-                  posthog?.capture('sync_qr_pairing_opened');
-                  setShowQRModal(true);
-                }}
-                disabled={!effectiveServerUrl}
-              >
-                <svg className="w-[18px] h-[18px] mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect x="3" y="3" width="7" height="7" rx="1" />
-                  <rect x="14" y="3" width="7" height="7" rx="1" />
-                  <rect x="3" y="14" width="7" height="7" rx="1" />
-                  <rect x="14" y="14" width="3" height="3" />
-                  <rect x="18" y="14" width="3" height="3" />
-                  <rect x="14" y="18" width="3" height="3" />
-                  <rect x="18" y="18" width="3" height="3" />
-                </svg>
-                Pair Mobile Device
-              </button>
-
-              {/* Encryption Explanation */}
-              <div className="mt-3 p-4 bg-green-500/10 border border-green-500/20 rounded-lg">
-                <div className="flex items-center gap-2 mb-2.5">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2">
-                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                    <path d="M7 11V7a5 5 0 0110 0v4" />
-                  </svg>
-                  <span className="text-[13px] font-semibold text-green-500">
-                    End-to-End Encryption
-                  </span>
-                </div>
-                <p className="m-0 mb-2.5 text-xs text-nim-muted leading-relaxed">
-                  The QR code securely transfers your encryption key directly between devices.
-                </p>
-                <ul className="m-0 pl-5 text-xs text-nim leading-7">
-                  <li>Your encryption keys never touch our servers</li>
-                  <li>Only your devices can decrypt your data</li>
-                  <li>Sign in with the same account on both devices</li>
-                </ul>
+              <div className="text-[11px] text-nim-faint mb-2">
+                View and respond to AI sessions from your phone
               </div>
-            </div>
-          ) : (
-            <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
-              <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">Mobile Device</h4>
-              <div className="p-4 bg-nim-secondary rounded-lg text-center">
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="mx-auto mb-3 text-nim-faint">
-                  <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
-                  <line x1="12" y1="18" x2="12" y2="18"/>
-                </svg>
-                <p className="m-0 text-[13px] text-nim-muted">
-                  Sign in above to pair your mobile device
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* Connected Devices */}
-          {connectedDevices.length > 0 && (
-            <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
-              <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">
-                Online Devices
+              <div className="flex items-center gap-2">
                 <button
-                  onClick={loadDevices}
-                  disabled={devicesLoading}
-                  className={`ml-2 px-1.5 py-0.5 text-[10px] bg-nim-secondary border border-nim rounded text-nim-faint ${
-                    devicesLoading ? 'cursor-wait' : 'cursor-pointer hover:bg-nim-hover'
-                  }`}
+                  onClick={() => window.electronAPI.openExternal('https://apps.apple.com/app/nimbalyst')}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white rounded text-[11px] font-medium text-gray-900 border-none cursor-pointer hover:bg-gray-100"
                 >
-                  Refresh
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
+                  </svg>
+                  App Store
                 </button>
-              </h4>
-              <div className="mt-2">
-                {connectedDevices.map((device) => (
-                  <div
-                    key={device.deviceId}
-                    className="flex items-center gap-2.5 px-2.5 py-2 bg-nim-secondary rounded-md mb-1.5 last:mb-0"
-                  >
-                    <div className="w-2 h-2 rounded-full bg-green-500" />
-                    <div className="flex-1">
-                      <div className="text-[13px] text-nim">
-                        {device.name}
-                      </div>
-                      <div className="text-[11px] text-nim-faint">
-                        {device.platform} - {formatRelativeTime(device.connectedAt)}
-                      </div>
-                    </div>
-                  </div>
-                ))}
+                <span className="inline-flex items-center px-2 py-0.5 bg-nim-primary/15 border border-nim-primary/30 rounded-full text-[10px] font-medium text-nim-primary">
+                  Coming Soon
+                </span>
               </div>
             </div>
-          )}
-        </>
+            {/* Pair Device button - right side of card */}
+            <button
+              className="self-center flex flex-col items-center gap-1.5 px-4 py-2.5 bg-nim-primary border-none rounded-lg text-white text-[14px] font-medium cursor-pointer hover:bg-nim-primary-hover disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+              onClick={() => {
+                posthog?.capture('sync_qr_pairing_opened');
+                setShowQRModal(true);
+              }}
+              disabled={!effectiveServerUrl}
+            >
+              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="3" y="3" width="7" height="7" rx="1" />
+                <rect x="14" y="3" width="7" height="7" rx="1" />
+                <rect x="3" y="14" width="7" height="7" rx="1" />
+                <rect x="14" y="14" width="3" height="3" />
+                <rect x="18" y="14" width="3" height="3" />
+                <rect x="14" y="18" width="3" height="3" />
+                <rect x="18" y="18" width="3" height="3" />
+              </svg>
+              Pair Device
+            </button>
+          </div>
+        </div>
       )}
+
+      {/* Connected Devices */}
+      {connectedDevices.length > 0 && (
+        <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
+          <h4 className="provider-panel-section-title text-[15px] font-semibold mb-3 text-[var(--nim-text)]">
+            Online Devices
+            <button
+              onClick={loadDevices}
+              disabled={devicesLoading}
+              className={`ml-2 px-1.5 py-0.5 text-[10px] bg-nim-secondary border border-nim rounded text-nim-faint ${
+                devicesLoading ? 'cursor-wait' : 'cursor-pointer hover:bg-nim-hover'
+              }`}
+            >
+              Refresh
+            </button>
+          </h4>
+          <div className="mt-2">
+            {connectedDevices.map((device) => (
+              <div
+                key={device.deviceId}
+                className="flex items-center gap-2.5 px-2.5 py-2 bg-nim-secondary rounded-md mb-1.5 last:mb-0"
+              >
+                <div className="w-2 h-2 rounded-full bg-green-500" />
+                <div className="flex-1">
+                  <div className="text-[13px] text-nim">
+                    {device.name}
+                  </div>
+                  <div className="text-[11px] text-nim-faint">
+                    {device.platform} - {formatRelativeTime(device.connectedAt)}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Encryption footer */}
+      <div className="provider-panel-section py-4">
+        <div className="p-3.5 bg-nim-secondary border border-nim rounded-lg">
+          <div className="flex items-center gap-2 mb-2">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--nim-success, #22c55e)" strokeWidth="2" className="shrink-0">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+              <path d="M7 11V7a5 5 0 0110 0v4" />
+            </svg>
+            <span className="text-[13px] font-semibold" style={{ color: 'var(--nim-success, #22c55e)' }}>
+              End-to-End Encryption
+            </span>
+          </div>
+          <p className="m-0 mb-2 text-[12px] text-nim-muted leading-relaxed">
+            The QR code securely transfers your encryption key directly between devices.
+          </p>
+          <ul className="m-0 pl-5 text-[12px] text-nim leading-7">
+            <li>Your encryption keys never touch our servers</li>
+            <li>Only your devices can decrypt your data</li>
+            <li>Sign in with the same account on both devices</li>
+          </ul>
+        </div>
+      </div>
 
       {/* Modals */}
       <QRPairingModal
         isOpen={showQRModal}
         onClose={() => setShowQRModal(false)}
         serverUrl={effectiveServerUrl}
-      />
-
-      <ProjectPickerPopup
-        isOpen={showProjectPicker}
-        onClose={() => setShowProjectPicker(false)}
-        projects={projects}
-        enabledProjects={config.enabledProjects || projects.map(p => p.path)}
-        onToggle={handleProjectToggle}
       />
     </div>
   );

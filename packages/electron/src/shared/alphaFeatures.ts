@@ -26,12 +26,6 @@ export interface AlphaFeatureDefinition {
  */
 export const ALPHA_FEATURES: readonly AlphaFeatureDefinition[] = [
   {
-    tag: 'sync',
-    name: 'Account & Sync',
-    description: 'Enable account sign-in and session synchronization across devices.',
-    icon: 'account_circle',
-  },
-  {
     tag: 'voice-mode',
     name: 'Voice Mode',
     description: 'Enable voice interaction mode for hands-free coding with AI.',

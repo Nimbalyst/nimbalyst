@@ -468,13 +468,11 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
         // Get enabled projects filter (if configured)
         const { store } = await import('../utils/store');
         const syncSettings = store.get('sessionSync');
-        const enabledProjects = syncSettings?.enabledProjects;
-        logger.main.info(`[SyncManager] Enabled projects filter: ${enabledProjects ? JSON.stringify(enabledProjects) : 'all (no filter)'}`);
+        const enabledProjects = syncSettings?.enabledProjects ?? [];
+        logger.main.info(`[SyncManager] Enabled projects filter: ${JSON.stringify(enabledProjects)}`);
 
-        // Build enabled projects set - if enabledProjects is set, use it; otherwise sync all
-        const enabledProjectIds = enabledProjects
-          ? new Set(enabledProjects)
-          : null; // null means all projects enabled
+        // Build enabled projects set - only sync explicitly selected projects
+        const enabledProjectIds = new Set(enabledProjects);
 
         // Step 4: Find sessions that need syncing using timestamp comparison
         // Compare local updatedAt vs server updatedAt - if local is newer, we have changes to sync
@@ -769,12 +767,11 @@ export async function triggerIncrementalSync(): Promise<void> {
     // Get enabled projects filter
     const { store } = await import('../utils/store');
     const syncSettings = store.get('sessionSync');
-    const enabledProjects = syncSettings?.enabledProjects;
-    logger.main.info(`[SyncManager] Triggered sync: enabled projects: ${enabledProjects ? JSON.stringify(enabledProjects) : 'all (no filter)'}`);
+    const enabledProjects = syncSettings?.enabledProjects ?? [];
+    logger.main.info(`[SyncManager] Triggered sync: enabled projects: ${JSON.stringify(enabledProjects)}`);
 
-    const enabledProjectIds = enabledProjects
-      ? new Set(enabledProjects)
-      : null;
+    // Only sync explicitly selected projects
+    const enabledProjectIds = new Set(enabledProjects);
 
     // Find sessions that need syncing using timestamp comparison
     const sessionsNeedingIndexUpdate: typeof allLocalSessions = [];

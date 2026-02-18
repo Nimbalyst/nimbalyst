@@ -58,7 +58,7 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
 }) => {
   // Get release channel and alpha/beta feature flags from Jotai atoms
   const releaseChannel = useAtomValue(releaseChannelAtom);
-  const alphaFeatures = useAlphaFeatures(['sync', 'voice-mode', 'claude-plugins']);
+  const alphaFeatures = useAlphaFeatures(['voice-mode', 'claude-plugins']);
   const isCodexBetaEnabled = useBetaFeature('codex');
 
   const getStatusDot = (providerId: string): 'success' | 'warning' | 'error' | undefined => {
@@ -77,13 +77,11 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
           id: 'sync',
           name: 'Account & Sync',
           icon: <MaterialSymbol icon="account_circle" size={16} />,
-          hidden: !alphaFeatures.sync, // Only visible when feature is enabled
         },
         {
           id: 'shared-links',
           name: 'Shared Links',
           icon: <MaterialSymbol icon="link" size={16} />,
-          hidden: !alphaFeatures.sync, // Only visible when sync is enabled
         },
         {
           id: 'notifications',

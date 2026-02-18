@@ -637,10 +637,9 @@ export function registerSettingsHandlers() {
             };
         }
 
-        // Check if project is enabled
-        // If no enabledProjects list, all projects are enabled by default
-        const isProjectEnabled = !config?.enabledProjects ||
-            (workspacePath ? config.enabledProjects.includes(workspacePath) : true);
+        // Check if project is enabled - only explicitly selected projects sync
+        const enabledProjects = config?.enabledProjects ?? [];
+        const isProjectEnabled = workspacePath ? enabledProjects.includes(workspacePath) : false;
 
         // Get sync provider status from SyncManager
         const { isSyncEnabled, getSyncProvider } = await import('../services/SyncManager');
