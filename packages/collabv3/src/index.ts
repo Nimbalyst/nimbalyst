@@ -9,6 +9,9 @@
  * - JWT 'sub' claim contains the user ID used for room authorization
  */
 
+// Injected at build time by wrangler define
+declare const COLLABV3_VERSION: string;
+
 import type { Env } from './types';
 import { SessionRoom } from './SessionRoom';
 import { IndexRoom } from './IndexRoom';
@@ -165,9 +168,13 @@ export default {
 
     const url = new URL(request.url);
 
-    // Health check
+    // Health check - returns version for deploy tracking
     if (url.pathname === '/health') {
-      return new Response('OK', { status: 200 });
+      return Response.json({
+        status: 'ok',
+        version: COLLABV3_VERSION,
+        environment: env.ENVIRONMENT || 'unknown',
+      });
     }
 
     // WebSocket route: /sync/{roomId}

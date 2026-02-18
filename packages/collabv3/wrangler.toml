@@ -38,6 +38,10 @@ bucket_name = "nimbalyst-session-shares"
 enabled = true
 head_sampling_rate = 1  # Sample 100% of requests
 
+# Build-time version injection (overridden by deploy script)
+[define]
+COLLABV3_VERSION = '"0.0.0-dev"'
+
 # Environment variables
 [vars]
 ENVIRONMENT = "development"
