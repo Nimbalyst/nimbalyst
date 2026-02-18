@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { VList } from 'virtua';
 import { DatabaseDashboard } from './DatabaseDashboard';
 
@@ -180,30 +180,6 @@ export function DatabaseBrowser() {
     return {};
   });
   const [showColumnPicker, setShowColumnPicker] = useState(false);
-
-  const tableHeaderRef = useRef<HTMLDivElement>(null);
-  const queryHeaderRef = useRef<HTMLDivElement>(null);
-
-  // Callback ref: attach to a wrapper div around VList.
-  // Finds VList's root scrollable element (first child) and syncs its horizontal scroll to the header.
-  const syncHeaderScroll = useCallback((headerRef: React.RefObject<HTMLDivElement | null>) => {
-    return (wrapper: HTMLDivElement | null) => {
-      if (!wrapper) return;
-      // VList renders as a single child div of our wrapper
-      const vlistEl = wrapper.firstElementChild as HTMLElement | null;
-      if (!vlistEl) return;
-      const handler = () => {
-        if (headerRef.current) {
-          headerRef.current.scrollLeft = vlistEl.scrollLeft;
-        }
-      };
-      if ((vlistEl as any).__syncHandler) {
-        vlistEl.removeEventListener('scroll', (vlistEl as any).__syncHandler);
-      }
-      (vlistEl as any).__syncHandler = handler;
-      vlistEl.addEventListener('scroll', handler, { passive: true });
-    };
-  }, []);
 
   // Save hidden columns to localStorage whenever they change
   useEffect(() => {
@@ -622,9 +598,9 @@ export function DatabaseBrowser() {
                   const visibleColumns = getVisibleColumns(selectedTable, allColumns);
 
                   return (
-                    <div className="virtual-table-container flex-1 border border-[var(--nim-border)] rounded overflow-hidden min-h-0 bg-nim" style={{ display: 'grid', gridTemplateRows: 'auto 1fr' }}>
-                      <div ref={tableHeaderRef} className="virtual-table-header bg-nim-tertiary overflow-hidden">
-                        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${visibleColumns.length}, 150px)`, width: visibleColumns.length * 150 }}>
+                    <div className="virtual-table-container flex-1 border border-[var(--nim-border)] rounded overflow-x-auto min-h-0 bg-nim" style={{ display: 'grid', gridTemplateRows: 'auto 1fr' }}>
+                      <div className="virtual-table-header bg-nim-tertiary" style={{ minWidth: visibleColumns.length * 180 }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${visibleColumns.length}, 1fr)` }}>
                           {visibleColumns.map(key => (
                             <div key={key} onClick={() => handleSort(key)} className="py-2 px-3 text-[13px] text-left border-b border-r border-[var(--nim-border)] font-semibold text-nim-muted cursor-pointer select-none hover:bg-nim-hover bg-nim-tertiary overflow-hidden text-ellipsis whitespace-nowrap last:border-r-0">
                               {key}
@@ -637,10 +613,10 @@ export function DatabaseBrowser() {
                           ))}
                         </div>
                       </div>
-                      <div className="min-h-0" ref={syncHeaderScroll(tableHeaderRef)}>
-                        <VList className="virtual-table-body !h-full" style={{ overflow: 'auto' }}>
+                      <div className="min-h-0" style={{ minWidth: visibleColumns.length * 180 }}>
+                        <VList className="virtual-table-body !h-full" style={{ overflowX: 'hidden' }}>
                           {tableData.rows.map((row, idx) => (
-                            <div key={idx} className="virtual-table-row border-b border-[var(--nim-border)] hover:bg-[var(--nim-bg-hover)]" style={{ display: 'grid', gridTemplateColumns: `repeat(${visibleColumns.length}, 150px)`, width: visibleColumns.length * 150 }}>
+                            <div key={idx} className="virtual-table-row border-b border-[var(--nim-border)] hover:bg-[var(--nim-bg-hover)]" style={{ display: 'grid', gridTemplateColumns: `repeat(${visibleColumns.length}, 1fr)` }}>
                               {visibleColumns.map(col => {
                                 const value = row[col];
                                 return (
@@ -689,9 +665,9 @@ export function DatabaseBrowser() {
               const sortedRows = getSortedQueryResults();
 
               return (
-                <div className="virtual-table-container flex-1 border border-[var(--nim-border)] rounded overflow-hidden min-h-0 bg-nim" style={{ display: 'grid', gridTemplateRows: 'auto 1fr' }}>
-                  <div ref={queryHeaderRef} className="virtual-table-header bg-nim-tertiary overflow-hidden">
-                    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${columns.length}, 150px)`, width: columns.length * 150 }}>
+                <div className="virtual-table-container flex-1 border border-[var(--nim-border)] rounded overflow-x-auto min-h-0 bg-nim" style={{ display: 'grid', gridTemplateRows: 'auto 1fr' }}>
+                  <div className="virtual-table-header bg-nim-tertiary" style={{ minWidth: columns.length * 180 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${columns.length}, 1fr)` }}>
                       {columns.map(key => (
                         <div key={key} onClick={() => handleSort(key)} className="py-2 px-3 text-[13px] text-left border-b border-r border-[var(--nim-border)] font-semibold text-nim-muted cursor-pointer select-none hover:bg-nim-hover bg-nim-tertiary overflow-hidden text-ellipsis whitespace-nowrap last:border-r-0">
                           {key}
@@ -704,10 +680,10 @@ export function DatabaseBrowser() {
                       ))}
                     </div>
                   </div>
-                  <div className="min-h-0" ref={syncHeaderScroll(queryHeaderRef)}>
-                    <VList className="virtual-table-body !h-full" style={{ overflow: 'auto' }}>
+                  <div className="min-h-0" style={{ minWidth: columns.length * 180 }}>
+                    <VList className="virtual-table-body !h-full" style={{ overflowX: 'hidden' }}>
                       {sortedRows.map((row, idx) => (
-                        <div key={idx} className="virtual-table-row border-b border-[var(--nim-border)] hover:bg-[var(--nim-bg-hover)]" style={{ display: 'grid', gridTemplateColumns: `repeat(${columns.length}, 150px)`, width: columns.length * 150 }}>
+                        <div key={idx} className="virtual-table-row border-b border-[var(--nim-border)] hover:bg-[var(--nim-bg-hover)]" style={{ display: 'grid', gridTemplateColumns: `repeat(${columns.length}, 1fr)` }}>
                           {columns.map((col, colIdx) => {
                             const value = row[col];
                             return (
