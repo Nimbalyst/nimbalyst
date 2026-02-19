@@ -1112,7 +1112,7 @@ public final class SyncManager: ObservableObject {
                 "messageCount": 0,
                 "lastMessageAt": session.lastMessageAt ?? session.updatedAt,
                 "createdAt": session.createdAt,
-                "updatedAt": now,
+                "updatedAt": session.updatedAt,
                 "isExecuting": session.isExecuting,
                 "lastReadAt": now,
             ]

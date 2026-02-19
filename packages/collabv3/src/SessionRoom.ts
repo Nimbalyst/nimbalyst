@@ -333,9 +333,6 @@ export class SessionRoom implements DurableObject {
       }
     }
 
-    // Touch activity timestamp (someone is actively viewing this session)
-    this.setMetadataValue('updated_at', String(Date.now()));
-
     // Get metadata
     const metadata = this.getMetadata();
 
