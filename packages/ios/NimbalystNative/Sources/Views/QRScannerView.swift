@@ -21,10 +21,33 @@ public struct QRPairingData: Equatable {
     public let analyticsId: String?
 
     /// Parse QR code string into pairing data.
-    /// Supports the desktop v4 payload format (encryptionKeySeed, syncEmail)
-    /// and falls back to legacy format (seed, userId).
-    /// Returns nil if the string is not valid JSON with required fields.
+    /// Supports three formats:
+    /// 1. Deep link URL: `nimbalyst://pair?data=<base64-encoded-JSON>` (from Camera app scan)
+    /// 2. Desktop v4 JSON payload (encryptionKeySeed, syncEmail)
+    /// 3. Legacy JSON format (seed, userId)
+    /// Returns nil if the string cannot be parsed.
     public static func parse(_ string: String) -> QRPairingData? {
+        // Try deep link URL format first
+        if string.hasPrefix("nimbalyst://pair") {
+            return parseFromDeepLink(string)
+        }
+
+        return parseJSON(string)
+    }
+
+    /// Extract pairing data from a `nimbalyst://pair?data=<base64>` URL.
+    private static func parseFromDeepLink(_ urlString: String) -> QRPairingData? {
+        guard let components = URLComponents(string: urlString),
+              let dataParam = components.queryItems?.first(where: { $0.name == "data" })?.value,
+              let decoded = Data(base64Encoded: dataParam),
+              let jsonString = String(data: decoded, encoding: .utf8) else {
+            return nil
+        }
+        return parseJSON(jsonString)
+    }
+
+    /// Parse a raw JSON string into pairing data.
+    private static func parseJSON(_ string: String) -> QRPairingData? {
         guard let data = string.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return nil

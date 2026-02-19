@@ -84,8 +84,14 @@ export function QRPairingModal({ isOpen, onClose, serverUrl }: QRPairingModalPro
       const payload = await window.electronAPI.credentials.generateQRPayload(effectiveUrl);
       setQRPayload(payload);
 
+      // Wrap payload in a nimbalyst:// deep link URL so the iOS Camera app
+      // can open Nimbalyst directly when scanning. The payload stays local —
+      // it goes from screen -> camera -> app, never touches a server.
+      const payloadBase64 = btoa(JSON.stringify(payload));
+      const deepLinkUrl = `nimbalyst://pair?data=${encodeURIComponent(payloadBase64)}`;
+
       // Generate QR code data URL
-      const dataUrl = await QRCode.toDataURL(JSON.stringify(payload), {
+      const dataUrl = await QRCode.toDataURL(deepLinkUrl, {
         width: 280,
         margin: 2,
         color: {

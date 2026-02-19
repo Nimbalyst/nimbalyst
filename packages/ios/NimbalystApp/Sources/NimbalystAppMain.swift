@@ -91,7 +91,8 @@ struct NimbalystAppMain: App {
     }
 
     /// Handle `nimbalyst://` deep links.
-    /// The auth callback comes in as `nimbalyst://auth/callback?session_token=...&session_jwt=...`
+    /// - `nimbalyst://auth/callback?session_token=...&session_jwt=...` — Stytch auth callback
+    /// - `nimbalyst://pair?data=<base64-encoded-JSON>` — QR pairing from Camera app
     private func handleDeepLink(_ url: URL) {
         NSLog("[DeepLink] handleDeepLink called with scheme=\(url.scheme ?? "nil"), host=\(url.host ?? "nil"), path=\(url.path)")
         guard url.scheme == "nimbalyst" else {
@@ -102,8 +103,41 @@ struct NimbalystAppMain: App {
         if url.host == "auth" {
             NSLog("[DeepLink] Routing to authManager.handleCallback")
             appState.authManager.handleCallback(url)
+        } else if url.host == "pair" {
+            NSLog("[DeepLink] Routing to QR pairing")
+            handlePairDeepLink(url)
         } else {
             NSLog("[DeepLink] Ignored: unknown host")
+        }
+    }
+
+    /// Handle `nimbalyst://pair?data=<base64>` deep link from Camera QR scan.
+    /// Decodes the base64 payload and feeds it into the same pairing flow
+    /// as the in-app QR scanner.
+    private func handlePairDeepLink(_ url: URL) {
+        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let dataParam = components.queryItems?.first(where: { $0.name == "data" })?.value,
+              let decoded = Data(base64Encoded: dataParam),
+              let jsonString = String(data: decoded, encoding: .utf8) else {
+            NSLog("[DeepLink] pair: failed to decode base64 data parameter")
+            return
+        }
+
+        guard let pairingData = QRPairingData.parse(jsonString) else {
+            NSLog("[DeepLink] pair: failed to parse pairing data from decoded JSON")
+            return
+        }
+
+        do {
+            try appState.pair(
+                with: pairingData.seed,
+                serverUrl: pairingData.serverUrl,
+                userId: pairingData.userId,
+                analyticsId: pairingData.analyticsId
+            )
+            NSLog("[DeepLink] pair: pairing successful")
+        } catch {
+            NSLog("[DeepLink] pair: pairing failed: \(error.localizedDescription)")
         }
     }
 }
