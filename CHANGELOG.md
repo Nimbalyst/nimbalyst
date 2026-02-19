@@ -20,6 +20,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.53.12] - 2026-02-18
+
+
+### Added
+- QR code opens Nimbalyst iOS app when scanned with Camera
+- Extended context settings toggle for 1M context models
+
+### Fixed
+- Blitz sessions now show full worktree UI (git ops, terminal, merge)
+- Codex usage indicator shown without requiring provider to be enabled
+- Folder collapse state preserved in files-edited sidebar
+- iOS sessions reorder to top of list when viewed
+- iOS shows correct connection status dot when desktop is connected
+- Use SDK [1m] suffix for 1M context models
+
 ## [0.53.11] - 2026-02-18
 
 
