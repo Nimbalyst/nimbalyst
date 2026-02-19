@@ -6,6 +6,10 @@ import {
   toggleTrackerPanelAtom,
   closeTrackerPanelAtom,
 } from '../store/atoms/trackers';
+import {
+  toggleTerminalPanelAtom,
+  closeTerminalPanelAtom,
+} from '../store/atoms/terminals';
 
 interface KeyboardShortcutsOptions {
   // Mode state
@@ -27,10 +31,6 @@ interface KeyboardShortcutsOptions {
   // AgentMode ref for worktree operations
   agentModeRef: React.RefObject<AgentModeRef | null>;
 
-  // Terminal panel state
-  terminalPanelVisible: boolean;
-  setTerminalPanelVisible: React.Dispatch<React.SetStateAction<boolean>>;
-
   // Agent mode toggle
   toggleAgentCollapsed: () => void;
 }
@@ -44,7 +44,7 @@ interface KeyboardShortcutsOptions {
  * - Cmd+Y: Open history dialog (Files mode only)
  * - Cmd+T: Toggle Tracker panel (remembers last active type)
  * - Cmd+Alt+W: Create new worktree session
- * - Cmd+`: Toggle Terminal panel
+ * - Ctrl+`: Toggle Terminal panel
  */
 const isMac = navigator.platform.startsWith('Mac');
 
@@ -55,13 +55,15 @@ export function useKeyboardShortcuts({
   activeModeStateRef,
   editorModeRef,
   agentModeRef,
-  terminalPanelVisible,
-  setTerminalPanelVisible,
   toggleAgentCollapsed,
 }: KeyboardShortcutsOptions): void {
   // Tracker panel atoms
   const toggleTrackerPanel = useSetAtom(toggleTrackerPanelAtom);
   const closeTrackerPanel = useSetAtom(closeTrackerPanelAtom);
+
+  // Terminal panel atoms
+  const toggleTerminalPanel = useSetAtom(toggleTerminalPanelAtom);
+  const closeTerminalPanel = useSetAtom(closeTerminalPanelAtom);
 
   // Track if worktree creation is pending after mode switch
   const pendingWorktreeCreationRef = useRef(false);
@@ -121,17 +123,15 @@ export function useKeyboardShortcuts({
       if (workspaceMode && isAppModifier && !e.shiftKey && !e.altKey && e.key === 't') {
         e.preventDefault();
         toggleTrackerPanel();
-        setTerminalPanelVisible(false);
+        closeTerminalPanel();
       }
       // Ctrl+` for Terminal panel (Ctrl on all platforms, matching VS Code)
       if (workspaceMode && e.code === 'Backquote' && !e.shiftKey && !e.altKey &&
           e.ctrlKey && !e.metaKey) {
         e.preventDefault();
         e.stopPropagation();
-        setTerminalPanelVisible(prev => {
-          if (!prev) closeTrackerPanel(); // Close tracker when opening terminal
-          return !prev;
-        });
+        toggleTerminalPanel();
+        closeTrackerPanel(); // Close tracker when opening terminal
       }
 
       // Cmd+Alt+W (Mac) or Ctrl+Alt+W (Windows) to create new worktree session
@@ -161,10 +161,10 @@ export function useKeyboardShortcuts({
     activeModeStateRef,
     editorModeRef,
     agentModeRef,
-    terminalPanelVisible,
-    setTerminalPanelVisible,
     toggleAgentCollapsed,
     toggleTrackerPanel,
     closeTrackerPanel,
+    toggleTerminalPanel,
+    closeTerminalPanel,
   ]);
 }

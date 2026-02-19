@@ -1,7 +1,7 @@
 /**
  * Terminal Atoms
  *
- * State management for terminal instances using Jotai.
+ * State management for terminal instances and panel UI using Jotai.
  * Provides reactive updates when terminals are created, deleted, or modified.
  *
  * Key principle: Backend emits IPC events, atoms update, UI re-renders.
@@ -45,6 +45,58 @@ export const terminalListAtom = atom<TerminalInstance[]>([]);
  * Active terminal ID atom
  */
 export const activeTerminalIdAtom = atom<string | undefined>(undefined);
+
+// --- Terminal Panel UI State ---
+
+/**
+ * Terminal panel visibility atom
+ */
+export const terminalPanelVisibleAtom = atom<boolean>(false);
+
+/**
+ * Terminal panel height atom
+ */
+export const terminalPanelHeightAtom = atom<number>(300);
+
+/**
+ * Toggle terminal panel visibility (write-only atom)
+ */
+export const toggleTerminalPanelAtom = atom(null, (_get, set) => {
+  set(terminalPanelVisibleAtom, (prev) => !prev);
+});
+
+/**
+ * Close terminal panel (write-only atom)
+ */
+export const closeTerminalPanelAtom = atom(null, (_get, set) => {
+  set(terminalPanelVisibleAtom, false);
+});
+
+/**
+ * Open terminal panel (write-only atom)
+ */
+export const openTerminalPanelAtom = atom(null, (_get, set) => {
+  set(terminalPanelVisibleAtom, true);
+});
+
+/**
+ * Load terminal panel state from backend and update atoms.
+ * Called once on startup.
+ */
+export async function loadTerminalPanelState(): Promise<void> {
+  try {
+    if (!window.electronAPI?.terminal?.getPanelState) return;
+    const state = await window.electronAPI.terminal.getPanelState();
+    if (state?.panelVisible !== undefined) {
+      store.set(terminalPanelVisibleAtom, state.panelVisible);
+    }
+    if (state?.panelHeight !== undefined) {
+      store.set(terminalPanelHeightAtom, state.panelHeight);
+    }
+  } catch (error) {
+    console.error('[terminals] Failed to load terminal panel state:', error);
+  }
+}
 
 /**
  * Atom family for tracking command running state per terminal

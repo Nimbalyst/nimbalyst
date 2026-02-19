@@ -107,6 +107,14 @@ import {
   closeTrackerPanelAtom,
   initTrackerPanelLayout,
 } from './store/atoms/trackers';
+import {
+  terminalPanelVisibleAtom,
+  terminalPanelHeightAtom,
+  toggleTerminalPanelAtom,
+  closeTerminalPanelAtom,
+  openTerminalPanelAtom,
+  loadTerminalPanelState,
+} from './store/atoms/terminals';
 
 logger.ui.info('App.tsx loading');
 logger.ui.info('About to import StravuEditor');
@@ -377,9 +385,12 @@ export default function App() {
   const toggleTrackerPanel = useSetAtom(toggleTrackerPanelAtom);
   const closeTrackerPanel = useSetAtom(closeTrackerPanelAtom);
 
-  // Terminal bottom panel state
-  const [terminalPanelVisible, setTerminalPanelVisible] = useState<boolean>(false);
-  const [terminalPanelHeight, setTerminalPanelHeight] = useState<number>(300);
+  // Terminal bottom panel state (Jotai atoms)
+  const terminalPanelVisible = useAtomValue(terminalPanelVisibleAtom);
+  const terminalPanelHeight = useAtomValue(terminalPanelHeightAtom);
+  const toggleTerminalPanel = useSetAtom(toggleTerminalPanelAtom);
+  const closeTerminalPanel = useSetAtom(closeTerminalPanelAtom);
+  const openTerminalPanel = useSetAtom(openTerminalPanelAtom);
 
   // Agent panel plan reference (for launching from plan status)
   const [agentPlanReference, setAgentPlanReference] = useState<string | null>(null);
@@ -443,26 +454,15 @@ export default function App() {
     }
   }, [workspacePath]);
 
-  // Load terminal panel state from terminal store
+  // Load terminal panel state from terminal store into Jotai atoms
   useEffect(() => {
-    if (!workspacePath || !window.electronAPI?.terminal?.getPanelState) return;
-
-    window.electronAPI.terminal.getPanelState()
-      .then(state => {
-        if (state?.panelVisible !== undefined) {
-          setTerminalPanelVisible(state.panelVisible);
-          // If terminal panel is visible, close tracker panel (mutually exclusive)
-          if (state.panelVisible) {
-            closeTrackerPanel();
-          }
-        }
-        if (state?.panelHeight !== undefined) {
-          setTerminalPanelHeight(state.panelHeight);
-        }
-      })
-      .catch(error => {
-        console.error('[TerminalBottomPanel] Failed to load terminal panel state:', error);
-      });
+    if (!workspacePath) return;
+    loadTerminalPanelState().then(() => {
+      // If terminal panel is visible on load, close tracker panel (mutually exclusive)
+      if (store.get(terminalPanelVisibleAtom)) {
+        closeTrackerPanel();
+      }
+    });
   }, [workspacePath, closeTrackerPanel]);
 
 
@@ -989,21 +989,19 @@ export default function App() {
     activeModeStateRef,
     editorModeRef,
     agentModeRef,
-    terminalPanelVisible,
-    setTerminalPanelVisible,
     toggleAgentCollapsed,
   });
 
   // Listen for terminal:show events (from worktree terminal button)
   useEffect(() => {
     const handleTerminalShow = () => {
-      setTerminalPanelVisible(true);
+      openTerminalPanel();
       closeTrackerPanel(); // Close tracker when opening terminal
     };
 
     window.addEventListener('terminal:show', handleTerminalShow);
     return () => window.removeEventListener('terminal:show', handleTerminalShow);
-  }, [closeTrackerPanel]);
+  }, [openTerminalPanel, closeTrackerPanel]);
 
   // Listen for open-ai-session events (from rebase/merge conflict resolution)
   useEffect(() => {
@@ -1444,7 +1442,7 @@ export default function App() {
           setActiveMode('agent');
         }}
         onToggleTerminalPanel={() => {
-          setTerminalPanelVisible(prev => !prev);
+          toggleTerminalPanel();
           if (!terminalPanelVisible) {
             closeTrackerPanel(); // Close tracker when opening terminal
           }
@@ -1653,10 +1651,6 @@ export default function App() {
         {workspacePath && (
           <TerminalBottomPanel
             workspacePath={workspacePath}
-            visible={terminalPanelVisible}
-            onVisibilityChange={setTerminalPanelVisible}
-            height={terminalPanelHeight}
-            onHeightChange={setTerminalPanelHeight}
           />
         )}
       </div>

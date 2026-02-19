@@ -5,12 +5,12 @@
  * in a tabbed interface. Terminals are stored in a dedicated terminal store
  * separate from AI sessions.
  *
- * Uses Jotai atoms for terminal list state to enable reactive updates when
- * terminals are created or deleted (e.g., from worktree archiving).
+ * Uses Jotai atoms for all state: terminal list, active terminal, panel
+ * visibility, and panel height. No props needed for panel state.
  */
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { useAtomValue } from 'jotai';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import { store } from '@nimbalyst/runtime/store';
 import { TerminalPanel } from '../Terminal/TerminalPanel';
@@ -19,6 +19,9 @@ import { usePostHog } from 'posthog-js/react';
 import {
   terminalListAtom,
   activeTerminalIdAtom,
+  terminalPanelVisibleAtom,
+  terminalPanelHeightAtom,
+  closeTerminalPanelAtom,
   loadTerminals,
   setActiveTerminal,
   removeTerminalFromList,
@@ -31,10 +34,6 @@ import { selectedWorkstreamAtom, sessionWorktreeIdAtom } from '../../store/atoms
 
 interface TerminalBottomPanelProps {
   workspacePath: string;
-  visible: boolean;
-  onVisibilityChange: (visible: boolean) => void;
-  height: number;
-  onHeightChange: (height: number) => void;
   minHeight?: number;
   maxHeight?: number;
 }
@@ -75,14 +74,15 @@ const TerminalTabWrapper: React.FC<TerminalTabWrapperProps> = ({
 
 export const TerminalBottomPanel: React.FC<TerminalBottomPanelProps> = ({
   workspacePath,
-  visible,
-  onVisibilityChange,
-  height,
-  onHeightChange,
   minHeight = 150,
   maxHeight = 600,
 }) => {
-  // Use Jotai atoms for terminal state - enables reactive updates from IPC events
+  // Panel state from Jotai atoms
+  const visible = useAtomValue(terminalPanelVisibleAtom);
+  const height = useAtomValue(terminalPanelHeightAtom);
+  const closePanel = useSetAtom(closeTerminalPanelAtom);
+
+  // Terminal list state from Jotai atoms
   const terminals = useAtomValue(terminalListAtom);
   const activeTerminalId = useAtomValue(activeTerminalIdAtom);
   const [isResizing, setIsResizing] = useState(false);
@@ -130,28 +130,6 @@ export const TerminalBottomPanel: React.FC<TerminalBottomPanelProps> = ({
       unsubscribeCommandRunning?.();
     };
   }, [workspacePath]);
-
-  // Load panel height on mount (visibility is managed by App.tsx)
-  useEffect(() => {
-    let mounted = true;
-
-    const loadPanelState = async () => {
-      try {
-        const state = await window.electronAPI.terminal.getPanelState();
-        if (mounted && state.panelHeight) {
-          onHeightChange(state.panelHeight);
-        }
-      } catch (error) {
-        console.error('[TerminalBottomPanel] Failed to load panel state:', error);
-      }
-    };
-
-    loadPanelState();
-
-    return () => {
-      mounted = false;
-    };
-  }, [onHeightChange]);
 
   // Track analytics and persist visibility when panel visibility changes
   useEffect(() => {
@@ -271,9 +249,8 @@ export const TerminalBottomPanel: React.FC<TerminalBottomPanelProps> = ({
 
   // Close panel
   const handleClose = useCallback(() => {
-    onVisibilityChange(false);
-    window.electronAPI.terminal.setPanelVisible(false);
-  }, [onVisibilityChange]);
+    closePanel();
+  }, [closePanel]);
 
   // Resize handling
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -291,8 +268,8 @@ export const TerminalBottomPanel: React.FC<TerminalBottomPanelProps> = ({
       Math.max(resizeStartHeight.current + deltaY, minHeight),
       maxHeight
     );
-    onHeightChange(newHeight);
-  }, [isResizing, minHeight, maxHeight, onHeightChange]);
+    store.set(terminalPanelHeightAtom, newHeight);
+  }, [isResizing, minHeight, maxHeight]);
 
   const handleMouseUp = useCallback(() => {
     if (isResizing) {
@@ -326,14 +303,10 @@ export const TerminalBottomPanel: React.FC<TerminalBottomPanelProps> = ({
     console.log(`[TerminalBottomPanel] Terminal ${terminalId} exited with code ${exitCode}`);
   }, []);
 
-  if (!visible) {
-    return null;
-  }
-
   return (
     <div
       className="terminal-bottom-panel-container relative shrink-0 flex flex-col border-t-2 border-[var(--nim-border)]"
-      style={{ height: `${height}px` }}
+      style={{ height: visible ? `${height}px` : '0px', display: visible ? 'flex' : 'none' }}
     >
       <div
         className="terminal-bottom-panel-resize-handle absolute top-0 left-0 right-0 h-1 cursor-ns-resize z-10 bg-transparent hover:bg-[var(--nim-primary)]"

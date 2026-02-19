@@ -503,14 +503,14 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
                 // Clear the corrupted scrollback file to prevent future crashes
                 window.electronAPI.terminal.clearScrollback?.(sessionId);
               } else if (terminal && !disposed) {
-                // Send a soft terminal reset to clear any stale state from scrollback
-                // This resets scroll regions, cursor attributes, and other state that
-                // might have been left in a bad state by the scrollback content.
-                // CSI ! p = Soft Terminal Reset (DECSTR)
-                terminal.write('\x1b[!p');
-                // Also reset scroll margins to full screen
+                // Reset scroll margins to full screen to clear any stale scroll region
+                // from the scrollback content.
                 // CSI r = Set scroll region to entire screen
                 terminal.write('\x1b[r');
+                // Note: We intentionally do NOT send DECSTR (\x1b[!p) here because
+                // it resets the cursor to position (0,0), which causes the cursor to
+                // appear at the top-left while scrollback content fills the screen.
+                // The scroll region reset above is sufficient to fix stale state.
               }
             }
           }
