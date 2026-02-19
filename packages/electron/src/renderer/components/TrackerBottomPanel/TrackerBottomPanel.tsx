@@ -125,19 +125,21 @@ export const TrackerBottomPanel: React.FC<BottomPanelProps> = ({
 
               // Check type-specific key (e.g. 'planStatus') or generic 'trackerStatus' with matching type
               const specificKey = `${tracker.type}Status`;
-              let trackerData: any = null;
+              let isMatch = false;
               if (doc.frontmatter[specificKey] && typeof doc.frontmatter[specificKey] === 'object') {
-                trackerData = doc.frontmatter[specificKey];
+                isMatch = true;
               } else if (doc.frontmatter.trackerStatus && typeof doc.frontmatter.trackerStatus === 'object' && doc.frontmatter.trackerStatus.type === tracker.type) {
-                trackerData = doc.frontmatter.trackerStatus;
+                isMatch = true;
               }
-              if (!trackerData) return false;
+              if (!isMatch) return false;
 
               const pathLower = doc.path.toLowerCase();
               const isAgentFile = pathLower.includes('/agents/') || pathLower.includes('\\agents\\');
               if (isAgentFile) return false;
 
-              const status = (trackerData.status || '').toLowerCase();
+              // Status can be top-level (canonical) or embedded in trackerStatus (backward compat)
+              const trackerBlock = doc.frontmatter.trackerStatus || doc.frontmatter[specificKey] || {};
+              const status = (doc.frontmatter.status || trackerBlock.status || '').toLowerCase();
               return status !== 'completed' && status !== 'done';
             }).length;
 

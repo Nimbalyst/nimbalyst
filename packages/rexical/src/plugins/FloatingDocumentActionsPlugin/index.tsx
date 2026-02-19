@@ -9,6 +9,7 @@ import { useRuntimeSettings } from '../../context/RuntimeSettingsContext';
 import {
   getBuiltInFullDocumentTrackerTypes,
   getDefaultFrontmatterForType,
+  getModelDefaults,
   applyTrackerTypeToMarkdown,
   removeTrackerTypeFromMarkdown,
   getCurrentTrackerTypeFromMarkdown,
@@ -266,12 +267,15 @@ export default function FloatingDocumentActionsPlugin({
   }, [onOpenSessionInChat]);
 
   const handleSetTrackerType = useCallback((trackerType: string) => {
+    const isLegacy = trackerType === 'plan' || trackerType === 'decision';
+    const modelDefaults = isLegacy ? undefined : getModelDefaults(trackerType);
+
     editor.update(() => {
       const transformers = getEditorTransformers();
       const markdown = $convertToEnhancedMarkdownString(transformers);
 
       try {
-        const updatedMarkdown = applyTrackerTypeToMarkdown(markdown, trackerType);
+        const updatedMarkdown = applyTrackerTypeToMarkdown(markdown, trackerType, modelDefaults);
         $convertFromEnhancedMarkdownString(updatedMarkdown, transformers);
 
         // Mark as dirty - autosave will handle saving
@@ -287,12 +291,15 @@ export default function FloatingDocumentActionsPlugin({
     if (filePath) {
       const docService = (window as any).documentService;
       if (docService?.notifyFrontmatterChanged) {
-        let frontmatterKey = 'trackerStatus';
-        if (trackerType === 'plan') frontmatterKey = 'planStatus';
-        else if (trackerType === 'decision') frontmatterKey = 'decisionStatus';
-
-        const defaultData = getDefaultFrontmatterForType(trackerType);
-        docService.notifyFrontmatterChanged(filePath, { [frontmatterKey]: defaultData });
+        if (isLegacy) {
+          const frontmatterKey = trackerType === 'plan' ? 'planStatus' : 'decisionStatus';
+          const defaultData = getDefaultFrontmatterForType(trackerType);
+          docService.notifyFrontmatterChanged(filePath, { [frontmatterKey]: defaultData });
+        } else {
+          // Generic: top-level fields + trackerStatus only holds type
+          const frontmatter: Record<string, any> = { ...(modelDefaults || {}), trackerStatus: { type: trackerType } };
+          docService.notifyFrontmatterChanged(filePath, frontmatter);
+        }
       }
     }
 

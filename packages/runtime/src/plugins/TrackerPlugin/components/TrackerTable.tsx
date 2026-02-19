@@ -96,6 +96,75 @@ function getTypeColor(type: TrackerItemType): string {
   return colors[type] || '#6b7280';
 }
 
+/**
+ * Multi-select checkbox dropdown for filtering table columns.
+ */
+const MultiSelectFilter: React.FC<{
+  values: string[];
+  selected: Set<string>;
+  onChange: (selected: Set<string>) => void;
+}> = ({ values, selected, onChange }) => {
+  const [open, setOpen] = useState(false);
+  const ref = React.useRef<HTMLDivElement>(null);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const toggle = (val: string) => {
+    const next = new Set(selected);
+    if (next.has(val)) next.delete(val); else next.add(val);
+    onChange(next);
+  };
+
+  const activeCount = selected.size;
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        className={`w-full py-1 px-1.5 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded text-xs text-left truncate focus:outline-none focus:border-[var(--nim-primary)] ${
+          activeCount > 0 ? 'text-[var(--nim-primary)]' : 'text-[var(--nim-text-faint)]'
+        }`}
+        onClick={() => setOpen(!open)}
+      >
+        {activeCount > 0 ? `${activeCount} selected` : 'All'}
+      </button>
+      {open && (
+        <div className="absolute top-full left-0 mt-0.5 w-40 max-h-48 overflow-auto bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded shadow-lg z-30">
+          {activeCount > 0 && (
+            <button
+              className="w-full px-2 py-1 text-xs text-[var(--nim-primary)] hover:bg-[var(--nim-bg-hover)] text-left border-b border-[var(--nim-border)]"
+              onClick={() => onChange(new Set())}
+            >
+              Clear all
+            </button>
+          )}
+          {values.map(val => (
+            <label
+              key={val}
+              className="flex items-center gap-1.5 px-2 py-1 text-xs text-[var(--nim-text)] cursor-pointer hover:bg-[var(--nim-bg-hover)]"
+            >
+              <input
+                type="checkbox"
+                className="w-3 h-3"
+                checked={selected.has(val)}
+                onChange={() => toggle(val)}
+              />
+              <span className="truncate">{val || '(empty)'}</span>
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const BUILTIN_STATUS_COLORS: Record<string, string> = {
   'to-do': '#6b7280',
   'in-progress': '#eab308',
@@ -176,9 +245,8 @@ function formatDate(date: Date): string {
  */
 /**
  * Resolve the tracker frontmatter data for a given document and tracker type.
- * Checks both the type-specific key (e.g. 'planStatus') and the generic
- * 'trackerStatus' key with a nested type field (e.g. trackerStatus: { type: 'blog-post' }).
- * Returns the tracker data object, or null if no match.
+ * Returns merged data with top-level fields as canonical and embedded fields as fallback.
+ * Returns null if the document doesn't match this tracker type.
  */
 function resolveTrackerFrontmatter(frontmatter: Record<string, any> | undefined, trackerType: string): Record<string, any> | null {
   if (!frontmatter) return null;
@@ -193,7 +261,9 @@ function resolveTrackerFrontmatter(frontmatter: Record<string, any> | undefined,
   if (frontmatter.trackerStatus && typeof frontmatter.trackerStatus === 'object') {
     const trackerData = frontmatter.trackerStatus as Record<string, any>;
     if (trackerData.type === trackerType) {
-      return trackerData;
+      // Top-level fields are canonical, embedded fields are backward-compat fallback
+      const { trackerStatus: _, ...topLevel } = frontmatter;
+      return { ...trackerData, ...topLevel };
     }
   }
 
@@ -291,6 +361,7 @@ export function TrackerTable({
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
+  const [customFieldFilters, setCustomFieldFilters] = useState<Record<string, Set<string>>>({});
   // Only use internal type filter state when tabs are shown (not hidden by parent)
   const [internalTypeFilter, setInternalTypeFilter] = useState<TrackerItemType | 'all'>('all');
   const posthog = usePostHog();
@@ -298,9 +369,10 @@ export function TrackerTable({
   // Use prop filterType when hideTypeTabs is true, otherwise use internal state
   const activeTypeFilter = hideTypeTabs ? filterType : internalTypeFilter;
 
-  // Reset status filter when tracker type changes (different types have different statuses)
+  // Reset filters when tracker type changes (different types have different fields/statuses)
   useEffect(() => {
     setStatusFilter('all');
+    setCustomFieldFilters({});
   }, [activeTypeFilter]);
 
   useEffect(() => {
@@ -538,6 +610,19 @@ export function TrackerTable({
         return false;
       }
 
+      // Apply custom field filters
+      for (const [fieldKey, selectedValues] of Object.entries(customFieldFilters)) {
+        if (selectedValues.size === 0) continue;
+        const value = item.customFields?.[fieldKey];
+        if (Array.isArray(value)) {
+          // For array fields (e.g. tags), pass if any selected value is in the array
+          if (!value.some(v => selectedValues.has(String(v)))) return false;
+        } else {
+          const strVal = value != null ? String(value) : '';
+          if (!selectedValues.has(strVal)) return false;
+        }
+      }
+
       return true;
     });
 
@@ -663,6 +748,29 @@ export function TrackerTable({
     }
     return [];
   }, [activeTypeFilter]);
+
+  // Collect unique values for filterable extra columns (string, user, array types)
+  const extraColumnValues = useMemo(() => {
+    const filterableTypes = new Set(['string', 'user', 'select', 'array']);
+    const result: Record<string, string[]> = {};
+    for (const col of extraColumns) {
+      if (!filterableTypes.has(col.type)) continue;
+      const valSet = new Set<string>();
+      for (const item of items) {
+        const val = item.customFields?.[col.key];
+        if (val == null) continue;
+        if (Array.isArray(val)) {
+          val.forEach(v => valSet.add(String(v)));
+        } else {
+          valSet.add(String(val));
+        }
+      }
+      if (valSet.size > 0) {
+        result[col.key] = Array.from(valSet).sort();
+      }
+    }
+    return result;
+  }, [extraColumns, items]);
 
   // Only show full-page loading spinner if we have no items yet
   if (loading && items.length === 0) {
@@ -872,7 +980,18 @@ export function TrackerTable({
                 </th>
                 <th className="tracker-table-header filter-cell py-1 px-2 bg-[var(--nim-bg)]"></th>
                 {extraColumns.map(col => (
-                  <th key={col.key} className="tracker-table-header filter-cell py-1 px-2 bg-[var(--nim-bg)]"></th>
+                  <th key={col.key} className="tracker-table-header filter-cell py-1 px-2 bg-[var(--nim-bg)]">
+                    {extraColumnValues[col.key] && (
+                      <MultiSelectFilter
+                        values={extraColumnValues[col.key]}
+                        selected={customFieldFilters[col.key] || new Set()}
+                        onChange={(selected) => setCustomFieldFilters(prev => ({
+                          ...prev,
+                          [col.key]: selected,
+                        }))}
+                      />
+                    )}
+                  </th>
                 ))}
                 <th className="tracker-table-header filter-cell py-1 px-2 bg-[var(--nim-bg)]"></th>
                 <th className="tracker-table-header filter-cell py-1 px-2 bg-[var(--nim-bg)]"></th>

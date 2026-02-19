@@ -1,6 +1,7 @@
 /**
- * Helper functions for tracker type operations
- * This is a simplified version that doesn't depend on runtime internals
+ * Helper functions for tracker type operations.
+ * Uses window.trackerRegistry when available for custom tracker support,
+ * with hardcoded fallbacks for plan/decision.
  */
 
 export interface TrackerTypeInfo {
@@ -53,17 +54,24 @@ export function getCurrentTrackerTypeFromMarkdown(markdown: string): string | nu
     return 'decision';
   }
 
+  // Check for generic trackerStatus with type field
+  const typeMatch = yamlContent.match(/trackerStatus:\s*\n\s+type:\s*(.+)/);
+  if (typeMatch) {
+    return typeMatch[1].trim().replace(/^["']|["']$/g, '');
+  }
+
   return null;
 }
 
 /**
- * Get default frontmatter template for a tracker type
+ * Get default frontmatter template for a tracker type.
+ * For plan/decision returns legacy embedded fields.
+ * For generic types returns empty - callers should pass model defaults to applyTrackerTypeToMarkdown.
  */
 export function getDefaultFrontmatterForType(trackerType: string): Record<string, any> {
   const now = new Date().toISOString();
   const today = now.split('T')[0];
 
-  // Generate a simple ID (using timestamp + random)
   const generateId = (prefix: string) => {
     return `${prefix}_${Date.now()}_${Math.random().toString(36).substring(7)}`;
   };
@@ -100,30 +108,43 @@ export function getDefaultFrontmatterForType(trackerType: string): Record<string
   return {};
 }
 
+function serializeYamlValue(value: any): string {
+  if (Array.isArray(value)) return '[]';
+  if (typeof value === 'string') return value === '' ? '""' : `"${value}"`;
+  return String(value);
+}
+
 /**
- * Apply tracker type to markdown content
+ * Apply tracker type to markdown content.
+ * For generic types: fields go at the top level, trackerStatus only holds type.
+ * For plan/decision: legacy embedded format.
+ * @param modelDefaults - Default field values from the tracker model (for generic types)
  */
-export function applyTrackerTypeToMarkdown(markdown: string, trackerType: string): string {
-  const defaultData = getDefaultFrontmatterForType(trackerType);
+export function applyTrackerTypeToMarkdown(
+  markdown: string,
+  trackerType: string,
+  modelDefaults?: Record<string, any>,
+): string {
+  const isLegacy = trackerType === 'plan' || trackerType === 'decision';
 
-  // Determine the frontmatter key
-  let frontmatterKey = 'trackerStatus';
-  if (trackerType === 'plan') {
-    frontmatterKey = 'planStatus';
-  } else if (trackerType === 'decision') {
-    frontmatterKey = 'decisionStatus';
-  }
+  const yamlLines: string[] = [];
 
-  // Simple YAML serialization (basic approach)
-  const yamlLines = [`${frontmatterKey}:`];
-  for (const [key, value] of Object.entries(defaultData)) {
-    if (Array.isArray(value)) {
-      yamlLines.push(`  ${key}: []`);
-    } else if (typeof value === 'string') {
-      yamlLines.push(`  ${key}: "${value}"`);
-    } else {
-      yamlLines.push(`  ${key}: ${value}`);
+  if (isLegacy) {
+    const frontmatterKey = trackerType === 'plan' ? 'planStatus' : 'decisionStatus';
+    const defaultData = getDefaultFrontmatterForType(trackerType);
+    yamlLines.push(`${frontmatterKey}:`);
+    for (const [key, value] of Object.entries(defaultData)) {
+      yamlLines.push(`  ${key}: ${serializeYamlValue(value)}`);
     }
+  } else {
+    // Generic: all fields at top level, trackerStatus only holds type
+    if (modelDefaults) {
+      for (const [key, value] of Object.entries(modelDefaults)) {
+        yamlLines.push(`${key}: ${serializeYamlValue(value)}`);
+      }
+    }
+    yamlLines.push(`trackerStatus:`);
+    yamlLines.push(`  type: ${trackerType}`);
   }
 
   const yamlContent = yamlLines.join('\n');
@@ -132,11 +153,40 @@ export function applyTrackerTypeToMarkdown(markdown: string, trackerType: string
   const hasFrontmatter = frontmatterRegex.test(markdown);
 
   if (hasFrontmatter) {
-    // Replace existing frontmatter
     return markdown.replace(frontmatterRegex, `---\n${yamlContent}\n---\n`);
   } else {
-    // Add frontmatter at the beginning
     return `---\n${yamlContent}\n---\n${markdown}`;
+  }
+}
+
+/**
+ * Build default field values from a tracker model's field definitions.
+ * Accesses the global registry via window (set by the renderer).
+ * Returns empty object if registry is unavailable or model not found.
+ */
+export function getModelDefaults(trackerType: string): Record<string, any> {
+  try {
+    const registry = (window as any).__trackerRegistry || (window as any).trackerRegistry;
+    if (!registry?.get) return {};
+    const model = registry.get(trackerType);
+    if (!model?.fields) return {};
+
+    const defaults: Record<string, any> = {};
+    for (const field of model.fields) {
+      if (field.name === 'title') continue; // title comes from the document
+      if (field.default !== undefined) {
+        defaults[field.name] = field.default;
+      } else if (field.type === 'array') {
+        defaults[field.name] = [];
+      } else if (field.type === 'string' || field.type === 'user') {
+        defaults[field.name] = '';
+      } else if (field.type === 'number') {
+        defaults[field.name] = field.min ?? 0;
+      }
+    }
+    return defaults;
+  } catch {
+    return {};
   }
 }
 

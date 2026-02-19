@@ -18,19 +18,17 @@ import {
   $convertFromEnhancedMarkdownString,
   getEditorTransformers,
   wrapWithPrintStyles,
+  applyTrackerTypeToMarkdown,
+  getDefaultFrontmatterForType,
+  getModelDefaults,
+  getCurrentTrackerTypeFromMarkdown,
+  removeTrackerTypeFromMarkdown,
+  type TrackerTypeInfo,
 } from 'rexical';
 import { $generateHtmlFromNodes } from '@lexical/html';
 import { revealFolderAtom, revealFileAtom, openFileRequestAtom, setWindowModeAtom } from '../../store';
 import { getDocumentService } from '../../services/RendererDocumentService';
 import { isWorktreePath } from '../../../shared/pathUtils';
-
-// Tracker type info
-interface TrackerTypeInfo {
-  type: string;
-  displayName: string;
-  icon: string;
-  color: string;
-}
 
 // Built-in tracker types that support full-document mode
 const TRACKER_TYPES: TrackerTypeInfo[] = [
@@ -44,87 +42,6 @@ interface EditorLike {
   registerUpdateListener: (callback: () => void) => () => void;
   getElementByKey: (key: string) => HTMLElement | null;
   update: (fn: () => void) => void;
-}
-
-// Helper functions for document type detection and manipulation
-function getCurrentTrackerTypeFromMarkdown(markdown: string): string | null {
-  const frontmatterRegex = /^---\n([\s\S]*?)\n---/;
-  const match = markdown.match(frontmatterRegex);
-  if (!match) return null;
-
-  const yamlContent = match[1];
-  if (yamlContent.includes('planStatus:')) return 'plan';
-  if (yamlContent.includes('decisionStatus:')) return 'decision';
-  return null;
-}
-
-function getDefaultFrontmatterForType(trackerType: string): Record<string, unknown> {
-  const now = new Date().toISOString();
-  const today = now.split('T')[0];
-  const generateId = (prefix: string) => `${prefix}_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-
-  if (trackerType === 'plan') {
-    return {
-      planId: generateId('plan'),
-      title: '',
-      status: 'draft',
-      planType: 'feature',
-      priority: 'medium',
-      progress: 0,
-      owner: '',
-      stakeholders: [],
-      tags: [],
-      created: today,
-      updated: now,
-    };
-  } else if (trackerType === 'decision') {
-    return {
-      decisionId: generateId('dec'),
-      title: '',
-      status: 'to-do',
-      chosen: '',
-      priority: 'medium',
-      owner: '',
-      stakeholders: [],
-      tags: [],
-      created: today,
-      updated: now,
-    };
-  }
-  return {};
-}
-
-function applyTrackerTypeToMarkdown(markdown: string, trackerType: string): string {
-  const defaultData = getDefaultFrontmatterForType(trackerType);
-  let frontmatterKey = 'trackerStatus';
-  if (trackerType === 'plan') frontmatterKey = 'planStatus';
-  else if (trackerType === 'decision') frontmatterKey = 'decisionStatus';
-
-  const yamlLines = [`${frontmatterKey}:`];
-  for (const [key, value] of Object.entries(defaultData)) {
-    if (Array.isArray(value)) {
-      yamlLines.push(`  ${key}: []`);
-    } else if (typeof value === 'string') {
-      yamlLines.push(`  ${key}: "${value}"`);
-    } else {
-      yamlLines.push(`  ${key}: ${value}`);
-    }
-  }
-
-  const yamlContent = yamlLines.join('\n');
-  const frontmatterRegex = /^---\n[\s\S]*?\n---\n?/;
-  const hasFrontmatter = frontmatterRegex.test(markdown);
-
-  if (hasFrontmatter) {
-    return markdown.replace(frontmatterRegex, `---\n${yamlContent}\n---\n`);
-  } else {
-    return `---\n${yamlContent}\n---\n${markdown}`;
-  }
-}
-
-function removeTrackerTypeFromMarkdown(markdown: string): string {
-  const frontmatterRegex = /^---\n[\s\S]*?\n---\n?/;
-  return markdown.replace(frontmatterRegex, '');
 }
 
 interface AISession {
@@ -502,16 +419,14 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
   const handleSetDocumentType = useCallback((trackerType: string) => {
     if (!lexicalEditor || typeof lexicalEditor.update !== 'function') return;
 
-    try {
-      const defaultData = getDefaultFrontmatterForType(trackerType);
-      let frontmatterKey = 'trackerStatus';
-      if (trackerType === 'plan') frontmatterKey = 'planStatus';
-      else if (trackerType === 'decision') frontmatterKey = 'decisionStatus';
+    const isLegacy = trackerType === 'plan' || trackerType === 'decision';
+    const modelDefaults = isLegacy ? undefined : getModelDefaults(trackerType);
 
+    try {
       lexicalEditor.update(() => {
         const transformers = getEditorTransformers();
         const markdown = $convertToEnhancedMarkdownString(transformers);
-        const updatedMarkdown = applyTrackerTypeToMarkdown(markdown, trackerType);
+        const updatedMarkdown = applyTrackerTypeToMarkdown(markdown, trackerType, modelDefaults);
         $convertFromEnhancedMarkdownString(updatedMarkdown, transformers);
 
         // Mark as dirty - autosave will handle saving
@@ -522,7 +437,15 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
 
       // Notify DocumentService so tracker UI updates immediately
       const documentService = getDocumentService();
-      documentService.notifyFrontmatterChanged?.(filePath, { [frontmatterKey]: defaultData });
+      if (isLegacy) {
+        const frontmatterKey = trackerType === 'plan' ? 'planStatus' : 'decisionStatus';
+        const defaultData = getDefaultFrontmatterForType(trackerType);
+        documentService.notifyFrontmatterChanged?.(filePath, { [frontmatterKey]: defaultData });
+      } else {
+        // Generic: top-level fields + trackerStatus only holds type
+        const frontmatter: Record<string, any> = { ...(modelDefaults || {}), trackerStatus: { type: trackerType } };
+        documentService.notifyFrontmatterChanged?.(filePath, frontmatter);
+      }
 
       // Signal content changed so document header re-checks for frontmatter
       onContentChanged?.();

@@ -93,10 +93,9 @@ export function detectTrackerFromFrontmatter(content: string): TrackerFrontmatte
   if (frontmatter.trackerStatus && typeof frontmatter.trackerStatus === 'object') {
     const trackerData = frontmatter.trackerStatus as Record<string, any>;
     if (trackerData.type) {
-      // Merge top-level frontmatter fields (author, date, tags, etc.) as defaults,
-      // with trackerStatus fields taking precedence
+      // Top-level fields are canonical. Embedded trackerStatus fields are backward-compat fallback.
       const { trackerStatus: _, ...topLevelFields } = frontmatter;
-      const merged = { ...topLevelFields, ...trackerData };
+      const merged = { ...trackerData, ...topLevelFields };
       return {
         type: trackerData.type as string,
         data: resolveFieldData(trackerData.type as string, merged),
@@ -154,13 +153,39 @@ export function updateTrackerInFrontmatter(
   }
 
   const existingData = (frontmatter[frontmatterKey] || {}) as Record<string, any>;
-  const updatedData = {
-    ...existingData,
-    ...updates,
-    updated: new Date().toISOString(), // Auto-update timestamp
-  };
+
+  // For generic trackerStatus, fields that already exist at the top level of the
+  // frontmatter should be written back there (not inside trackerStatus). This keeps
+  // them in sync with tools like Astro that read top-level frontmatter.
+  const topLevelUpdates: Record<string, any> = {};
+  const trackerUpdates: Record<string, any> = {};
+
+  if (frontmatterKey === 'trackerStatus') {
+    // trackerStatus only holds `type`. All other fields go at the top level.
+    // This keeps frontmatter compatible with external tools (Astro, Hugo, etc.)
+    // and eliminates sync issues between embedded and top-level fields.
+    for (const [key, value] of Object.entries(updates)) {
+      if (key === 'type') {
+        trackerUpdates[key] = value;
+      } else {
+        topLevelUpdates[key] = value;
+      }
+    }
+  } else {
+    // For plan/decision, all updates go into the status block (legacy behavior)
+    Object.assign(trackerUpdates, updates);
+  }
+
+  // Preserve existing trackerStatus but strip out any fields that are now top-level
+  const cleanedTrackerData: Record<string, any> = { type: existingData.type || trackerUpdates.type };
+  if (trackerUpdates.type) cleanedTrackerData.type = trackerUpdates.type;
 
   return updateFrontmatter(content, {
-    [frontmatterKey]: updatedData,
+    ...topLevelUpdates,
+    [frontmatterKey]: frontmatterKey === 'trackerStatus' ? cleanedTrackerData : {
+      ...existingData,
+      ...trackerUpdates,
+      updated: new Date().toISOString(),
+    },
   });
 }

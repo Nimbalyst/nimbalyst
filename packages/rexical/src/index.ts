@@ -133,6 +133,17 @@ export {
   type FrontmatterData
 } from './markdown/FrontmatterUtils';
 
+// Tracker type helpers
+export {
+  applyTrackerTypeToMarkdown,
+  removeTrackerTypeFromMarkdown,
+  getCurrentTrackerTypeFromMarkdown,
+  getDefaultFrontmatterForType,
+  getModelDefaults,
+  getBuiltInFullDocumentTrackerTypes,
+  type TrackerTypeInfo,
+} from './plugins/FloatingDocumentActionsPlugin/TrackerTypeHelper';
+
 // Additional frontmatter utilities from EnhancedMarkdownImport
 export {
   $mergeFrontmatter,
