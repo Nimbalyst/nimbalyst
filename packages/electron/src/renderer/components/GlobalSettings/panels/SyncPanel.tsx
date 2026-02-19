@@ -96,6 +96,12 @@ export function SyncPanel() {
     user: null,
   });
 
+  // Account deletion state
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
   // Auth UI state
   const [showAuthForm, setShowAuthForm] = useState(false);
   const [email, setEmail] = useState('');
@@ -326,6 +332,29 @@ export function SyncPanel() {
       await window.electronAPI.stytch.signOut();
     } catch (err) {
       console.error('Sign out error:', err);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!window.electronAPI?.stytch) return;
+    setDeleteLoading(true);
+    setDeleteError(null);
+    posthog?.capture('account_deletion_confirmed');
+    try {
+      const result = await window.electronAPI.stytch.deleteAccount();
+      if (result.success) {
+        posthog?.capture('account_deletion_completed');
+        setShowDeleteConfirm(false);
+        setDeleteConfirmText('');
+      } else {
+        posthog?.capture('account_deletion_failed', { error: result.error });
+        setDeleteError(result.error || 'Failed to delete account');
+      }
+    } catch (err) {
+      posthog?.capture('account_deletion_failed', { error: String(err) });
+      setDeleteError(String(err));
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -696,6 +725,70 @@ export function SyncPanel() {
           </ul>
         </div>
       </div>
+
+      {/* Delete Account */}
+      {stytchAuth.isAuthenticated && (
+        <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
+          <h4 className="provider-panel-section-title text-[15px] font-semibold mb-2 text-[var(--nim-text)]">Danger Zone</h4>
+          {!showDeleteConfirm ? (
+            <button
+              onClick={() => {
+                posthog?.capture('account_deletion_started');
+                setShowDeleteConfirm(true);
+                setDeleteError(null);
+              }}
+              className="px-4 py-2 text-[13px] bg-transparent border border-red-500/40 rounded-md text-red-500 cursor-pointer hover:bg-red-500/10"
+            >
+              Delete Account
+            </button>
+          ) : (
+            <div className="p-4 bg-nim-secondary rounded-lg border border-red-500/30">
+              <p className="text-[13px] text-nim-muted m-0 mb-3">
+                This will permanently delete your account and all synced data, including sessions, shared links, and device pairings. This cannot be undone.
+              </p>
+              <p className="text-[12px] text-nim-faint m-0 mb-2">
+                Type <strong className="text-nim">DELETE</strong> to confirm:
+              </p>
+              <input
+                type="text"
+                value={deleteConfirmText}
+                onChange={(e) => setDeleteConfirmText(e.target.value)}
+                placeholder="DELETE"
+                className="w-full px-3 py-2 mb-3 border border-nim rounded-md bg-nim text-nim text-[13px]"
+                disabled={deleteLoading}
+                autoFocus
+              />
+              {deleteError && (
+                <p className="text-red-500 text-xs mb-3 m-0">{deleteError}</p>
+              )}
+              <div className="flex gap-2">
+                <button
+                  onClick={handleDeleteAccount}
+                  disabled={deleteConfirmText !== 'DELETE' || deleteLoading}
+                  className={`px-4 py-2 text-[13px] border-none rounded-md text-white font-medium ${
+                    deleteConfirmText === 'DELETE' && !deleteLoading
+                      ? 'bg-red-600 cursor-pointer hover:bg-red-700'
+                      : 'bg-red-600/40 cursor-not-allowed'
+                  }`}
+                >
+                  {deleteLoading ? 'Deleting...' : 'Delete Account'}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowDeleteConfirm(false);
+                    setDeleteConfirmText('');
+                    setDeleteError(null);
+                  }}
+                  disabled={deleteLoading}
+                  className="px-4 py-2 text-[13px] bg-transparent border border-nim rounded-md text-nim-muted cursor-pointer hover:bg-nim-hover"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Modals */}
       <QRPairingModal

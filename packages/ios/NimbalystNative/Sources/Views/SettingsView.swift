@@ -6,6 +6,9 @@ public struct SettingsView: View {
     @State private var pushEnabled = UserDefaults.standard.bool(forKey: "pushNotificationsEnabled")
     @State private var analyticsEnabled = AnalyticsManager.shared.isEnabled
     @State private var showUnpairConfirmation = false
+    @State private var showDeleteAccountConfirmation = false
+    @State private var isDeletingAccount = false
+    @State private var deleteAccountError: String?
     @Environment(\.dismiss) private var dismiss
 
     // Voice mode settings
@@ -216,6 +219,15 @@ public struct SettingsView: View {
                         AnalyticsManager.shared.optOut()
                     }
                 }
+
+            Link(destination: URL(string: "https://nimbalyst.com/privacy-policy")!) {
+                HStack {
+                    Text("Privacy Policy")
+                    Spacer()
+                    Image(systemName: "arrow.up.right.square")
+                        .foregroundStyle(.secondary)
+                }
+            }
         } header: {
             Text("Privacy")
         } footer: {
@@ -248,6 +260,64 @@ public struct SettingsView: View {
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text("This will remove all synced data from this device. You can re-pair later by scanning a new QR code.")
+            }
+
+            if appState.authManager.isAuthenticated {
+                Button(role: .destructive) {
+                    showDeleteAccountConfirmation = true
+                } label: {
+                    HStack {
+                        if isDeletingAccount {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else {
+                            Image(systemName: "trash")
+                        }
+                        Text("Delete Account")
+                    }
+                }
+                .disabled(isDeletingAccount)
+                .confirmationDialog(
+                    "Delete your account?",
+                    isPresented: $showDeleteAccountConfirmation,
+                    titleVisibility: .visible
+                ) {
+                    Button("Delete Account", role: .destructive) {
+                        Task {
+                            await performAccountDeletion()
+                        }
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("This will permanently delete your account and all synced data, including sessions, shared links, and device pairings. This cannot be undone.")
+                }
+            }
+
+            if let error = deleteAccountError {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+        }
+    }
+
+    private func performAccountDeletion() async {
+        guard let serverUrl = KeychainManager.getServerUrl() else {
+            deleteAccountError = "No server URL configured"
+            return
+        }
+
+        isDeletingAccount = true
+        deleteAccountError = nil
+
+        let result = await appState.authManager.deleteAccount(serverUrl: serverUrl)
+
+        await MainActor.run {
+            isDeletingAccount = false
+            if result.success {
+                appState.unpair()
+            } else {
+                deleteAccountError = result.error ?? "Account deletion failed"
             }
         }
     }

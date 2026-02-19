@@ -744,6 +744,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     sendMagicLink: (email: string) =>
       ipcRenderer.invoke('stytch:send-magic-link', email),
     signOut: () => ipcRenderer.invoke('stytch:sign-out'),
+    deleteAccount: () => ipcRenderer.invoke('stytch:delete-account'),
     getSessionJwt: () => ipcRenderer.invoke('stytch:get-session-jwt'),
     refreshSession: () => ipcRenderer.invoke('stytch:refresh-session'),
     subscribeAuthState: () => ipcRenderer.invoke('stytch:subscribe-auth-state'),

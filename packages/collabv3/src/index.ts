@@ -17,6 +17,7 @@ import { SessionRoom } from './SessionRoom';
 import { IndexRoom } from './IndexRoom';
 import { parseAuth as parseAuthJWT, type AuthConfig, type AuthResult } from './auth';
 import { handleShareUpload, handleShareView, handleShareContent, handleShareList, handleShareDelete } from './share';
+import { handleAccountDeletion } from './accountDeletion';
 import { setLogEnvironment, createLogger } from './logger';
 
 const log = createLogger('sync');
@@ -316,6 +317,11 @@ async function handleApiRequest(
     } catch (err) {
       return new Response(`Invalid request body: ${err}`, { status: 400 });
     }
+  }
+
+  // POST /api/account/delete - Delete user account and all data
+  if (url.pathname === '/api/account/delete' && request.method === 'POST') {
+    return handleAccountDeletion(auth, env, corsHeaders);
   }
 
   return new Response('Not Found', { status: 404, headers: corsHeaders });

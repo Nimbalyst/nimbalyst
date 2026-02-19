@@ -270,6 +270,11 @@ export class IndexRoom implements DurableObject {
       return await this.handleStatusRequest();
     }
 
+    // Account deletion - return session IDs then purge all data
+    if (url.pathname.endsWith('/delete-account') && request.method === 'DELETE') {
+      return await this.handleDeleteAccount();
+    }
+
     return new Response('Expected WebSocket', { status: 400 });
   }
 
@@ -1352,6 +1357,45 @@ export class IndexRoom implements DurableObject {
     }
 
     this.connections.delete(ws);
+  }
+
+  /**
+   * Handle account deletion - return all session IDs then purge all data.
+   * Called internally by the account deletion cascade (not user-facing).
+   */
+  private async handleDeleteAccount(): Promise<Response> {
+    await this.ensureInitialized();
+    const sql = this.state.storage.sql;
+
+    // Collect all session IDs before deletion (needed to clean up SessionRooms)
+    const sessionIds: string[] = [];
+    for (const row of sql.exec<{ session_id: string }>(`SELECT session_id FROM session_index`)) {
+      sessionIds.push(row.session_id);
+    }
+
+    log.info('Account deletion: purging', sessionIds.length, 'sessions from index');
+
+    // Purge all SQL tables
+    sql.exec(`DELETE FROM session_index`);
+    sql.exec(`DELETE FROM project_index`);
+
+    // Purge all KV storage (device info, push tokens, etc.)
+    await this.state.storage.deleteAll();
+
+    // Close all WebSocket connections
+    for (const [ws] of this.connections) {
+      try {
+        ws.close(4003, 'Account deleted');
+      } catch {
+        // Connection may already be closed
+      }
+    }
+    this.connections.clear();
+    this.storedDevices.clear();
+
+    return new Response(JSON.stringify({ deleted: true, sessionIds }), {
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 
   /**

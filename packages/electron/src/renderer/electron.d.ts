@@ -367,6 +367,7 @@ interface ElectronAPI {
     signInWithGoogle: () => Promise<{ success: boolean; error?: string }>;
     sendMagicLink: (email: string) => Promise<{ success: boolean; error?: string }>;
     signOut: () => Promise<{ success: boolean }>;
+    deleteAccount: () => Promise<{ success: boolean; error?: string }>;
     getSessionJwt: () => Promise<string | null>;
     refreshSession: () => Promise<boolean>;
     subscribeAuthState: () => Promise<any>;

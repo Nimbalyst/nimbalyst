@@ -886,6 +886,22 @@ export function registerSettingsHandlers() {
         return { success: true };
     });
 
+    // Delete account and all associated data
+    safeHandle('stytch:delete-account', async () => {
+        ensureStytchInitialized();
+        // Derive server URL same as other Stytch handlers
+        const syncConfig = getSessionSyncConfig();
+        const isDev = process.env.NODE_ENV !== 'production';
+        const effectiveEnvironment = isDev ? syncConfig?.environment : undefined;
+        let serverUrl: string;
+        if (effectiveEnvironment === 'development') {
+            serverUrl = 'ws://localhost:8790';
+        } else {
+            serverUrl = 'wss://sync.nimbalyst.com';
+        }
+        return StytchAuth.deleteAccount(serverUrl);
+    });
+
     // Get session JWT for server authentication
     safeHandle('stytch:get-session-jwt', () => {
         ensureStytchInitialized();

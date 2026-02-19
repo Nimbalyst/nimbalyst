@@ -155,6 +155,11 @@ export class SessionRoom implements DurableObject {
       return this.handleStatusRequest();
     }
 
+    // Account deletion - purge all data in this SessionRoom
+    if (url.pathname.endsWith('/delete-account') && request.method === 'DELETE') {
+      return this.handleDeleteAccount();
+    }
+
     return new Response('Expected WebSocket', { status: 400 });
   }
 
@@ -607,6 +612,35 @@ export class SessionRoom implements DurableObject {
     log.info('Session TTL expired, deleting data. Last activity:', lastActivity);
     sql.exec(`DELETE FROM messages`);
     sql.exec(`DELETE FROM metadata`);
+  }
+
+  /**
+   * Handle account deletion - purge all data and disconnect clients.
+   * Called internally by the account deletion cascade (not user-facing).
+   */
+  private handleDeleteAccount(): Response {
+    const sql = this.state.storage.sql;
+
+    // Delete all messages and metadata
+    sql.exec(`DELETE FROM messages`);
+    sql.exec(`DELETE FROM metadata`);
+
+    // Close all WebSocket connections
+    for (const [ws] of this.connections) {
+      try {
+        ws.close(4003, 'Account deleted');
+      } catch {
+        // Connection may already be closed
+      }
+    }
+    this.connections.clear();
+
+    // Cancel any TTL alarm
+    this.state.storage.deleteAlarm();
+
+    return new Response(JSON.stringify({ deleted: true }), {
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 
   /**

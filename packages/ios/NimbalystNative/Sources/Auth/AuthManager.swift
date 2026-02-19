@@ -302,6 +302,51 @@ public final class AuthManager: ObservableObject {
         }
     }
 
+    // MARK: - Account Deletion
+
+    /// Delete the user's account and all server-side data.
+    /// Calls the server's /api/account/delete endpoint, then clears local state.
+    public func deleteAccount(serverUrl: String) async -> (success: Bool, error: String?) {
+        guard let jwt = KeychainManager.getSessionJwt() else {
+            return (false, "Not authenticated")
+        }
+
+        let baseUrl = serverUrl
+            .replacingOccurrences(of: "wss://", with: "https://")
+            .replacingOccurrences(of: "ws://", with: "http://")
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard let url = URL(string: "\(baseUrl)/api/account/delete") else {
+            return (false, "Invalid server URL")
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(jwt)", forHTTPHeaderField: "Authorization")
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse else {
+                return (false, "Unexpected response")
+            }
+
+            if httpResponse.statusCode == 200 {
+                logger.info("Account deleted successfully")
+                // Clear local state
+                logout()
+                return (true, nil)
+            } else {
+                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+                let errorMsg = json?["error"] as? String ?? "Account deletion failed (HTTP \(httpResponse.statusCode))"
+                logger.error("Account deletion failed: \(errorMsg)")
+                return (false, errorMsg)
+            }
+        } catch {
+            logger.error("Account deletion request failed: \(error.localizedDescription)")
+            return (false, "Network error: \(error.localizedDescription)")
+        }
+    }
+
     // MARK: - Logout
 
     public func logout() {

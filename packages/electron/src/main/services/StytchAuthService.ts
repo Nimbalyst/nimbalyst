@@ -508,6 +508,59 @@ export async function signOut(): Promise<void> {
 }
 
 /**
+ * Delete the user's account and all associated data.
+ * Calls the server's /api/account/delete endpoint which cascades
+ * deletes across all storage layers and deletes the Stytch member.
+ * On success, clears local credentials and signs out.
+ */
+export async function deleteAccount(serverUrl?: string): Promise<{ success: boolean; error?: string }> {
+  if (!authState.isAuthenticated || !authState.sessionJwt) {
+    return { success: false, error: 'Not authenticated' };
+  }
+
+  const syncServerUrl = serverUrl || getSyncServerUrl();
+  if (!syncServerUrl) {
+    return { success: false, error: 'No server URL configured' };
+  }
+
+  // Convert ws:// to http:// for API calls
+  const httpUrl = syncServerUrl
+    .replace(/^ws:/, 'http:')
+    .replace(/^wss:/, 'https:')
+    .replace(/\/$/, '');
+
+  try {
+    logger.main.info('[StytchAuthService] Deleting account...');
+
+    const response = await net.fetch(`${httpUrl}/api/account/delete`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authState.sessionJwt}`,
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({})) as { error?: string };
+      logger.main.error('[StytchAuthService] Account deletion failed:', response.status, errorData.error);
+      return { success: false, error: errorData.error || `Server error: ${response.status}` };
+    }
+
+    const data = await response.json() as { deleted: boolean };
+    logger.main.info('[StytchAuthService] Account deletion response:', data);
+
+    // Clear local state (same as sign out)
+    await signOut();
+
+    logger.main.info('[StytchAuthService] Account deleted successfully');
+    return { success: true };
+  } catch (error) {
+    logger.main.error('[StytchAuthService] Account deletion error:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
+/**
  * Refresh the current session to get a fresh JWT.
  * Calls the collabv3 server's /auth/refresh endpoint.
  *
