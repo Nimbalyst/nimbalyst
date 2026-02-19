@@ -15,7 +15,6 @@ import {
   codexUsageSessionColorAtom,
   formatResetTime,
 } from '../../store/atoms/codexUsageAtoms';
-import { enabledProvidersAtom } from '../../store/atoms/appSettings';
 import { CodexUsagePopover } from './CodexUsagePopover';
 import { refreshCodexUsage } from '../../store/listeners/codexUsageListeners';
 
@@ -31,8 +30,6 @@ export const CodexUsageIndicator: React.FC<CodexUsageIndicatorProps> = ({ classN
   const isAvailable = useAtomValue(codexUsageAvailableAtom);
   const isEnabled = useAtomValue(codexUsageIndicatorEnabledAtom);
   const sessionColor = useAtomValue(codexUsageSessionColorAtom);
-  const enabledProviders = useAtomValue(enabledProvidersAtom);
-  const isCodexProviderEnabled = enabledProviders.includes('openai-codex');
 
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -45,7 +42,7 @@ export const CodexUsageIndicator: React.FC<CodexUsageIndicatorProps> = ({ classN
     await refreshCodexUsage();
   }, []);
 
-  if (!isEnabled || !isAvailable || !isCodexProviderEnabled) {
+  if (!isEnabled || !isAvailable) {
     return null;
   }
 
