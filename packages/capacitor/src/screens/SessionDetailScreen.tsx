@@ -677,6 +677,10 @@ export function SessionDetailScreen({ hiddenBackButton, voiceModeActive }: Sessi
       hasAttachments: attachments.length > 0,
     });
 
+    // Clear input immediately (optimistic) before async work
+    setInputValue('');
+    setAttachments([]);
+
     setIsSending(true);
     try {
       // Create a queued prompt entry
@@ -703,10 +707,6 @@ export function SessionDetailScreen({ hiddenBackButton, voiceModeActive }: Sessi
 
       // Update local metadata state
       setMetadata((prev) => ({ ...prev, queuedPrompts: newQueue }));
-
-      // Clear input
-      setInputValue('');
-      setAttachments([]);
     } catch (err) {
       console.error('[SessionDetail] Failed to queue message:', err);
       setError('Failed to queue message');
