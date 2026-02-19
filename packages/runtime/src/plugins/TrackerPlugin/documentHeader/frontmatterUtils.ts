@@ -3,10 +3,39 @@
  */
 
 import jsyaml from 'js-yaml';
+import { globalRegistry } from '../models/TrackerDataModel';
+import { parseDate } from '../models/dateUtils';
 
 export interface TrackerFrontmatter {
   type: string; // Tracker type (plan, decision, bug, etc.)
   data: Record<string, any>; // All tracker field data
+}
+
+/**
+ * Resolve tracker field data from merged frontmatter using the model's field definitions.
+ * Handles date fallback ('date' -> 'publishDate') and parses date values.
+ */
+function resolveFieldData(type: string, data: Record<string, any>): Record<string, any> {
+  const model = globalRegistry.get(type);
+  if (!model) return data;
+
+  const resolved = { ...data };
+  for (const field of model.fields) {
+    // If the field value is missing, check the 'date' key as fallback for date fields
+    if (resolved[field.name] === undefined && (field.type === 'date' || field.type === 'datetime')) {
+      if (resolved.date !== undefined) {
+        resolved[field.name] = resolved.date;
+      }
+    }
+    // Parse date values into proper Date objects
+    if ((field.type === 'date' || field.type === 'datetime') && resolved[field.name] !== undefined) {
+      const parsed = parseDate(resolved[field.name]);
+      if (parsed) {
+        resolved[field.name] = parsed;
+      }
+    }
+  }
+  return resolved;
 }
 
 /**
@@ -48,7 +77,7 @@ export function detectTrackerFromFrontmatter(content: string): TrackerFrontmatte
   if (frontmatter.planStatus && typeof frontmatter.planStatus === 'object') {
     return {
       type: 'plan',
-      data: frontmatter.planStatus as Record<string, any>,
+      data: resolveFieldData('plan', frontmatter.planStatus as Record<string, any>),
     };
   }
 
@@ -56,7 +85,7 @@ export function detectTrackerFromFrontmatter(content: string): TrackerFrontmatte
   if (frontmatter.decisionStatus && typeof frontmatter.decisionStatus === 'object') {
     return {
       type: 'decision',
-      data: frontmatter.decisionStatus as Record<string, any>,
+      data: resolveFieldData('decision', frontmatter.decisionStatus as Record<string, any>),
     };
   }
 
@@ -64,9 +93,13 @@ export function detectTrackerFromFrontmatter(content: string): TrackerFrontmatte
   if (frontmatter.trackerStatus && typeof frontmatter.trackerStatus === 'object') {
     const trackerData = frontmatter.trackerStatus as Record<string, any>;
     if (trackerData.type) {
+      // Merge top-level frontmatter fields (author, date, tags, etc.) as defaults,
+      // with trackerStatus fields taking precedence
+      const { trackerStatus: _, ...topLevelFields } = frontmatter;
+      const merged = { ...topLevelFields, ...trackerData };
       return {
         type: trackerData.type as string,
-        data: trackerData,
+        data: resolveFieldData(trackerData.type as string, merged),
       };
     }
   }

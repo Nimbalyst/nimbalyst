@@ -47,7 +47,7 @@ export interface MetadataChangeEvent {
  * Tracker item types
  */
 export type TrackerItemType = 'bug' | 'task' | 'plan' | 'idea' | 'decision';
-export type TrackerItemStatus = 'to-do' | 'in-progress' | 'in-review' | 'done' | 'blocked' | 'proposed' | 'in-discussion' | 'decided' | 'implemented' | 'rejected' | 'superseded';
+export type TrackerItemStatus = 'to-do' | 'in-progress' | 'in-review' | 'done' | 'blocked' | 'proposed' | 'in-discussion' | 'decided' | 'implemented' | 'rejected' | 'superseded' | (string & {});
 export type TrackerItemPriority = 'low' | 'medium' | 'high' | 'critical';
 
 /**
@@ -70,6 +70,8 @@ export interface TrackerItem {
   dueDate?: string;
   progress?: number;      // Progress percentage (0-100) for items that support it
   lastIndexed: Date;
+  /** Extra fields from frontmatter defined by the tracker model */
+  customFields?: Record<string, any>;
 }
 
 /**

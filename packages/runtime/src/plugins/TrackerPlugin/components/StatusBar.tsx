@@ -107,7 +107,15 @@ export const StatusBar: React.FC<StatusBarProps> = ({ model, data, onChange, onC
           </div>
         );
 
-      case 'date':
+      case 'date': {
+        // Format Date objects to YYYY-MM-DD for the date input
+        let dateValue = value || '';
+        if (value instanceof Date && !isNaN(value.getTime())) {
+          const y = value.getFullYear();
+          const m = String(value.getMonth() + 1).padStart(2, '0');
+          const d = String(value.getDate()).padStart(2, '0');
+          dateValue = `${y}-${m}-${d}`;
+        }
         return (
           <div key={field.name} className={fieldBaseClasses} style={fieldStyle}>
             <label htmlFor={fieldId} className={labelClasses}>{field.name}</label>
@@ -115,11 +123,12 @@ export const StatusBar: React.FC<StatusBarProps> = ({ model, data, onChange, onC
               id={fieldId}
               type="date"
               className={inputClasses}
-              value={value || ''}
+              value={dateValue}
               onChange={(e) => handleFieldChange(field.name, e.target.value)}
             />
           </div>
         );
+      }
 
       case 'string':
       case 'user':

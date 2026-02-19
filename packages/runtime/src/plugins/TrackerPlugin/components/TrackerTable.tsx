@@ -3,7 +3,7 @@
  * Shows bugs, tasks, plans, and ideas across all documents in workspace
  */
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import type {
   TrackerItem,
   TrackerItemChangeEvent,
@@ -11,10 +11,10 @@ import type {
   TrackerItemStatus,
   TrackerItemPriority
 } from '../../../core/DocumentService';
-import { globalRegistry } from '../models';
+import { globalRegistry, parseDate } from '../models';
 import {usePostHog} from "posthog-js/react";
 
-export type SortColumn = 'title' | 'type' | 'status' | 'priority' | 'progress' | 'module' | 'lastIndexed';
+export type SortColumn = 'title' | 'type' | 'status' | 'priority' | 'progress' | 'module' | 'lastIndexed' | (string & {});
 export type SortDirection = 'asc' | 'desc';
 
 interface TrackerTableProps {
@@ -96,15 +96,35 @@ function getTypeColor(type: TrackerItemType): string {
   return colors[type] || '#6b7280';
 }
 
-function getStatusColor(status: TrackerItemStatus): string {
-  const statusColors: Record<string, string> = {
-    'to-do': '#6b7280',
-    'in-progress': '#eab308',
-    'in-review': '#8b5cf6',
-    'done': '#22c55e',
-    'blocked': '#ef4444',
-  };
-  return statusColors[status] || '#6b7280';
+const BUILTIN_STATUS_COLORS: Record<string, string> = {
+  'to-do': '#6b7280',
+  'in-progress': '#eab308',
+  'in-review': '#8b5cf6',
+  'done': '#22c55e',
+  'blocked': '#ef4444',
+};
+
+function getStatusColor(status: TrackerItemStatus, trackerType?: string): string {
+  // Check built-in statuses first
+  if (BUILTIN_STATUS_COLORS[status]) {
+    return BUILTIN_STATUS_COLORS[status];
+  }
+
+  // Look up color from the tracker model's status field options
+  if (trackerType) {
+    const model = globalRegistry.get(trackerType);
+    if (model) {
+      const statusField = model.fields.find(f => f.name === 'status');
+      if (statusField?.options) {
+        const option = statusField.options.find(o => o.value === status);
+        if (option?.color) {
+          return option.color;
+        }
+      }
+    }
+  }
+
+  return '#6b7280';
 }
 
 function getPriorityColor(priority: TrackerItemPriority | undefined): string {
@@ -154,14 +174,37 @@ function formatDate(date: Date): string {
  * Convert full-document tracker items (from frontmatter) to TrackerItem format
  * Works for any tracker type that supports fullDocument mode (plan, decision, etc.)
  */
-function convertFullDocumentToTrackerItems(metadata: any[], trackerType: TrackerItemType): TrackerItem[] {
-  // Get the frontmatter key for this tracker type (e.g., 'planStatus', 'decisionStatus')
-  const frontmatterKey = `${trackerType}Status`;
+/**
+ * Resolve the tracker frontmatter data for a given document and tracker type.
+ * Checks both the type-specific key (e.g. 'planStatus') and the generic
+ * 'trackerStatus' key with a nested type field (e.g. trackerStatus: { type: 'blog-post' }).
+ * Returns the tracker data object, or null if no match.
+ */
+function resolveTrackerFrontmatter(frontmatter: Record<string, any> | undefined, trackerType: string): Record<string, any> | null {
+  if (!frontmatter) return null;
 
+  // Check type-specific key first (e.g. 'planStatus', 'decisionStatus')
+  const specificKey = `${trackerType}Status`;
+  if (frontmatter[specificKey] && typeof frontmatter[specificKey] === 'object') {
+    return frontmatter[specificKey] as Record<string, any>;
+  }
+
+  // Check generic trackerStatus with nested type field
+  if (frontmatter.trackerStatus && typeof frontmatter.trackerStatus === 'object') {
+    const trackerData = frontmatter.trackerStatus as Record<string, any>;
+    if (trackerData.type === trackerType) {
+      return trackerData;
+    }
+  }
+
+  return null;
+}
+
+function convertFullDocumentToTrackerItems(metadata: any[], trackerType: TrackerItemType): TrackerItem[] {
   return metadata
     .filter(doc => {
-      // Only include documents that have the tracker's frontmatter key
-      const hasTrackerStatus = !!(doc.frontmatter && doc.frontmatter[frontmatterKey]);
+      // Only include documents that have matching tracker frontmatter
+      const hasTrackerStatus = resolveTrackerFrontmatter(doc.frontmatter, trackerType) !== null;
 
       // Exclude agent files
       const pathLower = doc.path.toLowerCase();
@@ -170,22 +213,11 @@ function convertFullDocumentToTrackerItems(metadata: any[], trackerType: Tracker
       return hasTrackerStatus && !isAgentFile;
     })
     .map(doc => {
-      const trackerStatus = doc.frontmatter[frontmatterKey] as any || {};
+      const trackerStatus = resolveTrackerFrontmatter(doc.frontmatter, trackerType) || {};
       const frontmatter = doc.frontmatter;
 
-      // Map status to standard tracker item status
-      let status: TrackerItemStatus = 'to-do';
-      const statusValue = (trackerStatus.status || frontmatter.status || 'draft').toLowerCase();
-
-      if (statusValue === 'completed' || statusValue === 'done' || statusValue === 'decided' || statusValue === 'implemented') {
-        status = 'done';
-      } else if (statusValue === 'in-progress' || statusValue === 'in-development' || statusValue === 'evaluating') {
-        status = 'in-progress';
-      } else if (statusValue === 'in-review') {
-        status = 'in-review';
-      } else if (statusValue === 'blocked') {
-        status = 'blocked';
-      }
+      // Use raw status value from frontmatter - custom trackers define their own statuses
+      const statusValue = (trackerStatus.status || frontmatter.status || 'to-do').toLowerCase() as TrackerItemStatus;
 
       // Use file modified date for full-document trackers (more accurate than frontmatter)
       // This ensures recently-edited plans appear at the top regardless of frontmatter state
@@ -203,10 +235,33 @@ function convertFullDocumentToTrackerItems(metadata: any[], trackerType: Tracker
         }
       }
 
+      // Collect custom fields from the tracker model's field definitions
+      const customFields: Record<string, any> = {};
+      const model = globalRegistry.get(trackerType);
+      if (model) {
+        const builtinFields = new Set(['title', 'status', 'priority', 'owner', 'tags', 'progress']);
+        for (const field of model.fields) {
+          if (builtinFields.has(field.name)) continue;
+          let value = trackerStatus[field.name] ?? frontmatter[field.name];
+          // For date fields, also check the common 'date' frontmatter key as fallback
+          if (value === undefined && (field.type === 'date' || field.type === 'datetime')) {
+            value = trackerStatus.date ?? frontmatter.date;
+          }
+          if (value !== undefined && value !== null) {
+            // Parse dates into Date objects at the data layer
+            if (field.type === 'date' || field.type === 'datetime') {
+              customFields[field.name] = parseDate(value) ?? value;
+            } else {
+              customFields[field.name] = value;
+            }
+          }
+        }
+      }
+
       return {
         type: trackerType,
         title: trackerStatus.title || frontmatter.title || doc.path.split('/').pop()?.replace('.md', '') || 'Untitled',
-        status,
+        status: statusValue,
         priority: (trackerStatus.priority || frontmatter.priority || 'medium') as TrackerItemPriority,
         module: doc.path,
         lineNumber: 0,
@@ -214,6 +269,7 @@ function convertFullDocumentToTrackerItems(metadata: any[], trackerType: Tracker
         tags: trackerStatus.tags || frontmatter.tags,
         progress: trackerStatus.progress || frontmatter.progress,
         lastIndexed: actualDate || new Date(0), // Use epoch for invalid dates
+        customFields: Object.keys(customFields).length > 0 ? customFields : undefined,
       } as TrackerItem;
     });
 }
@@ -241,6 +297,11 @@ export function TrackerTable({
 
   // Use prop filterType when hideTypeTabs is true, otherwise use internal state
   const activeTypeFilter = hideTypeTabs ? filterType : internalTypeFilter;
+
+  // Reset status filter when tracker type changes (different types have different statuses)
+  useEffect(() => {
+    setStatusFilter('all');
+  }, [activeTypeFilter]);
 
   useEffect(() => {
     let unsubscribeTracker: (() => void) | null = null;
@@ -427,9 +488,20 @@ export function TrackerTable({
           compareValue = a.module.localeCompare(b.module);
           break;
         case 'lastIndexed':
-        default:
           compareValue = a.lastIndexed.getTime() - b.lastIndexed.getTime();
           break;
+        default: {
+          // Sort by custom field
+          const aVal = a.customFields?.[sortColumn];
+          const bVal = b.customFields?.[sortColumn];
+          if (aVal == null && bVal == null) { compareValue = 0; break; }
+          if (aVal == null) { compareValue = 1; break; }
+          if (bVal == null) { compareValue = -1; break; }
+          if (aVal instanceof Date && bVal instanceof Date) { compareValue = aVal.getTime() - bVal.getTime(); break; }
+          if (typeof aVal === 'number' && typeof bVal === 'number') { compareValue = aVal - bVal; break; }
+          compareValue = String(aVal).localeCompare(String(bVal));
+          break;
+        }
       }
 
       return sortDir === 'asc' ? compareValue : -compareValue;
@@ -539,6 +611,59 @@ export function TrackerTable({
       : <span className="sort-indicator active opacity-100 text-[var(--nim-primary)] text-sm">&#8593;</span>;
   };
 
+  // Build status options from the active tracker model's field definition
+  // (must be before early returns to maintain consistent hook order)
+  const statusOptions = useMemo(() => {
+    const allOption = { value: 'all', label: 'All' };
+
+    if (activeTypeFilter && activeTypeFilter !== 'all') {
+      const model = globalRegistry.get(activeTypeFilter);
+      if (model) {
+        const statusField = model.fields.find(f => f.name === 'status');
+        if (statusField?.options && statusField.options.length > 0) {
+          return [
+            allOption,
+            ...statusField.options.map(o => ({
+              value: o.value,
+              label: o.label,
+            })),
+          ];
+        }
+      }
+    }
+
+    // Fallback for built-in types or 'all' view
+    return [
+      allOption,
+      { value: 'to-do', label: 'To Do' },
+      { value: 'in-progress', label: 'In Progress' },
+      { value: 'in-review', label: 'In Review' },
+      { value: 'done', label: 'Done' },
+      { value: 'blocked', label: 'Blocked' },
+    ];
+  }, [activeTypeFilter]);
+
+  // Derive extra columns from the tracker model's tableView.defaultColumns
+  const extraColumns = useMemo(() => {
+    const builtinColumns = new Set(['title', 'status', 'priority', 'progress']);
+    if (activeTypeFilter && activeTypeFilter !== 'all') {
+      const model = globalRegistry.get(activeTypeFilter);
+      if (model?.tableView?.defaultColumns) {
+        return model.tableView.defaultColumns
+          .filter(col => !builtinColumns.has(col))
+          .map(col => {
+            const field = model.fields.find(f => f.name === col);
+            // Convert camelCase to display label (e.g. publishDate -> Publish Date)
+            const label = field?.name
+              ? field.name.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase())
+              : col;
+            return { key: col, label, type: field?.type || 'string' };
+          });
+      }
+    }
+    return [];
+  }, [activeTypeFilter]);
+
   // Only show full-page loading spinner if we have no items yet
   if (loading && items.length === 0) {
     return (
@@ -556,15 +681,6 @@ export function TrackerTable({
       </div>
     );
   }
-
-  const statusOptions = [
-    { value: 'all', label: 'All' },
-    { value: 'to-do', label: 'To Do' },
-    { value: 'in-progress', label: 'In Progress' },
-    { value: 'in-review', label: 'In Review' },
-    { value: 'done', label: 'Done' },
-    { value: 'blocked', label: 'Blocked' },
-  ];
 
   const priorityOptions = [
     { value: 'all', label: 'All' },
@@ -684,6 +800,18 @@ export function TrackerTable({
                   {getSortIndicator('progress')}
                 </span>
               </th>
+              {extraColumns.map(col => (
+                <th
+                  key={col.key}
+                  className="tracker-table-header sortable sticky top-0 bg-[var(--nim-bg-secondary)] py-1 px-2 text-left text-[11px] font-semibold text-[var(--nim-text-faint)] uppercase tracking-[0.5px] border-b border-[var(--nim-border)] z-10 cursor-pointer select-none hover:bg-[var(--nim-bg-hover)]"
+                  onClick={() => handleColumnClick(col.key as SortColumn)}
+                >
+                  <span className="header-content inline-flex items-center gap-1 whitespace-nowrap">
+                    <span>{col.label.toUpperCase()}</span>
+                    {getSortIndicator(col.key as SortColumn)}
+                  </span>
+                </th>
+              ))}
               <th
                 className="tracker-table-header module sortable sticky top-0 bg-[var(--nim-bg-secondary)] py-1 px-2 text-left text-[11px] font-semibold text-[var(--nim-text-faint)] uppercase tracking-[0.5px] border-b border-[var(--nim-border)] z-10 cursor-pointer select-none hover:bg-[var(--nim-bg-hover)]"
                 onClick={() => handleColumnClick('module')}
@@ -743,6 +871,9 @@ export function TrackerTable({
                   </select>
                 </th>
                 <th className="tracker-table-header filter-cell py-1 px-2 bg-[var(--nim-bg)]"></th>
+                {extraColumns.map(col => (
+                  <th key={col.key} className="tracker-table-header filter-cell py-1 px-2 bg-[var(--nim-bg)]"></th>
+                ))}
                 <th className="tracker-table-header filter-cell py-1 px-2 bg-[var(--nim-bg)]"></th>
                 <th className="tracker-table-header filter-cell py-1 px-2 bg-[var(--nim-bg)]"></th>
               </tr>
@@ -751,7 +882,7 @@ export function TrackerTable({
           <tbody>
           {sortedItems.length === 0 ? (
             <tr>
-              <td colSpan={7} className="tracker-table-empty-cell !p-0 !border-none">
+              <td colSpan={7 + extraColumns.length} className="tracker-table-empty-cell !p-0 !border-none">
                 {loading ? (
                   // Still loading - show loading indicator instead of empty state
                   <div className="tracker-table-loading flex items-center justify-center gap-3 py-6 px-6 text-[var(--nim-text-muted)]">
@@ -852,9 +983,9 @@ export function TrackerTable({
                   <span
                     className="status-badge inline-block py-0.5 px-2 rounded-[10px] text-[11px] font-medium border"
                     style={{
-                      backgroundColor: `${getStatusColor(item.status)}20`,
-                      color: getStatusColor(item.status),
-                      borderColor: getStatusColor(item.status)
+                      backgroundColor: `${getStatusColor(item.status, item.type)}20`,
+                      color: getStatusColor(item.status, item.type),
+                      borderColor: getStatusColor(item.status, item.type)
                     }}
                   >
                     {item.status.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
@@ -880,6 +1011,24 @@ export function TrackerTable({
                     </div>
                   )}
                 </td>
+                {extraColumns.map(col => {
+                  const value = item.customFields?.[col.key];
+                  let display = '';
+                  if (value == null) {
+                    // leave empty
+                  } else if (value instanceof Date) {
+                    display = value.toLocaleDateString();
+                  } else if (Array.isArray(value)) {
+                    display = value.join(', ');
+                  } else {
+                    display = String(value);
+                  }
+                  return (
+                    <td key={col.key} className="tracker-table-cell p-[5px] text-[var(--nim-text)] align-middle">
+                      <span className="text-[var(--nim-text-muted)] text-xs">{display}</span>
+                    </td>
+                  );
+                })}
                 <td className="tracker-table-cell module p-[5px] text-[var(--nim-text)] align-middle min-w-[150px] max-w-[250px]">
                   <span className="module-text text-[var(--nim-text-muted)] text-xs font-mono whitespace-nowrap overflow-hidden text-ellipsis block">{item.module}</span>
                 </td>

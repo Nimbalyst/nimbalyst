@@ -111,9 +111,17 @@ export interface ValidationResult {
  */
 export class TrackerDataModelRegistry {
   private models: Map<string, TrackerDataModel> = new Map();
+  private listeners: Set<() => void> = new Set();
 
   register(model: TrackerDataModel): void {
     this.models.set(model.type, model);
+    this.listeners.forEach(fn => fn());
+  }
+
+  /** Subscribe to registry changes. Returns an unsubscribe function. */
+  onChange(fn: () => void): () => void {
+    this.listeners.add(fn);
+    return () => { this.listeners.delete(fn); };
   }
 
   get(type: string): TrackerDataModel | undefined {

@@ -52,10 +52,14 @@ export const TrackerBottomPanel: React.FC<BottomPanelProps> = ({
   const [quickAddType, setQuickAddType] = useState<string | null>(null);
   const posthog = usePostHog();
 
-  // Get available tracker types from registry
+  // Get available tracker types from registry, re-read when new trackers are registered
+  const [registryVersion, setRegistryVersion] = useState(0);
+  useEffect(() => {
+    return globalRegistry.onChange(() => setRegistryVersion(v => v + 1));
+  }, []);
   const trackerTypes = useMemo(() => {
     return globalRegistry.getAll();
-  }, []);
+  }, [registryVersion]);
 
   // Initialize counts for all tracker types
   const [itemCounts, setItemCounts] = useState<ItemCounts>(() => {
@@ -116,15 +120,24 @@ export const TrackerBottomPanel: React.FC<BottomPanelProps> = ({
           trackerTypes.forEach(tracker => {
             if (!tracker.modes?.fullDocument) return;
 
-            const frontmatterKey = `${tracker.type}Status`;
             const fullDocCount = metadata.filter((doc: any) => {
-              if (!doc.frontmatter || !doc.frontmatter[frontmatterKey]) return false;
+              if (!doc.frontmatter) return false;
+
+              // Check type-specific key (e.g. 'planStatus') or generic 'trackerStatus' with matching type
+              const specificKey = `${tracker.type}Status`;
+              let trackerData: any = null;
+              if (doc.frontmatter[specificKey] && typeof doc.frontmatter[specificKey] === 'object') {
+                trackerData = doc.frontmatter[specificKey];
+              } else if (doc.frontmatter.trackerStatus && typeof doc.frontmatter.trackerStatus === 'object' && doc.frontmatter.trackerStatus.type === tracker.type) {
+                trackerData = doc.frontmatter.trackerStatus;
+              }
+              if (!trackerData) return false;
 
               const pathLower = doc.path.toLowerCase();
               const isAgentFile = pathLower.includes('/agents/') || pathLower.includes('\\agents\\');
               if (isAgentFile) return false;
 
-              const status = (doc.frontmatter[frontmatterKey].status || '').toLowerCase();
+              const status = (trackerData.status || '').toLowerCase();
               return status !== 'completed' && status !== 'done';
             }).length;
 
