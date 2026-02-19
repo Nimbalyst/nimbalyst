@@ -333,13 +333,38 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
     setExpandedFolders(new Set());
   }, []);
 
-  // Auto-expand all folders when groupByDirectory is enabled or files change
+  // Auto-expand all folders when groupByDirectory is first enabled.
+  // When files change, only expand NEW folders (don't reset manually collapsed ones).
+  const prevGroupByDirectoryRef = React.useRef(groupByDirectory);
   useEffect(() => {
-    if (groupByDirectory && editedFiles.length > 0) {
-      const tree = buildDirectoryTree(editedFiles);
-      const allPaths = getAllFolderPaths(tree);
-      setExpandedFolders(new Set(allPaths));
+    if (!groupByDirectory || editedFiles.length === 0) {
+      prevGroupByDirectoryRef.current = groupByDirectory;
+      return;
     }
+
+    const tree = buildDirectoryTree(editedFiles);
+    const allPaths = getAllFolderPaths(tree);
+
+    if (!prevGroupByDirectoryRef.current && groupByDirectory) {
+      // groupByDirectory was just turned on - expand everything
+      setExpandedFolders(new Set(allPaths));
+    } else {
+      // Files changed while already grouped - only add new folders, preserve collapsed state
+      setExpandedFolders(prev => {
+        const next = new Set(prev);
+        let changed = false;
+        for (const path of allPaths) {
+          if (!prev.has(path)) {
+            // This is a new folder not seen before - expand it by default
+            next.add(path);
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
+    }
+
+    prevGroupByDirectoryRef.current = groupByDirectory;
   }, [groupByDirectory, editedFiles]);
 
   // Listen for external expand/collapse events (when hideControls is true)
