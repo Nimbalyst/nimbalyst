@@ -28,6 +28,8 @@ targets:
       - Sources
       - path: Resources/Assets.xcassets
         buildPhase: resources
+      - path: Resources/PrivacyInfo.xcprivacy
+        buildPhase: resources
       - path: Resources/transcript-dist
         type: folder
         buildPhase: resources

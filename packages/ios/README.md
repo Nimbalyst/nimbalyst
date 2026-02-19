@@ -119,6 +119,31 @@ cd NimbalystNative && swift test
 cd NimbalystNative && swift test --enable-code-coverage
 ```
 
+## App Store Compliance
+
+### Encryption Export (ITSAppUsesNonExemptEncryption)
+
+The app uses AES-256-GCM encryption (via CryptoKit) for end-to-end encryption of synced data. `ITSAppUsesNonExemptEncryption` is set to `false` in Info.plist because:
+
+1. The encryption uses Apple's built-in CryptoKit framework, not a custom implementation
+2. It is used solely for protecting the user's own personal data in transit between their devices
+3. It is not used for direct communication between third parties
+4. HTTPS/TLS (handled by the OS) is used for all network communication
+
+This qualifies as exempt under US BIS encryption export regulations (Category 5, Part 2, Note 4).
+
+### Privacy Manifest (PrivacyInfo.xcprivacy)
+
+The app declares:
+- **UserDefaults** access (reason CA92.1: app-specific preferences)
+- **Product interaction** data collection (PostHog analytics, linked to identity)
+- **No tracking** (analytics are not used for cross-app advertising)
+
+### Required Legal Links
+
+- Privacy Policy: https://nimbalyst.com/privacy-policy (linked in-app via Settings > Privacy)
+- Privacy Policy URL must also be entered in App Store Connect metadata
+
 ## Tech Stack
 
 | Component | Technology |

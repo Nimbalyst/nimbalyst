@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		07375C6E0FB269FD76F1EBC7 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = EC6BD8ABB212746BF377C59C /* PrivacyInfo.xcprivacy */; };
 		2430D292FD676E64EB569585 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = EB11A131E099B9309C58DE20 /* Assets.xcassets */; };
 		6D2BC05B6E2A22A09C4240A5 /* NimbalystNative in Frameworks */ = {isa = PBXBuildFile; productRef = D41B25A54BA519221EC949FC /* NimbalystNative */; };
 		8861F70DF98177EB5D6F8FAD /* DebugMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = 988E8A7EF37C4B495EEC60EB /* DebugMenu.swift */; };
@@ -25,6 +26,7 @@
 		988E8A7EF37C4B495EEC60EB /* DebugMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugMenu.swift; sourceTree = "<group>"; };
 		CCD597478FE1DE96262222D2 /* transcript-dist */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "transcript-dist"; path = "Resources/transcript-dist"; sourceTree = SOURCE_ROOT; };
 		EB11A131E099B9309C58DE20 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		EC6BD8ABB212746BF377C59C /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -81,6 +83,7 @@
 			isa = PBXGroup;
 			children = (
 				EB11A131E099B9309C58DE20 /* Assets.xcassets */,
+				EC6BD8ABB212746BF377C59C /* PrivacyInfo.xcprivacy */,
 				CCD597478FE1DE96262222D2 /* transcript-dist */,
 			);
 			path = Resources;
@@ -153,6 +156,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				2430D292FD676E64EB569585 /* Assets.xcassets in Resources */,
+				07375C6E0FB269FD76F1EBC7 /* PrivacyInfo.xcprivacy in Resources */,
 				D61148B64AD2C6754C306505 /* transcript-dist in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
