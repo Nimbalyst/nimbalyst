@@ -366,6 +366,40 @@ packages/
 └── core/                  # Shared utilities
 ```
 
+### Marketing Screenshots & Videos
+
+Automated Playwright capture for nimbalyst.com marketing assets. Produces 1440x900 PNG screenshots in both dark and light themes, plus WebM video recordings with a DOM-injected cursor.
+
+```bash
+# Requires dev server running first
+cd packages/electron && npm run dev
+
+# In another terminal - capture everything
+cd packages/electron && npm run marketing:screenshots
+
+# Capture specific categories
+npm run marketing:screenshots:grep -- "hero-"
+npm run marketing:screenshots:grep -- "editor-"
+npm run marketing:screenshots:grep -- "ai-"
+npm run marketing:screenshots:grep -- "video-"
+
+# Convert WebM videos to MP4/GIF (requires ffmpeg)
+bash packages/electron/marketing/process-videos.sh
+```
+
+Output structure:
+```
+packages/electron/marketing/
+  screenshots/
+    dark/     # 26 PNGs - hero shots, editor types, AI features, settings
+    light/    # Same 26 PNGs in light theme
+  videos/
+    dark/     # WebM - hero ambient, feature loops
+    light/    # WebM - hero ambient light theme
+```
+
+For the marketing website, swap `dark/` and `light/` directories based on theme toggle. All filenames are identical between themes. See [docs/MARKETING_SCREENSHOTS.md](./docs/MARKETING_SCREENSHOTS.md) for the full output inventory and architecture.
+
 ### Testing
 
 - `npm run test:unit`: Vitest unit suite (JSDOM)

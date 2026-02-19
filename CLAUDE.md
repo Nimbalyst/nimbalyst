@@ -87,6 +87,14 @@ For detailed information about specific packages, see their CLAUDE.md files:
 - **Test UI**: `npm run test:unit:ui`
 - **E2E tests**: See [E2E_TESTING.md](./docs/E2E_TESTING.md) for comprehensive documentation
 
+### Marketing Screenshots & Videos
+- **Capture all**: `cd packages/electron && npm run marketing:screenshots`
+- **Capture by category**: `cd packages/electron && npm run marketing:screenshots:grep -- "hero-"` (also: `editor-`, `ai-`, `settings-`, `feature-`, `video-`)
+- **Requires dev server running** on port 5273 (`cd packages/electron && npm run dev`)
+- **Output**: `packages/electron/marketing/screenshots/{dark,light}/` (1440x900 PNG) and `packages/electron/marketing/videos/{dark,light}/` (WebM)
+- **Post-process videos**: `bash packages/electron/marketing/process-videos.sh` (converts WebM to MP4/GIF via ffmpeg)
+- See [MARKETING_SCREENSHOTS.md](./docs/MARKETING_SCREENSHOTS.md) for architecture, output inventory, and how to add new screenshots
+
 ### Other Packages
 - **iOS (native)**: `npm run ios:test:swift`, `npm run ios:build:transcript`
 - **Capacitor (Android)**: `npm run cap:dev`, `npm run cap:android`
@@ -163,6 +171,7 @@ Read the file **in its entirety** before making changes. These documents contain
 | [POSTHOG_MCP_INTEGRATION.md](./docs/POSTHOG_MCP_INTEGRATION.md) | Documents the PostHog MCP server architecture, available tools, and how to query analytics data programmatically from AI sessions. | Using PostHog MCP tools to query analytics, debugging MCP integration issues, or extending PostHog functionality. |
 | [THEMING.md](./packages/electron/docs/THEMING.md) | Documents the theming system including theme definition format, color variables, and how themes are applied across the application. | Working on themes, adding new color schemes, or debugging theme-related styling issues. |
 | [RELEASING.md](./RELEASING.md) | Documents the release process including version bumping, changelog management, git tagging, and the `/release` command. Covers both local and notarized builds. | Preparing a release, understanding the release workflow, or debugging release script issues. |
+| [MARKETING_SCREENSHOTS.md](./docs/MARKETING_SCREENSHOTS.md) | Documents the Playwright-based marketing screenshot and video capture system. Covers the fixture workspace, helper utilities, DOM cursor for video, output file inventory, and how to add new screenshots or video choreography. | Adding new marketing screenshots, modifying video choreography, updating the fixture workspace data, or importing output files into the marketing website. |
 
 ## AI Features
 

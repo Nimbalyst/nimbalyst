@@ -42,7 +42,9 @@
     "test:ai:watch": "vitest watch ../runtime/src/ai/providers/__tests__/",
     "test:e2e": "playwright test",
     "test:e2e:basic": "playwright test claude-code-basic.spec.ts",
-    "test:e2e:ui": "playwright test --ui"
+    "test:e2e:ui": "playwright test --ui",
+    "marketing:screenshots": "playwright test --config=marketing/playwright.marketing.config.ts",
+    "marketing:screenshots:grep": "playwright test --config=marketing/playwright.marketing.config.ts --grep"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.39",
