@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useAtomValue } from 'jotai';
 import { MaterialSymbol, getProviderIcon } from '@nimbalyst/runtime';
 import { getClaudeCodeModelLabel } from '../../utils/modelUtils';
@@ -28,10 +29,28 @@ export function ModelSelector({
   const [isOpen, setIsOpen] = useState(false);
   const [models, setModels] = useState<Record<string, Model[]>>({});
   const [loading, setLoading] = useState(false);
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number } | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const isCodexBetaEnabled = useAtomValue(betaFeatureEnabledAtom('codex'));
   const providers = useAtomValue(providersAtom);
+
+  // Compute fixed position for the dropdown when it opens
+  const openDropdown = useCallback(() => {
+    if (buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      setDropdownPos({ top: rect.top, left: rect.left });
+    }
+    setIsOpen(true);
+  }, []);
+
+  const toggleDropdown = useCallback(() => {
+    if (isOpen) {
+      setIsOpen(false);
+    } else {
+      openDropdown();
+    }
+  }, [isOpen, openDropdown]);
 
   // Clear cached models when provider settings change so next dropdown open fetches fresh data
   useEffect(() => {
@@ -43,8 +62,11 @@ export function ModelSelector({
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
 
-      // Don't close if clicking inside the dropdown
+      // Don't close if clicking inside the dropdown or on the toggle button
       if (dropdownRef.current && dropdownRef.current.contains(target)) {
+        return;
+      }
+      if (buttonRef.current && buttonRef.current.contains(target)) {
         return;
       }
 
@@ -154,11 +176,11 @@ export function ModelSelector({
   }, {} as Record<'agents' | 'models', Record<string, Model[]>>);
 
   return (
-    <div className="model-selector relative inline-block" ref={dropdownRef}>
+    <div className="model-selector inline-block">
       <button
         ref={buttonRef}
         className="model-selector-button flex items-center gap-1 px-2 py-[3px] rounded-xl text-[11px] font-medium cursor-pointer transition-all duration-200 outline-none whitespace-nowrap max-w-[200px] bg-[var(--nim-bg-secondary)] text-[var(--nim-text-muted)] border border-[var(--nim-border)] hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-primary)]"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={toggleDropdown}
         aria-label={`Current model: ${getCurrentModelName()}`}
         data-testid="model-picker"
       >
@@ -166,8 +188,8 @@ export function ModelSelector({
         <MaterialSymbol icon="expand_more" size={14} className={`model-selector-arrow transition-transform duration-200 shrink-0 ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
-      {isOpen && (
-        <div className="model-selector-dropdown nim-scrollbar absolute bottom-full left-0 mb-1 min-w-[240px] max-w-[320px] max-h-[400px] overflow-y-auto rounded-lg p-1 z-[1000] bg-[var(--nim-bg)] border border-[var(--nim-border)] shadow-[0_4px_12px_rgba(0,0,0,0.15)]">
+      {isOpen && dropdownPos && createPortal(
+        <div className="model-selector-dropdown nim-scrollbar fixed min-w-[240px] max-w-[320px] max-h-[400px] overflow-y-auto rounded-lg p-1 z-[1000] bg-[var(--nim-bg)] border border-[var(--nim-border)] shadow-[0_4px_12px_rgba(0,0,0,0.15)]" style={{ bottom: `${window.innerHeight - dropdownPos.top + 4}px`, left: `${dropdownPos.left}px` }} ref={dropdownRef}>
           {loading ? (
             <div className="model-selector-loading p-3 text-center text-xs text-[var(--nim-text-faint)]">Loading models...</div>
           ) : Object.keys(models).length === 0 ? (
@@ -270,7 +292,8 @@ export function ModelSelector({
               </button>
             </>
           )}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
