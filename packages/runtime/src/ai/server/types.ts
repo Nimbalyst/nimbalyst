@@ -5,6 +5,7 @@
 import type { ToolDefinition } from '../tools';
 import type { EffortLevel } from './effortLevels';
 import type { ToolResult } from './protocols/ProtocolInterface';
+import { ModelIdentifier } from './ModelIdentifier';
 export type { ToolDefinition } from '../tools';
 export { ModelIdentifier } from './ModelIdentifier';
 export type { ToolResult } from './protocols/ProtocolInterface';
@@ -130,6 +131,51 @@ export const AI_PROVIDER_TYPES: readonly AIProviderType[] = ['claude', 'claude-c
  * These are ONLY valid for the claude-code provider.
  */
 export const CLAUDE_CODE_VARIANTS = ['opus', 'sonnet', 'haiku'] as const;
+
+/**
+ * Resolves a configured model string to the SDK model value.
+ *
+ * Key behaviors:
+ * - For extended context (1M) variants, appends [1m] suffix so the SDK auto-detects
+ *   the beta header. The --betas CLI option is ignored for OAuth users, so [1m] suffix
+ *   is the only reliable way to enable 1M context.
+ * - sonnet-1m uses the SDK's 'sonnet' variant (currently Sonnet 4.6) with [1m] suffix.
+ * - sonnet-4.5-1m pins to claude-sonnet-4-5-20250929 with [1m] suffix.
+ * - The SDK strips [1m] before sending the model ID to the API.
+ */
+export function resolveClaudeCodeModelVariant(configuredModel: string | undefined, defaultModel: string): string {
+  type ClaudeCodeVariant = typeof CLAUDE_CODE_VARIANTS[number];
+  const fallback: ClaudeCodeVariant = 'sonnet';
+  const configured = configuredModel || defaultModel;
+
+  // Handle special pinned model identifiers (these don't parse via ModelIdentifier)
+  if (configured === 'claude-code:sonnet-4.5-1m') {
+    return 'claude-sonnet-4-5-20250929[1m]';
+  }
+
+  // Try parsing with ModelIdentifier
+  const parsed = ModelIdentifier.tryParse(configured);
+  if (parsed && parsed.provider === 'claude-code') {
+    // baseVariant strips suffixes like -1m
+    const variant = parsed.baseVariant as ClaudeCodeVariant;
+    if ((CLAUDE_CODE_VARIANTS as readonly string[]).includes(variant)) {
+      // Append [1m] suffix for extended context so the SDK auto-detects the 1M beta
+      return parsed.isExtendedContext ? `${variant}[1m]` : variant;
+    }
+  }
+
+  // Fallback for non-standard formats
+  const raw = parsed ? parsed.model : configured;
+  const normalized = raw?.toLowerCase();
+  const isExtended = normalized?.endsWith('-1m');
+  const withoutContext = normalized?.replace(/-1m$/, '');
+
+  if (withoutContext && (CLAUDE_CODE_VARIANTS as readonly string[]).includes(withoutContext)) {
+    return isExtended ? `${withoutContext}[1m]` : withoutContext as ClaudeCodeVariant;
+  }
+
+  return fallback;
+}
 
 export interface AIModel {
   id: string;           // e.g., 'gpt-4', 'claude-3-5-sonnet-20241022'

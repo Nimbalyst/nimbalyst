@@ -29,6 +29,7 @@ import {
   getPatternDisplayName,
   CLAUDE_CODE_VARIANTS,
   ModelIdentifier,
+  resolveClaudeCodeModelVariant,
 } from '../types';
 import { isBedrockToolSearchError } from '../utils/errorDetection';
 import { AgentMessagesRepository } from '../../../storage/repositories/AgentMessagesRepository';
@@ -505,51 +506,9 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
   }
 
   private resolveModelVariant(): string {
-    const fallback: ClaudeCodeVariant = 'sonnet';
-    const configured = this.config.model || ClaudeCodeProvider.DEFAULT_MODEL;
-
-    // Try parsing with ModelIdentifier
-    const parsed = ModelIdentifier.tryParse(configured);
-    if (parsed && parsed.provider === 'claude-code') {
-      // For 1M context: pin to Sonnet 4.5 since the 1M beta isn't supported on Sonnet 4.6 yet
-      if (parsed.isExtendedContext && parsed.baseVariant === 'sonnet') {
-        return 'claude-sonnet-4-5-20250929';
-      }
-      // baseVariant strips suffixes like -1m
-      const variant = parsed.baseVariant as ClaudeCodeVariant;
-      if ((CLAUDE_CODE_VARIANTS as readonly string[]).includes(variant)) {
-        return variant;
-      }
-    }
-
-    // Fallback for non-standard formats
-    const raw = parsed ? parsed.model : configured;
-    const normalized = raw?.toLowerCase();
-    const withoutContext = normalized?.replace(/-1m$/, '');
-
-    if (withoutContext && (CLAUDE_CODE_VARIANTS as readonly string[]).includes(withoutContext)) {
-      return withoutContext as ClaudeCodeVariant;
-    }
-
-    return fallback;
+    return resolveClaudeCodeModelVariant(this.config.model, ClaudeCodeProvider.DEFAULT_MODEL);
   }
 
-  /**
-   * Check if the configured model uses 1M context window
-   */
-  private is1MModel(): boolean {
-    const configured = this.config.model || ClaudeCodeProvider.DEFAULT_MODEL;
-
-    // Try parsing with ModelIdentifier
-    const parsed = ModelIdentifier.tryParse(configured);
-    if (parsed && parsed.provider === 'claude-code') {
-      return parsed.isExtendedContext;
-    }
-
-    // Fallback for non-standard formats
-    const raw = parsed ? parsed.model : configured;
-    return raw?.toLowerCase().endsWith('-1m') || false;
-  }
 
 
   async *sendMessage(
@@ -893,9 +852,9 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
         mcpServers: await this.mcpConfigService.getMcpServersConfig({ sessionId, workspacePath }),
         cwd: workspacePath,
         abortController: this.abortController,
+        // Model variant includes [1m] suffix when extended context is selected,
+        // which tells the SDK to auto-detect the 1M beta (--betas is ignored for OAuth users)
         model: this.resolveModelVariant(),
-        // Enable 1M context beta if using a 1M model variant
-        ...(this.is1MModel() && { betas: ['context-1m-2025-08-07'] }),
         // Use 'default' permission mode so canUseTool fires for AskUserQuestion and Bash
         // We auto-approve most tools in canUseTool, but check permissions for Bash
         permissionMode: 'default',
@@ -3699,13 +3658,20 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
         contextWindow: 200000
       });
 
-      // Add 1M variant right after Sonnet
+      // Add 1M variants right after Sonnet
       // Access is controlled by Anthropic via account permissions
       // If user doesn't have access, the SDK will return an error when they try to use it
-      // Note: 1M beta is pinned to Sonnet 4.5 since the API doesn't support 1M for Sonnet 4.6 yet
       if (variant === 'sonnet') {
         models.push({
           id: ModelIdentifier.create('claude-code', 'sonnet-1m').combined,
+          name: 'Claude Agent · Sonnet 4.6 (1M)',
+          provider: 'claude-code' as const,
+          maxTokens: 8192,
+          contextWindow: 1000000
+        });
+        // Sonnet 4.5 1M — uses a full model ID to pin to 4.5
+        models.push({
+          id: 'claude-code:sonnet-4.5-1m',
           name: 'Claude Agent · Sonnet 4.5 (1M)',
           provider: 'claude-code' as const,
           maxTokens: 8192,

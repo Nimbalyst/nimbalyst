@@ -54,28 +54,32 @@ function formatVariantLabel(variant: ClaudeCodeVariant): string {
 }
 
 export function getClaudeCodeModelLabel(modelId?: string): string {
+  // Handle pinned Sonnet 4.5 1M (uses non-standard model ID)
+  if (modelId === 'claude-code:sonnet-4.5-1m') return 'Claude Agent (Sonnet 4.5 (1M))';
+
   const variant = extractClaudeCodeVariant(modelId);
   // If no variant detected (shouldn't happen with legacy handling), default to Sonnet
   if (!variant) return 'Claude Agent (Sonnet 4.6)';
 
   // Check for extended context (1M) variant
   const parsed = modelId ? ModelIdentifier.tryParse(modelId) : null;
-  // 1M is pinned to Sonnet 4.5 since the API doesn't support 1M for Sonnet 4.6 yet
-  const version = (parsed?.isExtendedContext && variant === 'sonnet') ? '4.5' : CLAUDE_CODE_VARIANT_VERSIONS[variant];
+  const version = CLAUDE_CODE_VARIANT_VERSIONS[variant];
   const suffix = parsed?.isExtendedContext ? ' (1M)' : '';
 
   return `Claude Agent (${formatVariantLabel(variant)} ${version}${suffix})`;
 }
 
 export function getClaudeCodeModelShortLabel(modelId?: string): string {
+  // Handle pinned Sonnet 4.5 1M (uses non-standard model ID)
+  if (modelId === 'claude-code:sonnet-4.5-1m') return 'Sonnet 4.5 (1M)';
+
   const variant = extractClaudeCodeVariant(modelId);
   // If no variant detected (shouldn't happen with legacy handling), default to Sonnet
   if (!variant) return 'Sonnet 4.6';
 
   // Check for extended context (1M) variant
   const parsed = modelId ? ModelIdentifier.tryParse(modelId) : null;
-  // 1M is pinned to Sonnet 4.5 since the API doesn't support 1M for Sonnet 4.6 yet
-  const version = (parsed?.isExtendedContext && variant === 'sonnet') ? '4.5' : CLAUDE_CODE_VARIANT_VERSIONS[variant];
+  const version = CLAUDE_CODE_VARIANT_VERSIONS[variant];
   const suffix = parsed?.isExtendedContext ? ' (1M)' : '';
 
   return `${formatVariantLabel(variant)} ${version}${suffix}`;
@@ -228,14 +232,12 @@ export function getModelShortName(provider: string, modelId: string): string {
 
 /**
  * Check if a model supports effort level configuration (Opus 4.6 and Sonnet 4.6).
- * Excludes the Sonnet 1M variant which is pinned to Sonnet 4.5.
+ * Excludes the Sonnet 4.5 1M variant.
  */
 export function supportsEffortLevel(modelId?: string): boolean {
+  if (modelId === 'claude-code:sonnet-4.5-1m') return false;
   const variant = extractClaudeCodeVariant(modelId);
   if (variant === 'opus') return true;
-  if (variant === 'sonnet') {
-    const parsed = modelId ? ModelIdentifier.tryParse(modelId) : null;
-    return !parsed?.isExtendedContext;
-  }
+  if (variant === 'sonnet') return true;
   return false;
 }

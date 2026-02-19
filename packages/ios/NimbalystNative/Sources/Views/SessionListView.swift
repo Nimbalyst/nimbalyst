@@ -346,6 +346,11 @@ struct ProviderBadge: View {
             variant = model
         }
 
+        // Handle pinned Sonnet 4.5 1M
+        if variant == "sonnet-4.5-1m" {
+            return "Sonnet 4.5 (1M)"
+        }
+
         // Strip suffixes like "-1m" for extended context
         let baseVariant = variant.split(separator: "-").first.map(String.init) ?? variant
         let isExtended = variant.contains("-1m")
@@ -353,8 +358,7 @@ struct ProviderBadge: View {
 
         switch baseVariant {
         case "opus": return "Opus 4.6\(suffix)"
-        // 1M is pinned to Sonnet 4.5 since the API doesn't support 1M for Sonnet 4.6 yet
-        case "sonnet": return "Sonnet \(isExtended ? "4.5" : "4.6")\(suffix)"
+        case "sonnet": return "Sonnet 4.6\(suffix)"
         case "haiku": return "Haiku 3.5\(suffix)"
         default: return "Sonnet 4.6\(suffix)"
         }
