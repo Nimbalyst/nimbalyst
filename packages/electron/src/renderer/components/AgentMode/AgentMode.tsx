@@ -707,7 +707,28 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
     const registry = store.get(sessionRegistryAtom);
     const sessionMeta = registry.get(sessionId);
     if (sessionMeta?.parentSessionId) {
-      // This is a child session - select the parent workstream instead
+      // Blitz children have worktreeId - select directly as worktree sessions
+      // so they get full worktree UI (git operations, terminal, merge buttons)
+      if (sessionMeta.worktreeId) {
+        const state = store.get(workstreamStateAtom(sessionId));
+        if (state.type !== 'worktree') {
+          store.set(workstreamStateAtom(sessionId), {
+            type: 'worktree',
+            worktreeId: sessionMeta.worktreeId,
+          });
+        }
+        store.set(setWorktreeActiveSessionAtom, {
+          worktreeId: sessionMeta.worktreeId,
+          sessionId,
+        });
+        setSelectedWorkstream({
+          workspacePath,
+          selection: { type: 'worktree', id: sessionId },
+        });
+        return;
+      }
+
+      // Non-worktree child session - select the parent workstream instead
       handleChildSessionSelect(sessionId, sessionMeta.parentSessionId, 'workstream');
       return;
     }
