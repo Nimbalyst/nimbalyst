@@ -338,6 +338,8 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
     let unsubscribeExited: (() => void) | null = null;
     let inputDisposable: { dispose: () => void } | null = null;
     let resizeObserver: ResizeObserver | null = null;
+    let focusInHandler: (() => void) | null = null;
+    let focusOutHandler: (() => void) | null = null;
 
     const initTerminal = async () => {
       try {
@@ -377,7 +379,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
           fontSize: 13,
           fontFamily: '"SF Mono", Monaco, "Courier New", monospace',
           scrollback: 50000,
-          cursorBlink: true,
+          cursorBlink: false,
           cursorStyle: 'block',
           theme: getTerminalTheme(),
         });
@@ -405,6 +407,20 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
 
           terminalInstanceRef.current = terminal;
           fitAddonRef.current = fitAddon;
+
+          // Enable cursor blinking only when the terminal has focus
+          focusInHandler = () => {
+            if (terminal && !disposed) {
+              terminal.options.cursorBlink = true;
+            }
+          };
+          focusOutHandler = () => {
+            if (terminal && !disposed) {
+              terminal.options.cursorBlink = false;
+            }
+          };
+          terminalRef.current.addEventListener('focusin', focusInHandler);
+          terminalRef.current.addEventListener('focusout', focusOutHandler);
 
           // CRITICAL: Set up PTY output listener BEFORE scrollback restoration,
           // but queue the output to prevent race conditions.
@@ -581,6 +597,12 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
       disposedRef.current = true;
       hasInitializedRef.current = false;
       resizeObserver?.disconnect();
+      if (focusInHandler && terminalRef.current) {
+        terminalRef.current.removeEventListener('focusin', focusInHandler);
+      }
+      if (focusOutHandler && terminalRef.current) {
+        terminalRef.current.removeEventListener('focusout', focusOutHandler);
+      }
       unsubscribeOutput?.();
       unsubscribeExited?.();
       inputDisposable?.dispose();
