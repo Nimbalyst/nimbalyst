@@ -82,6 +82,8 @@ export function AdvancedPanel() {
     alphaFeatures,
     enableAllAlphaFeatures,
     customPathDirs,
+    historyMaxAgeDays,
+    historyMaxSnapshots,
   } = settings;
   const isDevelopment = import.meta.env.DEV;
   const [showReleaseChannel, setShowReleaseChannel] = useState(false);
@@ -654,6 +656,59 @@ export function AdvancedPanel() {
             <option value={16384}>16 GB</option>
           </select>
         </div>
+      </div>
+
+      <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
+        <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">Document History</h4>
+        <p className="text-sm leading-relaxed text-[var(--nim-text-muted)] mb-4">
+          Configure how long file history snapshots are retained. Older snapshots are cleaned up on app startup.
+        </p>
+
+        <div className="setting-item py-3">
+          <div className="setting-text flex flex-col gap-0.5">
+            <span className="setting-name text-sm font-medium text-[var(--nim-text)]">Retention Period</span>
+            <span className="setting-description text-xs leading-relaxed text-[var(--nim-text-muted)]">
+              Maximum age of history snapshots before they are automatically deleted.
+            </span>
+          </div>
+          <select
+            value={historyMaxAgeDays}
+            onChange={(e) => updateSettings({ historyMaxAgeDays: parseInt(e.target.value, 10) })}
+            className="setting-select mt-2 w-full py-2 px-3 pr-9 rounded-md text-sm bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] text-[var(--nim-text)] outline-none appearance-none bg-[url('data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2012%2012%22%3E%3Cpath%20fill%3D%22%236b7280%22%20d%3D%22M3%204.5L6%207.5L9%204.5%22%2F%3E%3C%2Fsvg%3E')] bg-no-repeat bg-[right_12px_center] focus:border-[var(--nim-primary)]"
+          >
+            <option value={7}>7 days</option>
+            <option value={14}>14 days</option>
+            <option value={30}>30 days (Default)</option>
+            <option value={60}>60 days</option>
+            <option value={90}>90 days</option>
+            <option value={180}>180 days</option>
+            <option value={365}>1 year</option>
+          </select>
+        </div>
+
+        <div className="setting-item py-3">
+          <div className="setting-text flex flex-col gap-0.5">
+            <span className="setting-name text-sm font-medium text-[var(--nim-text)]">Max Snapshots Per File</span>
+            <span className="setting-description text-xs leading-relaxed text-[var(--nim-text-muted)]">
+              Maximum number of history snapshots kept per file. Oldest snapshots beyond this limit are deleted.
+            </span>
+          </div>
+          <select
+            value={historyMaxSnapshots}
+            onChange={(e) => updateSettings({ historyMaxSnapshots: parseInt(e.target.value, 10) })}
+            className="setting-select mt-2 w-full py-2 px-3 pr-9 rounded-md text-sm bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] text-[var(--nim-text)] outline-none appearance-none bg-[url('data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2012%2012%22%3E%3Cpath%20fill%3D%22%236b7280%22%20d%3D%22M3%204.5L6%207.5L9%204.5%22%2F%3E%3C%2Fsvg%3E')] bg-no-repeat bg-[right_12px_center] focus:border-[var(--nim-primary)]"
+          >
+            <option value={50}>50</option>
+            <option value={100}>100</option>
+            <option value={250}>250 (Default)</option>
+            <option value={500}>500</option>
+            <option value={1000}>1,000</option>
+          </select>
+        </div>
+
+        <p className="text-xs text-[var(--nim-text-faint)] mt-2">
+          Changes take effect on next app restart when cleanup runs.
+        </p>
       </div>
 
       <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">

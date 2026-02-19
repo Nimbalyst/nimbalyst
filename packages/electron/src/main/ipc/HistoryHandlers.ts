@@ -2,11 +2,17 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { HistoryManager } from '../HistoryManager';
 import { safeHandle, safeOn } from '../utils/ipcRegistry';
+import { getAppSetting } from '../utils/store';
 
 // Initialize history manager
 const historyManager = new HistoryManager();
 
 export async function registerHistoryHandlers() {
+    // Configure history manager with user settings before initialization
+    const maxAgeDays = getAppSetting<number>('historyMaxAgeDays');
+    const maxSnapshots = getAppSetting<number>('historyMaxSnapshots');
+    historyManager.configure({ maxAgeDays, maxSnapshots });
+
     // Initialize history manager
     await historyManager.initialize();
 

@@ -55,6 +55,20 @@ export class HistoryManager {
   constructor() {}
 
   /**
+   * Configure the history retention limits.
+   * Called during initialization with values from app settings.
+   */
+  configure(options: { maxAgeDays?: number; maxSnapshots?: number }): void {
+    if (options.maxAgeDays !== undefined && options.maxAgeDays > 0) {
+      this.maxAgeDays = options.maxAgeDays;
+    }
+    if (options.maxSnapshots !== undefined && options.maxSnapshots > 0) {
+      this.maxSnapshots = options.maxSnapshots;
+    }
+    logger.main.info('[HistoryManager] Configured:', { maxAgeDays: this.maxAgeDays, maxSnapshots: this.maxSnapshots });
+  }
+
+  /**
    * Emit pending count changed event to all windows for a workspace
    */
   private async emitPendingCountChanged(workspacePath: string): Promise<void> {

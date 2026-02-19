@@ -375,6 +375,9 @@ export interface AdvancedSettings {
   enableAllBetaFeatures: boolean;
   // Custom directories to add to PATH (colon-separated on Unix, semicolon-separated on Windows)
   customPathDirs: string;
+  // Document history settings
+  historyMaxAgeDays: number; // Max age in days before snapshots are cleaned up (default: 30)
+  historyMaxSnapshots: number; // Max snapshots per file (default: 250)
 }
 
 /**
@@ -402,6 +405,8 @@ const defaultAdvancedSettings: AdvancedSettings = {
   } as Record<BetaFeatureTag, boolean>,
   enableAllBetaFeatures: false,
   customPathDirs: '',
+  historyMaxAgeDays: 30,
+  historyMaxSnapshots: 250,
 };
 
 /**
@@ -464,6 +469,12 @@ function scheduleAdvancedPersist(
           break;
         case 'customPathDirs':
           await window.electronAPI.invoke('app-settings:set', 'customPathDirs', settings.customPathDirs);
+          break;
+        case 'historyMaxAgeDays':
+          await window.electronAPI.invoke('app-settings:set', 'historyMaxAgeDays', settings.historyMaxAgeDays);
+          break;
+        case 'historyMaxSnapshots':
+          await window.electronAPI.invoke('app-settings:set', 'historyMaxSnapshots', settings.historyMaxSnapshots);
           break;
         // walkthroughsViewedCount and walkthroughsTotalCount are read-only from main process
       }
@@ -643,7 +654,7 @@ export async function initAdvancedSettings(): Promise<AdvancedSettings> {
   }
 
   try {
-    const [channel, analyticsEnabled, extensionDevToolsEnabled, walkthroughState, maxHeapSizeMB, alphaFeatures, enableAllAlphaFeatures, betaFeatures, enableAllBetaFeatures, customPathDirs] =
+    const [channel, analyticsEnabled, extensionDevToolsEnabled, walkthroughState, maxHeapSizeMB, alphaFeatures, enableAllAlphaFeatures, betaFeatures, enableAllBetaFeatures, customPathDirs, historyMaxAgeDays, historyMaxSnapshots] =
       await Promise.all([
         window.electronAPI.invoke('release-channel:get'),
         window.electronAPI.invoke('analytics:is-enabled'),
@@ -655,6 +666,8 @@ export async function initAdvancedSettings(): Promise<AdvancedSettings> {
         window.electronAPI.invoke('beta-features:get'),
         window.electronAPI.invoke('beta-features:get-enable-all'),
         window.electronAPI.invoke('app-settings:get', 'customPathDirs'),
+        window.electronAPI.invoke('app-settings:get', 'historyMaxAgeDays'),
+        window.electronAPI.invoke('app-settings:get', 'historyMaxSnapshots'),
       ]);
 
     // Calculate viewed count (completed + dismissed)
@@ -675,6 +688,8 @@ export async function initAdvancedSettings(): Promise<AdvancedSettings> {
       betaFeatures: betaFeatures ?? defaultAdvancedSettings.betaFeatures,
       enableAllBetaFeatures: enableAllBetaFeatures ?? false,
       customPathDirs: customPathDirs ?? '',
+      historyMaxAgeDays: historyMaxAgeDays ?? 30,
+      historyMaxSnapshots: historyMaxSnapshots ?? 250,
     };
   } catch (error) {
     console.error('[appSettings] Failed to load advanced settings:', error);
