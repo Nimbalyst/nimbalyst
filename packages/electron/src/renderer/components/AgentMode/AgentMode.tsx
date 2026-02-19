@@ -13,7 +13,7 @@
 
 import React, { forwardRef, useImperativeHandle, useEffect, useCallback, useMemo, useRef, useState } from 'react';
 import { atom, useAtomValue, useSetAtom } from 'jotai';
-import { defaultAgentModelAtom, worktreesFeatureAvailableAtom, betaFeatureEnabledAtom } from '../../store/atoms/appSettings';
+import { defaultAgentModelAtom, worktreesFeatureAvailableAtom, alphaFeatureEnabledAtom } from '../../store/atoms/appSettings';
 import { ResizablePanel } from '../AgenticCoding/ResizablePanel';
 import { SessionHistory } from '../AgenticCoding/SessionHistory';
 import { useSuperLoopInit } from '../../hooks/useSuperLoop';
@@ -109,9 +109,9 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
 
   // Check if worktrees feature is available (developer mode + feature enabled)
   const isWorktreesAvailable = useAtomValue(worktreesFeatureAvailableAtom);
-  // Blitz requires both worktrees and the blitz beta feature
-  const isBlitzBetaEnabled = useAtomValue(betaFeatureEnabledAtom('blitz'));
-  const isBlitzAvailable = isWorktreesAvailable && isBlitzBetaEnabled;
+  // Blitz requires both worktrees and the blitz alpha feature
+  const isBlitzAlphaEnabled = useAtomValue(alphaFeatureEnabledAtom('blitz'));
+  const isBlitzAvailable = isWorktreesAvailable && isBlitzAlphaEnabled;
 
   // Keep Super Loop listeners active even when session history is collapsed/hidden.
   useSuperLoopInit(workspacePath);

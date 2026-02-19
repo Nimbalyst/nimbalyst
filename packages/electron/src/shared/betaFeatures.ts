@@ -27,12 +27,6 @@ export interface BetaFeatureDefinition {
  */
 export const BETA_FEATURES: readonly BetaFeatureDefinition[] = [
   {
-    tag: 'blitz',
-    name: 'Blitz',
-    description: 'Run the same prompt on multiple isolated worktrees to make more than one attempt at a task.',
-    icon: 'bolt',
-  },
-  {
     tag: 'codex',
     name: 'Codex',
     description: 'Enable OpenAI Codex agent provider for code generation tasks.',

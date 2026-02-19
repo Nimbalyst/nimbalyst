@@ -49,6 +49,12 @@ export const ALPHA_FEATURES: readonly AlphaFeatureDefinition[] = [
     description: 'Enable Super Loops for iterative agent workflows in dedicated worktrees.',
     icon: 'sync',
   },
+  {
+    tag: 'blitz',
+    name: 'Blitz',
+    description: 'Run the same prompt on multiple isolated worktrees to make more than one attempt at a task.',
+    icon: 'bolt',
+  },
 ] as const;
 
 /**
