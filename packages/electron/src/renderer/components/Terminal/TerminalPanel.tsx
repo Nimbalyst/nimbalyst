@@ -6,7 +6,7 @@
  */
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { init, Terminal, FitAddon, type ITheme } from 'ghostty-web';
+import { init, Terminal, FitAddon, OSC8LinkProvider, UrlRegexProvider, type ITheme, type ILinkProvider, type ILink } from 'ghostty-web';
 import { TerminalContextMenu } from './TerminalContextMenu';
 
 // Type for terminal API is defined in electron.d.ts
@@ -579,6 +579,29 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
             }
           });
           resizeObserver.observe(terminalRef.current);
+
+          // Register link providers that open URLs in the default browser
+          const wrapProvider = (provider: ILinkProvider): ILinkProvider => ({
+            provideLinks(y: number, callback: (links: ILink[] | undefined) => void) {
+              provider.provideLinks(y, (links) => {
+                if (!links) {
+                  callback(undefined);
+                  return;
+                }
+                callback(links.map((link) => ({
+                  ...link,
+                  activate: () => {
+                    window.electronAPI.openExternal(link.text);
+                  },
+                })));
+              });
+            },
+            dispose() {
+              provider.dispose?.();
+            },
+          });
+          terminal.registerLinkProvider(wrapProvider(new OSC8LinkProvider(terminal)));
+          terminal.registerLinkProvider(wrapProvider(new UrlRegexProvider(terminal)));
 
           setIsInitialized(true);
           hasInitializedRef.current = true;
