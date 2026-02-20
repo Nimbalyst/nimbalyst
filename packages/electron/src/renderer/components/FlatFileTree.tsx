@@ -438,44 +438,6 @@ export function FlatFileTree({
     setSelectedPaths(new Set());
   }, [setSelectedPaths]);
 
-  const handleOpenInDefaultApp = useCallback(async (filePath: string) => {
-    const result = await window.electronAPI.openInDefaultApp(filePath);
-    if (!result.success) {
-      console.error('Failed to open in default app:', result.error);
-    }
-  }, []);
-
-  const handleShareLink = useCallback(async (filePath: string) => {
-    try {
-      const result = await window.electronAPI.shareFileAsLink({ filePath });
-      if (result?.success) {
-        const { errorNotificationService } = await import('../services/ErrorNotificationService');
-        const expiryDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-        const expiryStr = expiryDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        errorNotificationService.showInfo(
-          result.isUpdate ? 'Share link updated' : 'Share link copied',
-          `Link copied to clipboard. Expires ${expiryStr}.`,
-          { duration: 4000 }
-        );
-      } else {
-        const { errorNotificationService } = await import('../services/ErrorNotificationService');
-        errorNotificationService.showError(
-          'Share failed',
-          result?.error || 'Failed to share file',
-          { duration: 5000 }
-        );
-      }
-    } catch (error) {
-      console.error('Failed to share file:', error);
-      const { errorNotificationService } = await import('../services/ErrorNotificationService');
-      errorNotificationService.showError(
-        'Share failed',
-        error instanceof Error ? error.message : 'An unexpected error occurred',
-        { duration: 5000 }
-      );
-    }
-  }, []);
-
   // == Drag and drop ==
   const handleDragStart = useCallback((e: React.DragEvent, node: FlatTreeNode) => {
     const target = e.target as HTMLElement;
@@ -960,12 +922,10 @@ export function FlatFileTree({
           onRename={handleRename}
           onDelete={handleDelete}
           onDeleteMultiple={handleDeleteMultiple}
-          onOpenInDefaultApp={handleOpenInDefaultApp}
           onNewFile={onNewFile}
           onNewFolder={onNewFolder}
           onViewHistory={onViewHistory}
           onViewWorkspaceHistory={onViewWorkspaceHistory}
-          onShareLink={handleShareLink}
           selectedPaths={selectedPaths}
           extensionFileTypes={extensionFileTypes}
         />

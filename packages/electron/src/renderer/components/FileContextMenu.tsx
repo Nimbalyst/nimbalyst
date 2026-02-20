@@ -1,22 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useAtomValue, useSetAtom } from 'jotai';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import type { NewFileType, ExtensionFileType } from './NewFileMenu';
-import {
-  hasExternalEditorAtom,
-  externalEditorNameAtom,
-  openInExternalEditorAtom,
-  revealInFinderAtom,
-  copyFilePathAtom,
-} from '../store/atoms/appSettings';
-
-/** File extensions that support sharing as rendered HTML links. */
-const SHAREABLE_EXTENSIONS = new Set(['.md', '.markdown']);
-
-function isShareableFile(fileName: string): boolean {
-  const ext = fileName.lastIndexOf('.') >= 0 ? fileName.slice(fileName.lastIndexOf('.')).toLowerCase() : '';
-  return SHAREABLE_EXTENSIONS.has(ext);
-}
+import { CommonFileActions } from './CommonFileActions';
 
 interface FileContextMenuProps {
   x: number;
@@ -28,12 +13,10 @@ interface FileContextMenuProps {
   onRename: (filePath: string, newName: string) => void;
   onDelete: (filePath: string) => void;
   onDeleteMultiple?: (filePaths: string[]) => void;
-  onOpenInDefaultApp: (filePath: string) => void;
   onNewFile?: (folderPath: string, fileType: NewFileType) => void;
   onNewFolder?: (folderPath: string) => void;
   onViewHistory?: (filePath: string) => void;
   onViewWorkspaceHistory?: (folderPath: string) => void;
-  onShareLink?: (filePath: string) => void;
   selectedPaths?: Set<string>;
   /** Extension-contributed file types */
   extensionFileTypes?: ExtensionFileType[];
@@ -49,12 +32,10 @@ export function FileContextMenu({
   onRename,
   onDelete,
   onDeleteMultiple,
-  onOpenInDefaultApp,
   onNewFile,
   onNewFolder,
   onViewHistory,
   onViewWorkspaceHistory,
-  onShareLink,
   selectedPaths,
   extensionFileTypes = []
 }: FileContextMenuProps) {
@@ -63,13 +44,6 @@ export function FileContextMenu({
   const [newName, setNewName] = useState(fileName);
   const inputRef = useRef<HTMLInputElement>(null);
   const [adjustedPosition, setAdjustedPosition] = useState({ x, y });
-
-  // File action atoms
-  const hasExternalEditor = useAtomValue(hasExternalEditorAtom);
-  const externalEditorName = useAtomValue(externalEditorNameAtom);
-  const openInExternalEditor = useSetAtom(openInExternalEditorAtom);
-  const revealInFinder = useSetAtom(revealInFinderAtom);
-  const copyFilePath = useSetAtom(copyFilePathAtom);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -168,33 +142,6 @@ export function FileContextMenu({
       e.preventDefault();
       handleRenameSubmit();
     }
-  };
-
-  const handleOpenInDefaultApp = () => {
-    onOpenInDefaultApp(filePath);
-    onClose();
-  };
-
-  const handleOpenInExternalEditor = () => {
-    openInExternalEditor(filePath);
-    onClose();
-  };
-
-  const handleShowInFinder = () => {
-    revealInFinder(filePath);
-    onClose();
-  };
-
-  const handleCopyPath = () => {
-    copyFilePath(filePath);
-    onClose();
-  };
-
-  const handleShareLink = () => {
-    if (onShareLink) {
-      onShareLink(filePath);
-    }
-    onClose();
   };
 
   const handleDelete = () => {
@@ -330,12 +277,6 @@ export function FileContextMenu({
             </div>
           )}
           {(onNewFile || onNewFolder) && <div className={separatorClasses} />}
-          {hasExternalEditor && (
-            <div className={menuItemClasses} onClick={handleOpenInExternalEditor}>
-              <MaterialSymbol icon="open_in_new" size={18} />
-              <span>Open in {externalEditorName}</span>
-            </div>
-          )}
           {onViewWorkspaceHistory && (
             <div className={menuItemClasses} onClick={() => { onViewWorkspaceHistory(filePath); onClose(); }}>
               <MaterialSymbol icon="history" size={18} />
@@ -345,48 +286,27 @@ export function FileContextMenu({
         </>
       )}
 
-      {fileType === 'file' && (
-        <>
-          <div className={menuItemClasses} onClick={handleOpenInDefaultApp}>
-            <MaterialSymbol icon="launch" size={18} />
-            <span>Open in Default App</span>
-          </div>
-          {hasExternalEditor && (
-            <div className={menuItemClasses} onClick={handleOpenInExternalEditor}>
-              <MaterialSymbol icon="open_in_new" size={18} />
-              <span>Open in {externalEditorName}</span>
-            </div>
-          )}
-          {onViewHistory && (
-            <div className={menuItemClasses} onClick={() => { onViewHistory(filePath); onClose(); }}>
-              <MaterialSymbol icon="history" size={18} />
-              <span>View History...</span>
-            </div>
-          )}
-          {onShareLink && isShareableFile(fileName) && (
-            <div className={menuItemClasses} onClick={handleShareLink}>
-              <MaterialSymbol icon="share" size={18} />
-              <span>Share Link</span>
-            </div>
-          )}
-        </>
+      {fileType === 'file' && onViewHistory && (
+        <div className={menuItemClasses} onClick={() => { onViewHistory(filePath); onClose(); }}>
+          <MaterialSymbol icon="history" size={18} />
+          <span>View History...</span>
+        </div>
       )}
+
+      {/* Common file actions (Open in Default App, External Editor, Finder, Copy Path, Share) */}
+      <CommonFileActions
+        filePath={filePath}
+        fileName={fileName}
+        onClose={onClose}
+        menuItemClass={menuItemClasses}
+        separatorClass={separatorClasses}
+      />
+
+      <div className={separatorClasses} />
 
       <div className={menuItemClasses} onClick={handleRenameClick}>
         <MaterialSymbol icon="edit" size={18} />
         <span>Rename</span>
-      </div>
-
-      <div className={separatorClasses} />
-
-      <div className={menuItemClasses} onClick={handleShowInFinder}>
-        <MaterialSymbol icon="folder_open" size={18} />
-        <span>Show in Finder</span>
-      </div>
-
-      <div className={menuItemClasses} onClick={handleCopyPath}>
-        <MaterialSymbol icon="content_copy" size={18} />
-        <span>Copy Path</span>
       </div>
 
       <div className={separatorClasses} />

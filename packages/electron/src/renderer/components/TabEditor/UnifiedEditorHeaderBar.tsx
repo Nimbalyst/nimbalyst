@@ -29,6 +29,7 @@ import { $generateHtmlFromNodes } from '@lexical/html';
 import { revealFolderAtom, revealFileAtom, openFileRequestAtom, setWindowModeAtom } from '../../store';
 import { getDocumentService } from '../../services/RendererDocumentService';
 import { isWorktreePath } from '../../../shared/pathUtils';
+import { CommonFileActions } from '../CommonFileActions';
 
 // Built-in tracker types that support full-document mode
 const TRACKER_TYPES: TrackerTypeInfo[] = [
@@ -947,6 +948,18 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
                   Toggle Debug Tree
                 </button>
               )}
+
+              {/* Common file actions (Open in Default App, External Editor, Finder, Copy Path, Share) */}
+              <div className="dropdown-divider h-px my-1 bg-[var(--nim-border)]" />
+              <CommonFileActions
+                filePath={filePath}
+                fileName={fileName}
+                onClose={() => setShowActionsMenu(false)}
+                menuItemClass="dropdown-item w-full py-2 px-3 border-none bg-transparent text-[13px] text-left cursor-pointer flex items-center gap-2.5 transition-colors duration-150 text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]"
+                separatorClass="dropdown-divider h-px my-1 bg-[var(--nim-border)]"
+                iconSize={16}
+                useButtons={true}
+              />
 
               {/* Extension Menu Items */}
               {extensionMenuItems.length > 0 && (
