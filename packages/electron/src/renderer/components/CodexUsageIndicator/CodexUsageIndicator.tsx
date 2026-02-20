@@ -48,6 +48,7 @@ export const CodexUsageIndicator: React.FC<CodexUsageIndicatorProps> = ({ classN
 
   const utilization = usage?.fiveHour?.utilization ?? 0;
   const strokeDashoffset = RING_CIRCUMFERENCE * (1 - utilization / 100);
+  const limitsAvailable = usage?.limitsAvailable ?? true;
 
   const colorClasses: Record<string, string> = {
     green: 'stroke-green-500',
@@ -56,10 +57,13 @@ export const CodexUsageIndicator: React.FC<CodexUsageIndicatorProps> = ({ classN
     muted: 'stroke-nim-muted',
   };
 
-  const strokeColor = colorClasses[sessionColor] || colorClasses.muted;
+  const effectiveSessionColor = limitsAvailable ? sessionColor : 'muted';
+  const strokeColor = colorClasses[effectiveSessionColor] || colorClasses.muted;
 
   const tooltipContent = usage
-    ? `Codex: ${Math.round(utilization)}% (resets ${formatResetTime(usage.fiveHour.resetsAt)})`
+    ? limitsAvailable
+      ? `Codex: ${Math.round(utilization)}% (resets ${formatResetTime(usage.fiveHour.resetsAt)})`
+      : 'Codex usage (limits unavailable)'
     : 'Codex Usage';
 
   return (
@@ -103,7 +107,7 @@ export const CodexUsageIndicator: React.FC<CodexUsageIndicatorProps> = ({ classN
         </svg>
         {/* Percentage text */}
         <span className="absolute inset-0 flex items-center justify-center text-[9px] font-semibold text-nim">
-          {Math.round(utilization)}%
+          {limitsAvailable ? `${Math.round(utilization)}%` : '--'}
         </span>
       </button>
 

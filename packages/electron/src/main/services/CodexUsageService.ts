@@ -7,8 +7,9 @@
  * - Implements activity-aware polling (active when using Codex, sleeps when idle)
  * - Broadcasts usage updates to renderer via IPC
  *
- * Only works for subscription users (ChatGPT Plus/Pro) - API key users
- * get null rate_limits and the indicator won't show.
+ * Subscription users provide rate_limits. If rate_limits are missing
+ * (common for API key sessions), we fall back to token usage so the
+ * indicator still appears with limits unavailable.
  */
 
 import { readdir, readFile, stat } from 'fs/promises';
@@ -32,6 +33,11 @@ export interface CodexUsageData {
     unlimited: boolean;
     balance: number | null;
   };
+  tokenUsage?: {
+    totalTokens: number;
+    lastTokens: number | null;
+  };
+  limitsAvailable?: boolean;
   lastUpdated: number; // Unix timestamp
   error?: string;
 }
@@ -53,6 +59,16 @@ interface CodexRateLimits {
     unlimited: boolean;
     balance: number | null;
   } | null;
+}
+
+interface CodexTokenUsage {
+  totalTokens: number;
+  lastTokens: number | null;
+}
+
+interface CodexUsageSnapshot {
+  rateLimits: CodexRateLimits | null;
+  tokenUsage: CodexTokenUsage | null;
 }
 
 const CODEX_SESSIONS_DIR = join(homedir(), '.codex', 'sessions');
@@ -88,9 +104,12 @@ class CodexUsageServiceImpl {
 
   async refresh(): Promise<CodexUsageData> {
     try {
-      const rateLimits = await this.findLatestRateLimits();
-      logger.main.debug('[CodexUsageService] findLatestRateLimits result:', rateLimits ? 'found data' : 'null');
-      if (!rateLimits) {
+      const snapshot = await this.findLatestUsageSnapshot();
+      logger.main.debug(
+        '[CodexUsageService] findLatestUsageSnapshot result:',
+        snapshot.rateLimits ? 'rate limits' : snapshot.tokenUsage ? 'token usage' : 'null'
+      );
+      if (!snapshot.rateLimits && !snapshot.tokenUsage) {
         const noData: CodexUsageData = {
           fiveHour: { utilization: 0, resetsAt: null },
           sevenDay: { utilization: 0, resetsAt: null },
@@ -102,7 +121,24 @@ class CodexUsageServiceImpl {
         return noData;
       }
 
-      const usageData = this.convertRateLimits(rateLimits);
+      if (!snapshot.rateLimits && snapshot.tokenUsage) {
+        const usageData: CodexUsageData = {
+          fiveHour: { utilization: 0, resetsAt: null },
+          sevenDay: { utilization: 0, resetsAt: null },
+          tokenUsage: snapshot.tokenUsage,
+          limitsAvailable: false,
+          lastUpdated: Date.now(),
+        };
+        this.cachedUsage = usageData;
+        this.broadcastUpdate();
+        return usageData;
+      }
+
+      const usageData = this.convertRateLimits(snapshot.rateLimits as CodexRateLimits);
+      usageData.limitsAvailable = true;
+      if (snapshot.tokenUsage) {
+        usageData.tokenUsage = snapshot.tokenUsage;
+      }
       this.cachedUsage = usageData;
       this.broadcastUpdate();
       return usageData;
@@ -157,33 +193,38 @@ class CodexUsageServiceImpl {
   }
 
   /**
-   * Find the latest rate_limits data from recent Codex session files.
+   * Find the latest usage data from recent Codex session files.
    * Walks the session directory tree to find the most recent files,
-   * then reads them to extract rate_limits from token_count events.
+   * then reads them to extract rate_limits or token usage from token_count events.
    */
-  private async findLatestRateLimits(): Promise<CodexRateLimits | null> {
+  private async findLatestUsageSnapshot(): Promise<CodexUsageSnapshot> {
     if (!existsSync(CODEX_SESSIONS_DIR)) {
       logger.main.debug('[CodexUsageService] Sessions directory does not exist:', CODEX_SESSIONS_DIR);
-      return null;
+      return { rateLimits: null, tokenUsage: null };
     }
 
     const recentFiles = await this.getRecentSessionFiles();
     logger.main.debug('[CodexUsageService] Found session files:', recentFiles.length);
     if (recentFiles.length === 0) {
-      return null;
+      return { rateLimits: null, tokenUsage: null };
     }
+
+    let fallbackTokenUsage: CodexTokenUsage | null = null;
 
     // Check files from most recent to oldest
     for (const filePath of recentFiles.slice(0, MAX_FILES_TO_CHECK)) {
       logger.main.debug('[CodexUsageService] Checking file:', filePath);
-      const rateLimits = await this.extractRateLimitsFromFile(filePath);
-      if (rateLimits) {
+      const snapshot = await this.extractUsageSnapshotFromFile(filePath);
+      if (snapshot.tokenUsage && !fallbackTokenUsage) {
+        fallbackTokenUsage = snapshot.tokenUsage;
+      }
+      if (snapshot.rateLimits) {
         logger.main.debug('[CodexUsageService] Found rate_limits in file');
-        return rateLimits;
+        return { rateLimits: snapshot.rateLimits, tokenUsage: snapshot.tokenUsage ?? fallbackTokenUsage };
       }
     }
 
-    return null;
+    return { rateLimits: null, tokenUsage: fallbackTokenUsage };
   }
 
   /**
@@ -244,24 +285,33 @@ class CodexUsageServiceImpl {
   }
 
   /**
-   * Extract the last rate_limits with non-null primary from a JSONL file.
+   * Extract the latest token usage and rate_limits with non-null primary from a JSONL file.
    * Reads the entire file and scans for token_count events.
    */
-  private async extractRateLimitsFromFile(filePath: string): Promise<CodexRateLimits | null> {
+  private async extractUsageSnapshotFromFile(filePath: string): Promise<CodexUsageSnapshot> {
+    let tokenUsage: CodexTokenUsage | null = null;
+    let rateLimits: CodexRateLimits | null = null;
+
     try {
       const content = await readFile(filePath, 'utf8');
       const lines = content.split('\n');
 
-      // Scan from the end for the last token_count event with non-null primary
+      // Scan from the end for the latest token_count event and rate limits
       for (let i = lines.length - 1; i >= 0; i--) {
         const line = lines[i].trim();
         if (!line) continue;
 
         try {
           const event = JSON.parse(line);
-          const rateLimits = this.extractRateLimitsFromEvent(event);
-          if (rateLimits) {
-            return rateLimits;
+          if (!tokenUsage) {
+            tokenUsage = this.extractTokenUsageFromEvent(event);
+          }
+          if (!rateLimits) {
+            const candidate = this.extractRateLimitsFromEvent(event);
+            if (candidate) {
+              rateLimits = candidate;
+              break;
+            }
           }
         } catch {
           // Skip unparseable lines
@@ -269,6 +319,22 @@ class CodexUsageServiceImpl {
       }
     } catch (error) {
       logger.main.debug(`[CodexUsageService] Error reading file ${filePath}:`, error);
+    }
+
+    return { rateLimits, tokenUsage };
+  }
+
+  private getTokenCountPayload(event: Record<string, unknown>): Record<string, unknown> | null {
+    if (event.type === 'event_msg') {
+      const payload = event.payload as Record<string, unknown> | undefined;
+      if (payload?.type === 'token_count') {
+        return payload;
+      }
+      return null;
+    }
+
+    if (event.type === 'token_count') {
+      return event;
     }
 
     return null;
@@ -279,24 +345,31 @@ class CodexUsageServiceImpl {
    * with non-null primary data.
    */
   private extractRateLimitsFromEvent(event: Record<string, unknown>): CodexRateLimits | null {
-    // Handle both wrapped (event_msg -> payload) and direct token_count events
-    let tokenCountPayload: Record<string, unknown> | null = null;
-
-    if (event.type === 'event_msg') {
-      const payload = event.payload as Record<string, unknown> | undefined;
-      if (payload?.type === 'token_count') {
-        tokenCountPayload = payload;
-      }
-    } else if (event.type === 'token_count') {
-      tokenCountPayload = event;
-    }
-
+    const tokenCountPayload = this.getTokenCountPayload(event);
     if (!tokenCountPayload) return null;
 
     const rateLimits = tokenCountPayload.rate_limits as CodexRateLimits | undefined;
     if (!rateLimits?.primary) return null;
 
     return rateLimits;
+  }
+
+  private extractTokenUsageFromEvent(event: Record<string, unknown>): CodexTokenUsage | null {
+    const tokenCountPayload = this.getTokenCountPayload(event);
+    if (!tokenCountPayload) return null;
+
+    const info = tokenCountPayload.info as
+      | {
+          total_token_usage?: { total_tokens?: number };
+          last_token_usage?: { total_tokens?: number };
+        }
+      | undefined;
+    const totalTokens = info?.total_token_usage?.total_tokens;
+    if (typeof totalTokens !== 'number') return null;
+    const lastTokens = typeof info?.last_token_usage?.total_tokens === 'number'
+      ? info?.last_token_usage?.total_tokens
+      : null;
+    return { totalTokens, lastTokens };
   }
 
   private convertRateLimits(rateLimits: CodexRateLimits): CodexUsageData {

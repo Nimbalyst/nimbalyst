@@ -25,6 +25,11 @@ export interface CodexUsageData {
     unlimited: boolean;
     balance: number | null;
   };
+  tokenUsage?: {
+    totalTokens: number;
+    lastTokens: number | null;
+  };
+  limitsAvailable?: boolean;
   lastUpdated: number; // Unix timestamp
   error?: string;
 }
@@ -91,7 +96,8 @@ export const codexUsageAvailableAtom = atom((get) => {
     Boolean(usage.fiveHour.resetsAt) ||
     Boolean(usage.sevenDay.resetsAt);
   const hasCreditsData = Boolean(usage.credits?.hasCredits) || usage.credits?.balance !== null;
-  return hasUsageData || hasCreditsData;
+  const hasTokenUsage = (usage.tokenUsage?.totalTokens ?? 0) > 0;
+  return hasUsageData || hasCreditsData || hasTokenUsage;
 });
 
 export const codexUsageSessionColorAtom = atom((get) => {

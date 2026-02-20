@@ -4,7 +4,7 @@
  * Shows both session (5-hour) and weekly usage with progress bars and reset times.
  */
 
-import React, { useEffect, useRef, RefObject } from 'react';
+import React, { useEffect, useRef, RefObject, useLayoutEffect } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import {
@@ -102,6 +102,7 @@ export const CodexUsagePopover: React.FC<CodexUsagePopoverProps> = ({
   const setUsageIndicatorEnabled = useSetAtom(setCodexUsageIndicatorEnabledAtom);
   const popoverRef = useRef<HTMLDivElement>(null);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
+  const [alignBottom, setAlignBottom] = React.useState(false);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -130,6 +131,20 @@ export const CodexUsagePopover: React.FC<CodexUsagePopoverProps> = ({
     };
   }, [anchorRef, onClose]);
 
+  useLayoutEffect(() => {
+    if (!popoverRef.current || !anchorRef.current) return;
+    const measure = () => {
+      if (!popoverRef.current || !anchorRef.current) return;
+      const popoverRect = popoverRef.current.getBoundingClientRect();
+      const anchorRect = anchorRef.current.getBoundingClientRect();
+      const margin = 12;
+      const fitsBelow = anchorRect.top + popoverRect.height <= window.innerHeight - margin;
+      setAlignBottom(!fitsBelow);
+    };
+    const frame = window.requestAnimationFrame(measure);
+    return () => window.cancelAnimationFrame(frame);
+  }, [anchorRef, usage, isRefreshing]);
+
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
@@ -143,6 +158,8 @@ export const CodexUsagePopover: React.FC<CodexUsagePopoverProps> = ({
     return null;
   }
 
+  const limitsAvailable = usage.limitsAvailable ?? true;
+
   // Determine window durations from the data
   // Codex primary is typically 300 minutes (5 hours), secondary is 10080 minutes (7 days)
   const sessionWindowMs = 5 * 60 * 60 * 1000; // 5 hours
@@ -151,7 +168,7 @@ export const CodexUsagePopover: React.FC<CodexUsagePopoverProps> = ({
   return (
     <div
       ref={popoverRef}
-      className="absolute left-full top-0 ml-3 w-60 bg-nim-secondary border border-nim rounded-lg shadow-lg z-50"
+      className={`absolute left-full ${alignBottom ? 'bottom-0' : 'top-0'} ml-3 w-60 bg-nim-secondary border border-nim rounded-lg shadow-lg z-50 max-h-[calc(100vh-16px)] overflow-y-auto`}
       data-testid="codex-usage-popover"
     >
       {/* Header */}
@@ -194,6 +211,11 @@ export const CodexUsagePopover: React.FC<CodexUsagePopoverProps> = ({
           <div className="text-[13px] text-nim-error">{usage.error}</div>
         ) : (
           <>
+            {!limitsAvailable && (
+              <div className="mb-3 text-[12px] text-nim-muted">
+                Usage detected, but Codex limits are unavailable in recent session data.
+              </div>
+            )}
             <UsageSection
               title="Session"
               subtitle="5-hour window"

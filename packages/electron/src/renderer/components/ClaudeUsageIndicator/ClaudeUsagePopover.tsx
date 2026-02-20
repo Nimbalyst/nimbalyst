@@ -5,7 +5,7 @@
  * and reset times.
  */
 
-import React, { useEffect, useRef, RefObject } from 'react';
+import React, { useEffect, useRef, RefObject, useLayoutEffect } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import {
@@ -110,6 +110,7 @@ export const ClaudeUsagePopover: React.FC<ClaudeUsagePopoverProps> = ({
   const setUsageIndicatorEnabled = useSetAtom(setClaudeUsageIndicatorEnabledAtom);
   const popoverRef = useRef<HTMLDivElement>(null);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
+  const [alignBottom, setAlignBottom] = React.useState(false);
 
   // Close on click outside
   useEffect(() => {
@@ -139,6 +140,20 @@ export const ClaudeUsagePopover: React.FC<ClaudeUsagePopoverProps> = ({
     };
   }, [anchorRef, onClose]);
 
+  useLayoutEffect(() => {
+    if (!popoverRef.current || !anchorRef.current) return;
+    const measure = () => {
+      if (!popoverRef.current || !anchorRef.current) return;
+      const popoverRect = popoverRef.current.getBoundingClientRect();
+      const anchorRect = anchorRef.current.getBoundingClientRect();
+      const margin = 12;
+      const fitsBelow = anchorRect.top + popoverRect.height <= window.innerHeight - margin;
+      setAlignBottom(!fitsBelow);
+    };
+    const frame = window.requestAnimationFrame(measure);
+    return () => window.cancelAnimationFrame(frame);
+  }, [anchorRef, usage, isRefreshing]);
+
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
@@ -155,7 +170,7 @@ export const ClaudeUsagePopover: React.FC<ClaudeUsagePopoverProps> = ({
   return (
     <div
       ref={popoverRef}
-      className="absolute left-full top-0 ml-3 w-60 bg-nim-secondary border border-nim rounded-lg shadow-lg z-50"
+      className={`absolute left-full ${alignBottom ? 'bottom-0' : 'top-0'} ml-3 w-60 bg-nim-secondary border border-nim rounded-lg shadow-lg z-50 max-h-[calc(100vh-16px)] overflow-y-auto`}
       data-testid="claude-usage-popover"
     >
       {/* Header */}
