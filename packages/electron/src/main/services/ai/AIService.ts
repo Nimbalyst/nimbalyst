@@ -35,6 +35,7 @@ import { notificationService } from '../NotificationService';
 import { logger } from '../../utils/logger';
 import { windowStates, findWindowByWorkspace, getWindowId } from '../../window/WindowManager';
 import { sessionFileTracker } from '../SessionFileTracker';
+import { toolCallMatcher } from '../ToolCallMatcher';
 import {AnalyticsService} from "../analytics/AnalyticsService.ts";
 import { historyManager } from '../../HistoryManager';
 import { FileSnapshotCache } from '../../file/FileSnapshotCache';
@@ -2948,6 +2949,20 @@ export class AIService {
                 // if (session.provider === 'claude-code' && !hadError) {
                 //   autoContextPromise = this.runAutoContextCommand(session, effectiveWorkspacePath, event);
                 // }
+              }
+
+              // Match file edits to tool calls now that all messages are flushed.
+              // Delay briefly to let non-blocking message writes complete.
+              if (effectiveWorkspacePath) {
+                setTimeout(() => {
+                  toolCallMatcher.matchSession(session.id).then(count => {
+                    if (count > 0) {
+                      safeSend(event, 'session-files:updated', session.id);
+                    }
+                  }).catch(err =>
+                    console.error('[AIService] Tool call matching failed:', err)
+                  );
+                }, 2000);
               }
 
               break;

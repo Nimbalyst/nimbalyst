@@ -6,6 +6,7 @@ import { SessionFilesRepository, type FileLinkType, type FileLink } from '@nimba
 import { logger } from '../utils/logger';
 import { safeHandle } from '../utils/ipcRegistry';
 import { BrowserWindow } from 'electron';
+import { toolCallMatcher } from '../services/ToolCallMatcher';
 
 // ============================================================
 // Session Files Cache
@@ -163,6 +164,45 @@ export function setupSessionFileHandlers(): void {
         error: String(error),
         stats: { edited: 0, referenced: 0, read: 0, total: 0 }
       };
+    }
+  });
+
+  /**
+   * Get tool call matches for a session
+   */
+  safeHandle('session-files:get-tool-call-matches', async (event, sessionId: string) => {
+    try {
+      const matches = await toolCallMatcher.getMatchesForSession(sessionId);
+      return { success: true, matches };
+    } catch (error) {
+      logger.main.error('[SessionFileHandlers] Failed to get tool call matches:', error);
+      return { success: false, error: String(error), matches: [] };
+    }
+  });
+
+  /**
+   * Trigger tool call matching for a session (backfill/repair)
+   */
+  safeHandle('session-files:match-tool-calls', async (event, sessionId: string) => {
+    try {
+      const matchCount = await toolCallMatcher.matchSession(sessionId);
+      return { success: true, matchCount };
+    } catch (error) {
+      logger.main.error('[SessionFileHandlers] Failed to match tool calls:', error);
+      return { success: false, error: String(error), matchCount: 0 };
+    }
+  });
+
+  /**
+   * Get file diffs caused by a specific tool call
+   */
+  safeHandle('session-files:get-tool-call-diffs', async (event, sessionId: string, toolCallItemId: string) => {
+    try {
+      const diffs = await toolCallMatcher.getDiffsForToolCall(sessionId, toolCallItemId);
+      return { success: true, diffs };
+    } catch (error) {
+      logger.main.error('[SessionFileHandlers] Failed to get tool call diffs:', error);
+      return { success: false, error: String(error), diffs: [] };
     }
   });
 

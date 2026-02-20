@@ -12,7 +12,8 @@ import { formatToolArguments, extractFilePathFromArgs } from '../utils/pathResol
 import { EditToolResultCard } from './EditToolResultCard';
 import { TranscriptSearchBar } from './TranscriptSearchBar';
 import { formatToolDisplayName } from '../utils/toolNameFormatter';
-import { getCustomToolWidget } from './CustomToolWidgets';
+import { getCustomToolWidget, type ToolCallDiffResult } from './CustomToolWidgets';
+import { ToolCallChanges } from './ToolCallChanges';
 import { setSessionIsAtBottom, getSessionIsAtBottom } from '../../../store/atoms/transcriptScroll';
 import { CodexOutputRenderer } from './CodexOutputRenderer';
 
@@ -377,6 +378,8 @@ interface RichTranscriptViewProps {
   currentTeammates?: Array<{ agentId: string; status: 'running' | 'completed' | 'errored' | 'idle' }>;
   /** Optional: App start time (epoch ms) for rendering restart indicator line (dev mode only) */
   appStartTime?: number;
+  /** Optional: Fetch file diffs caused by a specific tool call */
+  getToolCallDiffs?: (toolCallItemId: string) => Promise<ToolCallDiffResult[] | null>;
   // Note: Interactive widgets read their host from interactiveWidgetHostAtom(sessionId)
 }
 
@@ -558,7 +561,7 @@ const extractEditsFromToolMessage = (message: Message): any[] => {
 export const RichTranscriptView = React.forwardRef<
   { scrollToMessage: (index: number) => void; scrollToTop: () => void },
   RichTranscriptViewProps
->(({ sessionId, sessionStatus, isProcessing, messages, provider, settings: propsSettings, onSettingsChange, showSettings, documentContext, workspacePath, renderEmptyExtra, readFile, onOpenFile, onCompact, promptAdditions, currentTeammates, appStartTime }, ref) => {
+>(({ sessionId, sessionStatus, isProcessing, messages, provider, settings: propsSettings, onSettingsChange, showSettings, documentContext, workspacePath, renderEmptyExtra, readFile, onOpenFile, onCompact, promptAdditions, currentTeammates, appStartTime, getToolCallDiffs }, ref) => {
   const [collapsedMessages, setCollapsedMessages] = useState<Set<number>>(new Set());
   const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
   const scrollButtonRef = useRef<HTMLDivElement>(null);
@@ -1020,6 +1023,7 @@ export const RichTranscriptView = React.forwardRef<
             workspacePath={workspacePath}
             sessionId={sessionId}
             readFile={readFile}
+            getToolCallDiffs={getToolCallDiffs}
           />
         </div>
       );
@@ -1252,6 +1256,17 @@ export const RichTranscriptView = React.forwardRef<
                     )}
                   </div>
                 </details>
+              )}
+
+              {/* File changes caused by this tool call */}
+              {!isSubAgent && getToolCallDiffs && tool.id && tool.result && (
+                <ToolCallChanges
+                  toolCallItemId={tool.id}
+                  getToolCallDiffs={getToolCallDiffs}
+                  isExpanded={isExpanded}
+                  workspacePath={workspacePath}
+                  onOpenFile={onOpenFile}
+                />
               )}
             </div>
           )}

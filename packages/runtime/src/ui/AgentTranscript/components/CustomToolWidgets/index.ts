@@ -57,6 +57,18 @@ export type { InteractiveWidgetHost, PermissionScope, ToolPermissionResponse } f
 export { noopInteractiveWidgetHost } from './InteractiveWidgetHost';
 
 /**
+ * Diff data for a file changed by a tool call
+ */
+export interface ToolCallDiffResult {
+  filePath: string;
+  operation: string; // 'create' | 'edit' | 'delete' | 'bash'
+  diffs: Array<{ oldString: string; newString: string }>; // empty for bash/unknown
+  content?: string; // full content for create operations
+  linesAdded?: number;
+  linesRemoved?: number;
+}
+
+/**
  * Props passed to custom tool widgets
  */
 export interface CustomToolWidgetProps {
@@ -72,6 +84,8 @@ export interface CustomToolWidgetProps {
   sessionId: string;
   /** Optional: Read a file from the filesystem (for loading persisted output files) */
   readFile?: (filePath: string) => Promise<{ success: boolean; content?: string; error?: string }>;
+  /** Optional: Fetch file diffs caused by this tool call */
+  getToolCallDiffs?: (toolCallItemId: string) => Promise<ToolCallDiffResult[] | null>;
   // Note: Interactive widgets read their host from interactiveWidgetHostAtom(sessionId)
   // No host prop needed - avoids prop drilling through the component tree
 }

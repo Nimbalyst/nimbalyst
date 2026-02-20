@@ -835,6 +835,19 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     onFileClick?.(filePath);
   }, [onFileClick]);
 
+  const getToolCallDiffs = useCallback(async (toolCallItemId: string) => {
+    try {
+      const result = await window.electronAPI.invoke(
+        'session-files:get-tool-call-diffs',
+        sessionId,
+        toolCallItemId
+      );
+      return result.success && result.diffs?.length > 0 ? result.diffs : null;
+    } catch {
+      return null;
+    }
+  }, [sessionId]);
+
   const handleOpenInExternalEditor = useCallback((filePath: string) => {
     openInExternalEditor(filePath);
   }, [openInExternalEditor]);
@@ -1452,6 +1465,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
             onCompact={handleCompact}
             promptAdditions={showPromptAdditions ? promptAdditions : null}
             appStartTime={appStartTime ?? undefined}
+            getToolCallDiffs={getToolCallDiffs}
           />
         </div>
       )}

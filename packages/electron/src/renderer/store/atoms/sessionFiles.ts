@@ -22,6 +22,12 @@ export interface FileEditWithSession {
   linesRemoved?: number;
   timestamp: string;
   sessionId: string;
+  /** ID of the matching ai_agent_messages row (tool call that caused this edit) */
+  toolCallMessageId?: number;
+  /** Name of the tool that caused this edit */
+  toolCallName?: string;
+  /** Confidence score of the tool call match */
+  matchScore?: number;
 }
 
 export interface FileGitStatus {

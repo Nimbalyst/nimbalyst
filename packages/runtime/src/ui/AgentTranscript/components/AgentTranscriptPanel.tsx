@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import type { SessionData } from '../../../ai/server/types';
 import type { TranscriptSettings, PromptMarker, FileEditSummary } from '../types';
+import type { ToolCallDiffResult } from './CustomToolWidgets';
 import { RichTranscriptView } from './RichTranscriptView';
 import { TranscriptSidebar } from './TranscriptSidebar';
 import { FileEditsSidebar } from './FileEditsSidebar';
@@ -66,6 +67,8 @@ interface AgentTranscriptPanelProps {
   } | null;
   /** Optional: App start time (epoch ms) for rendering restart indicator line (dev mode only) */
   appStartTime?: number;
+  /** Optional: Fetch file diffs caused by a specific tool call */
+  getToolCallDiffs?: (toolCallItemId: string) => Promise<ToolCallDiffResult[] | null>;
   // Note: Interactive widgets read their host from interactiveWidgetHostAtom(sessionId)
 }
 
@@ -98,7 +101,8 @@ const AgentTranscriptPanelComponent = React.forwardRef<
   externalEditorName,
   onCompact,
   promptAdditions,
-  appStartTime
+  appStartTime,
+  getToolCallDiffs,
 }, ref) => {
   // Show floating actions if explicitly enabled, otherwise default to showing when sidebar is visible
   const shouldShowFloatingActions = showFloatingActions ?? !hideSidebar;
@@ -323,6 +327,7 @@ const AgentTranscriptPanelComponent = React.forwardRef<
           promptAdditions={promptAdditions}
           currentTeammates={sessionData.metadata?.currentTeammates as Array<{ agentId: string; status: 'running' | 'completed' | 'errored' | 'idle' }> | undefined}
           appStartTime={appStartTime}
+          getToolCallDiffs={getToolCallDiffs}
         />
 
         {/* Floating Actions - show based on showFloatingActions prop */}

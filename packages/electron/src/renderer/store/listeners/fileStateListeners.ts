@@ -96,7 +96,7 @@ export async function loadInitialSessionFileState(sessionId: string, workspacePa
     // console.log('[fileStateListeners] File result for', sessionId, ':', fileResult);
 
     if (fileResult.success && fileResult.files) {
-      const edits: FileEditWithSession[] = fileResult.files.map((f: any) => ({
+      let edits: FileEditWithSession[] = fileResult.files.map((f: any) => ({
         filePath: f.filePath,
         linkType: 'edited' as const,
         operation: f.metadata?.operation,
@@ -106,8 +106,9 @@ export async function loadInitialSessionFileState(sessionId: string, workspacePa
         sessionId: f.sessionId,
       }));
 
-      // Debug logging - uncomment if needed
-      // console.log('[fileStateListeners] Setting', edits.length, 'file edits for session:', sessionId);
+      // Enrich with tool call match data
+      edits = await enrichEditsWithToolCallMatches(sessionId, edits);
+
       store.set(sessionFileEditsAtom(sessionId), edits);
 
       // Load git status for these files
@@ -184,7 +185,7 @@ export function initFileStateListeners(workspacePath: string): () => void {
         );
 
         if (result.success && result.files) {
-          const edits: FileEditWithSession[] = result.files.map((f: any) => ({
+          let edits: FileEditWithSession[] = result.files.map((f: any) => ({
             filePath: f.filePath,
             linkType: 'edited' as const,
             operation: f.metadata?.operation,
@@ -193,6 +194,9 @@ export function initFileStateListeners(workspacePath: string): () => void {
             timestamp: f.createdAt || new Date().toISOString(),
             sessionId: f.sessionId,
           }));
+
+          // Enrich with tool call match data
+          edits = await enrichEditsWithToolCallMatches(sessionId, edits);
 
           store.set(sessionFileEditsAtom(sessionId), edits);
 
@@ -289,6 +293,76 @@ export function initFileStateListeners(workspacePath: string): () => void {
   return () => {
     cleanups.forEach(cleanup => cleanup?.());
   };
+}
+
+/**
+ * Enrich file edits with tool call match data.
+ * Fetches matches from the database and merges tool call info into the edits.
+ */
+async function enrichEditsWithToolCallMatches(
+  sessionId: string,
+  edits: FileEditWithSession[]
+): Promise<FileEditWithSession[]> {
+  try {
+    const matchResult = await window.electronAPI.invoke(
+      'session-files:get-tool-call-matches',
+      sessionId
+    );
+
+    if (!matchResult.success || !matchResult.matches || matchResult.matches.length === 0) {
+      return edits;
+    }
+
+    // Build map of sessionFileId -> match
+    // We need sessionFileId from the original files, but edits don't carry it.
+    // Instead, map by (filePath, sessionId) since each file appears once per session.
+    // The match has sessionFileId which maps to a session_files row.
+    // For now, store match data on the match itself and merge by message info.
+    const matchByFileId = new Map<string, any>();
+    for (const match of matchResult.matches) {
+      matchByFileId.set(match.sessionFileId, match);
+    }
+
+    // We need to correlate matches back to edits. The session_files.id isn't in the edit,
+    // but the match has sessionFileId. Let's fetch the session files to get the mapping.
+    const filesResult = await window.electronAPI.invoke(
+      'session-files:get-by-session',
+      sessionId,
+      'edited'
+    );
+
+    if (!filesResult.success || !filesResult.files) return edits;
+
+    // Build filePath -> sessionFileId mapping
+    const filePathToId = new Map<string, string>();
+    for (const f of filesResult.files) {
+      filePathToId.set(f.filePath, f.id);
+    }
+
+    // Enrich edits with match data
+    return edits.map(edit => {
+      const fileId = filePathToId.get(edit.filePath);
+      if (!fileId) return edit;
+
+      const match = matchByFileId.get(fileId);
+      if (!match) return edit;
+
+      // Extract tool name from match_reason
+      const toolNameMatch = match.matchReason?.match(/tool=(.+)$/);
+      const toolName = toolNameMatch ? toolNameMatch[1] : undefined;
+
+      return {
+        ...edit,
+        toolCallMessageId: match.messageId,
+        toolCallName: toolName,
+        matchScore: match.matchScore,
+      };
+    });
+  } catch (error) {
+    // Non-critical - return edits without match data
+    console.error('[fileStateListeners] Failed to enrich edits with tool call matches:', error);
+    return edits;
+  }
 }
 
 /**

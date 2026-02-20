@@ -11,6 +11,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import type { CustomToolWidgetProps } from './index';
+import { ToolCallChanges } from '../ToolCallChanges';
 
 /**
  * Maximum number of lines to show before adding "show more" in expanded view
@@ -168,7 +169,7 @@ function getOutputSummary(output: string | null): string | null {
   return `${lines.length} lines`;
 }
 
-export const BashWidget: React.FC<CustomToolWidgetProps> = ({ message, isExpanded, onToggle }) => {
+export const BashWidget: React.FC<CustomToolWidgetProps> = ({ message, isExpanded, onToggle, workspacePath, getToolCallDiffs }) => {
   const [copied, setCopied] = useState(false);
   const [outputExpanded, setOutputExpanded] = useState(false);
 
@@ -396,6 +397,18 @@ export const BashWidget: React.FC<CustomToolWidgetProps> = ({ message, isExpande
             <span className="w-1.5 h-1.5 bg-nim-faint rounded-full animate-bash-dot-pulse" style={{ animationDelay: '0.2s' }}></span>
             <span className="w-1.5 h-1.5 bg-nim-faint rounded-full animate-bash-dot-pulse" style={{ animationDelay: '0.4s' }}></span>
           </span>
+        </div>
+      )}
+
+      {/* File changes caused by this tool call */}
+      {!isRunning && getToolCallDiffs && tool.id && (
+        <div className="px-2 pb-2">
+          <ToolCallChanges
+            toolCallItemId={tool.id}
+            getToolCallDiffs={getToolCallDiffs}
+            isExpanded={isExpanded}
+            workspacePath={workspacePath}
+          />
         </div>
       )}
     </div>
