@@ -437,7 +437,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
           terminalRef.current.addEventListener('focusout', focusOutHandler);
 
           // Start with unfocused cursor color
-          terminal.renderer.setTheme({
+          terminal.renderer?.setTheme({
             ...terminal.options.theme,
             cursor: unfocusedCursorColor,
           });
