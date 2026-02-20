@@ -2385,6 +2385,13 @@ export const TabEditor: React.FC<TabEditorProps> = ({
               if (registration.extensionId) {
                 return (
                   <div className="custom-editor-container flex flex-col flex-1 min-h-0 overflow-hidden">
+                    <DocumentHeaderContainer
+                      filePath={filePath}
+                      fileName={fileName}
+                      getContent={getDocumentHeaderContent}
+                      contentVersion={reloadVersion}
+                      onContentChange={handleDocumentHeaderContentChange}
+                    />
                     {showCustomEditorDiffBar && (
                       <UnifiedDiffHeader
                         filePath={filePath}
@@ -2413,6 +2420,13 @@ export const TabEditor: React.FC<TabEditorProps> = ({
               const CustomEditor = registration.component;
               return (
                 <div className="custom-editor-container flex flex-col flex-1 min-h-0 overflow-hidden">
+                  <DocumentHeaderContainer
+                    filePath={filePath}
+                    fileName={fileName}
+                    getContent={getDocumentHeaderContent}
+                    contentVersion={reloadVersion}
+                    onContentChange={handleDocumentHeaderContentChange}
+                  />
                   {showCustomEditorDiffBar && (
                     <UnifiedDiffHeader
                       filePath={filePath}
@@ -2544,6 +2558,15 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             </>
           ) : (
             <>
+              {!isMarkdown && (
+                <DocumentHeaderContainer
+                  filePath={filePath}
+                  fileName={fileName}
+                  getContent={getDocumentHeaderContent}
+                  contentVersion={reloadVersion}
+                  onContentChange={handleDocumentHeaderContentChange}
+                />
+              )}
               {!isMarkdown && showMonacoDiffBar && (
                 <UnifiedDiffHeader
                   filePath={filePath}

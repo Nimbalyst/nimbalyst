@@ -21,7 +21,7 @@ export interface DocumentHeaderComponentProps {
 export interface DocumentHeaderProvider {
   id: string;
   priority: number; // Higher priority renders first
-  shouldRender: (content: string) => boolean;
+  shouldRender: (content: string, filePath: string) => boolean;
   component: React.ComponentType<DocumentHeaderComponentProps>;
 }
 
@@ -41,9 +41,9 @@ class DocumentHeaderRegistryImpl {
     this.providers.delete(providerId);
   }
 
-  getProviders(content: string): DocumentHeaderProvider[] {
+  getProviders(content: string, filePath: string): DocumentHeaderProvider[] {
     const matching = Array.from(this.providers.values())
-      .filter(provider => provider.shouldRender(content))
+      .filter(provider => provider.shouldRender(content, filePath))
       .sort((a, b) => b.priority - a.priority); // Higher priority first
 
     return matching;

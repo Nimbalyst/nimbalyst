@@ -87,7 +87,12 @@ export const TrackerDocumentHeader: React.FC<DocumentHeaderComponentProps> = ({
 /**
  * Helper function to check if content should render tracker header
  */
-export function shouldRenderTrackerHeader(content: string): boolean {
+export function shouldRenderTrackerHeader(content: string, filePath: string): boolean {
+  // Only render for markdown files - tracker frontmatter is a markdown convention
+  const lowerPath = filePath.toLowerCase();
+  if (lowerPath && !lowerPath.endsWith('.md') && !lowerPath.endsWith('.mdx')) {
+    return false;
+  }
   const detected = detectTrackerFromFrontmatter(content);
   return detected !== null;
 }

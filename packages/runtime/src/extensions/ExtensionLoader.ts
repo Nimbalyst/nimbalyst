@@ -112,6 +112,7 @@ function validateManifest(
   const contributions = m.contributions as Record<string, unknown> | undefined;
   const onlyClaudePlugin = contributions?.claudePlugin &&
     !contributions?.customEditors &&
+    !contributions?.documentHeaders &&
     !contributions?.aiTools &&
     !contributions?.slashCommands &&
     !contributions?.nodes &&
@@ -181,6 +182,41 @@ function validateManifest(
                 error: `customEditors[${index}] missing 'component' name`,
                 field: `contributions.customEditors[${index}].component`,
                 suggestion: 'Add component name that matches an export, e.g., "component": "MyEditor"',
+              });
+            }
+          });
+        }
+      }
+
+      // Validate documentHeaders
+      if (contributions.documentHeaders !== undefined) {
+        if (!Array.isArray(contributions.documentHeaders)) {
+          errors.push({
+            error: `Invalid 'contributions.documentHeaders' - should be an array`,
+            field: 'contributions.documentHeaders',
+            suggestion: 'documentHeaders should be an array of document header contributions',
+          });
+        } else {
+          contributions.documentHeaders.forEach((header: Record<string, unknown>, index: number) => {
+            if (!header.id || typeof header.id !== 'string') {
+              errors.push({
+                error: `documentHeaders[${index}] missing 'id' string`,
+                field: `contributions.documentHeaders[${index}].id`,
+                suggestion: 'Add a unique identifier, e.g., "id": "my-header"',
+              });
+            }
+            if (!header.filePatterns || !Array.isArray(header.filePatterns)) {
+              errors.push({
+                error: `documentHeaders[${index}] missing 'filePatterns' array`,
+                field: `contributions.documentHeaders[${index}].filePatterns`,
+                suggestion: 'Add file patterns, e.g., "filePatterns": ["*.astro"]',
+              });
+            }
+            if (!header.component || typeof header.component !== 'string') {
+              errors.push({
+                error: `documentHeaders[${index}] missing 'component' name`,
+                field: `contributions.documentHeaders[${index}].component`,
+                suggestion: 'Add component name that matches an export, e.g., "component": "MyHeader"',
               });
             }
           });
@@ -538,6 +574,7 @@ export class ExtensionLoader {
     const contributions = manifest.contributions;
     const isClaudePluginOnly = contributions?.claudePlugin &&
       !contributions?.customEditors &&
+      !contributions?.documentHeaders &&
       !contributions?.aiTools &&
       !contributions?.slashCommands &&
       !contributions?.nodes &&

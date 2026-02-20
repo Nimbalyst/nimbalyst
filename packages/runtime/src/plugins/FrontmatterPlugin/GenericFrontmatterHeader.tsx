@@ -335,7 +335,14 @@ export const GenericFrontmatterHeader: React.FC<DocumentHeaderComponentProps> = 
 /**
  * Check if content should render the generic frontmatter header
  */
-export function shouldRenderGenericFrontmatter(content: string): boolean {
+export function shouldRenderGenericFrontmatter(content: string, filePath: string): boolean {
+  // Only render for markdown files - other file types (e.g., .astro) may use ---
+  // delimiters for non-YAML purposes (like JS imports in Astro frontmatter)
+  const lowerPath = filePath.toLowerCase();
+  if (lowerPath && !lowerPath.endsWith('.md') && !lowerPath.endsWith('.mdx')) {
+    return false;
+  }
+
   const result = extractFrontmatterWithError(content);
 
   // No frontmatter at all

@@ -67,10 +67,10 @@ export const DocumentHeaderContainer: React.FC<DocumentHeaderContainerProps> = (
   // Effective version combines parent and local
   const effectiveVersion = contentVersion + localVersion;
 
-  // Get matching providers based on content structure (frontmatter detection)
+  // Get matching providers based on content structure (frontmatter detection) and file path
   const providers = useMemo(() => {
-    return DocumentHeaderRegistry.getProviders(contentForMatching);
-  }, [contentForMatching]);
+    return DocumentHeaderRegistry.getProviders(contentForMatching, filePath);
+  }, [contentForMatching, filePath]);
 
   // Expose onContentChange handler globally for commands to access
   useEffect(() => {

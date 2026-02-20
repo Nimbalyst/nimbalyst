@@ -22,6 +22,7 @@ import {
 import { ExtensionPlatformServiceImpl } from '../services/ExtensionPlatformServiceImpl';
 import { initializeExtensionEditorBridge } from '../extensions/ExtensionEditorBridge';
 import { initializeExtensionPluginBridge } from '../extensions/ExtensionPluginBridge';
+import { initializeExtensionDocumentHeaderBridge, syncExtensionDocumentHeaders } from '../extensions/ExtensionDocumentHeaderBridge';
 import { syncExtensionEditors } from '../extensions/ExtensionEditorBridge';
 
 // Track workspace path for MCP tool registration
@@ -110,9 +111,10 @@ function setupExtensionDevListeners(): void {
 
       if (result.success) {
         console.log(`[ExtensionSystem] Successfully reloaded extension ${data.extensionId}`);
-        // The ExtensionLoader notifies listeners, which triggers syncExtensionEditors
-        // But we'll call it explicitly to ensure the bridges are updated
+        // The ExtensionLoader notifies listeners, which triggers sync functions
+        // But we'll call them explicitly to ensure the bridges are updated
         syncExtensionEditors();
+        syncExtensionDocumentHeaders();
       } else {
         console.error(`[ExtensionSystem] Failed to reload extension ${data.extensionId}: ${result.error}`);
       }
@@ -129,8 +131,9 @@ function setupExtensionDevListeners(): void {
       const loader = getExtensionLoader();
       await loader.unloadExtension(data.extensionId);
       console.log(`[ExtensionSystem] Successfully unloaded extension ${data.extensionId}`);
-      // The ExtensionLoader notifies listeners, which triggers syncExtensionEditors
+      // The ExtensionLoader notifies listeners, which triggers sync functions
       syncExtensionEditors();
+      syncExtensionDocumentHeaders();
     } catch (error) {
       console.error(`[ExtensionSystem] Error unloading extension ${data.extensionId}:`, error);
     }
@@ -534,9 +537,10 @@ export async function registerExtensionSystem(): Promise<void> {
     initializeExtensionEditorBridge();
 
     // Initialize the plugin bridge to register slash commands, nodes, and transformers
-    // console.log('[ExtensionSystem] Initializing plugin bridge...');
     initializeExtensionPluginBridge();
-    // console.log('[ExtensionSystem] Plugin bridge initialized');
+
+    // Initialize the document header bridge to register extension-contributed document headers
+    initializeExtensionDocumentHeaderBridge();
 
     // Set up IPC listener for screenshot capture requests
     setupScreenshotIPCListener();

@@ -134,6 +134,12 @@ export interface ExtensionContributions {
   settingsPanel?: SettingsPanelContribution;
 
   /**
+   * Document headers that render above editors for matching file types.
+   * Headers augment the editor without replacing it (e.g., frontmatter forms above Monaco).
+   */
+  documentHeaders?: DocumentHeaderContribution[];
+
+  /**
    * Custom themes that users can select.
    * Extensions can provide color themes that override the built-in themes.
    */
@@ -318,6 +324,27 @@ export interface CustomEditorContribution {
    * Default: false
    */
   supportsSourceMode?: boolean;
+}
+
+/**
+ * Document header contribution from manifest.
+ * Headers render above editors for matching file types without replacing the editor.
+ */
+export interface DocumentHeaderContribution {
+  /** Unique identifier for this header (e.g., 'astro-frontmatter') */
+  id: string;
+
+  /** Glob patterns for files this header applies to (e.g., ['*.astro']) */
+  filePatterns: string[];
+
+  /** Display name shown in UI */
+  displayName: string;
+
+  /** Component name to look up in module exports */
+  component: string;
+
+  /** Priority for ordering (higher renders first, default 50) */
+  priority?: number;
 }
 
 /**

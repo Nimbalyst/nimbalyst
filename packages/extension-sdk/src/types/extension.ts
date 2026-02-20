@@ -108,6 +108,12 @@ export interface ExtensionContributions {
    * Use this for managing extension configuration like database connections.
    */
   settingsPanel?: SettingsPanelContribution;
+
+  /**
+   * Document headers that render above editors for matching file types.
+   * Headers augment the editor without replacing it (e.g., frontmatter forms above Monaco).
+   */
+  documentHeaders?: DocumentHeaderContribution[];
 }
 
 export interface CustomEditorContribution {
@@ -119,6 +125,23 @@ export interface CustomEditorContribution {
 
   /** Component name exported from the extension */
   component: string;
+}
+
+export interface DocumentHeaderContribution {
+  /** Unique identifier for this header (e.g., 'astro-frontmatter') */
+  id: string;
+
+  /** Glob patterns for files this header applies to (e.g., ['*.astro']) */
+  filePatterns: string[];
+
+  /** Display name shown in UI */
+  displayName: string;
+
+  /** Component name exported from the extension (key in module.components) */
+  component: string;
+
+  /** Priority for ordering (higher renders first, default 50) */
+  priority?: number;
 }
 
 export interface FileIconContribution {

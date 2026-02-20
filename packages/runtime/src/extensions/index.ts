@@ -13,6 +13,7 @@ export type {
   ExtensionConfigurationContribution,
   ConfigurationProperty,
   CustomEditorContribution,
+  DocumentHeaderContribution,
   CommandContribution,
   NewFileMenuContribution,
   SlashCommandContribution,
