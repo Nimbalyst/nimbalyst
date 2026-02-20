@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { VList, type VListHandle } from 'virtua';
+import { VList, type VListHandle, type CacheSnapshot } from 'virtua';
 import type { Message, SessionData } from '../../../ai/server/types';
 import type { TranscriptSettings } from '../types';
 import { MessageSegment } from './MessageSegment';
@@ -15,6 +15,10 @@ import { formatToolDisplayName } from '../utils/toolNameFormatter';
 import { getCustomToolWidget } from './CustomToolWidgets';
 import { setSessionIsAtBottom, getSessionIsAtBottom } from '../../../store/atoms/transcriptScroll';
 import { CodexOutputRenderer } from './CodexOutputRenderer';
+
+// Per-session VList cache - survives component remounts so returning to a session
+// doesn't re-measure all items from scratch
+const vlistCacheMap = new Map<string, CacheSnapshot>();
 
 // Inject RichTranscriptView styles once (for animations, scrollbar, and complex selectors)
 const injectRichTranscriptStyles = () => {
@@ -563,25 +567,39 @@ export const RichTranscriptView = React.forwardRef<
   const pendingPermissionsVisibleRef = useRef(true);
   const [showPermissionBanner, setShowPermissionBanner] = useState(false);
   const [isScrollReady, setIsScrollReady] = useState(false);
+  const [isContainerVisible, setIsContainerVisible] = useState(true);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const viewRootRef = useRef<HTMLDivElement>(null);
   const vlistRef = useRef<VListHandle>(null);
   const messageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
 
   const settings = propsSettings || defaultSettings;
 
-  const renderCountRef = useRef(0);
-  renderCountRef.current++;
-  // console.log(`[RichTranscriptView] render #${renderCountRef.current}`, {
-  //   sessionId,
-  //   sessionStatus,
-  //   isProcessing,
-  //   messageCount: messages.length,
-  //   showSearchBar,
-  //   isScrollReady,
-  //   copiedMessageIndex,
-  //   collapsedMessagesSize: collapsedMessages.size,
-  //   expandedToolsSize: expandedTools.size,
-  // });
+  // Save VList cache when switching sessions or unmounting.
+  // This lets returning to a session skip expensive re-measurement of all item sizes.
+  useEffect(() => {
+    return () => {
+      if (vlistRef.current && sessionId) {
+        vlistCacheMap.set(sessionId, vlistRef.current.cache);
+      }
+    };
+  }, [sessionId]);
+
+  // Track container visibility - when parent is display:none (e.g. mode switch),
+  // VList gets 0 height and renders ALL items instead of virtualizing.
+  // Skip rendering the message list entirely when hidden.
+  useEffect(() => {
+    const el = viewRootRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        setIsContainerVisible(entries[0]?.isIntersecting ?? false);
+      },
+      { threshold: 0 }
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
 
   // Determine if we're waiting for a response (used for scroll behavior and UI)
   const isWaitingForResponse = useMemo(() => {
@@ -732,60 +750,58 @@ export const RichTranscriptView = React.forwardRef<
     }
   }), []);
 
-  // Reset scroll-ready state when session changes
+  // Reset scroll-ready state when session changes or container hides
   useEffect(() => {
     setIsScrollReady(false);
-  }, [sessionId]);
+  }, [sessionId, isContainerVisible]);
 
-  // Initialize scroll to bottom when session loads
+  // Initialize scroll to bottom when session loads or container becomes visible
   useEffect(() => {
+    if (!isContainerVisible) return;
+
     if (messages.length === 0) {
       // Empty session is ready immediately
       setIsScrollReady(true);
       return;
     }
 
-    // Use double RAF to ensure DOM is fully rendered before scrolling
+    // Single RAF: wrapper is opacity:0 until scroll-ready, so intermediate state is invisible.
+    // With itemSize hint + cache, VList can estimate scroll position accurately on first try.
     requestAnimationFrame(() => {
+      if (vlistRef.current) {
+        vlistRef.current.scrollToIndex(messages.length - 1, { align: 'end' });
+      }
+      // Let VList settle, then reveal
       requestAnimationFrame(() => {
-        if (vlistRef.current) {
-          vlistRef.current.scrollToIndex(messages.length - 1, { align: 'end' });
-        }
-        // Mark as ready after scroll - use another RAF to ensure scroll is applied
-        requestAnimationFrame(() => {
-          setIsScrollReady(true);
-        });
+        setIsScrollReady(true);
       });
     });
-  }, [sessionId]); // Re-run when session changes
+  }, [sessionId, isContainerVisible]); // Re-run when session changes or container becomes visible
 
   // Auto-scroll to bottom when messages change (if user was at bottom)
   useEffect(() => {
     // Read scroll state from atom - this is stable across renders
     const wasAtBottom = getSessionIsAtBottom(sessionId);
 
-    // Use double RAF to ensure DOM is fully rendered before scrolling
     requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        if (vlistRef.current) {
-          const scrollSize = vlistRef.current.scrollSize;
-          const viewportSize = vlistRef.current.viewportSize;
-          const scrollOffset = vlistRef.current.scrollOffset;
-          const distanceFromBottom = scrollSize - scrollOffset - viewportSize;
-          const isCurrentlyAtBottom = distanceFromBottom < 100;
+      if (vlistRef.current) {
+        const scrollSize = vlistRef.current.scrollSize;
+        const viewportSize = vlistRef.current.viewportSize;
+        const scrollOffset = vlistRef.current.scrollOffset;
+        const distanceFromBottom = scrollSize - scrollOffset - viewportSize;
+        const isCurrentlyAtBottom = distanceFromBottom < 100;
 
-          // Auto-scroll if user was at bottom (from atom state) or is currently at bottom
-          const shouldAutoScroll = wasAtBottom || isCurrentlyAtBottom;
+        // Auto-scroll if user was at bottom (from atom state) or is currently at bottom
+        const shouldAutoScroll = wasAtBottom || isCurrentlyAtBottom;
 
-          if (shouldAutoScroll) {
-            // Account for the "Thinking..." indicator which is an extra item after messages
-            const lastIndex = isWaitingForResponse ? messages.length : messages.length - 1;
-            vlistRef.current.scrollToIndex(lastIndex, { align: 'end' });
-            // Update atom to reflect we're now at bottom
-            setSessionIsAtBottom(sessionId, true);
-          }
+        if (shouldAutoScroll) {
+          // Account for the "Thinking..." indicator which is an extra item after messages
+          const lastIndex = isWaitingForResponse ? messages.length : messages.length - 1;
+          vlistRef.current.scrollToIndex(lastIndex, { align: 'end' });
+          // Update atom to reflect we're now at bottom
+          setSessionIsAtBottom(sessionId, true);
         }
-      });
+      }
     });
   }, [messages, isWaitingForResponse, sessionId]);
 
@@ -1245,7 +1261,7 @@ export const RichTranscriptView = React.forwardRef<
   };
 
   return (
-    <div className="rich-transcript-view h-full flex flex-col bg-[var(--nim-bg)] relative overflow-x-hidden select-text">
+    <div ref={viewRootRef} className="rich-transcript-view h-full flex flex-col bg-[var(--nim-bg)] relative overflow-x-hidden select-text">
       {/* Search Bar */}
       <TranscriptSearchBar
         isVisible={showSearchBar}
@@ -1314,13 +1330,20 @@ export const RichTranscriptView = React.forwardRef<
               </div>
               {renderEmptyExtra?.()}
             </div>
+          ) : !isContainerVisible ? (
+            /* Skip VList rendering when container is hidden (display:none parent).
+               VList with 0 height renders ALL items instead of virtualizing,
+               causing massive DOM bloat and style recalculation. */
+            null
           ) : (
             <div className={`rich-transcript-messages rich-transcript-vlist-wrapper flex flex-col max-w-full overflow-x-hidden h-full ${isScrollReady ? 'scroll-ready' : ''}`}>
               <VList
                   ref={vlistRef}
                   className="rich-transcript-vlist !h-full !w-full"
                   style={{ height: '100%' }}
-                  bufferSize={40000}
+                  bufferSize={800}
+                  itemSize={90}
+                  cache={vlistCacheMap.get(sessionId)}
                   onScroll={(offset) => {
                     // Track if we're at the bottom for auto-scroll using per-session atom
                     if (vlistRef.current) {

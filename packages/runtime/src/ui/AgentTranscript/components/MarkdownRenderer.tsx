@@ -113,23 +113,50 @@ if (typeof document !== 'undefined') {
   injectMarkdownRendererStyles();
 }
 
-// Wrapper for any element that might overflow horizontally
+// Wrapper for any element that might overflow horizontally.
+// Uses IntersectionObserver to defer scrollWidth measurement until visible,
+// and ResizeObserver to re-check on size changes - avoids forced reflow during
+// initial session load when many code blocks render off-screen.
 const OverflowWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [wordWrap, setWordWrap] = useState(false);
   const [isOverflowing, setIsOverflowing] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
+  const hasBeenVisible = useRef(false);
 
   useEffect(() => {
+    const el = contentRef.current;
+    if (!el) return;
+
     const checkOverflow = () => {
       if (contentRef.current) {
-        const el = contentRef.current;
-        setIsOverflowing(el.scrollWidth > el.clientWidth + 1);
+        setIsOverflowing(contentRef.current.scrollWidth > contentRef.current.clientWidth + 1);
       }
     };
 
-    checkOverflow();
-    window.addEventListener('resize', checkOverflow);
-    return () => window.removeEventListener('resize', checkOverflow);
+    // Only measure once visible - avoids forced reflow for off-screen code blocks
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          hasBeenVisible.current = true;
+          checkOverflow();
+        }
+      },
+      { rootMargin: '100px' }
+    );
+    io.observe(el);
+
+    // Re-check on resize (only when already visible)
+    const ro = new ResizeObserver(() => {
+      if (hasBeenVisible.current) {
+        checkOverflow();
+      }
+    });
+    ro.observe(el);
+
+    return () => {
+      io.disconnect();
+      ro.disconnect();
+    };
   }, [children]);
 
   return (

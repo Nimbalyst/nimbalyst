@@ -858,7 +858,6 @@ export class SessionManager {
       throw new Error('workspacePath is required to load a session - cannot fall back to default');
     }
     const workspace = workspacePath || this.currentWorkspacePath!;
-    // console.log('[SessionManager] Loading session:', { sessionId, workspace });
 
     const session = await AISessionsRepository.get(sessionId);
     if (!session) {

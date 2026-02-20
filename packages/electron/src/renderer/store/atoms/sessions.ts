@@ -1366,6 +1366,14 @@ export const convertToWorkstreamAtom = atom(
 export const openSessionsAtom = atom<OpenSession[]>([]);
 
 /**
+ * Track in-flight load promises to deduplicate concurrent loads for the same session.
+ * Multiple components (SessionTranscript, AgentWorkstreamPanel) may call loadSessionDataAtom
+ * simultaneously for the same session. Without deduplication, each triggers a separate
+ * IPC round-trip + DB query (2+ seconds each for large sessions).
+ */
+const loadSessionPromises = new Map<string, Promise<SessionData | null>>();
+
+/**
  * Load session data into the atom.
  * Called by AISessionView on mount.
  */
@@ -1376,8 +1384,16 @@ export const loadSessionDataAtom = atom(
       return null;
     }
 
+    // Deduplicate: if a load is already in-flight for this session, reuse its promise
+    const existing = loadSessionPromises.get(sessionId);
+    if (existing) {
+      const result = await existing;
+      return result;
+    }
+
     set(sessionLoadingAtom(sessionId), true);
 
+    const loadPromise = (async () => {
     try {
       const sessionData = await window.electronAPI.aiLoadSession(sessionId, workspacePath);
       if (sessionData) {
@@ -1416,6 +1432,14 @@ export const loadSessionDataAtom = atom(
     }
 
     return null;
+    })();
+
+    loadSessionPromises.set(sessionId, loadPromise);
+    try {
+      return await loadPromise;
+    } finally {
+      loadSessionPromises.delete(sessionId);
+    }
   }
 );
 
@@ -2039,6 +2063,9 @@ export const setActiveSessionInWorkstreamAtom = atom(
   (get, set, { workstreamId, sessionId }: { workstreamId: string; sessionId: string }) => {
     set(setWorkstreamActiveChildAtom, { workstreamId, childId: sessionId });
     set(markSessionReadAtom, sessionId);
+    // Also set the global active session so components like VoiceModeButton
+    // (which live outside of the workstream context) can read it.
+    set(activeSessionIdAtom, sessionId);
   }
 );
 
