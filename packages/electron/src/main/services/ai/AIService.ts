@@ -3801,7 +3801,7 @@ export class AIService {
       const showToolCalls = this.getSettingsStore().get('showToolCalls', false) as boolean;
       const aiDebugLogging = this.getSettingsStore().get('aiDebugLogging', false) as boolean;
       const showPromptAdditions = this.getSettingsStore().get('showPromptAdditions', false) as boolean;
-      const showUsageIndicator = this.getSettingsStore().get('showUsageIndicator', false) as boolean;
+      const showUsageIndicator = this.getSettingsStore().get('showUsageIndicator', true) as boolean;
       const showCodexUsageIndicator = this.getSettingsStore().get('showCodexUsageIndicator', true) as boolean;
       const useStandaloneBinary = this.getSettingsStore().get('useStandaloneBinary', false) as boolean;
       const autoCommitEnabled = this.getSettingsStore().get('autoCommitEnabled', false) as boolean;
@@ -3834,7 +3834,9 @@ export class AIService {
         // Save Anthropic key
         if (settings.apiKeys.anthropic !== undefined) {
           const key = settings.apiKeys.anthropic;
-          if (key && key !== this.maskApiKey(currentKeys['anthropic'] || '')) {
+          if (!key) {
+            delete currentKeys['anthropic'];
+          } else if (key !== this.maskApiKey(currentKeys['anthropic'] || '')) {
             currentKeys['anthropic'] = key as string;
           }
         }
@@ -3842,7 +3844,9 @@ export class AIService {
         // Save OpenAI key
         if (settings.apiKeys.openai !== undefined) {
           const key = settings.apiKeys.openai;
-          if (key && key !== this.maskApiKey(currentKeys['openai'] || '')) {
+          if (!key) {
+            delete currentKeys['openai'];
+          } else if (key !== this.maskApiKey(currentKeys['openai'] || '')) {
             currentKeys['openai'] = key as string;
             // Sync to mobile devices for voice mode
             import('../SyncManager').then(({ syncSettingsToMobile }) => {
