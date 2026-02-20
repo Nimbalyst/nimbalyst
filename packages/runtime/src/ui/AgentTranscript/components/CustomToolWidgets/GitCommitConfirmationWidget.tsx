@@ -675,6 +675,58 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
     return null;
   }
 
+  // When auto-commit is enabled, the server already committed in the MCP handler
+  // before the widget renders. Show the committed success state directly rather than
+  // the interactive form (which can't work since the commit already happened).
+  // The tool result will arrive later and update completedState, but until then
+  // we can confidently show success since the server commits synchronously.
+  if (host?.autoCommitEnabled) {
+    return (
+      <div
+        data-testid="git-commit-widget"
+        data-state="committed"
+        className="git-commit-widget rounded-lg bg-[var(--nim-bg-secondary)] border border-[var(--nim-success)] overflow-hidden"
+      >
+        <div className="git-commit-widget__header flex items-center gap-2 p-2 border-b border-[var(--nim-border)] bg-[var(--nim-bg-secondary)]">
+          <MaterialSymbol icon="check_circle" size={16} className="text-[var(--nim-success)]" />
+          <span className="text-sm font-semibold text-[var(--nim-text)] flex-1">Changes Committed</span>
+        </div>
+        <div className="git-commit-widget__success-content p-2 bg-[color-mix(in_srgb,var(--nim-success)_8%,var(--nim-bg))] flex flex-col gap-2">
+          <div className="text-[0.8125rem] font-medium text-[var(--nim-text)] leading-normal whitespace-pre-wrap font-mono">{initialCommitMessage}</div>
+          <div className="mt-1 pt-2 border-t border-[var(--nim-border)]">
+            <div className="text-[0.6875rem] font-semibold uppercase tracking-wide text-[var(--nim-text-muted)] mb-1.5">
+              {initialFilesToStage.length} file{initialFilesToStage.length !== 1 ? 's' : ''} committed
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {initialFilesToStage.map((filePath) => {
+                const fileName = filePath.split('/').pop() || filePath;
+                const status = fileStatusMap.get(filePath) || 'modified';
+                return (
+                  <div key={filePath} className="text-xs" title={filePath}>
+                    <span className={`font-mono ${getStatusColorClass(status)}`}>
+                      {fileName}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <div className="mt-2 pt-2 border-t border-[var(--nim-border)]">
+            <button
+              className="text-[0.75rem] text-[var(--nim-text-muted)] hover:text-[var(--nim-text)] underline cursor-pointer bg-transparent border-none p-0 transition-colors"
+              onClick={() => {
+                host.setAutoCommitEnabled(false);
+                host.trackEvent('auto_commit_disabled', { source: 'commit_success_widget' });
+              }}
+            >
+              Disable auto-approve
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Show interactive UI for pending proposals
   return (
     <div
@@ -687,14 +739,6 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
         <MaterialSymbol icon="commit" size={16} className="text-[var(--nim-primary)]" />
         <span className="text-sm font-semibold text-[var(--nim-text)] flex-1">Commit Proposal</span>
       </div>
-
-      {/* Auto-commit indicator */}
-      {host?.autoCommitEnabled && (
-        <div className="git-commit-widget__auto-commit-indicator flex items-center gap-1.5 px-2 py-1.5 bg-[color-mix(in_srgb,var(--nim-info)_10%,var(--nim-bg))] border-b border-[var(--nim-border)] text-[0.75rem] text-[var(--nim-info)]">
-          <MaterialSymbol icon="bolt" size={14} />
-          <span>Auto-approve enabled - committing automatically...</span>
-        </div>
-      )}
 
       <div className="git-commit-widget__content p-2 flex flex-col gap-3">
         {/* Reasoning */}
