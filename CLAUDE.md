@@ -52,7 +52,7 @@ packages/
   rexical/        # Lexical-based editor
   runtime/        # Cross-platform runtime services (AI, sync)
   ios/            # Native iOS app (SwiftUI)
-  capacitor/      # Mobile web app (Capacitor, for Android)
+  capacitor/      # Mobile web app (Capacitor, for Android) - NOT in active development
   core/           # Shared utilities
   collabv3/       # Collaboration server
   extension-sdk/  # Extension development kit
@@ -71,7 +71,7 @@ For detailed information about specific packages, see their CLAUDE.md files:
 - `/packages/runtime/CLAUDE.md` - AI providers and runtime services
 - `/packages/rexical/CLAUDE.md` - Lexical editor architecture
 - `/packages/ios/CLAUDE.md` - Native iOS app (SwiftUI)
-- `/packages/capacitor/CLAUDE.md` - Capacitor mobile app (Android)
+- `/packages/capacitor/CLAUDE.md` - Capacitor mobile app (Android) - not in active development
 - `/packages/collabv3/CLAUDE.md` - Sync server (Cloudflare Workers)
 
 ## Development Commands
@@ -97,7 +97,7 @@ For detailed information about specific packages, see their CLAUDE.md files:
 
 ### Other Packages
 - **iOS (native)**: `npm run ios:test:swift`, `npm run ios:build:transcript`
-- **Capacitor (Android)**: `npm run cap:dev`, `npm run cap:android`
+- **Capacitor (Android)** *(not in active development - focused on native iOS app)*: `npm run cap:dev`, `npm run cap:android`
 - **Collaboration server**: `npm run collabv2:dev`, `npm run collabv2:deploy`
 
 ## Releases
