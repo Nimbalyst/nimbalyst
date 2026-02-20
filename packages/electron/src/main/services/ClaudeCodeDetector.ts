@@ -123,6 +123,7 @@ export class ClaudeCodeDetector {
           timeout: 10000,
           shell: true,
           env,
+          stdio: ['ignore', 'pipe', 'pipe'],
         });
 
         let output = '';

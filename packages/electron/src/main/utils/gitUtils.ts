@@ -1,4 +1,5 @@
 import { execSync } from 'child_process';
+import { readdirSync } from 'fs';
 
 /**
  * Cached result of git availability check.
@@ -70,4 +71,38 @@ function checkGitAvailable(): boolean {
  */
 export function resetGitAvailableCache(): void {
   gitAvailableCache = null;
+}
+
+/**
+ * Returns the number of open file descriptors in the current process,
+ * or null if unavailable (Windows or read error).
+ *
+ * Useful for diagnosing EBADF errors: if this number is climbing toward
+ * the OS limit (ulimit -n, typically 256 soft / 10240 hard on macOS),
+ * that indicates a file descriptor leak somewhere in the process.
+ */
+export function getOpenFdCount(): number | null {
+  if (process.platform === 'win32') return null;
+  try {
+    // /dev/fd lists one entry per open fd. readdirSync itself opens a
+    // temporary fd, so subtract 1 to get the count before this call.
+    return readdirSync('/dev/fd').length - 1;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * If the error is EBADF, logs the current open fd count to help diagnose
+ * whether the error stems from fd exhaustion or a corrupted fd table.
+ */
+export function logEbadfDiagnostic(context: string, error: unknown): void {
+  const message = (error as any)?.message ?? String(error);
+  if (!message.includes('EBADF')) return;
+
+  const fdCount = getOpenFdCount();
+  console.error(
+    `[${context}] EBADF detected - open fd count: ${fdCount ?? 'unknown'}`,
+    '(system soft limit is typically 256 on macOS; run `ulimit -n` to check)'
+  );
 }

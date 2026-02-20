@@ -626,6 +626,7 @@ async function runBuild(
       cwd: extensionPath,
       shell: true,
       env: { ...process.env, FORCE_COLOR: "0" },
+      stdio: ['ignore', 'pipe', 'pipe'],
     });
 
     child.stdout.on("data", (data) => {

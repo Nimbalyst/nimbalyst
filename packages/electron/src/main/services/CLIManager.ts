@@ -121,7 +121,8 @@ export class CLIManager {
         const version = execSync('npm --version', {
           encoding: 'utf8',
           env: { ...process.env, PATH: enhancedPath },
-          timeout: 5000
+          timeout: 5000,
+          stdio: ['pipe', 'pipe', 'pipe']
         }).trim();
         console.log('[CLIManager] ✓ npm found via enhanced PATH, version:', version);
         this.npmAvailable = true;
@@ -134,7 +135,8 @@ export class CLIManager {
       try {
         const version = execSync('npm --version', {
           encoding: 'utf8',
-          timeout: 5000
+          timeout: 5000,
+          stdio: ['pipe', 'pipe', 'pipe']
         }).trim();
         console.log('[CLIManager] ✓ npm found in system PATH, version:', version);
         this.npmAvailable = true;
@@ -149,14 +151,16 @@ export class CLIManager {
         const npmPath = execSync(`${findCommand} npm`, {
           encoding: 'utf8',
           env: { ...process.env, PATH: enhancedPath },
-          timeout: 5000
+          timeout: 5000,
+          stdio: ['pipe', 'pipe', 'pipe']
         }).trim().split('\n')[0]; // Get first result
 
         console.log('[CLIManager] Found npm at:', npmPath);
 
         const version = execSync(`"${npmPath}" --version`, {
           encoding: 'utf8',
-          timeout: 5000
+          timeout: 5000,
+          stdio: ['pipe', 'pipe', 'pipe']
         }).trim();
         console.log('[CLIManager] ✓ npm version:', version);
         this.npmAvailable = true;
@@ -189,7 +193,8 @@ export class CLIManager {
 
           const version = execSync(`"${npmPath}" --version`, {
             encoding: 'utf8',
-            timeout: 5000
+            timeout: 5000,
+            stdio: ['pipe', 'pipe', 'pipe']
           }).trim();
           console.log('[CLIManager] ✓ npm at', npmPath, 'version:', version);
           this.npmAvailable = true;
@@ -246,7 +251,7 @@ export class CLIManager {
       try {
         await fs.access(claudePath, fsSync.constants.X_OK);
         // Found it, get version
-        const claudeCodeVersion = execSync(`"${claudePath}" --version`, { encoding: 'utf8' }).trim();
+        const claudeCodeVersion = execSync(`"${claudePath}" --version`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
         return { isPlatformWindows: true, gitVersion, claudeCodeVersion };
       } catch (e) {
         // continue searching
@@ -264,7 +269,7 @@ export class CLIManager {
 
     // Also try to get the dynamic npm root
     try {
-      const globalNpmRoot = execSync('npm root -g', { encoding: 'utf8' }).trim();
+      const globalNpmRoot = execSync('npm root -g', { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
       if (globalNpmRoot) {
         npmGlobalPaths.unshift(path.join(globalNpmRoot, '@anthropic-ai', 'claude-agent-sdk'));
         npmGlobalPaths.unshift(path.join(globalNpmRoot, '@anthropic-ai', 'claude-code'));
@@ -297,7 +302,7 @@ export class CLIManager {
       // Get global npm root dynamically
       let globalNpmRoot: string | null = null;
       try {
-          globalNpmRoot = execSync('npm root -g', { encoding: 'utf8' }).trim();
+          globalNpmRoot = execSync('npm root -g', { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
       } catch (error) {
         // Ignore error, will use fallback paths
       }
@@ -376,7 +381,8 @@ export class CLIManager {
           // Found it, get version
           const status = await new Promise<InstallationStatus>((resolve) => {
             const checkProcess = spawn(codexPath, ['--version'], {
-              shell: false
+              shell: false,
+              stdio: ['ignore', 'pipe', 'pipe']
             });
 
             let output = '';
@@ -427,7 +433,8 @@ export class CLIManager {
     return new Promise((resolve) => {
       const checkProcess = spawn(command, ['--version'], {
         shell: true,
-        env: { ...process.env, PATH: this.getEnhancedPath() }
+        env: { ...process.env, PATH: this.getEnhancedPath() },
+        stdio: ['ignore', 'pipe', 'pipe']
       });
 
       let output = '';
@@ -485,8 +492,8 @@ export class CLIManager {
 
     // Check if we're using Homebrew's npm and need to configure prefix
     try {
-      const npmPath = execSync('which npm', { encoding: 'utf8' }).trim();
-      const npmPrefix = execSync('npm config get prefix', { encoding: 'utf8' }).trim();
+      const npmPath = execSync('which npm', { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
+      const npmPrefix = execSync('npm config get prefix', { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
 
       console.log('[CLIManager] npm path:', npmPath);
       console.log('[CLIManager] npm prefix:', npmPrefix);
@@ -506,7 +513,7 @@ export class CLIManager {
         }
 
         // Configure npm to use this prefix
-        execSync(`npm config set prefix '${userNpmPrefix}'`, { encoding: 'utf8' });
+        execSync(`npm config set prefix '${userNpmPrefix}'`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
         console.log('[CLIManager] Set npm prefix to:', userNpmPrefix);
 
         this.sendProgressToRenderer(tool, {
@@ -645,7 +652,7 @@ export class CLIManager {
           encoding: 'utf8',
           cwd: os.homedir(), // Run from home directory
           env: cleanEnv, // Use minimal clean environment
-          stdio: ['pipe', 'pipe', 'inherit'] // Let stderr go to console
+          stdio: ['pipe', 'pipe', 'pipe']
         });
 
         console.log('[CLIManager] Uninstall output:', output || '(no output)');
@@ -804,7 +811,7 @@ export class CLIManager {
 
           // Check if user has Homebrew Node.js and warn them
           try {
-            const whichNode = execSync('which node', { encoding: 'utf8' }).trim();
+            const whichNode = execSync('which node', { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
             if (whichNode.includes('/opt/homebrew') || whichNode.includes('/usr/local/Cellar')) {
               this.sendProgressToRenderer('nodejs' as CLITool, {
                 percent: 0,
@@ -850,7 +857,7 @@ export class CLIManager {
           let installed = false;
           for (const pm of packageManagers) {
             try {
-              execSync(`which ${pm.cmd}`, { encoding: 'utf8' });
+              execSync(`which ${pm.cmd}`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
 
               this.sendProgressToRenderer('nodejs' as CLITool, {
                 percent: 50,
@@ -1273,7 +1280,7 @@ export function getEnhancedPath(): string {
       // Get User PATH from registry
       const userPathResult = execSync(
         'reg query "HKCU\\Environment" /v Path',
-        { encoding: 'utf8', timeout: 5000, windowsHide: true }
+        { encoding: 'utf8', timeout: 5000, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] }
       );
       const regQueryDuration = Date.now() - regQueryStart;
       if (regQueryDuration > 1000) {

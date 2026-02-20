@@ -1,7 +1,7 @@
 import { execSync } from 'child_process';
 import { existsSync, statSync } from 'fs';
 import { join, resolve } from 'path';
-import { isGitAvailable } from '../utils/gitUtils';
+import { isGitAvailable, logEbadfDiagnostic } from '../utils/gitUtils';
 import { getAllFilesInDirectory } from '../utils/fileUtils';
 
 export interface FileGitStatus {
@@ -99,6 +99,7 @@ export class GitStatusService {
 
       return result;
     } catch (error) {
+      logEbadfDiagnostic('GitStatusService', error);
       console.error('[GitStatusService] Error getting git status:', error);
       // On error, return empty status (treat as unchanged)
       return this.createEmptyResult(filePaths);
@@ -114,7 +115,8 @@ export class GitStatusService {
     return execSync('git status --porcelain', {
       cwd: workspacePath,
       encoding: 'utf8',
-      timeout: 5000 // 5 second timeout
+      timeout: 5000, // 5 second timeout
+      stdio: ['pipe', 'pipe', 'pipe']
     });
   }
 
@@ -327,6 +329,7 @@ export class GitStatusService {
 
       return uncommittedFiles;
     } catch (error) {
+      logEbadfDiagnostic('GitStatusService', error);
       console.error('[GitStatusService] Error getting uncommitted files:', error);
       // On error, return empty array
       return [];
@@ -379,7 +382,8 @@ export class GitStatusService {
       const gitDir = execSync('git rev-parse --git-dir', {
         cwd: workspacePath,
         encoding: 'utf8',
-        timeout: 5000
+        timeout: 5000,
+        stdio: ['pipe', 'pipe', 'pipe']
       }).trim();
 
       // If git-dir contains "worktrees/", it's a worktree
@@ -402,14 +406,16 @@ export class GitStatusService {
       const commonDir = execSync('git rev-parse --git-common-dir', {
         cwd: workspacePath,
         encoding: 'utf8',
-        timeout: 5000
+        timeout: 5000,
+        stdio: ['pipe', 'pipe', 'pipe']
       }).trim();
 
       // List all worktrees
       const worktreeList = execSync('git worktree list --porcelain', {
         cwd: workspacePath,
         encoding: 'utf8',
-        timeout: 5000
+        timeout: 5000,
+        stdio: ['pipe', 'pipe', 'pipe']
       });
 
       // Parse worktree list to find the main worktree
@@ -459,7 +465,8 @@ export class GitStatusService {
       const branch = execSync('git branch --show-current', {
         cwd: workspacePath,
         encoding: 'utf8',
-        timeout: 5000
+        timeout: 5000,
+        stdio: ['pipe', 'pipe', 'pipe']
       }).trim();
 
       return branch || null;
@@ -526,7 +533,8 @@ export class GitStatusService {
       const diffOutput = execSync(`git diff --name-only ${mainBranch}...${worktreeBranch}`, {
         cwd: workspacePath,
         encoding: 'utf8',
-        timeout: 5000
+        timeout: 5000,
+        stdio: ['pipe', 'pipe', 'pipe']
       }).trim();
 
       if (diffOutput) {
@@ -565,6 +573,7 @@ export class GitStatusService {
       // Convert Set to Array
       return Array.from(filePathSet);
     } catch (error) {
+      logEbadfDiagnostic('GitStatusService', error);
       console.error('[GitStatusService] Error getting worktree modified files:', error);
       return [];
     }
@@ -647,6 +656,7 @@ export class GitStatusService {
 
       return result;
     } catch (error) {
+      logEbadfDiagnostic('GitStatusService', error);
       console.error('[GitStatusService] Error getting all file statuses:', error);
       return {};
     }
@@ -678,7 +688,8 @@ export class GitStatusService {
       const remoteUrl = execSync('git remote get-url origin', {
         cwd: workspacePath,
         encoding: 'utf8',
-        timeout: 5000
+        timeout: 5000,
+        stdio: ['pipe', 'pipe', 'pipe']
       }).trim();
 
       // Check if URL contains github.com

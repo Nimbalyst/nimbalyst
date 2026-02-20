@@ -181,7 +181,7 @@ class ClaudeUsageServiceImpl {
       // Read credentials from macOS Keychain
       const result = execSync(
         `security find-generic-password -s "${serviceName}" -w`,
-        { encoding: 'utf8', timeout: 5000 }
+        { encoding: 'utf8', timeout: 5000, stdio: ['pipe', 'pipe', 'pipe'] }
       ).trim();
 
       // Parse the JSON credentials

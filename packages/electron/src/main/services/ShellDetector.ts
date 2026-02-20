@@ -49,6 +49,7 @@ export class ShellDetector {
         const result = execSync(`dscl . -read /Users/${username} UserShell`, {
           encoding: 'utf8',
           timeout: 5000,
+          stdio: ['pipe', 'pipe', 'pipe'],
         });
         const match = result.match(/UserShell:\s*(.+)/);
         if (match?.[1] && fs.existsSync(match[1].trim())) {
