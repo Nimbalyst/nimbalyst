@@ -1,17 +1,28 @@
 import React, { useEffect, useRef } from 'react';
 import { MaterialSymbol } from '@nimbalyst/runtime';
+import { AgentModelPicker, type AgentModelOption } from './AgentModelPicker';
 
 interface MergeConflictDialogProps {
   workspacePath: string;
   conflictedFiles: string[];
-  onResolveWithAgent: () => void;
+  agentModels: AgentModelOption[];
+  selectedModel: string;
+  isLoadingModels: boolean;
+  onModelChange: (modelId: string) => void;
+  onResolveWithAgent: (modelId: string) => void;
+  resolveDisabled?: boolean;
   onCancel: () => void;
 }
 
 export function MergeConflictDialog({
   workspacePath,
   conflictedFiles,
+  agentModels,
+  selectedModel,
+  isLoadingModels,
+  onModelChange,
   onResolveWithAgent,
+  resolveDisabled = false,
   onCancel,
 }: MergeConflictDialogProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -77,9 +88,16 @@ export function MergeConflictDialog({
           <div className="merge-conflict-dialog-suggestion flex items-start gap-2.5 p-3 mb-4 rounded-lg bg-[var(--nim-success-light)] text-[var(--nim-success)] text-[13px] leading-snug">
             <MaterialSymbol icon="smart_toy" size={16} />
             <p className="m-0 text-[var(--nim-success)]">
-              Claude Agent can help you resolve these conflicts automatically, or you can resolve them manually.
+              An AI agent can help you resolve these conflicts automatically, or you can resolve them manually.
             </p>
           </div>
+
+          <AgentModelPicker
+            models={agentModels}
+            selectedModel={selectedModel}
+            onModelChange={onModelChange}
+            isLoading={isLoadingModels}
+          />
 
           <div className="merge-conflict-dialog-manual flex flex-col gap-2 p-3 rounded-lg bg-[var(--nim-bg-secondary)] text-[13px]">
             <p className="m-0 flex items-center gap-2 text-[var(--nim-text-muted)]">
@@ -101,10 +119,11 @@ export function MergeConflictDialog({
           <button
             type="button"
             className="merge-conflict-dialog-button merge-conflict-dialog-button--primary nim-btn-primary"
-            onClick={onResolveWithAgent}
+            onClick={() => onResolveWithAgent(selectedModel)}
+            disabled={resolveDisabled}
           >
             <MaterialSymbol icon="smart_toy" size={16} />
-            <span>Resolve with Claude Agent</span>
+            <span>Resolve with Agent</span>
           </button>
         </div>
       </div>

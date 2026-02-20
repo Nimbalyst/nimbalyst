@@ -9,9 +9,10 @@
  * Note: File selection (uncommitted changes) is now handled in FilesEditedSidebar
  */
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { MaterialSymbol } from '@nimbalyst/runtime';
+import { ModelIdentifier } from '@nimbalyst/runtime/ai/server/types';
 import {
   gitStatusAtom,
   gitCommitsAtom,
@@ -39,6 +40,8 @@ import { HelpTooltip } from '../../help';
 import { refreshWorktreeChangedFiles } from '../../store/listeners/fileStateListeners';
 import { getWorktreeNameFromPath } from '../../utils/pathUtils';
 import { SuperFilesPanel } from './SuperFilesPanel';
+import { defaultAgentModelAtom, betaFeatureEnabledAtom } from '../../store/atoms/appSettings';
+import { type AgentModelOption } from './AgentModelPicker';
 
 // Types for worktree mode (copied from DiffModeView)
 interface WorktreeChangedFile {
@@ -87,6 +90,10 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
 
     // Local state for commit workflow mode (manual vs smart)
     const [commitMode, setCommitMode] = useState<'manual' | 'smart'>('smart');
+
+    // Default model for new sessions (user's last selected model)
+    const defaultModel = useAtomValue(defaultAgentModelAtom);
+    const isCodexBetaEnabled = useAtomValue(betaFeatureEnabledAtom('codex'));
 
     // Per-workstream git state (persisted)
     const stagedFilesArr = useAtomValue(workstreamStagedFilesAtom(workstreamId));
@@ -157,6 +164,9 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
     const [squashWarning, setSquashWarning] = useState<string | undefined>();
     const [isSquashing, setIsSquashing] = useState(false);
     const [isCheckingCommits, setIsCheckingCommits] = useState(false);
+    const [agentModels, setAgentModels] = useState<AgentModelOption[]>([]);
+    const [isLoadingAgentModels, setIsLoadingAgentModels] = useState(false);
+    const [selectedAgentModel, setSelectedAgentModel] = useState<string>(defaultModel);
 
     // Track if worktree data has been loaded for the current worktreePath
     // This prevents redundant fetches when switching between manual/smart modes
@@ -183,15 +193,20 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
     // 1. Set the Jotai atom for immediate display when session mounts
     // 2. Persist to database for durability
     const createSessionWithDraft = useCallback(async (
-      draftMessage: string
+      draftMessage: string,
+      modelId?: string
     ): Promise<void> => {
+      const resolvedModel = modelId || defaultModel;
+      const parsedModel = resolvedModel ? ModelIdentifier.tryParse(resolvedModel) : null;
+      const provider = parsedModel?.provider === 'openai-codex' ? 'openai-codex' : 'claude-code';
+
       // Create the session in the MAIN REPO workspace (so it appears in session list)
       // but associate it with the worktree via worktreeId
       const sessionResult = await window.electronAPI.aiCreateSession(
-        'claude-code',
+        provider,
         undefined, // documentContext
         workspacePath, // workspacePath (main repo - so session appears in main session list)
-        undefined, // modelId (use default)
+        resolvedModel, // modelId
         'session', // sessionType
         worktreeId ?? undefined  // worktreeId (associate with the worktree)
       );
@@ -222,7 +237,12 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
           draftInput: draftMessage
         }
       }));
-    }, [workspacePath, worktreeId]);
+    }, [workspacePath, worktreeId, defaultModel]);
+
+    // Keep selected agent model in sync with default
+    useEffect(() => {
+      setSelectedAgentModel(defaultModel);
+    }, [defaultModel]);
 
     // Clear git state when there are no more uncommitted changes
     // This is the authoritative cleanup - if nothing to commit, reset the UI
@@ -387,6 +407,47 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
     // ============================================================
     // Worktree Mode Callbacks (copied from DiffModeView)
     // ============================================================
+    const shouldShowAgentResolutionDialog = useMemo(() => {
+      return Boolean(
+        (rebaseConflictData && rebaseConflictData.files.length > 0) ||
+        (mergeConflictFiles && mergeConflictFiles.length > 0) ||
+        (untrackedFilesConflict && untrackedFilesConflict.length > 0) ||
+        badGitStateError
+      );
+    }, [rebaseConflictData, mergeConflictFiles, untrackedFilesConflict, badGitStateError]);
+
+    const loadAgentModels = useCallback(async () => {
+      setIsLoadingAgentModels(true);
+      try {
+        const response = await window.electronAPI.aiGetModels();
+        if (response.success && response.grouped) {
+          const agents: AgentModelOption[] = [];
+          for (const [provider, models] of Object.entries(response.grouped)) {
+            if (provider !== 'claude-code' && provider !== 'openai-codex') continue;
+            if (provider === 'openai-codex' && !isCodexBetaEnabled) continue;
+            for (const model of models as AgentModelOption[]) {
+              agents.push(model);
+            }
+          }
+          setAgentModels(agents);
+          setSelectedAgentModel((current) => {
+            if (agents.length === 0) return defaultModel;
+            if (defaultModel && agents.some(m => m.id === defaultModel)) return defaultModel;
+            if (current && agents.some(m => m.id === current)) return current;
+            return agents[0].id;
+          });
+        }
+      } catch (err) {
+        console.error('[GitOperationsPanel] Failed to load agent models:', err);
+      } finally {
+        setIsLoadingAgentModels(false);
+      }
+    }, [defaultModel, isCodexBetaEnabled]);
+
+    useEffect(() => {
+      if (!shouldShowAgentResolutionDialog) return;
+      loadAgentModels();
+    }, [shouldShowAgentResolutionDialog, loadAgentModels]);
 
     // Refresh worktree changed files via central listener (updates the atom)
     const loadWorktreeChangedFiles = useCallback(async () => {
@@ -677,7 +738,7 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
     }, [worktreePath, loadWorktreeChangedFiles, loadWorktreeCommits, loadWorktreeStatus]);
 
     // Resolve bad git state with Claude Agent
-    const handleResolveBadGitStateWithAgent = useCallback(async () => {
+    const handleResolveBadGitStateWithAgent = useCallback(async (modelId: string) => {
       if (!badGitStateError) return;
 
       // Close the dialog
@@ -708,14 +769,14 @@ ${conflictFilesList}
 
 Please help me resolve this git issue.`;
 
-        await createSessionWithDraft(draftMessage);
+        await createSessionWithDraft(draftMessage, modelId);
       } catch (err) {
         console.error('[GitOperationsPanel] Failed to send bad git state resolution request:', err);
       }
     }, [badGitStateError, worktreePath, workspacePath, createSessionWithDraft]);
 
     // Resolve rebase conflicts with Claude Agent (using Crystal's prompt pattern)
-    const handleResolveRebaseConflictsWithAgent = useCallback(async () => {
+    const handleResolveRebaseConflictsWithAgent = useCallback(async (modelId: string) => {
       if (!rebaseConflictData || rebaseConflictData.files.length === 0) return;
 
       // Close the dialog
@@ -763,14 +824,14 @@ ${rebaseConflictData.commits.theirs && rebaseConflictData.commits.theirs.length 
 
 Make sure to preserve the intent of both the worktree changes and the incoming changes from ${baseBranch}.`;
 
-        await createSessionWithDraft(draftMessage);
+        await createSessionWithDraft(draftMessage, modelId);
       } catch (err) {
         console.error('[GitOperationsPanel] Failed to create agent session for rebase conflict resolution:', err);
       }
     }, [worktreePath, worktreeRepoRootBranch, rebaseConflictData, createSessionWithDraft]);
 
     // Resolve untracked files conflict with Claude Agent
-    const handleResolveUntrackedFilesWithAgent = useCallback(async () => {
+    const handleResolveUntrackedFilesWithAgent = useCallback(async (modelId: string) => {
       if (!untrackedFilesConflict || untrackedFilesConflict.length === 0) return;
 
       // Close the dialog
@@ -807,14 +868,14 @@ ${untrackedFilesList}
 
 Please analyze these files and recommend the best approach before taking action.`;
 
-        await createSessionWithDraft(draftMessage);
+        await createSessionWithDraft(draftMessage, modelId);
       } catch (err) {
         console.error('[GitOperationsPanel] Failed to create agent session for untracked files resolution:', err);
       }
     }, [worktreePath, worktreeRepoRootBranch, untrackedFilesConflict, createSessionWithDraft]);
 
     // Resolve merge conflicts with Claude Agent
-    const handleResolveConflictsWithAgent = useCallback(async () => {
+    const handleResolveConflictsWithAgent = useCallback(async (modelId: string) => {
       if (!mergeConflictFiles || mergeConflictFiles.length === 0) return;
 
       // Close the dialog
@@ -887,7 +948,7 @@ Should show the files as modified (uncommitted). The working directory should ha
 
 Please proceed with this strategy.`;
 
-        await createSessionWithDraft(draftMessage);
+        await createSessionWithDraft(draftMessage, modelId);
       } catch (err) {
         console.error('[GitOperationsPanel] Failed to create agent session for conflict resolution:', err);
       }
@@ -1520,7 +1581,12 @@ Please proceed with this strategy.`;
             worktreePath={worktreePath || ''}
             conflictedFiles={rebaseConflictData.files}
             conflictingCommits={rebaseConflictData.commits}
+            agentModels={agentModels}
+            selectedModel={selectedAgentModel}
+            isLoadingModels={isLoadingAgentModels}
+            onModelChange={setSelectedAgentModel}
             onResolveWithAgent={handleResolveRebaseConflictsWithAgent}
+            resolveDisabled={isLoadingAgentModels || agentModels.length === 0}
             onCancel={() => setRebaseConflictData(null)}
           />
         )}
@@ -1530,7 +1596,12 @@ Please proceed with this strategy.`;
           <MergeConflictDialog
             workspacePath={workspacePath}
             conflictedFiles={mergeConflictFiles}
+            agentModels={agentModels}
+            selectedModel={selectedAgentModel}
+            isLoadingModels={isLoadingAgentModels}
+            onModelChange={setSelectedAgentModel}
             onResolveWithAgent={handleResolveConflictsWithAgent}
+            resolveDisabled={isLoadingAgentModels || agentModels.length === 0}
             onCancel={() => setMergeConflictFiles(null)}
           />
         )}
@@ -1540,7 +1611,12 @@ Please proceed with this strategy.`;
           <UntrackedFilesConflictDialog
             worktreePath={worktreePath || ''}
             untrackedFiles={untrackedFilesConflict}
+            agentModels={agentModels}
+            selectedModel={selectedAgentModel}
+            isLoadingModels={isLoadingAgentModels}
+            onModelChange={setSelectedAgentModel}
             onResolveWithAgent={handleResolveUntrackedFilesWithAgent}
+            resolveDisabled={isLoadingAgentModels || agentModels.length === 0}
             onCancel={() => setUntrackedFilesConflict(null)}
           />
         )}
@@ -1551,7 +1627,12 @@ Please proceed with this strategy.`;
             worktreePath={worktreePath || ''}
             errorMessage={badGitStateError.message}
             conflictedFiles={badGitStateError.conflictedFiles}
+            agentModels={agentModels}
+            selectedModel={selectedAgentModel}
+            isLoadingModels={isLoadingAgentModels}
+            onModelChange={setSelectedAgentModel}
             onResolveWithAgent={handleResolveBadGitStateWithAgent}
+            resolveDisabled={isLoadingAgentModels || agentModels.length === 0}
             onCancel={() => setBadGitStateError(null)}
           />
         )}
