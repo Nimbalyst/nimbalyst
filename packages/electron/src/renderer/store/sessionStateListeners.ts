@@ -46,6 +46,13 @@ import { triggerWorktreeRefreshAtom } from './atoms/gitOperations';
 const reloadDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const RELOAD_DEBOUNCE_MS = 1000;
 
+// Per-session debounce timers for syncing lastReadAt to other devices.
+// When the user is actively viewing a session that's streaming, we need to
+// push lastReadAt so iOS doesn't show it as unread. But message-logged fires
+// on every chunk, so we debounce to avoid spamming the sync server.
+const readStateSyncTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const READ_STATE_SYNC_DEBOUNCE_MS = 5000;
+
 /**
  * Initialize global session state listeners.
  * Should be called once at app startup (or when AgentMode mounts).
@@ -84,6 +91,37 @@ export function initSessionStateListeners(): () => void {
         store.set(sessionProcessingAtom(sessionId), false);
         // Also clear pending interactive prompt state - if session ended, no longer waiting
         store.set(sessionHasPendingInteractivePromptAtom(sessionId), false);
+
+        // Clear any pending debounce timer for this session - the final reload below
+        // will fetch the complete state, so a stale debounced reload is unnecessary
+        {
+          const pendingTimer = reloadDebounceTimers.get(sessionId);
+          if (pendingTimer) {
+            clearTimeout(pendingTimer);
+            reloadDebounceTimers.delete(sessionId);
+          }
+        }
+
+        // Trigger a final session data reload as a safety net.
+        // During streaming, ai:message-logged events trigger debounced reloads.
+        // But those events can be silently dropped if sessionListWorkspaceAtom
+        // is null (e.g., after HMR re-evaluates the sessions module, or during
+        // a race between listener init and session list init). This final reload
+        // on session:completed ensures all messages are loaded regardless.
+        {
+          let workspacePath = store.get(sessionListWorkspaceAtom);
+          // Fallback: get workspace path from session registry if the global atom is null
+          if (!workspacePath) {
+            const registry = store.get(sessionRegistryAtom);
+            const sessionMeta = registry.get(sessionId);
+            if (sessionMeta?.workspaceId) {
+              workspacePath = sessionMeta.workspaceId;
+            }
+          }
+          if (workspacePath) {
+            store.set(reloadSessionDataAtom, { sessionId, workspacePath });
+          }
+        }
 
         // If this session is in a worktree, trigger a git panel refresh
         // This ensures the GitOperationsPanel shows updated status after agent work
@@ -194,6 +232,23 @@ export function initSessionStateListeners(): () => void {
         }).catch((err: Error) => {
           console.error('[sessionStateListeners] Failed to persist unread state:', err);
         });
+      } else {
+        // Session IS currently viewed - push lastReadAt (debounced) so other
+        // devices (iOS) know the user is reading these messages in real time.
+        // Without this, iOS would show the session as unread because it sees
+        // lastMessageAt increasing but lastReadAt staying stale.
+        const existingReadTimer = readStateSyncTimers.get(sessionId);
+        if (existingReadTimer) {
+          clearTimeout(existingReadTimer);
+        }
+        readStateSyncTimers.set(sessionId, setTimeout(() => {
+          readStateSyncTimers.delete(sessionId);
+          window.electronAPI?.invoke('ai:updateSessionMetadata', sessionId, {
+            metadata: { hasUnread: false, lastReadAt: Date.now() },
+          }).catch((err: Error) => {
+            console.error('[sessionStateListeners] Failed to sync read state:', err);
+          });
+        }, READ_STATE_SYNC_DEBOUNCE_MS));
       }
     }
   };
@@ -417,11 +472,16 @@ export function initSessionStateListeners(): () => void {
 
   // Return cleanup function
   return () => {
-    // Clear all pending reload debounce timers
+    // Clear all pending debounce timers
     for (const timer of reloadDebounceTimers.values()) {
       clearTimeout(timer);
     }
     reloadDebounceTimers.clear();
+
+    for (const timer of readStateSyncTimers.values()) {
+      clearTimeout(timer);
+    }
+    readStateSyncTimers.clear();
 
     window.electronAPI.sessionState?.removeStateChangeListener?.(handleStateChange);
     window.electronAPI.sessionState?.unsubscribe?.();

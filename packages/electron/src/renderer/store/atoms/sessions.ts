@@ -1628,21 +1628,22 @@ export const anyPendingInteractivePromptAtom = atom((get) => {
  * Persists to database metadata for cross-device sync.
  */
 export const markSessionReadAtom = atom(null, (get, set, sessionId: string) => {
-  // Only persist if actually changing from unread to read
   const wasUnread = get(sessionUnreadAtom(sessionId));
 
   const now = Date.now();
   set(sessionUnreadAtom(sessionId), false);
   set(sessionLastReadAtom(sessionId), now);
 
-  // Persist to database metadata and push lastReadAt through sync for cross-device read state
-  if (wasUnread) {
-    window.electronAPI?.invoke('ai:updateSessionMetadata', sessionId, {
-      metadata: { hasUnread: false, lastReadAt: now },
-    }).catch((err: Error) => {
-      console.error('[sessions] Failed to persist unread state:', err);
-    });
-  }
+  // Always push lastReadAt through sync for cross-device read state.
+  // Even if this device didn't consider the session "unread", another device
+  // (e.g. iOS) may show it as unread because it tracks read state independently
+  // via lastReadAt vs lastMessageAt. We must always sync the read timestamp
+  // so other devices can clear their unread indicators.
+  window.electronAPI?.invoke('ai:updateSessionMetadata', sessionId, {
+    metadata: { hasUnread: false, lastReadAt: now },
+  }).catch((err: Error) => {
+    console.error('[sessions] Failed to persist read state:', err);
+  });
 });
 
 /**

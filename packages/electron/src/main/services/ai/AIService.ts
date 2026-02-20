@@ -3244,13 +3244,14 @@ export class AIService {
       await AISessionsRepository.updateMetadata(sessionId, { metadata });
 
       // If lastReadAt is being updated, also push through sync for cross-device read state
+      // NOTE: Do NOT include updatedAt here. Reading a session is not meaningful activity
+      // and should not cause the session to resort to the top of the list on other devices.
       const syncProvider = getSyncProvider();
       if (metadata.metadata?.lastReadAt && syncProvider) {
         syncProvider.pushChange(sessionId, {
           type: 'metadata_updated',
           metadata: {
             lastReadAt: metadata.metadata.lastReadAt,
-            updatedAt: Date.now(),
           },
         });
       }

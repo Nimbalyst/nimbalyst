@@ -2205,7 +2205,10 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
         } else if (change.type === 'metadata_updated') {
           const meta = change.metadata;
           const cached = sessionIndexCache.get(sessionId);
-          const updatedAt = meta.updatedAt ?? Date.now();
+          // Only use a fresh timestamp if the caller explicitly set updatedAt.
+          // For read-status-only updates (lastReadAt), we must NOT bump updatedAt
+          // or the session will resort to the top of the list on other devices.
+          const updatedAt = meta.updatedAt ?? undefined;
 
           // Helper to build and send encrypted index entry
           const sendIndexUpdate = async (baseEntry: CachedSessionIndex) => {
@@ -2272,8 +2275,8 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
               provider: meta.provider ?? cached.provider,
               model: meta.model ?? cached.model,
               mode: (meta.mode ?? cached.mode) as CachedSessionIndex['mode'],
-              lastMessageAt: updatedAt,
-              updatedAt: updatedAt,
+              lastMessageAt: updatedAt ?? cached.lastMessageAt,
+              updatedAt: updatedAt ?? cached.updatedAt,
               pendingExecution: 'pendingExecution' in meta ? meta.pendingExecution : cached.pendingExecution,
               isExecuting: 'isExecuting' in meta ? meta.isExecuting : cached.isExecuting,
               currentContext: 'currentContext' in meta ? meta.currentContext : cached.currentContext,
@@ -2283,6 +2286,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
             await sendIndexUpdate(updatedCache);
           } else if (meta.title && meta.provider) {
             // New session - need at least title and provider
+            const now = updatedAt ?? Date.now();
             const newEntry: CachedSessionIndex = {
               sessionId: sessionId,
               projectId: meta.workspaceId ?? 'default',
@@ -2292,9 +2296,9 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
               mode: meta.mode as CachedSessionIndex['mode'],
               sessionType: meta.sessionType,
               messageCount: 0,
-              lastMessageAt: updatedAt,
-              createdAt: updatedAt,
-              updatedAt: updatedAt,
+              lastMessageAt: now,
+              createdAt: now,
+              updatedAt: now,
               pendingExecution: meta.pendingExecution,
               isExecuting: meta.isExecuting,
               currentContext: meta.currentContext,
