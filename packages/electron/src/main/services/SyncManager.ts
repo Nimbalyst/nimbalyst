@@ -87,6 +87,11 @@ let incrementalSyncInFlight = false;
 let lastIncrementalSyncAt = 0;
 const MIN_INCREMENTAL_SYNC_INTERVAL = 5000; // 5 seconds minimum between syncs
 
+// Must match SERVER_TTL (IndexRoom.ts SESSION_TTL_MS = 30 days).
+// Sessions older than this that are missing from the server were TTL-expired;
+// re-uploading them is wasteful because they'll just be expired again.
+const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
 // Event emitter for sync status changes
 type SyncStatusListener = (status: { connected: boolean; syncing: boolean; error: string | null }) => void;
 const statusListeners = new Set<SyncStatusListener>();
@@ -494,7 +499,14 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
           const serverSession = serverSessionMap.get(localSession.id);
 
           if (!serverSession) {
-            // New session - needs full sync (index + messages)
+            // Session missing from server. Check if it's older than the server TTL --
+            // if so, the server already expired it and re-uploading is wasteful.
+            const localUpdatedAt = localSession.updatedAt || 0;
+            const ttlCutoff = Date.now() - SESSION_TTL_MS;
+            if (localUpdatedAt < ttlCutoff) {
+              continue; // Expired session, skip
+            }
+            // Genuinely new session - needs full sync (index + messages)
             sessionsNeedingIndexUpdate.push(localSession);
             sessionsNeedingMessageSync.push(localSession.id);
           } else {
@@ -790,6 +802,13 @@ export async function triggerIncrementalSync(): Promise<void> {
       const serverSession = serverSessionMap.get(localSession.id);
 
       if (!serverSession) {
+        // Session missing from server. Check if it's older than the server TTL --
+        // if so, the server already expired it and re-uploading is wasteful.
+        const localUpdatedAt = localSession.updatedAt || 0;
+        const ttlCutoff = Date.now() - SESSION_TTL_MS;
+        if (localUpdatedAt < ttlCutoff) {
+          continue; // Expired session, skip
+        }
         sessionsNeedingIndexUpdate.push(localSession);
         sessionsNeedingMessageSync.push(localSession.id);
       } else {
