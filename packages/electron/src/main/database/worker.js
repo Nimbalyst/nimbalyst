@@ -591,6 +591,38 @@ class PGLiteWorker {
       CREATE INDEX IF NOT EXISTS idx_session_files_uncommitted_lookup ON session_files(workspace_id, link_type, file_path, timestamp DESC);
     `);
 
+    // AI Tool Call <-> File Edit linkage table
+    // Maps session_files entries to the ai_agent_messages tool call that caused them
+    console.log('[PGLite Worker] Creating ai_tool_call_file_edits table...');
+    try {
+      await this.db.exec(`
+        CREATE TABLE IF NOT EXISTS ai_tool_call_file_edits (
+          id BIGSERIAL PRIMARY KEY,
+          session_id TEXT NOT NULL,
+          session_file_id TEXT NOT NULL,
+          message_id BIGINT NOT NULL,
+          tool_call_item_id TEXT,
+          tool_use_id TEXT,
+          match_score INTEGER NOT NULL DEFAULT 0,
+          match_reason TEXT,
+          file_timestamp TIMESTAMPTZ,
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          CONSTRAINT fk_atcfe_session FOREIGN KEY (session_id) REFERENCES ai_sessions(id) ON DELETE CASCADE,
+          CONSTRAINT fk_atcfe_session_file FOREIGN KEY (session_file_id) REFERENCES session_files(id) ON DELETE CASCADE,
+          CONSTRAINT fk_atcfe_message FOREIGN KEY (message_id) REFERENCES ai_agent_messages(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_atcfe_session ON ai_tool_call_file_edits(session_id);
+        CREATE INDEX IF NOT EXISTS idx_atcfe_session_file ON ai_tool_call_file_edits(session_file_id);
+        CREATE INDEX IF NOT EXISTS idx_atcfe_message ON ai_tool_call_file_edits(message_id);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_atcfe_unique ON ai_tool_call_file_edits(session_file_id, message_id);
+      `);
+      console.log('[PGLite Worker] ai_tool_call_file_edits table created successfully');
+    } catch (error) {
+      console.error('[PGLite Worker] Failed to create ai_tool_call_file_edits table:', error);
+      throw error;
+    }
+
     // Tracker Items table (JSONB structure)
     console.log('[PGLite Worker] Creating tracker_items table...');
     try {
@@ -1261,6 +1293,25 @@ class PGLiteWorker {
       await this.db.exec(`DROP TABLE IF EXISTS voice_sessions;`);
     } catch (error) {
       // Non-fatal
+    }
+
+    // Migration: Add file_timestamp column to ai_tool_call_file_edits
+    try {
+      await this.db.exec(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'ai_tool_call_file_edits' AND column_name = 'file_timestamp'
+          ) THEN
+            ALTER TABLE ai_tool_call_file_edits ADD COLUMN file_timestamp TIMESTAMPTZ;
+          END IF;
+        END $$;
+      `);
+      console.log('[PGLite Worker] file_timestamp column added to ai_tool_call_file_edits');
+    } catch (error) {
+      console.error('[PGLite Worker] Failed to add file_timestamp column:', error);
+      throw error;
     }
   }
 

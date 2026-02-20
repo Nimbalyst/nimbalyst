@@ -1,0 +1,482 @@
+import { describe, it, expect, vi, beforeAll } from 'vitest';
+
+vi.mock('../../database/PGLiteDatabaseWorker', () => ({
+  database: {
+    isInitialized: () => true,
+    initialize: vi.fn(),
+    query: vi.fn(),
+  },
+}));
+
+vi.mock('../../utils/logger', () => ({
+  logger: {
+    main: {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      debug: vi.fn(),
+    },
+  },
+}));
+
+import { parseToolCallWindows, scoreMatch, _setParseBashFn, type ToolCallWindow } from '../ToolCallMatcher';
+
+// Provide a test-friendly bash parser (same fallback logic as production)
+beforeAll(() => {
+  _setParseBashFn((command: string, cwd: string) => {
+    const paths: string[] = [];
+    const redirectMatch = command.match(/>\s*(\S+)/g);
+    if (redirectMatch) {
+      for (const m of redirectMatch) {
+        const target = m.replace(/^>+\s*/, '');
+        paths.push(target.startsWith('/') ? target : `${cwd}/${target}`);
+      }
+    }
+    const teeMatch = command.match(/tee\s+(?:-a\s+)?(\S+)/);
+    if (teeMatch?.[1]) {
+      const t = teeMatch[1];
+      paths.push(t.startsWith('/') ? t : `${cwd}/${t}`);
+    }
+    const cpMatch = command.match(/cp\s+\S+\s+(\S+)/);
+    if (cpMatch?.[1]) {
+      const t = cpMatch[1];
+      paths.push(t.startsWith('/') ? t : `${cwd}/${t}`);
+    }
+    const sedMatch = command.match(/sed\s+-i(?:\.\w+)?\s+'[^']+'\s+(\S+)/);
+    if (sedMatch?.[1]) {
+      const t = sedMatch[1];
+      paths.push(t.startsWith('/') ? t : `${cwd}/${t}`);
+    }
+    return paths;
+  });
+});
+
+describe('ToolCallMatcher', () => {
+  describe('parseToolCallWindows', () => {
+    const baseDate = new Date('2026-02-20T12:00:00Z');
+    const SESSION_ID = 'test-session';
+
+    it('should parse Write tool call with file_path argument', () => {
+      const content = JSON.stringify({
+        type: 'item.completed',
+        item: {
+          type: 'mcp_tool_call',
+          id: 'tool-123',
+          server: 'nimbalyst',
+          tool: 'Write',
+          arguments: { file_path: '/workspace/src/index.ts' },
+          result: { success: true },
+        },
+      });
+
+      const windows = parseToolCallWindows(1, content, baseDate, SESSION_ID, '/workspace');
+
+      expect(windows).toHaveLength(1);
+      expect(windows[0].toolName).toBe('mcp__nimbalyst__Write');
+      expect(windows[0].toolCallItemId).toBe('tool-123');
+      expect(windows[0].filePaths).toContain('/workspace/src/index.ts');
+      expect(windows[0].messageId).toBe(1);
+    });
+
+    it('should parse Edit tool call with filePath argument', () => {
+      const content = JSON.stringify({
+        type: 'item.started',
+        item: {
+          type: 'mcp_tool_call',
+          id: 'tool-456',
+          server: 'nimbalyst',
+          tool: 'Edit',
+          arguments: { filePath: '/workspace/src/app.tsx' },
+        },
+      });
+
+      const windows = parseToolCallWindows(2, content, baseDate, SESSION_ID, '/workspace');
+
+      expect(windows).toHaveLength(1);
+      expect(windows[0].filePaths).toContain('/workspace/src/app.tsx');
+    });
+
+    it('should parse command_execution (Bash) tool call', () => {
+      const content = JSON.stringify({
+        type: 'item.completed',
+        item: {
+          type: 'command_execution',
+          id: 'cmd-789',
+          command: 'printf "hello" > /workspace/output.txt',
+          result: { exit_code: 0 },
+        },
+      });
+
+      const windows = parseToolCallWindows(3, content, baseDate, SESSION_ID, '/workspace');
+
+      expect(windows).toHaveLength(1);
+      expect(windows[0].toolName).toBe('Bash');
+      expect(windows[0].filePaths).toContain('/workspace/output.txt');
+    });
+
+    it('should parse file_change event with multiple files', () => {
+      const content = JSON.stringify({
+        type: 'item.completed',
+        item: {
+          type: 'file_change',
+          id: 'fc-001',
+          changes: [
+            { path: '/workspace/src/a.ts', kind: 'edit' },
+            { path: '/workspace/src/b.ts', kind: 'create' },
+          ],
+          result: { status: 'completed' },
+        },
+      });
+
+      const windows = parseToolCallWindows(4, content, baseDate, SESSION_ID, '/workspace');
+
+      expect(windows).toHaveLength(1);
+      expect(windows[0].toolName).toBe('file_change');
+      expect(windows[0].filePaths).toContain('/workspace/src/a.ts');
+      expect(windows[0].filePaths).toContain('/workspace/src/b.ts');
+    });
+
+    it('should extract file paths from tool output text', () => {
+      const content = JSON.stringify({
+        type: 'item.completed',
+        item: {
+          type: 'command_execution',
+          id: 'cmd-out',
+          command: 'node build.js',
+          aggregated_output: 'Written output to /workspace/dist/bundle.js successfully',
+        },
+      });
+
+      const windows = parseToolCallWindows(5, content, baseDate, SESSION_ID, '/workspace');
+
+      expect(windows).toHaveLength(1);
+      expect(windows[0].filePaths).toContain('/workspace/dist/bundle.js');
+    });
+
+    it('should return empty array for non-tool events', () => {
+      const content = JSON.stringify({
+        type: 'item.completed',
+        item: {
+          type: 'message',
+          content: 'Hello world',
+        },
+      });
+
+      const windows = parseToolCallWindows(6, content, baseDate, SESSION_ID);
+
+      expect(windows).toHaveLength(0);
+    });
+
+    it('should return empty array for invalid JSON', () => {
+      const windows = parseToolCallWindows(7, 'not json', baseDate, SESSION_ID);
+      expect(windows).toHaveLength(0);
+    });
+
+    it('should return empty array for text-only chunks', () => {
+      const content = JSON.stringify({ type: 'text', content: 'Some text' });
+      const windows = parseToolCallWindows(8, content, baseDate, SESSION_ID);
+      expect(windows).toHaveLength(0);
+    });
+
+    it('should handle sed -i bash commands', () => {
+      const content = JSON.stringify({
+        type: 'item.completed',
+        item: {
+          type: 'command_execution',
+          id: 'cmd-sed',
+          command: "sed -i 's/foo/bar/' /workspace/config.json",
+          result: { exit_code: 0 },
+        },
+      });
+
+      const windows = parseToolCallWindows(9, content, baseDate, SESSION_ID, '/workspace');
+
+      expect(windows).toHaveLength(1);
+      expect(windows[0].filePaths).toContain('/workspace/config.json');
+    });
+
+    it('should handle tee command', () => {
+      const content = JSON.stringify({
+        type: 'item.completed',
+        item: {
+          type: 'command_execution',
+          id: 'cmd-tee',
+          command: 'echo "data" | tee /workspace/log.txt',
+          result: { exit_code: 0 },
+        },
+      });
+
+      const windows = parseToolCallWindows(10, content, baseDate, SESSION_ID, '/workspace');
+
+      expect(windows).toHaveLength(1);
+      expect(windows[0].filePaths).toContain('/workspace/log.txt');
+    });
+
+    it('should handle chained bash commands', () => {
+      const content = JSON.stringify({
+        type: 'item.completed',
+        item: {
+          type: 'command_execution',
+          id: 'cmd-chain',
+          command: 'mkdir -p /workspace/out && cp /workspace/src/a.ts /workspace/out/a.ts',
+          result: { exit_code: 0 },
+        },
+      });
+
+      const windows = parseToolCallWindows(11, content, baseDate, SESSION_ID, '/workspace');
+
+      expect(windows).toHaveLength(1);
+      // Should contain the cp dest
+      expect(windows[0].filePaths).toContain('/workspace/out/a.ts');
+    });
+
+    it('should not extract /proc/ or /dev/ paths from output', () => {
+      const content = JSON.stringify({
+        type: 'item.completed',
+        item: {
+          type: 'command_execution',
+          id: 'cmd-proc',
+          command: 'cat /proc/cpuinfo',
+          aggregated_output: 'Reading /dev/null and /proc/meminfo',
+        },
+      });
+
+      const windows = parseToolCallWindows(12, content, baseDate, SESSION_ID, '/workspace');
+
+      expect(windows).toHaveLength(1);
+      // Should not have /proc or /dev paths
+      const nonSystemPaths = windows[0].filePaths.filter(
+        p => !p.includes('/proc/') && !p.includes('/dev/')
+      );
+      expect(nonSystemPaths).toEqual(windows[0].filePaths);
+    });
+
+    // ---------------------------------------------------------------
+    // Raw Claude API format tests
+    // ---------------------------------------------------------------
+
+    it('should parse raw Claude API format with tool_use blocks', () => {
+      const content = JSON.stringify({
+        type: 'assistant',
+        message: {
+          model: 'claude-opus-4-6',
+          id: 'msg_01ABC',
+          type: 'message',
+          role: 'assistant',
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu_01XYZ',
+              name: 'Edit',
+              input: {
+                file_path: '/workspace/src/app.ts',
+                old_string: 'foo',
+                new_string: 'bar',
+              },
+            },
+          ],
+        },
+      });
+
+      const windows = parseToolCallWindows(20, content, baseDate, SESSION_ID, '/workspace');
+
+      expect(windows).toHaveLength(1);
+      expect(windows[0].toolName).toBe('Edit');
+      expect(windows[0].toolCallItemId).toBe('toolu_01XYZ');
+      expect(windows[0].toolUseId).toBe('toolu_01XYZ');
+      expect(windows[0].filePaths).toContain('/workspace/src/app.ts');
+    });
+
+    it('should parse raw Claude API format with multiple tool_use blocks', () => {
+      const content = JSON.stringify({
+        type: 'assistant',
+        message: {
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu_01AAA',
+              name: 'Write',
+              input: { file_path: '/workspace/a.ts', content: 'hello' },
+            },
+            {
+              type: 'tool_use',
+              id: 'toolu_01BBB',
+              name: 'Write',
+              input: { file_path: '/workspace/b.ts', content: 'world' },
+            },
+          ],
+        },
+      });
+
+      const windows = parseToolCallWindows(21, content, baseDate, SESSION_ID, '/workspace');
+
+      expect(windows).toHaveLength(2);
+      expect(windows[0].toolCallItemId).toBe('toolu_01AAA');
+      expect(windows[0].filePaths).toContain('/workspace/a.ts');
+      expect(windows[1].toolCallItemId).toBe('toolu_01BBB');
+      expect(windows[1].filePaths).toContain('/workspace/b.ts');
+    });
+
+    it('should ignore text blocks in raw Claude API format', () => {
+      const content = JSON.stringify({
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'text', text: 'Let me edit the file.' },
+            {
+              type: 'tool_use',
+              id: 'toolu_01CCC',
+              name: 'Edit',
+              input: { file_path: '/workspace/c.ts', old_string: 'x', new_string: 'y' },
+            },
+          ],
+        },
+      });
+
+      const windows = parseToolCallWindows(22, content, baseDate, SESSION_ID, '/workspace');
+
+      expect(windows).toHaveLength(1);
+      expect(windows[0].toolName).toBe('Edit');
+    });
+
+    it('should return empty for raw Claude API user messages with tool_result', () => {
+      const content = JSON.stringify({
+        type: 'user',
+        message: {
+          role: 'user',
+          content: [
+            {
+              tool_use_id: 'toolu_01XYZ',
+              type: 'tool_result',
+              content: 'File edited successfully',
+            },
+          ],
+        },
+      });
+
+      const windows = parseToolCallWindows(23, content, baseDate, SESSION_ID, '/workspace');
+
+      // tool_result blocks don't have 'name' so they should be skipped
+      expect(windows).toHaveLength(0);
+    });
+
+    it('should extract tool use id from item', () => {
+      const content = JSON.stringify({
+        type: 'item.completed',
+        item: {
+          type: 'mcp_tool_call',
+          id: 'toolu_abc123',
+          tool_use_id: 'toolu_abc123',
+          server: 'test',
+          tool: 'Write',
+          arguments: { file_path: '/workspace/file.ts' },
+        },
+      });
+
+      const windows = parseToolCallWindows(13, content, baseDate, SESSION_ID, '/workspace');
+
+      expect(windows).toHaveLength(1);
+      expect(windows[0].toolUseId).toBe('toolu_abc123');
+      expect(windows[0].toolCallItemId).toBe('toolu_abc123');
+    });
+  });
+
+  describe('scoreMatch', () => {
+    const baseTime = new Date('2026-02-20T12:00:00Z').getTime();
+
+    function makeWindow(overrides: Partial<ToolCallWindow> = {}): ToolCallWindow {
+      return {
+        messageId: 1,
+        messageCreatedAt: baseTime,
+        sessionId: 'test-session',
+        toolName: 'Edit',
+        toolCallItemId: 'tool-1',
+        toolUseId: 'toolu_1',
+        filePaths: [],
+        outputText: '',
+        ...overrides,
+      };
+    }
+
+    it('should return null when file timestamp is outside 10s cutoff', () => {
+      const window = makeWindow({ filePaths: ['/workspace/src/app.ts'] });
+      // 15 seconds after tool call
+      const result = scoreMatch('/workspace/src/app.ts', baseTime + 15_000, window);
+      expect(result).toBeNull();
+    });
+
+    it('should return null when file timestamp is far before tool call', () => {
+      const window = makeWindow({ filePaths: ['/workspace/src/app.ts'] });
+      // 15 seconds before tool call
+      const result = scoreMatch('/workspace/src/app.ts', baseTime - 15_000, window);
+      expect(result).toBeNull();
+    });
+
+    it('should match by filename only, not requiring full path', () => {
+      const window = makeWindow({
+        filePaths: ['/different/workspace/src/app.ts'],
+      });
+      // Within time window
+      const result = scoreMatch('/workspace/src/app.ts', baseTime + 1_000, window);
+      expect(result).not.toBeNull();
+      expect(result!.score).toBe(40);
+      expect(result!.reasons).toContain('name_in_args');
+    });
+
+    it('should match filename in output text', () => {
+      const window = makeWindow({
+        outputText: 'Successfully wrote to app.ts',
+      });
+      const result = scoreMatch('/workspace/src/app.ts', baseTime + 1_000, window);
+      expect(result).not.toBeNull();
+      expect(result!.score).toBe(30);
+      expect(result!.reasons).toContain('name_in_output');
+    });
+
+    it('should combine name_in_args and name_in_output scores', () => {
+      const window = makeWindow({
+        filePaths: ['/workspace/src/app.ts'],
+        outputText: 'Wrote app.ts successfully',
+      });
+      const result = scoreMatch('/workspace/src/app.ts', baseTime + 1_000, window);
+      expect(result).not.toBeNull();
+      expect(result!.score).toBe(70); // 40 + 30
+    });
+
+    it('should bypass time cutoff for toolUseId match', () => {
+      const window = makeWindow({ toolUseId: 'toolu_exact' });
+      // 30 seconds away - way outside the 10s cutoff
+      const result = scoreMatch('/workspace/src/app.ts', baseTime + 30_000, window, 'toolu_exact');
+      expect(result).not.toBeNull();
+      expect(result!.score).toBe(100);
+      expect(result!.reasons).toContain('toolUseId');
+    });
+
+    it('should return score 0 (below threshold) when within time but no name match', () => {
+      const window = makeWindow({
+        filePaths: ['/workspace/src/other.ts'],
+        outputText: 'no relevant paths here',
+      });
+      const result = scoreMatch('/workspace/src/app.ts', baseTime + 1_000, window);
+      expect(result).not.toBeNull();
+      expect(result!.score).toBe(0);
+    });
+
+    it('should match at exactly 10s boundary', () => {
+      const window = makeWindow({
+        filePaths: ['/workspace/src/app.ts'],
+      });
+      const result = scoreMatch('/workspace/src/app.ts', baseTime + 10_000, window);
+      expect(result).not.toBeNull();
+      expect(result!.score).toBe(40);
+    });
+
+    it('should reject at just over 10s boundary', () => {
+      const window = makeWindow({
+        filePaths: ['/workspace/src/app.ts'],
+      });
+      const result = scoreMatch('/workspace/src/app.ts', baseTime + 10_001, window);
+      expect(result).toBeNull();
+    });
+  });
+});
