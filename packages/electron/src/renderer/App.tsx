@@ -65,6 +65,8 @@ import {
   // File navigation
   openFileRequestAtom,
 } from './store';
+import { initClaudeUsageListeners } from './store/listeners/claudeUsageListeners';
+import { initCodexUsageListeners } from './store/listeners/codexUsageListeners';
 import { TrackerBottomPanel } from './components/TrackerBottomPanel/TrackerBottomPanel.tsx';
 import { TerminalBottomPanel } from './components/TerminalBottomPanel';
 import { registerDocumentLinkPlugin } from './plugins/registerDocumentLinkPlugin';
@@ -197,6 +199,16 @@ export default function App() {
     };
 
     registerCustomEditors();
+  }, []);
+
+  // Initialize Claude and Codex usage listeners once at app startup
+  useEffect(() => {
+    const cleanupClaude = initClaudeUsageListeners();
+    const cleanupCodex = initCodexUsageListeners();
+    return () => {
+      cleanupClaude?.();
+      cleanupCodex?.();
+    };
   }, []);
 
   // PostHog for analytics

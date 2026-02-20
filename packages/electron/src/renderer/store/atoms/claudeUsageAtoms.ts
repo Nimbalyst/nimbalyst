@@ -102,7 +102,14 @@ export const claudeUsageAvailableAtom = atom((get) => {
   if (!usage) return false;
   // If there's an error about missing credentials, consider it unavailable
   if (usage.error?.includes('credentials')) return false;
-  return true;
+  // Only show if we have actual usage data (utilization or reset times)
+  const hasUsageData = [usage.fiveHour, usage.sevenDay, usage.sevenDayOpus]
+    .filter(Boolean)
+    .some((window) => {
+      const utilization = window?.utilization ?? 0;
+      return utilization > 0 || Boolean(window?.resetsAt);
+    });
+  return hasUsageData;
 });
 
 /**

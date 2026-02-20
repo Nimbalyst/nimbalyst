@@ -52,9 +52,6 @@ import { initFileStateListeners } from '../../store/listeners/fileStateListeners
 import { initFileTreeListeners } from '../../store/listeners/fileTreeListeners';
 import { initSessionListListeners } from '../../store/listeners/sessionListListeners';
 import { initSessionTranscriptListeners } from '../../store/listeners/sessionTranscriptListeners';
-import { initClaudeUsageListeners } from '../../store/listeners/claudeUsageListeners';
-import { initCodexUsageListeners } from '../../store/listeners/codexUsageListeners';
-import { initVoiceModeListeners } from '../../store/listeners/voiceModeListeners';
 import { fetchSessionSharesAtom } from '../../store';
 import type { WorktreeCreateResult, SessionCreateResult } from '../../../shared/ipc/types';
 import { BlitzDialog } from '../BlitzDialog/BlitzDialog';
@@ -185,24 +182,6 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
   // Initialize session transcript listeners (global, runs once)
   useEffect(() => {
     const cleanup = initSessionTranscriptListeners();
-    return cleanup;
-  }, []);
-
-  // Initialize Claude usage listeners (global, runs once)
-  useEffect(() => {
-    const cleanup = initClaudeUsageListeners();
-    return cleanup;
-  }, []);
-
-  // Initialize Codex usage listeners (global, runs once)
-  useEffect(() => {
-    const cleanup = initCodexUsageListeners();
-    return cleanup;
-  }, []);
-
-  // Initialize voice mode listeners (global, runs once)
-  useEffect(() => {
-    const cleanup = initVoiceModeListeners();
     return cleanup;
   }, []);
 

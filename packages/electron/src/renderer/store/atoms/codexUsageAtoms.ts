@@ -84,9 +84,14 @@ export const codexUsageAvailableAtom = atom((get) => {
   if (!usage) return false;
   // Only hide for "no data" errors (API key users or no sessions)
   if (usage.error?.includes('No Codex usage data')) return false;
-  // Must have actual rate limit data (resetsAt proves we got real data from subscription)
-  if (!usage.fiveHour.resetsAt && !usage.sevenDay.resetsAt) return false;
-  return true;
+  // Show if we have actual usage data (utilization or reset times), or credits info.
+  const hasUsageData =
+    usage.fiveHour.utilization > 0 ||
+    usage.sevenDay.utilization > 0 ||
+    Boolean(usage.fiveHour.resetsAt) ||
+    Boolean(usage.sevenDay.resetsAt);
+  const hasCreditsData = Boolean(usage.credits?.hasCredits) || usage.credits?.balance !== null;
+  return hasUsageData || hasCreditsData;
 });
 
 export const codexUsageSessionColorAtom = atom((get) => {
