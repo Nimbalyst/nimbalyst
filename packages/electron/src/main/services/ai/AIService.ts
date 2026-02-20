@@ -37,6 +37,8 @@ import { windowStates, findWindowByWorkspace, getWindowId } from '../../window/W
 import { sessionFileTracker } from '../SessionFileTracker';
 import {AnalyticsService} from "../analytics/AnalyticsService.ts";
 import { historyManager } from '../../HistoryManager';
+import { FileSnapshotCache } from '../../file/FileSnapshotCache';
+import { SessionFileWatcher } from '../../file/SessionFileWatcher';
 import { getAIProviderOverrides, saveAIProviderOverrides, clearAIProviderOverrides, getWorkspaceState, getBetaFeatures, getDefaultAIModel } from '../../utils/store';
 import { mergeAISettings } from '../../utils/aiSettingsMerge';
 import { DocumentContextService, type RawDocumentContext, type PreparedDocumentContext } from '@nimbalyst/runtime';
@@ -456,6 +458,10 @@ export class AIService {
   // This is a backup to the atomic database claim - catches cases where claim succeeds
   // but the same prompt ID is somehow passed to sendMessage twice
   private processingQueuedPromptIds = new Set<string>();
+
+  // File snapshot caches and watchers for Codex sessions (diff support)
+  // Only active for openai-codex provider; Claude Code has its own tool hooks
+  private codexSessionWatchers = new Map<string, { cache: FileSnapshotCache; watcher: SessionFileWatcher }>();
 
   // Track sessions currently processing a queued prompt to prevent concurrent execution.
   // Without this, the completion handler and triggerQueueProcessing IPC can race,
@@ -2254,6 +2260,21 @@ export class AIService {
           }
         }
 
+        // Start file snapshot cache + watcher for Codex sessions (diff support)
+        // Only start once per session; persists across turns
+        if (session.provider === 'openai-codex' && effectiveWorkspacePath && !this.codexSessionWatchers.has(session.id)) {
+          try {
+            const cache = new FileSnapshotCache();
+            const watcher = new SessionFileWatcher();
+            await cache.startSession(effectiveWorkspacePath, session.id);
+            await watcher.start(effectiveWorkspacePath, session.id, cache, historyManager);
+            this.codexSessionWatchers.set(session.id, { cache, watcher });
+            logger.main.info('[AIService] Started Codex file watcher for session:', session.id);
+          } catch (watcherError) {
+            logger.main.error('[AIService] Failed to start Codex file watcher:', watcherError);
+          }
+        }
+
         for await (const chunk of provider.sendMessage(messageToSend, contextWithSession, session.id, sessionMessages, effectiveWorkspacePath, attachments)) {
           if (!chunk) continue;
           chunkCount++;
@@ -3492,6 +3513,8 @@ export class AIService {
         ProviderFactory.destroyProvider(sessionId);
         // Clean up document state tracking
         this.documentContextService.clearSessionState(sessionId);
+        // Clean up Codex file watcher if active
+        await this.stopCodexSessionWatcher(sessionId);
       }
 
       return { success };
@@ -4494,6 +4517,21 @@ export class AIService {
     return masked;
   }
 
+  private async stopCodexSessionWatcher(sessionId: string): Promise<void> {
+    const entry = this.codexSessionWatchers.get(sessionId);
+    if (entry) {
+      try {
+        await entry.watcher.stop();
+        entry.cache.stopSession();
+        this.codexSessionWatchers.delete(sessionId);
+        logger.main.info('[AIService] Stopped Codex file watcher for session:', sessionId);
+      } catch (error) {
+        logger.main.error('[AIService] Error stopping Codex file watcher:', error);
+        this.codexSessionWatchers.delete(sessionId);
+      }
+    }
+  }
+
   public destroy() {
     try {
       // Clean up all providers with error handling
@@ -4502,6 +4540,17 @@ export class AIService {
       console.error('[AIService] Error destroying providers:', error);
       // Continue destruction even if providers fail
     }
+
+    // Stop all Codex file watchers
+    for (const [sessionId, entry] of this.codexSessionWatchers) {
+      try {
+        entry.watcher.stop();
+        entry.cache.stopSession();
+      } catch (error) {
+        console.error(`[AIService] Error stopping Codex watcher for ${sessionId}:`, error);
+      }
+    }
+    this.codexSessionWatchers.clear();
 
     // Clear any remaining references
     try {

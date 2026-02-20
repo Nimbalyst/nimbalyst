@@ -1,0 +1,251 @@
+import chokidar, { FSWatcher } from 'chokidar';
+import * as fs from 'fs/promises';
+import * as path from 'path';
+import { BrowserWindow } from 'electron';
+import { logger } from '../utils/logger';
+import type { FileSnapshotCache } from './FileSnapshotCache';
+import type { HistoryManager } from '../HistoryManager';
+
+const BINARY_EXTENSIONS = new Set([
+  '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.webp', '.svg',
+  '.mp3', '.mp4', '.wav', '.ogg', '.webm', '.flac',
+  '.zip', '.tar', '.gz', '.bz2', '.7z', '.rar',
+  '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
+  '.exe', '.dll', '.so', '.dylib', '.o', '.a',
+  '.woff', '.woff2', '.ttf', '.eot', '.otf',
+  '.sqlite', '.db', '.lock',
+  '.wasm', '.node',
+]);
+
+export class SessionFileWatcher {
+  private watcher: FSWatcher | null = null;
+  private cache: FileSnapshotCache | null = null;
+  private historyManager: HistoryManager | null = null;
+  private sessionId: string | null = null;
+  private workspacePath: string | null = null;
+  private active = false;
+
+  async start(
+    workspacePath: string,
+    sessionId: string,
+    cache: FileSnapshotCache,
+    historyManager: HistoryManager
+  ): Promise<void> {
+    await this.stop();
+
+    this.cache = cache;
+    this.historyManager = historyManager;
+    this.sessionId = sessionId;
+    this.workspacePath = workspacePath;
+    this.active = true;
+
+    this.watcher = chokidar.watch(workspacePath, {
+      ignored: (filePath: string) => {
+        const relativePath = filePath.replace(workspacePath, '');
+
+        if (
+          relativePath.includes('/node_modules/') ||
+          relativePath.includes('/.git/') ||
+          relativePath.includes('/dist/') ||
+          relativePath.includes('/build/') ||
+          relativePath.includes('/out/') ||
+          relativePath.includes('/coverage/') ||
+          relativePath.includes('/.next/') ||
+          relativePath.includes('/.nuxt/') ||
+          relativePath.includes('/.cache/') ||
+          relativePath.includes('/.turbo/') ||
+          relativePath.includes('/.svelte-kit/') ||
+          relativePath.includes('/worktrees/')
+        ) {
+          return true;
+        }
+
+        // Ignore OS files
+        if (relativePath.endsWith('.DS_Store') || relativePath.endsWith('Thumbs.db')) {
+          return true;
+        }
+
+        return false;
+      },
+      ignoreInitial: true,
+      followSymlinks: false,
+      usePolling: false,
+      atomic: true,
+      awaitWriteFinish: {
+        stabilityThreshold: 50,
+        pollInterval: 20,
+      },
+      alwaysStat: false,
+    });
+
+    this.watcher
+      .on('change', (filePath: string) => this.handleChange(filePath))
+      .on('add', (filePath: string) => this.handleAdd(filePath))
+      .on('unlink', (filePath: string) => this.handleUnlink(filePath))
+      .on('error', (error: unknown) => {
+        const code = error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined;
+        if (code === 'EPERM' || code === 'EACCES' || code === 'UNKNOWN') {
+          logger.main.debug('[SessionFileWatcher] Skipping unwatchable path:', error);
+        } else {
+          logger.main.error('[SessionFileWatcher] Watcher error:', error);
+        }
+      });
+
+    logger.main.info('[SessionFileWatcher] Started watching:', { workspacePath, sessionId });
+  }
+
+  async stop(): Promise<void> {
+    if (this.watcher) {
+      await this.watcher.close();
+      this.watcher = null;
+    }
+    this.cache = null;
+    this.historyManager = null;
+    this.sessionId = null;
+    this.workspacePath = null;
+    this.active = false;
+  }
+
+  isActive(): boolean {
+    return this.active;
+  }
+
+  private isBinaryPath(filePath: string): boolean {
+    return BINARY_EXTENSIONS.has(path.extname(filePath).toLowerCase());
+  }
+
+  private async handleChange(filePath: string): Promise<void> {
+    if (!this.active || !this.cache || !this.historyManager || !this.sessionId) return;
+    if (this.isBinaryPath(filePath)) return;
+
+    try {
+      const beforeContent = await this.cache.getBeforeState(filePath);
+
+      let currentContent: string;
+      try {
+        currentContent = await fs.readFile(filePath, 'utf-8');
+      } catch {
+        return; // File may have been deleted between event and read
+      }
+
+      if (beforeContent === null) {
+        if (!this.workspacePath || !this.isPathInWorkspace(filePath, this.workspacePath)) {
+          return;
+        }
+        const pendingTags = await this.historyManager.getPendingTags(filePath);
+        if (!pendingTags || pendingTags.length === 0) {
+          const toolUseId = `codex-file-change-${Date.now()}`;
+          const tagId = `ai-edit-pending-${this.sessionId}-${toolUseId}`;
+
+          await this.historyManager.createTag(
+            filePath,
+            tagId,
+            '',
+            this.sessionId,
+            toolUseId
+          );
+
+          this.notifyFileChanged(filePath);
+
+          logger.main.info('[SessionFileWatcher] Created pre-edit tag for uncached file change:', {
+            file: path.basename(filePath),
+            tagId,
+          });
+        }
+
+        this.cache.updateSnapshot(filePath, currentContent);
+        return;
+      }
+
+      if (beforeContent !== currentContent) {
+        // Check if a pre-edit tag already exists for this file
+        const pendingTags = await this.historyManager.getPendingTags(filePath);
+        if (!pendingTags || pendingTags.length === 0) {
+          const toolUseId = `codex-file-change-${Date.now()}`;
+          const tagId = `ai-edit-pending-${this.sessionId}-${toolUseId}`;
+
+          await this.historyManager.createTag(
+            filePath,
+            tagId,
+            beforeContent,
+            this.sessionId,
+            toolUseId
+          );
+
+          // Notify renderer of the file change so it can enter diff mode
+          this.notifyFileChanged(filePath);
+
+          logger.main.info('[SessionFileWatcher] Created pre-edit tag for changed file:', {
+            file: path.basename(filePath),
+            tagId,
+          });
+        }
+      }
+
+      // Update cache with current content for subsequent edits
+      this.cache.updateSnapshot(filePath, currentContent);
+    } catch (error) {
+      logger.main.error('[SessionFileWatcher] Error handling file change:', error);
+    }
+  }
+
+  private async handleAdd(filePath: string): Promise<void> {
+    if (!this.active || !this.cache || !this.historyManager || !this.sessionId) return;
+    if (this.isBinaryPath(filePath)) return;
+
+    try {
+      // Check if a pre-edit tag already exists
+      const pendingTags = await this.historyManager.getPendingTags(filePath);
+      if (!pendingTags || pendingTags.length === 0) {
+        const toolUseId = `codex-file-add-${Date.now()}`;
+        const tagId = `ai-edit-pending-${this.sessionId}-${toolUseId}`;
+
+        // New file - empty "before" content
+        await this.historyManager.createTag(
+          filePath,
+          tagId,
+          '',
+          this.sessionId,
+          toolUseId
+        );
+
+        this.notifyFileChanged(filePath);
+
+        logger.main.info('[SessionFileWatcher] Created pre-edit tag for new file:', {
+          file: path.basename(filePath),
+          tagId,
+        });
+      }
+
+      // Cache the new file content
+      try {
+        const content = await fs.readFile(filePath, 'utf-8');
+        this.cache.updateSnapshot(filePath, content);
+      } catch {
+        // File may have been deleted already
+      }
+    } catch (error) {
+      logger.main.error('[SessionFileWatcher] Error handling file add:', error);
+    }
+  }
+
+  private handleUnlink(filePath: string): void {
+    if (!this.active || !this.cache) return;
+    this.cache.removeSnapshot(filePath);
+  }
+
+  private isPathInWorkspace(filePath: string, workspacePath: string): boolean {
+    const resolvedFile = path.resolve(filePath);
+    const resolvedWorkspace = path.resolve(workspacePath);
+    return resolvedFile === resolvedWorkspace || resolvedFile.startsWith(resolvedWorkspace + path.sep);
+  }
+
+  private notifyFileChanged(filePath: string): void {
+    const windows = BrowserWindow.getAllWindows();
+    for (const window of windows) {
+      if (!window.isDestroyed()) {
+        window.webContents.send('file-changed-on-disk', { path: filePath });
+      }
+    }
+  }
+}
