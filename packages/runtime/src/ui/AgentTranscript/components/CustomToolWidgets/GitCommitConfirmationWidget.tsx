@@ -14,7 +14,7 @@
  * - tool.result containing "cancelled" means user cancelled
  */
 
-import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { useAtomValue } from 'jotai';
 import { usePostHog } from 'posthog-js/react';
 import { MaterialSymbol } from '../../../icons/MaterialSymbol';
@@ -554,22 +554,10 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
     });
   }, [proposalId, hasResponded, isPending, filesToStage.size, host]);
 
-  // Auto-commit: trigger handleConfirm automatically when auto-commit is enabled
-  const autoCommitTriggeredRef = useRef(false);
-  useEffect(() => {
-    if (
-      isPending &&
-      host?.autoCommitEnabled &&
-      !isCommitting &&
-      !hasResponded &&
-      !autoCommitTriggeredRef.current &&
-      filesToStage.size > 0 &&
-      commitMessage.trim()
-    ) {
-      autoCommitTriggeredRef.current = true;
-      handleConfirm();
-    }
-  }, [isPending, host?.autoCommitEnabled, isCommitting, hasResponded, filesToStage.size, commitMessage, handleConfirm]);
+  // Auto-commit is handled entirely by the httpServer (main process) which commits
+  // directly in the MCP tool handler before the widget renders. The widget should NOT
+  // attempt its own auto-commit, as that races with the httpServer and fails because
+  // files are already committed by the time the widget's git:commit IPC arrives.
 
   // No loading state needed - atom is reactive and updates when DB changes
 
