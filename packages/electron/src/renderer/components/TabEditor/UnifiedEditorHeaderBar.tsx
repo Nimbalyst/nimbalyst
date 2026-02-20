@@ -372,6 +372,42 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
     setShowActionsMenu(false);
   }, [lexicalEditor]);
 
+  // Handle share link
+  const handleShareLink = useCallback(async () => {
+    const electronAPI = (window as any).electronAPI;
+    if (!electronAPI || !filePath) return;
+
+    setShowActionsMenu(false);
+
+    try {
+      const result = await electronAPI.shareFileAsLink({ filePath });
+      const { errorNotificationService } = await import('../../services/ErrorNotificationService');
+      if (result?.success) {
+        const expiryDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+        const expiryStr = expiryDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        errorNotificationService.showInfo(
+          result.isUpdate ? 'Share link updated' : 'Share link copied',
+          `Link copied to clipboard. Expires ${expiryStr}.`,
+          { duration: 4000 }
+        );
+      } else {
+        errorNotificationService.showError(
+          'Share failed',
+          result?.error || 'Failed to share file',
+          { duration: 5000 }
+        );
+      }
+    } catch (error) {
+      console.error('[UnifiedHeaderBar] Failed to share file:', error);
+      const { errorNotificationService } = await import('../../services/ErrorNotificationService');
+      errorNotificationService.showError(
+        'Share failed',
+        error instanceof Error ? error.message : 'An unexpected error occurred',
+        { duration: 5000 }
+      );
+    }
+  }, [filePath]);
+
   // Handle export to PDF
   const handleExportToPdf = useCallback(async () => {
     if (!lexicalEditor || typeof lexicalEditor.getEditorState !== 'function') return;
@@ -867,6 +903,19 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
                       Export to PDF...
                     </button>
                   )}
+
+                  {/* Share Link */}
+                  <button
+                    className="dropdown-item w-full py-2 px-3 border-none bg-transparent text-[13px] text-left cursor-pointer flex items-center gap-2.5 transition-colors duration-150 text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]"
+                    onClick={handleShareLink}
+                  >
+                    <svg className="w-4 h-4 opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
+                      <polyline points="16 6 12 2 8 6"/>
+                      <line x1="12" y1="2" x2="12" y2="15"/>
+                    </svg>
+                    Share Link
+                  </button>
 
                   {/* Set Document Type with submenu */}
                   {lexicalEditor && (
