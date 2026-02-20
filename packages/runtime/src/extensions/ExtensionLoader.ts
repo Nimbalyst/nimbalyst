@@ -284,16 +284,47 @@ function createExtensionContext(
 
   const subscriptions: Disposable[] = [];
 
+  // Cache workspace path for resolving relative paths
+  let cachedWorkspacePath: string | null = null;
+  async function getWorkspacePath(): Promise<string | null> {
+    if (cachedWorkspacePath) return cachedWorkspacePath;
+    const electronAPI = (window as any).electronAPI;
+    if (electronAPI?.getInitialState) {
+      const state = await electronAPI.getInitialState();
+      if (state?.workspacePath) {
+        cachedWorkspacePath = state.workspacePath;
+        return cachedWorkspacePath;
+      }
+    }
+    return null;
+  }
+
+  // Resolve a path: if it's absolute, use as-is; if relative, prepend workspace path
+  async function resolvePath(filePath: string): Promise<string> {
+    // Absolute paths on macOS/Linux start with /, on Windows with C:\ etc.
+    if (filePath.startsWith('/') || /^[a-zA-Z]:/.test(filePath)) {
+      return filePath;
+    }
+    const wp = await getWorkspacePath();
+    if (wp) {
+      return `${wp}/${filePath}`;
+    }
+    return filePath;
+  }
+
   const services: ExtensionServices = {
     filesystem: {
-      readFile: (path: string) => platformService.readFile(path),
-      writeFile: (path: string, content: string) =>
-        platformService.writeFile(path, content),
-      fileExists: (path: string) => platformService.fileExists(path),
+      readFile: async (p: string) => platformService.readFile(await resolvePath(p)),
+      writeFile: async (p: string, content: string) =>
+        platformService.writeFile(await resolvePath(p), content),
+      fileExists: async (p: string) => platformService.fileExists(await resolvePath(p)),
       findFiles: async (pattern: string) => {
+        const wp = await getWorkspacePath();
+        if (wp) {
+          return platformService.findFiles(wp, pattern);
+        }
+        // Fallback to extensions directory if workspace path unavailable
         const extensionsDir = await platformService.getExtensionsDirectory();
-        // Find files in the workspace, not the extension directory
-        // This is a simplified version - full implementation would need workspace path
         return platformService.findFiles(extensionsDir, pattern);
       },
     },
@@ -336,6 +367,18 @@ function createExtensionContext(
             );
           },
         };
+      },
+      sendPrompt: async (options: {
+        prompt: string;
+        sessionName?: string;
+        provider?: 'claude-code' | 'claude' | 'openai';
+        model?: string;
+      }): Promise<{ sessionId: string; response: string }> => {
+        const electronAPI = (window as any).electronAPI;
+        if (!electronAPI) {
+          throw new Error('electronAPI not available for sendPrompt');
+        }
+        return electronAPI.invoke('extensions:ai-send-prompt', options);
       },
     };
   }

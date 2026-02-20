@@ -1,0 +1,45 @@
+{
+  "id": "com.nimbalyst.automations",
+  "name": "Automations",
+  "version": "1.0.0",
+  "description": "Schedule recurring AI-powered tasks with file-based automation definitions",
+  "author": "Nimbalyst",
+  "main": "dist/index.js",
+  "styles": "dist/index.css",
+  "apiVersion": "1.0.0",
+  "permissions": {
+    "filesystem": true,
+    "ai": true
+  },
+  "contributions": {
+    "documentHeaders": [
+      {
+        "id": "automation-header",
+        "filePatterns": ["*/nimbalyst-local/automations/*.md"],
+        "displayName": "Automation Schedule",
+        "component": "AutomationDocumentHeader",
+        "priority": 100
+      }
+    ],
+    "aiTools": [
+      "automations.list",
+      "automations.create",
+      "automations.run"
+    ],
+    "fileIcons": {
+      "*/nimbalyst-local/automations/*.md": "auto_mode"
+    },
+    "claudePlugin": {
+      "path": "claude-plugin",
+      "displayName": "Automation Tools",
+      "description": "Create and manage scheduled automations",
+      "enabledByDefault": true,
+      "commands": [
+        {
+          "name": "automation",
+          "description": "Create or manage an automation"
+        }
+      ]
+    }
+  }
+}

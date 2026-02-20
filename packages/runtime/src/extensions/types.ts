@@ -671,6 +671,19 @@ export interface ExtensionAIService {
 
   /** Register a context provider */
   registerContextProvider(provider: ExtensionContextProvider): Disposable;
+
+  /** Send a prompt to the AI and get a response. Defaults to claude-code provider. */
+  sendPrompt(options: {
+    prompt: string;
+    sessionName?: string;
+    /** AI provider to use. Defaults to 'claude-code'. */
+    provider?: 'claude-code' | 'claude' | 'openai';
+    /** Model ID (e.g. 'claude-code:opus', 'claude-code:sonnet'). Uses provider default if omitted. */
+    model?: string;
+  }): Promise<{
+    sessionId: string;
+    response: string;
+  }>;
 }
 
 /**

@@ -33,7 +33,7 @@ import { initMobileSessionControlHandler } from './MobileSessionControlHandler';
 import { SoundNotificationService } from '../SoundNotificationService';
 import { notificationService } from '../NotificationService';
 import { logger } from '../../utils/logger';
-import { windowStates, findWindowByWorkspace } from '../../window/WindowManager';
+import { windowStates, findWindowByWorkspace, getWindowId } from '../../window/WindowManager';
 import { sessionFileTracker } from '../SessionFileTracker';
 import {AnalyticsService} from "../analytics/AnalyticsService.ts";
 import { historyManager } from '../../HistoryManager';
@@ -4322,6 +4322,87 @@ export class AIService {
       clearAIProviderOverrides(workspacePath);
 
       return { success: true };
+    });
+
+    // Extension SDK: Send a prompt and wait for the full response
+    safeHandle('extensions:ai-send-prompt', async (
+      event,
+      options: { prompt: string; sessionName?: string; provider?: string; model?: string }
+    ) => {
+      const { prompt, sessionName } = options;
+      const provider = (options.provider || 'claude-code') as AIProviderType;
+      if (!prompt) {
+        throw new Error('prompt is required');
+      }
+
+      // Get workspace path from window state using BrowserWindow lookup
+      const browserWindow = BrowserWindow.fromWebContents(event.sender);
+      let workspacePath: string | undefined;
+      if (browserWindow) {
+        const windowId = getWindowId(browserWindow);
+        if (windowId !== null) {
+          const windowState = windowStates.get(windowId);
+          workspacePath = windowState?.workspacePath || undefined;
+        }
+      }
+      if (!workspacePath) {
+        throw new Error('No workspace path available for extension AI prompt');
+      }
+
+      // Validate provider is enabled and has required credentials
+      if (!this.isProviderEnabledForWorkspace(provider, workspacePath)) {
+        throw new Error(`Provider ${provider} is not enabled for this workspace`);
+      }
+
+      // Check API key (claude-code uses SSO, so key is optional)
+      if (provider !== 'claude-code') {
+        const apiKey = this.getApiKeyForProvider(provider, workspacePath);
+        if (!apiKey) {
+          throw new Error(`API key not configured for provider ${provider}. Configure it in Settings > AI.`);
+        }
+      }
+
+      // Use explicitly requested model, or fall back to provider default
+      const model = options.model || await ModelRegistry.getDefaultModel(provider);
+      const providerConfig: any = {
+        maxTokens: this.getProviderSetting(provider, 'maxTokens'),
+        temperature: this.getProviderSetting(provider, 'temperature'),
+      };
+
+      // For non-claude-code providers, set the model in provider config
+      if (model && provider !== 'claude-code') {
+        const modelForProvider = extractModelForProvider(model, provider);
+        if (modelForProvider !== null) {
+          providerConfig.model = modelForProvider;
+        }
+      }
+
+      const session = await this.sessionManager.createSession(
+        provider,
+        undefined, // no document context
+        workspacePath,
+        providerConfig,
+        model,
+        'session',
+      );
+
+      // Set session title
+      if (sessionName) {
+        await this.sessionManager.updateSessionTitle(session.id, sessionName, { force: true, markAsNamed: true });
+      }
+
+      // Notify renderer to refresh session list so the new session appears
+      safeSend(event, 'sessions:refresh-list', { workspacePath, sessionId: session.id });
+
+      // Send the prompt via the existing sendMessage handler
+      if (!this.sendMessageHandler) {
+        throw new Error('sendMessageHandler not initialized');
+      }
+
+      const result = await this.sendMessageHandler(event, prompt, undefined, session.id, workspacePath);
+      const response = result?.content || '';
+
+      return { sessionId: session.id, response };
     });
   }
 
