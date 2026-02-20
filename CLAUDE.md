@@ -90,7 +90,7 @@ For detailed information about specific packages, see their CLAUDE.md files:
 ### Marketing Screenshots & Videos
 - **Capture all**: `cd packages/electron && npm run marketing:screenshots`
 - **Capture by category**: `cd packages/electron && npm run marketing:screenshots:grep -- "hero-"` (also: `editor-`, `ai-`, `settings-`, `feature-`, `video-`)
-- **Requires dev server running** on port 5273 (`cd packages/electron && npm run dev`)
+- **Works with dev server or packaged app** - auto-detects which to use (set `MARKETING_APP_PATH` for custom location)
 - **Output**: `packages/electron/marketing/screenshots/{dark,light}/` (1440x900 PNG) and `packages/electron/marketing/videos/{dark,light}/` (WebM)
 - **Post-process videos**: `bash packages/electron/marketing/process-videos.sh` (converts WebM to MP4/GIF via ffmpeg)
 - See [MARKETING_SCREENSHOTS.md](./docs/MARKETING_SCREENSHOTS.md) for architecture, output inventory, and how to add new screenshots

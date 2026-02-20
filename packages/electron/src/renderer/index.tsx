@@ -136,8 +136,8 @@ const isDevInstallation = process.env.NODE_ENV?.toLowerCase() === 'development';
 const isDevMode = process.env.IS_DEV_MODE === 'true';
 const isOfficialBuild = process.env.OFFICIAL_BUILD === 'true';
 
-// Add dev mode indicator to body for styling (only for npm run dev, not packaged builds)
-if (isDevMode) {
+// Add dev mode indicator to body for styling (only for npm run dev, not packaged builds or Playwright)
+if (isDevMode && !(window as any).PLAYWRIGHT) {
   document.body.setAttribute('data-dev-mode', 'true');
 }
 

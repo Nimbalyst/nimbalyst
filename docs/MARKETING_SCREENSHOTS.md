@@ -29,14 +29,32 @@ packages/electron/marketing/
 
 ## Running
 
-Requires the dev server on port 5273:
+Two launch modes are supported. The system auto-detects which to use:
+
+### Option A: Dev mode (for developers with the repo checked out)
 
 ```bash
 cd packages/electron && npm run dev    # in one terminal
 
 # Capture everything (31 tests, ~4 minutes)
 npm run marketing:screenshots
+```
 
+### Option B: Packaged mode (for anyone with Nimbalyst installed)
+
+No dev server needed. Just have Nimbalyst.app installed:
+
+```bash
+# Auto-detects /Applications/Nimbalyst.app
+npm run marketing:screenshots
+
+# Or specify a custom path
+MARKETING_APP_PATH=/path/to/Nimbalyst.app/Contents/MacOS/Nimbalyst npm run marketing:screenshots
+```
+
+### Filtering
+
+```bash
 # Capture by category
 npm run marketing:screenshots:grep -- "hero-"
 npm run marketing:screenshots:grep -- "editor-"
@@ -50,6 +68,10 @@ bash marketing/take-screenshots.sh
 bash marketing/take-screenshots.sh --grep=hero
 bash marketing/take-screenshots.sh --list
 ```
+
+### Priority
+
+If both a dev server and a packaged app are available, the dev server takes priority.
 
 ## Output Inventory
 
