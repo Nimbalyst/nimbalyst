@@ -25,6 +25,9 @@ export interface McpConfigServiceDeps {
   /** Port for the Super Loop progress MCP server */
   superLoopProgressServerPort: number | null;
 
+  /** Port for the session context MCP server (provides session summary, workstream overview, etc.) */
+  sessionContextServerPort: number | null;
+
   /** Loader for user and workspace MCP server configs */
   mcpConfigLoader: ((workspacePath?: string) => Promise<Record<string, any>>) | null;
 
@@ -108,6 +111,15 @@ export class McpConfigService {
         type: 'sse',
         transport: 'sse',
         url: `http://127.0.0.1:${this.deps.superLoopProgressServerPort}/mcp?sessionId=${encodeURIComponent(sessionId)}`
+      };
+    }
+
+    // Include session context MCP server if it's started (provides session summary, workstream overview, etc.)
+    if (this.deps.sessionContextServerPort !== null && sessionId && workspacePath) {
+      config['nimbalyst-session-context'] = {
+        type: 'sse',
+        transport: 'sse',
+        url: `http://127.0.0.1:${this.deps.sessionContextServerPort}/mcp?sessionId=${encodeURIComponent(sessionId)}&workspaceId=${encodeURIComponent(workspacePath)}`
       };
     }
 

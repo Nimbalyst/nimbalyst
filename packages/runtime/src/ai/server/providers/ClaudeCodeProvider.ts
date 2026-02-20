@@ -177,6 +177,7 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
       sessionNamingServerPort: ClaudeCodeProvider.sessionNamingServerPort,
       extensionDevServerPort: ClaudeCodeProvider.extensionDevServerPort,
       superLoopProgressServerPort: ClaudeCodeProvider.superLoopProgressServerPort,
+      sessionContextServerPort: ClaudeCodeProvider.sessionContextServerPort,
       mcpConfigLoader: ClaudeCodeProvider.mcpConfigLoader,
       extensionPluginsLoader: ClaudeCodeProvider.extensionPluginsLoader,
       claudeSettingsEnvLoader: ClaudeCodeProvider.claudeSettingsEnvLoader,
@@ -279,6 +280,10 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
   // Super Loop progress MCP server port (injected from electron main process)
   private static superLoopProgressServerPort: number | null = null;
 
+  // Session context MCP server port (injected from electron main process)
+  // Provides session summary, workstream overview, and recent sessions tools
+  private static sessionContextServerPort: number | null = null;
+
   // MCP config loader (injected from electron main process)
   // Returns merged user + workspace MCP servers
   private static mcpConfigLoader: ((workspacePath?: string) => Promise<Record<string, any>>) | null = null;
@@ -365,6 +370,14 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
    */
   public static setSuperLoopProgressServerPort(port: number | null): void {
     ClaudeCodeProvider.superLoopProgressServerPort = port;
+  }
+
+  /**
+   * Set the session context MCP server port (called from electron main process)
+   * This provides session summary, workstream overview, and recent sessions tools
+   */
+  public static setSessionContextServerPort(port: number | null): void {
+    ClaudeCodeProvider.sessionContextServerPort = port;
   }
 
   /**
@@ -3104,6 +3117,10 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
         'mcp__nimbalyst-mcp__get_session_edited_files',
         'mcp__nimbalyst-mcp__developer_git_commit_proposal',
         'mcp__nimbalyst-mcp__developer_git_log',
+        'mcp__nimbalyst-session-context__get_session_summary',
+        'mcp__nimbalyst-session-context__get_workstream_overview',
+        'mcp__nimbalyst-session-context__list_recent_sessions',
+        'mcp__nimbalyst-session-context__get_workstream_edited_files',
       ];
 
       if (internalMcpTools.includes(toolName)) {

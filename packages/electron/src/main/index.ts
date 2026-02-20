@@ -1053,6 +1053,16 @@ app.whenReady().then(async () => {
     } catch (error) {
         logger.mcp.error('Failed to start Super Loop progress MCP server:', error);
     }
+
+    // Start session context MCP server (session summary, workstream overview, recent sessions)
+    try {
+        const { startSessionContextServer } = await import('./mcp/sessionContextServer');
+        const result = await startSessionContextServer();
+        ClaudeCodeProvider.setSessionContextServerPort(result.port);
+        OpenAICodexProvider.setSessionContextServerPort(result.port);
+    } catch (error) {
+        logger.mcp.error('Failed to start session context MCP server:', error);
+    }
     markEnd('mcp-servers');
 
     // Set up IPC handler to update document state for MCP
@@ -1724,6 +1734,19 @@ app.on('before-quit', async (event) => {
         console.log('[QUIT] Super Loop progress MCP server shutdown complete');
     } catch (error) {
         console.error('[QUIT] Error closing Super Loop progress MCP server:', error);
+    }
+
+    try {
+        // Shutdown session context MCP server
+        const { shutdownSessionContextServer } = await import('./mcp/sessionContextServer');
+        const shutdownPromise = shutdownSessionContextServer();
+        const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 500));
+        await Promise.race([shutdownPromise, timeoutPromise]);
+        ClaudeCodeProvider.setSessionContextServerPort(null);
+        OpenAICodexProvider.setSessionContextServerPort(null);
+        console.log('[QUIT] Session context MCP server shutdown complete');
+    } catch (error) {
+        console.error('[QUIT] Error closing session context MCP server:', error);
     }
 
     try {
