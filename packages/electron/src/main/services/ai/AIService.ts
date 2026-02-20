@@ -613,8 +613,9 @@ export class AIService {
       case 'claude-code':
         return globalApiKeys['anthropic'] || process.env.ANTHROPIC_API_KEY;
       case 'openai':
-      case 'openai-codex':
         return globalApiKeys['openai'] || process.env.OPENAI_API_KEY;
+      case 'openai-codex':
+        return globalApiKeys['openai-codex'] || process.env.OPENAI_API_KEY;
       case 'lmstudio':
         return 'not-required';
       default:
@@ -1378,10 +1379,12 @@ export class AIService {
           // No error if missing - will use SSO login
           break;
         case 'openai':
-        case 'openai-codex':
           if (!apiKey) {
             throw new Error('OpenAI API key not configured');
           }
+          break;
+        case 'openai-codex':
+          // Codex SDK uses its own auth (codex auth login), API key is optional
           break;
         case 'lmstudio':
           // LMStudio doesn't need an API key, just the base URL
@@ -1718,7 +1721,7 @@ export class AIService {
             break;
           case 'openai-codex':
             // Codex SDK uses its own auth (codex auth login), API key is optional
-            apiKey = apiKeys['openai'] || process.env.OPENAI_API_KEY;
+            apiKey = apiKeys['openai-codex'] || process.env.OPENAI_API_KEY;
             requiresApiKey = false;
             break;
           case 'lmstudio':
@@ -3857,6 +3860,16 @@ export class AIService {
           }
         }
 
+        // Save OpenAI Codex key
+        if (settings.apiKeys['openai-codex'] !== undefined) {
+          const key = settings.apiKeys['openai-codex'];
+          if (!key) {
+            delete currentKeys['openai-codex'];
+          } else if (key !== this.maskApiKey(currentKeys['openai-codex'] || '')) {
+            currentKeys['openai-codex'] = key as string;
+          }
+        }
+
         // Save LMStudio URL
         if (settings.apiKeys.lmstudio_url !== undefined) {
           currentKeys['lmstudio_url'] = settings.apiKeys.lmstudio_url as string;
@@ -3934,8 +3947,13 @@ export class AIService {
           // No error if missing - will use SSO login
           break;
         case 'openai':
-        case 'openai-codex':
           apiKey = apiKeys['openai'] || process.env.OPENAI_API_KEY;
+          if (!apiKey) {
+            return { success: false, error: 'OpenAI API key not configured' };
+          }
+          break;
+        case 'openai-codex':
+          apiKey = apiKeys['openai-codex'] || process.env.OPENAI_API_KEY;
           if (!apiKey) {
             return { success: false, error: 'OpenAI API key not configured' };
           }
@@ -4191,7 +4209,7 @@ export class AIService {
           models: providerSettings['openai']?.models
         },
         'openai-codex': {
-          // Codex SDK uses its own auth (codex auth login), so don't require apiKeys['openai']
+          // Codex SDK uses its own auth (codex auth login), API key is optional
           enabled: providerSettings['openai-codex']?.enabled === true && getBetaFeatures()['codex'] === true,
         },
         'lmstudio': {

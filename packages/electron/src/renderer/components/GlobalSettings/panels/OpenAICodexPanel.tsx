@@ -75,14 +75,11 @@ export function OpenAICodexPanel({
           <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
             <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">API Configuration</h4>
             <div className="api-key-section mt-4">
-              <p className="text-[13px] text-[var(--nim-text-muted)] mb-3">
-                OpenAI Codex uses the same API key as OpenAI (GPT models)
-              </p>
               <div className="api-key-row flex gap-2 items-center">
                 <input
                   type="password"
-                  value={apiKeys.openai || ''}
-                  onChange={(e) => onApiKeyChange('openai', e.target.value)}
+                  value={apiKeys['openai-codex'] || ''}
+                  onChange={(e) => onApiKeyChange('openai-codex', e.target.value)}
                   onFocus={(e) => e.target.select()}
                   placeholder="sk-..."
                   className="api-key-input flex-1 py-2 px-3 rounded-md bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] text-[var(--nim-text)] outline-none font-mono focus:border-[var(--nim-primary)]"
