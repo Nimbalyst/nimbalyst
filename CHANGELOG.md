@@ -20,6 +20,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.54.0] - 2026-02-20
+
+
+### Added
+- Clicking links in terminal opens them in default browser
+- Configurable document history retention in Advanced Settings
+- Custom tracker types fully supported in bottom panel and document header
+- Account deletion for Apple App Store compliance (5.1.1)
+- App Store compliance: privacy manifest and in-app privacy policy link
+- Tracker creation writes canonical frontmatter format
+- Playwright-based marketing screenshot and video capture system
+- Show restart indicator line in AI session transcripts (dev mode)
+
+### Changed
+- Unified file actions across context menus
+
+### Fixed
+- Share link fails until logout/login due to missing server URL
+- Improve session loading performance for large transcripts
+- Terminal cursor polish: bar style, focus-aware color, ghost cursor fix
+- Terminal cursor only blinks when terminal has focus
+- Terminal panel keeps terminals alive when hidden, fixing cursor position bug
+- Skip re-uploading TTL-expired sessions to sync server
+- Add optional chaining for terminal renderer setTheme call
+- Mobile chat input now clears immediately after sending
+- Model selector dropdown no longer clipped by agent panel overflow
+
 ## [0.53.13] - 2026-02-19
 
 
