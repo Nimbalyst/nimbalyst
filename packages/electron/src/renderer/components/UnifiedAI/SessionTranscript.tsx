@@ -291,6 +291,15 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   const isDevelopment = import.meta.env.DEV;
   const showPromptAdditions = isDevelopment && showPromptAdditionsSetting;
 
+  // App start time for restart indicator (dev mode only)
+  const [appStartTime, setAppStartTime] = useState<number | null>(null);
+  useEffect(() => {
+    if (!isDevelopment) return;
+    window.electronAPI.extensionDevTools.getProcessInfo()
+      .then(info => setAppStartTime(info.startTime))
+      .catch(() => {}); // Silently ignore if not available
+  }, [isDevelopment]);
+
   // File action atoms
   const hasExternalEditor = useAtomValue(hasExternalEditorAtom);
   const externalEditorName = useAtomValue(externalEditorNameAtom);
@@ -1442,6 +1451,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
             externalEditorName={externalEditorName}
             onCompact={handleCompact}
             promptAdditions={showPromptAdditions ? promptAdditions : null}
+            appStartTime={appStartTime ?? undefined}
           />
         </div>
       )}

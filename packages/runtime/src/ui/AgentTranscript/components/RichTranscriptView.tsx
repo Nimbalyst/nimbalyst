@@ -371,6 +371,8 @@ interface RichTranscriptViewProps {
   } | null;
   /** Optional: Current teammates/agents from session metadata, used to show status on spawn cards */
   currentTeammates?: Array<{ agentId: string; status: 'running' | 'completed' | 'errored' | 'idle' }>;
+  /** Optional: App start time (epoch ms) for rendering restart indicator line (dev mode only) */
+  appStartTime?: number;
   // Note: Interactive widgets read their host from interactiveWidgetHostAtom(sessionId)
 }
 
@@ -552,7 +554,7 @@ const extractEditsFromToolMessage = (message: Message): any[] => {
 export const RichTranscriptView = React.forwardRef<
   { scrollToMessage: (index: number) => void; scrollToTop: () => void },
   RichTranscriptViewProps
->(({ sessionId, sessionStatus, isProcessing, messages, provider, settings: propsSettings, onSettingsChange, showSettings, documentContext, workspacePath, renderEmptyExtra, readFile, onOpenFile, onCompact, promptAdditions, currentTeammates }, ref) => {
+>(({ sessionId, sessionStatus, isProcessing, messages, provider, settings: propsSettings, onSettingsChange, showSettings, documentContext, workspacePath, renderEmptyExtra, readFile, onOpenFile, onCompact, promptAdditions, currentTeammates, appStartTime }, ref) => {
   const [collapsedMessages, setCollapsedMessages] = useState<Set<number>>(new Set());
   const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
   const scrollButtonRef = useRef<HTMLDivElement>(null);
@@ -626,6 +628,22 @@ export const RichTranscriptView = React.forwardRef<
     }
     return -1;
   }, [messages, promptAdditions]);
+
+  // Compute restart line position: find the first visible message after appStartTime
+  // The red restart indicator line renders before this message, or at the bottom if all messages precede the restart
+  const { restartAfterIndex, restartAtBottom } = useMemo(() => {
+    if (!appStartTime || messages.length === 0) return { restartAfterIndex: -1, restartAtBottom: false };
+    // If all messages are before restart, show at bottom
+    if (messages[messages.length - 1].timestamp <= appStartTime) return { restartAfterIndex: -1, restartAtBottom: true };
+    // Find the first message after restart that will actually be rendered visibly:
+    // Skip tool messages (they render hidden, grouped with the next assistant message)
+    for (let i = 0; i < messages.length; i++) {
+      if (messages[i].timestamp > appStartTime && messages[i].role !== 'tool') {
+        return { restartAfterIndex: i, restartAtBottom: false };
+      }
+    }
+    return { restartAfterIndex: -1, restartAtBottom: false };
+  }, [messages, appStartTime]);
 
   // Find pending (unresolved) ToolPermission widgets and the VList indices where they're actually rendered.
   // Tool messages are hidden (display:none) and rendered inside the next assistant message via toolMessagesBefore,
@@ -1559,6 +1577,16 @@ export const RichTranscriptView = React.forwardRef<
                         }}
                         className={`rich-transcript-message rounded-md relative max-w-full overflow-x-hidden break-words mb-2 ${isUser ? 'user bg-[var(--nim-bg-secondary)]' : 'assistant bg-[var(--nim-bg)]'} ${settings.compactMode ? 'compact p-2' : 'normal p-3'} ${!isNewGroup ? 'continuation -mt-1' : ''}`}
                       >
+                        {/* Restart indicator line (dev mode only) - rendered before the first message after restart */}
+                        {restartAfterIndex >= 0 && index === restartAfterIndex && (
+                          <div className="flex items-center gap-3 mb-3">
+                            <div className="flex-1 h-px bg-[var(--nim-error)]" />
+                            <span className="text-[11px] font-medium text-[var(--nim-error)] whitespace-nowrap">
+                              Nimbalyst restarted {formatMessageTime(appStartTime!)}
+                            </span>
+                            <div className="flex-1 h-px bg-[var(--nim-error)]" />
+                          </div>
+                        )}
                         {isNewGroup && (
                           <div className="rich-transcript-message-header flex items-center gap-2 mb-1.5">
                             <div className={`rich-transcript-message-avatar w-7 h-7 rounded-full shrink-0 flex items-center justify-center ${isUser ? 'user' : 'assistant'}`}>
@@ -1671,9 +1699,20 @@ export const RichTranscriptView = React.forwardRef<
                             </div>
                           );
                         })()}
+
                       </div>
                     );
                   })}
+                  {/* Restart indicator at bottom when all messages precede the restart (dev mode only) */}
+                  {restartAtBottom && (
+                    <div key="restart-bottom" className="flex items-center gap-3 my-2 px-3">
+                      <div className="flex-1 h-px bg-[var(--nim-error)]" />
+                      <span className="text-[11px] font-medium text-[var(--nim-error)] whitespace-nowrap">
+                        Nimbalyst restarted {formatMessageTime(appStartTime!)}
+                      </span>
+                      <div className="flex-1 h-px bg-[var(--nim-error)]" />
+                    </div>
+                  )}
                   {isWaitingForResponse && (
                     <div key="waiting" className="rich-transcript-waiting flex items-center gap-2 text-[var(--nim-text-muted)] italic py-2 px-4 mb-2">
                       <div className="rich-transcript-waiting-dots flex gap-1">

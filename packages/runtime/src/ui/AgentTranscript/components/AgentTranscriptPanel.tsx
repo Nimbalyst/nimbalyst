@@ -64,6 +64,8 @@ interface AgentTranscriptPanelProps {
     timestamp: number;
     messageIndex: number; // Index of user message this belongs to (for stable positioning)
   } | null;
+  /** Optional: App start time (epoch ms) for rendering restart indicator line (dev mode only) */
+  appStartTime?: number;
   // Note: Interactive widgets read their host from interactiveWidgetHostAtom(sessionId)
 }
 
@@ -95,7 +97,8 @@ const AgentTranscriptPanelComponent = React.forwardRef<
   onOpenInExternalEditor,
   externalEditorName,
   onCompact,
-  promptAdditions
+  promptAdditions,
+  appStartTime
 }, ref) => {
   // Show floating actions if explicitly enabled, otherwise default to showing when sidebar is visible
   const shouldShowFloatingActions = showFloatingActions ?? !hideSidebar;
@@ -319,6 +322,7 @@ const AgentTranscriptPanelComponent = React.forwardRef<
           onCompact={onCompact}
           promptAdditions={promptAdditions}
           currentTeammates={sessionData.metadata?.currentTeammates as Array<{ agentId: string; status: 'running' | 'completed' | 'errored' | 'idle' }> | undefined}
+          appStartTime={appStartTime}
         />
 
         {/* Floating Actions - show based on showFloatingActions prop */}
@@ -479,6 +483,9 @@ export const AgentTranscriptPanel = React.memo(
 
     // Token usage changed - check reference
     if (prevData.tokenUsage !== nextData.tokenUsage) return false;
+
+    // App start time changed - must re-render (restart indicator)
+    if (prevProps.appStartTime !== nextProps.appStartTime) return false;
 
     // All checks passed - skip re-render
     return true;
