@@ -293,14 +293,14 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
     setExpandedFolders(new Set(allPaths));
   }, [directoryTree]);
 
-  // Determine which result to show (local takes precedence while waiting for tool to complete)
-  const displayResult = localResult || (completedState ? {
+  // Determine which result to show (tool result wins once available; local is only for pending UI)
+  const displayResult = completedState ? {
     success: completedState.type === 'committed',
     commitHash: completedState.type === 'committed' ? completedState.commitHash : undefined,
     commitDate: completedState.type === 'committed' ? completedState.commitDate : undefined,
     error: completedState.type === 'cancelled' ? 'Cancelled' :
            completedState.type === 'error' ? completedState.error : undefined,
-  } : null);
+  } : localResult;
 
   const toggleFile = useCallback((filePath: string) => {
     setFilesToStage((prev) => {
