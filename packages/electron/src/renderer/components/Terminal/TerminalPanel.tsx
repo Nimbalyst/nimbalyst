@@ -18,6 +18,8 @@ export interface TerminalPanelProps {
   workspacePath: string;
   /** Whether this terminal tab is currently active/visible */
   isActive: boolean;
+  /** Whether the parent bottom panel is visible */
+  panelVisible?: boolean;
   /** Optional callback when terminal exits */
   onExit?: (exitCode: number) => void;
 }
@@ -234,6 +236,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
   terminalId,
   workspacePath,
   isActive,
+  panelVisible,
   onExit,
 }) => {
   // Support legacy sessionId prop name
@@ -380,7 +383,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
           fontFamily: '"SF Mono", Monaco, "Courier New", monospace',
           scrollback: 50000,
           cursorBlink: false,
-          cursorStyle: 'block',
+          cursorStyle: 'bar',
           theme: getTerminalTheme(),
         });
 
@@ -408,19 +411,36 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
           terminalInstanceRef.current = terminal;
           fitAddonRef.current = fitAddon;
 
-          // Enable cursor blinking only when the terminal has focus
+          // Show cursor as theme color when focused, dim gray when unfocused.
+          // Use renderer.setTheme() directly since Terminal.options.theme setter
+          // warns that runtime theme changes aren't fully supported.
+          const focusedCursorColor = getTerminalTheme().cursor;
+          const unfocusedCursorColor = '#666666';
+
           focusInHandler = () => {
-            if (terminal && !disposed) {
-              terminal.options.cursorBlink = true;
+            if (terminal?.renderer && !disposed) {
+              terminal.renderer.setTheme({
+                ...terminal.options.theme,
+                cursor: focusedCursorColor,
+              });
             }
           };
           focusOutHandler = () => {
-            if (terminal && !disposed) {
-              terminal.options.cursorBlink = false;
+            if (terminal?.renderer && !disposed) {
+              terminal.renderer.setTheme({
+                ...terminal.options.theme,
+                cursor: unfocusedCursorColor,
+              });
             }
           };
           terminalRef.current.addEventListener('focusin', focusInHandler);
           terminalRef.current.addEventListener('focusout', focusOutHandler);
+
+          // Start with unfocused cursor color
+          terminal.renderer.setTheme({
+            ...terminal.options.theme,
+            cursor: unfocusedCursorColor,
+          });
 
           // CRITICAL: Set up PTY output listener BEFORE scrollback restoration,
           // but queue the output to prevent race conditions.
@@ -605,6 +625,11 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
 
           setIsInitialized(true);
           hasInitializedRef.current = true;
+
+          // Auto-focus if this is the active terminal and panel is visible
+          if (isActive) {
+            setTimeout(() => terminal?.focus(), 50);
+          }
         }
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -644,16 +669,23 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [terminalId, workspacePath, shouldInit]);
 
-  // Focus terminal when becoming active
+  // Blur terminal when panel hides, focus when it shows
   useEffect(() => {
-    if (isActive && terminalInstanceRef.current) {
-      terminalInstanceRef.current.focus();
+    if (!terminalInstanceRef.current) return;
+    if (isActive && panelVisible) {
+      // Panel became visible - focus and re-fit after DOM updates
+      setTimeout(() => {
+        terminalInstanceRef.current?.focus();
+      }, 50);
+    } else if (!panelVisible) {
+      // Panel hidden - blur terminal
+      terminalInstanceRef.current.blur();
     }
-  }, [isActive]);
+  }, [isActive, panelVisible]);
 
-  // Re-fit when becoming active (in case size changed while hidden)
+  // Re-fit when becoming active or panel becomes visible (size may have changed while hidden)
   useEffect(() => {
-    if (isActive && fitAddonRef.current) {
+    if (isActive && panelVisible && fitAddonRef.current) {
       setTimeout(() => {
         try {
           fitAddonRef.current?.fit();
@@ -666,7 +698,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
         }
       }, 50);
     }
-  }, [isActive, sessionId]);
+  }, [isActive, panelVisible, sessionId]);
 
   // Listen for theme changes and update terminal colors
   useEffect(() => {
@@ -705,6 +737,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
         style={{
           flex: 1,
           overflow: 'hidden',
+          caretColor: 'transparent',
         }}
         data-testid="terminal-container"
         onContextMenu={handleContextMenu}

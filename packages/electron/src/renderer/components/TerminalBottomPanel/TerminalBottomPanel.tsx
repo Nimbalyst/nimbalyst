@@ -357,6 +357,7 @@ export const TerminalBottomPanel: React.FC<TerminalBottomPanelProps> = ({
                 terminalId={terminal.id}
                 workspacePath={workspacePath}
                 isActive={activeTerminalId === terminal.id}
+                panelVisible={visible}
                 onExit={(exitCode) => handleTerminalExit(terminal.id, exitCode)}
               />
             </div>
