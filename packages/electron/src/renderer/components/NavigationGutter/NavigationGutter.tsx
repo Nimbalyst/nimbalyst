@@ -10,6 +10,7 @@ import { TrustIndicator } from '../TrustIndicator';
 import { ExtensionDevIndicator } from '../ExtensionDevIndicator';
 import { ClaudeUsageIndicator } from '../ClaudeUsageIndicator';
 import { CodexUsageIndicator } from '../CodexUsageIndicator';
+import { VoiceModeButton } from '../UnifiedAI/VoiceModeButton';
 import { useExtensionGutterButtons } from '../../extensions/panels/usePanels';
 import { HelpTooltip } from '../../help';
 import { terminalFeatureAvailableAtom } from '../../store/atoms/appSettings';
@@ -344,6 +345,11 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
             ))}
         </div>
       )}
+
+      {/* Voice Mode - persistent button with integrated context ring */}
+      <div className="nav-section nav-voice-mode flex flex-col items-center gap-1 w-full px-1.5 py-1">
+        <VoiceModeButton workspacePath={workspacePath} />
+      </div>
 
       {/* Bottom Panel Toggles - Above Settings */}
       <div className="nav-section nav-bottom-panels flex flex-col items-center gap-1 w-full px-1.5 py-1">

@@ -71,6 +71,7 @@ export class RealtimeAPIClient {
   private onStopSessionCallback: (() => boolean) | null = null;
   private onGetSessionSummaryCallback: (() => Promise<{ success: boolean; summary?: string; error?: string }>) | null = null;
   private onAskCodingAgentCallback: ((question: string) => Promise<{ success: boolean; answer?: string; error?: string }>) | null = null;
+  private onPauseListeningCallback: (() => void) | null = null;
   private claudeCodeSessionId: string;
   private workspacePath: string | null;
   private window: Electron.BrowserWindow;
@@ -92,6 +93,9 @@ export class RealtimeAPIClient {
   // Current response tracking
   private currentResponseId: string | null = null;
   private hasActiveResponse: boolean = false;
+
+  // When true, the inactivity monitor is suspended (e.g. voice is sleeping)
+  private listeningPaused: boolean = false;
 
   constructor(
     apiKey: string,
@@ -200,6 +204,13 @@ export class RealtimeAPIClient {
    */
   setOnAskCodingAgent(callback: (question: string) => Promise<{ success: boolean; answer?: string; error?: string }>): void {
     this.onAskCodingAgentCallback = callback;
+  }
+
+  /**
+   * Set callback for when the voice agent wants to pause listening
+   */
+  setOnPauseListening(callback: () => void): void {
+    this.onPauseListeningCallback = callback;
   }
 
   /**
@@ -387,12 +398,13 @@ Tools:
 - get_session_summary: Get a summary of what's been discussed in this session.
 
 Guidelines:
-- For coding tasks: use submit_agent_prompt, say "On it" or similar, then stay quiet until the coding agent finishes
-- For ANY question about this project, codebase, files, features, implementation, timeouts, configurations, or how things work: ALWAYS say a brief acknowledgement first (like "Let me check on that" or "Asking the coding agent"), then use ask_coding_agent, then summarize the answer conversationally
-- Only answer directly for truly general knowledge questions completely unrelated to this project (like "what time is it" or "tell me a joke")
-- For "[INTERNAL: ...]" messages: these are completion notifications from the coding agent - briefly acknowledge ("Done" + short summary)
-- When summarizing coding agent responses: adapt length to complexity, paraphrase technical details naturally for speech
-- Never read code, file paths, or technical details verbatim
+- Be terse. One short sentence per response. Never say filler like "I'll let you know when it's ready" or "Got it, I'll take care of that for you." Just state what you did.
+- For coding tasks: use submit_agent_prompt, say what you did in ~5 words (e.g. "I've requested a commit proposal"), then stop talking. Do NOT narrate what will happen next.
+- For questions about this project: use ask_coding_agent. The answer will come back as the tool result. Summarize it conversationally for the user. This is critical -- you MUST speak the answer when the tool result arrives.
+- Only answer directly for truly general knowledge questions unrelated to this project.
+- For "[INTERNAL: Task complete. Result: ...]" messages: these are completion notifications from a previously submitted coding task. Briefly relay the result. Do NOT say "I finished that task" -- just state the result.
+- For "[INTERNAL: User is now viewing ...]" messages: the user switched to a different file. Do NOT announce this. Just silently note which file the user is looking at so you can reference it if they ask about "this file" or "what I'm looking at".
+- When summarizing coding agent responses: be concise, paraphrase for speech. Never read code or file paths verbatim.
 
 CRITICAL - Passing through user requests:
 When the user says "ask the coding agent..." or "tell the coding agent..." or similar, you MUST pass their request VERBATIM to the coding agent. Do NOT rephrase, interpret, or add your own context. Examples:
@@ -482,6 +494,16 @@ Your job is to be a voice relay, not to interpret or improve the user's requests
             required: ['question'],
           },
         },
+        {
+          type: 'function',
+          name: 'pause_listening',
+          description: 'Pause listening for voice input. The voice session stays active but the microphone goes to sleep. Use when the user says to stop listening, go to sleep, be quiet, or pause. The mic will wake up automatically when you next speak to the user (e.g. when a task completes).',
+          parameters: {
+            type: 'object',
+            properties: {},
+            required: [],
+          },
+        },
       ],
     };
 
@@ -501,6 +523,11 @@ Your job is to be a voice relay, not to interpret or improve the user's requests
     if (!this.ws || !this.connected) {
       console.error('[RealtimeAPIClient] Cannot send audio - not connected');
       return;
+    }
+
+    // Audio is flowing again -- clear paused state
+    if (this.listeningPaused) {
+      this.listeningPaused = false;
     }
 
     const event = {
@@ -528,6 +555,39 @@ Your job is to be a voice relay, not to interpret or improve the user's requests
   }
 
   /**
+   * Inject a context message into the conversation without triggering a response.
+   * Used for silent notifications like session switches and file changes.
+   */
+  injectContext(text: string): boolean {
+    if (!this.ws || !this.connected) {
+      return false;
+    }
+
+    try {
+      const event = {
+        type: 'conversation.item.create',
+        item: {
+          type: 'message',
+          role: 'user',
+          content: [
+            {
+              type: 'input_text',
+              text,
+            },
+          ],
+        },
+      };
+
+      this.ws.send(JSON.stringify(event));
+      // No createResponse() -- this is silent context injection
+      return true;
+    } catch (error) {
+      console.error('[RealtimeAPIClient] Failed to inject context:', error);
+      return false;
+    }
+  }
+
+  /**
    * Send a text message from the user to the assistant
    * This is used to notify the voice assistant when the coding agent completes
    * Returns true if message was sent successfully, false otherwise
@@ -537,6 +597,10 @@ Your job is to be a voice relay, not to interpret or improve the user's requests
       console.error('[RealtimeAPIClient] Cannot send user message - WebSocket not connected');
       return false;
     }
+
+    // Resume from paused state -- activity is happening again
+    this.listeningPaused = false;
+    this.updateActivity();
 
     try {
       const event = {
@@ -683,6 +747,26 @@ Your job is to be a voice relay, not to interpret or improve the user's requests
         break;
       }
 
+      case 'pause_listening': {
+        try {
+          this.listeningPaused = true;
+          if (this.onPauseListeningCallback) {
+            this.onPauseListeningCallback();
+          }
+          this.sendFunctionCallResult(callId, {
+            success: true,
+            message: 'Listening paused. The mic will wake up when you next speak to the user.',
+          });
+        } catch (error) {
+          console.error('[RealtimeAPIClient] Failed to pause listening:', error);
+          this.sendFunctionCallResult(callId, {
+            success: false,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+        break;
+      }
+
       default: {
         console.error('[RealtimeAPIClient] Unknown function call:', name);
         this.sendFunctionCallResult(callId, { error: 'Unknown function' });
@@ -759,6 +843,9 @@ Your job is to be a voice relay, not to interpret or improve the user's requests
   private startInactivityMonitor(): void {
     // Check every 30 seconds
     this.inactivityCheckInterval = setInterval(() => {
+      // Don't disconnect while listening is paused -- user explicitly asked to sleep
+      if (this.listeningPaused) return;
+
       const inactiveMs = Date.now() - this.lastActivityTime;
 
       if (inactiveMs >= this.INACTIVITY_TIMEOUT_MS) {
@@ -865,5 +952,16 @@ Your job is to be a voice relay, not to interpret or improve the user's requests
    */
   isConnected(): boolean {
     return this.connected;
+  }
+
+  /**
+   * Set the listening paused state.
+   * When paused, the inactivity monitor won't disconnect the WebSocket.
+   */
+  setListeningPaused(paused: boolean): void {
+    this.listeningPaused = paused;
+    if (!paused) {
+      this.updateActivity();
+    }
   }
 }

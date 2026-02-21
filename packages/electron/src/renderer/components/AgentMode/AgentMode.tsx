@@ -43,6 +43,7 @@ import {
   pushNavigationEntryAtom,
   isRestoringNavigationAtom,
   markSessionReadAtom,
+  activeSessionIdAtom,
 } from '../../store';
 import { errorNotificationService } from '../../services/ErrorNotificationService';
 import { initWorkstreamState, loadWorkstreamStates, workstreamStateAtom, workstreamActiveChildAtom, setWorkstreamActiveChildAtom, setWorktreeActiveSessionAtom } from '../../store/atoms/workstreamState';
@@ -53,6 +54,7 @@ import { initSessionListListeners } from '../../store/listeners/sessionListListe
 import { initSessionTranscriptListeners } from '../../store/listeners/sessionTranscriptListeners';
 import { initClaudeUsageListeners } from '../../store/listeners/claudeUsageListeners';
 import { initCodexUsageListeners } from '../../store/listeners/codexUsageListeners';
+import { initVoiceModeListeners } from '../../store/listeners/voiceModeListeners';
 import { fetchSessionSharesAtom } from '../../store';
 import type { WorktreeCreateResult, SessionCreateResult } from '../../../shared/ipc/types';
 import { BlitzDialog } from '../BlitzDialog/BlitzDialog';
@@ -148,6 +150,14 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
   // The actual active session is either the active child OR the workstream parent
   const actualActiveSessionId = activeChildId || selectedWorkstream?.id || null;
 
+  // Sync the active session to the global atom so nav gutter components
+  // (VoiceModeButton) can read it without workstream context
+  useEffect(() => {
+    if (actualActiveSessionId) {
+      store.set(activeSessionIdAtom, actualActiveSessionId);
+    }
+  }, [actualActiveSessionId]);
+
   // Initialize on mount
   useEffect(() => {
     initSessionList(workspacePath);
@@ -187,6 +197,12 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
   // Initialize Codex usage listeners (global, runs once)
   useEffect(() => {
     const cleanup = initCodexUsageListeners();
+    return cleanup;
+  }, []);
+
+  // Initialize voice mode listeners (global, runs once)
+  useEffect(() => {
+    const cleanup = initVoiceModeListeners();
     return cleanup;
   }, []);
 

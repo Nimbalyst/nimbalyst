@@ -41,11 +41,12 @@ export interface SystemPromptConfig {
 export interface VoiceModeSettings {
   enabled: boolean;
   voice: VoiceId;
-  showTranscription: boolean;
   turnDetection: TurnDetectionConfig;
   voiceAgentPrompt: SystemPromptConfig;
   codingAgentPrompt: SystemPromptConfig;
   submitDelayMs: number;
+  /** How long (ms) to keep listening after speech ends before sleeping. Default 10000. */
+  listenWindowMs: number;
 }
 
 /**
@@ -54,7 +55,6 @@ export interface VoiceModeSettings {
 const defaultVoiceModeSettings: VoiceModeSettings = {
   enabled: false,
   voice: 'alloy',
-  showTranscription: true,
   turnDetection: {
     mode: 'server_vad',
     vadThreshold: 0.5,
@@ -64,6 +64,7 @@ const defaultVoiceModeSettings: VoiceModeSettings = {
   voiceAgentPrompt: {},
   codingAgentPrompt: {},
   submitDelayMs: 3000,
+  listenWindowMs: 10000,
 };
 
 /**
@@ -102,13 +103,6 @@ function schedulePersist(settings: VoiceModeSettings): void {
  */
 export const voiceModeEnabledAtom = atom(
   (get) => get(voiceModeSettingsAtom).enabled
-);
-
-/**
- * Show transcription setting.
- */
-export const showTranscriptionAtom = atom(
-  (get) => get(voiceModeSettingsAtom).showTranscription
 );
 
 /**
@@ -191,11 +185,11 @@ export async function initVoiceModeSettings(): Promise<VoiceModeSettings> {
       return {
         enabled: settings.enabled || false,
         voice: settings.voice || 'alloy',
-        showTranscription: settings.showTranscription !== false,
         turnDetection: settings.turnDetection || defaultVoiceModeSettings.turnDetection,
         voiceAgentPrompt: settings.voiceAgentPrompt || {},
         codingAgentPrompt: settings.codingAgentPrompt || {},
         submitDelayMs: settings.submitDelayMs ?? 3000,
+        listenWindowMs: settings.listenWindowMs ?? 10000,
       };
     }
   } catch (error) {

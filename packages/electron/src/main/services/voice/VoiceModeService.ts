@@ -359,6 +359,10 @@ export function initVoiceModeService() {
         }
       }
 
+      // NOTE: Initial active file context is sent by the renderer via
+      // voice-mode:editor-context-changed IPC after voiceActiveSessionIdAtom is set.
+      // The voiceModeListeners subscription fires checkAndReportFileChange automatically.
+
       // Load custom voice agent prompt, turn detection settings, and voice
       const voiceModeSettings = voiceModeSettingsStore.get('voiceMode') as {
         voice?: 'alloy' | 'ash' | 'ballad' | 'coral' | 'echo' | 'sage' | 'shimmer' | 'verse' | 'marin' | 'cedar';
@@ -383,35 +387,38 @@ export function initVoiceModeService() {
       // Create PoC instance with agent session context, custom prompt, turn detection, and voice
       const poc = new RealtimeAPIClient(apiKey, sessionId, workspacePath, window, sessionContext, customPrompt, turnDetection, selectedVoice);
 
+      // Helper: get the current linked session ID (may change if user switches sessions)
+      const currentSessionId = () => activeVoiceSession?.sessionId ?? sessionId;
+
       // Set up callbacks to forward audio/text to renderer
-      // Include sessionId in the event payload so the renderer can filter
+      // Use currentSessionId() so events always target the current session
       poc.setOnAudio((audioBase64) => {
         if (window && !window.isDestroyed()) {
-          window.webContents.send('voice-mode:audio-received', { sessionId, audioBase64 });
+          window.webContents.send('voice-mode:audio-received', { sessionId: currentSessionId(), audioBase64 });
         }
       });
 
       poc.setOnText((text) => {
         if (window && !window.isDestroyed()) {
-          window.webContents.send('voice-mode:text-received', { sessionId, text });
+          window.webContents.send('voice-mode:text-received', { sessionId: currentSessionId(), text });
         }
       });
 
       poc.setOnUserTranscript((transcript) => {
         if (window && !window.isDestroyed()) {
-          window.webContents.send('voice-mode:transcript-complete', { sessionId, transcript });
+          window.webContents.send('voice-mode:transcript-complete', { sessionId: currentSessionId(), transcript });
         }
       });
 
       poc.setOnUserTranscriptDelta((delta, itemId) => {
         if (window && !window.isDestroyed()) {
-          window.webContents.send('voice-mode:transcript-delta', { sessionId, delta, itemId });
+          window.webContents.send('voice-mode:transcript-delta', { sessionId: currentSessionId(), delta, itemId });
         }
       });
 
       poc.setOnTokenUsage((usage) => {
         if (window && !window.isDestroyed()) {
-          window.webContents.send('voice-mode:token-usage', { sessionId, usage });
+          window.webContents.send('voice-mode:token-usage', { sessionId: currentSessionId(), usage });
         }
       });
 
@@ -422,7 +429,7 @@ export function initVoiceModeService() {
         if (window && !window.isDestroyed()) {
           // Include coding agent prompt settings so they can be passed to the provider
           window.webContents.send('voice-mode:submit-prompt', {
-            sessionId,
+            sessionId: currentSessionId(),
             workspacePath,
             prompt,
             codingAgentPrompt: codingAgentPromptSettings,
@@ -432,20 +439,26 @@ export function initVoiceModeService() {
 
       poc.setOnInterruption(() => {
         if (window && !window.isDestroyed()) {
-          window.webContents.send('voice-mode:interrupt', { sessionId });
+          window.webContents.send('voice-mode:interrupt', { sessionId: currentSessionId() });
         }
       });
 
       poc.setOnError((error) => {
         console.error('[VoiceModeService] Error from OpenAI:', error.type, error.message);
         if (window && !window.isDestroyed()) {
-          window.webContents.send('voice-mode:error', { sessionId, error });
+          window.webContents.send('voice-mode:error', { sessionId: currentSessionId(), error });
         }
       });
 
       // Set up callbacks for voice agent tools
       poc.setOnStopSession(() => {
         return stopVoiceSession();
+      });
+
+      poc.setOnPauseListening(() => {
+        if (window && !window.isDestroyed()) {
+          window.webContents.send('voice-mode:pause-listening', { sessionId: currentSessionId() });
+        }
       });
 
       poc.setOnGetSessionSummary(async () => {
@@ -457,13 +470,21 @@ export function initVoiceModeService() {
         };
       });
 
+      // Track whether an ask_coding_agent call is in-flight so the
+      // completion listener doesn't also fire an [INTERNAL] notification
+      // for the same response (which would cause the voice agent to say
+      // "I finished that task" instead of summarizing the answer).
+      let askCodingAgentInFlight = false;
+
       poc.setOnAskCodingAgent(async (question: string) => {
         // Send the question to the coding agent via the existing prompt system
         // The [VOICE] prefix signals this is from the voice assistant
         // The system prompt (via isVoiceMode in documentContext) provides full context
         const questionPrompt = `[VOICE] ${question}`;
+        const targetSessionId = currentSessionId();
 
-        console.log('[VoiceModeService] ask_coding_agent called with question:', question);
+        console.log('[VoiceModeService] ask_coding_agent called with question:', question, 'target:', targetSessionId);
+        askCodingAgentInFlight = true;
 
         try {
           if (window && !window.isDestroyed()) {
@@ -474,10 +495,11 @@ export function initVoiceModeService() {
               // Set up a one-time listener for the response via ipcMain
               // This listens for the same event that submit_agent_prompt uses
               const responseHandler = (_event: any, data: { sessionId: string; summary: string }) => {
-                if (data.sessionId === sessionId) {
+                if (data.sessionId === targetSessionId) {
                   // Clean up
                   ipcMain.removeListener('voice-mode:agent-task-complete', responseHandler);
                   if (timeoutId) clearTimeout(timeoutId);
+                  askCodingAgentInFlight = false;
 
                   // Log what we received
                   console.log('[VoiceModeService] ask_coding_agent received response:', {
@@ -485,10 +507,16 @@ export function initVoiceModeService() {
                     summaryPreview: data.summary?.substring(0, 500),
                   });
 
-                  // Return the answer
+                  // Truncate the answer for the voice context window.
+                  // gpt-realtime struggles with very long function results.
+                  const answer = data.summary || 'I was unable to find an answer.';
+                  const truncatedAnswer = answer.length > 2000
+                    ? answer.substring(0, 2000) + '... (truncated)'
+                    : answer;
+
                   resolve({
                     success: true,
-                    answer: data.summary || 'I was unable to find an answer.',
+                    answer: truncatedAnswer,
                   });
                 }
               };
@@ -498,7 +526,7 @@ export function initVoiceModeService() {
 
               // Send the question to the renderer to queue
               window.webContents.send('voice-mode:submit-prompt', {
-                sessionId,
+                sessionId: targetSessionId,
                 workspacePath,
                 prompt: questionPrompt,
               });
@@ -506,6 +534,7 @@ export function initVoiceModeService() {
               // Timeout after 60 seconds
               timeoutId = setTimeout(() => {
                 ipcMain.removeListener('voice-mode:agent-task-complete', responseHandler);
+                askCodingAgentInFlight = false;
                 resolve({
                   success: false,
                   error: 'Question timed out waiting for response',
@@ -513,9 +542,11 @@ export function initVoiceModeService() {
               }, 60000);
             });
           } else {
+            askCodingAgentInFlight = false;
             return { success: false, error: 'Window not available' };
           }
         } catch (error) {
+          askCodingAgentInFlight = false;
           console.error('[VoiceModeService] Failed to ask coding agent:', error);
           return {
             success: false,
@@ -539,32 +570,33 @@ export function initVoiceModeService() {
 
       // Listen for agent completion events
       // When the coding agent finishes a task, we'll get a message from the renderer
-      // and can notify the voice assistant
+      // and can notify the voice assistant.
+      // IMPORTANT: Skip this when ask_coding_agent is in-flight because
+      // that path returns the response via the function call result instead.
       const completionListener = (_event: any, data: { sessionId: string; summary?: string }) => {
-        if (data.sessionId === sessionId) {
-          // Extract a concise summary from the coding agent's response
-          // The summary contains the full text response, which may be very long
-          // We need to create a brief notification for the voice agent
+        if (data.sessionId === currentSessionId()) {
+          // Don't send [INTERNAL] notification when ask_coding_agent is handling
+          // this response -- the answer goes back via the function call result.
+          if (askCodingAgentInFlight) {
+            return;
+          }
+
+          // Build a concise completion notification from the coding agent's response
           let completionMessage: string;
 
           if (data.summary) {
-            // Try to extract key information from the summary
-            // Look for common patterns like "I've..." or action verbs
             const summaryLines = data.summary.split('\n').filter(line => line.trim());
             const firstLine = summaryLines[0] || '';
 
-            // If the first line is short and clear, use it. Otherwise, provide a generic message
             if (firstLine.length < 200 && firstLine.length > 0) {
-              completionMessage = `[INTERNAL: Your task is complete. Here's what you did: ${firstLine}. Acknowledge naturally in first person, be brief.]`;
+              completionMessage = `[INTERNAL: Task complete. Result: ${firstLine}]`;
             } else {
-              // Summary is too long or unclear, provide generic completion
-              completionMessage = '[INTERNAL: Your previous task has completed. Acknowledge the completion to the user naturally using first person ("I finished that task"). Be brief.]';
+              completionMessage = '[INTERNAL: Task complete.]';
             }
           } else {
-            completionMessage = '[INTERNAL: Your previous task has completed. Acknowledge the completion to the user naturally using first person ("I finished that task"). Be brief.]';
+            completionMessage = '[INTERNAL: Task complete.]';
           }
 
-          // Send the completion notification to the voice assistant
           poc.sendUserMessage(completionMessage);
         }
       };
@@ -904,6 +936,212 @@ Generate the summary now:`;
         success: false,
         message: `Failed to generate summary: ${error instanceof Error ? error.message : String(error)}`,
       };
+    }
+  });
+
+  /**
+   * Find the most recent voice session for a workspace, if it was updated
+   * within the timeout window. Used to resume an existing voice session
+   * rather than creating a new one every time the button is pressed.
+   */
+  safeHandle('voice-mode:findRecentSession', async (_event, data: {
+    workspacePath: string;
+    timeoutMs: number;
+  }) => {
+    try {
+      const { database } = await import('../../database/PGLiteDatabaseWorker');
+      const result = await database.query(
+        `SELECT id, updated_at FROM ai_sessions
+         WHERE workspace_id = $1
+           AND session_type = 'voice'
+           AND updated_at > NOW() - INTERVAL '1 millisecond' * $2
+         ORDER BY updated_at DESC
+         LIMIT 1`,
+        [data.workspacePath, data.timeoutMs]
+      );
+      if (result.rows.length > 0) {
+        return { found: true, sessionId: result.rows[0].id };
+      }
+      return { found: false };
+    } catch (error) {
+      console.error('[VoiceModeService] Failed to find recent voice session:', error);
+      return { found: false };
+    }
+  });
+
+  /**
+   * Create a voice session row in ai_sessions.
+   * Called immediately when voice activates so the session is visible right away.
+   */
+  safeHandle('voice-mode:createSession', async (_event, data: {
+    id: string;
+    workspacePath: string;
+    linkedSessionId: string;
+  }) => {
+    try {
+      const { database } = await import('../../database/PGLiteDatabaseWorker');
+      await database.query(
+        `INSERT INTO ai_sessions (id, workspace_id, provider, title, session_type, metadata, created_at, updated_at)
+         VALUES ($1, $2, 'openai-realtime', 'Voice Session', 'voice', $3, NOW(), NOW())
+         ON CONFLICT (id) DO NOTHING`,
+        [
+          data.id,
+          data.workspacePath,
+          JSON.stringify({ linkedSessionId: data.linkedSessionId }),
+        ]
+      );
+      return { success: true };
+    } catch (error) {
+      console.error('[VoiceModeService] Failed to create voice session:', error);
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+
+  /**
+   * Resume an existing voice session by touching its updated_at and
+   * updating the linked coding session ID in metadata.
+   */
+  safeHandle('voice-mode:resumeSession', async (_event, data: {
+    sessionId: string;
+    linkedSessionId: string;
+  }) => {
+    try {
+      const { database } = await import('../../database/PGLiteDatabaseWorker');
+      await database.query(
+        `UPDATE ai_sessions
+         SET updated_at = NOW(),
+             metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb
+         WHERE id = $1`,
+        [
+          data.sessionId,
+          JSON.stringify({ linkedSessionId: data.linkedSessionId }),
+        ]
+      );
+      return { success: true };
+    } catch (error) {
+      console.error('[VoiceModeService] Failed to resume voice session:', error);
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+
+  /**
+   * Append a single transcript message to a voice session.
+   * Called incrementally as user speaks and assistant responds.
+   */
+  safeHandle('voice-mode:appendMessage', async (_event, data: {
+    sessionId: string;
+    direction: 'input' | 'output';
+    content: string;
+    entryId: string;
+    timestamp: number;
+  }) => {
+    try {
+      const { database } = await import('../../database/PGLiteDatabaseWorker');
+      await database.query(
+        `INSERT INTO ai_agent_messages (session_id, source, direction, content, metadata, created_at)
+         VALUES ($1, 'voice', $2, $3, $4, $5)`,
+        [
+          data.sessionId,
+          data.direction,
+          data.content,
+          JSON.stringify({ voiceEntryId: data.entryId }),
+          new Date(data.timestamp).toISOString(),
+        ]
+      );
+      // Touch updated_at on the session
+      await database.query(
+        `UPDATE ai_sessions SET updated_at = NOW() WHERE id = $1`,
+        [data.sessionId]
+      );
+      return { success: true };
+    } catch (error) {
+      console.error('[VoiceModeService] Failed to append voice message:', error);
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+
+  /**
+   * Update voice session metadata (token usage, duration) on stop.
+   */
+  safeHandle('voice-mode:updateSessionMetadata', async (_event, data: {
+    sessionId: string;
+    tokenUsage: unknown;
+    durationMs: number;
+  }) => {
+    try {
+      const { database } = await import('../../database/PGLiteDatabaseWorker');
+      // Merge token usage and duration into existing metadata
+      await database.query(
+        `UPDATE ai_sessions
+         SET metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb,
+             updated_at = NOW()
+         WHERE id = $1`,
+        [
+          data.sessionId,
+          JSON.stringify({
+            tokenUsage: data.tokenUsage,
+            durationMs: data.durationMs,
+          }),
+        ]
+      );
+      return { success: true };
+    } catch (error) {
+      console.error('[VoiceModeService] Failed to update voice session metadata:', error);
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+
+  /**
+   * Update the linked AI session for the active voice session.
+   * Called when the user switches to a different coding session while voice is active.
+   * This ensures voice agent commands (submit-prompt, ask_coding_agent) target the correct session.
+   */
+  ipcMain.on('voice-mode:update-linked-session', (_event, data: {
+    newSessionId: string;
+    sessionName?: string;
+  }) => {
+    if (!activeVoiceSession) return;
+    const oldSessionId = activeVoiceSession.sessionId;
+    if (oldSessionId === data.newSessionId) return;
+
+    activeVoiceSession.sessionId = data.newSessionId;
+    const name = data.sessionName || 'Untitled';
+    console.log(`[VoiceModeService] Updated linked session -> "${name}"`);
+
+    // Notify the voice agent so it knows commands now target a different session
+    if (activeVoiceSession.poc.isConnected()) {
+      activeVoiceSession.poc.injectContext(
+        `[INTERNAL: User switched to a different coding session called "${name}". Your commands now target this session.]`
+      );
+    }
+  });
+
+  /**
+   * Listen state changed -- renderer notifies when voice goes to sleep or wakes up.
+   * Used to suspend/resume the inactivity disconnect timer.
+   */
+  ipcMain.on('voice-mode:listen-state-changed', (_event, data: { sleeping: boolean }) => {
+    if (!activeVoiceSession) return;
+    activeVoiceSession.poc.setListeningPaused(data.sleeping);
+  });
+
+  /**
+   * Editor context changed -- user switched to a different file.
+   * Notify the active voice agent so it knows what document the user is viewing.
+   */
+  ipcMain.on('voice-mode:editor-context-changed', (_event, data: {
+    sessionId: string;
+    filePath: string | null;
+  }) => {
+    if (!activeVoiceSession || activeVoiceSession.sessionId !== data.sessionId) return;
+    if (!activeVoiceSession.poc.isConnected()) return;
+
+    if (data.filePath) {
+      // Extract just the filename for the voice agent (full paths are noisy for speech)
+      const fileName = data.filePath.split('/').pop() || data.filePath;
+      activeVoiceSession.poc.injectContext(
+        `[INTERNAL: User is now viewing ${fileName}]`
+      );
     }
   });
 

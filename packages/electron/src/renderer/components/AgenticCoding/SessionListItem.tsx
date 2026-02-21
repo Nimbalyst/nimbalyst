@@ -87,7 +87,7 @@ interface SessionListItemProps {
   provider?: string;
   model?: string;
   messageCount?: number;
-  sessionType?: 'session' | 'workstream' | 'blitz'; // Structural type of session
+  sessionType?: 'session' | 'workstream' | 'blitz' | 'voice'; // Structural type of session
   isWorkstream?: boolean; // Whether this session is a workstream (has children)
   isWorktreeSession?: boolean; // Whether this session belongs to a worktree (shows worktree icon)
   parentSessionId?: string | null; // Parent session ID for hierarchical workstreams
@@ -513,7 +513,18 @@ export const SessionListItem = memo<SessionListItemProps>(({
       aria-current={isActive ? 'page' : undefined}
     >
       <div className={`session-list-item-icon shrink-0 mt-0.5 text-[var(--nim-text-muted)] flex items-center relative ${isActive ? '[&]:text-[var(--nim-primary)] [&_svg]:text-[var(--nim-primary)]' : '[&_svg]:text-[var(--nim-text-muted)]'} ${isWorkstream ? 'workstream-icon' : ''} ${isWorktreeSession ? 'worktree-icon' : ''}`}>
-        {isWorktreeSession ? (
+        {sessionType === 'voice' ? (
+          // Voice session: OpenAI icon with mic badge
+          <div className="relative">
+            <ProviderIcon provider="openai" size={16} />
+            <MaterialSymbol
+              icon="mic"
+              size={12}
+              className="absolute -bottom-1 -right-1.5 text-[var(--nim-text-muted)]"
+              fill
+            />
+          </div>
+        ) : isWorktreeSession ? (
           // Worktree icon (git branching visual)
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
             <rect x="3" y="2" width="3" height="3" rx="0.5" stroke="currentColor" strokeWidth="1.5" fill="none"/>

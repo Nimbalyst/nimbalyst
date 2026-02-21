@@ -1,8 +1,34 @@
 /**
  * Voice mode state atoms
+ *
+ * Workspace-scoped atoms (not per-session) since only one voice session
+ * can be active at a time. Updated by centralized voiceModeListeners.ts,
+ * never by components directly.
  */
 
 import { atom } from 'jotai';
+
+// =========================================================================
+// Voice Listen State
+// =========================================================================
+
+/**
+ * Three-state listening model:
+ * - 'off': voice mode not active
+ * - 'listening': active, mic sending audio, listen window timer running
+ * - 'sleeping': active (WebSocket connected), mic paused, waiting for wake event
+ */
+export type VoiceListenState = 'off' | 'listening' | 'sleeping';
+
+/**
+ * Current listen state for the voice session.
+ * Managed by voiceModeListeners.ts, read by VoiceModeButton for icon/gating.
+ */
+export const voiceListenStateAtom = atom<VoiceListenState>('off');
+
+// =========================================================================
+// Pending Voice Command (existing)
+// =========================================================================
 
 /**
  * Represents a pending voice command awaiting submission.
@@ -32,3 +58,83 @@ export interface PendingVoiceCommand {
  * Null when no voice command is pending.
  */
 export const pendingVoiceCommandAtom = atom<PendingVoiceCommand | null>(null);
+
+// =========================================================================
+// Voice Transcript Capture
+// =========================================================================
+
+/**
+ * A single entry in the voice conversation transcript.
+ */
+export interface VoiceTranscriptEntry {
+  id: string;
+  role: 'user' | 'assistant';
+  text: string;
+  timestamp: number;
+}
+
+/**
+ * Token usage for the current voice session.
+ */
+export interface VoiceTokenUsage {
+  inputAudio: number;
+  outputAudio: number;
+  text: number;
+  total: number;
+}
+
+/**
+ * The session ID that currently has an active voice connection.
+ * Null when no voice session is active.
+ */
+export const voiceActiveSessionIdAtom = atom<string | null>(null);
+
+/**
+ * Accumulated transcript entries for the current voice session.
+ * Reset when voice session ends (after persisting).
+ */
+export const voiceTranscriptEntriesAtom = atom<VoiceTranscriptEntry[]>([]);
+
+/**
+ * Live partial transcription text while the user is speaking.
+ * Cleared when user finishes speaking (transcript-complete).
+ */
+export const voiceCurrentUserTextAtom = atom<string>('');
+
+/**
+ * Live token usage for the active voice session.
+ * Null when no voice session is active.
+ */
+export const voiceTokenUsageAtom = atom<VoiceTokenUsage | null>(null);
+
+/**
+ * Timestamp when the current voice session started.
+ * Used to compute session duration on persist.
+ */
+export const voiceSessionStartTimeAtom = atom<number | null>(null);
+
+/**
+ * Workspace path for the current voice session.
+ * Stored at activation so the persist function can access it.
+ */
+export const voiceWorkspacePathAtom = atom<string | null>(null);
+
+// =========================================================================
+// Voice Editor Context
+// =========================================================================
+
+/**
+ * The database session ID for the current voice session.
+ * Generated at activation time and used as the ai_sessions.id.
+ * This is separate from voiceActiveSessionIdAtom which tracks the
+ * linked coding session. Reset to null when voice session ends.
+ */
+export const voiceDbSessionIdAtom = atom<string | null>(null);
+
+/**
+ * The file path last reported to the voice agent.
+ * Set by voiceModeListeners when a file change is sent to main process.
+ * Used to deduplicate -- only send IPC when the file actually changes.
+ * Reset to null when voice session ends.
+ */
+export const voiceLastReportedFileAtom = atom<string | null>(null);

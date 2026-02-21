@@ -186,7 +186,7 @@ export interface AIModel {
 }
 
 /** Structural type describing what role a session plays in the hierarchy */
-export type SessionType = 'session' | 'workstream' | 'blitz';
+export type SessionType = 'session' | 'workstream' | 'blitz' | 'voice';
 
 export type SessionMode = 'planning' | 'agent';
 

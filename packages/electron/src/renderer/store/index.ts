@@ -424,3 +424,27 @@ export {
   type WorktreeChangedFile,
   type WorktreeGitStatus,
 } from './atoms/sessionFiles';
+
+// Voice mode atoms (transcript capture, token usage)
+export {
+  pendingVoiceCommandAtom,
+  voiceActiveSessionIdAtom,
+  voiceTranscriptEntriesAtom,
+  voiceCurrentUserTextAtom,
+  voiceTokenUsageAtom,
+  voiceSessionStartTimeAtom,
+  voiceWorkspacePathAtom,
+  voiceDbSessionIdAtom,
+  voiceLastReportedFileAtom,
+  type PendingVoiceCommand,
+  type VoiceTranscriptEntry,
+  type VoiceTokenUsage,
+} from './atoms/voiceModeState';
+
+// Voice mode listeners (centralized IPC handlers)
+export {
+  initVoiceModeListeners,
+  setVoiceActiveSession,
+  clearVoiceActiveSession,
+  persistAndClearVoiceSession,
+} from './listeners/voiceModeListeners';

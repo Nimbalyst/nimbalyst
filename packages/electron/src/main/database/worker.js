@@ -1239,21 +1239,28 @@ class PGLiteWorker {
     try {
       await this.db.exec(`
         -- Step 1: Mark workstream parents (sessions that have children pointing to them)
-        -- but only if they aren't already 'blitz' (blitz is already a structural type)
+        -- but only if they aren't already 'blitz' or 'voice'
         UPDATE ai_sessions
         SET session_type = 'workstream'
-        WHERE session_type != 'blitz'
+        WHERE session_type NOT IN ('blitz', 'voice')
           AND id IN (SELECT DISTINCT parent_session_id FROM ai_sessions WHERE parent_session_id IS NOT NULL);
 
-        -- Step 2: Everything else that isn't blitz or workstream becomes 'session'
+        -- Step 2: Everything else that isn't blitz, workstream, or voice becomes 'session'
         UPDATE ai_sessions
         SET session_type = 'session'
-        WHERE session_type NOT IN ('blitz', 'workstream');
+        WHERE session_type NOT IN ('blitz', 'workstream', 'voice');
       `);
       console.log('[PGLite Worker] Migrated session_type to structural types (session/workstream/blitz)');
     } catch (error) {
       console.error('[PGLite Worker] Failed to migrate session_type:', error);
       // Non-fatal - old values still work, just not meaningful
+    }
+
+    // Migration: Drop voice_sessions table if it exists (voice sessions now use ai_sessions)
+    try {
+      await this.db.exec(`DROP TABLE IF EXISTS voice_sessions;`);
+    } catch (error) {
+      // Non-fatal
     }
   }
 

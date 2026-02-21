@@ -14,14 +14,25 @@ const registeredExtensionHeaders = new Map<string, string[]>();
 
 /**
  * Check if a file path matches any of the given patterns.
- * Supports simple "*.ext" patterns (matching by file extension).
+ * Supports simple extension patterns ("*.ext") and glob path patterns
+ * with wildcards (e.g. path segments with asterisks for single-segment matching).
  */
 function matchesFilePatterns(filePath: string, patterns: string[]): boolean {
-  const lowerPath = filePath.toLowerCase();
+  const normalizedPath = filePath.replace(/\\/g, '/');
   for (const pattern of patterns) {
     if (pattern.startsWith('*.')) {
-      const ext = pattern.slice(1).toLowerCase(); // "*.astro" -> ".astro"
-      if (lowerPath.endsWith(ext)) {
+      // Simple extension match
+      const ext = pattern.slice(1).toLowerCase();
+      if (normalizedPath.toLowerCase().endsWith(ext)) {
+        return true;
+      }
+    } else if (pattern.includes('/')) {
+      // Glob path pattern - convert to regex
+      const regexStr = pattern
+        .replace(/[.+^${}()|[\]\\]/g, '\\$&') // Escape regex chars (not * and ?)
+        .replace(/\*/g, '[^/]*'); // * matches anything except /
+      const regex = new RegExp(`(^|/)${regexStr}$`);
+      if (regex.test(normalizedPath)) {
         return true;
       }
     }

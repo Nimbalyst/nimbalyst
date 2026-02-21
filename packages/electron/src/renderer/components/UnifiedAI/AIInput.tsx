@@ -9,11 +9,9 @@ import { AttachmentPreviewList } from '../AgenticCoding/AttachmentPreviewList';
 import { ModeTag, AIMode } from './ModeTag';
 import { ModelSelector } from './ModelSelector';
 import { EffortLevelSelector } from './EffortLevelSelector';
-import { VoiceModeButton, registerPendingVoiceCommandSetter } from './VoiceModeButton.tsx';
-import { VoiceTranscriptionDisplay } from './VoiceTranscriptionDisplay';
-import { VoiceContextIndicator } from './VoiceContextIndicator';
+import { registerPendingVoiceCommandSetter } from './VoiceModeButton.tsx';
 import { PendingVoiceCommand } from './PendingVoiceCommand';
-import { pendingVoiceCommandAtom, type PendingVoiceCommand as PendingVoiceCommandType } from '../../store/atoms/voiceModeState';
+import { pendingVoiceCommandAtom, voiceActiveSessionIdAtom, type PendingVoiceCommand as PendingVoiceCommandType } from '../../store/atoms/voiceModeState';
 import { ContextUsageDisplay } from './ContextUsageDisplay';
 import { MockupAnnotationIndicator } from './MockupAnnotationIndicator';
 import { TextSelectionIndicator } from './TextSelectionIndicator';
@@ -25,7 +23,6 @@ import {
   getMemoryContent,
 } from './interactivePrompts';
 import { HelpTooltip } from '../../help';
-import { showTranscriptionAtom } from '../../store/atoms/appSettings';
 import {
   fileMentionOptionsAtom,
   searchFileMentionAtom,
@@ -167,9 +164,9 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
     // Suppress typeahead re-trigger after a selection (prevents menu from reopening)
     const justSelectedRef = useRef(false);
 
-    // Voice mode state
-    const [isVoiceActive, setIsVoiceActive] = useState(false);
-    const showTranscription = useAtomValue(showTranscriptionAtom);
+    // Voice mode state - derived from centralized atom
+    const voiceActiveSessionId = useAtomValue(voiceActiveSessionIdAtom);
+    const isVoiceActive = voiceActiveSessionId === sessionId;
 
     // File mention state via Jotai atoms
     // Subscribes directly to atoms instead of receiving props (no prop drilling)
@@ -969,14 +966,6 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
           title="Drag to resize prompt box"
         />
 
-        {/* Voice transcription display - floating above the input */}
-        {showTranscription && sessionId && (
-          <VoiceTranscriptionDisplay
-            isActive={isVoiceActive}
-            sessionId={sessionId}
-          />
-        )}
-
         {/* Pending voice command with countdown */}
         {sessionId && <PendingVoiceCommand sessionId={sessionId} onSubmit={handlePendingVoiceCommandSubmit} />}
 
@@ -1018,24 +1007,7 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
             alignItems: 'center',
             gap: '8px',
           }}>
-            {/* Voice Mode Button */}
-            <HelpTooltip testId="voice-mode-toggle" disabled={isVoiceActive}>
-              <span style={{ display: 'inline-flex' }}>
-                <VoiceModeButton
-                  sessionId={sessionId}
-                  workspacePath={workspacePath}
-                  onVoiceActiveChange={setIsVoiceActive}
-                />
-              </span>
-            </HelpTooltip>
-            {/* Voice context indicator - shows token usage when voice mode is active */}
-            {sessionId && (
-              <VoiceContextIndicator
-                isActive={isVoiceActive}
-                sessionId={sessionId}
-              />
-            )}
-            {onModeChange && provider === 'claude-code' && mode && <ModeTag mode={mode} onModeChange={onModeChange} />}
+{onModeChange && provider === 'claude-code' && mode && <ModeTag mode={mode} onModeChange={onModeChange} />}
 
             {onModelChange && (
               <HelpTooltip testId="model-picker">

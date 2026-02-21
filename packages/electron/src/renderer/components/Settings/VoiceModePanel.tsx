@@ -75,11 +75,11 @@ export const VoiceModePanel: React.FC<VoiceModePanelProps> = ({
   const {
     enabled,
     voice,
-    showTranscription,
     turnDetection,
     voiceAgentPrompt,
     codingAgentPrompt,
     submitDelayMs,
+    listenWindowMs,
   } = voiceModeSettings;
 
   // Check if OpenAI key is configured
@@ -418,26 +418,31 @@ export const VoiceModePanel: React.FC<VoiceModePanelProps> = ({
                 </div>
               </label>
             </div>
-          </div>
 
-          <div className="provider-panel-section mb-6">
-            <h4 className="provider-panel-section-title text-base font-medium mb-4 text-[var(--nim-text)]">Display Options</h4>
-
+            {/* Listen Window Duration */}
             <div className="setting-item py-3">
-              <label className="setting-label flex items-start gap-3 cursor-pointer">
+              <div className="setting-text flex flex-col gap-0.5">
+                <span className="setting-name text-sm font-medium text-[var(--nim-text)]">Listen Window Duration</span>
+                <span className="setting-description text-xs text-[var(--nim-text-muted)]">
+                  How long to keep listening after you stop speaking. After this time, the mic goes to sleep until the assistant responds or you click the mic button.
+                </span>
+              </div>
+              <div className="flex items-center gap-3 mt-2">
+                <span className="text-xs text-[var(--nim-text-muted)]">5s</span>
                 <input
-                  type="checkbox"
-                  checked={showTranscription}
-                  onChange={(e) => handleSettingChange({ showTranscription: e.target.checked })}
-                  className="setting-checkbox mt-1 w-4 h-4 rounded border-[var(--nim-border)] accent-[var(--nim-primary)]"
+                  type="range"
+                  min="5000"
+                  max="30000"
+                  step="1000"
+                  value={listenWindowMs ?? 10000}
+                  onChange={(e) => handleSettingChange({ listenWindowMs: parseInt(e.target.value) })}
+                  className="flex-1"
                 />
-                <div className="setting-text flex flex-col gap-0.5">
-                  <span className="setting-name text-sm font-medium text-[var(--nim-text)]">Show Live Transcription</span>
-                  <span className="setting-description text-xs text-[var(--nim-text-muted)]">
-                    Display a floating transcription of your speech above the input area
-                  </span>
-                </div>
-              </label>
+                <span className="text-xs text-[var(--nim-text-muted)]">30s</span>
+                <span className="text-xs text-[var(--nim-text)] min-w-[36px]">
+                  {Math.round((listenWindowMs ?? 10000) / 1000)}s
+                </span>
+              </div>
             </div>
           </div>
 

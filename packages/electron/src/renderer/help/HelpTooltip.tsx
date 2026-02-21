@@ -79,6 +79,8 @@ interface HelpTooltipProps {
   delay?: number;
   /** Whether to disable the tooltip */
   disabled?: boolean;
+  /** Optional dynamic content rendered below the help body */
+  extraContent?: React.ReactNode;
 }
 
 interface TooltipPosition {
@@ -160,6 +162,7 @@ export function HelpTooltip({
   placement = 'auto',
   delay = 500,
   disabled = false,
+  extraContent,
 }: HelpTooltipProps) {
   const [isVisible, setIsVisible] = useState(false);
   const [position, setPosition] = useState<TooltipPosition | null>(null);
@@ -355,6 +358,7 @@ export function HelpTooltip({
               )}
             </div>
             <div className="help-tooltip-body text-xs leading-normal text-[var(--nim-text-muted)]">{renderedBody}</div>
+            {extraContent && <div className="help-tooltip-extra mt-2 pt-2 border-t border-[var(--nim-border)]">{extraContent}</div>}
           </div>,
           document.body
         )}
