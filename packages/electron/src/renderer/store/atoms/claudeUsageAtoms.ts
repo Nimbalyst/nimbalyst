@@ -95,21 +95,15 @@ export async function initClaudeUsageIndicatorSetting(): Promise<boolean> {
 }
 
 /**
- * Derived atom: whether credentials are available (no error about missing credentials)
+ * Derived atom: whether usage data is available to display.
+ * Shows the indicator whenever we have valid data from the API (even at 0% utilization).
+ * Hides only when there's no data or an error (missing credentials, auth expired, etc.).
  */
 export const claudeUsageAvailableAtom = atom((get) => {
   const usage = get(claudeUsageAtom);
   if (!usage) return false;
-  // If there's an error about missing credentials, consider it unavailable
-  if (usage.error?.includes('credentials')) return false;
-  // Only show if we have actual usage data (utilization or reset times)
-  const hasUsageData = [usage.fiveHour, usage.sevenDay, usage.sevenDayOpus]
-    .filter(Boolean)
-    .some((window) => {
-      const utilization = window?.utilization ?? 0;
-      return utilization > 0 || Boolean(window?.resetsAt);
-    });
-  return hasUsageData;
+  if (usage.error) return false;
+  return true;
 });
 
 /**
