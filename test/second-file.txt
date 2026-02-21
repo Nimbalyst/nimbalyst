@@ -1,4 +1,0 @@
-This is a second test file.
-It was created after the restart to verify tool call matching.
-Apply patch edit: another line for matching.
-Bash edit: appended line on 2026-02-21.

@@ -51,11 +51,6 @@ function getOperationBadge(operation: string): { label: string; colorClass: stri
   }
 }
 
-function getBasename(filePath: string): string {
-  const parts = filePath.split('/');
-  return parts[parts.length - 1] || filePath;
-}
-
 export const ToolCallChanges: React.FC<ToolCallChangesProps> = ({
   toolCallItemId,
   getToolCallDiffs,

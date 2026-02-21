@@ -146,6 +146,8 @@ function extractReadMetadata(toolName: string, args: any, result: any): ReadFile
 
 export class SessionFileTracker {
   private enabled = true;
+  private recentBashToolCalls = new Map<string, { toolUseId: string; command?: string; workspaceId: string; timestamp: number }>();
+  private readonly bashSideEffectWindowMs = 10_000;
 
   /**
    * Track a tool execution and create appropriate file links.
@@ -209,6 +211,15 @@ export class SessionFileTracker {
           return;
         }
 
+        if (toolUseId) {
+          this.recentBashToolCalls.set(sessionId, {
+            toolUseId,
+            command,
+            workspaceId,
+            timestamp: Date.now()
+          });
+        }
+
         const filePaths = extractBashFilePaths(command, workspaceId);
         // console.log('[SessionFileTracker] Extracted Bash file paths:', filePaths);
 
@@ -240,6 +251,39 @@ export class SessionFileTracker {
       console.error('[SessionFileTracker] Error details:', error);
       // Don't throw - tracking failures shouldn't break AI operations
     }
+  }
+
+  /**
+   * Track a file changed by a recent Bash tool call when the command
+   * itself didn't specify the affected files (e.g., running a script).
+   */
+  async trackBashSideEffect(
+    sessionId: string,
+    workspaceId: string,
+    filePath: string,
+    window?: BrowserWindow | null
+  ): Promise<void> {
+    const recent = this.recentBashToolCalls.get(sessionId);
+    if (!recent) return;
+    if (recent.workspaceId !== workspaceId) return;
+
+    const ageMs = Date.now() - recent.timestamp;
+    if (ageMs > this.bashSideEffectWindowMs) {
+      this.recentBashToolCalls.delete(sessionId);
+      return;
+    }
+
+    await this.trackSingleFile(
+      sessionId,
+      workspaceId,
+      filePath,
+      'edited',
+      'Bash',
+      { command: recent.command },
+      null,
+      recent.toolUseId,
+      window
+    );
   }
 
   /**

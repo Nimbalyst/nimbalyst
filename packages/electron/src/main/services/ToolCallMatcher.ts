@@ -149,6 +149,22 @@ interface ToolCallMatchRow {
 const TIME_CUTOFF_MS = 10_000; // 10 second hard cutoff around tool call
 const MIN_MATCH_SCORE = 30; // Must have at least a filename match
 
+/** Regex to detect shell-wrapped commands like "/bin/zsh -lc 'actual command'" */
+const SHELL_WRAPPER_REGEX = /\/(?:bin|usr\/bin)\/(?:bash|zsh|sh)\s+-l?c\s+([\s\S]+)$/;
+
+/**
+ * Unwrap a shell-wrapped command to extract the inner command.
+ * e.g. "/bin/zsh -lc 'echo hello'" -> "echo hello"
+ * Returns the original command if not shell-wrapped.
+ */
+export function unwrapShellCommand(command: string): string {
+  const match = command.match(SHELL_WRAPPER_REGEX);
+  if (match) {
+    return match[1].replace(/^['"]|['"]$/g, '');
+  }
+  return command;
+}
+
 // Tool item types that represent tool calls
 const TOOL_ITEM_TYPES = new Set([
   'mcp_tool_call',
@@ -160,6 +176,11 @@ const TOOL_ITEM_TYPES = new Set([
 
 // Common path fields in tool arguments
 const PATH_FIELDS = ['file_path', 'filePath', 'path', 'notebook_path', 'notebookPath'];
+
+/** Count newline-delimited lines in a string. Returns 0 for empty strings. */
+function countLines(text: string): number {
+  return text.length === 0 ? 0 : text.split('\n').length;
+}
 
 // ---------------------------------------------------------------------------
 // Parsing helpers
@@ -349,12 +370,8 @@ export function parseToolCallWindows(
   if (itemType === 'command_execution') {
     // Codex uses command field directly, often wrapped in a shell invocation
     // like "/bin/zsh -lc 'actual command'" - unwrap to get the inner command
-    let rawCommand = typeof item.command === 'string' ? item.command : '';
-    const shellMatch = rawCommand.match(/\/(?:bin|usr\/bin)\/(?:bash|zsh|sh)\s+-l?c\s+([\s\S]+)$/);
-    if (shellMatch) {
-      rawCommand = shellMatch[1].replace(/^['"]|['"]$/g, '');
-    }
-    args = { command: rawCommand };
+    const rawCommand = typeof item.command === 'string' ? item.command : '';
+    args = { command: unwrapShellCommand(rawCommand) };
   } else if (itemType === 'file_change') {
     args = { changes: item.changes };
   } else {
@@ -804,7 +821,6 @@ class ToolCallMatcherImpl {
             diffResult.content = extracted.content;
           }
           if (diffResult.linesAdded == null && diffResult.linesRemoved == null) {
-            const countLines = (text: string) => (text.length === 0 ? 0 : text.split('\n').length);
             let added = 0;
             let removed = 0;
             for (const diff of extracted.diffs) {
@@ -872,12 +888,7 @@ class ToolCallMatcherImpl {
         const item = parsed.item;
         args = item.arguments ?? item.args ?? item.input ?? item.parameters ?? null;
         if (!args && item?.type === 'command_execution' && typeof item.command === 'string') {
-          // Normalize shell-wrapped command to the inner command
-          const shellMatch = item.command.match(/\/(?:bin|usr\/bin)\/(?:bash|zsh|sh)\s+-l?c\s+([\s\S]+)$/);
-          const innerCommand = shellMatch
-            ? shellMatch[1].replace(/^['"]|['"]$/g, '')
-            : item.command;
-          args = { command: innerCommand };
+          args = { command: unwrapShellCommand(item.command) };
         }
         itemForChanges = item;
       } else if (parsed?.message?.content && Array.isArray(parsed.message.content)) {
@@ -974,7 +985,7 @@ class ToolCallMatcherImpl {
     const workspaceRoot = this.inferWorkspacePath(targetFilePath);
     const normalizedTarget = path.normalize(targetFilePath);
 
-    const normalizeEscapedCommand = (value: string): string => {
+    const decodeEscapes = (value: string): string => {
       if (!value.includes('\\')) return value;
       return value
         .replace(/\\n/g, '\n')
@@ -993,16 +1004,6 @@ class ToolCallMatcherImpl {
       } catch {
         return null;
       }
-    };
-
-    const decodeEscapes = (value: string): string => {
-      return value
-        .replace(/\\n/g, '\n')
-        .replace(/\\r/g, '\r')
-        .replace(/\\t/g, '\t')
-        .replace(/\\\"/g, '"')
-        .replace(/\\'/g, '\'')
-        .replace(/\\\\/g, '\\');
     };
 
     const extractOutputFromTokens = (tokens: string[]): string | null => {
@@ -1091,7 +1092,7 @@ class ToolCallMatcherImpl {
     };
 
     try {
-      const normalizedCommand = normalizeEscapedCommand(command);
+      const normalizedCommand = decodeEscapes(command);
       const tokens = parseShellCommand(normalizedCommand) as Array<string | { op: string }>;
       const parsed = tryParseTokens(tokens);
       if (parsed) return parsed;
@@ -1102,7 +1103,7 @@ class ToolCallMatcherImpl {
     // Regex fallback for simple printf/echo redirects
     const regex = /(?:^|[;&|]\s*|\n)\s*(?:printf|echo)(?:\s+-e)?\s+(['"])([\s\S]*?)\1\s*>>?\s*([^\s;&|]+)/g;
     let match;
-    const regexCommand = normalizeEscapedCommand(command);
+    const regexCommand = decodeEscapes(command);
     while ((match = regex.exec(regexCommand)) !== null) {
       const raw = match[2] ?? '';
       const target = match[3] ?? '';
@@ -1149,29 +1150,6 @@ class ToolCallMatcherImpl {
          match_reason = EXCLUDED.match_reason,
          file_timestamp = EXCLUDED.file_timestamp`,
       values
-    );
-  }
-
-  private async insertMatch(
-    sessionId: string,
-    sessionFileId: string,
-    messageId: number,
-    toolCallItemId: string | null,
-    toolUseId: string | null,
-    matchScore: number,
-    matchReason: string,
-    fileTimestamp?: number
-  ): Promise<void> {
-    const fileTs = fileTimestamp ? new Date(fileTimestamp) : null;
-    await database.query(
-      `INSERT INTO ai_tool_call_file_edits
-       (session_id, session_file_id, message_id, tool_call_item_id, tool_use_id, match_score, match_reason, file_timestamp)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       ON CONFLICT (session_file_id, message_id) DO UPDATE SET
-         match_score = EXCLUDED.match_score,
-         match_reason = EXCLUDED.match_reason,
-         file_timestamp = EXCLUDED.file_timestamp`,
-      [sessionId, sessionFileId, messageId, toolCallItemId, toolUseId, matchScore, matchReason, fileTs]
     );
   }
 
@@ -1278,7 +1256,6 @@ class ToolCallMatcherImpl {
             diffResult.content = extracted.content;
           }
 
-          const countLines = (text: string) => (text.length === 0 ? 0 : text.split('\n').length);
           let added = 0;
           let removed = 0;
           for (const diff of diffResult.diffs) {

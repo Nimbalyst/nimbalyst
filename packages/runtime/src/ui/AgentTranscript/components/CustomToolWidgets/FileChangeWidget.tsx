@@ -51,7 +51,7 @@ function extractSnapshots(tool: any): Record<string, FileSnapshot> {
 }
 
 function isToolRunning(tool: any): boolean {
-  return !tool.result;
+  return tool.result === undefined || tool.result === null;
 }
 
 function isToolError(result: any, message: any): boolean {

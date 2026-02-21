@@ -131,7 +131,7 @@ function isToolError(result: any, message: any): boolean {
  * Check if the tool is still running (no result yet)
  */
 function isToolRunning(tool: any): boolean {
-  return !tool.result;
+  return tool.result === undefined || tool.result === null;
 }
 
 /**

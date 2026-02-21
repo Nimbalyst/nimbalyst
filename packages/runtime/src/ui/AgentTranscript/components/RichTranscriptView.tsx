@@ -1259,7 +1259,7 @@ export const RichTranscriptView = React.forwardRef<
               )}
 
               {/* File changes caused by this tool call */}
-              {!isSubAgent && getToolCallDiffs && tool.id && tool.result && (
+              {!isSubAgent && getToolCallDiffs && tool.id && tool.result !== undefined && tool.result !== null && (
                 <ToolCallChanges
                   toolCallItemId={tool.id}
                   getToolCallDiffs={getToolCallDiffs}

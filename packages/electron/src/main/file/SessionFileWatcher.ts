@@ -24,12 +24,14 @@ export class SessionFileWatcher {
   private sessionId: string | null = null;
   private workspacePath: string | null = null;
   private active = false;
+  private onFileChanged: ((filePath: string) => Promise<void> | void) | null = null;
 
   async start(
     workspacePath: string,
     sessionId: string,
     cache: FileSnapshotCache,
-    historyManager: HistoryManager
+    historyManager: HistoryManager,
+    onFileChanged?: (filePath: string) => Promise<void> | void
   ): Promise<void> {
     await this.stop();
 
@@ -38,6 +40,7 @@ export class SessionFileWatcher {
     this.sessionId = sessionId;
     this.workspacePath = workspacePath;
     this.active = true;
+    this.onFileChanged = onFileChanged ?? null;
 
     this.watcher = chokidar.watch(workspacePath, {
       ignored: (filePath: string) => {
@@ -104,6 +107,7 @@ export class SessionFileWatcher {
     this.sessionId = null;
     this.workspacePath = null;
     this.active = false;
+    this.onFileChanged = null;
   }
 
   isActive(): boolean {
@@ -119,6 +123,10 @@ export class SessionFileWatcher {
     if (this.isBinaryPath(filePath)) return;
 
     try {
+      if (this.onFileChanged) {
+        await this.onFileChanged(filePath);
+      }
+
       const beforeContent = await this.cache.getBeforeState(filePath);
 
       let currentContent: string;
@@ -194,6 +202,10 @@ export class SessionFileWatcher {
     if (this.isBinaryPath(filePath)) return;
 
     try {
+      if (this.onFileChanged) {
+        await this.onFileChanged(filePath);
+      }
+
       // Check if a pre-edit tag already exists
       const pendingTags = await this.historyManager.getPendingTags(filePath);
       if (!pendingTags || pendingTags.length === 0) {

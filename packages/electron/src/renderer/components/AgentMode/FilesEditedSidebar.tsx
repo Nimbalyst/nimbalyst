@@ -86,6 +86,7 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
   onWorktreeArchived,
   isGitRepo = false,
 }) => {
+  const effectiveWorkspacePath = worktreePath || workspacePath;
   // Get all session IDs in this workstream (must be declared before useEffects that use it)
   const workstreamSessions = useAtomValue(workstreamSessionsAtom(workstreamId));
   const hasMultipleSessions = workstreamSessions.length > 1;
@@ -110,11 +111,11 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
 
   // Register this session/worktree with central listener for state updates
   useEffect(() => {
-    registerSessionWorkspace(workstreamId, workspacePath);
+    registerSessionWorkspace(workstreamId, effectiveWorkspacePath);
     if (worktreeId && worktreePath) {
       registerWorktreePath(worktreeId, worktreePath);
     }
-  }, [workstreamId, workspacePath, worktreeId, worktreePath]);
+  }, [workstreamId, effectiveWorkspacePath, worktreeId, worktreePath]);
 
   // Lazy load file state for all child sessions in the workstream
   useEffect(() => {
@@ -122,15 +123,15 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
     // console.log('[FilesEditedSidebar] Loading file state for workstream', workstreamId, 'with', workstreamSessions.length, 'child sessions');
 
     // Load file state for the workstream itself (parent)
-    loadInitialSessionFileState(workstreamId, workspacePath);
+    loadInitialSessionFileState(workstreamId, effectiveWorkspacePath);
 
     // Also load file state for all child sessions
     workstreamSessions.forEach(sessionId => {
       if (sessionId !== workstreamId) {
-        loadInitialSessionFileState(sessionId, workspacePath);
+        loadInitialSessionFileState(sessionId, effectiveWorkspacePath);
       }
     });
-  }, [workstreamId, workspacePath, workstreamSessions]);
+  }, [workstreamId, effectiveWorkspacePath, workstreamSessions]);
 
   // Group by directory state from Jotai
   const [groupByDirectory] = useAtom(diffTreeGroupByDirectoryAtom);
@@ -154,14 +155,14 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
   const copyFilePath = useSetAtom(copyFilePathAtom);
 
   const setGroupByDirectory = useCallback((value: boolean) => {
-    if (workspacePath) {
-      setDiffTreeGroupByDirectory({ groupByDirectory: value, workspacePath });
+    if (effectiveWorkspacePath) {
+      setDiffTreeGroupByDirectory({ groupByDirectory: value, workspacePath: effectiveWorkspacePath });
     }
-  }, [workspacePath, setDiffTreeGroupByDirectory]);
+  }, [effectiveWorkspacePath, setDiffTreeGroupByDirectory]);
 
   const setFileScopeMode = useCallback((mode: AgentFileScopeMode) => {
-    setFileScopeModeAction({ fileScopeMode: mode, workspacePath });
-  }, [workspacePath, setFileScopeModeAction]);
+    setFileScopeModeAction({ fileScopeMode: mode, workspacePath: effectiveWorkspacePath });
+  }, [effectiveWorkspacePath, setFileScopeModeAction]);
 
   // Helper to check if a file has uncommitted git changes
   const isFileUncommitted = useCallback((filePath: string): boolean => {

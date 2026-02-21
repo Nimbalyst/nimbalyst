@@ -416,7 +416,8 @@ export const CodexOutputRenderer: React.FC<CodexOutputRendererProps> = ({
     const statusLabel = didFail ? 'Failed' : 'Succeeded';
     const statusColor = didFail ? 'var(--nim-error)' : 'var(--nim-success)';
     const statusBackground = didFail ? 'rgba(239, 68, 68, 0.12)' : 'rgba(16, 185, 129, 0.12)';
-    const hasResult = toolResult !== undefined && toolResult !== null && (typeof toolResult !== 'string' || toolResult.trim().length > 0);
+    const hasResultValue = toolResult !== undefined && toolResult !== null;
+    const hasDisplayResult = hasResultValue && (typeof toolResult !== 'string' || toolResult.trim().length > 0);
     const toolDisplayName = formatToolDisplayName(tool.name || '') || tool.name || 'Tool Call';
 
     const CustomWidget = tool.name ? getCustomToolWidget(tool.name) : undefined;
@@ -487,7 +488,7 @@ export const CodexOutputRenderer: React.FC<CodexOutputRendererProps> = ({
 
             <div className="mt-2">
               <div className="text-nim-faint mb-1">Result:</div>
-              {hasResult ? (
+              {hasDisplayResult ? (
                 typeof toolResult === 'string' ? (
                   <pre className="text-xs text-nim font-mono overflow-x-auto bg-nim-secondary p-2 rounded max-h-64 overflow-y-auto">
                     {toolResult}
@@ -508,10 +509,10 @@ export const CodexOutputRenderer: React.FC<CodexOutputRendererProps> = ({
             </div>
 
             {/* File changes caused by this tool call */}
-            {getToolCallDiffs && tool.id && hasResult && (
-              <ToolCallChanges
-                toolCallItemId={tool.id}
-                getToolCallDiffs={getToolCallDiffs}
+              {getToolCallDiffs && tool.id && hasResultValue && (
+                <ToolCallChanges
+                  toolCallItemId={tool.id}
+                  getToolCallDiffs={getToolCallDiffs}
                 isExpanded={isExpanded}
                 workspacePath={workspacePath}
               />

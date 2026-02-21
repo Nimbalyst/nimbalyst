@@ -1,5 +1,0 @@
-Testing tool call matching after race condition fix.
-This Write should be matched to a tool call in the database.
-And this Edit should also be matched.
-Another edit to verify matching after stream completion.
-Bash edit: another appended line on 2026-02-21.

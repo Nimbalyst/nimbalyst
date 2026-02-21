@@ -35,7 +35,7 @@ import { notificationService } from '../NotificationService';
 import { logger } from '../../utils/logger';
 import { windowStates, findWindowByWorkspace, getWindowId } from '../../window/WindowManager';
 import { sessionFileTracker } from '../SessionFileTracker';
-import { toolCallMatcher } from '../ToolCallMatcher';
+import { toolCallMatcher, unwrapShellCommand } from '../ToolCallMatcher';
 import {AnalyticsService} from "../analytics/AnalyticsService.ts";
 import { historyManager } from '../../HistoryManager';
 import { FileSnapshotCache } from '../../file/FileSnapshotCache';
@@ -2264,14 +2264,31 @@ export class AIService {
           }
         }
 
-        // Start file snapshot cache + watcher for Codex sessions (diff support)
+        // Start file snapshot cache + watcher for agentic sessions (diff support)
         // Only start once per session; persists across turns
-        if (session.provider === 'openai-codex' && effectiveWorkspacePath && !this.codexSessionWatchers.has(session.id)) {
+        if ((session.provider === 'openai-codex' || session.provider === 'claude-code')
+          && effectiveWorkspacePath
+          && !this.codexSessionWatchers.has(session.id)
+        ) {
           try {
             const cache = new FileSnapshotCache();
             const watcher = new SessionFileWatcher();
             await cache.startSession(effectiveWorkspacePath, session.id);
-            await watcher.start(effectiveWorkspacePath, session.id, cache, historyManager);
+            await watcher.start(
+              effectiveWorkspacePath,
+              session.id,
+              cache,
+              historyManager,
+              async (filePath: string) => {
+                await sessionFileTracker.trackBashSideEffect(
+                  session.id,
+                  effectiveWorkspacePath,
+                  filePath,
+                  BrowserWindow.fromWebContents(event.sender)
+                );
+                safeSend(event, 'session-files:updated', session.id);
+              }
+            );
             this.codexSessionWatchers.set(session.id, { cache, watcher });
             logger.main.info('[AIService] Started Codex file watcher for session:', session.id);
           } catch (watcherError) {
@@ -2340,11 +2357,7 @@ export class AIService {
                     let trackToolName = chunk.toolCall.name;
                     let trackArgs = chunk.toolCall.arguments;
                     if (/^\/(?:bin|usr\/bin)\//.test(trackToolName) || /\/(?:bash|zsh|sh)\b/.test(trackToolName)) {
-                      const shellMatch = trackToolName.match(/\/(?:bin|usr\/bin)\/(?:bash|zsh|sh)\s+-l?c\s+([\s\S]+)$/);
-                      const innerCommand = shellMatch
-                        ? shellMatch[1].replace(/^['"]|['"]$/g, '')
-                        : trackToolName;
-                      trackArgs = { command: innerCommand };
+                      trackArgs = { command: unwrapShellCommand(trackToolName) };
                       trackToolName = 'Bash';
                     }
 
@@ -2967,13 +2980,14 @@ export class AIService {
               // Match file edits to tool calls now that all messages are flushed.
               // Delay briefly to let non-blocking message writes complete.
               if (effectiveWorkspacePath) {
+                const matchSessionId = session.id;
                 setTimeout(() => {
-                  toolCallMatcher.matchSession(session.id).then(count => {
+                  toolCallMatcher.matchSession(matchSessionId).then(count => {
                     if (count > 0) {
-                      safeSend(event, 'session-files:updated', session.id);
+                      safeSend(event, 'session-files:updated', matchSessionId);
                     }
                   }).catch(err =>
-                    logger.main.error('[AIService] Tool call matching failed:', err)
+                    logger.main.error(`[AIService] Tool call matching failed for session ${matchSessionId}:`, err)
                   );
                 }, 2000);
               }

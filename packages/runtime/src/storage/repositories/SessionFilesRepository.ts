@@ -94,15 +94,16 @@ export const SessionFilesRepository = {
         if (match) {
           return match;
         }
-      } else if (link.metadata?.toolUseId) {
+      } else if ((link.metadata as Record<string, unknown>)?.toolUseId) {
         // Avoid duplicate inserts when reprocessing the same tool use
         const existing = await store.getFilesBySession(link.sessionId, link.linkType);
+        const linkToolUseId = (link.metadata as Record<string, unknown>).toolUseId;
         const targetSignature = getEditedSignature(link.metadata);
         const match = existing.find(
           l =>
             l.filePath === link.filePath &&
             l.linkType === link.linkType &&
-            l.metadata?.toolUseId === link.metadata.toolUseId &&
+            (l.metadata as Record<string, unknown>)?.toolUseId === linkToolUseId &&
             getEditedSignature(l.metadata) === targetSignature
         );
         if (match) {
