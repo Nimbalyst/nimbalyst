@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import QRCode from 'qrcode';
+import { copyToClipboard } from '@nimbalyst/runtime';
 
 interface QRPairingModalProps {
   isOpen: boolean;
@@ -115,7 +116,7 @@ export function QRPairingModal({ isOpen, onClose, serverUrl }: QRPairingModalPro
     try {
       const jsonString = JSON.stringify(qrPayload, null, 2);
       console.log('[QRPairingModal] Copying payload:', jsonString);
-      await navigator.clipboard.writeText(jsonString);
+      await copyToClipboard(jsonString);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {

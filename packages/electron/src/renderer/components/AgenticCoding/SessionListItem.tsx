@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo, memo } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
-import { MaterialSymbol, ProviderIcon } from '@nimbalyst/runtime';
+import { MaterialSymbol, ProviderIcon, copyToClipboard } from '@nimbalyst/runtime';
 import { getRelativeTimeString } from '../../utils/dateFormatting';
 import { sessionOrChildProcessingAtom, sessionUnreadAtom, sessionPendingPromptAtom, sessionHasPendingInteractivePromptAtom, reparentSessionAtom, refreshSessionListAtom, sessionShareAtom, addSessionShareAtom, removeSessionShareAtom, shareKeysAtom, buildShareUrl } from '../../store';
 import type { ShareInfo } from '../../store';
@@ -193,7 +193,7 @@ export const SessionListItem = memo<SessionListItemProps>(({
   const handleCopySessionId = (e: React.MouseEvent) => {
     e.stopPropagation();
     setShowContextMenu(false);
-    navigator.clipboard.writeText(id);
+    copyToClipboard(id);
   };
 
   const handleExportHtml = (e: React.MouseEvent) => {
@@ -249,7 +249,7 @@ export const SessionListItem = memo<SessionListItemProps>(({
     setShowContextMenu(false);
     if (shareInfo) {
       const url = buildShareUrl(shareInfo.shareId, shareKeys.get(id));
-      navigator.clipboard.writeText(url);
+      copyToClipboard(url);
       errorNotificationService.showInfo('Share link copied', 'The share link has been copied to your clipboard.', { duration: 3000 });
     }
   };

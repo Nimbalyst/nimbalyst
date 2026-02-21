@@ -94,6 +94,7 @@ export * from './ui/icons/ProviderIcons';
 export * from './ui/icons/MaterialSymbol';
 export * from './ui/icons/fileIcons';
 // Utils
+export * from './utils/clipboard';
 export * from './utils/dateUtils';
 export * from './utils/fuzzyMatch';
 export * from './utils/documentDiff';

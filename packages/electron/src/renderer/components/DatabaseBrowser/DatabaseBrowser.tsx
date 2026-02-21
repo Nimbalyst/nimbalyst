@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { VList } from 'virtua';
+import { copyToClipboard } from '@nimbalyst/runtime';
 import { DatabaseDashboard } from './DatabaseDashboard';
 
 interface Table {
@@ -396,7 +397,7 @@ export function DatabaseBrowser() {
   const handleCopyCellValue = async () => {
     if (!expandedCell) return;
     try {
-      await navigator.clipboard.writeText(formatCellValue(expandedCell.value));
+      await copyToClipboard(formatCellValue(expandedCell.value));
       setCopiedCell(true);
       setTimeout(() => setCopiedCell(false), 2000);
     } catch (err) {

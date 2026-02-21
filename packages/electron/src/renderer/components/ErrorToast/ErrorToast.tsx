@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { copyToClipboard } from '@nimbalyst/runtime';
 import { errorNotificationService, type ErrorNotification } from '../../services/ErrorNotificationService';
 
 const severityStyles = {
@@ -87,7 +88,7 @@ ${JSON.stringify(notification.context, null, 2)}
 ` : ''}
 `.trim();
 
-    navigator.clipboard.writeText(details);
+    copyToClipboard(details);
   }, []);
 
   const handleActionClick = useCallback((notification: ErrorNotification) => {

@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from 'react';
+import { copyToClipboard } from '@nimbalyst/runtime';
 
 interface DiffErrorDetails {
   originalMarkdown: string;
@@ -93,7 +94,7 @@ ${r.newText}
 \`\`\`
 `).join('\n')}`;
 
-    navigator.clipboard.writeText(text).then(() => {
+    copyToClipboard(text).then(() => {
       setCopyFeedback(true);
       setTimeout(() => setCopyFeedback(false), 2000);
     });

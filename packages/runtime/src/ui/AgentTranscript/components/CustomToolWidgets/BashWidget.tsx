@@ -11,6 +11,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import type { CustomToolWidgetProps } from './index';
+import { copyToClipboard } from '../../../../utils/clipboard';
 import { ToolCallChanges } from '../ToolCallChanges';
 import { unwrapShellCommand } from '../../utils/unwrapShellCommand';
 
@@ -191,7 +192,7 @@ export const BashWidget: React.FC<CustomToolWidgetProps> = ({ message, isExpande
     const command = extractCommand(tool?.arguments);
     if (command) {
       try {
-        await navigator.clipboard.writeText(command);
+        await copyToClipboard(command);
         setCopied(true);
       } catch (err) {
         console.error('Failed to copy command:', err);
