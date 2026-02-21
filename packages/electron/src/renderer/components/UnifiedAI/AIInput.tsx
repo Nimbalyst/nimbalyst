@@ -442,7 +442,14 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
       setSlashCommandOptions(filtered);
     }, [allSlashCommands]);
 
-    // Check for typeahead trigger when value or cursor changes (debounced for performance)
+    // Check for typeahead trigger when value changes (debounced for performance)
+    // NOTE: cursorPosition and fileMentionOptions.length are intentionally excluded
+    // from the dependency array to prevent re-triggering loops:
+    // - cursorPosition is updated inside this effect via setCursorPosition, which would
+    //   cause immediate re-runs and clear the debounce timer before it fires
+    // - fileMentionOptions.length changes when async search results arrive, which would
+    //   re-run the effect and restart the debounce timer unnecessarily
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     useEffect(() => {
       // Skip trigger detection if we just completed a typeahead selection.
       // The value change from insertion would otherwise immediately re-open the menu.
@@ -472,16 +479,13 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
 
       if (match) {
         setTypeaheadMatch(match);
+        // Update cursor position for GenericTypeahead dropdown positioning
         setCursorPosition(pos);
 
         // Debounce the expensive filtering operations
         const timerId = setTimeout(() => {
           if (match.trigger === '@' && workspacePath) {
-            // Use atom-based search instead of prop callback
             searchFileMention({ workspacePath, query: match.query });
-            if (fileMentionOptions.length > 0) {
-              setSelectedIndex(0);
-            }
           } else if (match.trigger === '/' && enableSlashCommands) {
             filterSlashCommands(match.query);
             setSelectedIndex(0);
@@ -495,14 +499,39 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
         setSelectedOption(null);
       }
       return undefined;
-    }, [value, cursorPosition, workspacePath, searchFileMention, filterSlashCommands, enableSlashCommands, fileMentionOptions.length]);
+    }, [value, workspacePath, searchFileMention, filterSlashCommands, enableSlashCommands]);
 
-    // Update cursor position on selection change
+    // Auto-select first option when file mention results arrive
+    useEffect(() => {
+      if (typeaheadMatch?.trigger === '@' && fileMentionOptions.length > 0) {
+        setSelectedIndex(0);
+      }
+    }, [fileMentionOptions.length, typeaheadMatch]);
+
+    // Update cursor position on selection change (click/select)
+    // This triggers re-evaluation of typeahead trigger for cursor repositioning
     const handleSelectionChange = useCallback(() => {
       if (textareaRef.current) {
-        setCursorPosition(textareaRef.current.selectionStart);
+        const pos = textareaRef.current.selectionStart;
+        setCursorPosition(pos);
+
+        // Re-evaluate typeahead trigger when cursor moves via click/select
+        // (The main typeahead effect only triggers on value changes)
+        const triggers: string[] = [];
+        if (workspacePath) triggers.push('@');
+        if (enableSlashCommands) triggers.push('/');
+        if (triggers.length > 0) {
+          const match = extractTriggerMatch(value, pos, triggers);
+          if (match) {
+            setTypeaheadMatch(match);
+          } else {
+            setTypeaheadMatch(null);
+            setSelectedIndex(null);
+            setSelectedOption(null);
+          }
+        }
       }
-    }, []);
+    }, [value, workspacePath, enableSlashCommands]);
 
     useEffect(() => {
       const textarea = textareaRef.current;

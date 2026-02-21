@@ -131,10 +131,20 @@ function getRipgrepPath(): string {
             path.join(resourcesPath, 'app.asar.unpacked', NODE_MODULES_DIR, '@anthropic-ai', 'claude-agent-sdk', 'vendor', 'ripgrep', rgBinaryDir, rgBinaryName),
         );
     } else {
+        const rgRelPath = path.join(NODE_MODULES_DIR, '@anthropic-ai', 'claude-agent-sdk', 'vendor', 'ripgrep', rgBinaryDir, rgBinaryName);
         possibleRgPaths.push(
-            path.join(__dirname, '..', '..', NODE_MODULES_DIR, '@anthropic-ai', 'claude-agent-sdk', 'vendor', 'ripgrep', rgBinaryDir, rgBinaryName),
-            path.join(process.cwd(), NODE_MODULES_DIR, '@anthropic-ai', 'claude-agent-sdk', 'vendor', 'ripgrep', rgBinaryDir, rgBinaryName),
+            path.join(__dirname, '..', '..', rgRelPath),
+            path.join(process.cwd(), rgRelPath),
         );
+        // In monorepos, node_modules may be hoisted to the repo root.
+        // Walk up from cwd to find it.
+        let searchDir = process.cwd();
+        for (let i = 0; i < 5; i++) {
+            const parent = path.dirname(searchDir);
+            if (parent === searchDir) break; // reached filesystem root
+            possibleRgPaths.push(path.join(parent, rgRelPath));
+            searchDir = parent;
+        }
     }
 
     for (const testPath of possibleRgPaths) {
