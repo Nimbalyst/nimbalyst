@@ -1,6 +1,7 @@
 import { extractTextFromCodexEvent } from './textExtraction';
 
 export interface ParsedCodexToolCall {
+  id?: string;
   name: string;
   arguments?: unknown;
   result?: unknown;
@@ -107,6 +108,7 @@ function extractToolCallFromRecord(record: Record<string, unknown> | null | unde
   }
 
   return {
+    id: typeof record.id === 'string' ? record.id : undefined,
     name,
     arguments: (record.arguments ?? record.args ?? record.input ?? record.parameters) as unknown,
     result:
@@ -163,6 +165,7 @@ export function parseCodexEvent(event: unknown): ParsedCodexEvent[] {
     if (itemType === 'file_change') {
       parsed.push({
         toolCall: {
+          id: typeof itemRecord.id === 'string' ? itemRecord.id : undefined,
           name: 'file_change',
           arguments: { changes: itemRecord.changes },
           ...(eventType === 'item.completed'

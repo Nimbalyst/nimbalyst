@@ -1,0 +1,4 @@
+This file was created after the format parsing fix.
+It should trigger tool call matching in the database.
+This line was added via an Edit call to verify matching works.
+Apply patch edit: added on 2026-02-21.

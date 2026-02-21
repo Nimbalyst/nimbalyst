@@ -215,6 +215,7 @@ export class CodexSDKProtocol implements AgentProtocol {
             yield {
               type: 'tool_call',
               toolCall: {
+                ...(parsedEvent.toolCall.id ? { id: parsedEvent.toolCall.id } : {}),
                 name: parsedEvent.toolCall.name,
                 arguments: parsedEvent.toolCall.arguments as Record<string, unknown> | undefined,
                 ...(parsedEvent.toolCall.result !== undefined && parsedEvent.toolCall.result !== null

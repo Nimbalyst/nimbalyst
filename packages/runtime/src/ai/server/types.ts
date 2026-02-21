@@ -416,6 +416,7 @@ export interface EditedFileMetadata {
   linesRemoved?: number;
   toolName?: string;
   bashCommand?: string;  // For bash operations, stores the command (truncated)
+  toolUseId?: string;  // Tool call identifier for matching edits to tool calls
 }
 
 export interface ReferencedFileMetadata {

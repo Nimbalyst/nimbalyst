@@ -160,6 +160,7 @@ export class ToolExecutor extends EventEmitter {
           'streamContent',
           { file_path: args.targetFilePath, content: args.content },
           { success: true, linesAdded: args.content.split('\n').length },
+          undefined,
           window  // Pass window to enable file watcher attachment
         );
         console.log('[ToolExecutor] streamContent tracking completed');
@@ -351,6 +352,7 @@ export class ToolExecutor extends EventEmitter {
           name,
           args,
           result,
+          undefined,
           window  // Pass window to enable file watcher attachment for edited files
         );
         console.log('[ToolExecutor] File tracking completed successfully');

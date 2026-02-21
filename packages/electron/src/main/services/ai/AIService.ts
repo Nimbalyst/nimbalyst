@@ -2340,7 +2340,7 @@ export class AIService {
                     let trackToolName = chunk.toolCall.name;
                     let trackArgs = chunk.toolCall.arguments;
                     if (/^\/(?:bin|usr\/bin)\//.test(trackToolName) || /\/(?:bash|zsh|sh)\b/.test(trackToolName)) {
-                      const shellMatch = trackToolName.match(/\/(?:bin|usr\/bin)\/(?:bash|zsh|sh)\s+-l?c\s+(.+)$/);
+                      const shellMatch = trackToolName.match(/\/(?:bin|usr\/bin)\/(?:bash|zsh|sh)\s+-l?c\s+([\s\S]+)$/);
                       const innerCommand = shellMatch
                         ? shellMatch[1].replace(/^['"]|['"]$/g, '')
                         : trackToolName;
@@ -2348,12 +2348,17 @@ export class AIService {
                       trackToolName = 'Bash';
                     }
 
+                    const toolUseId = typeof (chunk.toolCall as any)?.toolUseId === 'string'
+                      ? (chunk.toolCall as any).toolUseId
+                      : (typeof chunk.toolCall.id === 'string' ? chunk.toolCall.id : undefined);
+
                     await sessionFileTracker.trackToolExecution(
                       session.id,
                       effectiveWorkspacePath,
                       trackToolName,
                       trackArgs,
                       chunk.toolCall.result,
+                      toolUseId,
                       window  // Pass window to enable file watcher attachment for edited files
                     );
                     // Notify renderer that files were tracked
@@ -2571,6 +2576,7 @@ export class AIService {
                     'streamContent',
                     { file_path: documentContext.filePath },
                     { success: !chunk.error },
+                    undefined,
                     window  // Pass window to enable file watcher attachment for edited files
                   );
                   // Notify renderer that files were tracked

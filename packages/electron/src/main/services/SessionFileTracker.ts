@@ -166,6 +166,7 @@ export class SessionFileTracker {
     toolName: string,
     args: any,
     result: any,
+    toolUseId?: string,
     window?: BrowserWindow | null
   ): Promise<void> {
     // console.log('[SessionFileTracker] trackToolExecution called:', { sessionId, workspaceId, toolName, enabled: this.enabled });
@@ -194,7 +195,7 @@ export class SessionFileTracker {
         }
         for (const change of changes) {
           if (change && typeof change.path === 'string') {
-            await this.trackSingleFile(sessionId, workspaceId, change.path, linkType, toolName, args, result, window);
+            await this.trackSingleFile(sessionId, workspaceId, change.path, linkType, toolName, args, result, toolUseId, window);
           }
         }
         return;
@@ -218,7 +219,7 @@ export class SessionFileTracker {
 
         // Track each affected file
         for (const filePath of filePaths) {
-          await this.trackSingleFile(sessionId, workspaceId, filePath, linkType, toolName, args, result, window);
+          await this.trackSingleFile(sessionId, workspaceId, filePath, linkType, toolName, args, result, toolUseId, window);
         }
         return;
       }
@@ -233,7 +234,7 @@ export class SessionFileTracker {
         return;
       }
 
-      await this.trackSingleFile(sessionId, workspaceId, filePath, linkType, toolName, args, result, window);
+      await this.trackSingleFile(sessionId, workspaceId, filePath, linkType, toolName, args, result, toolUseId, window);
     } catch (error) {
       logger.main.error('[SessionFileTracker] Failed to track tool execution:', error);
       console.error('[SessionFileTracker] Error details:', error);
@@ -253,6 +254,7 @@ export class SessionFileTracker {
     toolName: string,
     args: any,
     result: any,
+    toolUseId?: string,
     window?: BrowserWindow | null
   ): Promise<void> {
     try {
@@ -261,6 +263,9 @@ export class SessionFileTracker {
       let metadata: any = {};
       if (linkType === 'edited') {
         metadata = extractEditMetadata(toolName, args, result);
+        if (toolUseId) {
+          metadata.toolUseId = toolUseId;
+        }
 
         // Ensure file watcher is attached for edited files
         // This is critical for detecting subsequent changes, even for files

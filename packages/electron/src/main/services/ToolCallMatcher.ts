@@ -17,6 +17,7 @@
  */
 
 import * as path from 'path';
+import { SessionFilesRepository } from '@nimbalyst/runtime';
 import { database } from '../database/PGLiteDatabaseWorker';
 import { logger } from '../utils/logger';
 // Lazy-loaded parseBashForFileOps - the deep import path isn't in runtime's
@@ -85,6 +86,7 @@ export interface ToolCallWindow {
   toolUseId: string | null;
   filePaths: string[];
   outputText: string;
+  args?: any;
 }
 
 /**
@@ -300,6 +302,7 @@ export function parseToolCallWindows(
           toolUseId: toolId,
           filePaths: allPaths,
           outputText: '',
+          args,
         });
       }
     }
@@ -346,7 +349,7 @@ export function parseToolCallWindows(
     // Codex uses command field directly, often wrapped in a shell invocation
     // like "/bin/zsh -lc 'actual command'" - unwrap to get the inner command
     let rawCommand = typeof item.command === 'string' ? item.command : '';
-    const shellMatch = rawCommand.match(/\/(?:bin|usr\/bin)\/(?:bash|zsh|sh)\s+-l?c\s+(.+)$/);
+    const shellMatch = rawCommand.match(/\/(?:bin|usr\/bin)\/(?:bash|zsh|sh)\s+-l?c\s+([\s\S]+)$/);
     if (shellMatch) {
       rawCommand = shellMatch[1].replace(/^['"]|['"]$/g, '');
     }
@@ -388,6 +391,7 @@ export function parseToolCallWindows(
     toolUseId,
     filePaths: allPaths,
     outputText: stringifyOutput(result),
+    args,
   });
 
   return windows;
@@ -460,7 +464,14 @@ class ToolCallMatcherImpl {
         await database.initialize();
       }
 
-      // 1. Load edited session_files
+      // 1. Get workspace path from session metadata (fallback to file path heuristic)
+      const sessionInfo = await database.query<{ workspace_id: string | null }>(
+        `SELECT workspace_id FROM ai_sessions WHERE id = $1 LIMIT 1`,
+        [sessionId]
+      );
+      const workspacePath = sessionInfo.rows[0]?.workspace_id || undefined;
+
+      // 2. Load edited session_files
       const filesResult = await database.query<SessionFileRow>(
         `SELECT id, file_path, timestamp, metadata
          FROM session_files
@@ -468,10 +479,11 @@ class ToolCallMatcherImpl {
         [sessionId]
       );
       const sessionFiles = filesResult.rows;
-      if (sessionFiles.length === 0) return 0;
 
-      // 2. Get workspace path from first file (for bash parsing)
-      const workspacePath = this.inferWorkspacePath(sessionFiles[0].file_path);
+      const sessionFilesByPath = new Map<string, SessionFileRow>();
+      for (const file of sessionFiles) {
+        sessionFilesByPath.set(file.file_path, file);
+      }
 
       // 3. Load output messages
       const messagesResult = await database.query<AgentMessageRow>(
@@ -497,14 +509,71 @@ class ToolCallMatcherImpl {
 
       if (windows.length === 0) return 0;
 
-      // 5. Load existing matches to avoid re-processing
-      const existingResult = await database.query<{ session_file_id: string }>(
-        `SELECT session_file_id FROM ai_tool_call_file_edits WHERE session_id = $1`,
+      // 5. If Bash tool calls produced file paths but no session_files entry
+      // exists (e.g., when command_execution events are stored without
+      // going through SessionFileTracker), create the missing link now.
+      // This ensures ai_tool_call_file_edits can still be created.
+      for (const window of windows) {
+        if (window.toolName !== 'Bash') continue;
+        if (!window.filePaths.length) continue;
+
+        const bashCommand = window.args?.command;
+        for (const filePath of window.filePaths) {
+          if (sessionFilesByPath.has(filePath)) continue;
+
+          const resolvedWorkspacePath = workspacePath || this.inferWorkspacePath(filePath);
+          const metadata: Record<string, any> = {
+            toolName: 'Bash',
+            operation: 'bash',
+          };
+          if (typeof bashCommand === 'string' && bashCommand.length > 0) {
+            metadata.bashCommand = bashCommand.slice(0, 200);
+          }
+          if (window.toolUseId) {
+            metadata.toolUseId = window.toolUseId;
+          }
+
+          const link = await SessionFilesRepository.addFileLink({
+            sessionId,
+            workspaceId: resolvedWorkspacePath,
+            filePath,
+            linkType: 'edited',
+            timestamp: window.messageCreatedAt,
+            metadata,
+          });
+
+          const row: SessionFileRow = {
+            id: link.id,
+            file_path: link.filePath,
+            timestamp: new Date(link.timestamp),
+            metadata: link.metadata,
+          };
+          sessionFiles.push(row);
+          sessionFilesByPath.set(filePath, row);
+        }
+      }
+
+      if (sessionFiles.length === 0) return 0;
+
+      // 6. Load existing matches to avoid re-processing
+      const existingResult = await database.query<{
+        session_file_id: string;
+        tool_use_id: string | null;
+      }>(
+        `SELECT session_file_id, tool_use_id FROM ai_tool_call_file_edits WHERE session_id = $1`,
         [sessionId]
       );
       const alreadyMatched = new Set(existingResult.rows.map(r => r.session_file_id));
+      const matchedToolUseIdsByFile = new Map<string, Set<string>>();
+      for (const row of existingResult.rows) {
+        if (!row.tool_use_id) continue;
+        if (!matchedToolUseIdsByFile.has(row.session_file_id)) {
+          matchedToolUseIdsByFile.set(row.session_file_id, new Set());
+        }
+        matchedToolUseIdsByFile.get(row.session_file_id)!.add(row.tool_use_id);
+      }
 
-      // 6. Match each unmatched file
+      // 7. Match each unmatched file
       const matches: Array<{
         sessionId: string;
         sessionFileId: string;
@@ -517,13 +586,19 @@ class ToolCallMatcherImpl {
       }> = [];
 
       for (const file of sessionFiles) {
-        if (alreadyMatched.has(file.id)) continue;
+        const metadataToolUseId = file.metadata?.toolUseId;
+        if (metadataToolUseId) {
+          const matchedToolUseIds = matchedToolUseIdsByFile.get(file.id);
+          if (matchedToolUseIds?.has(metadataToolUseId)) {
+            continue;
+          }
+        } else if (alreadyMatched.has(file.id)) {
+          continue;
+        }
 
         const fileTimestamp = file.timestamp instanceof Date
           ? file.timestamp.getTime()
           : new Date(file.timestamp).getTime();
-
-        const metadataToolUseId = file.metadata?.toolUseId;
 
         // Score against all windows (scoreMatch returns null for time-cutoff failures)
         const candidates = windows

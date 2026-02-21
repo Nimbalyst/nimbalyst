@@ -51,12 +51,13 @@ export function createPGLiteSessionFileStore(db: PGliteLike, ensureDbReady?: Ens
       const timestampMs = link.timestamp || now;
       const timestamp = new Date(timestampMs);
 
-      await db.query(
+      const { rows } = await db.query<any>(
         `INSERT INTO session_files (
           id, session_id, workspace_id, file_path, link_type, timestamp, metadata
         ) VALUES (
           $1, $2, $3, $4, $5, $6, $7
-        )`,
+        )
+        RETURNING id, session_id, workspace_id, file_path, link_type, timestamp, metadata`,
         [
           id,
           link.sessionId,
@@ -68,11 +69,15 @@ export function createPGLiteSessionFileStore(db: PGliteLike, ensureDbReady?: Ens
         ]
       );
 
-      return {
-        id,
-        ...link,
-        timestamp: link.timestamp || now
-      };
+      if (!rows[0]) {
+        return {
+          id,
+          ...link,
+          timestamp: link.timestamp || now
+        };
+      }
+
+      return rowToFileLink(rows[0]);
     },
 
     async getFilesBySession(sessionId: string, linkType?: FileLinkType): Promise<FileLink[]> {

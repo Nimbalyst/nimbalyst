@@ -77,11 +77,25 @@ export const SessionFilesRepository = {
     // Check if link already exists
     const exists = await store.hasFileLink(link.sessionId, link.filePath, link.linkType);
     if (exists) {
-      // Return existing link without creating duplicate
-      const existing = await store.getFilesBySession(link.sessionId, link.linkType);
-      const match = existing.find(l => l.filePath === link.filePath && l.linkType === link.linkType);
-      if (match) {
-        return match;
+      if (link.linkType !== 'edited') {
+        // Return existing link without creating duplicate
+        const existing = await store.getFilesBySession(link.sessionId, link.linkType);
+        const match = existing.find(l => l.filePath === link.filePath && l.linkType === link.linkType);
+        if (match) {
+          return match;
+        }
+      } else if (link.metadata?.toolUseId) {
+        // Avoid duplicate inserts when reprocessing the same tool use
+        const existing = await store.getFilesBySession(link.sessionId, link.linkType);
+        const match = existing.find(
+          l =>
+            l.filePath === link.filePath &&
+            l.linkType === link.linkType &&
+            l.metadata?.toolUseId === link.metadata.toolUseId
+        );
+        if (match) {
+          return match;
+        }
       }
     }
 
