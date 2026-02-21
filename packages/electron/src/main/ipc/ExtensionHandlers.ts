@@ -13,6 +13,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { logger } from '../utils/logger';
 import { safeHandle, safeOn } from '../utils/ipcRegistry';
+import { SessionFileWatcher } from '../file/SessionFileWatcher';
 import { minimatch } from 'minimatch';
 import {
   getExtensionSettings,
@@ -631,6 +632,7 @@ export function registerExtensionHandlers(): void {
   // Write content to a file
   safeHandle('extensions:write-file', async (_event, filePath: string, content: string) => {
     try {
+      SessionFileWatcher.markEditorSave(filePath);
       const dir = path.dirname(filePath);
       await fs.mkdir(dir, { recursive: true });
       await fs.writeFile(filePath, content, 'utf-8');

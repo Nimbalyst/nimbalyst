@@ -207,7 +207,7 @@ describe('ToolCallMatcher Codex Integration', () => {
         // Should match since filename is in args and timestamp is recent
         expect(result).not.toBeNull();
         expect(result!.score).toBeGreaterThanOrEqual(30);
-        expect(result!.reasons.some(r => r.includes('name_in'))).toBe(true);
+        expect(result!.reasons.some(r => r.includes('name_in') || r.includes('path_in_changes'))).toBe(true);
       }
     }
   );

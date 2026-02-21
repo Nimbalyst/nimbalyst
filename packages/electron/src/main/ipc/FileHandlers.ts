@@ -12,6 +12,7 @@ import { logger } from '../utils/logger';
 import { homedir } from 'os';
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
 import { isPathInWorkspace, getRelativeWorkspacePath } from '../utils/workspaceDetection';
+import { SessionFileWatcher } from '../file/SessionFileWatcher';
 
 // Helper function to get file type from extension
 function getFileType(filePath: string): string {
@@ -168,9 +169,8 @@ export function registerFileHandlers() {
 
             // Mark that we're saving to prevent file watcher from reacting
             savingWindows.add(windowId);
-            // console.log('[SAVE] Marked window as saving:', windowId);
+            SessionFileWatcher.markEditorSave(filePath);
 
-            // console.log('[SAVE] Writing to file:', filePath);
             saveFile(filePath, content);
 
             if (state) {
@@ -262,7 +262,7 @@ export function registerFileHandlers() {
 
                 // Mark that we're saving to prevent file watcher from reacting
                 savingWindows.add(windowId);
-                console.log('[SAVE_AS] Marked window as saving:', windowId);
+                SessionFileWatcher.markEditorSave(filePath);
 
                 if (state) {
                     state.filePath = filePath;

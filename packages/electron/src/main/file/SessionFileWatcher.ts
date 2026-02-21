@@ -17,6 +17,9 @@ const BINARY_EXTENSIONS = new Set([
   '.wasm', '.node',
 ]);
 
+/** TTL for editor save markers (ms). Must exceed chokidar's awaitWriteFinish delay. */
+const EDITOR_SAVE_TTL_MS = 2000;
+
 export class SessionFileWatcher {
   private watcher: FSWatcher | null = null;
   private cache: FileSnapshotCache | null = null;
@@ -25,6 +28,32 @@ export class SessionFileWatcher {
   private workspacePath: string | null = null;
   private active = false;
   private onFileChanged: ((filePath: string) => Promise<void> | void) | null = null;
+
+  /**
+   * File paths recently saved by the Nimbalyst editor (user saves).
+   * These are excluded from AI tool call matching so human edits
+   * don't get attributed to AI tool calls.
+   */
+  private static recentEditorSaves = new Map<string, number>();
+
+  /**
+   * Mark a file as recently saved by the editor.
+   * Called from FileHandlers when the user saves a file (Cmd+S / autosave).
+   */
+  static markEditorSave(filePath: string): void {
+    SessionFileWatcher.recentEditorSaves.set(path.normalize(filePath), Date.now());
+  }
+
+  private isRecentEditorSave(filePath: string): boolean {
+    const normalized = path.normalize(filePath);
+    const savedAt = SessionFileWatcher.recentEditorSaves.get(normalized);
+    if (savedAt === undefined) return false;
+    if (Date.now() - savedAt > EDITOR_SAVE_TTL_MS) {
+      SessionFileWatcher.recentEditorSaves.delete(normalized);
+      return false;
+    }
+    return true;
+  }
 
   async start(
     workspacePath: string,
@@ -121,6 +150,7 @@ export class SessionFileWatcher {
   private async handleChange(filePath: string): Promise<void> {
     if (!this.active || !this.cache || !this.historyManager || !this.sessionId) return;
     if (this.isBinaryPath(filePath)) return;
+    if (this.isRecentEditorSave(filePath)) return;
 
     try {
       if (this.onFileChanged) {
@@ -200,6 +230,7 @@ export class SessionFileWatcher {
   private async handleAdd(filePath: string): Promise<void> {
     if (!this.active || !this.cache || !this.historyManager || !this.sessionId) return;
     if (this.isBinaryPath(filePath)) return;
+    if (this.isRecentEditorSave(filePath)) return;
 
     try {
       if (this.onFileChanged) {

@@ -513,6 +513,7 @@ describe('ToolCallMatcher', () => {
         toolUseId: 'item_9',
         argsText: '{"changes":[{"path":"/Users/jordanbentley/git/nimnim_worktrees/noble-owl/test/hello.txt","kind":"update"}]}',
         outputText: '',
+        args: { changes: [{ path: '/Users/jordanbentley/git/nimnim_worktrees/noble-owl/test/hello.txt', kind: 'update' }] },
       };
 
       const result = scoreMatch(
@@ -522,8 +523,8 @@ describe('ToolCallMatcher', () => {
       );
 
       expect(result).not.toBeNull();
-      expect(result!.score).toBe(40); // name_in_args
-      expect(result!.reasons).toContain('name_in_args');
+      expect(result!.score).toBe(40); // path_in_changes
+      expect(result!.reasons).toContain('path_in_changes');
     });
 
     it('should NOT match when timestamps have timezone mismatch (Bug 3)', () => {
@@ -540,6 +541,7 @@ describe('ToolCallMatcher', () => {
         toolUseId: null,
         argsText: '{"changes":[{"path":"/Users/jordanbentley/git/nimnim_worktrees/noble-owl/test/hello.txt","kind":"update"}]}',
         outputText: '',
+        args: { changes: [{ path: '/Users/jordanbentley/git/nimnim_worktrees/noble-owl/test/hello.txt', kind: 'update' }] },
       };
 
       const result = scoreMatch(

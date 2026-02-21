@@ -17,10 +17,15 @@
  */
 
 import * as path from 'path';
-import { execFile } from 'child_process';
+import * as fs from 'fs/promises';
+import * as zlib from 'zlib';
+import { promisify } from 'util';
 import { parse as parseShellCommand } from 'shell-quote';
+import { diffLines } from 'diff';
 import { database } from '../database/PGLiteDatabaseWorker';
 import { logger } from '../utils/logger';
+
+const gunzip = promisify(zlib.gunzip);
 
 // ---------------------------------------------------------------------------
 // Types
@@ -346,14 +351,29 @@ export function scoreMatch(
     return null; // Outside time window, not a candidate
   }
 
-  // 3. Filename in tool input (arguments) - basename match
+  // 3. file_change (Codex apply_patch): require exact file path match in the changes array.
+  //    Don't use basename heuristics — only match if the full path is listed.
+  if (window.toolName === 'file_change' && window.args?.changes) {
+    const changes = Array.isArray(window.args.changes) ? window.args.changes : [];
+    const normalizedFilePath = path.normalize(filePath);
+    const hasExactMatch = changes.some(
+      (c: any) => typeof c.path === 'string' && path.normalize(c.path) === normalizedFilePath
+    );
+    if (hasExactMatch) {
+      score += 40;
+      reasons.push('path_in_changes');
+    }
+    return score >= MIN_MATCH_SCORE ? { window, score, reasons } : null;
+  }
+
+  // 4. Filename in tool input (arguments) - basename match
   const fileName = path.basename(filePath);
   if (window.argsText.includes(fileName)) {
     score += 40;
     reasons.push('name_in_args');
   }
 
-  // 4. Filename in tool output
+  // 5. Filename in tool output
   if (window.outputText && window.outputText.includes(fileName)) {
     score += 30;
     reasons.push('name_in_output');
@@ -573,13 +593,6 @@ class ToolCallMatcherImpl {
         return directDiffs;
       }
 
-      // Get workspace path for git diff fallback
-      const sessionInfo = await database.query<{ workspace_id: string | null }>(
-        `SELECT workspace_id FROM ai_sessions WHERE id = $1 LIMIT 1`,
-        [sessionId]
-      );
-      const workspacePath = sessionInfo.rows[0]?.workspace_id || undefined;
-
       // 1. Find matches for this tool call
       const latestMessageResult = await database.query<{
         message_id: number;
@@ -701,19 +714,18 @@ class ToolCallMatcherImpl {
         results.push(diffResult);
       }
 
-      // Git diff fallback for entries with no extractable diff data
-      if (workspacePath) {
-        for (const result of results) {
-          if (result.diffs.length === 0 && !result.content) {
-            const gitDiff = await this.computeGitDiff(workspacePath, result.filePath);
-            if (gitDiff) {
-              result.diffs = [{ oldString: gitDiff.oldString, newString: gitDiff.newString }];
-              result.linesAdded = gitDiff.linesAdded;
-              result.linesRemoved = gitDiff.linesRemoved;
-              result.debugInfo += ' | diff: git diff fallback';
-            } else {
-              result.debugInfo += ' | diff: git diff returned empty';
-            }
+      // Fallback for entries with no extractable diff data:
+      // Use history snapshot (before-content from file watcher vs current file on disk)
+      for (const result of results) {
+        if (result.diffs.length === 0 && !result.content) {
+          const historyDiff = await this.computeHistoryDiff(sessionId, result.filePath);
+          if (historyDiff) {
+            result.diffs = [{ oldString: historyDiff.oldString, newString: historyDiff.newString }];
+            result.linesAdded = historyDiff.linesAdded;
+            result.linesRemoved = historyDiff.linesRemoved;
+            result.debugInfo += ' | diff: history snapshot';
+          } else {
+            result.debugInfo += ' | diff: no history snapshot found';
           }
         }
       }
@@ -1055,75 +1067,73 @@ class ToolCallMatcherImpl {
    * Falls back through: git diff HEAD, git diff (staged), git diff HEAD~1 (just committed).
    * Returns old/new content strings suitable for DiffViewer, or null if no diff available.
    */
-  private async computeGitDiff(
-    workspacePath: string,
+  /**
+   * Get diff from history snapshot (document_history pre-edit tag) vs current file on disk.
+   * The SessionFileWatcher stores before-content when it detects file changes during an AI session.
+   */
+  private async computeHistoryDiff(
+    sessionId: string,
     filePath: string
   ): Promise<{ oldString: string; newString: string; linesAdded: number; linesRemoved: number } | null> {
-    const runGitDiff = (args: string[]): Promise<string> => {
-      return new Promise((resolve, reject) => {
-        execFile('git', args, { cwd: workspacePath, maxBuffer: 1024 * 1024 }, (error, stdout) => {
-          if (error && !stdout) {
-            reject(error);
-            return;
-          }
-          resolve(stdout || '');
-        });
-      });
-    };
+    try {
+      // Find the pre-edit tag for this file+session from document_history
+      const result = await database.query<{
+        content: Buffer;
+      }>(`
+        SELECT content
+        FROM document_history
+        WHERE file_path = $1
+          AND metadata->>'sessionId' = $2
+          AND metadata->>'type' = 'pre-edit'
+        ORDER BY timestamp DESC
+        LIMIT 1
+      `, [filePath, sessionId]);
 
-    const parseDiffOutput = (diffOutput: string): { oldString: string; newString: string; linesAdded: number; linesRemoved: number } | null => {
-      if (!diffOutput.trim()) return null;
+      if (result.rows.length === 0) return null;
 
-      const lines = diffOutput.split('\n');
-      const oldLines: string[] = [];
-      const newLines: string[] = [];
-      let inHunk = false;
+      const compressed = result.rows[0].content;
+      const decompressed = await gunzip(compressed);
+      const beforeContent = decompressed.toString('utf-8');
 
-      for (const line of lines) {
-        if (line.startsWith('@@')) {
-          inHunk = true;
-          continue;
-        }
-        if (!inHunk) continue;
-
-        // Only collect actual changes, not context lines.
-        // DiffViewer renders all old lines as red and all new lines as green,
-        // so context lines would appear incorrectly as both removed and added.
-        if (line.startsWith('-')) {
-          oldLines.push(line.slice(1));
-        } else if (line.startsWith('+')) {
-          newLines.push(line.slice(1));
-        }
+      // Read current file from disk
+      let currentContent: string;
+      try {
+        currentContent = await fs.readFile(filePath, 'utf-8');
+      } catch {
+        return null; // File may have been deleted
       }
 
-      if (oldLines.length === 0 && newLines.length === 0) return null;
+      if (beforeContent === currentContent) return null;
+
+      // Compute line-level diff — only return the changed lines, not the entire file.
+      // DiffViewer renders oldString as all-red and newString as all-green,
+      // so we must only include the actual removed/added lines.
+      const changes = diffLines(beforeContent, currentContent);
+      const removedLines: string[] = [];
+      const addedLines: string[] = [];
+
+      for (const change of changes) {
+        if (change.removed) {
+          removedLines.push(change.value);
+        } else if (change.added) {
+          addedLines.push(change.value);
+        }
+        // Skip unchanged lines (context)
+      }
+
+      if (removedLines.length === 0 && addedLines.length === 0) return null;
+
+      const oldString = removedLines.join('');
+      const newString = addedLines.join('');
 
       return {
-        oldString: oldLines.join('\n'),
-        newString: newLines.join('\n'),
-        linesAdded: newLines.length,
-        linesRemoved: oldLines.length,
+        oldString,
+        newString,
+        linesAdded: newString ? newString.split('\n').filter(l => l !== '').length : 0,
+        linesRemoved: oldString ? oldString.split('\n').filter(l => l !== '').length : 0,
       };
-    };
-
-    try {
-      // Try unstaged changes first (most common during active session)
-      let output = await runGitDiff(['diff', '--no-color', '--', filePath]);
-      let parsed = parseDiffOutput(output);
-      if (parsed) return parsed;
-
-      // Try staged changes
-      output = await runGitDiff(['diff', '--cached', '--no-color', '--', filePath]);
-      parsed = parseDiffOutput(output);
-      if (parsed) return parsed;
-
-      // Try last commit (file may have just been committed)
-      output = await runGitDiff(['diff', 'HEAD~1', 'HEAD', '--no-color', '--', filePath]);
-      parsed = parseDiffOutput(output);
-      if (parsed) return parsed;
-
-      return null;
-    } catch {
+    } catch (error) {
+      logger.main.error('[ToolCallMatcher] computeHistoryDiff failed:', error);
       return null;
     }
   }
@@ -1247,19 +1257,17 @@ class ToolCallMatcherImpl {
         results.push(diffResult);
       }
 
-      // Git diff fallback for entries with no extractable diff data
-      if (workspacePath) {
-        for (const result of results) {
-          if (result.diffs.length === 0 && !result.content) {
-            const gitDiff = await this.computeGitDiff(workspacePath, result.filePath);
-            if (gitDiff) {
-              result.diffs = [{ oldString: gitDiff.oldString, newString: gitDiff.newString }];
-              result.linesAdded = gitDiff.linesAdded;
-              result.linesRemoved = gitDiff.linesRemoved;
-              result.debugInfo += ' | diff: git diff fallback';
-            } else {
-              result.debugInfo += ' | diff: git diff returned empty';
-            }
+      // History snapshot fallback for entries with no extractable diff data
+      for (const result of results) {
+        if (result.diffs.length === 0 && !result.content) {
+          const historyDiff = await this.computeHistoryDiff(sessionId, result.filePath);
+          if (historyDiff) {
+            result.diffs = [{ oldString: historyDiff.oldString, newString: historyDiff.newString }];
+            result.linesAdded = historyDiff.linesAdded;
+            result.linesRemoved = historyDiff.linesRemoved;
+            result.debugInfo += ' | diff: history snapshot';
+          } else {
+            result.debugInfo += ' | diff: no history snapshot found';
           }
         }
       }
