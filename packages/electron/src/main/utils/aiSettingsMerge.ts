@@ -220,9 +220,12 @@ export function getEffectiveApiKey(
   }
 
   // Fall back to global key
-  // Handle anthropic being shared by claude and claude-code
-  if (providerId === 'claude' || providerId === 'claude-code') {
+  // Claude Chat uses the 'anthropic' key; Claude Code has its own auth (SSO)
+  if (providerId === 'claude') {
     return effective.apiKeys['anthropic'];
+  }
+  if (providerId === 'claude-code') {
+    return effective.apiKeys['claude-code'];
   }
 
   return effective.apiKeys[providerId];

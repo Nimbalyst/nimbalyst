@@ -611,8 +611,10 @@ export class AIService {
     // Fall back to global API key
     switch (provider) {
       case 'claude':
-      case 'claude-code':
         return globalApiKeys['anthropic'] || process.env.ANTHROPIC_API_KEY;
+      case 'claude-code':
+        // Claude Code has its own auth (SSO login) - never use the Claude Chat API key
+        return globalApiKeys['claude-code'];
       case 'openai':
         return globalApiKeys['openai'] || process.env.OPENAI_API_KEY;
       case 'openai-codex':
@@ -1269,15 +1271,16 @@ export class AIService {
       const apiKeys = this.getSettingsStore().get('apiKeys', {}) as Record<string, string>;
       const providerSettings = this.getNormalizedProviderSettings() as any;
 
-      // Check Claude/Claude Code (needs API key)
+      // Claude Code uses its own auth (SSO) - always available if enabled
+      const claudeCodeEnabled = providerSettings['claude-code']?.enabled !== false;
+      if (claudeCodeEnabled) return true;
+
+      // Claude Chat needs an Anthropic API key and enabled models
       const hasAnthropicKey = !!(apiKeys['anthropic'] || process.env.ANTHROPIC_API_KEY);
       if (hasAnthropicKey) {
-        // Claude Code is always available with API key
-        // Regular Claude needs to be enabled with models
-        const hasClaudeCode = true; // Always available with key
         const hasClaude = providerSettings['claude']?.enabled &&
                          providerSettings['claude']?.models?.length > 0;
-        if (hasClaudeCode || hasClaude) return true;
+        if (hasClaude) return true;
       }
 
       // Check OpenAI (needs API key and enabled models)
@@ -1304,7 +1307,8 @@ export class AIService {
     // Initialize/configure AI
     safeHandle('ai:initialize', async (event, provider?: string, apiKey?: string) => {
       if (apiKey) {
-        // Save API key - always save as 'anthropic' since both providers use the same key
+        // Save API key for the Claude Chat provider only
+        // Claude Code has its own auth (SSO) and should never use this key
         const apiKeys = this.getSettingsStore().get('apiKeys', {}) as Record<string, string>;
         apiKeys['anthropic'] = apiKey;
         this.getSettingsStore().set('apiKeys', apiKeys);

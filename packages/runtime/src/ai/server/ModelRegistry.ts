@@ -86,7 +86,7 @@ export class ModelRegistry {
     // Fetch from each provider in parallel
     const promises = [
       this.getModelsForProvider('claude', apiKeys['anthropic']),
-      this.getModelsForProvider('claude-code', apiKeys['anthropic']),
+      this.getModelsForProvider('claude-code'), // Claude Code uses its own auth, not the Chat API key
       this.getModelsForProvider('openai', apiKeys['openai']),
       this.getModelsForProvider('openai-codex', apiKeys['openai']),
       this.getModelsForProvider('lmstudio', undefined, apiKeys['lmstudio_url'])
