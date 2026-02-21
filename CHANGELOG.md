@@ -20,6 +20,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.54.3] - 2026-02-21
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- Tool call diffs now appear for Codex sessions
+- File change diffs use history snapshots and exclude human edits
+- Shell-wrapped bash commands properly unwrapped for file tracking
+- Claude Code no longer leaks or uses the Claude Chat API key
+- @ mention file search fixed in dev mode
+- Claude usage indicator no longer hidden when utilization is at 0%
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.54.2] - 2026-02-21
 
 
