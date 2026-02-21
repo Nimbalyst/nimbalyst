@@ -158,6 +158,17 @@ class PGLiteWorker {
         parentPort.postMessage(response);
       } catch (error) {
         console.error('[PGLite Worker] Error handling message:', error);
+
+        // ROLLBACK to clear any aborted transaction state so that
+        // subsequent queries from other callers are not poisoned.
+        if (this.db) {
+          try {
+            await this.db.exec('ROLLBACK');
+          } catch {
+            // Ignore - no transaction may be active
+          }
+        }
+
         parentPort.postMessage({
           id: message.id,
           success: false,

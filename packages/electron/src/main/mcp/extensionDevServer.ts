@@ -1583,16 +1583,6 @@ function createExtensionDevMcpServer(
             isError: false,
           };
         } catch (error) {
-          // ROLLBACK to clear the aborted transaction state, otherwise
-          // subsequent queries from other parts of the app will fail with
-          // "current transaction is aborted, commands ignored until end of
-          // transaction block"
-          try {
-            await database.exec("ROLLBACK");
-          } catch {
-            // Ignore ROLLBACK errors (e.g., no transaction in progress)
-          }
-
           const errorMessage =
             error instanceof Error ? error.message : "Unknown error";
           return {
