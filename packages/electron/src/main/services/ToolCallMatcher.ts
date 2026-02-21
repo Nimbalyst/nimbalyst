@@ -73,7 +73,7 @@ export interface ToolCallFileEdit {
 interface SessionFileRow {
   id: string;
   file_path: string;
-  timestamp: Date;
+  timestamp_ms: number;
   metadata: any;
 }
 
@@ -331,12 +331,15 @@ export function scoreMatch(
   filePath: string,
   fileTimestamp: number,
   window: ToolCallWindow,
-  fileMetadataToolUseId?: string
+  fileMetadataToolUseId?: string,
 ): MatchCandidate | null {
   let score = 0;
   const reasons: string[] = [];
 
-  // 1. Direct toolUseId match - definitive, bypasses time cutoff
+  // 1. Direct toolUseId match - definitive, bypasses time cutoff.
+  //    Only used for providers with unique tool IDs (e.g., Claude Code SDK).
+  //    Codex sessions don't store toolUseId in session_files metadata because
+  //    Codex reuses item IDs across turns, so this path is never reached for Codex.
   if (fileMetadataToolUseId && window.toolUseId && fileMetadataToolUseId === window.toolUseId) {
     score += 100;
     reasons.push('toolUseId');
@@ -405,8 +408,11 @@ class ToolCallMatcherImpl {
       const workspacePath = sessionInfo.rows[0]?.workspace_id || undefined;
 
       // 2. Load edited session_files
+      // Use EXTRACT(EPOCH) to get correct epoch ms regardless of
+      // timestamp column timezone type (avoids PGLite tz interpretation bug
+      // where "timestamp without time zone" values get a phantom offset).
       const filesResult = await database.query<SessionFileRow>(
-        `SELECT id, file_path, timestamp, metadata
+        `SELECT id, file_path, EXTRACT(EPOCH FROM timestamp) * 1000 AS timestamp_ms, metadata
          FROM session_files
          WHERE session_id = $1 AND link_type = 'edited'`,
         [sessionId]
@@ -483,9 +489,7 @@ class ToolCallMatcherImpl {
           continue;
         }
 
-        const fileTimestamp = file.timestamp instanceof Date
-          ? file.timestamp.getTime()
-          : new Date(file.timestamp).getTime();
+        const fileTimestamp = ensureNumber(file.timestamp_ms);
 
         // Score against all windows (scoreMatch returns null for time-cutoff failures)
         const candidates = windows
@@ -1154,8 +1158,9 @@ class ToolCallMatcherImpl {
       const workspacePath = sessionResult.rows[0]?.workspace_id;
 
       // Get file paths from the file watcher (session_files) for this tool call
-      const linkResult = await database.query<{ file_path: string; timestamp: Date; metadata: any }>(
-        `SELECT file_path, timestamp, metadata
+      // Use EXTRACT(EPOCH) for correct epoch ms (avoids PGLite tz interpretation bug).
+      const linkResult = await database.query<{ file_path: string; timestamp_ms: number; metadata: any }>(
+        `SELECT file_path, EXTRACT(EPOCH FROM timestamp) * 1000 AS timestamp_ms, metadata
          FROM session_files
          WHERE session_id = $1
            AND link_type = 'edited'
@@ -1167,17 +1172,12 @@ class ToolCallMatcherImpl {
 
       // Deduplicate by most recent timestamp per path
       const sorted = [...linkResult.rows].sort((a, b) => {
-        const aTs = a.timestamp instanceof Date ? a.timestamp.getTime() : new Date(a.timestamp).getTime();
-        const bTs = b.timestamp instanceof Date ? b.timestamp.getTime() : new Date(b.timestamp).getTime();
-        return bTs - aTs;
+        return ensureNumber(b.timestamp_ms) - ensureNumber(a.timestamp_ms);
       });
-      const maxTs = sorted[0].timestamp instanceof Date
-        ? sorted[0].timestamp.getTime()
-        : new Date(sorted[0].timestamp).getTime();
+      const maxTs = ensureNumber(sorted[0].timestamp_ms);
       const thresholdMs = 2000;
       const recentPaths = sorted.filter(row => {
-        const ts = row.timestamp instanceof Date ? row.timestamp.getTime() : new Date(row.timestamp).getTime();
-        return Math.abs(ts - maxTs) <= thresholdMs;
+        return Math.abs(ensureNumber(row.timestamp_ms) - maxTs) <= thresholdMs;
       });
       const filePaths = [...new Set(recentPaths.map(r => r.file_path))];
 

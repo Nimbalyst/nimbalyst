@@ -426,6 +426,44 @@ describe('ToolCallMatcher', () => {
       const result = scoreMatch('/workspace/src/app.ts', baseTime + 10_001, window);
       expect(result).toBeNull();
     });
+
+    it('should match file_change by path_in_changes without toolUseId (Codex sessions)', () => {
+      // For Codex sessions, toolUseId is not stored in session_files metadata.
+      // Matching relies on filename/path heuristics within the time window.
+      const fileChangeWindow = makeWindow({
+        messageId: 200,
+        toolName: 'file_change',
+        toolCallItemId: 'item_53',
+        toolUseId: 'item_53',
+        argsText: '{"changes":[{"path":"/workspace/src/app.ts","kind":"update"}]}',
+        args: { changes: [{ path: '/workspace/src/app.ts', kind: 'update' }] },
+      });
+
+      // No fileMetadataToolUseId passed — simulates Codex session where we don't store item IDs
+      const result = scoreMatch('/workspace/src/app.ts', baseTime + 1_000, fileChangeWindow);
+      expect(result).not.toBeNull();
+      expect(result!.score).toBe(40); // path_in_changes
+      expect(result!.reasons).toContain('path_in_changes');
+    });
+
+    it('should not match Codex reused item IDs when toolUseId not in session_files', () => {
+      // Codex reuses item IDs across turns. When we don't store toolUseId in
+      // session_files metadata, the toolUseId shortcut path is never triggered,
+      // so matching falls through to time+filename heuristics.
+      const bashWindow = makeWindow({
+        messageId: 100,
+        toolName: 'Bash',
+        toolCallItemId: 'item_53',
+        toolUseId: 'item_53',
+        argsText: '{"command":"grep -Rns logAgentMessage"}',
+      });
+
+      // No fileMetadataToolUseId — toolUseId match path won't fire.
+      // File is within time window but filename not in args → no match.
+      const result = scoreMatch('/workspace/src/app.ts', baseTime + 1_000, bashWindow);
+      expect(result).not.toBeNull();
+      expect(result!.score).toBe(0); // No filename match
+    });
   });
 
   // ---------------------------------------------------------------------------

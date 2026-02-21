@@ -199,7 +199,8 @@ export function initFileStateListeners(workspacePath: string): () => void {
           // Set edits immediately without enrichment
           store.set(sessionFileEditsAtom(sessionId), edits);
 
-          // Debounce the enrichment to avoid rapid-fire IPC calls during active sessions
+          // Debounce the enrichment to avoid rapid-fire IPC calls during active sessions.
+          // Short delay (200ms) since incremental matching now runs during the session.
           const existingTimer = enrichDebounceTimers.get(sessionId);
           if (existingTimer) clearTimeout(existingTimer);
           enrichDebounceTimers.set(sessionId, setTimeout(async () => {
@@ -210,7 +211,7 @@ export function initFileStateListeners(workspacePath: string): () => void {
             } catch {
               // Non-critical - edits already set without enrichment
             }
-          }, 500));
+          }, 200));
 
           // Also refresh git status for these files
           await refreshSessionGitStatus(sessionId);

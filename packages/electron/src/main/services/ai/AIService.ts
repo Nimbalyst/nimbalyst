@@ -464,6 +464,11 @@ export class AIService {
   // Only active for openai-codex provider; Claude Code has its own tool hooks
   private codexSessionWatchers = new Map<string, { cache: FileSnapshotCache; watcher: SessionFileWatcher }>();
 
+  // Debounced tool call matching during active sessions.
+  // After each tool execution is tracked, we schedule matchSession with a short delay
+  // so file edits are linked to tool calls promptly (not just at session end).
+  private matchDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
   // Track sessions currently processing a queued prompt to prevent concurrent execution.
   // Without this, the completion handler and triggerQueueProcessing IPC can race,
   // each claiming a different prompt and sending both to the AI concurrently.
@@ -2365,9 +2370,15 @@ export class AIService {
                       trackToolName = 'Bash';
                     }
 
-                    const toolUseId = typeof (chunk.toolCall as any)?.toolUseId === 'string'
-                      ? (chunk.toolCall as any).toolUseId
-                      : (typeof chunk.toolCall.id === 'string' ? chunk.toolCall.id : undefined);
+                    // For Codex sessions, don't use the provider's item IDs as toolUseId
+                    // because Codex reuses item IDs across turns (e.g., item_4 in turn 1
+                    // and item_4 in turn 5 are different tool calls). Without toolUseId,
+                    // matching falls through to filename/time heuristics which are reliable.
+                    const toolUseId = session.provider === 'openai-codex'
+                      ? undefined
+                      : (typeof (chunk.toolCall as any)?.toolUseId === 'string'
+                        ? (chunk.toolCall as any).toolUseId
+                        : (typeof chunk.toolCall.id === 'string' ? chunk.toolCall.id : undefined));
 
                     await sessionFileTracker.trackToolExecution(
                       session.id,
@@ -2380,6 +2391,21 @@ export class AIService {
                     );
                     // Notify renderer that files were tracked
                     safeSend(event, 'session-files:updated', session.id);
+
+                    // Schedule debounced tool call matching so file edits are linked
+                    // to tool calls promptly during the session, not just at the end.
+                    const existingTimer = this.matchDebounceTimers.get(session.id);
+                    if (existingTimer) clearTimeout(existingTimer);
+                    this.matchDebounceTimers.set(session.id, setTimeout(() => {
+                      this.matchDebounceTimers.delete(session.id);
+                      toolCallMatcher.matchSession(session.id).then(count => {
+                        if (count > 0) {
+                          safeSend(event, 'session-files:updated', session.id);
+                        }
+                      }).catch(() => {
+                        // Non-critical - end-of-session matching will retry
+                      });
+                    }, 1000));
                   } catch (trackError) {
                     console.error('[AIService] Failed to track tool call:', trackError);
                   }
@@ -2982,6 +3008,12 @@ export class AIService {
               }
 
               // Match file edits to tool calls now that all messages are flushed.
+              // Cancel any pending incremental match timer - we'll do a final pass now.
+              const pendingMatchTimer = this.matchDebounceTimers.get(session.id);
+              if (pendingMatchTimer) {
+                clearTimeout(pendingMatchTimer);
+                this.matchDebounceTimers.delete(session.id);
+              }
               // Delay briefly to let non-blocking message writes complete.
               if (effectiveWorkspacePath) {
                 const matchSessionId = session.id;
@@ -4619,6 +4651,12 @@ export class AIService {
       }
     }
     this.codexSessionWatchers.clear();
+
+    // Clear any pending match debounce timers
+    for (const timer of this.matchDebounceTimers.values()) {
+      clearTimeout(timer);
+    }
+    this.matchDebounceTimers.clear();
 
     // Clear any remaining references
     try {
