@@ -17,62 +17,10 @@
  */
 
 import * as path from 'path';
+import { execFile } from 'child_process';
 import { parse as parseShellCommand } from 'shell-quote';
-import { SessionFilesRepository } from '@nimbalyst/runtime';
 import { database } from '../database/PGLiteDatabaseWorker';
 import { logger } from '../utils/logger';
-// Lazy-loaded parseBashForFileOps - the deep import path isn't in runtime's
-// package.json exports map, so we load it lazily via require() which bypasses
-// export validation. Falls back to a simple regex parser if unavailable.
-let _parseBashForFileOps: ((command: string, cwd: string) => string[]) | undefined;
-
-function parseBashPaths(command: string, cwd: string): string[] {
-  if (!_parseBashForFileOps) {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const mod = require('@nimbalyst/runtime/ai/server/providers/bashUtils');
-      _parseBashForFileOps = mod.parseBashForFileOps;
-    } catch {
-      // Fallback: simple regex extraction for common write patterns
-      _parseBashForFileOps = (cmd: string, cwdPath: string) => {
-        const paths: string[] = [];
-        // Redirect: > or >> followed by whitespace and filename
-        const redirectMatches = cmd.match(/>+\s+(\S+)/g);
-        if (redirectMatches) {
-          for (const m of redirectMatches) {
-            const target = m.replace(/^>+\s*/, '');
-            paths.push(target.startsWith('/') ? target : `${cwdPath}/${target}`);
-          }
-        }
-        // tee
-        const teeMatch = cmd.match(/tee\s+(?:-a\s+)?(\S+)/);
-        if (teeMatch?.[1]) {
-          const t = teeMatch[1];
-          paths.push(t.startsWith('/') ? t : `${cwdPath}/${t}`);
-        }
-        // cp dest
-        const cpMatch = cmd.match(/cp\s+\S+\s+(\S+)/);
-        if (cpMatch?.[1]) {
-          const t = cpMatch[1];
-          paths.push(t.startsWith('/') ? t : `${cwdPath}/${t}`);
-        }
-        // sed -i
-        const sedMatch = cmd.match(/sed\s+-i(?:\.\w+)?\s+'[^']+'\s+(\S+)/);
-        if (sedMatch?.[1]) {
-          const t = sedMatch[1];
-          paths.push(t.startsWith('/') ? t : `${cwdPath}/${t}`);
-        }
-        return paths;
-      };
-    }
-  }
-  return _parseBashForFileOps!(command, cwd);
-}
-
-/** For testing: override the parseBash function */
-export function _setParseBashFn(fn: ((command: string, cwd: string) => string[]) | undefined): void {
-  _parseBashForFileOps = fn;
-}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -85,7 +33,7 @@ export interface ToolCallWindow {
   toolName: string;
   toolCallItemId: string | null;
   toolUseId: string | null;
-  filePaths: string[];
+  argsText: string;
   outputText: string;
   args?: any;
 }
@@ -174,9 +122,6 @@ const TOOL_ITEM_TYPES = new Set([
   'function_call',
 ]);
 
-// Common path fields in tool arguments
-const PATH_FIELDS = ['file_path', 'filePath', 'path', 'notebook_path', 'notebookPath'];
-
 /** Count newline-delimited lines in a string. Returns 0 for empty strings. */
 function countLines(text: string): number {
   return text.length === 0 ? 0 : text.split('\n').length;
@@ -194,57 +139,15 @@ function ensureNumber(value: number | string): number {
 }
 
 /**
- * Extract file paths from tool call arguments.
+ * Stringify tool arguments for filename matching in scoreMatch.
  */
-function extractFilePathsFromArgs(args: any, workspacePath?: string): string[] {
-  if (!args) return [];
-  const paths: string[] = [];
-
-  // Direct path fields
-  for (const field of PATH_FIELDS) {
-    if (typeof args[field] === 'string') {
-      paths.push(args[field]);
-    }
+function stringifyArgs(args: any): string {
+  if (!args) return '';
+  try {
+    return JSON.stringify(args);
+  } catch {
+    return '';
   }
-
-  // file_change: args.changes[].path
-  if (Array.isArray(args.changes)) {
-    for (const change of args.changes) {
-      if (change && typeof change.path === 'string') {
-        paths.push(change.path);
-      }
-    }
-  }
-
-  // Bash commands: parse for file operations
-  if (typeof args.command === 'string' && workspacePath) {
-    const bashPaths = parseBashPaths(args.command, workspacePath);
-    paths.push(...bashPaths);
-  }
-
-  return paths;
-}
-
-/**
- * Extract file paths mentioned in tool result/output text.
- * Scans for absolute paths that look like file references.
- */
-function extractFilePathsFromOutput(output: any): string[] {
-  const text = stringifyOutput(output);
-  if (!text) return [];
-
-  // Match absolute paths (Unix-style)
-  const pathRegex = /(?:^|\s)(\/[^\s:,;'"()\[\]{}]+\.[a-zA-Z0-9]+)/g;
-  const paths: string[] = [];
-  let match;
-  while ((match = pathRegex.exec(text)) !== null) {
-    const p = match[1];
-    // Filter out common non-file paths
-    if (!p.includes('/proc/') && !p.includes('/dev/') && !p.includes('/sys/')) {
-      paths.push(p);
-    }
-  }
-  return paths;
 }
 
 /**
@@ -312,9 +215,6 @@ export function parseToolCallWindows(
         const args = block.input ?? null;
         const toolId = typeof block.id === 'string' ? block.id : null;
 
-        const argPaths = extractFilePathsFromArgs(args, workspacePath);
-        const allPaths = [...new Set(argPaths)];
-
         windows.push({
           messageId,
           messageCreatedAt: createdAt.getTime(),
@@ -322,7 +222,7 @@ export function parseToolCallWindows(
           toolName,
           toolCallItemId: toolId,
           toolUseId: toolId,
-          filePaths: allPaths,
+          argsText: stringifyArgs(args),
           outputText: '',
           args,
         });
@@ -390,11 +290,6 @@ export function parseToolCallWindows(
     result = item.result ?? item.output ?? item.aggregated_output ?? null;
   }
 
-  // Extract file paths
-  const argPaths = extractFilePathsFromArgs(args, workspacePath);
-  const outputPaths = extractFilePathsFromOutput(result);
-  const allPaths = [...new Set([...argPaths, ...outputPaths])];
-
   // Get item ID and tool use ID
   const itemId = typeof item.id === 'string' ? item.id : null;
   const toolUseId = typeof item.tool_use_id === 'string' ? item.tool_use_id :
@@ -407,7 +302,7 @@ export function parseToolCallWindows(
     toolName,
     toolCallItemId: itemId,
     toolUseId,
-    filePaths: allPaths,
+    argsText: stringifyArgs(args),
     outputText: stringifyOutput(result),
     args,
   });
@@ -450,10 +345,9 @@ export function scoreMatch(
     return null; // Outside time window, not a candidate
   }
 
-  // 3. Filename in tool input (arguments) - basename match only
+  // 3. Filename in tool input (arguments) - basename match
   const fileName = path.basename(filePath);
-  const nameInArgs = window.filePaths.some(p => path.basename(p) === fileName);
-  if (nameInArgs) {
+  if (window.argsText.includes(fileName)) {
     score += 40;
     reasons.push('name_in_args');
   }
@@ -525,53 +419,7 @@ class ToolCallMatcherImpl {
         windows.push(...msgWindows);
       }
 
-      if (windows.length === 0) return 0;
-
-      // 5. If Bash tool calls produced file paths but no session_files entry
-      // exists (e.g., when command_execution events are stored without
-      // going through SessionFileTracker), create the missing link now.
-      // This ensures ai_tool_call_file_edits can still be created.
-      for (const window of windows) {
-        if (window.toolName !== 'Bash') continue;
-        if (!window.filePaths.length) continue;
-
-        const bashCommand = window.args?.command;
-        for (const filePath of window.filePaths) {
-          if (sessionFilesByPath.has(filePath)) continue;
-
-          const resolvedWorkspacePath = workspacePath || this.inferWorkspacePath(filePath);
-          const metadata: Record<string, any> = {
-            toolName: 'Bash',
-            operation: 'bash',
-          };
-          if (typeof bashCommand === 'string' && bashCommand.length > 0) {
-            metadata.bashCommand = bashCommand.slice(0, 200);
-          }
-          if (window.toolUseId) {
-            metadata.toolUseId = window.toolUseId;
-          }
-
-          const link = await SessionFilesRepository.addFileLink({
-            sessionId,
-            workspaceId: resolvedWorkspacePath,
-            filePath,
-            linkType: 'edited',
-            timestamp: window.messageCreatedAt,
-            metadata,
-          });
-
-          const row: SessionFileRow = {
-            id: link.id,
-            file_path: link.filePath,
-            timestamp: new Date(link.timestamp),
-            metadata: link.metadata,
-          };
-          sessionFiles.push(row);
-          sessionFilesByPath.set(filePath, row);
-        }
-      }
-
-      if (sessionFiles.length === 0) return 0;
+      if (windows.length === 0 || sessionFiles.length === 0) return 0;
 
       // 6. Load existing matches to avoid re-processing
       const existingResult = await database.query<{
@@ -724,6 +572,13 @@ class ToolCallMatcherImpl {
         return directDiffs;
       }
 
+      // Get workspace path for git diff fallback
+      const sessionInfo = await database.query<{ workspace_id: string | null }>(
+        `SELECT workspace_id FROM ai_sessions WHERE id = $1 LIMIT 1`,
+        [sessionId]
+      );
+      const workspacePath = sessionInfo.rows[0]?.workspace_id || undefined;
+
       // 1. Find matches for this tool call
       const latestMessageResult = await database.query<{
         message_id: number;
@@ -836,6 +691,20 @@ class ToolCallMatcherImpl {
         }
 
         results.push(diffResult);
+      }
+
+      // Git diff fallback for entries with no extractable diff data
+      if (workspacePath) {
+        for (const result of results) {
+          if (result.diffs.length === 0 && !result.content) {
+            const gitDiff = await this.computeGitDiff(workspacePath, result.filePath);
+            if (gitDiff) {
+              result.diffs = [{ oldString: gitDiff.oldString, newString: gitDiff.newString }];
+              result.linesAdded = gitDiff.linesAdded;
+              result.linesRemoved = gitDiff.linesRemoved;
+            }
+          }
+        }
       }
 
       return results;
@@ -1170,6 +1039,84 @@ class ToolCallMatcherImpl {
     return path.dirname(path.dirname(filePath));
   }
 
+  /**
+   * Compute a diff for a file using git.
+   * Falls back through: git diff HEAD, git diff (staged), git diff HEAD~1 (just committed).
+   * Returns old/new content strings suitable for DiffViewer, or null if no diff available.
+   */
+  private async computeGitDiff(
+    workspacePath: string,
+    filePath: string
+  ): Promise<{ oldString: string; newString: string; linesAdded: number; linesRemoved: number } | null> {
+    const runGitDiff = (args: string[]): Promise<string> => {
+      return new Promise((resolve, reject) => {
+        execFile('git', args, { cwd: workspacePath, maxBuffer: 1024 * 1024 }, (error, stdout) => {
+          if (error && !stdout) {
+            reject(error);
+            return;
+          }
+          resolve(stdout || '');
+        });
+      });
+    };
+
+    const parseDiffOutput = (diffOutput: string): { oldString: string; newString: string; linesAdded: number; linesRemoved: number } | null => {
+      if (!diffOutput.trim()) return null;
+
+      const lines = diffOutput.split('\n');
+      const oldLines: string[] = [];
+      const newLines: string[] = [];
+      let inHunk = false;
+
+      for (const line of lines) {
+        if (line.startsWith('@@')) {
+          inHunk = true;
+          continue;
+        }
+        if (!inHunk) continue;
+
+        // Only collect actual changes, not context lines.
+        // DiffViewer renders all old lines as red and all new lines as green,
+        // so context lines would appear incorrectly as both removed and added.
+        if (line.startsWith('-')) {
+          oldLines.push(line.slice(1));
+        } else if (line.startsWith('+')) {
+          newLines.push(line.slice(1));
+        }
+      }
+
+      if (oldLines.length === 0 && newLines.length === 0) return null;
+
+      return {
+        oldString: oldLines.join('\n'),
+        newString: newLines.join('\n'),
+        linesAdded: newLines.length,
+        linesRemoved: oldLines.length,
+      };
+    };
+
+    try {
+      // Try unstaged changes first (most common during active session)
+      let output = await runGitDiff(['diff', '--no-color', '--', filePath]);
+      let parsed = parseDiffOutput(output);
+      if (parsed) return parsed;
+
+      // Try staged changes
+      output = await runGitDiff(['diff', '--cached', '--no-color', '--', filePath]);
+      parsed = parseDiffOutput(output);
+      if (parsed) return parsed;
+
+      // Try last commit (file may have just been committed)
+      output = await runGitDiff(['diff', 'HEAD~1', 'HEAD', '--no-color', '--', filePath]);
+      parsed = parseDiffOutput(output);
+      if (parsed) return parsed;
+
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
   private async getDiffsFromToolCallContent(
     sessionId: string,
     toolCallItemId: string
@@ -1185,12 +1132,42 @@ class ToolCallMatcherImpl {
       );
       const workspacePath = sessionResult.rows[0]?.workspace_id;
 
+      // Get file paths from the file watcher (session_files) for this tool call
+      const linkResult = await database.query<{ file_path: string; timestamp: Date; metadata: any }>(
+        `SELECT file_path, timestamp, metadata
+         FROM session_files
+         WHERE session_id = $1
+           AND link_type = 'edited'
+           AND metadata->>'toolUseId' = $2`,
+        [sessionId, toolCallItemId]
+      );
+
+      if (linkResult.rows.length === 0) return [];
+
+      // Deduplicate by most recent timestamp per path
+      const sorted = [...linkResult.rows].sort((a, b) => {
+        const aTs = a.timestamp instanceof Date ? a.timestamp.getTime() : new Date(a.timestamp).getTime();
+        const bTs = b.timestamp instanceof Date ? b.timestamp.getTime() : new Date(b.timestamp).getTime();
+        return bTs - aTs;
+      });
+      const maxTs = sorted[0].timestamp instanceof Date
+        ? sorted[0].timestamp.getTime()
+        : new Date(sorted[0].timestamp).getTime();
+      const thresholdMs = 2000;
+      const recentPaths = sorted.filter(row => {
+        const ts = row.timestamp instanceof Date ? row.timestamp.getTime() : new Date(row.timestamp).getTime();
+        return Math.abs(ts - maxTs) <= thresholdMs;
+      });
+      const filePaths = [...new Set(recentPaths.map(r => r.file_path))];
+
+      if (filePaths.length === 0) return [];
+
+      // Find the matching message content for extracting diffs from tool args
       const messageResult = await database.query<{
         id: number;
         content: string;
-        created_at: Date;
       }>(
-        `SELECT id, content, created_at
+        `SELECT id, content
          FROM ai_agent_messages
          WHERE session_id = $1 AND content LIKE $2 AND content LIKE $3
          ORDER BY id DESC
@@ -1198,87 +1175,76 @@ class ToolCallMatcherImpl {
         [sessionId, `%\"id\":\"${toolCallItemId}\"%`, '%item.completed%']
       );
 
+      // Determine tool name from message content
+      let toolName = 'edit';
       for (const row of messageResult.rows) {
         const windows = parseToolCallWindows(
           ensureNumber(row.id),
           row.content,
-          row.created_at instanceof Date ? row.created_at : new Date(row.created_at),
+          new Date(),
           sessionId,
           workspacePath
         );
         const match = windows.find(w => w.toolCallItemId === toolCallItemId);
-        if (!match || match.filePaths.length === 0) {
-          continue;
+        if (match) {
+          toolName = match.toolName;
+          break;
         }
+      }
 
-        let filePaths = match.filePaths;
-        if (toolCallItemId) {
-          const linkResult = await database.query<{ file_path: string; timestamp: Date }>(
-            `SELECT file_path, timestamp
-             FROM session_files
-             WHERE session_id = $1
-               AND link_type = 'edited'
-               AND metadata->>'toolUseId' = $2`,
-            [sessionId, toolCallItemId]
-          );
-          if (linkResult.rows.length > 0) {
-            const sorted = [...linkResult.rows].sort((a, b) => {
-              const aTs = a.timestamp instanceof Date ? a.timestamp.getTime() : new Date(a.timestamp).getTime();
-              const bTs = b.timestamp instanceof Date ? b.timestamp.getTime() : new Date(b.timestamp).getTime();
-              return bTs - aTs;
-            });
-            const maxTs = sorted[0].timestamp instanceof Date
-              ? sorted[0].timestamp.getTime()
-              : new Date(sorted[0].timestamp).getTime();
-            const thresholdMs = 2000;
-            const recentPaths = sorted.filter(row => {
-              const ts = row.timestamp instanceof Date ? row.timestamp.getTime() : new Date(row.timestamp).getTime();
-              return Math.abs(ts - maxTs) <= thresholdMs;
-            });
-            filePaths = [...new Set(recentPaths.map(r => r.file_path))];
-          }
-        }
+      const rawContent = messageResult.rows[0]?.content;
 
-        const results: ToolCallDiffResult[] = [];
-        for (const filePath of filePaths) {
-          const operation = match.toolName === 'Bash' ? 'bash' : 'edit';
-          const diffResult: ToolCallDiffResult = {
-            filePath,
-            operation,
-            diffs: [],
-          };
+      const results: ToolCallDiffResult[] = [];
+      for (const filePath of filePaths) {
+        const operation = toolName === 'Bash' ? 'bash' : 'edit';
+        const diffResult: ToolCallDiffResult = {
+          filePath,
+          operation,
+          diffs: [],
+        };
 
-          const extracted = this.extractDiffsFromMessageContent(row.content, filePath);
+        // Try to extract diff data from the raw message content
+        if (rawContent) {
+          const extracted = this.extractDiffsFromMessageContent(rawContent, filePath);
           if (extracted.diffs.length > 0) {
             diffResult.diffs = extracted.diffs;
           }
           if (extracted.content) {
             diffResult.content = extracted.content;
           }
-
-          let added = 0;
-          let removed = 0;
-          for (const diff of diffResult.diffs) {
-            if (diff.newString) added += countLines(diff.newString);
-            if (diff.oldString) removed += countLines(diff.oldString);
-          }
-          if (diffResult.content) {
-            added += countLines(diffResult.content);
-          }
-          if (added > 0) diffResult.linesAdded = added;
-          if (removed > 0) diffResult.linesRemoved = removed;
-
-          if (diffResult.diffs.length > 0 || diffResult.content) {
-            results.push(diffResult);
-          }
         }
 
-        if (results.length > 0) {
-          return results;
+        let added = 0;
+        let removed = 0;
+        for (const diff of diffResult.diffs) {
+          if (diff.newString) added += countLines(diff.newString);
+          if (diff.oldString) removed += countLines(diff.oldString);
+        }
+        if (diffResult.content) {
+          added += countLines(diffResult.content);
+        }
+        if (added > 0) diffResult.linesAdded = added;
+        if (removed > 0) diffResult.linesRemoved = removed;
+
+        results.push(diffResult);
+      }
+
+      // Git diff fallback for entries with no extractable diff data
+      if (workspacePath) {
+        for (const result of results) {
+          if (result.diffs.length === 0 && !result.content) {
+            const gitDiff = await this.computeGitDiff(workspacePath, result.filePath);
+            if (gitDiff) {
+              result.diffs = [{ oldString: gitDiff.oldString, newString: gitDiff.newString }];
+              result.linesAdded = gitDiff.linesAdded;
+              result.linesRemoved = gitDiff.linesRemoved;
+            }
+          }
         }
       }
 
-      return [];
+      // Filter to only entries that have diff data
+      return results.filter(r => r.diffs.length > 0 || r.content);
     } catch (error) {
       logger.main.error('[ToolCallMatcher] getDiffsFromToolCallContent failed:', error);
       return [];

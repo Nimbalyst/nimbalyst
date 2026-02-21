@@ -33,34 +33,9 @@ vi.mock('../../utils/logger', () => ({
   },
 }));
 
-import { parseToolCallWindows, scoreMatch, _setParseBashFn, type ToolCallWindow } from '../ToolCallMatcher';
+import { parseToolCallWindows, scoreMatch, type ToolCallWindow } from '../ToolCallMatcher';
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-
-// Provide a test-friendly bash parser (same fallback logic as production)
-beforeAll(() => {
-  _setParseBashFn((command: string, cwd: string) => {
-    const paths: string[] = [];
-    const redirectMatch = command.match(/>+\s+(\S+)/g);
-    if (redirectMatch) {
-      for (const m of redirectMatch) {
-        const target = m.replace(/^>+\s*/, '');
-        paths.push(target.startsWith('/') ? target : `${cwd}/${target}`);
-      }
-    }
-    const teeMatch = command.match(/tee\s+(?:-a\s+)?(\S+)/);
-    if (teeMatch?.[1]) {
-      const t = teeMatch[1];
-      paths.push(t.startsWith('/') ? t : `${cwd}/${t}`);
-    }
-    const cpMatch = command.match(/cp\s+\S+\s+(\S+)/);
-    if (cpMatch?.[1]) {
-      const t = cpMatch[1];
-      paths.push(t.startsWith('/') ? t : `${cwd}/${t}`);
-    }
-    return paths;
-  });
-});
 
 /**
  * Helper: Check if a value is an async iterable.
@@ -215,7 +190,7 @@ describe('ToolCallMatcher Codex Integration', () => {
 
       // Find windows that reference the edit target file
       const editWindows = windows.filter(w =>
-        w.filePaths.some(p => p.includes('edit-target.txt'))
+        w.argsText.includes('edit-target.txt')
       );
 
       // Should have found the file in at least one tool call
@@ -267,7 +242,7 @@ describe('ToolCallMatcher Codex Integration', () => {
 
       // Find windows that reference the bash target file
       const matchingWindows = windows.filter(w =>
-        w.filePaths.some(p => p.includes('bash-target.txt'))
+        w.argsText.includes('bash-target.txt')
       );
 
       // After shell wrapper unwrapping fix, should find the file
@@ -316,19 +291,19 @@ Do both operations.`
 
       // Check for edit-target.txt
       const editMatches = windows.filter(w =>
-        w.filePaths.some(p => p.includes('edit-target.txt'))
+        w.argsText.includes('edit-target.txt')
       );
 
       // Check for bash-target.txt
       const bashMatches = windows.filter(w =>
-        w.filePaths.some(p => p.includes('bash-target.txt'))
+        w.argsText.includes('bash-target.txt')
       );
 
       // Both files should be found in tool call windows
       console.log('Edit matches:', editMatches.length, 'Bash matches:', bashMatches.length);
       console.log('All windows:', windows.map(w => ({
         tool: w.toolName,
-        paths: w.filePaths,
+        argsText: w.argsText.slice(0, 100),
       })));
 
       // At minimum, the edit file should be matched (file_change is reliable)

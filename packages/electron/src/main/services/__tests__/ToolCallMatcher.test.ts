@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeAll } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
 vi.mock('../../database/PGLiteDatabaseWorker', () => ({
   database: {
@@ -19,37 +19,7 @@ vi.mock('../../utils/logger', () => ({
   },
 }));
 
-import { parseToolCallWindows, scoreMatch, _setParseBashFn, type ToolCallWindow } from '../ToolCallMatcher';
-
-// Provide a test-friendly bash parser (same fallback logic as production)
-beforeAll(() => {
-  _setParseBashFn((command: string, cwd: string) => {
-    const paths: string[] = [];
-    const redirectMatch = command.match(/>+\s+(\S+)/g);
-    if (redirectMatch) {
-      for (const m of redirectMatch) {
-        const target = m.replace(/^>+\s*/, '');
-        paths.push(target.startsWith('/') ? target : `${cwd}/${target}`);
-      }
-    }
-    const teeMatch = command.match(/tee\s+(?:-a\s+)?(\S+)/);
-    if (teeMatch?.[1]) {
-      const t = teeMatch[1];
-      paths.push(t.startsWith('/') ? t : `${cwd}/${t}`);
-    }
-    const cpMatch = command.match(/cp\s+\S+\s+(\S+)/);
-    if (cpMatch?.[1]) {
-      const t = cpMatch[1];
-      paths.push(t.startsWith('/') ? t : `${cwd}/${t}`);
-    }
-    const sedMatch = command.match(/sed\s+-i(?:\.\w+)?\s+'[^']+'\s+(\S+)/);
-    if (sedMatch?.[1]) {
-      const t = sedMatch[1];
-      paths.push(t.startsWith('/') ? t : `${cwd}/${t}`);
-    }
-    return paths;
-  });
-});
+import { parseToolCallWindows, scoreMatch, type ToolCallWindow } from '../ToolCallMatcher';
 
 describe('ToolCallMatcher', () => {
   describe('parseToolCallWindows', () => {
@@ -74,7 +44,7 @@ describe('ToolCallMatcher', () => {
       expect(windows).toHaveLength(1);
       expect(windows[0].toolName).toBe('mcp__nimbalyst__Write');
       expect(windows[0].toolCallItemId).toBe('tool-123');
-      expect(windows[0].filePaths).toContain('/workspace/src/index.ts');
+      expect(windows[0].argsText).toContain('index.ts');
       expect(windows[0].messageId).toBe(1);
     });
 
@@ -93,7 +63,7 @@ describe('ToolCallMatcher', () => {
       const windows = parseToolCallWindows(2, content, baseDate, SESSION_ID, '/workspace');
 
       expect(windows).toHaveLength(1);
-      expect(windows[0].filePaths).toContain('/workspace/src/app.tsx');
+      expect(windows[0].argsText).toContain('app.tsx');
     });
 
     it('should parse command_execution (Bash) tool call', () => {
@@ -111,7 +81,7 @@ describe('ToolCallMatcher', () => {
 
       expect(windows).toHaveLength(1);
       expect(windows[0].toolName).toBe('Bash');
-      expect(windows[0].filePaths).toContain('/workspace/output.txt');
+      expect(windows[0].argsText).toContain('output.txt');
     });
 
     it('should parse file_change event with multiple files', () => {
@@ -132,11 +102,11 @@ describe('ToolCallMatcher', () => {
 
       expect(windows).toHaveLength(1);
       expect(windows[0].toolName).toBe('file_change');
-      expect(windows[0].filePaths).toContain('/workspace/src/a.ts');
-      expect(windows[0].filePaths).toContain('/workspace/src/b.ts');
+      expect(windows[0].argsText).toContain('a.ts');
+      expect(windows[0].argsText).toContain('b.ts');
     });
 
-    it('should extract file paths from tool output text', () => {
+    it('should include output text from tool results', () => {
       const content = JSON.stringify({
         type: 'item.completed',
         item: {
@@ -150,7 +120,7 @@ describe('ToolCallMatcher', () => {
       const windows = parseToolCallWindows(5, content, baseDate, SESSION_ID, '/workspace');
 
       expect(windows).toHaveLength(1);
-      expect(windows[0].filePaths).toContain('/workspace/dist/bundle.js');
+      expect(windows[0].outputText).toContain('bundle.js');
     });
 
     it('should return empty array for non-tool events', () => {
@@ -178,7 +148,7 @@ describe('ToolCallMatcher', () => {
       expect(windows).toHaveLength(0);
     });
 
-    it('should handle sed -i bash commands', () => {
+    it('should include bash command in argsText for sed -i', () => {
       const content = JSON.stringify({
         type: 'item.completed',
         item: {
@@ -192,10 +162,10 @@ describe('ToolCallMatcher', () => {
       const windows = parseToolCallWindows(9, content, baseDate, SESSION_ID, '/workspace');
 
       expect(windows).toHaveLength(1);
-      expect(windows[0].filePaths).toContain('/workspace/config.json');
+      expect(windows[0].argsText).toContain('config.json');
     });
 
-    it('should handle tee command', () => {
+    it('should include bash command in argsText for tee', () => {
       const content = JSON.stringify({
         type: 'item.completed',
         item: {
@@ -209,10 +179,10 @@ describe('ToolCallMatcher', () => {
       const windows = parseToolCallWindows(10, content, baseDate, SESSION_ID, '/workspace');
 
       expect(windows).toHaveLength(1);
-      expect(windows[0].filePaths).toContain('/workspace/log.txt');
+      expect(windows[0].argsText).toContain('log.txt');
     });
 
-    it('should handle chained bash commands', () => {
+    it('should include bash command in argsText for chained commands', () => {
       const content = JSON.stringify({
         type: 'item.completed',
         item: {
@@ -226,29 +196,7 @@ describe('ToolCallMatcher', () => {
       const windows = parseToolCallWindows(11, content, baseDate, SESSION_ID, '/workspace');
 
       expect(windows).toHaveLength(1);
-      // Should contain the cp dest
-      expect(windows[0].filePaths).toContain('/workspace/out/a.ts');
-    });
-
-    it('should not extract /proc/ or /dev/ paths from output', () => {
-      const content = JSON.stringify({
-        type: 'item.completed',
-        item: {
-          type: 'command_execution',
-          id: 'cmd-proc',
-          command: 'cat /proc/cpuinfo',
-          aggregated_output: 'Reading /dev/null and /proc/meminfo',
-        },
-      });
-
-      const windows = parseToolCallWindows(12, content, baseDate, SESSION_ID, '/workspace');
-
-      expect(windows).toHaveLength(1);
-      // Should not have /proc or /dev paths
-      const nonSystemPaths = windows[0].filePaths.filter(
-        p => !p.includes('/proc/') && !p.includes('/dev/')
-      );
-      expect(nonSystemPaths).toEqual(windows[0].filePaths);
+      expect(windows[0].argsText).toContain('a.ts');
     });
 
     // ---------------------------------------------------------------
@@ -284,7 +232,7 @@ describe('ToolCallMatcher', () => {
       expect(windows[0].toolName).toBe('Edit');
       expect(windows[0].toolCallItemId).toBe('toolu_01XYZ');
       expect(windows[0].toolUseId).toBe('toolu_01XYZ');
-      expect(windows[0].filePaths).toContain('/workspace/src/app.ts');
+      expect(windows[0].argsText).toContain('app.ts');
     });
 
     it('should parse raw Claude API format with multiple tool_use blocks', () => {
@@ -312,9 +260,9 @@ describe('ToolCallMatcher', () => {
 
       expect(windows).toHaveLength(2);
       expect(windows[0].toolCallItemId).toBe('toolu_01AAA');
-      expect(windows[0].filePaths).toContain('/workspace/a.ts');
+      expect(windows[0].argsText).toContain('a.ts');
       expect(windows[1].toolCallItemId).toBe('toolu_01BBB');
-      expect(windows[1].filePaths).toContain('/workspace/b.ts');
+      expect(windows[1].argsText).toContain('b.ts');
     });
 
     it('should ignore text blocks in raw Claude API format', () => {
@@ -392,29 +340,29 @@ describe('ToolCallMatcher', () => {
         toolName: 'Edit',
         toolCallItemId: 'tool-1',
         toolUseId: 'toolu_1',
-        filePaths: [],
+        argsText: '',
         outputText: '',
         ...overrides,
       };
     }
 
     it('should return null when file timestamp is outside 10s cutoff', () => {
-      const window = makeWindow({ filePaths: ['/workspace/src/app.ts'] });
+      const window = makeWindow({ argsText: '{"file_path":"/workspace/src/app.ts"}' });
       // 15 seconds after tool call
       const result = scoreMatch('/workspace/src/app.ts', baseTime + 15_000, window);
       expect(result).toBeNull();
     });
 
     it('should return null when file timestamp is far before tool call', () => {
-      const window = makeWindow({ filePaths: ['/workspace/src/app.ts'] });
+      const window = makeWindow({ argsText: '{"file_path":"/workspace/src/app.ts"}' });
       // 15 seconds before tool call
       const result = scoreMatch('/workspace/src/app.ts', baseTime - 15_000, window);
       expect(result).toBeNull();
     });
 
-    it('should match by filename only, not requiring full path', () => {
+    it('should match by filename in argsText', () => {
       const window = makeWindow({
-        filePaths: ['/different/workspace/src/app.ts'],
+        argsText: '{"file_path":"/different/workspace/src/app.ts"}',
       });
       // Within time window
       const result = scoreMatch('/workspace/src/app.ts', baseTime + 1_000, window);
@@ -435,7 +383,7 @@ describe('ToolCallMatcher', () => {
 
     it('should combine name_in_args and name_in_output scores', () => {
       const window = makeWindow({
-        filePaths: ['/workspace/src/app.ts'],
+        argsText: '{"file_path":"/workspace/src/app.ts"}',
         outputText: 'Wrote app.ts successfully',
       });
       const result = scoreMatch('/workspace/src/app.ts', baseTime + 1_000, window);
@@ -454,7 +402,7 @@ describe('ToolCallMatcher', () => {
 
     it('should return score 0 (below threshold) when within time but no name match', () => {
       const window = makeWindow({
-        filePaths: ['/workspace/src/other.ts'],
+        argsText: '{"file_path":"/workspace/src/other.ts"}',
         outputText: 'no relevant paths here',
       });
       const result = scoreMatch('/workspace/src/app.ts', baseTime + 1_000, window);
@@ -464,7 +412,7 @@ describe('ToolCallMatcher', () => {
 
     it('should match at exactly 10s boundary', () => {
       const window = makeWindow({
-        filePaths: ['/workspace/src/app.ts'],
+        argsText: '{"file_path":"/workspace/src/app.ts"}',
       });
       const result = scoreMatch('/workspace/src/app.ts', baseTime + 10_000, window);
       expect(result).not.toBeNull();
@@ -473,7 +421,7 @@ describe('ToolCallMatcher', () => {
 
     it('should reject at just over 10s boundary', () => {
       const window = makeWindow({
-        filePaths: ['/workspace/src/app.ts'],
+        argsText: '{"file_path":"/workspace/src/app.ts"}',
       });
       const result = scoreMatch('/workspace/src/app.ts', baseTime + 10_001, window);
       expect(result).toBeNull();
@@ -507,9 +455,7 @@ describe('ToolCallMatcher', () => {
 
       expect(windows).toHaveLength(1);
       expect(windows[0].toolName).toBe('file_change');
-      expect(windows[0].filePaths).toContain(
-        '/Users/jordanbentley/git/nimnim_worktrees/noble-owl/test/hello.txt'
-      );
+      expect(windows[0].argsText).toContain('hello.txt');
     });
 
     it('should parse command_execution bash redirect from Codex', () => {
@@ -530,8 +476,8 @@ describe('ToolCallMatcher', () => {
 
       expect(windows).toHaveLength(1);
       expect(windows[0].toolName).toBe('Bash');
-      // After unwrapping /bin/zsh -lc wrapper, the redirect target should be found
-      expect(windows[0].filePaths.some(p => p.includes('second-file.txt'))).toBe(true);
+      // After unwrapping /bin/zsh -lc wrapper, the command should be in argsText
+      expect(windows[0].argsText).toContain('second-file.txt');
     });
 
     it('should unwrap /bin/zsh -lc wrapper to extract inner command', () => {
@@ -551,7 +497,7 @@ describe('ToolCallMatcher', () => {
       const windows = parseToolCallWindows(1, content, new Date(), 'test', '/workspace');
 
       expect(windows).toHaveLength(1);
-      expect(windows[0].filePaths).toContain('/workspace/output.txt');
+      expect(windows[0].argsText).toContain('output.txt');
     });
 
     it('should match file_change edit to tool call with consistent timestamps', () => {
@@ -565,7 +511,7 @@ describe('ToolCallMatcher', () => {
         toolName: 'file_change',
         toolCallItemId: 'item_9',
         toolUseId: 'item_9',
-        filePaths: ['/Users/jordanbentley/git/nimnim_worktrees/noble-owl/test/hello.txt'],
+        argsText: '{"changes":[{"path":"/Users/jordanbentley/git/nimnim_worktrees/noble-owl/test/hello.txt","kind":"update"}]}',
         outputText: '',
       };
 
@@ -592,7 +538,7 @@ describe('ToolCallMatcher', () => {
         toolName: 'file_change',
         toolCallItemId: 'item_9',
         toolUseId: null,
-        filePaths: ['/Users/jordanbentley/git/nimnim_worktrees/noble-owl/test/hello.txt'],
+        argsText: '{"changes":[{"path":"/Users/jordanbentley/git/nimnim_worktrees/noble-owl/test/hello.txt","kind":"update"}]}',
         outputText: '',
       };
 
@@ -623,7 +569,7 @@ describe('ToolCallMatcher', () => {
       const windows = parseToolCallWindows(1, content, new Date(), 'test', '/workspace');
 
       expect(windows).toHaveLength(1);
-      expect(windows[0].filePaths).toContain('/workspace/direct.txt');
+      expect(windows[0].argsText).toContain('direct.txt');
     });
   });
 });
