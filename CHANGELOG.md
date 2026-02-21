@@ -20,6 +20,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.54.1] - 2026-02-20
+
+
+### Added
+- Voice mode overhaul with persistent button, session tracking, and listen window
+- Automations extension for scheduled AI-powered tasks
+- Session context MCP server with session awareness tools
+- Extensions can now contribute document headers above any editor
+- Marketing screenshots work with packaged app, no dev server required
+
+### Fixed
+- Session read state now syncs properly between desktop and iOS
+- Marketing screenshots fail when launched from packaged Nimbalyst
+- Exclude automation documents from frontmatter header processing
+
 ## [0.54.0] - 2026-02-20
 
 
