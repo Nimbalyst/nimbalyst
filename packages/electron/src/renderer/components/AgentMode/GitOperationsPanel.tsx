@@ -373,7 +373,29 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
       // Send message to AI session to propose commit based on session work
       if (window.electronAPI && sessionId && workspacePath) {
         try {
-          const message = 'Use the developer_git_commit_proposal tool to create a commit for the work done in this session. First call get_session_edited_files to find all files edited, then cross-reference with git status to include all session-edited files that have uncommitted changes.';
+          // Build context-aware prompt based on workstream/worktree state
+          const isInWorkstream = childSessionIds && childSessionIds.length > 1;
+          const isInWorktree = !!worktreeId;
+
+          let message = 'Use the developer_git_commit_proposal tool to create a commit.';
+
+          if (isInWorkstream) {
+            message += `\n\nThis session is part of a workstream with ${childSessionIds.length} sessions. ` +
+              'Use get_workstream_overview to understand the full scope of work across all sessions, ' +
+              'then use get_workstream_edited_files to find ALL files edited across the workstream. ' +
+              'Cross-reference with git status to include all workstream-edited files that have uncommitted changes. ' +
+              'The commit should represent the combined work across sessions, not just this one.';
+          } else {
+            message += '\n\nFirst call get_session_edited_files to find all files edited, ' +
+              'then cross-reference with git status to include all session-edited files that have uncommitted changes.';
+          }
+
+          if (isInWorktree) {
+            message += `\n\nThis work is on a worktree branch. ` +
+              'Consider the full set of changes on this branch (vs the base branch) when writing the commit message, ' +
+              'as the user may want a single commit summarizing all the work done on this branch.';
+          }
+
           const docContext = {
             filePath: undefined,
             content: undefined,
@@ -386,7 +408,7 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
           console.error('[GitOperationsPanel] Failed to send smart commit message:', error);
         }
       }
-    }, [sessionId, workspacePath]);
+    }, [sessionId, workspacePath, childSessionIds, worktreeId]);
 
     // Toggle file staging
     const toggleFileStaging = useCallback(

@@ -268,7 +268,7 @@ async function handleGetSessionSummary(
       sessionId,
       "edited"
     );
-    editedFiles = fileLinks.map((f) => f.filePath);
+    editedFiles = fileLinks.map((f: any) => f.filePath);
   } catch {
     // File tracking might not be available for all sessions
   }
@@ -481,6 +481,15 @@ async function handleListRecentSessions(
     }
   }
 
+  // list() and search() return messageCount: 0 for performance, so fetch actual counts
+  const sessionIds = limited.map((s) => s.id);
+  let messageCounts = new Map<string, number>();
+  try {
+    messageCounts = await AgentMessagesRepository.getMessageCounts(sessionIds);
+  } catch {
+    // Fall back to empty counts
+  }
+
   const lines: string[] = [];
   const totalLabel = query ? `matching "${query}"` : "total";
   lines.push(
@@ -491,8 +500,9 @@ async function handleListRecentSessions(
   for (let i = 0; i < limited.length; i++) {
     const s = limited[i];
     const isCurrentSession = s.id === currentSessionId;
+    const msgCount = messageCounts.get(s.id) || 0;
 
-    let line = `${i + 1}. "${s.title}" (${s.id.substring(0, 8)}) - ${formatRelativeTime(s.updatedAt)}, ${s.messageCount} messages`;
+    let line = `${i + 1}. "${s.title}" (${s.id.substring(0, 8)}) - ${formatRelativeTime(s.updatedAt)}, ${msgCount} messages`;
     if (isCurrentSession) {
       line += " [CURRENT]";
     }

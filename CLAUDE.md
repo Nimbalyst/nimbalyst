@@ -2,6 +2,15 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## CRITICAL: No Dynamic Imports in Electron Main Process
+
+**NEVER convert static imports to dynamic `await import()` unless absolutely necessary** (confirmed circular reference) AND the user has approved it.
+
+Dynamic imports in the Electron main process cause `__ELECTRON_LOG__` double-registration crashes and other side-effect timing issues. All MCP servers and services in `index.ts` use **static top-level imports** - follow this pattern.
+
+- `httpServer`, `SessionNamingService`, `sessionContextServer` - all use static top-level imports
+- Dynamic `await import('./mcp/sessionContextServer')` caused server startup failure - fixed by switching to static import
+
 ## CRITICAL: Database Access Rules
 
 **NEVER directly open or query the PGLite database files using Node.js or command-line tools.**

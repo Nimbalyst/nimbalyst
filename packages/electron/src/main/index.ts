@@ -68,6 +68,7 @@ import { detectFileWorkspace, suggestWorkspaceForFile, getAdditionalDirectoriesF
 // import { AgentService } from './services/agents/AgentService';
 import { cliManager, initEnhancedPath, getEnhancedPath, getShellEnvironment } from './services/CLIManager';
 import { registerWorkspaceWindow, registerExtensionTools, shutdownHttpServer, startMcpHttpServer, updateDocumentState } from './mcp/httpServer';
+import { startSessionContextServer, cleanupSessionContextServer, shutdownSessionContextServer } from './mcp/sessionContextServer';
 import { SessionNamingService } from './services/SessionNamingService';
 import { ExtensionDevService } from './services/ExtensionDevService';
 // SuperLoopProgressService import removed - server disabled (leaking into non-super-loop sessions)
@@ -1051,7 +1052,6 @@ app.whenReady().then(async () => {
 
     // Start session context MCP server (session summary, workstream overview, recent sessions)
     try {
-        const { startSessionContextServer } = await import('./mcp/sessionContextServer');
         const result = await startSessionContextServer();
         ClaudeCodeProvider.setSessionContextServerPort(result.port);
         OpenAICodexProvider.setSessionContextServerPort(result.port);
@@ -1724,7 +1724,6 @@ app.on('before-quit', async (event) => {
 
     try {
         // Shutdown session context MCP server
-        const { shutdownSessionContextServer } = await import('./mcp/sessionContextServer');
         const shutdownPromise = shutdownSessionContextServer();
         const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 500));
         await Promise.race([shutdownPromise, timeoutPromise]);
