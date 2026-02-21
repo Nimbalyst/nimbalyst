@@ -17,6 +17,7 @@
  */
 
 import * as path from 'path';
+import { parse as parseShellCommand } from 'shell-quote';
 import { SessionFilesRepository } from '@nimbalyst/runtime';
 import { database } from '../database/PGLiteDatabaseWorker';
 import { logger } from '../utils/logger';
@@ -701,7 +702,27 @@ class ToolCallMatcherImpl {
         await database.initialize();
       }
 
+      const directDiffs = await this.getDiffsFromToolCallContent(sessionId, toolCallItemId);
+      if (directDiffs.length > 0) {
+        return directDiffs;
+      }
+
       // 1. Find matches for this tool call
+      const latestMessageResult = await database.query<{
+        message_id: number;
+      }>(
+        `SELECT message_id
+         FROM ai_tool_call_file_edits
+         WHERE session_id = $1 AND tool_call_item_id = $2
+         ORDER BY created_at DESC
+         LIMIT 1`,
+        [sessionId, toolCallItemId]
+      );
+
+      if (latestMessageResult.rows.length === 0) return [];
+
+      const latestMessageId = ensureNumber(latestMessageResult.rows[0].message_id);
+
       const matchResult = await database.query<{
         session_file_id: string;
         message_id: number;
@@ -709,8 +730,8 @@ class ToolCallMatcherImpl {
       }>(
         `SELECT session_file_id, message_id, match_reason
          FROM ai_tool_call_file_edits
-         WHERE session_id = $1 AND tool_call_item_id = $2`,
-        [sessionId, toolCallItemId]
+         WHERE session_id = $1 AND tool_call_item_id = $2 AND message_id = $3`,
+        [sessionId, toolCallItemId, latestMessageId]
       );
 
       if (matchResult.rows.length === 0) return [];
@@ -782,6 +803,20 @@ class ToolCallMatcherImpl {
           if (extracted.content) {
             diffResult.content = extracted.content;
           }
+          if (diffResult.linesAdded == null && diffResult.linesRemoved == null) {
+            const countLines = (text: string) => (text.length === 0 ? 0 : text.split('\n').length);
+            let added = 0;
+            let removed = 0;
+            for (const diff of extracted.diffs) {
+              if (diff.newString) added += countLines(diff.newString);
+              if (diff.oldString) removed += countLines(diff.oldString);
+            }
+            if (extracted.content) {
+              added += countLines(extracted.content);
+            }
+            if (added > 0) diffResult.linesAdded = added;
+            if (removed > 0) diffResult.linesRemoved = removed;
+          }
         }
 
         results.push(diffResult);
@@ -836,6 +871,14 @@ class ToolCallMatcherImpl {
         // Claude Code SDK format: {"type":"item.completed","item":{...}}
         const item = parsed.item;
         args = item.arguments ?? item.args ?? item.input ?? item.parameters ?? null;
+        if (!args && item?.type === 'command_execution' && typeof item.command === 'string') {
+          // Normalize shell-wrapped command to the inner command
+          const shellMatch = item.command.match(/\/(?:bin|usr\/bin)\/(?:bash|zsh|sh)\s+-l?c\s+([\s\S]+)$/);
+          const innerCommand = shellMatch
+            ? shellMatch[1].replace(/^['"]|['"]$/g, '')
+            : item.command;
+          args = { command: innerCommand };
+        }
         itemForChanges = item;
       } else if (parsed?.message?.content && Array.isArray(parsed.message.content)) {
         // Raw Claude API format: {"type":"assistant","message":{"content":[{"type":"tool_use","input":{...}}]}}
@@ -908,10 +951,168 @@ class ToolCallMatcherImpl {
         }
       }
 
+      // Bash: attempt to extract appended content from command redirects
+      if (typeof args.command === 'string' && args.command.length > 0) {
+        const appended = this.extractBashAppendContent(args.command, targetFilePath);
+        if (appended && appended.length > 0) {
+          return {
+            diffs: [{
+              oldString: '',
+              newString: appended,
+            }],
+          };
+        }
+      }
+
       return { diffs: [] };
     } catch {
       return { diffs: [] };
     }
+  }
+
+  private extractBashAppendContent(command: string, targetFilePath: string): string | null {
+    const workspaceRoot = this.inferWorkspacePath(targetFilePath);
+    const normalizedTarget = path.normalize(targetFilePath);
+
+    const normalizeEscapedCommand = (value: string): string => {
+      if (!value.includes('\\')) return value;
+      return value
+        .replace(/\\n/g, '\n')
+        .replace(/\\r/g, '\r')
+        .replace(/\\t/g, '\t')
+        .replace(/\\\"/g, '"')
+        .replace(/\\'/g, '\'')
+        .replace(/\\\\/g, '\\');
+    };
+
+    const resolveTarget = (target: string): string | null => {
+      if (!target) return null;
+      try {
+        const resolved = target.startsWith('/') ? target : path.resolve(workspaceRoot, target);
+        return path.normalize(resolved);
+      } catch {
+        return null;
+      }
+    };
+
+    const decodeEscapes = (value: string): string => {
+      return value
+        .replace(/\\n/g, '\n')
+        .replace(/\\r/g, '\r')
+        .replace(/\\t/g, '\t')
+        .replace(/\\\"/g, '"')
+        .replace(/\\'/g, '\'')
+        .replace(/\\\\/g, '\\');
+    };
+
+    const extractOutputFromTokens = (tokens: string[]): string | null => {
+      if (tokens.length === 0) return null;
+      const cmd = tokens[0];
+
+      if (cmd === 'echo') {
+        let idx = 1;
+        let interpretEscapes = false;
+        let suppressNewline = false;
+        while (idx < tokens.length && tokens[idx].startsWith('-')) {
+          const opt = tokens[idx];
+          if (opt.includes('e')) interpretEscapes = true;
+          if (opt.includes('n')) suppressNewline = true;
+          idx += 1;
+        }
+        let output = tokens.slice(idx).join(' ');
+        if (interpretEscapes) {
+          output = decodeEscapes(output);
+        }
+        if (!suppressNewline) {
+          output += '\n';
+        }
+        return output;
+      }
+
+      if (cmd === 'printf') {
+        const format = tokens[1];
+        const arg = tokens[2];
+        if (typeof format !== 'string') return null;
+        let output = format;
+        if (typeof arg === 'string' && format.includes('%s')) {
+          output = format.replace('%s', arg);
+        }
+        output = decodeEscapes(output);
+        return output;
+      }
+
+      return null;
+    };
+
+    const tryParseTokens = (tokens: Array<string | { op: string }>): string | null => {
+      let currentTokens: string[] = [];
+      let expectingRedirectTarget = false;
+      let redirectTarget: string | null = null;
+
+      const flush = (): string | null => {
+        if (!redirectTarget) {
+          currentTokens = [];
+          return null;
+        }
+        const resolvedTarget = resolveTarget(redirectTarget);
+        if (resolvedTarget && resolvedTarget === normalizedTarget) {
+          const output = extractOutputFromTokens(currentTokens);
+          if (output) return output;
+        }
+        currentTokens = [];
+        redirectTarget = null;
+        return null;
+      };
+
+      for (const token of tokens) {
+        if (typeof token === 'object' && token !== null && 'op' in token) {
+          const op = token.op;
+          if (op === '>' || op === '>>') {
+            expectingRedirectTarget = true;
+            continue;
+          }
+          if (['&&', '||', ';', '|'].includes(op)) {
+            const output = flush();
+            if (output) return output;
+            expectingRedirectTarget = false;
+            continue;
+          }
+        } else if (typeof token === 'string') {
+          if (expectingRedirectTarget) {
+            redirectTarget = token;
+            expectingRedirectTarget = false;
+            continue;
+          }
+          currentTokens.push(token);
+        }
+      }
+
+      return flush();
+    };
+
+    try {
+      const normalizedCommand = normalizeEscapedCommand(command);
+      const tokens = parseShellCommand(normalizedCommand) as Array<string | { op: string }>;
+      const parsed = tryParseTokens(tokens);
+      if (parsed) return parsed;
+    } catch {
+      // fall through to regex parsing
+    }
+
+    // Regex fallback for simple printf/echo redirects
+    const regex = /(?:^|[;&|]\s*|\n)\s*(?:printf|echo)(?:\s+-e)?\s+(['"])([\s\S]*?)\1\s*>>?\s*([^\s;&|]+)/g;
+    let match;
+    const regexCommand = normalizeEscapedCommand(command);
+    while ((match = regex.exec(regexCommand)) !== null) {
+      const raw = match[2] ?? '';
+      const target = match[3] ?? '';
+      const resolvedTarget = resolveTarget(target);
+      if (resolvedTarget && resolvedTarget === normalizedTarget) {
+        return decodeEscapes(raw);
+      }
+    }
+
+    return null;
   }
 
   private async insertMatchesBatch(
@@ -989,6 +1190,122 @@ class ToolCallMatcherImpl {
     }
     // Fallback: use the directory two levels up from the file
     return path.dirname(path.dirname(filePath));
+  }
+
+  private async getDiffsFromToolCallContent(
+    sessionId: string,
+    toolCallItemId: string
+  ): Promise<ToolCallDiffResult[]> {
+    try {
+      if (!database.isInitialized()) {
+        await database.initialize();
+      }
+
+      const sessionResult = await database.query<{ workspace_id: string }>(
+        `SELECT workspace_id FROM ai_sessions WHERE id = $1`,
+        [sessionId]
+      );
+      const workspacePath = sessionResult.rows[0]?.workspace_id;
+
+      const messageResult = await database.query<{
+        id: number;
+        content: string;
+        created_at: Date;
+      }>(
+        `SELECT id, content, created_at
+         FROM ai_agent_messages
+         WHERE session_id = $1 AND content LIKE $2 AND content LIKE $3
+         ORDER BY id DESC
+         LIMIT 50`,
+        [sessionId, `%\"id\":\"${toolCallItemId}\"%`, '%item.completed%']
+      );
+
+      for (const row of messageResult.rows) {
+        const windows = parseToolCallWindows(
+          ensureNumber(row.id),
+          row.content,
+          row.created_at instanceof Date ? row.created_at : new Date(row.created_at),
+          sessionId,
+          workspacePath
+        );
+        const match = windows.find(w => w.toolCallItemId === toolCallItemId);
+        if (!match || match.filePaths.length === 0) {
+          continue;
+        }
+
+        let filePaths = match.filePaths;
+        if (toolCallItemId) {
+          const linkResult = await database.query<{ file_path: string; timestamp: Date }>(
+            `SELECT file_path, timestamp
+             FROM session_files
+             WHERE session_id = $1
+               AND link_type = 'edited'
+               AND metadata->>'toolUseId' = $2`,
+            [sessionId, toolCallItemId]
+          );
+          if (linkResult.rows.length > 0) {
+            const sorted = [...linkResult.rows].sort((a, b) => {
+              const aTs = a.timestamp instanceof Date ? a.timestamp.getTime() : new Date(a.timestamp).getTime();
+              const bTs = b.timestamp instanceof Date ? b.timestamp.getTime() : new Date(b.timestamp).getTime();
+              return bTs - aTs;
+            });
+            const maxTs = sorted[0].timestamp instanceof Date
+              ? sorted[0].timestamp.getTime()
+              : new Date(sorted[0].timestamp).getTime();
+            const thresholdMs = 2000;
+            const recentPaths = sorted.filter(row => {
+              const ts = row.timestamp instanceof Date ? row.timestamp.getTime() : new Date(row.timestamp).getTime();
+              return Math.abs(ts - maxTs) <= thresholdMs;
+            });
+            filePaths = [...new Set(recentPaths.map(r => r.file_path))];
+          }
+        }
+
+        const results: ToolCallDiffResult[] = [];
+        for (const filePath of filePaths) {
+          const operation = match.toolName === 'Bash' ? 'bash' : 'edit';
+          const diffResult: ToolCallDiffResult = {
+            filePath,
+            operation,
+            diffs: [],
+          };
+
+          const extracted = this.extractDiffsFromMessageContent(row.content, filePath);
+          if (extracted.diffs.length > 0) {
+            diffResult.diffs = extracted.diffs;
+          }
+          if (extracted.content) {
+            diffResult.content = extracted.content;
+          }
+
+          const countLines = (text: string) => (text.length === 0 ? 0 : text.split('\n').length);
+          let added = 0;
+          let removed = 0;
+          for (const diff of diffResult.diffs) {
+            if (diff.newString) added += countLines(diff.newString);
+            if (diff.oldString) removed += countLines(diff.oldString);
+          }
+          if (diffResult.content) {
+            added += countLines(diffResult.content);
+          }
+          if (added > 0) diffResult.linesAdded = added;
+          if (removed > 0) diffResult.linesRemoved = removed;
+
+          if (diffResult.diffs.length > 0 || diffResult.content) {
+            results.push(diffResult);
+          }
+        }
+
+        if (results.length > 0) {
+          return results;
+        }
+      }
+
+      return [];
+    } catch (error) {
+      logger.main.error('[ToolCallMatcher] getDiffsFromToolCallContent failed:', error);
+      return [];
+    }
   }
 }
 

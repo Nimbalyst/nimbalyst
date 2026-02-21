@@ -7,3 +7,11 @@ Bash edit: post-restart verification at 2026-02-21T03:08:48Z.
 Bash edit: third restart verification at 2026-02-21T03:22:02Z.
 Bash edit: fourth restart verification at 2026-02-21T03:35:47Z.
 Bash edit: post-restart check on 2026-02-21.
+Bash edit: dupe-check post-restart on 2026-02-21.
+Bash edit: diff-viewer check on 2026-02-21.
+Bash edit: diff-viewer check #2 on 2026-02-21.
+Bash edit: diff-viewer check #3 on 2026-02-21.
+Bash edit: diff-viewer check #4 on 2026-02-21.
+Bash edit: diff-viewer check #5 on 2026-02-21.
+Bash edit: diff-viewer check #6 on 2026-02-21.
+Bash edit: diff-viewer check 7 on 2026-02-21.

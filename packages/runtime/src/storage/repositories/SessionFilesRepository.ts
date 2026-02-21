@@ -73,6 +73,16 @@ export const SessionFilesRepository = {
    */
   async addFileLink(link: Omit<FileLink, 'id'>): Promise<FileLink> {
     const store = requireStore();
+    const getEditedSignature = (metadata: Record<string, any> | undefined): string => {
+      if (!metadata) return '';
+      return JSON.stringify({
+        toolName: metadata.toolName,
+        operation: metadata.operation,
+        bashCommand: metadata.bashCommand,
+        linesAdded: metadata.linesAdded,
+        linesRemoved: metadata.linesRemoved,
+      });
+    };
 
     // Check if link already exists
     const exists = await store.hasFileLink(link.sessionId, link.filePath, link.linkType);
@@ -87,11 +97,13 @@ export const SessionFilesRepository = {
       } else if (link.metadata?.toolUseId) {
         // Avoid duplicate inserts when reprocessing the same tool use
         const existing = await store.getFilesBySession(link.sessionId, link.linkType);
+        const targetSignature = getEditedSignature(link.metadata);
         const match = existing.find(
           l =>
             l.filePath === link.filePath &&
             l.linkType === link.linkType &&
-            l.metadata?.toolUseId === link.metadata.toolUseId
+            l.metadata?.toolUseId === link.metadata.toolUseId &&
+            getEditedSignature(l.metadata) === targetSignature
         );
         if (match) {
           return match;
