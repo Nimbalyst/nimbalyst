@@ -27,34 +27,73 @@ packages/electron/marketing/
   process-videos.sh                # ffmpeg WebM -> MP4/GIF conversion
 ```
 
-## Running
+## Quick Start (for non-developers)
 
-Two launch modes are supported. The system auto-detects which to use:
+Marketing screenshots require running Nimbalyst in dev mode temporarily. If you normally use the packaged app (Nimbalyst.app), follow these steps:
 
-### Option A: Dev mode (for developers with the repo checked out)
+### Prerequisites
+
+You need Node.js installed. If you don't have it, install via [nvm](https://github.com/nvm-sh/nvm):
+```bash
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.0/install.sh | bash
+nvm install 22
+```
+
+### Step-by-step
+
+1. **Quit the packaged Nimbalyst app** if it's running (the dev server uses the same ports).
+
+2. **Pull the latest code and install dependencies:**
+   ```bash
+   cd ~/sources/stravu-editor    # or wherever you cloned the repo
+   git pull
+   npm install
+   ```
+
+3. **Build the app and start the dev server** (two separate terminals):
+   ```bash
+   # Terminal 1: build the main process
+   cd packages/electron && npm run build
+
+   # Terminal 2: start the dev server (keep this running)
+   cd packages/electron && npm run dev
+   ```
+   Wait until you see "ready in Xms" in the dev terminal before proceeding.
+
+4. **Capture screenshots** (in a third terminal):
+   ```bash
+   cd packages/electron
+
+   # Capture everything (~4 minutes)
+   npm run marketing:screenshots
+
+   # Or capture just one category
+   npm run marketing:screenshots:grep -- "hero-"
+   ```
+   Output goes to `packages/electron/marketing/screenshots/{dark,light}/`.
+
+   You can also ask the Nimbalyst agent to capture specific screenshots or update the screenshot specs for you.
+
+5. **When done, stop the dev server** (Ctrl+C in the dev terminal) and relaunch the packaged Nimbalyst app.
+
+### Post-processing videos
+
+If you captured videos (the `video-` category), convert the raw WebM files to MP4/GIF:
+```bash
+bash packages/electron/marketing/process-videos.sh
+```
+This requires ffmpeg (`brew install ffmpeg` if you don't have it).
+
+## Running (reference)
+
+Requires the dev server on port 5273:
 
 ```bash
 cd packages/electron && npm run dev    # in one terminal
 
 # Capture everything (31 tests, ~4 minutes)
 npm run marketing:screenshots
-```
 
-### Option B: Packaged mode (for anyone with Nimbalyst installed)
-
-No dev server needed. Just have Nimbalyst.app installed:
-
-```bash
-# Auto-detects /Applications/Nimbalyst.app
-npm run marketing:screenshots
-
-# Or specify a custom path
-MARKETING_APP_PATH=/path/to/Nimbalyst.app/Contents/MacOS/Nimbalyst npm run marketing:screenshots
-```
-
-### Filtering
-
-```bash
 # Capture by category
 npm run marketing:screenshots:grep -- "hero-"
 npm run marketing:screenshots:grep -- "editor-"
@@ -68,10 +107,6 @@ bash marketing/take-screenshots.sh
 bash marketing/take-screenshots.sh --grep=hero
 bash marketing/take-screenshots.sh --list
 ```
-
-### Priority
-
-If both a dev server and a packaged app are available, the dev server takes priority.
 
 ## Output Inventory
 

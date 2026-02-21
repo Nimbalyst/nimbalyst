@@ -65,25 +65,18 @@ if [ "$LIST_ONLY" = true ]; then
   exit 0
 fi
 
-# Check launch mode: dev server or packaged app
-echo "Checking launch mode..."
-if curl -s http://127.0.0.1:5273 > /dev/null 2>&1 || curl -s http://[::1]:5273 > /dev/null 2>&1; then
-  echo "Dev server detected on port 5273 - using dev mode."
-elif [ -n "$MARKETING_APP_PATH" ]; then
-  echo "Using packaged app: $MARKETING_APP_PATH"
-elif [ -f "/Applications/Nimbalyst.app/Contents/MacOS/Nimbalyst" ]; then
-  echo "Using packaged app: /Applications/Nimbalyst.app"
-else
-  echo ""
-  echo "No Nimbalyst instance available for marketing capture."
-  echo ""
-  echo "Either:"
-  echo "  1. Start the dev server: cd packages/electron && npm run dev"
-  echo "  2. Install Nimbalyst.app to /Applications"
-  echo "  3. Set MARKETING_APP_PATH=/path/to/Nimbalyst.app/Contents/MacOS/Nimbalyst"
-  echo ""
-  exit 1
+# Check dev server
+echo "Checking dev server..."
+if ! curl -s http://127.0.0.1:5273 > /dev/null 2>&1; then
+  if ! curl -s http://[::1]:5273 > /dev/null 2>&1; then
+    echo ""
+    echo "Dev server is not running on port 5273."
+    echo "Start it with: cd packages/electron && npm run dev"
+    echo ""
+    exit 1
+  fi
 fi
+echo "Dev server is running."
 
 # Build the playwright command
 CMD="npx playwright test --config=$SCRIPT_DIR/playwright.marketing.config.ts"

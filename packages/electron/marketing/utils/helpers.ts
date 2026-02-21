@@ -3,11 +3,6 @@
  *
  * Utilities for capturing marketing screenshots in both dark and light themes,
  * launching the app with a fixture workspace, and common setup operations.
- *
- * Supports two launch modes:
- * - Dev mode: requires `npm run dev` running on port 5273 (default)
- * - Packaged mode: uses installed Nimbalyst.app, no dev server needed
- *   Set MARKETING_APP_PATH env var or pass executablePath option.
  */
 
 import { _electron } from '@playwright/test';
@@ -26,60 +21,20 @@ export const VIDEO_DIR = path.resolve(__dirname, '../videos');
 // Fixture workspace source (copied to temp dir for each run)
 export const FIXTURE_WORKSPACE_SRC = path.resolve(__dirname, '../fixtures/workspace');
 
-// Default packaged app locations by platform
-const DEFAULT_APP_PATHS: Record<string, string> = {
-  darwin: '/Applications/Nimbalyst.app/Contents/MacOS/Nimbalyst',
-  win32: 'C:\\Program Files\\Nimbalyst\\Nimbalyst.exe',
-  linux: '/usr/bin/nimbalyst',
-};
-
 export type Theme = 'dark' | 'light';
-
-/**
- * Find the packaged Nimbalyst binary.
- * Checks MARKETING_APP_PATH env var, then default install locations.
- * Returns null if no packaged app is found.
- */
-async function findPackagedApp(): Promise<string | null> {
-  // Explicit env var takes priority
-  const envPath = process.env.MARKETING_APP_PATH;
-  if (envPath) {
-    try {
-      await fs.access(envPath);
-      return envPath;
-    } catch {
-      throw new Error(`MARKETING_APP_PATH is set but file not found: ${envPath}`);
-    }
-  }
-
-  // Check default location for current platform
-  const defaultPath = DEFAULT_APP_PATHS[process.platform];
-  if (defaultPath) {
-    try {
-      await fs.access(defaultPath);
-      return defaultPath;
-    } catch {
-      // Not installed at default location
-    }
-  }
-
-  return null;
-}
 
 /**
  * Launch the Electron app configured for marketing capture.
  * Uses a temp copy of the fixture workspace to avoid mutations.
  *
- * Automatically detects whether to use dev mode or packaged mode:
- * - If a dev server is running on port 5273, uses dev mode (out/main/index.js)
- * - Otherwise, looks for the packaged Nimbalyst app
- * - Set MARKETING_APP_PATH env var to specify a custom packaged app path
+ * Requires the dev server running on port 5273 (npm run dev).
  */
 export async function launchMarketingApp(options?: {
   workspace?: string;
   recordVideo?: boolean;
   theme?: Theme;
 }): Promise<{ app: ElectronApplication; page: Page; workspaceDir: string }> {
+  const electronMain = path.resolve(__dirname, '../../out/main/index.js');
   const electronCwd = path.resolve(__dirname, '../../../../');
 
   // Create temp workspace from fixtures
@@ -93,56 +48,32 @@ export async function launchMarketingApp(options?: {
     // Ignore
   }
 
-  // Determine launch mode: dev server or packaged app
+  // Check dev server
   const devServerUrl = await findDevServer();
-  const packagedAppPath = devServerUrl ? null : await findPackagedApp();
 
-  if (!devServerUrl && !packagedAppPath) {
-    throw new Error(
-      '\n\nNo Nimbalyst instance available for marketing capture.\n\n' +
-      'Either:\n' +
-      '  1. Start the dev server: cd packages/electron && npm run dev\n' +
-      '  2. Install Nimbalyst.app to /Applications\n' +
-      '  3. Set MARKETING_APP_PATH=/path/to/Nimbalyst.app/Contents/MacOS/Nimbalyst\n'
-    );
-  }
+  const args = [electronMain, '--workspace', workspaceDir];
 
   const videoConfig = options?.recordVideo
     ? { dir: path.join(VIDEO_DIR, options?.theme ?? 'dark') }
     : undefined;
 
-  const env: Record<string, string> = {
-    ...process.env as Record<string, string>,
-    ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ?? 'marketing-capture-key',
-    ELECTRON_DISABLE_SECURITY_WARNINGS: '1',
-    PLAYWRIGHT: '1',
-    NIMBALYST_PERMISSION_MODE: 'allow-all',
-  };
-
-  let launchOptions: Parameters<typeof _electron.launch>[0];
-
-  if (devServerUrl) {
-    // Dev mode: use out/main/index.js with dev server
-    const electronMain = path.resolve(__dirname, '../../out/main/index.js');
-    env.ELECTRON_RENDERER_URL = devServerUrl;
-    launchOptions = {
-      ...(videoConfig ? { recordVideo: videoConfig } : {}),
-      args: [electronMain, '--workspace', workspaceDir],
-      cwd: electronCwd,
-      env,
-    };
-  } else {
-    // Packaged mode: launch the installed binary directly
-    launchOptions = {
-      ...(videoConfig ? { recordVideo: videoConfig } : {}),
-      executablePath: packagedAppPath!,
-      args: ['--workspace', workspaceDir],
-      cwd: electronCwd,
-      env,
-    };
-  }
-
-  const app = await _electron.launch(launchOptions);
+  // Build env, stripping vars that interfere with Electron launch.
+  // ELECTRON_RUN_AS_NODE makes Electron act as plain Node.js (set when running inside packaged Nimbalyst).
+  // These must be removed so the launched Electron process runs as a real Electron app.
+  const { ELECTRON_RUN_AS_NODE, ELECTRON_NO_ATTACH_CONSOLE, NODE_PATH, ...cleanEnv } = process.env;
+  const app = await _electron.launch({
+    ...(videoConfig ? { recordVideo: videoConfig } : {}),
+    args,
+    cwd: electronCwd,
+    env: {
+      ...cleanEnv as Record<string, string>,
+      ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ?? 'marketing-capture-key',
+      ELECTRON_DISABLE_SECURITY_WARNINGS: '1',
+      ELECTRON_RENDERER_URL: devServerUrl,
+      PLAYWRIGHT: '1',
+      NIMBALYST_PERMISSION_MODE: 'allow-all',
+    },
+  });
 
   const page = await app.firstWindow();
   await page.waitForLoadState('domcontentloaded');
@@ -371,9 +302,8 @@ export async function pause(page: Page, ms: number): Promise<void> {
 
 /**
  * Find the dev server URL.
- * Returns null if the dev server is not running (packaged mode will be used instead).
  */
-async function findDevServer(): Promise<string | null> {
+async function findDevServer(): Promise<string> {
   const urls = ['http://127.0.0.1:5273', 'http://[::1]:5273'];
   for (const url of urls) {
     try {
@@ -383,5 +313,23 @@ async function findDevServer(): Promise<string | null> {
       // Try next
     }
   }
-  return null;
+
+  // Detect if running inside packaged Nimbalyst (ELECTRON_RUN_AS_NODE is set by the app)
+  const isPackagedBuild = !!process.env.ELECTRON_RUN_AS_NODE;
+  if (isPackagedBuild) {
+    throw new Error(
+      '\n\nMarketing screenshots cannot be captured from the packaged Nimbalyst app.\n\n' +
+      'You need to run them from a dev environment instead:\n\n' +
+      '  1. Quit the packaged Nimbalyst app\n' +
+      '  2. Open a terminal and cd to the repo: cd ~/sources/stravu-editor\n' +
+      '  3. Pull latest and install: git pull && npm install\n' +
+      '  4. Build and start the dev server: cd packages/electron && npm run build && npm run dev\n' +
+      '  5. In another terminal: cd packages/electron && npm run marketing:screenshots\n\n' +
+      'See docs/MARKETING_SCREENSHOTS.md for the full guide.\n'
+    );
+  }
+
+  throw new Error(
+    'Dev server not running on port 5273. Start it with: cd packages/electron && npm run dev'
+  );
 }
