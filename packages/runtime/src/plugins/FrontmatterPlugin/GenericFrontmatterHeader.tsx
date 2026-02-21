@@ -360,8 +360,9 @@ export function shouldRenderGenericFrontmatter(content: string, filePath: string
     return false;
   }
 
-  // Skip if it's a tracker document
-  if (result.data.planStatus || result.data.decisionStatus || result.data.trackerStatus) {
+  // todo: this is an aweful hack and we  need a better solution.
+  // Skip if it's a tracker document or automation (handled by specialized headers)
+  if (result.data.planStatus || result.data.decisionStatus || result.data.trackerStatus || result.data.automationStatus) {
     return false;
   }
 
