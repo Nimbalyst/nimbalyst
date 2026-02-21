@@ -34,8 +34,8 @@ function parseBashPaths(command: string, cwd: string): string[] {
       // Fallback: simple regex extraction for common write patterns
       _parseBashForFileOps = (cmd: string, cwdPath: string) => {
         const paths: string[] = [];
-        // Redirect: > or >>
-        const redirectMatches = cmd.match(/>\s*(\S+)/g);
+        // Redirect: > or >> followed by whitespace and filename
+        const redirectMatches = cmd.match(/>+\s+(\S+)/g);
         if (redirectMatches) {
           for (const m of redirectMatches) {
             const target = m.replace(/^>+\s*/, '');
@@ -343,8 +343,14 @@ export function parseToolCallWindows(
   // Extract tool arguments
   let args: any = null;
   if (itemType === 'command_execution') {
-    // Codex uses command field directly
-    args = { command: typeof item.command === 'string' ? item.command : '' };
+    // Codex uses command field directly, often wrapped in a shell invocation
+    // like "/bin/zsh -lc 'actual command'" - unwrap to get the inner command
+    let rawCommand = typeof item.command === 'string' ? item.command : '';
+    const shellMatch = rawCommand.match(/\/(?:bin|usr\/bin)\/(?:bash|zsh|sh)\s+-l?c\s+(.+)$/);
+    if (shellMatch) {
+      rawCommand = shellMatch[1].replace(/^['"]|['"]$/g, '');
+    }
+    args = { command: rawCommand };
   } else if (itemType === 'file_change') {
     args = { changes: item.changes };
   } else {

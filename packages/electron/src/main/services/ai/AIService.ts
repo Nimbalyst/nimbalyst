@@ -2326,7 +2326,9 @@ export class AIService {
 
                 // Track file interactions for all tool calls
                 // Also attach file watchers for edited files to detect subsequent changes
-                if (effectiveWorkspacePath && chunk.toolCall.arguments) {
+                // Note: Codex command_execution events have arguments=undefined (command is in name),
+                // so we cannot guard on chunk.toolCall.arguments being truthy.
+                if (effectiveWorkspacePath) {
                   try {
                     // Get window from event sender to enable file watcher attachment
                     const window = BrowserWindow.fromWebContents(event.sender);
@@ -2334,10 +2336,15 @@ export class AIService {
                     // Normalize Codex command_execution tool names to 'Bash' so the
                     // tracker's existing shell-command file extraction logic applies.
                     // Codex emits these with the raw command as the tool name (e.g. "/bin/zsh -lc ls").
+                    // Unwrap the shell wrapper to get the inner command for file path extraction.
                     let trackToolName = chunk.toolCall.name;
                     let trackArgs = chunk.toolCall.arguments;
                     if (/^\/(?:bin|usr\/bin)\//.test(trackToolName) || /\/(?:bash|zsh|sh)\b/.test(trackToolName)) {
-                      trackArgs = { command: trackToolName };
+                      const shellMatch = trackToolName.match(/\/(?:bin|usr\/bin)\/(?:bash|zsh|sh)\s+-l?c\s+(.+)$/);
+                      const innerCommand = shellMatch
+                        ? shellMatch[1].replace(/^['"]|['"]$/g, '')
+                        : trackToolName;
+                      trackArgs = { command: innerCommand };
                       trackToolName = 'Bash';
                     }
 

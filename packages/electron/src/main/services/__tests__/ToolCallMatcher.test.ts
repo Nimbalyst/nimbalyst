@@ -25,7 +25,7 @@ import { parseToolCallWindows, scoreMatch, _setParseBashFn, type ToolCallWindow 
 beforeAll(() => {
   _setParseBashFn((command: string, cwd: string) => {
     const paths: string[] = [];
-    const redirectMatch = command.match(/>\s*(\S+)/g);
+    const redirectMatch = command.match(/>+\s+(\S+)/g);
     if (redirectMatch) {
       for (const m of redirectMatch) {
         const target = m.replace(/^>+\s*/, '');
@@ -477,6 +477,153 @@ describe('ToolCallMatcher', () => {
       });
       const result = scoreMatch('/workspace/src/app.ts', baseTime + 10_001, window);
       expect(result).toBeNull();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Real Codex event fixtures (from session fb958ac8-ce5d-4605-8756-2861ed0c095f)
+  // ---------------------------------------------------------------------------
+
+  describe('Codex real event fixtures', () => {
+    const baseDate = new Date('2026-02-21T01:55:59Z');
+    const SESSION_ID = 'fb958ac8-ce5d-4605-8756-2861ed0c095f';
+    const WORKSPACE = '/Users/jordanbentley/git/nimnim_worktrees/noble-owl';
+
+    it('should parse file_change event from Codex apply_diff', () => {
+      // Real message 329861 from the Codex session
+      const content = JSON.stringify({
+        type: 'item.completed',
+        item: {
+          id: 'item_9',
+          type: 'file_change',
+          changes: [
+            { path: '/Users/jordanbentley/git/nimnim_worktrees/noble-owl/test/hello.txt', kind: 'update' },
+          ],
+          status: 'completed',
+        },
+      });
+
+      const windows = parseToolCallWindows(329861, content, baseDate, SESSION_ID, WORKSPACE);
+
+      expect(windows).toHaveLength(1);
+      expect(windows[0].toolName).toBe('file_change');
+      expect(windows[0].filePaths).toContain(
+        '/Users/jordanbentley/git/nimnim_worktrees/noble-owl/test/hello.txt'
+      );
+    });
+
+    it('should parse command_execution bash redirect from Codex', () => {
+      // Real message 329867 from the Codex session - bash append via >>
+      const content = JSON.stringify({
+        type: 'item.completed',
+        item: {
+          id: 'item_13',
+          type: 'command_execution',
+          command: '/bin/zsh -lc "printf \'%s\\n\' \\"Bash edit: appended line on 2026-02-21.\\" >> test/second-file.txt"',
+          aggregated_output: '',
+          exit_code: 0,
+          status: 'completed',
+        },
+      });
+
+      const windows = parseToolCallWindows(329867, content, baseDate, SESSION_ID, WORKSPACE);
+
+      expect(windows).toHaveLength(1);
+      expect(windows[0].toolName).toBe('Bash');
+      // After unwrapping /bin/zsh -lc wrapper, the redirect target should be found
+      expect(windows[0].filePaths.some(p => p.includes('second-file.txt'))).toBe(true);
+    });
+
+    it('should unwrap /bin/zsh -lc wrapper to extract inner command', () => {
+      // Simpler case: zsh wrapping a redirect
+      const content = JSON.stringify({
+        type: 'item.completed',
+        item: {
+          id: 'cmd-zsh',
+          type: 'command_execution',
+          command: "/bin/zsh -lc 'echo hello > /workspace/output.txt'",
+          aggregated_output: '',
+          exit_code: 0,
+          status: 'completed',
+        },
+      });
+
+      const windows = parseToolCallWindows(1, content, new Date(), 'test', '/workspace');
+
+      expect(windows).toHaveLength(1);
+      expect(windows[0].filePaths).toContain('/workspace/output.txt');
+    });
+
+    it('should match file_change edit to tool call with consistent timestamps', () => {
+      const toolTime = new Date('2026-02-21T01:55:59.477Z').getTime();
+      const fileTime = new Date('2026-02-21T01:55:59.481Z').getTime(); // 4ms later (same timezone)
+
+      const window: ToolCallWindow = {
+        messageId: 329861,
+        messageCreatedAt: toolTime,
+        sessionId: SESSION_ID,
+        toolName: 'file_change',
+        toolCallItemId: 'item_9',
+        toolUseId: 'item_9',
+        filePaths: ['/Users/jordanbentley/git/nimnim_worktrees/noble-owl/test/hello.txt'],
+        outputText: '',
+      };
+
+      const result = scoreMatch(
+        '/Users/jordanbentley/git/nimnim_worktrees/noble-owl/test/hello.txt',
+        fileTime,
+        window
+      );
+
+      expect(result).not.toBeNull();
+      expect(result!.score).toBe(40); // name_in_args
+      expect(result!.reasons).toContain('name_in_args');
+    });
+
+    it('should NOT match when timestamps have timezone mismatch (Bug 3)', () => {
+      // This demonstrates Bug 3: 5-hour offset kills matching
+      const toolTimeUtc = new Date('2026-02-21T01:55:59.477Z').getTime();
+      const fileTimeLocal = new Date('2026-02-21T06:55:59.481Z').getTime(); // 5h offset
+
+      const window: ToolCallWindow = {
+        messageId: 329861,
+        messageCreatedAt: toolTimeUtc,
+        sessionId: SESSION_ID,
+        toolName: 'file_change',
+        toolCallItemId: 'item_9',
+        toolUseId: null,
+        filePaths: ['/Users/jordanbentley/git/nimnim_worktrees/noble-owl/test/hello.txt'],
+        outputText: '',
+      };
+
+      const result = scoreMatch(
+        '/Users/jordanbentley/git/nimnim_worktrees/noble-owl/test/hello.txt',
+        fileTimeLocal,
+        window
+      );
+
+      // With 5h offset, this falls outside the 10s cutoff
+      expect(result).toBeNull();
+    });
+
+    it('should parse command_execution without /bin/zsh wrapper', () => {
+      // Some Codex commands don't have shell wrappers
+      const content = JSON.stringify({
+        type: 'item.completed',
+        item: {
+          id: 'cmd-direct',
+          type: 'command_execution',
+          command: 'echo "test" > /workspace/direct.txt',
+          aggregated_output: '',
+          exit_code: 0,
+          status: 'completed',
+        },
+      });
+
+      const windows = parseToolCallWindows(1, content, new Date(), 'test', '/workspace');
+
+      expect(windows).toHaveLength(1);
+      expect(windows[0].filePaths).toContain('/workspace/direct.txt');
     });
   });
 });
