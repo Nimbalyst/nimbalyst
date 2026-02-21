@@ -44,45 +44,38 @@ nvm install 22
 1. **Quit the packaged Nimbalyst app** if it's running (the dev server uses the same ports).
 
 2. **Pull the latest code and install dependencies:**
-   ```bash
+```bash
    cd ~/sources/stravu-editor    # or wherever you cloned the repo
    git pull
    npm install
-   ```
-
-3. **Build the app and start the dev server** (two separate terminals):
-   ```bash
-   # Terminal 1: build the main process
-   cd packages/electron && npm run build
-
-   # Terminal 2: start the dev server (keep this running)
-   cd packages/electron && npm run dev
-   ```
-   Wait until you see "ready in Xms" in the dev terminal before proceeding.
-
-4. **Capture screenshots** (in a third terminal):
-   ```bash
-   cd packages/electron
-
-   # Capture everything (~4 minutes)
-   npm run marketing:screenshots
-
-   # Or capture just one category
-   npm run marketing:screenshots:grep -- "hero-"
-   ```
-   Output goes to `packages/electron/marketing/screenshots/{dark,light}/`.
-
-   You can also ask the Nimbalyst agent to capture specific screenshots or update the screenshot specs for you.
-
-5. **When done, stop the dev server** (Ctrl+C in the dev terminal) and relaunch the packaged Nimbalyst app.
-
-### Post-processing videos
-
-If you captured videos (the `video-` category), convert the raw WebM files to MP4/GIF:
-```bash
-bash packages/electron/marketing/process-videos.sh
 ```
-This requires ffmpeg (`brew install ffmpeg` if you don't have it).
+
+3. **Start the dev server:**
+```bash
+   cd packages/electron && npm run dev
+```
+   Wait until you see "ready in Xms" before proceeding. A dev-mode Nimbalyst window will open automatically.
+
+4. **Ask the agent to capture or update screenshots.** In the dev-mode Nimbalyst, open an agent session and tell it what you need. Examples:
+
+   **Capturing existing screenshots:**
+   - "Capture all marketing screenshots"
+   - "Capture just the hero screenshots"
+   - "Capture the editor type screenshots and the AI features screenshots"
+
+   **Changing what a screenshot shows:**
+   - "Update the hero-files-mode screenshot to have the plans folder expanded"
+   - "Change the AI chat sidebar screenshot to show a longer conversation"
+   - "Add a new screenshot showing the terminal panel with a running build"
+
+   **Updating video scripts:**
+   - "Make the hero ambient video pause longer on the agent mode view"
+   - "Add a new loop video that shows switching between dark and light themes"
+   - "Update the file-open loop video to open a .mockup.html file instead of JSON"
+
+   The agent will edit the spec files in `packages/electron/marketing/specs/`, run the capture, and show you the results. Output goes to `packages/electron/marketing/screenshots/{dark,light}/`.
+
+5. **When done, quit dev-mode Nimbalyst** (Cmd+Q) and relaunch the packaged app.
 
 ## Running (reference)
 
