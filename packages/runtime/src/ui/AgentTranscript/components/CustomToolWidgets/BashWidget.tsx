@@ -12,6 +12,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import type { CustomToolWidgetProps } from './index';
 import { ToolCallChanges } from '../ToolCallChanges';
+import { unwrapShellCommand } from '../../utils/unwrapShellCommand';
 
 /**
  * Maximum number of lines to show before adding "show more" in expanded view
@@ -28,7 +29,9 @@ const MAX_COLLAPSED_COMMAND_LENGTH = 60;
  */
 function extractCommand(args: Record<string, any> | undefined): string | null {
   if (!args) return null;
-  return args.command || null;
+  const command = args.command || null;
+  if (!command) return null;
+  return unwrapShellCommand(command);
 }
 
 /**
@@ -401,7 +404,7 @@ export const BashWidget: React.FC<CustomToolWidgetProps> = ({ message, isExpande
       )}
 
       {/* File changes caused by this tool call */}
-      {!isRunning && getToolCallDiffs && tool.id && (
+      {getToolCallDiffs && tool.id && (
         <div className="px-2 pb-2">
           <ToolCallChanges
             toolCallItemId={tool.id}

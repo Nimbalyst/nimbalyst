@@ -30,10 +30,7 @@ import { useAtomValue } from 'jotai';
 import type { CustomToolWidgetProps } from './index';
 import { interactiveWidgetHostAtom } from '../../../../store/atoms/interactiveWidgetHost';
 import type { PermissionScope } from './InteractiveWidgetHost';
-
-// ============================================================
-// Helper Functions
-// ============================================================
+import { unwrapShellCommand } from '../../utils/unwrapShellCommand';
 
 /**
  * Get a human-readable display name for a tool pattern
@@ -114,7 +111,7 @@ export const ToolPermissionWidget: React.FC<CustomToolWidgetProps> = ({
   const args = (toolCall.arguments || {}) as Record<string, any>;
   const requestId = (args.requestId || toolCall.id || '') as string;
   const toolName = (args.toolName || '') as string;
-  const rawCommand = (args.rawCommand || '') as string;
+  const rawCommand = unwrapShellCommand((args.rawCommand || '') as string);
   const pattern = (args.pattern || toolName) as string;
   const patternDisplayName = (args.patternDisplayName || getPatternDisplayName(pattern)) as string;
   const isDestructive = (args.isDestructive || false) as boolean;

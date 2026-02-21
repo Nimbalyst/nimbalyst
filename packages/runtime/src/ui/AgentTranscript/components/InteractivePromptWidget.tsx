@@ -19,6 +19,7 @@ import type {
   AskUserQuestionRequestContent,
   AskUserQuestionResponseContent,
 } from '../../../ai/server/types';
+import { unwrapShellCommand } from '../utils/unwrapShellCommand';
 
 // Inject interactive prompt styles once (for animations and color-mix patterns)
 const injectInteractivePromptStyles = () => {
@@ -99,7 +100,7 @@ const PermissionRequestWidget: React.FC<PermissionRequestWidgetProps> = ({
           <span className="interactive-prompt__title font-semibold text-sm text-[var(--nim-text)]">Permission Resolved</span>
         </div>
         <div className="interactive-prompt__command bg-[var(--nim-bg-tertiary)] rounded p-2 px-3 mb-3 overflow-x-auto">
-          <code className="font-mono text-xs text-[var(--nim-text)] whitespace-pre-wrap break-all">{content.rawCommand || content.toolName}</code>
+          <code className="font-mono text-xs text-[var(--nim-text)] whitespace-pre-wrap break-all">{unwrapShellCommand(content.rawCommand || content.toolName)}</code>
         </div>
       </div>
     );
@@ -149,7 +150,7 @@ const PermissionRequestWidget: React.FC<PermissionRequestWidgetProps> = ({
 
       {/* Command */}
       <div className="interactive-prompt__command bg-[var(--nim-bg-tertiary)] rounded p-2 px-3 mb-3 overflow-x-auto">
-        <code className="font-mono text-xs text-[var(--nim-text)] whitespace-pre-wrap break-all">{content.rawCommand || content.toolName}</code>
+        <code className="font-mono text-xs text-[var(--nim-text)] whitespace-pre-wrap break-all">{unwrapShellCommand(content.rawCommand || content.toolName)}</code>
       </div>
 
       {/* Details */}
