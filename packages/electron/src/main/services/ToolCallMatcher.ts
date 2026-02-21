@@ -49,6 +49,7 @@ export interface ToolCallDiffResult {
   content?: string; // full content for create operations
   linesAdded?: number;
   linesRemoved?: number;
+  debugInfo?: string; // how this file was linked to the tool call
 }
 
 export interface ToolCallFileEdit {
@@ -657,6 +658,7 @@ class ToolCallMatcherImpl {
         const msgId = ensureNumber(match.message_id);
         const rawContent = messagesById.get(msgId);
         const operation = fileInfo.metadata?.operation || 'edit';
+        const debug: string[] = [`match: ${match.match_reason}`];
 
         const diffResult: ToolCallDiffResult = {
           filePath: fileInfo.filePath,
@@ -671,9 +673,12 @@ class ToolCallMatcherImpl {
           const extracted = this.extractDiffsFromMessageContent(rawContent, fileInfo.filePath);
           if (extracted.diffs.length > 0) {
             diffResult.diffs = extracted.diffs;
-          }
-          if (extracted.content) {
+            debug.push('diff: tool args');
+          } else if (extracted.content) {
             diffResult.content = extracted.content;
+            debug.push('diff: new file content');
+          } else {
+            debug.push('diff: nothing extractable from tool args');
           }
           if (diffResult.linesAdded == null && diffResult.linesRemoved == null) {
             let added = 0;
@@ -688,8 +693,11 @@ class ToolCallMatcherImpl {
             if (added > 0) diffResult.linesAdded = added;
             if (removed > 0) diffResult.linesRemoved = removed;
           }
+        } else {
+          debug.push('message: not found for msgId ' + msgId);
         }
 
+        diffResult.debugInfo = debug.join(' | ');
         results.push(diffResult);
       }
 
@@ -702,6 +710,9 @@ class ToolCallMatcherImpl {
               result.diffs = [{ oldString: gitDiff.oldString, newString: gitDiff.newString }];
               result.linesAdded = gitDiff.linesAdded;
               result.linesRemoved = gitDiff.linesRemoved;
+              result.debugInfo += ' | diff: git diff fallback';
+            } else {
+              result.debugInfo += ' | diff: git diff returned empty';
             }
           }
         }
@@ -1197,6 +1208,7 @@ class ToolCallMatcherImpl {
       const results: ToolCallDiffResult[] = [];
       for (const filePath of filePaths) {
         const operation = toolName === 'Bash' ? 'bash' : 'edit';
+        const debug: string[] = [`match: toolUseId in session_files`, `tool: ${toolName}`];
         const diffResult: ToolCallDiffResult = {
           filePath,
           operation,
@@ -1208,10 +1220,15 @@ class ToolCallMatcherImpl {
           const extracted = this.extractDiffsFromMessageContent(rawContent, filePath);
           if (extracted.diffs.length > 0) {
             diffResult.diffs = extracted.diffs;
-          }
-          if (extracted.content) {
+            debug.push('diff: tool args');
+          } else if (extracted.content) {
             diffResult.content = extracted.content;
+            debug.push('diff: new file content');
+          } else {
+            debug.push('diff: nothing extractable from tool args');
           }
+        } else {
+          debug.push('message: not found');
         }
 
         let added = 0;
@@ -1226,6 +1243,7 @@ class ToolCallMatcherImpl {
         if (added > 0) diffResult.linesAdded = added;
         if (removed > 0) diffResult.linesRemoved = removed;
 
+        diffResult.debugInfo = debug.join(' | ');
         results.push(diffResult);
       }
 
@@ -1238,6 +1256,9 @@ class ToolCallMatcherImpl {
               result.diffs = [{ oldString: gitDiff.oldString, newString: gitDiff.newString }];
               result.linesAdded = gitDiff.linesAdded;
               result.linesRemoved = gitDiff.linesRemoved;
+              result.debugInfo += ' | diff: git diff fallback';
+            } else {
+              result.debugInfo += ' | diff: git diff returned empty';
             }
           }
         }

@@ -12,6 +12,7 @@ import { BrowserWindow } from 'electron';
 import { SessionFilesRepository } from '@nimbalyst/runtime';
 import type { FileLinkType, EditedFileMetadata, ReadFileMetadata, ReferencedFileMetadata } from '@nimbalyst/runtime/ai/server/types';
 import { parseBashForFileOps } from '@nimbalyst/runtime/ai/server/providers/bashUtils';
+import { unwrapShellCommand } from './ToolCallMatcher';
 import { logger } from '../utils/logger';
 import { startFileWatcher } from '../file/FileWatcher';
 import { documentServices } from '../window/WindowManager';
@@ -205,16 +206,20 @@ export class SessionFileTracker {
 
       // Special handling for Bash commands - extract all affected files from the command
       if (toolName === 'Bash') {
-        const command = args?.command;
-        if (!command || typeof command !== 'string') {
+        const rawCommand = args?.command;
+        if (!rawCommand || typeof rawCommand !== 'string') {
           logger.main.debug('[SessionFileTracker] No command found in Bash args');
           return;
         }
 
+        // Unwrap shell-wrapped commands (e.g., "/bin/zsh -lc 'sed -i ...'")
+        // so parseBashForFileOps can detect the inner file operations
+        const command = unwrapShellCommand(rawCommand);
+
         if (toolUseId) {
           this.recentBashToolCalls.set(sessionId, {
             toolUseId,
-            command,
+            command: rawCommand,
             workspaceId,
             timestamp: Date.now()
           });

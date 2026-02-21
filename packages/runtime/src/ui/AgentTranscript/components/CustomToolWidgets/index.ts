@@ -67,6 +67,7 @@ export interface ToolCallDiffResult {
   content?: string; // full content for create operations
   linesAdded?: number;
   linesRemoved?: number;
+  debugInfo?: string; // how this file was linked to the tool call
 }
 
 /**

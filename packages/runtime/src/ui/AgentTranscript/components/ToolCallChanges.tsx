@@ -172,6 +172,14 @@ export const ToolCallChanges: React.FC<ToolCallChangesProps> = ({
                   <span className={`text-[0.6rem] font-medium py-0.5 px-1.5 rounded-full ${badge.colorClass} ${badge.bgClass}`}>
                     {badge.label}
                   </span>
+                  {diff.debugInfo && (
+                    <span
+                      className="text-[0.6rem] text-nim-faint shrink-0 cursor-help opacity-40 hover:opacity-100 transition-opacity"
+                      title={diff.debugInfo}
+                    >
+                      (i)
+                    </span>
+                  )}
                 </div>
 
                 {/* Diff content */}
