@@ -20,6 +20,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.54.2] - 2026-02-21
+
+
+### Added
+- File change diffs shown per tool call in agent transcripts (ToolCallMatcher)
+- Share markdown files from editor overflow menu
+- Codex local file history diffs with dirty/untracked baseline snapshots
+- Agent model choice for git conflict resolution
+
+### Changed
+- Codex API key separated from OpenAI API key
+- Usage indicators remain visible when usage data is present
+
+### Fixed
+- Bash command diffs now display as attachments in tool call widgets
+- Tool call file matching stabilized with time cutoff and filename-based scoring
+- Failed MCP database queries no longer break subsequent DB operations
+- Auto-commit widget now shows success state instead of broken interactive form
+- Clearing API key in settings now actually removes it
+- EBADF errors no longer break all process spawning including sessions
+- Auto-commit no longer shows "No files were staged" error
+- Commit widget prefers tool result content
+
 ## [0.54.1] - 2026-02-20
 
 
