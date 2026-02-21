@@ -2960,7 +2960,7 @@ export class AIService {
                       safeSend(event, 'session-files:updated', session.id);
                     }
                   }).catch(err =>
-                    console.error('[AIService] Tool call matching failed:', err)
+                    logger.main.error('[AIService] Tool call matching failed:', err)
                   );
                 }, 2000);
               }

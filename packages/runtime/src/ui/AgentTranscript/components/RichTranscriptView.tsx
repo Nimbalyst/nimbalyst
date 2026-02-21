@@ -1449,6 +1449,7 @@ export const RichTranscriptView = React.forwardRef<
                               sessionId={sessionId}
                               workspacePath={workspacePath}
                               readFile={readFile}
+                              getToolCallDiffs={getToolCallDiffs}
                             />
                           </div>
 

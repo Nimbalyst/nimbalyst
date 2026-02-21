@@ -68,6 +68,12 @@ export const ToolCallChanges: React.FC<ToolCallChangesProps> = ({
   const [changesExpanded, setChangesExpanded] = useState(false);
   const fetchedRef = useRef(false);
 
+  // Reset fetch state when toolCallItemId changes
+  useEffect(() => {
+    fetchedRef.current = false;
+    setDiffs(null);
+  }, [toolCallItemId]);
+
   // Fetch diffs when the parent tool card is expanded
   useEffect(() => {
     if (!isExpanded || fetchedRef.current || !toolCallItemId) return;

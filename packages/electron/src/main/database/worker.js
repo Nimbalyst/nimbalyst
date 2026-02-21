@@ -627,6 +627,7 @@ class PGLiteWorker {
         CREATE INDEX IF NOT EXISTS idx_atcfe_session_file ON ai_tool_call_file_edits(session_file_id);
         CREATE INDEX IF NOT EXISTS idx_atcfe_message ON ai_tool_call_file_edits(message_id);
         CREATE UNIQUE INDEX IF NOT EXISTS idx_atcfe_unique ON ai_tool_call_file_edits(session_file_id, message_id);
+        CREATE INDEX IF NOT EXISTS idx_atcfe_session_tool_call ON ai_tool_call_file_edits(session_id, tool_call_item_id);
       `);
       console.log('[PGLite Worker] ai_tool_call_file_edits table created successfully');
     } catch (error) {
@@ -1323,6 +1324,16 @@ class PGLiteWorker {
     } catch (error) {
       console.error('[PGLite Worker] Failed to add file_timestamp column:', error);
       throw error;
+    }
+
+    // Migration: Add composite index on ai_agent_messages for tool call matching query pattern
+    try {
+      await this.db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_agent_messages_direction_hidden ON ai_agent_messages(session_id, direction, hidden, id);
+      `);
+    } catch (error) {
+      console.error('[PGLite Worker] Failed to create direction/hidden index:', error);
+      // Non-fatal
     }
   }
 

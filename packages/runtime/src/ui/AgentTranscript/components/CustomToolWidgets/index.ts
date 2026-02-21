@@ -57,7 +57,8 @@ export type { InteractiveWidgetHost, PermissionScope, ToolPermissionResponse } f
 export { noopInteractiveWidgetHost } from './InteractiveWidgetHost';
 
 /**
- * Diff data for a file changed by a tool call
+ * Diff data for a file changed by a tool call.
+ * SYNC: Keep in sync with ToolCallDiffResult in packages/electron/src/main/services/ToolCallMatcher.ts
  */
 export interface ToolCallDiffResult {
   filePath: string;

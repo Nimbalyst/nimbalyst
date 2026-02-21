@@ -107,7 +107,7 @@ export async function loadInitialSessionFileState(sessionId: string, workspacePa
       }));
 
       // Enrich with tool call match data
-      edits = await enrichEditsWithToolCallMatches(sessionId, edits);
+      edits = await enrichEditsWithToolCallMatches(sessionId, edits, fileResult.files);
 
       store.set(sessionFileEditsAtom(sessionId), edits);
 
@@ -158,6 +158,7 @@ export async function loadInitialWorktreeState(worktreeId: string, worktreePath:
 export function initFileStateListeners(workspacePath: string): () => void {
   currentWorkspacePath = workspacePath;
   const cleanups: Array<() => void> = [];
+  const enrichDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   // Load all uncommitted files for workspace immediately
   (async () => {
@@ -195,10 +196,21 @@ export function initFileStateListeners(workspacePath: string): () => void {
             sessionId: f.sessionId,
           }));
 
-          // Enrich with tool call match data
-          edits = await enrichEditsWithToolCallMatches(sessionId, edits);
-
+          // Set edits immediately without enrichment
           store.set(sessionFileEditsAtom(sessionId), edits);
+
+          // Debounce the enrichment to avoid rapid-fire IPC calls during active sessions
+          const existingTimer = enrichDebounceTimers.get(sessionId);
+          if (existingTimer) clearTimeout(existingTimer);
+          enrichDebounceTimers.set(sessionId, setTimeout(async () => {
+            enrichDebounceTimers.delete(sessionId);
+            try {
+              const enriched = await enrichEditsWithToolCallMatches(sessionId, edits, result.files);
+              store.set(sessionFileEditsAtom(sessionId), enriched);
+            } catch {
+              // Non-critical - edits already set without enrichment
+            }
+          }, 500));
 
           // Also refresh git status for these files
           await refreshSessionGitStatus(sessionId);
@@ -292,6 +304,8 @@ export function initFileStateListeners(workspacePath: string): () => void {
 
   return () => {
     cleanups.forEach(cleanup => cleanup?.());
+    enrichDebounceTimers.forEach(timer => clearTimeout(timer));
+    enrichDebounceTimers.clear();
   };
 }
 
@@ -301,7 +315,8 @@ export function initFileStateListeners(workspacePath: string): () => void {
  */
 async function enrichEditsWithToolCallMatches(
   sessionId: string,
-  edits: FileEditWithSession[]
+  edits: FileEditWithSession[],
+  rawFiles: Array<{ id: string; filePath: string }>
 ): Promise<FileEditWithSession[]> {
   try {
     const matchResult = await window.electronAPI.invoke(
@@ -323,19 +338,9 @@ async function enrichEditsWithToolCallMatches(
       matchByFileId.set(match.sessionFileId, match);
     }
 
-    // We need to correlate matches back to edits. The session_files.id isn't in the edit,
-    // but the match has sessionFileId. Let's fetch the session files to get the mapping.
-    const filesResult = await window.electronAPI.invoke(
-      'session-files:get-by-session',
-      sessionId,
-      'edited'
-    );
-
-    if (!filesResult.success || !filesResult.files) return edits;
-
-    // Build filePath -> sessionFileId mapping
+    // Build filePath -> sessionFileId mapping from the raw files we already have
     const filePathToId = new Map<string, string>();
-    for (const f of filesResult.files) {
+    for (const f of rawFiles) {
       filePathToId.set(f.filePath, f.id);
     }
 

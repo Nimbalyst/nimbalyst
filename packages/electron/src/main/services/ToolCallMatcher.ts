@@ -87,6 +87,10 @@ export interface ToolCallWindow {
   outputText: string;
 }
 
+/**
+ * Diff data for a file changed by a tool call.
+ * SYNC: Keep in sync with ToolCallDiffResult in packages/runtime/src/ui/AgentTranscript/components/CustomToolWidgets/index.ts
+ */
 export interface ToolCallDiffResult {
   filePath: string;
   operation: string; // 'create' | 'edit' | 'delete' | 'bash'
@@ -122,6 +126,19 @@ interface AgentMessageRow {
   created_at: Date;
 }
 
+interface ToolCallMatchRow {
+  id: number;
+  session_id: string;
+  session_file_id: string;
+  message_id: number;
+  tool_call_item_id: string | null;
+  tool_use_id: string | null;
+  match_score: number;
+  match_reason: string;
+  file_timestamp: Date | null;
+  created_at: Date;
+}
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -144,6 +161,13 @@ const PATH_FIELDS = ['file_path', 'filePath', 'path', 'notebook_path', 'notebook
 // ---------------------------------------------------------------------------
 // Parsing helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * Ensure a value is a number, converting from string if needed.
+ */
+function ensureNumber(value: number | string): number {
+  return typeof value === 'number' ? value : Number(value);
+}
 
 /**
  * Extract file paths from tool call arguments.
@@ -456,7 +480,7 @@ class ToolCallMatcherImpl {
       const windows: ToolCallWindow[] = [];
       for (const msg of messagesResult.rows) {
         const msgWindows = parseToolCallWindows(
-          typeof msg.id === 'number' ? msg.id : Number(msg.id),
+          ensureNumber(msg.id),
           msg.content,
           msg.created_at instanceof Date ? msg.created_at : new Date(msg.created_at),
           sessionId,
@@ -475,7 +499,17 @@ class ToolCallMatcherImpl {
       const alreadyMatched = new Set(existingResult.rows.map(r => r.session_file_id));
 
       // 6. Match each unmatched file
-      let matchCount = 0;
+      const matches: Array<{
+        sessionId: string;
+        sessionFileId: string;
+        messageId: number;
+        toolCallItemId: string | null;
+        toolUseId: string | null;
+        score: number;
+        reason: string;
+        fileTimestamp: number;
+      }> = [];
+
       for (const file of sessionFiles) {
         if (alreadyMatched.has(file.id)) continue;
 
@@ -494,25 +528,25 @@ class ToolCallMatcherImpl {
         const best = candidates.sort((a, b) => b.score - a.score)[0];
 
         if (best) {
-          await this.insertMatch(
+          matches.push({
             sessionId,
-            file.id,
-            best.window.messageId,
-            best.window.toolCallItemId,
-            best.window.toolUseId,
-            best.score,
-            `${best.reasons.join(',')}|score=${best.score}|tool=${best.window.toolName}`,
-            fileTimestamp
-          );
-          matchCount++;
+            sessionFileId: file.id,
+            messageId: best.window.messageId,
+            toolCallItemId: best.window.toolCallItemId,
+            toolUseId: best.window.toolUseId,
+            score: best.score,
+            reason: `${best.reasons.join(',')}|score=${best.score}|tool=${best.window.toolName}`,
+            fileTimestamp,
+          });
         }
       }
 
-      if (matchCount > 0) {
-        logger.main.debug(`[ToolCallMatcher] Matched ${matchCount} files for session ${sessionId}`);
+      if (matches.length > 0) {
+        await this.insertMatchesBatch(matches);
+        logger.main.debug(`[ToolCallMatcher] Matched ${matches.length} files for session ${sessionId}`);
       }
 
-      return matchCount;
+      return matches.length;
     } catch (error) {
       logger.main.error('[ToolCallMatcher] matchSession failed:', error);
       return 0;
@@ -528,18 +562,7 @@ class ToolCallMatcherImpl {
         await database.initialize();
       }
 
-      const result = await database.query<{
-        id: number;
-        session_id: string;
-        session_file_id: string;
-        message_id: number;
-        tool_call_item_id: string | null;
-        tool_use_id: string | null;
-        match_score: number;
-        match_reason: string;
-        file_timestamp: Date | null;
-        created_at: Date;
-      }>(
+      const result = await database.query<ToolCallMatchRow>(
         `SELECT id, session_id, session_file_id, message_id,
                 tool_call_item_id, tool_use_id, match_score, match_reason, file_timestamp, created_at
          FROM ai_tool_call_file_edits
@@ -548,18 +571,7 @@ class ToolCallMatcherImpl {
         [sessionId]
       );
 
-      return result.rows.map(row => ({
-        id: typeof row.id === 'number' ? row.id : Number(row.id),
-        sessionId: row.session_id,
-        sessionFileId: row.session_file_id,
-        messageId: typeof row.message_id === 'number' ? row.message_id : Number(row.message_id),
-        toolCallItemId: row.tool_call_item_id,
-        toolUseId: row.tool_use_id,
-        matchScore: typeof row.match_score === 'number' ? row.match_score : Number(row.match_score),
-        matchReason: row.match_reason || '',
-        fileTimestamp: row.file_timestamp ? (row.file_timestamp instanceof Date ? row.file_timestamp : new Date(row.file_timestamp)) : null,
-        createdAt: row.created_at instanceof Date ? row.created_at : new Date(row.created_at),
-      }));
+      return result.rows.map(row => this.mapRowToToolCallFileEdit(row));
     } catch (error) {
       logger.main.error('[ToolCallMatcher] getMatchesForSession failed:', error);
       return [];
@@ -575,18 +587,7 @@ class ToolCallMatcherImpl {
         await database.initialize();
       }
 
-      const result = await database.query<{
-        id: number;
-        session_id: string;
-        session_file_id: string;
-        message_id: number;
-        tool_call_item_id: string | null;
-        tool_use_id: string | null;
-        match_score: number;
-        match_reason: string;
-        file_timestamp: Date | null;
-        created_at: Date;
-      }>(
+      const result = await database.query<ToolCallMatchRow>(
         `SELECT id, session_id, session_file_id, message_id,
                 tool_call_item_id, tool_use_id, match_score, match_reason, file_timestamp, created_at
          FROM ai_tool_call_file_edits
@@ -598,18 +599,7 @@ class ToolCallMatcherImpl {
       if (result.rows.length === 0) return null;
 
       const row = result.rows[0];
-      return {
-        id: typeof row.id === 'number' ? row.id : Number(row.id),
-        sessionId: row.session_id,
-        sessionFileId: row.session_file_id,
-        messageId: typeof row.message_id === 'number' ? row.message_id : Number(row.message_id),
-        toolCallItemId: row.tool_call_item_id,
-        toolUseId: row.tool_use_id,
-        matchScore: typeof row.match_score === 'number' ? row.match_score : Number(row.match_score),
-        matchReason: row.match_reason || '',
-        fileTimestamp: row.file_timestamp ? (row.file_timestamp instanceof Date ? row.file_timestamp : new Date(row.file_timestamp)) : null,
-        createdAt: row.created_at instanceof Date ? row.created_at : new Date(row.created_at),
-      };
+      return this.mapRowToToolCallFileEdit(row);
     } catch (error) {
       logger.main.error('[ToolCallMatcher] getMatchForFile failed:', error);
       return null;
@@ -679,7 +669,7 @@ class ToolCallMatcherImpl {
 
       const messagesById = new Map<number, string>();
       for (const row of msgResult.rows) {
-        const id = typeof row.id === 'number' ? row.id : Number(row.id);
+        const id = ensureNumber(row.id);
         messagesById.set(id, row.content);
       }
 
@@ -690,7 +680,7 @@ class ToolCallMatcherImpl {
         const fileInfo = filesById.get(match.session_file_id);
         if (!fileInfo) continue;
 
-        const msgId = typeof match.message_id === 'number' ? match.message_id : Number(match.message_id);
+        const msgId = ensureNumber(match.message_id);
         const rawContent = messagesById.get(msgId);
         const operation = fileInfo.metadata?.operation || 'edit';
 
@@ -726,6 +716,24 @@ class ToolCallMatcherImpl {
   // -------------------------------------------------------------------------
   // Private helpers
   // -------------------------------------------------------------------------
+
+  /**
+   * Map a database row to a ToolCallFileEdit object.
+   */
+  private mapRowToToolCallFileEdit(row: ToolCallMatchRow): ToolCallFileEdit {
+    return {
+      id: ensureNumber(row.id),
+      sessionId: row.session_id,
+      sessionFileId: row.session_file_id,
+      messageId: ensureNumber(row.message_id),
+      toolCallItemId: row.tool_call_item_id,
+      toolUseId: row.tool_use_id,
+      matchScore: ensureNumber(row.match_score),
+      matchReason: row.match_reason || '',
+      fileTimestamp: row.file_timestamp ? (row.file_timestamp instanceof Date ? row.file_timestamp : new Date(row.file_timestamp)) : null,
+      createdAt: row.created_at instanceof Date ? row.created_at : new Date(row.created_at),
+    };
+  }
 
   /**
    * Extract diff data from a raw ai_agent_messages content string.
@@ -823,6 +831,43 @@ class ToolCallMatcherImpl {
     } catch {
       return { diffs: [] };
     }
+  }
+
+  private async insertMatchesBatch(
+    matches: Array<{
+      sessionId: string;
+      sessionFileId: string;
+      messageId: number;
+      toolCallItemId: string | null;
+      toolUseId: string | null;
+      score: number;
+      reason: string;
+      fileTimestamp: number;
+    }>
+  ): Promise<void> {
+    if (matches.length === 0) return;
+
+    const values: any[] = [];
+    const placeholders: string[] = [];
+    let paramIdx = 1;
+
+    for (const m of matches) {
+      const fileTs = m.fileTimestamp ? new Date(m.fileTimestamp) : null;
+      placeholders.push(`($${paramIdx}, $${paramIdx + 1}, $${paramIdx + 2}, $${paramIdx + 3}, $${paramIdx + 4}, $${paramIdx + 5}, $${paramIdx + 6}, $${paramIdx + 7})`);
+      values.push(m.sessionId, m.sessionFileId, m.messageId, m.toolCallItemId, m.toolUseId, m.score, m.reason, fileTs);
+      paramIdx += 8;
+    }
+
+    await database.query(
+      `INSERT INTO ai_tool_call_file_edits
+       (session_id, session_file_id, message_id, tool_call_item_id, tool_use_id, match_score, match_reason, file_timestamp)
+       VALUES ${placeholders.join(', ')}
+       ON CONFLICT (session_file_id, message_id) DO UPDATE SET
+         match_score = EXCLUDED.match_score,
+         match_reason = EXCLUDED.match_reason,
+         file_timestamp = EXCLUDED.file_timestamp`,
+      values
+    );
   }
 
   private async insertMatch(

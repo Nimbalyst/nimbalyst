@@ -4,7 +4,8 @@ import { OpenAIAuthWidget } from './OpenAIAuthWidget';
 import { MaterialSymbol } from '../../icons/MaterialSymbol';
 import { JSONViewer } from './JSONViewer';
 import { formatToolDisplayName } from '../utils/toolNameFormatter';
-import { getCustomToolWidget } from './CustomToolWidgets';
+import { getCustomToolWidget, type ToolCallDiffResult } from './CustomToolWidgets';
+import { ToolCallChanges } from './ToolCallChanges';
 import {
   extractStringField,
   extractNumberField,
@@ -25,6 +26,8 @@ interface CodexOutputRendererProps {
   sessionId: string;
   workspacePath?: string;
   readFile?: (filePath: string) => Promise<{ success: boolean; content?: string; error?: string }>;
+  /** Optional: Fetch file diffs caused by a specific tool call */
+  getToolCallDiffs?: (toolCallItemId: string) => Promise<ToolCallDiffResult[] | null>;
 }
 
 /**
@@ -369,6 +372,7 @@ export const CodexOutputRenderer: React.FC<CodexOutputRendererProps> = ({
   sessionId,
   workspacePath,
   readFile,
+  getToolCallDiffs,
 }) => {
   const [collapsedReasoningSections, setCollapsedReasoningSections] = useState<Set<number>>(new Set());
   const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
@@ -434,6 +438,7 @@ export const CodexOutputRenderer: React.FC<CodexOutputRendererProps> = ({
             workspacePath={workspacePath}
             sessionId={sessionId}
             readFile={readFile}
+            getToolCallDiffs={getToolCallDiffs}
           />
         </div>
       );
@@ -501,6 +506,16 @@ export const CodexOutputRenderer: React.FC<CodexOutputRendererProps> = ({
                 </div>
               )}
             </div>
+
+            {/* File changes caused by this tool call */}
+            {getToolCallDiffs && tool.id && hasResult && (
+              <ToolCallChanges
+                toolCallItemId={tool.id}
+                getToolCallDiffs={getToolCallDiffs}
+                isExpanded={isExpanded}
+                workspacePath={workspacePath}
+              />
+            )}
           </div>
         )}
       </div>
