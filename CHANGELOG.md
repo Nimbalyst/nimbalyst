@@ -20,6 +20,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.54.6] - 2026-02-23
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- File descriptor leak from session file watchers causing spawn EBADF errors
+- Sub-agents now spawn correctly in packaged builds
+- Worktree timestamps no longer shift by local timezone offset
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.54.5] - 2026-02-23
 
 
