@@ -10,7 +10,6 @@ import {
   worktreeGitStatusAtom,
 } from '../../store';
 import { LayoutControls } from '../UnifiedAI/LayoutControls';
-import { useAlphaFeature } from '../../hooks/useAlphaFeature';
 import { errorNotificationService } from '../../services/ErrorNotificationService';
 
 interface WorktreeMetadata {
@@ -152,7 +151,6 @@ export const AgentSessionHeader: React.FC<AgentSessionHeaderProps> = ({
     return () => unsubscribe?.();
   }, [worktreeId]);
 
-  const isSyncEnabled = useAlphaFeature('sync');
   const [isSharing, setIsSharing] = useState(false);
 
   const handleShareLink = useCallback(async () => {
@@ -254,9 +252,9 @@ export const AgentSessionHeader: React.FC<AgentSessionHeaderProps> = ({
         {/* Share button */}
         <button
           className="agent-session-header-share shrink-0 flex items-center justify-center w-7 h-7 rounded-md bg-transparent border-none text-[var(--nim-text-faint)] cursor-pointer transition-colors duration-150 hover:text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)] disabled:opacity-50 disabled:cursor-default"
-          title={!isSyncEnabled ? 'Enable Account & Sync in Settings to share sessions' : isSharing ? 'Sharing...' : 'Share session link'}
+          title={isSharing ? 'Sharing...' : 'Share session link'}
           onClick={handleShareLink}
-          disabled={isSharing || !isSyncEnabled}
+          disabled={isSharing}
         >
           <MaterialSymbol icon={isSharing ? 'progress_activity' : 'link'} size={16} className={isSharing ? 'animate-spin' : ''} />
         </button>

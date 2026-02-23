@@ -4,7 +4,6 @@ import { MaterialSymbol, ProviderIcon } from '@nimbalyst/runtime';
 import { getRelativeTimeString } from '../../utils/dateFormatting';
 import { sessionOrChildProcessingAtom, sessionUnreadAtom, sessionPendingPromptAtom, sessionHasPendingInteractivePromptAtom, reparentSessionAtom, refreshSessionListAtom, sessionShareAtom, addSessionShareAtom, removeSessionShareAtom, shareKeysAtom, buildShareUrl } from '../../store';
 import type { ShareInfo } from '../../store';
-import { useAlphaFeature } from '../../hooks/useAlphaFeature';
 import { errorNotificationService } from '../../services/ErrorNotificationService';
 
 /**
@@ -143,8 +142,7 @@ export const SessionListItem = memo<SessionListItemProps>(({
   const reparentSession = useSetAtom(reparentSessionAtom);
   const refreshSessionList = useSetAtom(refreshSessionListAtom);
 
-  // Share state (only available when sync is enabled)
-  const isSyncEnabled = useAlphaFeature('sync');
+  // Share state
   const shareInfo = useAtomValue(sessionShareAtom(id));
   const shareKeys = useAtomValue(shareKeysAtom);
   const addShare = useSetAtom(addSessionShareAtom);
@@ -551,7 +549,7 @@ export const SessionListItem = memo<SessionListItemProps>(({
       {branchedAt && (
         <MaterialSymbol icon="fork_right" size={12} className={`session-list-item-branch-icon shrink-0 -ml-1 opacity-60 ${isActive ? 'text-[var(--nim-primary)] opacity-70' : 'text-[var(--nim-text-faint)]'}`} title="Branched conversation" />
       )}
-      {isSyncEnabled && shareInfo && (
+      {shareInfo && (
         <MaterialSymbol icon="link" size={12} className={`session-list-item-share-icon shrink-0 -ml-1 opacity-60 ${isActive ? 'text-[var(--nim-primary)] opacity-70' : 'text-[var(--nim-text-faint)]'}`} title="Shared" />
       )}
       <div className="session-list-item-content flex-1 min-w-0 overflow-hidden">
@@ -647,42 +645,31 @@ export const SessionListItem = memo<SessionListItemProps>(({
             <MaterialSymbol icon="content_copy" size={14} />
             Copy Session ID
           </button>
-          {isSyncEnabled ? (
-            shareInfo ? (
-              <>
-                <button
-                  className="session-list-item-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
-                  onClick={handleCopyShareLink}
-                >
-                  <MaterialSymbol icon="content_copy" size={14} />
-                  Copy share link
-                </button>
-                <button
-                  className="session-list-item-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
-                  onClick={handleUnshare}
-                >
-                  <MaterialSymbol icon="link_off" size={14} />
-                  Unshare
-                </button>
-              </>
-            ) : (
+          {shareInfo ? (
+            <>
               <button
                 className="session-list-item-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
-                onClick={handleShareLink}
-                disabled={isSharing}
+                onClick={handleCopyShareLink}
               >
-                <MaterialSymbol icon="link" size={14} />
-                {isSharing ? 'Sharing...' : 'Share link'}
+                <MaterialSymbol icon="content_copy" size={14} />
+                Copy share link
               </button>
-            )
+              <button
+                className="session-list-item-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
+                onClick={handleUnshare}
+              >
+                <MaterialSymbol icon="link_off" size={14} />
+                Unshare
+              </button>
+            </>
           ) : (
             <button
-              className="session-list-item-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text-disabled)] text-[0.8125rem] text-left transition-colors duration-150 [&_svg]:shrink-0 cursor-default"
-              disabled
-              title="Enable Account & Sync in Settings to share sessions"
+              className="session-list-item-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
+              onClick={handleShareLink}
+              disabled={isSharing}
             >
               <MaterialSymbol icon="link" size={14} />
-              Share link
+              {isSharing ? 'Sharing...' : 'Share link'}
             </button>
           )}
           <button
