@@ -460,8 +460,10 @@ export class AIService {
   // but the same prompt ID is somehow passed to sendMessage twice
   private processingQueuedPromptIds = new Set<string>();
 
-  // File snapshot caches and watchers for Codex sessions (diff support)
-  // Only active for openai-codex provider; Claude Code has its own tool hooks
+  // File snapshot caches and watchers for agentic sessions (diff support).
+  // Active for openai-codex and claude-code providers.
+  // Stopped when sessions complete, error, or are deleted. Multiple sessions on the
+  // same workspace share a single chokidar instance (ref-counted inside SessionFileWatcher).
   private codexSessionWatchers = new Map<string, { cache: FileSnapshotCache; watcher: SessionFileWatcher }>();
 
   // Debounced tool call matching during active sessions.
@@ -2081,6 +2083,8 @@ export class AIService {
 
           logger.main.info(`[AIService] All teammates completed for session ${data.sessionId}, ending deferred session`);
           await stateManager.endSession(data.sessionId);
+          // Stop file watcher - session is fully complete (teammates done)
+          await this.stopCodexSessionWatcher(data.sessionId);
 
           // Play completion sound now that the session is truly done
           const soundService = SoundNotificationService.getInstance();
@@ -2964,6 +2968,8 @@ export class AIService {
                 logger.main.info(`[AIService] Deferring endSession for ${session.id} - ${hasTeammates ? 'teammates still active' : 'lead resuming'}`);
               } else {
                 await stateManager.endSession(session.id);
+                // Stop file watcher - session is fully complete
+                await this.stopCodexSessionWatcher(session.id);
 
                 // Play completion sound if enabled
                 const soundService = SoundNotificationService.getInstance();
@@ -3157,6 +3163,8 @@ export class AIService {
             logger.main.info(`[AIService] Deferring endSession for ${session.id} on error - ${hasTeammatesOnError ? 'teammates still active' : 'lead resuming'}`);
           } else {
             await stateManager.endSession(session.id);
+            // Stop file watcher - session ended on error
+            await this.stopCodexSessionWatcher(session.id);
           }
 
           // Clear executing and pending prompt flags for mobile sync on error

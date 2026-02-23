@@ -20,8 +20,166 @@ const BINARY_EXTENSIONS = new Set([
 /** TTL for editor save markers (ms). Must exceed chokidar's awaitWriteFinish delay. */
 const EDITOR_SAVE_TTL_MS = 2000;
 
+// ---------------------------------------------------------------------------
+// SharedFSWatcher – one chokidar instance per workspace path, ref-counted
+// ---------------------------------------------------------------------------
+
+interface SharedWatcherEntry {
+  watcher: FSWatcher;
+  /** Session IDs currently using this watcher */
+  refCount: number;
+  /** Callbacks to invoke for each fs event, keyed by session ID */
+  listeners: Map<string, SharedWatcherListener>;
+}
+
+interface SharedWatcherListener {
+  onChange: (filePath: string) => void;
+  onAdd: (filePath: string) => void;
+  onUnlink: (filePath: string) => void;
+}
+
+/** Global registry of shared chokidar watchers, keyed by normalized workspace path. */
+const sharedWatchers = new Map<string, SharedWatcherEntry>();
+
+function shouldIgnorePath(filePath: string, workspacePath: string): boolean {
+  const normalizedFile = filePath.replace(/\\/g, '/');
+  const normalizedWorkspace = workspacePath.replace(/\\/g, '/');
+  const relativePath = normalizedFile.startsWith(normalizedWorkspace)
+    ? normalizedFile.slice(normalizedWorkspace.length)
+    : normalizedFile;
+
+  if (
+    relativePath.includes('/node_modules/') ||
+    relativePath.includes('/.git/') ||
+    relativePath.includes('/dist/') ||
+    relativePath.includes('/build/') ||
+    relativePath.includes('/out/') ||
+    relativePath.includes('/coverage/') ||
+    relativePath.includes('/.next/') ||
+    relativePath.includes('/.nuxt/') ||
+    relativePath.includes('/.cache/') ||
+    relativePath.includes('/.turbo/') ||
+    relativePath.includes('/.svelte-kit/') ||
+    relativePath.includes('/worktrees/')
+  ) {
+    return true;
+  }
+
+  if (relativePath.endsWith('.DS_Store') || relativePath.endsWith('Thumbs.db')) {
+    return true;
+  }
+
+  return false;
+}
+
+function acquireSharedWatcher(
+  workspacePath: string,
+  sessionId: string,
+  listener: SharedWatcherListener,
+): void {
+  const key = path.resolve(workspacePath);
+  const existing = sharedWatchers.get(key);
+
+  if (existing) {
+    existing.refCount++;
+    existing.listeners.set(sessionId, listener);
+    logger.main.info('[SessionFileWatcher] Reusing shared watcher for workspace:', {
+      workspacePath: key,
+      sessionId,
+      refCount: existing.refCount,
+    });
+    return;
+  }
+
+  const watcher = chokidar.watch(workspacePath, {
+    ignored: (filePath: string) => shouldIgnorePath(filePath, workspacePath),
+    ignoreInitial: true,
+    followSymlinks: false,
+    usePolling: false,
+    atomic: true,
+    awaitWriteFinish: {
+      stabilityThreshold: 50,
+      pollInterval: 20,
+    },
+    alwaysStat: false,
+  });
+
+  const entry: SharedWatcherEntry = {
+    watcher,
+    refCount: 1,
+    listeners: new Map([[sessionId, listener]]),
+  };
+  sharedWatchers.set(key, entry);
+
+  watcher
+    .on('change', (filePath: string) => {
+      for (const l of entry.listeners.values()) l.onChange(filePath);
+    })
+    .on('add', (filePath: string) => {
+      for (const l of entry.listeners.values()) l.onAdd(filePath);
+    })
+    .on('unlink', (filePath: string) => {
+      for (const l of entry.listeners.values()) l.onUnlink(filePath);
+    })
+    .on('error', (error: unknown) => {
+      const code = error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined;
+      if (code === 'EPERM' || code === 'EACCES' || code === 'UNKNOWN') {
+        logger.main.debug('[SessionFileWatcher] Skipping unwatchable path:', error);
+      } else {
+        logger.main.error('[SessionFileWatcher] Watcher error:', error);
+      }
+    });
+
+  logger.main.info('[SessionFileWatcher] Created shared watcher for workspace:', {
+    workspacePath: key,
+    sessionId,
+  });
+}
+
+async function releaseSharedWatcher(workspacePath: string, sessionId: string): Promise<void> {
+  const key = path.resolve(workspacePath);
+  const entry = sharedWatchers.get(key);
+  if (!entry) return;
+
+  entry.listeners.delete(sessionId);
+  entry.refCount--;
+
+  if (entry.refCount <= 0) {
+    sharedWatchers.delete(key);
+    await entry.watcher.close();
+    logger.main.info('[SessionFileWatcher] Closed shared watcher for workspace:', {
+      workspacePath: key,
+      lastSessionId: sessionId,
+    });
+  } else {
+    logger.main.info('[SessionFileWatcher] Released shared watcher ref:', {
+      workspacePath: key,
+      sessionId,
+      remainingRefCount: entry.refCount,
+    });
+  }
+}
+
+/** Visible for testing / diagnostics. */
+export function getSharedWatcherCount(): number {
+  return sharedWatchers.size;
+}
+
+/** Visible for testing. */
+export function getSharedWatcherRefCount(workspacePath: string): number {
+  return sharedWatchers.get(path.resolve(workspacePath))?.refCount ?? 0;
+}
+
+/** Reset shared watcher state. Only for tests. */
+export function resetSharedWatchers(): void {
+  sharedWatchers.clear();
+}
+
+// ---------------------------------------------------------------------------
+// SessionFileWatcher – per-session wrapper that ref-counts into SharedFSWatcher
+// ---------------------------------------------------------------------------
+
 export class SessionFileWatcher {
-  private watcher: FSWatcher | null = null;
   private cache: FileSnapshotCache | null = null;
   private historyManager: HistoryManager | null = null;
   private sessionId: string | null = null;
@@ -71,70 +229,18 @@ export class SessionFileWatcher {
     this.active = true;
     this.onFileChanged = onFileChanged ?? null;
 
-    this.watcher = chokidar.watch(workspacePath, {
-      ignored: (filePath: string) => {
-        // Normalize to forward slashes so patterns work on Windows too
-        const normalizedFile = filePath.replace(/\\/g, '/');
-        const normalizedWorkspace = workspacePath.replace(/\\/g, '/');
-        const relativePath = normalizedFile.startsWith(normalizedWorkspace)
-          ? normalizedFile.slice(normalizedWorkspace.length)
-          : normalizedFile;
-
-        if (
-          relativePath.includes('/node_modules/') ||
-          relativePath.includes('/.git/') ||
-          relativePath.includes('/dist/') ||
-          relativePath.includes('/build/') ||
-          relativePath.includes('/out/') ||
-          relativePath.includes('/coverage/') ||
-          relativePath.includes('/.next/') ||
-          relativePath.includes('/.nuxt/') ||
-          relativePath.includes('/.cache/') ||
-          relativePath.includes('/.turbo/') ||
-          relativePath.includes('/.svelte-kit/') ||
-          relativePath.includes('/worktrees/')
-        ) {
-          return true;
-        }
-
-        // Ignore OS files
-        if (relativePath.endsWith('.DS_Store') || relativePath.endsWith('Thumbs.db')) {
-          return true;
-        }
-
-        return false;
-      },
-      ignoreInitial: true,
-      followSymlinks: false,
-      usePolling: false,
-      atomic: true,
-      awaitWriteFinish: {
-        stabilityThreshold: 50,
-        pollInterval: 20,
-      },
-      alwaysStat: false,
+    acquireSharedWatcher(workspacePath, sessionId, {
+      onChange: (filePath: string) => this.handleChange(filePath),
+      onAdd: (filePath: string) => this.handleAdd(filePath),
+      onUnlink: (filePath: string) => this.handleUnlink(filePath),
     });
-
-    this.watcher
-      .on('change', (filePath: string) => this.handleChange(filePath))
-      .on('add', (filePath: string) => this.handleAdd(filePath))
-      .on('unlink', (filePath: string) => this.handleUnlink(filePath))
-      .on('error', (error: unknown) => {
-        const code = error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined;
-        if (code === 'EPERM' || code === 'EACCES' || code === 'UNKNOWN') {
-          logger.main.debug('[SessionFileWatcher] Skipping unwatchable path:', error);
-        } else {
-          logger.main.error('[SessionFileWatcher] Watcher error:', error);
-        }
-      });
 
     logger.main.info('[SessionFileWatcher] Started watching:', { workspacePath, sessionId });
   }
 
   async stop(): Promise<void> {
-    if (this.watcher) {
-      await this.watcher.close();
-      this.watcher = null;
+    if (this.workspacePath && this.sessionId) {
+      await releaseSharedWatcher(this.workspacePath, this.sessionId);
     }
     this.cache = null;
     this.historyManager = null;

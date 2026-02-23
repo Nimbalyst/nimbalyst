@@ -21,7 +21,7 @@ vi.mock('../../utils/logger', () => ({
   },
 }));
 
-// Mock chokidar
+// Mock chokidar — shared watcher means chokidar.watch is called once per workspace
 const mockWatcherHandlers: Record<string, Function[]> = {};
 const mockWatcher = {
   on: vi.fn((event: string, handler: Function) => {
@@ -46,7 +46,12 @@ vi.mock('fs/promises', () => ({
   readFile: (...args: any[]) => mockReadFile(...args),
 }));
 
-import { SessionFileWatcher } from '../SessionFileWatcher';
+import { SessionFileWatcher, getSharedWatcherCount, getSharedWatcherRefCount, resetSharedWatchers } from '../SessionFileWatcher';
+
+/** Flush microtasks so async event handlers complete. */
+function flush(): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, 0));
+}
 
 function createMockCache(): FileSnapshotCache {
   return {
@@ -96,6 +101,8 @@ describe('SessionFileWatcher', () => {
     for (const key of Object.keys(mockWatcherHandlers)) {
       delete mockWatcherHandlers[key];
     }
+    // Reset shared watcher state so each test gets a fresh chokidar instance
+    resetSharedWatchers();
   });
 
   describe('start/stop lifecycle', () => {
@@ -107,6 +114,8 @@ describe('SessionFileWatcher', () => {
       await watcher.start(workspacePath, sessionId, cache, hm);
 
       expect(watcher.isActive()).toBe(true);
+
+      await watcher.stop();
     });
 
     it('should stop watching and clear active state', async () => {
@@ -118,13 +127,70 @@ describe('SessionFileWatcher', () => {
       await watcher.stop();
 
       expect(watcher.isActive()).toBe(false);
-      expect(mockWatcher.close).toHaveBeenCalled();
     });
 
     it('should handle stop when not started', async () => {
       const watcher = new SessionFileWatcher();
       await watcher.stop();
       expect(watcher.isActive()).toBe(false);
+    });
+  });
+
+  describe('shared watcher deduplication', () => {
+    it('should share a single chokidar watcher for multiple sessions on same workspace', async () => {
+      const chokidar = (await import('chokidar')).default;
+      const watchSpy = chokidar.watch as any;
+      watchSpy.mockClear();
+
+      const watcher1 = new SessionFileWatcher();
+      const watcher2 = new SessionFileWatcher();
+      const cache1 = createMockCache();
+      const cache2 = createMockCache();
+      const hm = createMockHistoryManager();
+
+      await watcher1.start(workspacePath, 'session-1', cache1, hm);
+      await watcher2.start(workspacePath, 'session-2', cache2, hm);
+
+      // Only one chokidar.watch() call for the same workspace
+      expect(watchSpy).toHaveBeenCalledTimes(1);
+      expect(getSharedWatcherRefCount(workspacePath)).toBe(2);
+
+      await watcher1.stop();
+      expect(getSharedWatcherRefCount(workspacePath)).toBe(1);
+      // Chokidar watcher should still be open (session-2 still using it)
+      expect(mockWatcher.close).not.toHaveBeenCalled();
+
+      await watcher2.stop();
+      // Now it should be closed
+      expect(mockWatcher.close).toHaveBeenCalledTimes(1);
+      expect(getSharedWatcherRefCount(workspacePath)).toBe(0);
+    });
+
+    it('should dispatch events to all sessions on same workspace', async () => {
+      const watcher1 = new SessionFileWatcher();
+      const watcher2 = new SessionFileWatcher();
+      const cache1 = createMockCache();
+      const cache2 = createMockCache();
+      const hm = createMockHistoryManager();
+
+      (cache1.getBeforeState as any).mockResolvedValue('original');
+      (cache2.getBeforeState as any).mockResolvedValue('original');
+      mockReadFile.mockResolvedValue('modified');
+
+      await watcher1.start(workspacePath, 'session-1', cache1, hm);
+      await watcher2.start(workspacePath, 'session-2', cache2, hm);
+
+      // Trigger a change event on the shared watcher
+      const changeHandler = mockWatcherHandlers['change']?.[0];
+      expect(changeHandler).toBeDefined();
+      await changeHandler('/test/workspace/src/file.ts');
+
+      // Both caches should have been updated
+      expect(cache1.getBeforeState).toHaveBeenCalled();
+      expect(cache2.getBeforeState).toHaveBeenCalled();
+
+      await watcher1.stop();
+      await watcher2.stop();
     });
   });
 
@@ -141,7 +207,8 @@ describe('SessionFileWatcher', () => {
 
       const changeHandler = mockWatcherHandlers['change']?.[0];
       expect(changeHandler).toBeDefined();
-      await changeHandler('/test/workspace/src/file.ts');
+      changeHandler('/test/workspace/src/file.ts');
+      await flush();
 
       expect(cache.getBeforeState).toHaveBeenCalledWith('/test/workspace/src/file.ts');
       expect(hm.createTag).toHaveBeenCalledWith(
@@ -152,6 +219,8 @@ describe('SessionFileWatcher', () => {
         expect.stringContaining('codex-file-change-')
       );
       expect(cache.updateSnapshot).toHaveBeenCalledWith('/test/workspace/src/file.ts', 'modified content');
+
+      await watcher.stop();
     });
 
     it('should skip tag creation when content has not changed', async () => {
@@ -165,10 +234,13 @@ describe('SessionFileWatcher', () => {
       await watcher.start(workspacePath, sessionId, cache, hm);
 
       const changeHandler = mockWatcherHandlers['change']?.[0];
-      await changeHandler('/test/workspace/src/file.ts');
+      changeHandler('/test/workspace/src/file.ts');
+      await flush();
 
       expect(hm.createTag).not.toHaveBeenCalled();
       expect(cache.updateSnapshot).toHaveBeenCalledWith('/test/workspace/src/file.ts', 'same content');
+
+      await watcher.stop();
     });
 
     it('should skip tag creation when a pending tag already exists', async () => {
@@ -186,6 +258,8 @@ describe('SessionFileWatcher', () => {
       await changeHandler('/test/workspace/src/file.ts');
 
       expect(hm.createTag).not.toHaveBeenCalled();
+
+      await watcher.stop();
     });
 
     it('should skip binary files', async () => {
@@ -200,6 +274,8 @@ describe('SessionFileWatcher', () => {
 
       expect(cache.getBeforeState).not.toHaveBeenCalled();
       expect(hm.createTag).not.toHaveBeenCalled();
+
+      await watcher.stop();
     });
 
     it('should create a tag with empty baseline when before state is null', async () => {
@@ -213,7 +289,8 @@ describe('SessionFileWatcher', () => {
       await watcher.start(workspacePath, sessionId, cache, hm);
 
       const changeHandler = mockWatcherHandlers['change']?.[0];
-      await changeHandler('/test/workspace/src/file.ts');
+      changeHandler('/test/workspace/src/file.ts');
+      await flush();
 
       expect(hm.createTag).toHaveBeenCalledWith(
         '/test/workspace/src/file.ts',
@@ -223,6 +300,8 @@ describe('SessionFileWatcher', () => {
         expect.stringContaining('codex-file-change-')
       );
       expect(cache.updateSnapshot).toHaveBeenCalledWith('/test/workspace/src/file.ts', 'new content');
+
+      await watcher.stop();
     });
 
     it('should not create a tag for changes outside the workspace', async () => {
@@ -239,6 +318,8 @@ describe('SessionFileWatcher', () => {
       await changeHandler('/outside/workspace/file.ts');
 
       expect(hm.createTag).not.toHaveBeenCalled();
+
+      await watcher.stop();
     });
 
     it('should handle file read errors gracefully', async () => {
@@ -256,6 +337,8 @@ describe('SessionFileWatcher', () => {
       await changeHandler('/test/workspace/src/deleted.ts');
 
       expect(hm.createTag).not.toHaveBeenCalled();
+
+      await watcher.stop();
     });
   });
 
@@ -271,7 +354,8 @@ describe('SessionFileWatcher', () => {
 
       const addHandler = mockWatcherHandlers['add']?.[0];
       expect(addHandler).toBeDefined();
-      await addHandler('/test/workspace/src/new-file.ts');
+      addHandler('/test/workspace/src/new-file.ts');
+      await flush();
 
       expect(hm.createTag).toHaveBeenCalledWith(
         '/test/workspace/src/new-file.ts',
@@ -281,6 +365,8 @@ describe('SessionFileWatcher', () => {
         expect.stringContaining('codex-file-add-')
       );
       expect(cache.updateSnapshot).toHaveBeenCalledWith('/test/workspace/src/new-file.ts', 'new file content');
+
+      await watcher.stop();
     });
 
     it('should skip if pending tag already exists', async () => {
@@ -297,6 +383,8 @@ describe('SessionFileWatcher', () => {
       await addHandler('/test/workspace/src/new-file.ts');
 
       expect(hm.createTag).not.toHaveBeenCalled();
+
+      await watcher.stop();
     });
 
     it('should skip binary files on add', async () => {
@@ -310,6 +398,8 @@ describe('SessionFileWatcher', () => {
       await addHandler('/test/workspace/image.jpg');
 
       expect(hm.createTag).not.toHaveBeenCalled();
+
+      await watcher.stop();
     });
   });
 
@@ -326,6 +416,8 @@ describe('SessionFileWatcher', () => {
       unlinkHandler('/test/workspace/src/deleted.ts');
 
       expect(cache.removeSnapshot).toHaveBeenCalledWith('/test/workspace/src/deleted.ts');
+
+      await watcher.stop();
     });
   });
 
