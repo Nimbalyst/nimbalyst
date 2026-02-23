@@ -1126,10 +1126,12 @@ export const reparentSessionAtom = atom(
  */
 export const convertToWorkstreamAtom = atom(
   null,
-  async (get, set, { sessionId, workspacePath, model }: {
+  async (get, set, { sessionId, workspacePath, model, skipSiblingCreation }: {
     sessionId: string;
     workspacePath: string;
     model?: string;
+    /** When true, skip creating a new sibling session (used for drag-drop where another session takes that role) */
+    skipSiblingCreation?: boolean;
   }) => {
     if (!sessionId || !workspacePath || !window.electronAPI) {
       return null;
@@ -1230,42 +1232,44 @@ export const convertToWorkstreamAtom = atom(
         return null;
       }
 
-      // Create a new sibling session
+      // Create a new sibling session (unless skipSiblingCreation is set, e.g. for drag-drop)
       let siblingResult: { success: boolean; sessionId?: string; error?: string } = { success: false };
-      try {
-        siblingResult = await window.electronAPI.invoke('sessions:create-child', {
-          parentSessionId,
-          workspacePath,
-          worktreeId: sessionData.worktreeId,
-          provider: sessionData.provider || 'claude-code',
-          model,  // Pass user's default model preference
-        });
-      } catch (error) {
-        // Sibling creation failed - rollback: remove parentSessionId from original, delete parent
-        console.error('[sessions] Failed to create sibling session (exception), rolling back:', error);
+      if (!skipSiblingCreation) {
         try {
-          await window.electronAPI.invoke('sessions:update-metadata', sessionId, {
-            parentSessionId: null,
+          siblingResult = await window.electronAPI.invoke('sessions:create-child', {
+            parentSessionId,
+            workspacePath,
+            worktreeId: sessionData.worktreeId,
+            provider: sessionData.provider || 'claude-code',
+            model,  // Pass user's default model preference
           });
-        } catch (revertError) {
-          console.error('[sessions] Failed to revert parentSessionId on original session:', revertError);
+        } catch (error) {
+          // Sibling creation failed - rollback: remove parentSessionId from original, delete parent
+          console.error('[sessions] Failed to create sibling session (exception), rolling back:', error);
+          try {
+            await window.electronAPI.invoke('sessions:update-metadata', sessionId, {
+              parentSessionId: null,
+            });
+          } catch (revertError) {
+            console.error('[sessions] Failed to revert parentSessionId on original session:', revertError);
+          }
+          await rollbackParent();
+          return null;
         }
-        await rollbackParent();
-        return null;
-      }
 
-      // Check if IPC returned an error (didn't throw but returned { success: false })
-      if (!siblingResult.success) {
-        console.error('[sessions] Failed to create sibling session (IPC error), rolling back:', siblingResult.error);
-        try {
-          await window.electronAPI.invoke('sessions:update-metadata', sessionId, {
-            parentSessionId: null,
-          });
-        } catch (revertError) {
-          console.error('[sessions] Failed to revert parentSessionId on original session:', revertError);
+        // Check if IPC returned an error (didn't throw but returned { success: false })
+        if (!siblingResult.success) {
+          console.error('[sessions] Failed to create sibling session (IPC error), rolling back:', siblingResult.error);
+          try {
+            await window.electronAPI.invoke('sessions:update-metadata', sessionId, {
+              parentSessionId: null,
+            });
+          } catch (revertError) {
+            console.error('[sessions] Failed to revert parentSessionId on original session:', revertError);
+          }
+          await rollbackParent();
+          return null;
         }
-        await rollbackParent();
-        return null;
       }
 
       // All database operations succeeded - now update atoms
@@ -1294,20 +1298,27 @@ export const convertToWorkstreamAtom = atom(
       }
       set(sessionChildrenAtom(parentSessionId), children);
 
-      // Set the new sibling as active (user wants to work in the new session) and mark as read
+      // Set the active child and mark as read
       if (siblingResult.success && siblingResult.sessionId) {
+        // Normal conversion: set the new sibling as active (user wants to work in the new session)
         set(sessionActiveChildAtom(parentSessionId), siblingResult.sessionId);
         set(setWorkstreamActiveChildAtom, { workstreamId: parentSessionId, childId: siblingResult.sessionId });
         set(markSessionReadAtom, siblingResult.sessionId);
+      } else {
+        // Drag-drop (no sibling): set the original session as active child
+        set(sessionActiveChildAtom(parentSessionId), sessionId);
+        set(setWorkstreamActiveChildAtom, { workstreamId: parentSessionId, childId: sessionId });
       }
 
-      // Update unified workstream state
-      const { convertToWorkstreamAtom: convertToWorkstreamStateAtom } = await import('./workstreamState');
-      set(convertToWorkstreamStateAtom, {
-        sessionId,
-        parentId: parentSessionId,
-        siblingId: siblingResult.sessionId!,
-      });
+      // Update unified workstream state (only when sibling was created)
+      if (siblingResult.success && siblingResult.sessionId) {
+        const { convertToWorkstreamAtom: convertToWorkstreamStateAtom } = await import('./workstreamState');
+        set(convertToWorkstreamStateAtom, {
+          sessionId,
+          parentId: parentSessionId,
+          siblingId: siblingResult.sessionId,
+        });
+      }
 
       // Add the new parent session to the session list so it appears in the sidebar
       // If original was pinned, transfer pin to the parent workstream
@@ -1350,7 +1361,7 @@ export const convertToWorkstreamAtom = atom(
         },
       });
 
-      return { parentId: parentSessionId, siblingId: siblingResult.sessionId! };
+      return { parentId: parentSessionId, siblingId: siblingResult.sessionId ?? null };
     } catch (error) {
       console.error(`[sessions] Failed to convert session ${sessionId} to workstream:`, error);
       return null;

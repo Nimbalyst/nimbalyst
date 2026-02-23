@@ -3,6 +3,7 @@ import { useAtomValue, useSetAtom } from 'jotai';
 import { MaterialSymbol, ProviderIcon, copyToClipboard } from '@nimbalyst/runtime';
 import { getRelativeTimeString } from '../../utils/dateFormatting';
 import { sessionOrChildProcessingAtom, sessionUnreadAtom, sessionPendingPromptAtom, sessionHasPendingInteractivePromptAtom, reparentSessionAtom, refreshSessionListAtom, sessionShareAtom, addSessionShareAtom, removeSessionShareAtom, shareKeysAtom, buildShareUrl } from '../../store';
+import { convertToWorkstreamAtom } from '../../store/atoms/sessions';
 import type { ShareInfo } from '../../store';
 import { errorNotificationService } from '../../services/ErrorNotificationService';
 
@@ -140,6 +141,7 @@ export const SessionListItem = memo<SessionListItemProps>(({
 
   // Atom setters for drag-drop
   const reparentSession = useSetAtom(reparentSessionAtom);
+  const convertToWorkstream = useSetAtom(convertToWorkstreamAtom);
   const refreshSessionList = useSetAtom(refreshSessionListAtom);
 
   // Share state
@@ -382,12 +384,34 @@ export const SessionListItem = memo<SessionListItemProps>(({
         return;
       }
 
-      // Execute reparent
-      console.log(`[SessionListItem] Reparenting session ${sessionId} from ${parentId} to ${id}`);
+      let targetParentId = id;
+
+      if (!isWorkstream) {
+        // Drop target is a standalone session, not a workstream.
+        // Convert it to a workstream first (without creating a sibling - the dragged session fills that role),
+        // then reparent the dragged session into the new workstream parent.
+        console.log(`[SessionListItem] Converting session ${id} to workstream before reparenting`);
+        const result = await convertToWorkstream({
+          sessionId: id,
+          workspacePath: projectPath,
+          skipSiblingCreation: true,
+        });
+
+        if (!result) {
+          console.error('[SessionListItem] Failed to convert drop target to workstream');
+          return;
+        }
+
+        // The dragged session should be reparented under the new workstream parent
+        targetParentId = result.parentId;
+      }
+
+      // Execute reparent into the (possibly new) workstream parent
+      console.log(`[SessionListItem] Reparenting session ${sessionId} from ${parentId} to ${targetParentId}`);
       const success = await reparentSession({
         sessionId,
         oldParentId: parentId,
-        newParentId: id,
+        newParentId: targetParentId,
         workspacePath: projectPath,
       });
 
@@ -401,6 +425,7 @@ export const SessionListItem = memo<SessionListItemProps>(({
             event: 'session_reparented',
             properties: {
               had_previous_parent: parentId !== null,
+              created_workstream: !isWorkstream,
               workspace_path: projectPath,
             },
           });
@@ -409,7 +434,7 @@ export const SessionListItem = memo<SessionListItemProps>(({
     } catch (error) {
       console.error('[SessionListItem] Failed to handle drop:', error);
     }
-  }, [projectPath, id, reparentSession, refreshSessionList]);
+  }, [projectPath, id, isWorkstream, reparentSession, convertToWorkstream, refreshSessionList]);
 
   // Auto-focus and select text when rename input appears
   useEffect(() => {
