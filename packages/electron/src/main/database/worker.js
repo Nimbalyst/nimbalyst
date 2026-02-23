@@ -1149,6 +1149,37 @@ class PGLiteWorker {
       // Non-fatal for existing installs
     }
 
+    // Migration: Convert any remaining TIMESTAMP (without timezone) columns to TIMESTAMPTZ
+    // Ensures all legacy tables follow the TIMESTAMPTZ-only rule.
+    // NOTE: We intentionally rely on the default cast (no AT TIME ZONE 'UTC').
+    // Legacy TIMESTAMP values were written via JS Date objects and thus represent
+    // local wall time already; forcing UTC would double-shift existing data.
+    try {
+      const legacyTimestamps = await this.db.query(`
+        SELECT table_name, column_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND data_type = 'timestamp without time zone'
+      `);
+
+      const quoteIdent = (value) => `"${String(value).replace(/"/g, '""')}"`;
+
+      for (const row of legacyTimestamps.rows) {
+        const tableName = quoteIdent(row.table_name);
+        const columnName = quoteIdent(row.column_name);
+        await this.db.exec(`ALTER TABLE ${tableName} ALTER COLUMN ${columnName} TYPE TIMESTAMPTZ;`);
+      }
+
+      if (legacyTimestamps.rows.length > 0) {
+        console.log(
+          `[PGLite Worker] Migrated ${legacyTimestamps.rows.length} timestamp columns to TIMESTAMPTZ`
+        );
+      }
+    } catch (error) {
+      console.error('[PGLite Worker] Failed to migrate legacy timestamp columns:', error);
+      // Non-fatal for existing installs
+    }
+
     // Migration: Rename ralph_loops -> super_loops and ralph_iterations -> super_iterations
     try {
       await this.db.exec(`

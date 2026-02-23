@@ -181,6 +181,8 @@ The Nimbalyst app uses **PGLite** (PostgreSQL in WebAssembly) for all data stora
 - **workspace-settings store** for per-project state
 - **PGLite database** for complex data like AI sessions and document history
 
+**CRITICAL: All database timestamps must use `TIMESTAMPTZ`.** Never create `TIMESTAMP` (without timezone) columns. If legacy tables exist, add a migration to convert those columns to `TIMESTAMPTZ`.
+
 For implementation details, see `/packages/electron/CLAUDE.md`.
 
 ## General Development Guidelines
