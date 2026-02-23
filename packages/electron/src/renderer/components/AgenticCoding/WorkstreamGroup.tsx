@@ -1,7 +1,21 @@
 import React, { useState, useCallback, useEffect, useRef, memo, useMemo } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { MaterialSymbol, ProviderIcon } from '@nimbalyst/runtime';
-import { sessionProcessingAtom, sessionUnreadAtom, sessionPendingPromptAtom, sessionHasPendingInteractivePromptAtom, groupSessionStatusAtom, reparentSessionAtom, refreshSessionListAtom } from '../../store';
+import {
+  sessionProcessingAtom,
+  sessionUnreadAtom,
+  sessionPendingPromptAtom,
+  sessionHasPendingInteractivePromptAtom,
+  groupSessionStatusAtom,
+  reparentSessionAtom,
+  refreshSessionListAtom,
+  sessionShareAtom,
+  addSessionShareAtom,
+  removeSessionShareAtom,
+  shareKeysAtom,
+  buildShareUrl,
+} from '../../store';
+import { errorNotificationService } from '../../services/ErrorNotificationService';
 import { getRelativeTimeString } from '../../utils/dateFormatting';
 
 /**
@@ -95,6 +109,7 @@ interface WorkstreamGroupProps {
   onSessionUnarchive?: (sessionId: string) => void;
   onSessionPinToggle?: (sessionId: string, isPinned: boolean) => void;
   onSessionRename?: (sessionId: string, newName: string) => void;
+  onSessionBranch?: (sessionId: string) => void;
 
   // Session/workstream-specific
   provider?: string;
@@ -141,6 +156,7 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
   onSessionUnarchive,
   onSessionPinToggle,
   onSessionRename,
+  onSessionBranch,
   provider,
   isPinned,
   isArchived,
@@ -247,6 +263,13 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
     return sessions.reduce((sum, session) => sum + (session.uncommittedCount || 0), 0);
   }, [sessions]);
 
+  // Workstream session-share state (used only when type === 'workstream')
+  const workstreamShareInfo = useAtomValue(sessionShareAtom(id));
+  const shareKeys = useAtomValue(shareKeysAtom);
+  const addShare = useSetAtom(addSessionShareAtom);
+  const removeShare = useSetAtom(removeSessionShareAtom);
+  const [isSharingWorkstream, setIsSharingWorkstream] = useState(false);
+
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -274,10 +297,12 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
     setShowContextMenu(false);
     if (type === 'worktree' && worktree && onWorktreeArchive) {
       onWorktreeArchive(worktree.id);
+    } else if (type === 'workstream' && isArchived && onSessionUnarchive) {
+      onSessionUnarchive(id);
     } else if (type === 'workstream' && onWorkstreamArchive) {
       onWorkstreamArchive(id);
     }
-  }, [type, id, worktree, onWorktreeArchive, onWorkstreamArchive]);
+  }, [type, id, worktree, isArchived, onWorktreeArchive, onWorkstreamArchive, onSessionUnarchive]);
 
   const handleAddSession = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -360,6 +385,105 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
       onChangesMode(worktree.id);
     }
   }, [type, worktree, onChangesMode]);
+
+  const handleWorkstreamBranch = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowContextMenu(false);
+    if (type === 'workstream' && onSessionBranch) {
+      onSessionBranch(id);
+    }
+  }, [type, id, onSessionBranch]);
+
+  const handleWorkstreamDelete = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowContextMenu(false);
+    if (type === 'workstream' && onSessionDelete) {
+      onSessionDelete(id);
+    }
+  }, [type, id, onSessionDelete]);
+
+  const handleWorkstreamCopySessionId = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowContextMenu(false);
+    if (type !== 'workstream') return;
+    navigator.clipboard.writeText(id);
+  }, [type, id]);
+
+  const handleWorkstreamExportHtml = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowContextMenu(false);
+    if (type !== 'workstream') return;
+    (window as any).electronAPI?.exportSessionToHtml({ sessionId: id });
+  }, [type, id]);
+
+  const handleWorkstreamCopyTranscript = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowContextMenu(false);
+    if (type !== 'workstream') return;
+    (window as any).electronAPI?.exportSessionToClipboard({ sessionId: id });
+  }, [type, id]);
+
+  const handleWorkstreamShareLink = useCallback(async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowContextMenu(false);
+    if (type !== 'workstream') return;
+
+    setIsSharingWorkstream(true);
+    try {
+      const result = await (window as any).electronAPI?.shareSessionAsLink({ sessionId: id });
+      if (result?.success && result.shareId) {
+        addShare({
+          shareId: result.shareId,
+          sessionId: id,
+          title,
+          sizeBytes: 0,
+          createdAt: new Date().toISOString(),
+          expiresAt: null,
+          viewCount: 0,
+          encryptionKey: result.encryptionKey,
+        });
+        const expiryDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+        const expiryStr = expiryDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        errorNotificationService.showInfo(
+          result.isUpdate ? 'Share link updated' : 'Share link copied',
+          `Link copied to clipboard. Expires ${expiryStr}.`,
+          { duration: 4000 }
+        );
+      } else if (result?.error) {
+        errorNotificationService.showError('Share failed', result.error);
+      }
+    } catch (error) {
+      errorNotificationService.showError('Share failed', error instanceof Error ? error.message : 'An unexpected error occurred');
+    } finally {
+      setIsSharingWorkstream(false);
+    }
+  }, [type, id, title, addShare]);
+
+  const handleWorkstreamCopyShareLink = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowContextMenu(false);
+    if (type !== 'workstream' || !workstreamShareInfo) return;
+    const url = buildShareUrl(workstreamShareInfo.shareId, shareKeys.get(id));
+    navigator.clipboard.writeText(url);
+    errorNotificationService.showInfo('Share link copied', 'The share link has been copied to your clipboard.', { duration: 3000 });
+  }, [type, id, workstreamShareInfo, shareKeys]);
+
+  const handleWorkstreamUnshare = useCallback(async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowContextMenu(false);
+    if (type !== 'workstream' || !workstreamShareInfo) return;
+    try {
+      const result = await (window as any).electronAPI?.deleteShare({ shareId: workstreamShareInfo.shareId, sessionId: id });
+      if (result?.success) {
+        removeShare(id);
+        errorNotificationService.showInfo('Session unshared', 'The share link has been removed.', { duration: 3000 });
+      } else if (result?.error) {
+        errorNotificationService.showError('Unshare failed', result.error);
+      }
+    } catch (error) {
+      errorNotificationService.showError('Unshare failed', error instanceof Error ? error.message : 'An unexpected error occurred');
+    }
+  }, [type, id, workstreamShareInfo, removeShare]);
 
   const handleHeaderClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -587,6 +711,7 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
               onUnarchive={onSessionUnarchive ? () => onSessionUnarchive(session.id) : undefined}
               onPinToggle={onSessionPinToggle ? (pinned) => onSessionPinToggle(session.id, pinned) : undefined}
               onRename={onSessionRename ? (newName) => onSessionRename(session.id, newName) : undefined}
+              onBranch={onSessionBranch ? () => onSessionBranch(session.id) : undefined}
             />
           ))}
         </div>
@@ -681,17 +806,86 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
               {isPinned ? 'Unpin' : 'Pin'}
             </button>
           )}
-          {type === 'workstream' && onWorkstreamArchive && (
+          {type === 'workstream' && onSessionBranch && (
+            <button
+              className="workstream-group-context-menu-item flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
+              onClick={handleWorkstreamBranch}
+            >
+              <MaterialSymbol icon="fork_right" size={14} />
+              Branch conversation
+            </button>
+          )}
+          {type === 'workstream' && (
+            <button
+              className="workstream-group-context-menu-item flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
+              onClick={handleWorkstreamCopySessionId}
+            >
+              <MaterialSymbol icon="content_copy" size={14} />
+              Copy Session ID
+            </button>
+          )}
+          {type === 'workstream' && workstreamShareInfo ? (
             <>
-              {onWorkstreamPinToggle && <div className="workstream-group-context-menu-divider h-px my-1 bg-[var(--nim-border)]" />}
               <button
-                className="workstream-group-context-menu-item destructive flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-error)] text-left rounded transition-colors duration-150 hover:bg-[rgba(239,68,68,0.1)]"
-                onClick={handleArchive}
+                className="workstream-group-context-menu-item flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
+                onClick={handleWorkstreamCopyShareLink}
               >
-                <MaterialSymbol icon="archive" size={14} />
-                Archive Workstream
+                <MaterialSymbol icon="content_copy" size={14} />
+                Copy share link
+              </button>
+              <button
+                className="workstream-group-context-menu-item flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
+                onClick={handleWorkstreamUnshare}
+              >
+                <MaterialSymbol icon="link_off" size={14} />
+                Unshare
               </button>
             </>
+          ) : type === 'workstream' ? (
+            <button
+              className="workstream-group-context-menu-item flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] disabled:opacity-60 disabled:cursor-default"
+              onClick={handleWorkstreamShareLink}
+              disabled={isSharingWorkstream}
+            >
+              <MaterialSymbol icon="link" size={14} />
+              {isSharingWorkstream ? 'Sharing...' : 'Share link'}
+            </button>
+          ) : null}
+          {type === 'workstream' && (
+            <button
+              className="workstream-group-context-menu-item flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
+              onClick={handleWorkstreamExportHtml}
+            >
+              <MaterialSymbol icon="download" size={14} />
+              Export as HTML
+            </button>
+          )}
+          {type === 'workstream' && (
+            <button
+              className="workstream-group-context-menu-item flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
+              onClick={handleWorkstreamCopyTranscript}
+            >
+              <MaterialSymbol icon="assignment" size={14} />
+              Copy transcript
+            </button>
+          )}
+          {type === 'workstream' && onWorkstreamArchive && (
+            <button
+              className="workstream-group-context-menu-item flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
+              onClick={handleArchive}
+            >
+              <MaterialSymbol icon={isArchived ? 'unarchive' : 'archive'} size={14} />
+              {isArchived ? 'Unarchive Workstream' : 'Archive Workstream'}
+            </button>
+          )}
+          {type === 'workstream' && onSessionDelete && (
+            <button
+              className="workstream-group-context-menu-item destructive flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-error)] text-left rounded transition-colors duration-150 hover:bg-[rgba(239,68,68,0.1)]"
+              onClick={handleWorkstreamDelete}
+            >
+              <MaterialSymbol icon="delete" size={14} />
+              Delete
+            </button>
           )}
         </div>
       )}
@@ -790,6 +984,7 @@ interface WorkstreamSessionItemProps {
   onUnarchive?: () => void;
   onPinToggle?: (isPinned: boolean) => void;
   onRename?: (newName: string) => void;
+  onBranch?: () => void;
 }
 
 const WorkstreamSessionItem: React.FC<WorkstreamSessionItemProps> = ({
@@ -801,6 +996,7 @@ const WorkstreamSessionItem: React.FC<WorkstreamSessionItemProps> = ({
   onUnarchive,
   onPinToggle,
   onRename,
+  onBranch,
 }) => {
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
@@ -808,6 +1004,11 @@ const WorkstreamSessionItem: React.FC<WorkstreamSessionItemProps> = ({
   const [renameValue, setRenameValue] = useState('');
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
+  const shareInfo = useAtomValue(sessionShareAtom(session.id));
+  const shareKeys = useAtomValue(shareKeysAtom);
+  const addShare = useSetAtom(addSessionShareAtom);
+  const removeShare = useSetAtom(removeSessionShareAtom);
+  const [isSharing, setIsSharing] = useState(false);
 
   const displayTitle = session.title || 'Untitled Session';
 
@@ -842,6 +1043,12 @@ const WorkstreamSessionItem: React.FC<WorkstreamSessionItemProps> = ({
     onPinToggle?.(!session.isPinned);
   };
 
+  const handleBranch = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowContextMenu(false);
+    onBranch?.();
+  };
+
   const handleRenameClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     setShowContextMenu(false);
@@ -865,6 +1072,84 @@ const WorkstreamSessionItem: React.FC<WorkstreamSessionItemProps> = ({
     } else if (e.key === 'Escape') {
       e.preventDefault();
       setIsRenaming(false);
+    }
+  };
+
+  const handleCopySessionId = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowContextMenu(false);
+    navigator.clipboard.writeText(session.id);
+  };
+
+  const handleExportHtml = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowContextMenu(false);
+    (window as any).electronAPI?.exportSessionToHtml({ sessionId: session.id });
+  };
+
+  const handleCopyTranscript = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowContextMenu(false);
+    (window as any).electronAPI?.exportSessionToClipboard({ sessionId: session.id });
+  };
+
+  const handleShareLink = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowContextMenu(false);
+    setIsSharing(true);
+    try {
+      const result = await (window as any).electronAPI?.shareSessionAsLink({ sessionId: session.id });
+      if (result?.success && result.shareId) {
+        addShare({
+          shareId: result.shareId,
+          sessionId: session.id,
+          title: displayTitle,
+          sizeBytes: 0,
+          createdAt: new Date().toISOString(),
+          expiresAt: null,
+          viewCount: 0,
+          encryptionKey: result.encryptionKey,
+        });
+        const expiryDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+        const expiryStr = expiryDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        errorNotificationService.showInfo(
+          result.isUpdate ? 'Share link updated' : 'Share link copied',
+          `Link copied to clipboard. Expires ${expiryStr}.`,
+          { duration: 4000 }
+        );
+      } else if (result?.error) {
+        errorNotificationService.showError('Share failed', result.error);
+      }
+    } catch (error) {
+      errorNotificationService.showError('Share failed', error instanceof Error ? error.message : 'An unexpected error occurred');
+    } finally {
+      setIsSharing(false);
+    }
+  };
+
+  const handleCopyShareLink = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowContextMenu(false);
+    if (!shareInfo) return;
+    const url = buildShareUrl(shareInfo.shareId, shareKeys.get(session.id));
+    navigator.clipboard.writeText(url);
+    errorNotificationService.showInfo('Share link copied', 'The share link has been copied to your clipboard.', { duration: 3000 });
+  };
+
+  const handleUnshare = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowContextMenu(false);
+    if (!shareInfo) return;
+    try {
+      const result = await (window as any).electronAPI?.deleteShare({ shareId: shareInfo.shareId, sessionId: session.id });
+      if (result?.success) {
+        removeShare(session.id);
+        errorNotificationService.showInfo('Session unshared', 'The share link has been removed.', { duration: 3000 });
+      } else if (result?.error) {
+        errorNotificationService.showError('Unshare failed', result.error);
+      }
+    } catch (error) {
+      errorNotificationService.showError('Unshare failed', error instanceof Error ? error.message : 'An unexpected error occurred');
     }
   };
 
@@ -903,6 +1188,11 @@ const WorkstreamSessionItem: React.FC<WorkstreamSessionItemProps> = ({
         <MaterialSymbol icon="push_pin" size={10} className={`workstream-session-item-pin-icon shrink-0 -ml-1 opacity-70 ${
           isActive ? 'text-[var(--nim-primary)]' : 'text-[var(--nim-text-faint)]'
         }`} />
+      )}
+      {shareInfo && (
+        <MaterialSymbol icon="link" size={10} className={`workstream-session-item-share-icon shrink-0 -ml-1 opacity-70 ${
+          isActive ? 'text-[var(--nim-primary)]' : 'text-[var(--nim-text-faint)]'
+        }`} title="Shared" />
       )}
       {isRenaming ? (
         <input
@@ -958,6 +1248,63 @@ const WorkstreamSessionItem: React.FC<WorkstreamSessionItemProps> = ({
               Rename
             </button>
           )}
+          {onBranch && (
+            <button
+              className="workstream-group-context-menu-item flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
+              onClick={handleBranch}
+            >
+              <MaterialSymbol icon="fork_right" size={14} />
+              Branch conversation
+            </button>
+          )}
+          <button
+            className="workstream-group-context-menu-item flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
+            onClick={handleCopySessionId}
+          >
+            <MaterialSymbol icon="content_copy" size={14} />
+            Copy Session ID
+          </button>
+          {shareInfo ? (
+            <>
+              <button
+                className="workstream-group-context-menu-item flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
+                onClick={handleCopyShareLink}
+              >
+                <MaterialSymbol icon="content_copy" size={14} />
+                Copy share link
+              </button>
+              <button
+                className="workstream-group-context-menu-item flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
+                onClick={handleUnshare}
+              >
+                <MaterialSymbol icon="link_off" size={14} />
+                Unshare
+              </button>
+            </>
+          ) : (
+            <button
+              className="workstream-group-context-menu-item flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] disabled:opacity-60 disabled:cursor-default"
+              onClick={handleShareLink}
+              disabled={isSharing}
+            >
+              <MaterialSymbol icon="link" size={14} />
+              {isSharing ? 'Sharing...' : 'Share link'}
+            </button>
+          )}
+          <button
+            className="workstream-group-context-menu-item flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
+            onClick={handleExportHtml}
+          >
+            <MaterialSymbol icon="download" size={14} />
+            Export as HTML
+          </button>
+          <button
+            className="workstream-group-context-menu-item flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
+            onClick={handleCopyTranscript}
+          >
+            <MaterialSymbol icon="assignment" size={14} />
+            Copy transcript
+          </button>
           {(onArchive || onUnarchive) && (
             <button
               className="workstream-group-context-menu-item flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
