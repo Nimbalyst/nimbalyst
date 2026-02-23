@@ -80,7 +80,7 @@ interface SessionFileRow {
 interface AgentMessageRow {
   id: number;
   content: string;
-  created_at: Date;
+  created_at_ms: number;
 }
 
 interface ToolCallMatchRow {
@@ -461,8 +461,11 @@ class ToolCallMatcherImpl {
       }
 
       // 3. Load output messages
+      // Use EXTRACT(EPOCH) for timestamp safety across legacy/modern schemas.
+      // This avoids timezone offsets when a column was historically persisted
+      // as timestamp without time zone on some machines.
       const messagesResult = await database.query<AgentMessageRow>(
-        `SELECT id, content, created_at
+        `SELECT id, content, EXTRACT(EPOCH FROM created_at) * 1000 AS created_at_ms
          FROM ai_agent_messages
          WHERE session_id = $1 AND direction = 'output' AND hidden = FALSE
          ORDER BY id ASC`,
@@ -475,7 +478,7 @@ class ToolCallMatcherImpl {
         const msgWindows = parseToolCallWindows(
           ensureNumber(msg.id),
           msg.content,
-          msg.created_at instanceof Date ? msg.created_at : new Date(msg.created_at),
+          new Date(ensureNumber(msg.created_at_ms)),
           sessionId,
           workspacePath
         );
