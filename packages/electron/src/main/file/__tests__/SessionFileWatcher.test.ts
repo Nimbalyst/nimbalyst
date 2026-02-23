@@ -530,8 +530,8 @@ describe('SessionFileWatcher', () => {
       await watcher.stop();
     });
 
-    it('should watch everything (except .git) when no .gitignore exists', async () => {
-      // Default: no .gitignore (ENOENT)
+    it('should use fallback ignore patterns when no .gitignore exists', async () => {
+      // Default: no .gitignore (ENOENT) — falls back to sensible defaults
       const watcher = new SessionFileWatcher();
       const cache = createMockCache();
       const hm = createMockHistoryManager();
@@ -540,11 +540,15 @@ describe('SessionFileWatcher', () => {
 
       const ignoredFn = await getChokidarIgnoredFn();
 
-      // These would have been ignored by the old hardcoded list, but not anymore
-      expect(ignoredFn(path.join(workspacePath, 'node_modules', 'foo'))).toBe(false);
-      expect(ignoredFn(path.join(workspacePath, 'dist', 'bundle.js'))).toBe(false);
+      // Fallback patterns should still ignore common dirs
+      expect(ignoredFn(path.join(workspacePath, 'node_modules'))).toBe(true);
+      expect(ignoredFn(path.join(workspacePath, 'node_modules', 'foo'))).toBe(true);
+      expect(ignoredFn(path.join(workspacePath, 'dist'))).toBe(true);
+      expect(ignoredFn(path.join(workspacePath, 'dist', 'bundle.js'))).toBe(true);
       // .git is still always ignored
       expect(ignoredFn(path.join(workspacePath, '.git'))).toBe(true);
+      // Source files should not be ignored
+      expect(ignoredFn(path.join(workspacePath, 'src', 'file.ts'))).toBe(false);
 
       await watcher.stop();
     });

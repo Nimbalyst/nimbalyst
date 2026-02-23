@@ -42,13 +42,29 @@ interface SharedWatcherListener {
 /** Global registry of shared chokidar watchers, keyed by normalized workspace path. */
 const sharedWatchers = new Map<string, SharedWatcherEntry>();
 
-async function loadGitignoreFilter(workspacePath: string): Promise<Ignore | null> {
+/** Fallback patterns used when no .gitignore exists (e.g. non-git projects). */
+const FALLBACK_IGNORE_PATTERNS = [
+  'node_modules/',
+  '.DS_Store',
+  'Thumbs.db',
+  'dist/',
+  'build/',
+  'out/',
+  'coverage/',
+  '.next/',
+  '.nuxt/',
+  '.cache/',
+  '.turbo/',
+  '.svelte-kit/',
+];
+
+async function loadGitignoreFilter(workspacePath: string): Promise<Ignore> {
   const gitignorePath = path.join(workspacePath, '.gitignore');
   try {
     const content = await fs.readFile(gitignorePath, 'utf-8');
     return ignore().add(content);
   } catch {
-    return null;
+    return ignore().add(FALLBACK_IGNORE_PATTERNS);
   }
 }
 
@@ -82,14 +98,10 @@ async function acquireSharedWatcher(
         return true;
       }
 
-      if (ig) {
-        // Test both as file and as directory (trailing slash) so that
-        // directory-only patterns like "node_modules/" match the directory
-        // itself, preventing chokidar from recursing into it.
-        return ig.ignores(relativePath) || ig.ignores(relativePath + '/');
-      }
-
-      return false;
+      // Test both as file and as directory (trailing slash) so that
+      // directory-only patterns like "node_modules/" match the directory
+      // itself, preventing chokidar from recursing into it.
+      return ig.ignores(relativePath) || ig.ignores(relativePath + '/');
     },
     ignoreInitial: true,
     followSymlinks: false,
