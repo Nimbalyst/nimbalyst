@@ -87,8 +87,8 @@ export async function initCodexUsageIndicatorSetting(): Promise<boolean> {
 export const codexUsageAvailableAtom = atom((get) => {
   const usage = get(codexUsageAtom);
   if (!usage) return false;
-  // Only hide for "no data" errors (API key users or no sessions)
-  if (usage.error?.includes('No Codex usage data')) return false;
+  // Keep the indicator visible for load failures so users can see the reason in tooltip/popover.
+  if (usage.error) return true;
   // Show if we have actual usage data (utilization or reset times), or credits info.
   const hasUsageData =
     usage.fiveHour.utilization > 0 ||

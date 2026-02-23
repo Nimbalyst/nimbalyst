@@ -96,14 +96,12 @@ export async function initClaudeUsageIndicatorSetting(): Promise<boolean> {
 
 /**
  * Derived atom: whether usage data is available to display.
- * Shows the indicator whenever we have valid data from the API (even at 0% utilization).
- * Hides only when there's no data or an error (missing credentials, auth expired, etc.).
+ * Shows the indicator whenever we have received any usage payload from main process.
+ * Error payloads still render the indicator so users can hover/click for the reason.
  */
 export const claudeUsageAvailableAtom = atom((get) => {
   const usage = get(claudeUsageAtom);
-  if (!usage) return false;
-  if (usage.error) return false;
-  return true;
+  return Boolean(usage);
 });
 
 /**

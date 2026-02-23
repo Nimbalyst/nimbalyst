@@ -47,12 +47,13 @@ export const ClaudeUsageIndicator: React.FC<ClaudeUsageIndicatorProps> = ({ clas
   // Only show if:
   // 1. On macOS (reads from macOS Keychain)
   // 2. User has enabled the indicator in settings
-  // 3. Credentials are available
+  // 3. We've received usage payload at least once (including error payloads)
   if (!isMacOS || !isEnabled || !isAvailable) {
     return null;
   }
 
-  const utilization = usage?.fiveHour?.utilization ?? 0;
+  const hasLoadError = Boolean(usage?.error);
+  const utilization = hasLoadError ? 0 : usage?.fiveHour?.utilization ?? 0;
   const strokeDashoffset = RING_CIRCUMFERENCE * (1 - utilization / 100);
 
   // Color mapping
@@ -63,11 +64,14 @@ export const ClaudeUsageIndicator: React.FC<ClaudeUsageIndicatorProps> = ({ clas
     muted: 'stroke-nim-muted',
   };
 
-  const strokeColor = colorClasses[sessionColor] || colorClasses.muted;
+  const effectiveSessionColor = hasLoadError ? 'muted' : sessionColor;
+  const strokeColor = colorClasses[effectiveSessionColor] || colorClasses.muted;
 
-  const tooltipContent = usage
-    ? `Session: ${Math.round(utilization)}% (resets ${formatResetTime(usage.fiveHour.resetsAt)})`
-    : 'Claude Usage';
+  const tooltipContent = usage?.error
+    ? `Claude usage unavailable: ${usage.error}`
+    : usage
+      ? `Session: ${Math.round(utilization)}% (resets ${formatResetTime(usage.fiveHour.resetsAt)})`
+      : 'Claude usage unavailable';
 
   return (
     <div className={`relative ${className || ''}`}>
@@ -110,7 +114,7 @@ export const ClaudeUsageIndicator: React.FC<ClaudeUsageIndicatorProps> = ({ clas
         </svg>
         {/* Percentage text */}
         <span className="absolute inset-0 flex items-center justify-center text-[9px] font-semibold text-nim">
-          {Math.round(utilization)}%
+          {hasLoadError ? '--' : `${Math.round(utilization)}%`}
         </span>
       </button>
 

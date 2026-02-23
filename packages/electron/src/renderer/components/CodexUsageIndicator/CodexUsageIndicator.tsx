@@ -3,7 +3,7 @@
  *
  * Displays the 5-hour session utilization as a circular progress ring
  * in the navigation gutter. Clicking opens a popover with full details.
- * Only visible for subscription users who have Codex session data.
+ * Error states render as a blank ("--") indicator with hover details.
  */
 
 import React, { useState, useRef, useCallback } from 'react';
@@ -46,9 +46,10 @@ export const CodexUsageIndicator: React.FC<CodexUsageIndicatorProps> = ({ classN
     return null;
   }
 
-  const utilization = usage?.fiveHour?.utilization ?? 0;
+  const hasLoadError = Boolean(usage?.error);
+  const utilization = hasLoadError ? 0 : usage?.fiveHour?.utilization ?? 0;
   const strokeDashoffset = RING_CIRCUMFERENCE * (1 - utilization / 100);
-  const limitsAvailable = usage?.limitsAvailable ?? true;
+  const limitsAvailable = !hasLoadError && (usage?.limitsAvailable ?? true);
 
   const colorClasses: Record<string, string> = {
     green: 'stroke-green-500',
@@ -60,11 +61,13 @@ export const CodexUsageIndicator: React.FC<CodexUsageIndicatorProps> = ({ classN
   const effectiveSessionColor = limitsAvailable ? sessionColor : 'muted';
   const strokeColor = colorClasses[effectiveSessionColor] || colorClasses.muted;
 
-  const tooltipContent = usage
-    ? limitsAvailable
-      ? `Codex: ${Math.round(utilization)}% (resets ${formatResetTime(usage.fiveHour.resetsAt)})`
-      : 'Codex usage (limits unavailable)'
-    : 'Codex Usage';
+  const tooltipContent = usage?.error
+    ? `Codex usage unavailable: ${usage.error}`
+    : usage
+      ? limitsAvailable
+        ? `Codex: ${Math.round(utilization)}% (resets ${formatResetTime(usage.fiveHour.resetsAt)})`
+        : 'Codex usage (limits unavailable)'
+      : 'Codex usage unavailable';
 
   return (
     <div className={`relative ${className || ''}`}>
