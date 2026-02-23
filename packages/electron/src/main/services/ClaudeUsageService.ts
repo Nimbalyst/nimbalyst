@@ -88,6 +88,10 @@ class ClaudeUsageServiceImpl {
     try {
       const token = this.getAccessTokenFromKeychain();
       if (!token) {
+        logger.main.warn(
+          '[ClaudeUsageService] No Claude OAuth token found in macOS Keychain entries (Claude Code-credentials, Claude Code). ' +
+          'Claude usage indicator will remain hidden until Claude Code login is restored.'
+        );
         const errorData: ClaudeUsageData = {
           fiveHour: { utilization: 0, resetsAt: null },
           sevenDay: { utilization: 0, resetsAt: null },
@@ -201,7 +205,7 @@ class ClaudeUsageServiceImpl {
         return null;
       }
       // Log other errors but continue to try fallback
-      logger.main.debug(`[ClaudeUsageService] Error reading keychain entry ${serviceName}:`, error);
+      logger.main.warn(`[ClaudeUsageService] Error reading keychain entry ${serviceName}:`, error);
       return null;
     }
   }
@@ -225,8 +229,14 @@ class ClaudeUsageServiceImpl {
         if (!response.ok) {
           if (response.status === 401) {
             // Non-retryable: auth expired
+            logger.main.warn(
+              '[ClaudeUsageService] Usage API returned 401 (unauthorized). Claude OAuth token is likely expired; user should re-login.'
+            );
             throw new Error('Authentication expired. Please re-login to Claude Code.');
           }
+          logger.main.warn(
+            `[ClaudeUsageService] Usage API error response: ${response.status} ${response.statusText}`
+          );
           throw new Error(`API error: ${response.status} ${response.statusText}`);
         }
 
@@ -257,7 +267,10 @@ class ClaudeUsageServiceImpl {
 
         // Retry on network errors
         if (attempt < NETWORK_MAX_RETRIES - 1) {
-          logger.main.debug(`[ClaudeUsageService] Fetch attempt ${attempt + 1} failed, retrying in ${NETWORK_RETRY_DELAY_MS}ms...`);
+          logger.main.warn(
+            `[ClaudeUsageService] Fetch attempt ${attempt + 1} failed (${lastError.message}). ` +
+            `Retrying in ${NETWORK_RETRY_DELAY_MS}ms...`
+          );
           await this.sleep(NETWORK_RETRY_DELAY_MS);
         }
       }
