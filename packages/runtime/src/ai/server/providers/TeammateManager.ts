@@ -82,6 +82,19 @@ export interface TeammateManagerDeps {
     Promise<{ behavior: 'allow' | 'deny'; updatedInput?: any; message?: string }>;
 }
 
+/**
+ * Packaged-build options for spawning Claude Code subprocesses.
+ * In production Electron builds, the SDK needs explicit executable/env
+ * configuration since `node` is not on PATH.
+ */
+export interface PackagedBuildOptions {
+  env: Record<string, string | undefined>;
+  executable?: string;
+  executableArgs?: string[];
+  pathToClaudeCodeExecutable?: string;
+  spawnClaudeCodeProcess?: (options: any) => any;
+}
+
 // ─── Class ──────────────────────────────────────────────────────────────────
 
 export class TeammateManager {
@@ -112,6 +125,9 @@ export class TeammateManager {
   private pendingStatusOverrides: Map<string, 'running' | 'completed' | 'errored' | 'idle'> = new Map();
   private pendingEmitSessionId?: string;
   private emitDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** Packaged-build options set by ClaudeCodeProvider for production Electron builds */
+  packagedBuildOptions?: PackagedBuildOptions;
   private static readonly EMIT_DEBOUNCE_MS = 100;
 
   /** Captured from lead's sendMessage() for teammate spawning. */
@@ -1385,6 +1401,10 @@ export class TeammateManager {
 
     const permissionsPath = this.lastUsedPermissionsPath;
 
+    // Build environment: use packaged build env if available (production Electron),
+    // otherwise fall back to process.env (development mode)
+    const baseEnv = this.packagedBuildOptions?.env ?? process.env;
+
     const options: any = {
       model: model || 'haiku',
       maxTurns: 20,
@@ -1400,7 +1420,7 @@ export class TeammateManager {
         'agent-type': agentType,
       },
       env: {
-        ...process.env,
+        ...baseEnv,
         CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',
         CLAUDE_CODE_ENABLE_TASKS: '1',
         CLAUDE_CODE_TEAM_NAME: teamName,
@@ -1416,6 +1436,20 @@ export class TeammateManager {
       canUseTool: this.deps.createCanUseToolHandler(sessionId, cwd, permissionsPath, name),
       additionalDirectories: teammateAdditionalDirectories,
     };
+
+    // Apply packaged-build executable options (production Electron)
+    if (this.packagedBuildOptions) {
+      if (this.packagedBuildOptions.executable) {
+        options.executable = this.packagedBuildOptions.executable;
+        options.executableArgs = this.packagedBuildOptions.executableArgs || [];
+      }
+      if (this.packagedBuildOptions.pathToClaudeCodeExecutable) {
+        options.pathToClaudeCodeExecutable = this.packagedBuildOptions.pathToClaudeCodeExecutable;
+      }
+      if (this.packagedBuildOptions.spawnClaudeCodeProcess) {
+        options.spawnClaudeCodeProcess = this.packagedBuildOptions.spawnClaudeCodeProcess;
+      }
+    }
 
     if (resumeSessionId) {
       options.resume = resumeSessionId;

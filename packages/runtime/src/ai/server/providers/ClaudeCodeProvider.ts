@@ -1010,6 +1010,14 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
         if (spawnFunction) {
           (options as any).spawnClaudeCodeProcess = spawnFunction;
         }
+
+        // Share packaged-build options with TeammateManager so sub-agents
+        // can also spawn Claude Code subprocesses in production builds
+        this.teammateManager.packagedBuildOptions = {
+          env: packagedEnv as Record<string, string | undefined>,
+          ...executableOptions,
+          ...(spawnFunction ? { spawnClaudeCodeProcess: spawnFunction } : {}),
+        };
       }
 
       options.env = env;
