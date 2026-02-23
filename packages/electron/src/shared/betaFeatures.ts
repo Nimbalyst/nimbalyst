@@ -26,12 +26,6 @@ export interface BetaFeatureDefinition {
  * ALL beta features must be registered here.
  */
 export const BETA_FEATURES: readonly BetaFeatureDefinition[] = [
-  {
-    tag: 'codex',
-    name: 'Codex',
-    description: 'Enable OpenAI Codex agent provider for code generation tasks.',
-    icon: 'terminal',
-  },
 ] as const;
 
 /**

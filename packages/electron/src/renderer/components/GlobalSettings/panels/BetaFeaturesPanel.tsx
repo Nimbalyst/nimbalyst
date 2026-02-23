@@ -1,10 +1,9 @@
 import React from 'react';
-import { useAtom, useSetAtom } from 'jotai';
+import { useAtom } from 'jotai';
 import { usePostHog } from 'posthog-js/react';
 import {
   advancedSettingsAtom,
   setAdvancedSettingsAtom,
-  setProviderConfigAtom,
 } from '../../../store/atoms/appSettings';
 import {
   BETA_FEATURES,
@@ -24,8 +23,6 @@ export function BetaFeaturesPanel() {
   const posthog = usePostHog();
   const [settings] = useAtom(advancedSettingsAtom);
   const [, updateSettings] = useAtom(setAdvancedSettingsAtom);
-  const updateProviderConfig = useSetAtom(setProviderConfigAtom);
-
   const { betaFeatures, enableAllBetaFeatures } = settings;
 
   return (
@@ -54,10 +51,6 @@ export function BetaFeaturesPanel() {
                     enableAllBetaFeatures: enabled,
                     betaFeatures: newFeatures,
                   });
-                  // Sync codex provider enabled state with the beta feature
-                  if (newFeatures.codex !== undefined) {
-                    updateProviderConfig({ providerId: 'openai-codex', config: { enabled: newFeatures.codex } });
-                  }
                   posthog?.capture('beta_feature_toggled', {
                     feature_tag: 'all',
                     enabled,
@@ -87,10 +80,6 @@ export function BetaFeaturesPanel() {
                   onChange={(e) => {
                     const checked = e.target.checked;
                     updateSettings({ betaFeatures: { ...betaFeatures, [feature.tag]: checked } });
-                    // Sync codex provider enabled state with the beta feature
-                    if (feature.tag === 'codex') {
-                      updateProviderConfig({ providerId: 'openai-codex', config: { enabled: checked } });
-                    }
                     posthog?.capture('beta_feature_toggled', {
                       feature_tag: feature.tag,
                       enabled: checked,
@@ -109,11 +98,6 @@ export function BetaFeaturesPanel() {
                   <span className="setting-description text-xs leading-relaxed text-[var(--nim-text-muted)]">
                     {feature.description}
                   </span>
-                  {feature.tag === 'codex' && (
-                    <span className="setting-description text-xs leading-relaxed text-[var(--nim-warning)]">
-                      Beta: Some functionality, such as red/green diffs in files, is not yet working.
-                    </span>
-                  )}
                 </div>
               </label>
             </div>

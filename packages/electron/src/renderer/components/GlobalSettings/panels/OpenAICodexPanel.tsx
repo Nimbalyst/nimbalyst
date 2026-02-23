@@ -50,13 +50,6 @@ export function OpenAICodexPanel({
         </p>
       </div>
 
-      <div className="mb-4 p-3 rounded border border-[var(--nim-warning)] bg-[var(--nim-warning)]/10">
-        <p className="text-[13px] font-semibold text-[var(--nim-warning)] mb-1">Beta Feature</p>
-        <p className="text-[13px] text-[var(--nim-text-muted)] leading-relaxed">
-          OpenAI Codex support is currently in beta. Some functionality, such as red/green diffs in files, is not yet working.
-        </p>
-      </div>
-
       <div className="provider-enable flex items-center justify-between gap-4 py-4 mb-4 border-b border-[var(--nim-border)]">
         <span className="provider-enable-label text-sm font-medium text-[var(--nim-text)]">Enable OpenAI Codex</span>
         <label className="provider-toggle relative inline-block w-11 h-6 cursor-pointer">

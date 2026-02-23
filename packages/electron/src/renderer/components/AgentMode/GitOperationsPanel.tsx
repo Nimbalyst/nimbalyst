@@ -40,7 +40,7 @@ import { HelpTooltip } from '../../help';
 import { refreshWorktreeChangedFiles } from '../../store/listeners/fileStateListeners';
 import { getWorktreeNameFromPath } from '../../utils/pathUtils';
 import { SuperFilesPanel } from './SuperFilesPanel';
-import { defaultAgentModelAtom, betaFeatureEnabledAtom } from '../../store/atoms/appSettings';
+import { defaultAgentModelAtom } from '../../store/atoms/appSettings';
 import { type AgentModelOption } from './AgentModelPicker';
 
 // Types for worktree mode (copied from DiffModeView)
@@ -93,8 +93,6 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
 
     // Default model for new sessions (user's last selected model)
     const defaultModel = useAtomValue(defaultAgentModelAtom);
-    const isCodexBetaEnabled = useAtomValue(betaFeatureEnabledAtom('codex'));
-
     // Per-workstream git state (persisted)
     const stagedFilesArr = useAtomValue(workstreamStagedFilesAtom(workstreamId));
     const stagedFiles = new Set(stagedFilesArr); // Convert to Set for compatibility
@@ -424,7 +422,6 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
           const agents: AgentModelOption[] = [];
           for (const [provider, models] of Object.entries(response.grouped)) {
             if (provider !== 'claude-code' && provider !== 'openai-codex') continue;
-            if (provider === 'openai-codex' && !isCodexBetaEnabled) continue;
             for (const model of models as AgentModelOption[]) {
               agents.push(model);
             }
@@ -442,7 +439,7 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
       } finally {
         setIsLoadingAgentModels(false);
       }
-    }, [defaultModel, isCodexBetaEnabled]);
+    }, [defaultModel]);
 
     useEffect(() => {
       if (!shouldShowAgentResolutionDialog) return;
