@@ -275,7 +275,7 @@ async function handleGetSessionSummary(
 
   const lines: string[] = [];
   lines.push(
-    `Session: "${session.title || "Untitled"}" (${sessionId.substring(0, 8)})`
+    `Session: "${session.title || "Untitled"}" (${sessionId})`
   );
   lines.push(
     `Provider: ${session.provider}${session.model ? ` | Model: ${session.model}` : ""}`
@@ -355,7 +355,7 @@ async function handleGetWorkstreamOverview(
   );
 
   if (rows.length === 0) {
-    return `Workstream: "${parent.title || "Untitled"}" (${parentId.substring(0, 8)})\nNo child sessions found.`;
+    return `Workstream: "${parent.title || "Untitled"}" (${parentId})\nNo child sessions found.`;
   }
 
   const childIds = rows.map((r: any) => r.id);
@@ -389,7 +389,7 @@ async function handleGetWorkstreamOverview(
 
   const lines: string[] = [];
   lines.push(
-    `Workstream: "${parent.title || "Untitled"}" (${parentId.substring(0, 8)})`
+    `Workstream: "${parent.title || "Untitled"}" (${parentId})`
   );
   lines.push(`Sessions (${rows.length}):`);
   lines.push("");
@@ -405,7 +405,7 @@ async function handleGetWorkstreamOverview(
     const isCurrentSession = row.id === currentSessionId;
 
     lines.push(
-      `${i + 1}. "${row.title || "Untitled"}" (${row.id.substring(0, 8)}) - ${msgCount} messages, last active ${formatRelativeTime(updatedAt)}${isCurrentSession ? " [CURRENT]" : ""}`
+      `${i + 1}. "${row.title || "Untitled"}" (${row.id}) - ${msgCount} messages, last active ${formatRelativeTime(updatedAt)}${isCurrentSession ? " [CURRENT]" : ""}`
     );
 
     if (sessionFiles.length > 0) {
@@ -502,7 +502,7 @@ async function handleListRecentSessions(
     const isCurrentSession = s.id === currentSessionId;
     const msgCount = messageCounts.get(s.id) || 0;
 
-    let line = `${i + 1}. "${s.title}" (${s.id.substring(0, 8)}) - ${formatRelativeTime(s.updatedAt)}, ${msgCount} messages`;
+    let line = `${i + 1}. "${s.title}" (${s.id}) - ${formatRelativeTime(s.updatedAt)}, ${msgCount} messages`;
     if (isCurrentSession) {
       line += " [CURRENT]";
     }
@@ -588,7 +588,7 @@ async function handleGetWorkstreamEditedFiles(
 
     for (const [sessionId, files] of grouped) {
       const title = titleMap.get(sessionId) || "Untitled";
-      lines.push(`Session: "${title}" (${sessionId.substring(0, 8)})`);
+      lines.push(`Session: "${title}" (${sessionId})`);
       for (const file of files) {
         lines.push(`- ${file}`);
       }

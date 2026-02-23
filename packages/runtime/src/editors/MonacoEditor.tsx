@@ -17,7 +17,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { MonacoCodeEditor } from './MonacoCodeEditor';
 import type { EditorHost } from '../extensions/editorHost';
-import type { ConfigTheme } from 'rexical';
+import type { ConfigTheme } from '../editor';
 
 export interface MonacoEditorConfig {
   /** Theme for the editor */

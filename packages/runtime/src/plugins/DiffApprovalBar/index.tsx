@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { $hasDiffNodes } from 'rexical';
+import { $hasDiffNodes } from '../../editor';
 import { FixedTabHeaderRegistry } from '../shared/fixedTabHeader/FixedTabHeaderRegistry';
 import type { TabContext } from '../shared/fixedTabHeader/types';
 import { DiffApprovalBar } from './DiffApprovalBar';

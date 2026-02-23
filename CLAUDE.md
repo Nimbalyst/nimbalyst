@@ -31,7 +31,7 @@ The MCP tool safely queries the database through the running Nimbalyst process, 
 
 Nimbalyst is an extensible, AI-native workspace that supports multiple editor types through a unified extension system. While it originated as a Lexical-based markdown editor, the architecture is evolving toward a fully pluggable model where **all editors** - including the core Lexical editor, Monaco code editor, spreadsheets, diagrams, and custom visual editors - are provided through extensions.
 
-This is a monorepo containing multiple packages including the Electron desktop app, the core editor (Rexical), runtime services, extension SDK, native iOS app, and mobile support via Capacitor (for Android).
+This is a monorepo containing multiple packages including the Electron desktop app, runtime services (including the Lexical-based editor), extension SDK, native iOS app, and mobile support via Capacitor (for Android).
 
 ## Extension Architecture
 
@@ -50,8 +50,7 @@ See [EXTENSION_ARCHITECTURE.md](./docs/EXTENSION_ARCHITECTURE.md) for the Editor
 ```
 packages/
   electron/       # Desktop app (Electron)
-  rexical/        # Lexical-based editor
-  runtime/        # Cross-platform runtime services (AI, sync)
+  runtime/        # Cross-platform runtime services (AI, sync, Lexical editor)
   ios/            # Native iOS app (SwiftUI)
   capacitor/      # Mobile web app (Capacitor, for Android) - NOT in active development
   core/           # Shared utilities
@@ -69,8 +68,7 @@ packages/
 ### Package-Specific Documentation
 For detailed information about specific packages, see their CLAUDE.md files:
 - `/packages/electron/CLAUDE.md` - Electron desktop app specifics
-- `/packages/runtime/CLAUDE.md` - AI providers and runtime services
-- `/packages/rexical/CLAUDE.md` - Lexical editor architecture
+- `/packages/runtime/CLAUDE.md` - AI providers, runtime services, and Lexical editor
 - `/packages/ios/CLAUDE.md` - Native iOS app (SwiftUI)
 - `/packages/capacitor/CLAUDE.md` - Capacitor mobile app (Android) - not in active development
 - `/packages/collabv3/CLAUDE.md` - Sync server (Cloudflare Workers)

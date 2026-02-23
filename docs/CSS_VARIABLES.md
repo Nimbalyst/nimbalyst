@@ -181,8 +181,8 @@ Premium dark theme using Tailwind gray scale:
 ## Implementation Notes
 
 1. **Theme Files**
-  - Dark theme: `packages/rexical/src/themes/DarkEditorTheme.css`
-  - Crystal theme: `packages/rexical/src/themes/CrystalDarkTheme.css`
+  - Dark theme: `packages/runtime/src/editor/themes/DarkEditorTheme.css`
+  - Crystal theme: `packages/runtime/src/editor/themes/CrystalDarkTheme.css`
   - Light theme: Variables defined in `index.css`
 
 2. **Package Usage**

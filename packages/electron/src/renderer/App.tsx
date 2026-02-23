@@ -2,10 +2,10 @@ import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react'
 import { useAtomValue, useSetAtom } from 'jotai';
 import { usePostHog } from 'posthog-js/react';
 import { logger } from './utils/logger';
-import type { LexicalCommand } from 'rexical';
+import type { LexicalCommand } from '@nimbalyst/runtime';
 // aiChatBridge has been replaced by editorRegistry
-// Import styles - handled by vite plugin for both dev and prod
-import 'rexical/styles';
+// Import editor styles (CSS side-effect)
+import '../../../runtime/src/editor/index.css';
 // Import refactored hooks and utilities
 import { useIPCHandlers } from './hooks/useIPCHandlers';
 import { useWindowLifecycle } from './hooks/useWindowLifecycle';

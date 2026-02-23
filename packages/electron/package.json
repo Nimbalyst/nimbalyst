@@ -102,7 +102,6 @@
     "react-is": "^19.2.4",
     "react-virtuoso": "^4.18.1",
     "recharts": "^3.5.0",
-    "rexical": "*",
     "simple-git": "^3.30.0",
     "ulid": "^3.0.1",
     "uuid": "^11.1.0",

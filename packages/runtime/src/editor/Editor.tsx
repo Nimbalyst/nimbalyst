@@ -71,8 +71,6 @@ import { PluginManager } from './plugins/PluginManager';
 import CodeHighlightPlugin from './plugins/CodeHighlightPlugin';
 // Shiki plugin has issues with Vite bundling
 // import CodeHighlightShikiPlugin  from './plugins/CodeHighlightShikiPlugin';
-// Lazy load ExcalidrawPlugin to improve initial load time
-const ExcalidrawPlugin = React.lazy(() => import('./plugins/ExcalidrawPlugin'));
 import { KanbanBoardPlugin } from './plugins/KanbanBoardPlugin';
 import CommentPlugin from "./plugins/CommentPlugin";
 // FloatingDocumentActionsPlugin removed - functionality moved to UnifiedEditorHeaderBar in TabEditor
@@ -309,9 +307,6 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
             <LinkPlugin hasLinkAttributes={hasLinkAttributes} />
             <ClickableLinkPlugin disabled={isEditable} />
             <HorizontalRulePlugin />
-            <Suspense fallback={null}>
-              <ExcalidrawPlugin />
-            </Suspense>
             <TabFocusPlugin />
             <TabIndentationPlugin maxIndent={7} />
             <CollapsiblePlugin />

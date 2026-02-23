@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState, useImperativeHandle, forwardRef } from 'react';
 import { useSetAtom, useAtomValue } from 'jotai';
-import type { ConfigTheme } from 'rexical';
+import type { ConfigTheme } from '@nimbalyst/runtime';
 import { useTabsActions, type TabData } from '../../contexts/TabsContext';
 import { store, editorDirtyAtom, makeEditorKey } from '@nimbalyst/runtime/store';
 import { pushNavigationEntryAtom, isRestoringNavigationAtom } from '../../store';

@@ -15,10 +15,9 @@ The power is in the combination: complex visual editors with rich UIs (spreadshe
 
 ## Packages
 
-- **`packages/rexical`** - The core Lexical-based editor library
 - **`packages/electron`** - Desktop application (Electron)
 - **`packages/capacitor`** - Mobile application (Capacitor)
-- **`packages/runtime`** - Cross-platform runtime services (AI, sync)
+- **`packages/runtime`** - Cross-platform runtime services (AI, sync, Lexical editor)
 - **`packages/extension-sdk`** - Extension development kit
 - **`packages/extensions`** - Built-in extensions
 - **`packages/core`** - Shared utilities
@@ -98,9 +97,6 @@ npm run build
 ### Electron Development
 
 ```bash
-# Build the rexical library first
-npm run build
-
 # Navigate to electron package
 cd packages/electron
 
@@ -149,7 +145,7 @@ npm run build:playground
 #### Hot Module Replacement (HMR)
 
 The development setup provides seamless HMR:
-- Changes to `packages/rexical` source files are immediately reflected in the playground
+- Changes to `packages/runtime` source files are immediately reflected in the playground
 - A custom Vite plugin handles module resolution to import directly from TypeScript source
 - Both CSS and TypeScript changes trigger instant updates
 - No manual rebuilds or separate library dev server required
@@ -358,8 +354,7 @@ Custom Lexical nodes extend base functionality:
 ```
 packages/
 ├── electron/              # Electron desktop app
-├── rexical/               # Core Lexical-based editor
-├── runtime/               # Cross-platform services (AI, sync)
+├── runtime/               # Cross-platform services (AI, sync, Lexical editor)
 ├── capacitor/             # Mobile app (iOS/Android)
 ├── extension-sdk/         # Extension development kit
 ├── extensions/            # Built-in extensions

@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useCallback, useEffect } from 'react';
 import { diffLines } from 'diff';
-import { generateUnifiedDiff } from 'rexical';
+import { generateUnifiedDiff } from '@nimbalyst/runtime';
 
 export interface TextDiffNavigationState {
   currentIndex: number;

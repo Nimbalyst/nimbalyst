@@ -2,8 +2,8 @@
 globs:
   - packages/electron/src/renderer/**/*.tsx
   - packages/electron/src/renderer/**/*.css
-  - packages/rexical/src/ui/**/*.tsx
-  - packages/rexical/src/**/*.css
+  - packages/runtime/src/editor/ui/**/*.tsx
+  - packages/runtime/src/editor/**/*.css
   - packages/runtime/src/ui/**/*.tsx
   - packages/runtime/src/ui/**/*.css
   - packages/capacitor/src/**/*.tsx

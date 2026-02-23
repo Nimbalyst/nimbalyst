@@ -12,7 +12,6 @@ import { IMAGE_TRANSFORMER } from './ImagesPlugin/ImageTransformer';
 import { EMOJI_TRANSFORMER } from './EmojisPlugin/EmojiTransformer';
 import { COLLAPSIBLE_TRANSFORMER } from './CollapsiblePlugin/CollapsibleTransformer';
 import { BOARD_TABLE_TRANSFORMER } from './KanbanBoardPlugin/BoardTableTransformer';
-import { ExcalidrawTransform } from './ExcalidrawPlugin/ExcalidrawNode/excalidrawTransform';
 import { MERMAID_TRANSFORMER } from './MermaidPlugin/MermaidTransformer';
 import MermaidPlugin, { INSERT_MERMAID_COMMAND } from './MermaidPlugin';
 import { MermaidNode } from './MermaidPlugin/MermaidNode';
@@ -72,15 +71,6 @@ export function registerBuiltinPlugins(): void {
     enabledByDefault: true,
   };
   pluginRegistry.register(kanbanPlugin);
-
-  // Excalidraw Plugin
-  const excalidrawPlugin: PluginPackage = {
-    name: 'ExcalidrawPlugin',
-    // Nodes are registered via EditorNodes.ts
-    transformers: [ExcalidrawTransform],
-    enabledByDefault: true,
-  };
-  pluginRegistry.register(excalidrawPlugin);
 
   // Mermaid Plugin
   const mermaidPlugin: PluginPackage = {

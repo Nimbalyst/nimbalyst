@@ -301,40 +301,15 @@ if (Test-Path $nodeModulesPath) {
 }
 
 # Build flags
-$buildRexical = $false
 $buildRuntime = $false
 $buildExtensionSdk = $false
 $buildExtensions = $false
-$buildRexicalReason = ""
 $buildRuntimeReason = ""
 $buildExtensionSdkReason = ""
 $buildExtensionsReason = ""
-$copyRexicalFromMain = $false
 $copyRuntimeFromMain = $false
 $copyExtensionSdkFromMain = $false
 $copyExtensionsFromMain = $false
-
-# Check rexical
-if ($script:WORKTREE_MODE) {
-    if (Package-HasWorktreeChanges "packages/rexical") {
-        if (Needs-Rebuild "packages/rexical") {
-            $buildRexical = $true
-            $buildRexicalReason = " (local changes)"
-        }
-    } elseif (Main-RepoHasDist "packages/rexical") {
-        if (-not (Test-Path (Join-Path $SCRIPT_DIR "packages/rexical/dist"))) {
-            $copyRexicalFromMain = $true
-        }
-    } else {
-        if (Needs-Rebuild "packages/rexical") {
-            $buildRexical = $true
-        }
-    }
-} else {
-    if (Needs-Rebuild "packages/rexical") {
-        $buildRexical = $true
-    }
-}
 
 # Check runtime
 if ($script:WORKTREE_MODE) {
@@ -342,31 +317,19 @@ if ($script:WORKTREE_MODE) {
         if (Needs-Rebuild "packages/runtime") {
             $buildRuntime = $true
             $buildRuntimeReason = " (local changes)"
-        } elseif ($buildRexical) {
-            $buildRuntime = $true
-            $buildRuntimeReason = " (rexical changed)"
         }
     } elseif (Main-RepoHasDist "packages/runtime") {
-        if ($buildRexical) {
-            $buildRuntime = $true
-            $buildRuntimeReason = " (rexical changed)"
-        } elseif (-not (Test-Path (Join-Path $SCRIPT_DIR "packages/runtime/dist"))) {
+        if (-not (Test-Path (Join-Path $SCRIPT_DIR "packages/runtime/dist"))) {
             $copyRuntimeFromMain = $true
         }
     } else {
         if (Needs-Rebuild "packages/runtime") {
             $buildRuntime = $true
-        } elseif ($buildRexical) {
-            $buildRuntime = $true
-            $buildRuntimeReason = " (rexical changed)"
         }
     }
 } else {
     if (Needs-Rebuild "packages/runtime") {
         $buildRuntime = $true
-    } elseif ($buildRexical) {
-        $buildRuntime = $true
-        $buildRuntimeReason = " (rexical changed)"
     }
 }
 
@@ -417,9 +380,6 @@ if ($script:WORKTREE_MODE) {
 # Print build plan
 Write-Host ""
 Write-Host "Build plan:"
-if ($copyRexicalFromMain) { Write-Host "  rexical: COPY from main repo (no local changes)" }
-elseif ($buildRexical) { Write-Host "  rexical: BUILD$buildRexicalReason" }
-else { Write-Host "  rexical: skip (up-to-date)" }
 
 if ($copyRuntimeFromMain) { Write-Host "  runtime: COPY from main repo (no local changes)" }
 elseif ($buildRuntime) { Write-Host "  runtime: BUILD$buildRuntimeReason" }
@@ -545,15 +505,6 @@ try {
                 Pop-Location
             }
         }
-    }
-
-    if ($copyRexicalFromMain) { Copy-DistFromMainRepo "packages/rexical" }
-    elseif ($buildRexical) {
-        Write-Host "Building rexical package..."
-        Push-Location (Join-Path $SCRIPT_DIR "packages/rexical")
-        npx vite build
-        Pop-Location
-        Save-BuildHash "packages/rexical"
     }
 
     if ($copyRuntimeFromMain) { Copy-DistFromMainRepo "packages/runtime" }

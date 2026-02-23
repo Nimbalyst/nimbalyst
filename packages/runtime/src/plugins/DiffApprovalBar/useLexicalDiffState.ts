@@ -21,7 +21,7 @@ import {
   type DiffChangeGroup,
   $getDiffState,
   $hasDiffNodes
-} from 'rexical';
+} from '../../editor';
 
 const HIGHLIGHT_CLASS_REMOVED = 'diff-group-highlight-removed';
 const HIGHLIGHT_CLASS_ADDED = 'diff-group-highlight-added';

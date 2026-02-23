@@ -56,3 +56,29 @@ export {
   createMessageSyncHandler,
   type SyncedSessionStoreOptions,
 } from './SyncedSessionStore';
+
+export {
+  DocumentSyncProvider,
+  createDocumentSyncProvider,
+} from './DocumentSync';
+
+export type {
+  DocumentSyncConfig,
+  DocumentSyncStatus,
+  AwarenessState,
+  SerializedRelativePosition,
+  ReviewGateState,
+  DocClientMessage,
+  DocServerMessage,
+} from './documentSyncTypes';
+
+export {
+  ECDHKeyManager,
+  createECDHKeyManager,
+} from './ECDHKeyManager';
+
+export type {
+  ECDHKeyPair,
+  SerializedECDHKeyPair,
+  KeyEnvelope,
+} from './ECDHKeyManager';

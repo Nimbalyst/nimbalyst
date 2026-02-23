@@ -24,7 +24,7 @@ import {
   getCurrentTrackerTypeFromMarkdown,
   removeTrackerTypeFromMarkdown,
   type TrackerTypeInfo,
-} from 'rexical';
+} from '@nimbalyst/runtime';
 import { $generateHtmlFromNodes } from '@lexical/html';
 import { copyToClipboard } from '@nimbalyst/runtime';
 import { revealFolderAtom, revealFileAtom, openFileRequestAtom, setWindowModeAtom } from '../../store';

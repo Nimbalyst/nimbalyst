@@ -12,7 +12,7 @@
   },
   "scripts": {
     "dev": "npm run dev --prefix packages/playground",
-    "build": "npm run build --prefix packages/rexical",
+    "build": "npm run build --prefix packages/runtime",
     "build:playground": "npm run build --prefix packages/playground",
     "preview": "npm run preview --prefix packages/playground",
     "typecheck": "npm run typecheck -ws --if-present",
@@ -57,7 +57,6 @@
     "packages/electron",
     "packages/runtime",
     "packages/core",
-    "packages/rexical",
     "packages/collabv3",
     "packages/capacitor",
     "packages/ios",

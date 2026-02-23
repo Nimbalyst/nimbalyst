@@ -3,7 +3,7 @@
  */
 
 import React, { useMemo } from 'react';
-import { pluginRegistry, type PluginPackage } from 'rexical';
+import { pluginRegistry, type PluginPackage } from '@nimbalyst/runtime';
 import {
   DocumentLinkPlugin,
   DocumentReferenceNode,
@@ -11,7 +11,7 @@ import {
   LegacyDocumentReferenceTransformer
 } from '@nimbalyst/runtime';
 import { ElectronRendererDocumentService } from '../services/ElectronDocumentService';
-import { TypeaheadMenuPlugin, useAnchorElem } from 'rexical';
+import { TypeaheadMenuPlugin, useAnchorElem } from '@nimbalyst/runtime';
 
 // Create the document service instance
 const documentService = new ElectronRendererDocumentService();

@@ -1,3 +1,5 @@
+// Editor (Lexical-based rich text editor)
+export * from './editor';
 export * from './core/types';
 export * from './core/DocumentService';
 export * from './core/FileSystemService';

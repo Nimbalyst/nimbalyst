@@ -13,9 +13,7 @@
     "types": [],
     "paths": {
       "@nimbalyst/runtime": ["./packages/runtime/src/index.ts"],
-      "@nimbalyst/runtime/*": ["./packages/runtime/src/*"],
-      "rexical": ["./packages/rexical/src/index.ts"],
-      "rexical/*": ["./packages/rexical/src/*"]
+      "@nimbalyst/runtime/*": ["./packages/runtime/src/*"]
     }
   },
   "exclude": [

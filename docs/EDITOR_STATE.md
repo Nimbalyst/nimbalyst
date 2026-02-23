@@ -93,7 +93,7 @@ Located in `packages/runtime/src/store/atoms/editors.ts`:
 **Editor Implementations:**
 - `packages/runtime/src/editors/MarkdownEditor.tsx` - Lexical-based markdown
 - `packages/runtime/src/editors/MonacoCodeEditor.tsx` - Monaco code editor
-- `packages/rexical/src/Editor.tsx` - Core Lexical editor
+- `packages/runtime/src/editor/Editor.tsx` - Core Lexical editor
 
 **EditorHost:**
 - `packages/runtime/src/extensions/editorHost.ts` - Host implementation

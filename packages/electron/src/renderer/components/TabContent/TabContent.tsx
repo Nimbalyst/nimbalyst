@@ -14,7 +14,7 @@
 import React, { useCallback, useEffect, useRef } from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { Provider as JotaiProvider } from 'jotai';
-import type { TextReplacement } from 'rexical';
+import type { TextReplacement } from '@nimbalyst/runtime';
 import type { Tab } from '../TabManager/TabManager';
 import { TabEditor } from '../TabEditor/TabEditor';
 import { TabEditorErrorBoundary } from '../TabEditorErrorBoundary';

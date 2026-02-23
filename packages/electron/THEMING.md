@@ -16,7 +16,7 @@ All colors MUST use CSS variables. The theme system has two variable naming conv
 - **Unified**: `--nim-*` (defined in `NimbalystTheme.css`, recommended for new code)
 
 ### Single Source of Truth
-Theme colors are defined in `/packages/rexical/src/themes/`:
+Theme colors are defined in `/packages/runtime/src/editor/themes/`:
 - `PlaygroundEditorTheme.css` - Legacy variable definitions
 - `NimbalystTheme.css` - Unified `--nim-*` variable definitions (maps from legacy vars)
 
@@ -24,7 +24,7 @@ Theme colors are defined in `/packages/rexical/src/themes/`:
 
 ### 1. Theme Definition Location
 ```
-/packages/rexical/src/themes/PlaygroundEditorTheme.css
+/packages/runtime/src/editor/themes/PlaygroundEditorTheme.css
 ```
 
 This file contains ALL theme variable definitions for:
@@ -208,7 +208,7 @@ If a component shows wrong colors:
 
 ## The Golden Rule
 
-**There is ONE and ONLY ONE place to define theme colors: `/packages/rexical/src/themes/`**
+**There is ONE and ONLY ONE place to define theme colors: `/packages/runtime/src/editor/themes/`**
 
 The theme files are:
 - `PlaygroundEditorTheme.css` - Legacy variables (`--surface-*`, `--text-*`, etc.)
@@ -254,10 +254,10 @@ The monorepo includes a shared Tailwind config (`/tailwind.config.ts`) with them
 
 ### TypeScript Theme Types
 
-The theme system includes TypeScript types in `rexical`:
+The theme system includes TypeScript types in `@nimbalyst/runtime`:
 
 ```typescript
-import { ThemeColors, ThemeId, getBaseThemeColors } from 'rexical';
+import { ThemeColors, ThemeId, getBaseThemeColors } from '@nimbalyst/runtime';
 
 // Get base colors for a theme
 const darkColors = getBaseThemeColors(true); // isDark = true

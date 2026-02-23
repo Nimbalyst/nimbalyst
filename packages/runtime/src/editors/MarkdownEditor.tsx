@@ -15,7 +15,7 @@
  */
 
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { StravuEditor, type EditorConfig, type ConfigTheme } from 'rexical';
+import { StravuEditor, type EditorConfig, type ConfigTheme } from '../editor';
 import type { EditorHost } from '../extensions/editorHost';
 
 export interface MarkdownEditorConfig {
@@ -150,7 +150,7 @@ export function MarkdownEditor({
       // If we have an editor, update it with new content
       // The editor will decide whether to reload based on its internal state
       if (editorRef.current && editorRef.current.update) {
-        // TODO: Import from rexical and use proper update method
+        // TODO: Import from editor and use proper update method
         console.log('[MarkdownEditor] File changed externally, updating editor');
         // For now, this will be implemented when we have the full Rexical integration
       }

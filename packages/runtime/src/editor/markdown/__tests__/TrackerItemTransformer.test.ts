@@ -13,9 +13,9 @@ import { LinkNode } from '@lexical/link';
 import { $convertToMarkdownString, Transformer } from '@lexical/markdown';
 import { $convertFromEnhancedMarkdownString } from '../EnhancedMarkdownImport';
 import { CORE_TRANSFORMERS } from '../core-transformers';
-// Import tracker items from runtime package using relative path
-import { TrackerItemNode, $isTrackerItemNode } from '../../../../runtime/src/plugins/TrackerPlugin/TrackerItemNode';
-import { TRACKER_ITEM_TRANSFORMERS } from '../../../../runtime/src/plugins/TrackerPlugin/TrackerItemTransformer';
+// Import tracker items from runtime's TrackerPlugin
+import { TrackerItemNode, $isTrackerItemNode } from '../../../plugins/TrackerPlugin/TrackerItemNode';
+import { TRACKER_ITEM_TRANSFORMERS } from '../../../plugins/TrackerPlugin/TrackerItemTransformer';
 
 // Combine tracker and core transformers for tests
 function getTestTransformers(): Transformer[] {

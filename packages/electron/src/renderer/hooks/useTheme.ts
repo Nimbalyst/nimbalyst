@@ -1,8 +1,8 @@
 import { useEffect } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
-import type { ConfigTheme } from 'rexical';
+import type { ConfigTheme } from '@nimbalyst/runtime';
 import { themeIdAtom, setThemeAtom, store, type ThemeId } from '@nimbalyst/runtime/store';
-import { getBaseThemeColors, type ExtendedThemeColors } from 'rexical';
+import { getBaseThemeColors, type ExtendedThemeColors } from '@nimbalyst/runtime';
 
 /**
  * Map of ExtendedThemeColors keys to CSS variable names.

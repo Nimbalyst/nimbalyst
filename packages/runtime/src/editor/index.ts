@@ -43,7 +43,7 @@ export type {
   ThemeColors,
   ExtendedThemeColors,
   Theme as NimbalystTheme,
-  ThemeContribution,
+  // ThemeContribution is exported from runtime's extensions/types.ts
   ThemeChangeEvent,
 } from './themes/types';
 export { isBuiltInTheme, getThemeExtensionId } from './themes/types';

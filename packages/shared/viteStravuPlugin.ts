@@ -11,29 +11,11 @@ export default function viteStravuPlugin(): Plugin {
     enforce: 'pre',
     config(config, env) {
       const isDevMode = env.mode !== 'production';
-      
+
       return mergeConfig(
         defineConfig({
           resolve: {
             alias: [
-              {
-                find: 'rexical/styles',
-                replacement: isDevMode 
-                  ? resolve(__dirname, '../rexical/src/index.css')
-                  : resolve(__dirname, '../rexical/dist/style.css')
-              },
-              {
-                find: 'rexical',
-                replacement: isDevMode
-                  ? resolve(__dirname, '../rexical/src/index.ts')
-                  : resolve(__dirname, '../rexical/dist/index.js')
-              },
-              {
-                find: /^rexical\//,
-                replacement: isDevMode
-                  ? resolve(__dirname, '../rexical/src') + '/'
-                  : resolve(__dirname, '../rexical/dist') + '/'
-              },
               // Runtime package aliases. First, normalize legacy to current name
               { find: '@stravu-editor/runtime', replacement: '@stravu/runtime' },
               { find: /^@stravu-editor\/runtime\//, replacement: '@stravu/runtime/' },

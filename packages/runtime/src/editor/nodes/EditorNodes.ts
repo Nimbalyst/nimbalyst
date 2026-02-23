@@ -22,7 +22,6 @@ import {CollapsibleContainerNode} from '../plugins/CollapsiblePlugin/Collapsible
 import {CollapsibleContentNode} from '../plugins/CollapsiblePlugin/CollapsibleContentNode';
 import {CollapsibleTitleNode} from '../plugins/CollapsiblePlugin/CollapsibleTitleNode';
 import {EmojiNode} from '../plugins/EmojisPlugin/EmojiNode.tsx';
-import {ExcalidrawNode} from '../plugins/ExcalidrawPlugin/ExcalidrawNode';
 import {ImageNode} from '../plugins/ImagesPlugin/ImageNode';
 import {LayoutContainerNode} from '../plugins/LayoutPlugin/LayoutContainerNode.ts';
 import {LayoutItemNode} from '../plugins/LayoutPlugin/LayoutItemNode.ts';
@@ -52,7 +51,6 @@ const EditorNodes: Array<Klass<LexicalNode>> = [
   OverflowNode,
   ImageNode,
   EmojiNode,
-  ExcalidrawNode,
   HorizontalRuleNode,
 
   MarkNode,

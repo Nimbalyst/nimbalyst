@@ -66,9 +66,7 @@ export default defineConfig({
     alias: {
       '@nimbalyst/runtime': runtimeSrcDir,
       '@stravu-editor/runtime': runtimeSrcDir,
-      '@stravu/runtime': runtimeSrcDir,
-      'rexical/styles': resolve(__dirname, '../packages/rexical/src/themes/NimbalystEditorTheme.css'),
-      'rexical': resolve(__dirname, '../packages/rexical/src')
+      '@stravu/runtime': runtimeSrcDir
     },
     dedupe: [
       'react',

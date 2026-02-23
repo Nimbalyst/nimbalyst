@@ -7,7 +7,7 @@
  */
 
 import { getExtensionLoader } from '@nimbalyst/runtime';
-import { pluginRegistry, type PluginPackage } from 'rexical';
+import { pluginRegistry, type PluginPackage } from '@nimbalyst/runtime';
 import type { LexicalCommand, Klass, LexicalNode } from 'lexical';
 import type { Transformer } from '@lexical/markdown';
 import { createCommand } from 'lexical';

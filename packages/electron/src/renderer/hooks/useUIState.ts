@@ -3,7 +3,7 @@
  */
 
 import { useState } from 'react';
-import type { ConfigTheme } from 'rexical';
+import type { ConfigTheme } from '@nimbalyst/runtime';
 
 interface UIState {
   theme: ConfigTheme;

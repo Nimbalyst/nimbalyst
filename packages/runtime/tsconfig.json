@@ -2,7 +2,7 @@
   "compilerOptions": {
     "target": "ES2020",
     "module": "ESNext",
-    "lib": ["ES2020", "DOM"],
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx",
     "moduleResolution": "Bundler",
     "allowImportingTsExtensions": true,
@@ -11,7 +11,7 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "noEmit": true,
-    "types": [],
+    "types": ["vitest/globals"],
     "paths": {
       "@nimbalyst/runtime": ["./src/index.ts"],
       "@nimbalyst/runtime/*": ["./src/*"]

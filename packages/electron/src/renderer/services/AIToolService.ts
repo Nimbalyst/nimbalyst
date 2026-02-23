@@ -146,7 +146,7 @@ export class AIToolService {
 
     const targetFilePath = args.targetFilePath;
 
-    const { parseFrontmatter, serializeWithFrontmatter } = await import('rexical');
+    const { parseFrontmatter, serializeWithFrontmatter } = await import('@nimbalyst/runtime');
     const currentContent = editorRegistry.getContent(targetFilePath);
     const { data: existingData } = parseFrontmatter(currentContent);
 

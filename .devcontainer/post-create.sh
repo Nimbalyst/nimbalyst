@@ -11,9 +11,6 @@ echo "Installing npm dependencies..."
 npm ci
 
 # Build required packages for E2E tests
-echo "Building rexical package..."
-cd packages/rexical && npm run build && cd ../..
-
 echo "Building extension-sdk..."
 cd packages/extension-sdk && npm run build && cd ../..
 
