@@ -20,6 +20,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.54.4] - 2026-02-23
+
+
+### Added
+- Codex is now available without enabling beta features
+
+### Fixed
+- Usage indicators remain visible when load errors occur
+- Grouped session context menus now align with plain session menus
+- Improved Claude usage diagnostics with explicit auth failure logging
+- Session share links no longer gated behind alpha flag
+- Codex bash commands no longer show /bin/zsh -lc wrapper
+
 ## [0.54.3] - 2026-02-21
 
 
