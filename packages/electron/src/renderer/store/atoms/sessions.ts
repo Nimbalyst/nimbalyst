@@ -2024,6 +2024,7 @@ export const workstreamSessionsAtom = atomFamily((workstreamId: string) =>
       // This is a worktree session - find all non-archived sessions with the same worktreeId
       const worktreeSessions = Array.from(registry.values())
         .filter(s => s.worktreeId === sessionData.worktreeId)
+        .sort((a, b) => a.createdAt - b.createdAt)
         .map(s => s.id);
       // If no sessions found in registry (might not be populated yet), at least include self
       if (worktreeSessions.length === 0) {
@@ -2043,6 +2044,7 @@ export const workstreamSessionsAtom = atomFamily((workstreamId: string) =>
       // This works even before the workstream is opened
       const childrenFromRegistry = Array.from(registry.values())
         .filter(s => s.parentSessionId === workstreamId)
+        .sort((a, b) => a.createdAt - b.createdAt)
         .map(s => s.id);
       // console.log('[workstreamSessionsAtom]', workstreamId, 'returning children from registry:', childrenFromRegistry);
       return filterArchived(childrenFromRegistry);
