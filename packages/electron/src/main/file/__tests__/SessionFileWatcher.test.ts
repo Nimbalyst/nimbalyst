@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import * as path from 'path';
 import type { FileSnapshotCache } from '../FileSnapshotCache';
 import type { HistoryManager, HistoryTag } from '../../HistoryManager';
 
@@ -48,6 +49,14 @@ vi.mock('fs/promises', () => ({
 
 import { SessionFileWatcher, getSharedWatcherCount, getSharedWatcherRefCount, resetSharedWatchers } from '../SessionFileWatcher';
 
+/** Helper to extract the `ignored` callback passed to chokidar.watch(). */
+async function getChokidarIgnoredFn(): Promise<(filePath: string) => boolean> {
+  const chokidar = (await import('chokidar')).default;
+  const watchSpy = chokidar.watch as any;
+  const lastCall = watchSpy.mock.calls[watchSpy.mock.calls.length - 1];
+  return lastCall[1].ignored;
+}
+
 /** Flush microtasks so async event handlers complete. */
 function flush(): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, 0));
@@ -91,6 +100,17 @@ function createMockHistoryManager(): HistoryManager {
   } as any;
 }
 
+/** Map of file path -> content (or Error to reject). Used by mockReadFile. */
+let mockFileContents: Record<string, string | Error> = {};
+
+function setMockFileContent(filePath: string, content: string | Error): void {
+  mockFileContents[filePath] = content;
+}
+
+function setMockGitignore(workspacePath: string, content: string): void {
+  mockFileContents[path.join(workspacePath, '.gitignore')] = content;
+}
+
 describe('SessionFileWatcher', () => {
   const workspacePath = '/test/workspace';
   const sessionId = 'test-session-1';
@@ -103,6 +123,21 @@ describe('SessionFileWatcher', () => {
     }
     // Reset shared watcher state so each test gets a fresh chokidar instance
     resetSharedWatchers();
+
+    // Default: no .gitignore (ENOENT), empty string for other files.
+    // Tests override via setMockFileContent() or setMockGitignore().
+    mockFileContents = {};
+    mockReadFile.mockImplementation((filePath: string) => {
+      if (filePath in mockFileContents) {
+        const val = mockFileContents[filePath];
+        if (val instanceof Error) return Promise.reject(val);
+        return Promise.resolve(val);
+      }
+      if (filePath.endsWith('.gitignore')) {
+        return Promise.reject(new Error('ENOENT'));
+      }
+      return Promise.resolve('');
+    });
   });
 
   describe('start/stop lifecycle', () => {
@@ -175,7 +210,7 @@ describe('SessionFileWatcher', () => {
 
       (cache1.getBeforeState as any).mockResolvedValue('original');
       (cache2.getBeforeState as any).mockResolvedValue('original');
-      mockReadFile.mockResolvedValue('modified');
+      setMockFileContent('/test/workspace/src/file.ts', 'modified');
 
       await watcher1.start(workspacePath, 'session-1', cache1, hm);
       await watcher2.start(workspacePath, 'session-2', cache2, hm);
@@ -201,7 +236,7 @@ describe('SessionFileWatcher', () => {
       const watcher = new SessionFileWatcher();
 
       (cache.getBeforeState as any).mockResolvedValue('original content');
-      mockReadFile.mockResolvedValue('modified content');
+      setMockFileContent('/test/workspace/src/file.ts', 'modified content');
 
       await watcher.start(workspacePath, sessionId, cache, hm);
 
@@ -229,7 +264,7 @@ describe('SessionFileWatcher', () => {
       const watcher = new SessionFileWatcher();
 
       (cache.getBeforeState as any).mockResolvedValue('same content');
-      mockReadFile.mockResolvedValue('same content');
+      setMockFileContent('/test/workspace/src/file.ts', 'same content');
 
       await watcher.start(workspacePath, sessionId, cache, hm);
 
@@ -249,7 +284,7 @@ describe('SessionFileWatcher', () => {
       const watcher = new SessionFileWatcher();
 
       (cache.getBeforeState as any).mockResolvedValue('original content');
-      mockReadFile.mockResolvedValue('modified content');
+      setMockFileContent('/test/workspace/src/file.ts', 'modified content');
       (hm.getPendingTags as any).mockResolvedValue([{ id: 'existing-tag' } as HistoryTag]);
 
       await watcher.start(workspacePath, sessionId, cache, hm);
@@ -284,7 +319,7 @@ describe('SessionFileWatcher', () => {
       const watcher = new SessionFileWatcher();
 
       (cache.getBeforeState as any).mockResolvedValue(null);
-      mockReadFile.mockResolvedValue('new content');
+      setMockFileContent('/test/workspace/src/file.ts', 'new content');
 
       await watcher.start(workspacePath, sessionId, cache, hm);
 
@@ -310,7 +345,7 @@ describe('SessionFileWatcher', () => {
       const watcher = new SessionFileWatcher();
 
       (cache.getBeforeState as any).mockResolvedValue(null);
-      mockReadFile.mockResolvedValue('new content');
+      setMockFileContent('/outside/workspace/file.ts', 'new content');
 
       await watcher.start(workspacePath, sessionId, cache, hm);
 
@@ -328,7 +363,7 @@ describe('SessionFileWatcher', () => {
       const watcher = new SessionFileWatcher();
 
       (cache.getBeforeState as any).mockResolvedValue('original');
-      mockReadFile.mockRejectedValue(new Error('ENOENT'));
+      setMockFileContent('/test/workspace/src/deleted.ts', new Error('ENOENT'));
 
       await watcher.start(workspacePath, sessionId, cache, hm);
 
@@ -348,7 +383,7 @@ describe('SessionFileWatcher', () => {
       const hm = createMockHistoryManager();
       const watcher = new SessionFileWatcher();
 
-      mockReadFile.mockResolvedValue('new file content');
+      setMockFileContent('/test/workspace/src/new-file.ts', 'new file content');
 
       await watcher.start(workspacePath, sessionId, cache, hm);
 
@@ -375,7 +410,7 @@ describe('SessionFileWatcher', () => {
       const watcher = new SessionFileWatcher();
 
       (hm.getPendingTags as any).mockResolvedValue([{ id: 'existing' } as HistoryTag]);
-      mockReadFile.mockResolvedValue('content');
+      setMockFileContent('/test/workspace/src/new-file.ts', 'content');
 
       await watcher.start(workspacePath, sessionId, cache, hm);
 
@@ -439,6 +474,79 @@ describe('SessionFileWatcher', () => {
       if (addHandler) await addHandler('/test/workspace/src/new.ts');
 
       expect(hm.createTag).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('gitignore-based filtering', () => {
+    it('should always ignore .git directory even without a .gitignore', async () => {
+      const watcher = new SessionFileWatcher();
+      const cache = createMockCache();
+      const hm = createMockHistoryManager();
+      // No .gitignore set (default ENOENT)
+
+      await watcher.start(workspacePath, sessionId, cache, hm);
+
+      const ignoredFn = await getChokidarIgnoredFn();
+
+      expect(ignoredFn(path.join(workspacePath, '.git'))).toBe(true);
+      expect(ignoredFn(path.join(workspacePath, '.git', 'objects', 'abc'))).toBe(true);
+      expect(ignoredFn(path.join(workspacePath, 'src', 'file.ts'))).toBe(false);
+
+      await watcher.stop();
+    });
+
+    it('should not ignore the workspace root itself', async () => {
+      const watcher = new SessionFileWatcher();
+      const cache = createMockCache();
+      const hm = createMockHistoryManager();
+
+      await watcher.start(workspacePath, sessionId, cache, hm);
+
+      const ignoredFn = await getChokidarIgnoredFn();
+      expect(ignoredFn(workspacePath)).toBe(false);
+
+      await watcher.stop();
+    });
+
+    it('should use gitignore patterns when .gitignore exists', async () => {
+      setMockGitignore(workspacePath, 'node_modules/\ndist/\n*.log\n');
+
+      const watcher = new SessionFileWatcher();
+      const cache = createMockCache();
+      const hm = createMockHistoryManager();
+
+      await watcher.start(workspacePath, sessionId, cache, hm);
+
+      const ignoredFn = await getChokidarIgnoredFn();
+
+      expect(ignoredFn(path.join(workspacePath, 'node_modules'))).toBe(true);
+      expect(ignoredFn(path.join(workspacePath, 'node_modules', 'foo', 'index.js'))).toBe(true);
+      expect(ignoredFn(path.join(workspacePath, 'dist'))).toBe(true);
+      expect(ignoredFn(path.join(workspacePath, 'dist', 'bundle.js'))).toBe(true);
+      expect(ignoredFn(path.join(workspacePath, 'debug.log'))).toBe(true);
+      expect(ignoredFn(path.join(workspacePath, 'src', 'file.ts'))).toBe(false);
+      expect(ignoredFn(path.join(workspacePath, 'README.md'))).toBe(false);
+
+      await watcher.stop();
+    });
+
+    it('should watch everything (except .git) when no .gitignore exists', async () => {
+      // Default: no .gitignore (ENOENT)
+      const watcher = new SessionFileWatcher();
+      const cache = createMockCache();
+      const hm = createMockHistoryManager();
+
+      await watcher.start(workspacePath, sessionId, cache, hm);
+
+      const ignoredFn = await getChokidarIgnoredFn();
+
+      // These would have been ignored by the old hardcoded list, but not anymore
+      expect(ignoredFn(path.join(workspacePath, 'node_modules', 'foo'))).toBe(false);
+      expect(ignoredFn(path.join(workspacePath, 'dist', 'bundle.js'))).toBe(false);
+      // .git is still always ignored
+      expect(ignoredFn(path.join(workspacePath, '.git'))).toBe(true);
+
+      await watcher.stop();
     });
   });
 });

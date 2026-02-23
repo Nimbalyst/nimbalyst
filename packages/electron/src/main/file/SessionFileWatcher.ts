@@ -1,6 +1,7 @@
 import chokidar, { FSWatcher } from 'chokidar';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import ignore, { Ignore } from 'ignore';
 import { BrowserWindow } from 'electron';
 import { logger } from '../utils/logger';
 import type { FileSnapshotCache } from './FileSnapshotCache';
@@ -41,42 +42,21 @@ interface SharedWatcherListener {
 /** Global registry of shared chokidar watchers, keyed by normalized workspace path. */
 const sharedWatchers = new Map<string, SharedWatcherEntry>();
 
-function shouldIgnorePath(filePath: string, workspacePath: string): boolean {
-  const normalizedFile = filePath.replace(/\\/g, '/');
-  const normalizedWorkspace = workspacePath.replace(/\\/g, '/');
-  const relativePath = normalizedFile.startsWith(normalizedWorkspace)
-    ? normalizedFile.slice(normalizedWorkspace.length)
-    : normalizedFile;
-
-  if (
-    relativePath.includes('/node_modules/') ||
-    relativePath.includes('/.git/') ||
-    relativePath.includes('/dist/') ||
-    relativePath.includes('/build/') ||
-    relativePath.includes('/out/') ||
-    relativePath.includes('/coverage/') ||
-    relativePath.includes('/.next/') ||
-    relativePath.includes('/.nuxt/') ||
-    relativePath.includes('/.cache/') ||
-    relativePath.includes('/.turbo/') ||
-    relativePath.includes('/.svelte-kit/') ||
-    relativePath.includes('/worktrees/')
-  ) {
-    return true;
+async function loadGitignoreFilter(workspacePath: string): Promise<Ignore | null> {
+  const gitignorePath = path.join(workspacePath, '.gitignore');
+  try {
+    const content = await fs.readFile(gitignorePath, 'utf-8');
+    return ignore().add(content);
+  } catch {
+    return null;
   }
-
-  if (relativePath.endsWith('.DS_Store') || relativePath.endsWith('Thumbs.db')) {
-    return true;
-  }
-
-  return false;
 }
 
-function acquireSharedWatcher(
+async function acquireSharedWatcher(
   workspacePath: string,
   sessionId: string,
   listener: SharedWatcherListener,
-): void {
+): Promise<void> {
   const key = path.resolve(workspacePath);
   const existing = sharedWatchers.get(key);
 
@@ -91,8 +71,26 @@ function acquireSharedWatcher(
     return;
   }
 
+  const ig = await loadGitignoreFilter(workspacePath);
+
   const watcher = chokidar.watch(workspacePath, {
-    ignored: (filePath: string) => shouldIgnorePath(filePath, workspacePath),
+    ignored: (filePath: string) => {
+      const relativePath = path.relative(workspacePath, filePath);
+      if (!relativePath) return false;
+
+      if (relativePath === '.git' || relativePath.startsWith('.git' + path.sep)) {
+        return true;
+      }
+
+      if (ig) {
+        // Test both as file and as directory (trailing slash) so that
+        // directory-only patterns like "node_modules/" match the directory
+        // itself, preventing chokidar from recursing into it.
+        return ig.ignores(relativePath) || ig.ignores(relativePath + '/');
+      }
+
+      return false;
+    },
     ignoreInitial: true,
     followSymlinks: false,
     usePolling: false,
@@ -229,7 +227,7 @@ export class SessionFileWatcher {
     this.active = true;
     this.onFileChanged = onFileChanged ?? null;
 
-    acquireSharedWatcher(workspacePath, sessionId, {
+    await acquireSharedWatcher(workspacePath, sessionId, {
       onChange: (filePath: string) => this.handleChange(filePath),
       onAdd: (filePath: string) => this.handleAdd(filePath),
       onUnlink: (filePath: string) => this.handleUnlink(filePath),

@@ -79,6 +79,7 @@
     "heic-decode": "^2.1.0",
     "highlight.js": "11.11.1",
     "html2canvas": "^1.4.1",
+    "ignore": "^7.0.5",
     "jimp": "^1.6.0",
     "jotai": "^2.16.1",
     "js-yaml": "^4.1.0",
