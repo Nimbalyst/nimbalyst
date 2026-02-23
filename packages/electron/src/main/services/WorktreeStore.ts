@@ -6,6 +6,7 @@
  */
 
 import log from 'electron-log/main';
+import { toMillis } from '../utils/timestampUtils';
 
 const logger = log.scope('WorktreeStore');
 
@@ -51,36 +52,6 @@ type PGliteLike = {
 };
 
 type EnsureReadyFn = () => Promise<void>;
-
-/**
- * Convert database timestamp to milliseconds (handles PGLite timezone issues)
- * See CLAUDE.md "CRITICAL: Date/Timestamp Handling" for details
- */
-function toMillis(value: unknown): number {
-  if (!value) return Date.now();
-  if (typeof value === 'number') return value;
-
-  if (value instanceof Date) {
-    // Get the components as if they were UTC
-    const year = value.getFullYear();
-    const month = value.getMonth();
-    const day = value.getDate();
-    const hour = value.getHours();
-    const minute = value.getMinutes();
-    const second = value.getSeconds();
-    const ms = value.getMilliseconds();
-
-    // Create a UTC date from those components
-    return Date.UTC(year, month, day, hour, minute, second, ms);
-  }
-
-  // Fallback for string timestamps
-  const str = String(value).trim();
-  const hasTimezone = str.endsWith('Z') || str.includes('+') || /[0-9]-\d{2}:\d{2}$/.test(str);
-  const utcStr = hasTimezone ? str : str.replace(' ', 'T') + 'Z';
-  const parsed = new Date(utcStr).getTime();
-  return Number.isNaN(parsed) ? Date.now() : parsed;
-}
 
 /**
  * Create a WorktreeStore instance
