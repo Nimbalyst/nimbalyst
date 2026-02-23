@@ -4,6 +4,9 @@ const SHELL_WRAPPER_REGEX = /^(?:\/(?:bin|usr\/bin)\/)?(?:bash|zsh|sh)\s+-l?c\s+
 /** Windows PowerShell wrapper: "C:\...\powershell.exe" -Command 'actual command' */
 const POWERSHELL_REGEX = /^"?[A-Za-z]:\\[^"]*\\(?:powershell|pwsh)(?:\.exe)?"?\s+-Command\s+([\s\S]+)$/i;
 
+/** Windows cmd.exe wrapper: cmd.exe /c "actual command" or cmd /c "actual command" */
+const CMD_EXE_REGEX = /^"?(?:[A-Za-z]:\\[^"]*\\)?cmd(?:\.exe)?"?\s+\/[cC]\s+([\s\S]+)$/;
+
 /** Strip matching outer quotes (single or double) from a string */
 function stripOuterQuotes(s: string): string {
   return s.replace(/^(['"])([\s\S]*)\1$/, '$2');
@@ -18,9 +21,19 @@ function stripOuterQuotes(s: string): string {
  * Windows: "C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe" -Command 'bash -lc "cat diagram.md"'
  *   → cat diagram.md
  *
+ * Windows: cmd.exe /c "bash -lc 'echo hello'"
+ *   → echo hello
+ *
  * Display-only — does not modify stored data.
  */
 export function unwrapShellCommand(command: string): string {
+  // Try cmd.exe wrapper
+  const cmdMatch = command.match(CMD_EXE_REGEX);
+  if (cmdMatch) {
+    const inner = stripOuterQuotes(cmdMatch[1]);
+    return unwrapShellCommand(inner);
+  }
+
   // Try PowerShell wrapper first (may contain a nested Unix shell wrapper)
   const psMatch = command.match(POWERSHELL_REGEX);
   if (psMatch) {

@@ -73,7 +73,12 @@ export class SessionFileWatcher {
 
     this.watcher = chokidar.watch(workspacePath, {
       ignored: (filePath: string) => {
-        const relativePath = filePath.replace(workspacePath, '');
+        // Normalize to forward slashes so patterns work on Windows too
+        const normalizedFile = filePath.replace(/\\/g, '/');
+        const normalizedWorkspace = workspacePath.replace(/\\/g, '/');
+        const relativePath = normalizedFile.startsWith(normalizedWorkspace)
+          ? normalizedFile.slice(normalizedWorkspace.length)
+          : normalizedFile;
 
         if (
           relativePath.includes('/node_modules/') ||

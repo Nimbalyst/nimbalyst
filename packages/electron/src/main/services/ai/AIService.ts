@@ -2364,7 +2364,7 @@ export class AIService {
                     // Unwrap the shell wrapper to get the inner command for file path extraction.
                     let trackToolName = chunk.toolCall.name;
                     let trackArgs = chunk.toolCall.arguments;
-                    if (/^\/(?:bin|usr\/bin)\//.test(trackToolName) || /\/(?:bash|zsh|sh)\b/.test(trackToolName)) {
+                    if (/^\/(?:bin|usr\/bin)\//.test(trackToolName) || /\/(?:bash|zsh|sh)\b/.test(trackToolName) || /(?:powershell|pwsh|cmd)(?:\.exe)?\b/i.test(trackToolName)) {
                       trackArgs = { command: unwrapShellCommand(trackToolName) };
                       trackToolName = 'Bash';
                     }

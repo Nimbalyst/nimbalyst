@@ -245,7 +245,9 @@ function addFileToSet(filePath: string, cwd: string, files: Set<string>): void {
   // Reject paths that contain characters not found in real file paths.
   // This catches false positives from mermaid syntax (B[Sporting]),
   // URLs, and other non-path content that shell-quote misparses.
-  if (/[\[\]{}()<>:;,!@#%^&*?|=+`"']/.test(filePath)) return;
+  // Allow ':' as the second character for Windows drive letters (e.g. C:\Users\...)
+  const pathToCheck = /^[A-Za-z]:/.test(filePath) ? filePath.slice(2) : filePath;
+  if (/[\[\]{}()<>:;,!@#%^&*?|=+`"']/.test(pathToCheck)) return;
 
   try {
     const absPath = path.resolve(cwd, filePath);
