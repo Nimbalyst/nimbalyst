@@ -20,6 +20,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.54.5] - 2026-02-23
+
+
+### Fixed
+- Codex file change diffs now match the correct tool call across machines
+- Worktree and workstream session tabs now stay in their creation order
+- Bash file changes now detected on Windows
+- Codex bash commands now unwrap correctly on Windows
+- Claude usage API forbidden responses now log full details for diagnostics
+
 ## [0.54.4] - 2026-02-23
 
 
