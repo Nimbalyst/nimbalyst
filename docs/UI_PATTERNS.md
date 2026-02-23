@@ -1,6 +1,6 @@
 # Shared UI Patterns
 
-These patterns apply across all packages (electron, capacitor, runtime) that contain UI code.
+These patterns apply across all packages (electron, runtime) that contain UI code.
 
 ## Responsive CSS: Use Container Queries
 

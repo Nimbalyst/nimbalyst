@@ -16,7 +16,6 @@ The power is in the combination: complex visual editors with rich UIs (spreadshe
 ## Packages
 
 - **`packages/electron`** - Desktop application (Electron)
-- **`packages/capacitor`** - Mobile application (Capacitor)
 - **`packages/runtime`** - Cross-platform runtime services (AI, sync, Lexical editor)
 - **`packages/extension-sdk`** - Extension development kit
 - **`packages/extensions`** - Built-in extensions
@@ -332,7 +331,6 @@ Custom Lexical nodes extend base functionality:
 packages/
 ├── electron/              # Electron desktop app
 ├── runtime/               # Cross-platform services (AI, sync, Lexical editor)
-├── capacitor/             # Mobile app (iOS/Android)
 ├── extension-sdk/         # Extension development kit
 ├── extensions/            # Built-in extensions
 └── core/                  # Shared utilities

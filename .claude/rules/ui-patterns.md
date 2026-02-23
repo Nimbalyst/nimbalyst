@@ -6,8 +6,6 @@ globs:
   - packages/runtime/src/editor/**/*.css
   - packages/runtime/src/ui/**/*.tsx
   - packages/runtime/src/ui/**/*.css
-  - packages/capacitor/src/**/*.tsx
-  - packages/capacitor/src/**/*.css
   - "**/tailwind.config.*"
   - "**/postcss.config.*"
 imports:

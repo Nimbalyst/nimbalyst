@@ -50,10 +50,6 @@ jobs:
         working-directory: packages/extension-sdk
         run: npx tsc --noEmit
 
-      - name: TypeScript check - capacitor
-        working-directory: packages/capacitor
-        run: npx tsc --noEmit
-
       # Typecheck extensions
       - name: TypeScript check - extensions/pdf-viewer
         working-directory: packages/extensions/pdf-viewer
