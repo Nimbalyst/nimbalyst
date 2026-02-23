@@ -835,12 +835,13 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     onFileClick?.(filePath);
   }, [onFileClick]);
 
-  const getToolCallDiffs = useCallback(async (toolCallItemId: string) => {
+  const getToolCallDiffs = useCallback(async (toolCallItemId: string, toolCallTimestamp?: number) => {
     try {
       const result = await window.electronAPI.invoke(
         'session-files:get-tool-call-diffs',
         sessionId,
-        toolCallItemId
+        toolCallItemId,
+        toolCallTimestamp
       );
       return result.success && result.diffs?.length > 0 ? result.diffs : null;
     } catch {

@@ -68,7 +68,10 @@ interface AgentTranscriptPanelProps {
   /** Optional: App start time (epoch ms) for rendering restart indicator line (dev mode only) */
   appStartTime?: number;
   /** Optional: Fetch file diffs caused by a specific tool call */
-  getToolCallDiffs?: (toolCallItemId: string) => Promise<ToolCallDiffResult[] | null>;
+  getToolCallDiffs?: (
+    toolCallItemId: string,
+    toolCallTimestamp?: number
+  ) => Promise<ToolCallDiffResult[] | null>;
   // Note: Interactive widgets read their host from interactiveWidgetHostAtom(sessionId)
 }
 

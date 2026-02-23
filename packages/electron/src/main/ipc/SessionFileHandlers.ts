@@ -196,15 +196,27 @@ export function setupSessionFileHandlers(): void {
   /**
    * Get file diffs caused by a specific tool call
    */
-  safeHandle('session-files:get-tool-call-diffs', async (event, sessionId: string, toolCallItemId: string) => {
-    try {
-      const diffs = await toolCallMatcher.getDiffsForToolCall(sessionId, toolCallItemId);
-      return { success: true, diffs };
-    } catch (error) {
-      logger.main.error('[SessionFileHandlers] Failed to get tool call diffs:', error);
-      return { success: false, error: String(error), diffs: [] };
+  safeHandle(
+    'session-files:get-tool-call-diffs',
+    async (
+      event,
+      sessionId: string,
+      toolCallItemId: string,
+      toolCallTimestamp?: number
+    ) => {
+      try {
+        const diffs = await toolCallMatcher.getDiffsForToolCall(
+          sessionId,
+          toolCallItemId,
+          toolCallTimestamp
+        );
+        return { success: true, diffs };
+      } catch (error) {
+        logger.main.error('[SessionFileHandlers] Failed to get tool call diffs:', error);
+        return { success: false, error: String(error), diffs: [] };
+      }
     }
-  });
+  );
 
   /**
    * Delete all file links for a session

@@ -27,7 +27,10 @@ interface CodexOutputRendererProps {
   workspacePath?: string;
   readFile?: (filePath: string) => Promise<{ success: boolean; content?: string; error?: string }>;
   /** Optional: Fetch file diffs caused by a specific tool call */
-  getToolCallDiffs?: (toolCallItemId: string) => Promise<ToolCallDiffResult[] | null>;
+  getToolCallDiffs?: (
+    toolCallItemId: string,
+    toolCallTimestamp?: number
+  ) => Promise<ToolCallDiffResult[] | null>;
 }
 
 /**
@@ -37,12 +40,16 @@ interface CodexOutputRendererProps {
 export type CodexSection =
   | { type: 'reasoning'; blocks: string[] }
   | { type: 'output'; content: string }
-  | { type: 'tool_call'; toolCall: ToolCall }
+  | { type: 'tool_call'; toolCall: ToolCall; timestamp: number }
   | { type: 'openai_auth_error' };
 
 interface ParsedCodexOutput {
   /** Ordered sections preserving the temporal sequence of reasoning, tool calls, and output. */
   sections: CodexSection[];
+}
+
+function buildCodexToolLookupId(rawItemId: string, timestamp: number, index: number): string {
+  return `nimtc|${encodeURIComponent(rawItemId)}|${timestamp}|${index}`;
 }
 
 function getEventItem(rawEvent: Record<string, unknown>): Record<string, unknown> | null {
@@ -206,8 +213,9 @@ function appendOutputChunk(outputParts: string[], candidateText: string, previou
 export function parseCodexRawEvents(rawEvents: Message[]): ParsedCodexOutput {
   const sections: CodexSection[] = [];
 
-  // Track tool calls by ID for merging item.started/item.completed pairs
-  const toolCallsMap = new Map<string, ToolCall>();
+  // Track only active tool calls by raw Codex item ID.
+  // Codex can reuse item IDs across turns, so completed calls must be removed.
+  const activeToolCallsByItemId = new Map<string, ToolCall>();
 
   // Track cumulative output state for dedup across the entire parse
   let lastCumulativeOutput = '';
@@ -257,12 +265,12 @@ export function parseCodexRawEvents(rawEvents: Message[]): ParsedCodexOutput {
         currentOutputParts = null;
 
         const itemId = extractStringField(item, 'id');
-        const toolCallId = (itemId && itemId) || `tool-${msg.timestamp ?? Date.now()}-${index}`;
-        const existingToolCall = toolCallsMap.get(toolCallId);
+        const existingToolCall = itemId ? activeToolCallsByItemId.get(itemId) : undefined;
         const toolResult = getToolResult(rawEventType, item, itemType);
+        const isCompleted = rawEventType === 'item.completed';
 
         if (existingToolCall) {
-          // Merge into existing tool call (item.completed updating item.started)
+          // Merge update/completion into the active tool call instance.
           if (existingToolCall.name === 'Unknown Tool') {
             existingToolCall.name = getToolDisplayName(item, itemType);
           }
@@ -278,9 +286,19 @@ export function parseCodexRawEvents(rawEvents: Message[]): ParsedCodexOutput {
           if (toolResult !== undefined) {
             existingToolCall.result = toolResult;
           }
-          // No new section - the ToolCall object is mutated in place
+
+          if (itemId) {
+            if (isCompleted) {
+              activeToolCallsByItemId.delete(itemId);
+            } else {
+              activeToolCallsByItemId.set(itemId, existingToolCall);
+            }
+          }
         } else {
           // New tool call - create a new section
+          const toolCallId = itemId
+            ? buildCodexToolLookupId(itemId, msg.timestamp, index)
+            : `tool-${msg.timestamp}-${index}`;
           const newToolCall: ToolCall = {
             id: toolCallId,
             name: getToolDisplayName(item, itemType),
@@ -289,8 +307,11 @@ export function parseCodexRawEvents(rawEvents: Message[]): ParsedCodexOutput {
           if (toolResult !== undefined) {
             newToolCall.result = toolResult;
           }
-          toolCallsMap.set(toolCallId, newToolCall);
-          sections.push({ type: 'tool_call', toolCall: newToolCall });
+          sections.push({ type: 'tool_call', toolCall: newToolCall, timestamp: msg.timestamp });
+
+          if (itemId && !isCompleted) {
+            activeToolCallsByItemId.set(itemId, newToolCall);
+          }
         }
 
         continue;
@@ -405,7 +426,7 @@ export const CodexOutputRenderer: React.FC<CodexOutputRendererProps> = ({
   };
 
   // Render tool call widget (same style as Claude Code)
-  const renderToolCall = (tool: ToolCall, sectionIndex: number) => {
+  const renderToolCall = (tool: ToolCall, sectionIndex: number, toolCallTimestamp?: number) => {
     const toolId = tool.id || tool.name || `tool-${sectionIndex}`;
     const isExpanded = expandedTools.has(toolId);
     const toolResult = tool.result;
@@ -509,10 +530,11 @@ export const CodexOutputRenderer: React.FC<CodexOutputRendererProps> = ({
             </div>
 
             {/* File changes caused by this tool call */}
-              {getToolCallDiffs && tool.id && hasResultValue && (
-                <ToolCallChanges
-                  toolCallItemId={tool.id}
-                  getToolCallDiffs={getToolCallDiffs}
+            {getToolCallDiffs && tool.id && hasResultValue && (
+              <ToolCallChanges
+                toolCallItemId={tool.id}
+                toolCallTimestamp={toolCallTimestamp}
+                getToolCallDiffs={getToolCallDiffs}
                 isExpanded={isExpanded}
                 workspacePath={workspacePath}
               />
@@ -594,7 +616,7 @@ export const CodexOutputRenderer: React.FC<CodexOutputRendererProps> = ({
           return renderReasoningSection(section.blocks, sectionIndex);
         }
         if (section.type === 'tool_call') {
-          return renderToolCall(section.toolCall, sectionIndex);
+          return renderToolCall(section.toolCall, sectionIndex, section.timestamp);
         }
         if (section.type === 'openai_auth_error') {
           return <OpenAIAuthWidget key={`auth-error-${sectionIndex}`} />;

@@ -87,7 +87,10 @@ export interface CustomToolWidgetProps {
   /** Optional: Read a file from the filesystem (for loading persisted output files) */
   readFile?: (filePath: string) => Promise<{ success: boolean; content?: string; error?: string }>;
   /** Optional: Fetch file diffs caused by this tool call */
-  getToolCallDiffs?: (toolCallItemId: string) => Promise<ToolCallDiffResult[] | null>;
+  getToolCallDiffs?: (
+    toolCallItemId: string,
+    toolCallTimestamp?: number
+  ) => Promise<ToolCallDiffResult[] | null>;
   // Note: Interactive widgets read their host from interactiveWidgetHostAtom(sessionId)
   // No host prop needed - avoids prop drilling through the component tree
 }

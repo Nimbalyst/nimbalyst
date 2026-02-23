@@ -268,12 +268,145 @@ describe('parseCodexRawEvents', () => {
     expect(parsed.sections).toHaveLength(1);
     expect(parsed.sections[0].type).toBe('tool_call');
     const toolSection = parsed.sections[0] as Extract<CodexSection, { type: 'tool_call' }>;
-    expect(toolSection.toolCall.id).toBe('tool-1');
+    expect(toolSection.toolCall.id).toBe('nimtc|tool-1|1|0');
     expect(toolSection.toolCall.result).toEqual({
       success: true,
       result: { data: 1 },
       status: 'completed',
     });
+  });
+
+  it('does not merge separate completed tool calls when Codex reuses item IDs', () => {
+    const events: Message[] = [
+      buildRawMessage(
+        {
+          type: 'item.completed',
+          item: {
+            id: 'item_4',
+            type: 'command_execution',
+            command: 'echo first',
+            aggregated_output: 'first',
+            exit_code: 0,
+            status: 'completed',
+          },
+        },
+        1
+      ),
+      buildRawMessage(
+        {
+          type: 'item.completed',
+          item: {
+            id: 'item_4',
+            type: 'command_execution',
+            command: 'echo second',
+            aggregated_output: 'second',
+            exit_code: 0,
+            status: 'completed',
+          },
+        },
+        2
+      ),
+    ];
+
+    const parsed = parseCodexRawEvents(events);
+
+    expect(parsed.sections).toHaveLength(2);
+    expect(parsed.sections[0].type).toBe('tool_call');
+    expect(parsed.sections[1].type).toBe('tool_call');
+
+    const first = parsed.sections[0] as Extract<CodexSection, { type: 'tool_call' }>;
+    const second = parsed.sections[1] as Extract<CodexSection, { type: 'tool_call' }>;
+    expect(first.toolCall.result).toMatchObject({ output: 'first' });
+    expect(second.toolCall.result).toMatchObject({ output: 'second' });
+    expect(first.toolCall.id).not.toBe(second.toolCall.id);
+  });
+
+  it('scopes item.updated + item.completed to the active tool call instance', () => {
+    const events: Message[] = [
+      buildRawMessage(
+        {
+          type: 'item.started',
+          item: {
+            id: 'item_9',
+            type: 'mcp_tool_call',
+            server: 's',
+            tool: 'read',
+            arguments: { path: '/tmp/a' },
+            status: 'in_progress',
+          },
+        },
+        1
+      ),
+      buildRawMessage(
+        {
+          type: 'item.updated',
+          item: {
+            id: 'item_9',
+            type: 'mcp_tool_call',
+            server: 's',
+            tool: 'read',
+            arguments: { path: '/tmp/a' },
+            status: 'in_progress',
+          },
+        },
+        2
+      ),
+      buildRawMessage(
+        {
+          type: 'item.completed',
+          item: {
+            id: 'item_9',
+            type: 'mcp_tool_call',
+            server: 's',
+            tool: 'read',
+            arguments: { path: '/tmp/a' },
+            result: { turn: 1 },
+            error: null,
+            status: 'completed',
+          },
+        },
+        3
+      ),
+      buildRawMessage(
+        {
+          type: 'item.started',
+          item: {
+            id: 'item_9',
+            type: 'mcp_tool_call',
+            server: 's',
+            tool: 'read',
+            arguments: { path: '/tmp/b' },
+            status: 'in_progress',
+          },
+        },
+        4
+      ),
+      buildRawMessage(
+        {
+          type: 'item.completed',
+          item: {
+            id: 'item_9',
+            type: 'mcp_tool_call',
+            server: 's',
+            tool: 'read',
+            arguments: { path: '/tmp/b' },
+            result: { turn: 2 },
+            error: null,
+            status: 'completed',
+          },
+        },
+        5
+      ),
+    ];
+
+    const parsed = parseCodexRawEvents(events);
+
+    expect(parsed.sections).toHaveLength(2);
+    const first = parsed.sections[0] as Extract<CodexSection, { type: 'tool_call' }>;
+    const second = parsed.sections[1] as Extract<CodexSection, { type: 'tool_call' }>;
+    expect(first.toolCall.result).toMatchObject({ result: { turn: 1 } });
+    expect(second.toolCall.result).toMatchObject({ result: { turn: 2 } });
+    expect(first.toolCall.id).not.toBe(second.toolCall.id);
   });
 
   it('renders OpenAI 401 error as openai_auth_error section', () => {

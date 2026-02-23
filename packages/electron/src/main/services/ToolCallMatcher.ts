@@ -96,6 +96,11 @@ interface ToolCallMatchRow {
   created_at: Date;
 }
 
+interface ToolCallLookup {
+  toolCallItemId: string;
+  toolCallTimestamp?: number;
+}
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -178,6 +183,31 @@ function countLines(text: string): number {
  */
 function ensureNumber(value: number | string): number {
   return typeof value === 'number' ? value : Number(value);
+}
+
+/**
+ * Parse tool call lookup inputs from the renderer.
+ * Format (Codex disambiguation): "nimtc|<urlEncodedItemId>|<timestamp>|<index>"
+ */
+function parseToolCallLookupId(toolCallItemId: string, toolCallTimestamp?: number): ToolCallLookup {
+  if (toolCallItemId.startsWith('nimtc|')) {
+    const parts = toolCallItemId.split('|');
+    const encodedId = parts[1] || '';
+    const parsedTimestamp = Number(parts[2]);
+    try {
+      const decodedId = decodeURIComponent(encodedId);
+      if (decodedId) {
+        return {
+          toolCallItemId: decodedId,
+          toolCallTimestamp: Number.isFinite(parsedTimestamp) ? parsedTimestamp : toolCallTimestamp,
+        };
+      }
+    } catch {
+      // Fall through to plain ID handling.
+    }
+  }
+
+  return { toolCallItemId, toolCallTimestamp };
 }
 
 /**
@@ -624,29 +654,48 @@ class ToolCallMatcherImpl {
    */
   async getDiffsForToolCall(
     sessionId: string,
-    toolCallItemId: string
+    toolCallItemId: string,
+    toolCallTimestamp?: number
   ): Promise<ToolCallDiffResult[]> {
     try {
       if (!database.isInitialized()) {
         await database.initialize();
       }
 
-      const directDiffs = await this.getDiffsFromToolCallContent(sessionId, toolCallItemId);
+      const lookup = parseToolCallLookupId(toolCallItemId, toolCallTimestamp);
+
+      const directDiffs = await this.getDiffsFromToolCallContent(
+        sessionId,
+        lookup.toolCallItemId,
+        lookup.toolCallTimestamp
+      );
       if (directDiffs.length > 0) {
         return directDiffs;
       }
 
       // 1. Find matches for this tool call
-      const latestMessageResult = await database.query<{
-        message_id: number;
-      }>(
-        `SELECT message_id
-         FROM ai_tool_call_file_edits
-         WHERE session_id = $1 AND tool_call_item_id = $2
-         ORDER BY created_at DESC
-         LIMIT 1`,
-        [sessionId, toolCallItemId]
-      );
+      const latestMessageResult = lookup.toolCallTimestamp != null
+        ? await database.query<{
+          message_id: number;
+        }>(
+          `SELECT edits.message_id
+           FROM ai_tool_call_file_edits edits
+           JOIN ai_agent_messages msg ON msg.id = edits.message_id
+           WHERE edits.session_id = $1 AND edits.tool_call_item_id = $2
+           ORDER BY ABS((EXTRACT(EPOCH FROM msg.created_at) * 1000) - $3) ASC, edits.created_at DESC
+           LIMIT 1`,
+          [sessionId, lookup.toolCallItemId, lookup.toolCallTimestamp]
+        )
+        : await database.query<{
+          message_id: number;
+        }>(
+          `SELECT message_id
+           FROM ai_tool_call_file_edits
+           WHERE session_id = $1 AND tool_call_item_id = $2
+           ORDER BY created_at DESC
+           LIMIT 1`,
+          [sessionId, lookup.toolCallItemId]
+        );
 
       if (latestMessageResult.rows.length === 0) return [];
 
@@ -660,7 +709,7 @@ class ToolCallMatcherImpl {
         `SELECT session_file_id, message_id, match_reason
          FROM ai_tool_call_file_edits
          WHERE session_id = $1 AND tool_call_item_id = $2 AND message_id = $3`,
-        [sessionId, toolCallItemId, latestMessageId]
+        [sessionId, lookup.toolCallItemId, latestMessageId]
       );
 
       if (matchResult.rows.length === 0) return [];
@@ -1183,7 +1232,8 @@ class ToolCallMatcherImpl {
 
   private async getDiffsFromToolCallContent(
     sessionId: string,
-    toolCallItemId: string
+    toolCallItemId: string,
+    toolCallTimestamp?: number
   ): Promise<ToolCallDiffResult[]> {
     try {
       if (!database.isInitialized()) {
@@ -1209,11 +1259,19 @@ class ToolCallMatcherImpl {
 
       if (linkResult.rows.length === 0) return [];
 
-      // Deduplicate by most recent timestamp per path
+      // Deduplicate by a timestamp anchor near the requested tool call.
+      // If timestamp hint is absent, keep legacy behavior: use latest timestamp.
       const sorted = [...linkResult.rows].sort((a, b) => {
         return ensureNumber(b.timestamp_ms) - ensureNumber(a.timestamp_ms);
       });
-      const maxTs = ensureNumber(sorted[0].timestamp_ms);
+      const anchorTs = toolCallTimestamp != null
+        ? [...sorted]
+          .sort((a, b) => {
+            return Math.abs(ensureNumber(a.timestamp_ms) - toolCallTimestamp) -
+              Math.abs(ensureNumber(b.timestamp_ms) - toolCallTimestamp);
+          })[0]
+        : sorted[0];
+      const maxTs = ensureNumber(anchorTs.timestamp_ms);
       const thresholdMs = 2000;
       const recentPaths = sorted.filter(row => {
         return Math.abs(ensureNumber(row.timestamp_ms) - maxTs) <= thresholdMs;
@@ -1223,17 +1281,30 @@ class ToolCallMatcherImpl {
       if (filePaths.length === 0) return [];
 
       // Find the matching message content for extracting diffs from tool args
-      const messageResult = await database.query<{
+      const messageResult = toolCallTimestamp != null
+        ? await database.query<{
+          id: number;
+          content: string;
+          created_at_ms: number;
+        }>(
+          `SELECT id, content, EXTRACT(EPOCH FROM created_at) * 1000 AS created_at_ms
+           FROM ai_agent_messages
+           WHERE session_id = $1 AND content LIKE $2 AND content LIKE $3
+           ORDER BY ABS((EXTRACT(EPOCH FROM created_at) * 1000) - $4) ASC, id DESC
+           LIMIT 50`,
+          [sessionId, `%\"id\":\"${toolCallItemId}\"%`, '%item.completed%', toolCallTimestamp]
+        )
+        : await database.query<{
         id: number;
         content: string;
       }>(
         `SELECT id, content
-         FROM ai_agent_messages
-         WHERE session_id = $1 AND content LIKE $2 AND content LIKE $3
-         ORDER BY id DESC
-         LIMIT 50`,
-        [sessionId, `%\"id\":\"${toolCallItemId}\"%`, '%item.completed%']
-      );
+           FROM ai_agent_messages
+           WHERE session_id = $1 AND content LIKE $2 AND content LIKE $3
+           ORDER BY id DESC
+           LIMIT 50`,
+          [sessionId, `%\"id\":\"${toolCallItemId}\"%`, '%item.completed%']
+        );
 
       // Determine tool name from message content
       let toolName = 'edit';

@@ -408,6 +408,7 @@ export const BashWidget: React.FC<CustomToolWidgetProps> = ({ message, isExpande
         <div className="px-2 pb-2">
           <ToolCallChanges
             toolCallItemId={tool.id}
+            toolCallTimestamp={message.timestamp}
             getToolCallDiffs={getToolCallDiffs}
             isExpanded={isExpanded}
             workspacePath={workspacePath}

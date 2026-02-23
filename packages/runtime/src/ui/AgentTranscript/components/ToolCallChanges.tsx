@@ -16,7 +16,11 @@ import { toProjectRelative } from '../utils/pathResolver';
 
 interface ToolCallChangesProps {
   toolCallItemId: string;
-  getToolCallDiffs: (toolCallItemId: string) => Promise<ToolCallDiffResult[] | null>;
+  toolCallTimestamp?: number;
+  getToolCallDiffs: (
+    toolCallItemId: string,
+    toolCallTimestamp?: number
+  ) => Promise<ToolCallDiffResult[] | null>;
   isExpanded: boolean;
   workspacePath?: string;
   onOpenFile?: (filePath: string) => void;
@@ -53,6 +57,7 @@ function getOperationBadge(operation: string): { label: string; colorClass: stri
 
 export const ToolCallChanges: React.FC<ToolCallChangesProps> = ({
   toolCallItemId,
+  toolCallTimestamp,
   getToolCallDiffs,
   isExpanded,
   workspacePath,
@@ -63,22 +68,22 @@ export const ToolCallChanges: React.FC<ToolCallChangesProps> = ({
   const [changesExpanded, setChangesExpanded] = useState(false);
   const fetchedRef = useRef(false);
 
-  // Reset fetch state when toolCallItemId changes
+  // Reset fetch state when tool call identity changes
   useEffect(() => {
     fetchedRef.current = false;
     setDiffs(null);
-  }, [toolCallItemId]);
+  }, [toolCallItemId, toolCallTimestamp]);
 
   // Fetch diffs when the parent tool card is expanded
   useEffect(() => {
     if (!isExpanded || fetchedRef.current || !toolCallItemId) return;
     fetchedRef.current = true;
     setIsLoading(true);
-    getToolCallDiffs(toolCallItemId)
+    getToolCallDiffs(toolCallItemId, toolCallTimestamp)
       .then(result => setDiffs(result))
       .catch(() => setDiffs(null))
       .finally(() => setIsLoading(false));
-  }, [isExpanded, toolCallItemId, getToolCallDiffs]);
+  }, [isExpanded, toolCallItemId, toolCallTimestamp, getToolCallDiffs]);
 
   // Don't render anything if not expanded or no diffs
   if (!isExpanded) return null;
