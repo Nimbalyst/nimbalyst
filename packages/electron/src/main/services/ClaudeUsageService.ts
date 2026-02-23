@@ -43,6 +43,7 @@ const KEYCHAIN_RETRY_DELAY_MS = 2000; // Retry delay for keychain errors (post-u
 const KEYCHAIN_MAX_RETRIES = 3;
 const NETWORK_RETRY_DELAY_MS = 3000; // Retry delay for network errors
 const NETWORK_MAX_RETRIES = 3;
+const USAGE_ERROR_BODY_MAX_CHARS = 600;
 
 class ClaudeUsageServiceImpl {
   private cachedUsage: ClaudeUsageData | null = null;
@@ -227,15 +228,31 @@ class ClaudeUsageServiceImpl {
         });
 
         if (!response.ok) {
+          const errorBody = await this.readErrorBody(response);
+
           if (response.status === 401) {
             // Non-retryable: auth expired
             logger.main.warn(
-              '[ClaudeUsageService] Usage API returned 401 (unauthorized). Claude OAuth token is likely expired; user should re-login.'
+              `[ClaudeUsageService] Usage API returned 401 (unauthorized). Claude OAuth token is likely expired; user should re-login.` +
+              (errorBody ? ` Response body: ${errorBody}` : '')
             );
             throw new Error('Authentication expired. Please re-login to Claude Code.');
           }
+
+          if (response.status === 403) {
+            logger.main.warn(
+              '[ClaudeUsageService] Usage API returned 403 (forbidden). ' +
+              'User may be authenticated for Claude Code but missing usage API authorization.' +
+              (errorBody ? ` Response body: ${errorBody}` : '')
+            );
+            throw new Error(
+              'Usage API access forbidden (403). Your account may not have usage API permissions.'
+            );
+          }
+
           logger.main.warn(
-            `[ClaudeUsageService] Usage API error response: ${response.status} ${response.statusText}`
+            `[ClaudeUsageService] Usage API error response: ${response.status} ${response.statusText}` +
+            (errorBody ? ` Response body: ${errorBody}` : '')
           );
           throw new Error(`API error: ${response.status} ${response.statusText}`);
         }
@@ -281,6 +298,27 @@ class ClaudeUsageServiceImpl {
 
   private sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  private async readErrorBody(response: Response): Promise<string> {
+    try {
+      const bodyText = (await response.text()).trim();
+      if (!bodyText) return '';
+
+      let normalized = bodyText;
+      try {
+        normalized = JSON.stringify(JSON.parse(bodyText));
+      } catch {
+        // Keep plain text if body is not JSON
+      }
+
+      if (normalized.length > USAGE_ERROR_BODY_MAX_CHARS) {
+        return `${normalized.slice(0, USAGE_ERROR_BODY_MAX_CHARS)}...`;
+      }
+      return normalized;
+    } catch {
+      return '';
+    }
   }
 
   private broadcastUpdate(): void {
