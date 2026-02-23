@@ -152,11 +152,13 @@ export const SessionListItem = memo<SessionListItemProps>(({
 
   // Determine if this session can be dragged
   // Can drag if: (1) Has a parent (is a child session), OR (2) Is an orphan (no parent, no children)
-  const isDraggable = parentSessionId !== null || !isWorkstream;
+  // Worktree sessions cannot be dragged - they are tied to their git worktree
+  const isDraggable = !isWorktreeSession && (parentSessionId !== null || !isWorkstream);
 
   // Determine if this session can accept drops
   // Workstreams and standalone root sessions can be drop targets (dropping creates a workstream)
-  const isDropTarget = isWorkstream || parentSessionId === null;
+  // Worktree sessions/workstreams cannot accept drops - they are tied to their git worktree
+  const isDropTarget = !isWorktreeSession && (isWorkstream || parentSessionId === null);
 
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -191,6 +193,23 @@ export const SessionListItem = memo<SessionListItemProps>(({
       onBranch();
     }
   };
+
+  const handleRemoveFromWorkstream = useCallback(async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowContextMenu(false);
+    if (!parentSessionId || !projectPath) return;
+
+    const success = await reparentSession({
+      sessionId: id,
+      oldParentId: parentSessionId,
+      newParentId: null,
+      workspacePath: projectPath,
+    });
+
+    if (success) {
+      await refreshSessionList();
+    }
+  }, [id, parentSessionId, projectPath, reparentSession, refreshSessionList]);
 
   const handleCopySessionId = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -323,12 +342,13 @@ export const SessionListItem = memo<SessionListItemProps>(({
       sessionId: id,
       parentId: parentSessionId,
       workspacePath: projectPath,
+      isWorktreeSession,
     };
 
     e.dataTransfer.setData('application/x-nimbalyst-session', JSON.stringify(dragData));
     e.dataTransfer.effectAllowed = 'move';
     setIsDragging(true);
-  }, [isDraggable, id, parentSessionId, projectPath]);
+  }, [isDraggable, id, parentSessionId, projectPath, isWorktreeSession]);
 
   const handleDragEnd = useCallback((e: React.DragEvent) => {
     setIsDragging(false);
@@ -364,7 +384,13 @@ export const SessionListItem = memo<SessionListItemProps>(({
     if (!dataStr || !projectPath) return;
 
     try {
-      const { sessionId, parentId, workspacePath } = JSON.parse(dataStr);
+      const { sessionId, parentId, workspacePath, isWorktreeSession: draggedIsWorktree } = JSON.parse(dataStr);
+
+      // Validate worktree sessions cannot be moved
+      if (draggedIsWorktree) {
+        console.error('[SessionListItem] Cannot move worktree sessions');
+        return;
+      }
 
       // Validate same workspace
       if (workspacePath !== projectPath) {
@@ -661,6 +687,15 @@ export const SessionListItem = memo<SessionListItemProps>(({
             >
               <MaterialSymbol icon="fork_right" size={14} />
               Branch conversation
+            </button>
+          )}
+          {parentSessionId && !isWorktreeSession && (
+            <button
+              className="session-list-item-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
+              onClick={handleRemoveFromWorkstream}
+            >
+              <MaterialSymbol icon="drive_file_move_rtl" size={14} />
+              Remove from workstream
             </button>
           )}
           <button
