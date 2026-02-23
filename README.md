@@ -127,29 +127,6 @@ The Electron app features:
 - **Session Manager** - Global view of all AI chat sessions across projects
 - **Drag and drop** file operations in the project sidebar with copy/move support
 
-### Playground Development
-
-The monorepo uses a simplified development setup with hot module replacement (HMR):
-
-```bash
-# Start development server
-npm run dev
-
-# This runs the playground dev server on port 4101
-# The playground imports directly from the library source files via custom Vite plugin
-
-# Build playground for deployment
-npm run build:playground
-```
-
-#### Hot Module Replacement (HMR)
-
-The development setup provides seamless HMR:
-- Changes to `packages/runtime` source files are immediately reflected in the playground
-- A custom Vite plugin handles module resolution to import directly from TypeScript source
-- Both CSS and TypeScript changes trigger instant updates
-- No manual rebuilds or separate library dev server required
-
 ### Library Installation (for end users)
 
 ```bash

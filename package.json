@@ -11,10 +11,7 @@
     "url": "https://github.com/stravu/nimbalyst.git"
   },
   "scripts": {
-    "dev": "npm run dev --prefix packages/playground",
     "build": "npm run build --prefix packages/runtime",
-    "build:playground": "npm run build --prefix packages/playground",
-    "preview": "npm run preview --prefix packages/playground",
     "typecheck": "npm run typecheck -ws --if-present",
     "test": "npm run test:unit",
     "test:unit": "vitest",
@@ -53,7 +50,6 @@
     "typescript": "^5.0.0"
   },
   "workspaces": [
-    "packages/playground",
     "packages/electron",
     "packages/runtime",
     "packages/core",
