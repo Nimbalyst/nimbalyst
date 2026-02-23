@@ -41,6 +41,8 @@ export interface ToolCallWindow {
   argsText: string;
   outputText: string;
   args?: any;
+  /** Whether this window was parsed from an item.completed event (has result data). */
+  isCompleted?: boolean;
 }
 
 /**
@@ -70,6 +72,30 @@ export interface ToolCallFileEdit {
   createdAt: Date;
 }
 
+export interface WorkspaceFileEditMatchInput {
+  workspacePath: string;
+  filePath: string;
+  fileTimestamp: number;
+  candidateSessionIds: string[];
+}
+
+export interface WorkspaceFileEditCandidate {
+  sessionId: string;
+  messageId: number;
+  toolName: string;
+  toolCallItemId: string | null;
+  toolUseId: string | null;
+  score: number;
+  reasons: string[];
+  timeDiffMs: number;
+}
+
+export interface WorkspaceFileEditMatchResult {
+  winner: WorkspaceFileEditCandidate | null;
+  candidates: WorkspaceFileEditCandidate[];
+  reason: string;
+}
+
 interface SessionFileRow {
   id: string;
   file_path: string;
@@ -81,6 +107,10 @@ interface AgentMessageRow {
   id: number;
   content: string;
   created_at_ms: number;
+}
+
+interface WorkspaceAgentMessageRow extends AgentMessageRow {
+  session_id: string;
 }
 
 interface ToolCallMatchRow {
@@ -107,6 +137,8 @@ interface ToolCallLookup {
 
 const TIME_CUTOFF_MS = 10_000; // 10 second hard cutoff around tool call
 const MIN_MATCH_SCORE = 30; // Must have at least a filename match
+const WORKSPACE_CLEAR_WINNER_MARGIN = 12;
+const WORKSPACE_MIN_CONFIDENCE_SCORE = 55;
 
 /** Shell wrapper: /bin/zsh -lc 'cmd' or bare bash -lc 'cmd' (Windows inner layer) */
 const SHELL_WRAPPER_REGEX = /^(?:\/(?:bin|usr\/bin)\/)?(?:bash|zsh|sh)\s+-l?c\s+([\s\S]+)$/;
@@ -357,8 +389,9 @@ export function parseToolCallWindows(
   }
 
   // Extract result/output for completed items
+  const isCompleted = eventType === 'item.completed';
   let result: any = null;
-  if (eventType === 'item.completed') {
+  if (isCompleted) {
     result = item.result ?? item.output ?? item.aggregated_output ?? null;
   }
 
@@ -377,6 +410,7 @@ export function parseToolCallWindows(
     argsText: stringifyArgs(args),
     outputText: stringifyOutput(result),
     args,
+    isCompleted,
   });
 
   return windows;
@@ -420,17 +454,27 @@ export function scoreMatch(
     return null; // Outside time window, not a candidate
   }
 
-  // 3. file_change (Codex apply_patch): require exact file path match in the changes array.
-  //    Don't use basename heuristics — only match if the full path is listed.
+  // 3. file_change (Codex apply_patch): match file path in the changes array.
+  //    Try full path match first, then fall back to basename match for relative paths.
   if (window.toolName === 'file_change' && window.args?.changes) {
     const changes = Array.isArray(window.args.changes) ? window.args.changes : [];
     const normalizedFilePath = path.normalize(filePath);
+    const fileBaseName = path.basename(filePath);
     const hasExactMatch = changes.some(
       (c: any) => typeof c.path === 'string' && path.normalize(c.path) === normalizedFilePath
     );
     if (hasExactMatch) {
       score += 40;
       reasons.push('path_in_changes');
+    } else {
+      // Fall back to basename match (handles relative paths from Codex)
+      const hasBaseNameMatch = changes.some(
+        (c: any) => typeof c.path === 'string' && path.basename(c.path) === fileBaseName
+      );
+      if (hasBaseNameMatch) {
+        score += 40;
+        reasons.push('basename_in_changes');
+      }
     }
     return score >= MIN_MATCH_SCORE ? { window, score, reasons } : null;
   }
@@ -451,11 +495,257 @@ export function scoreMatch(
   return { window, score, reasons };
 }
 
+function normalizeForContains(value: string): string {
+  return path.normalize(value).replace(/\\/g, '/').toLowerCase();
+}
+
+function hasPathEvidence(text: string, filePath: string): boolean {
+  if (!text) return false;
+  const normalizedText = text.replace(/\\/g, '/').toLowerCase();
+  const normalizedPath = normalizeForContains(filePath);
+  return normalizedText.includes(normalizedPath);
+}
+
+function hasBaseNameEvidence(text: string, filePath: string): boolean {
+  if (!text) return false;
+  return text.toLowerCase().includes(path.basename(filePath).toLowerCase());
+}
+
+/** Exported for unit tests covering workspace-scoped watcher attribution scoring. */
+export function scoreWorkspaceFileEdit(
+  filePath: string,
+  fileTimestamp: number,
+  window: ToolCallWindow,
+): MatchCandidate | null {
+  const reasons: string[] = [];
+  let score = 0;
+
+  const timeDiff = Math.abs(fileTimestamp - window.messageCreatedAt);
+  if (timeDiff > TIME_CUTOFF_MS) {
+    return null;
+  }
+
+  // Strong signal: explicit file path in Codex file_change payload.
+  if (window.toolName === 'file_change' && Array.isArray(window.args?.changes)) {
+    const changes = window.args.changes as Array<{ path?: string }>;
+    const normalizedTarget = normalizeForContains(filePath);
+    const fileBaseName = path.basename(filePath).toLowerCase();
+
+    if (changes.some(change => typeof change.path === 'string' && normalizeForContains(change.path) === normalizedTarget)) {
+      score += 90;
+      reasons.push('exact_path_in_changes');
+    } else if (changes.some(change => typeof change.path === 'string' && path.basename(change.path).toLowerCase() === fileBaseName)) {
+      score += 55;
+      reasons.push('basename_in_changes');
+    }
+  }
+
+  if (hasPathEvidence(window.argsText, filePath)) {
+    score += 45;
+    reasons.push('exact_path_in_args');
+  }
+  if (hasPathEvidence(window.outputText, filePath)) {
+    score += 40;
+    reasons.push('exact_path_in_output');
+  }
+
+  if (hasBaseNameEvidence(window.argsText, filePath)) {
+    score += 30;
+    reasons.push('basename_in_args');
+  }
+  if (hasBaseNameEvidence(window.outputText, filePath)) {
+    score += 25;
+    reasons.push('basename_in_output');
+  }
+
+  // Bash evidence uses plain command text only - no parser heuristics.
+  if (window.toolName === 'Bash' && window.args?.command && typeof window.args.command === 'string') {
+    const commandText = window.args.command;
+    if (hasPathEvidence(commandText, filePath)) {
+      score += 25;
+      reasons.push('bash_command_path_text');
+    } else if (hasBaseNameEvidence(commandText, filePath)) {
+      score += 20;
+      reasons.push('bash_command_basename_text');
+    }
+  }
+
+  if (timeDiff <= 500) {
+    score += 20;
+    reasons.push('recency_500ms');
+  } else if (timeDiff <= 2000) {
+    score += 14;
+    reasons.push('recency_2s');
+  } else if (timeDiff <= 5000) {
+    score += 8;
+    reasons.push('recency_5s');
+  } else {
+    score += 2;
+    reasons.push('recency_10s');
+  }
+
+  return { window, score, reasons };
+}
+
 // ---------------------------------------------------------------------------
 // ToolCallMatcher class
 // ---------------------------------------------------------------------------
 
 class ToolCallMatcherImpl {
+  async matchWorkspaceFileEdit(input: WorkspaceFileEditMatchInput): Promise<WorkspaceFileEditMatchResult> {
+    try {
+      if (!database.isInitialized()) {
+        await database.initialize();
+      }
+
+      const candidateSessionIds = [...new Set(input.candidateSessionIds.filter(Boolean))];
+      if (candidateSessionIds.length === 0) {
+        return { winner: null, candidates: [], reason: 'no_active_sessions' };
+      }
+
+      const windowStart = input.fileTimestamp - TIME_CUTOFF_MS;
+      const windowEnd = input.fileTimestamp + TIME_CUTOFF_MS;
+      const messagesResult = await database.query<WorkspaceAgentMessageRow>(
+        `SELECT session_id, id, content, EXTRACT(EPOCH FROM created_at) * 1000 AS created_at_ms
+         FROM ai_agent_messages
+         WHERE session_id = ANY($1::text[])
+           AND direction = 'output'
+           AND hidden = FALSE
+           AND (EXTRACT(EPOCH FROM created_at) * 1000) >= $2
+           AND (EXTRACT(EPOCH FROM created_at) * 1000) <= $3
+         ORDER BY id ASC`,
+        [candidateSessionIds, windowStart, windowEnd]
+      );
+
+      if (messagesResult.rows.length === 0) {
+        return { winner: null, candidates: [], reason: 'no_recent_tool_windows' };
+      }
+
+      const sessionWindows = new Map<string, ToolCallWindow[]>();
+      const sessionMessages = new Map<string, AgentMessageRow[]>();
+
+      for (const row of messagesResult.rows) {
+        const sessionId = row.session_id;
+        const msgCreatedAt = new Date(ensureNumber(row.created_at_ms));
+        const msgId = ensureNumber(row.id);
+
+        if (!sessionMessages.has(sessionId)) {
+          sessionMessages.set(sessionId, []);
+        }
+        sessionMessages.get(sessionId)!.push({
+          id: msgId,
+          content: row.content,
+          created_at_ms: ensureNumber(row.created_at_ms),
+        });
+
+        const parsedWindows = parseToolCallWindows(
+          msgId,
+          row.content,
+          msgCreatedAt,
+          sessionId,
+          input.workspacePath
+        );
+        if (parsedWindows.length > 0) {
+          if (!sessionWindows.has(sessionId)) {
+            sessionWindows.set(sessionId, []);
+          }
+          sessionWindows.get(sessionId)!.push(...parsedWindows);
+        }
+      }
+
+      const bestBySession = new Map<string, WorkspaceFileEditCandidate>();
+
+      for (const sessionId of candidateSessionIds) {
+        const windows = sessionWindows.get(sessionId) || [];
+        const messages = sessionMessages.get(sessionId) || [];
+        if (windows.length === 0 || messages.length === 0) continue;
+
+        const deduped = this.deduplicateWindows(windows, messages);
+        for (const window of deduped) {
+          const scored = scoreWorkspaceFileEdit(input.filePath, input.fileTimestamp, window);
+          if (!scored || scored.score < MIN_MATCH_SCORE) continue;
+
+          const candidate: WorkspaceFileEditCandidate = {
+            sessionId,
+            messageId: window.messageId,
+            toolName: window.toolName,
+            toolCallItemId: window.toolCallItemId,
+            toolUseId: window.toolUseId,
+            score: scored.score,
+            reasons: scored.reasons,
+            timeDiffMs: Math.abs(input.fileTimestamp - window.messageCreatedAt),
+          };
+          const previousBest = bestBySession.get(sessionId);
+          if (
+            !previousBest ||
+            candidate.score > previousBest.score ||
+            (candidate.score === previousBest.score && candidate.timeDiffMs < previousBest.timeDiffMs)
+          ) {
+            bestBySession.set(sessionId, candidate);
+          }
+        }
+      }
+
+      const sessionCandidates = [...bestBySession.values()]
+        .sort((a, b) => b.score - a.score || a.timeDiffMs - b.timeDiffMs);
+
+      logger.main.debug('[ToolCallMatcher] Workspace attribution candidate scoring:', {
+        workspacePath: input.workspacePath,
+        filePath: input.filePath,
+        fileTimestamp: input.fileTimestamp,
+        candidateSessions: candidateSessionIds,
+        sessionCandidates: sessionCandidates.slice(0, 6).map(candidate => ({
+          sessionId: candidate.sessionId,
+          score: candidate.score,
+          reasons: candidate.reasons,
+          toolName: candidate.toolName,
+          messageId: candidate.messageId,
+          timeDiffMs: candidate.timeDiffMs,
+        })),
+      });
+
+      if (sessionCandidates.length === 0) {
+        return { winner: null, candidates: [], reason: 'no_candidates' };
+      }
+
+      const winner = sessionCandidates[0];
+      if (winner.score < WORKSPACE_MIN_CONFIDENCE_SCORE) {
+        logger.main.debug('[ToolCallMatcher] Workspace attribution rejected (low confidence):', {
+          filePath: input.filePath,
+          score: winner.score,
+          sessionId: winner.sessionId,
+        });
+        return { winner: null, candidates: sessionCandidates, reason: 'low_confidence' };
+      }
+
+      const runnerUp = sessionCandidates[1];
+      if (runnerUp && (winner.score - runnerUp.score) < WORKSPACE_CLEAR_WINNER_MARGIN) {
+        logger.main.debug('[ToolCallMatcher] Workspace attribution rejected (ambiguous tie):', {
+          filePath: input.filePath,
+          winnerSessionId: winner.sessionId,
+          winnerScore: winner.score,
+          runnerUpSessionId: runnerUp.sessionId,
+          runnerUpScore: runnerUp.score,
+          scoreDelta: winner.score - runnerUp.score,
+        });
+        return { winner: null, candidates: sessionCandidates, reason: 'ambiguous' };
+      }
+
+      logger.main.debug('[ToolCallMatcher] Workspace attribution winner selected:', {
+        filePath: input.filePath,
+        sessionId: winner.sessionId,
+        score: winner.score,
+        reasons: winner.reasons,
+        messageId: winner.messageId,
+      });
+
+      return { winner, candidates: sessionCandidates, reason: 'winner_selected' };
+    } catch (error) {
+      logger.main.error('[ToolCallMatcher] matchWorkspaceFileEdit failed:', error);
+      return { winner: null, candidates: [], reason: 'matcher_error' };
+    }
+  }
+
   /**
    * Match all unmatched session_files entries for a session.
    * Returns the number of new matches created.
@@ -483,12 +773,34 @@ class ToolCallMatcherImpl {
          WHERE session_id = $1 AND link_type = 'edited'`,
         [sessionId]
       );
-      const sessionFiles = filesResult.rows;
-
+      // Deduplicate session_files by file path: if multiple rows exist for the
+      // same path (from both trackToolExecution and trackWatcherSideEffect), keep
+      // the best entry using this priority:
+      //   1. Entry with toolUseId (definitive link from trackToolExecution)
+      //   2. Most recent timestamp (closest to the tool call that created it)
+      // This matters for Codex sessions where toolUseId is always undefined
+      // and the DB may return rows in any order.
       const sessionFilesByPath = new Map<string, SessionFileRow>();
-      for (const file of sessionFiles) {
-        sessionFilesByPath.set(file.file_path, file);
+      for (const file of filesResult.rows) {
+        const existing = sessionFilesByPath.get(file.file_path);
+        if (!existing) {
+          sessionFilesByPath.set(file.file_path, file);
+        } else {
+          const existingHasToolUseId = !!existing.metadata?.toolUseId;
+          const newHasToolUseId = !!file.metadata?.toolUseId;
+          if (newHasToolUseId && !existingHasToolUseId) {
+            // Prefer entry with toolUseId (definitive)
+            sessionFilesByPath.set(file.file_path, file);
+          } else if (!existingHasToolUseId && !newHasToolUseId) {
+            // Neither has toolUseId (Codex): prefer the most recent timestamp
+            // so the entry closest to its tool call is used for time-based matching
+            if (ensureNumber(file.timestamp_ms) > ensureNumber(existing.timestamp_ms)) {
+              sessionFilesByPath.set(file.file_path, file);
+            }
+          }
+        }
       }
+      const sessionFiles = [...sessionFilesByPath.values()];
 
       // 3. Load output messages
       // Use EXTRACT(EPOCH) for timestamp safety across legacy/modern schemas.
@@ -517,25 +829,35 @@ class ToolCallMatcherImpl {
 
       if (windows.length === 0 || sessionFiles.length === 0) return 0;
 
-      // 6. Load existing matches to avoid re-processing
+      // 5. Deduplicate windows by toolCallItemId.
+      // When both item.started and item.completed exist for the same tool call,
+      // merge into one window preferring item.completed data (has output/result).
+      // When only item.started exists but the session continued (later messages exist),
+      // treat it as implicitly closed — a valid match candidate.
+      const deduped = this.deduplicateWindows(windows, messagesResult.rows);
+      logger.main.debug('[ToolCallMatcher] Loaded match inputs:', {
+        sessionId,
+        sessionFileCount: sessionFiles.length,
+        toolWindowCount: deduped.length,
+      });
+
+      // 6. Load existing matches so we can skip unchanged files and replace stale ones
       const existingResult = await database.query<{
         session_file_id: string;
+        match_score: number;
         tool_use_id: string | null;
       }>(
-        `SELECT session_file_id, tool_use_id FROM ai_tool_call_file_edits WHERE session_id = $1`,
+        `SELECT session_file_id, match_score, tool_use_id FROM ai_tool_call_file_edits WHERE session_id = $1`,
         [sessionId]
       );
-      const alreadyMatched = new Set(existingResult.rows.map(r => r.session_file_id));
-      const matchedToolUseIdsByFile = new Map<string, Set<string>>();
+      // Best existing score per file (a file may have multiple rows from legacy data)
+      const existingBestScore = new Map<string, number>();
       for (const row of existingResult.rows) {
-        if (!row.tool_use_id) continue;
-        if (!matchedToolUseIdsByFile.has(row.session_file_id)) {
-          matchedToolUseIdsByFile.set(row.session_file_id, new Set());
-        }
-        matchedToolUseIdsByFile.get(row.session_file_id)!.add(row.tool_use_id);
+        const prev = existingBestScore.get(row.session_file_id) ?? 0;
+        existingBestScore.set(row.session_file_id, Math.max(prev, ensureNumber(row.match_score)));
       }
 
-      // 7. Match each unmatched file
+      // 7. Match each file, replacing old matches when a better one is found
       const matches: Array<{
         sessionId: string;
         sessionFileId: string;
@@ -547,44 +869,130 @@ class ToolCallMatcherImpl {
         fileTimestamp: number;
       }> = [];
 
+      // Track file IDs where a new match replaces an old one
+      const replacedFileIds: string[] = [];
+
       for (const file of sessionFiles) {
         const metadataToolUseId = file.metadata?.toolUseId;
-        if (metadataToolUseId) {
-          const matchedToolUseIds = matchedToolUseIdsByFile.get(file.id);
-          if (matchedToolUseIds?.has(metadataToolUseId)) {
-            continue;
-          }
-        } else if (alreadyMatched.has(file.id)) {
-          continue;
-        }
-
         const fileTimestamp = ensureNumber(file.timestamp_ms);
 
-        // Score against all windows (scoreMatch returns null for time-cutoff failures)
-        const candidates = windows
+        // Score against deduplicated windows (scoreMatch returns null for time-cutoff failures)
+        const candidates = deduped
           .map(w => scoreMatch(file.file_path, fileTimestamp, w, metadataToolUseId))
           .filter((c): c is MatchCandidate => c !== null && c.score >= MIN_MATCH_SCORE);
 
-        // Pick the best match
-        const best = candidates.sort((a, b) => b.score - a.score)[0];
-
-        if (best) {
-          matches.push({
+        if (candidates.length === 0) {
+          logger.main.debug('[ToolCallMatcher] No candidates for file edit:', {
             sessionId,
             sessionFileId: file.id,
-            messageId: best.window.messageId,
-            toolCallItemId: best.window.toolCallItemId,
-            toolUseId: best.window.toolUseId,
-            score: best.score,
-            reason: `${best.reasons.join(',')}|score=${best.score}|tool=${best.window.toolName}`,
+            filePath: file.file_path,
             fileTimestamp,
+            metadataToolUseId: metadataToolUseId ?? null,
+          });
+        } else {
+          const topCandidates = [...candidates]
+            .sort((a, b) => b.score - a.score)
+            .slice(0, 3)
+            .map(c => ({
+              score: c.score,
+              reasons: c.reasons,
+              toolName: c.window.toolName,
+              toolCallItemId: c.window.toolCallItemId,
+              messageId: c.window.messageId,
+              toolTimestamp: c.window.messageCreatedAt,
+            }));
+          logger.main.debug('[ToolCallMatcher] Candidate matches for file edit:', {
+            sessionId,
+            sessionFileId: file.id,
+            filePath: file.file_path,
+            fileTimestamp,
+            metadataToolUseId: metadataToolUseId ?? null,
+            topCandidates,
           });
         }
+
+        // Pick the best match
+        const best = candidates.sort((a, b) => b.score - a.score)[0];
+        if (!best) continue;
+
+        logger.main.debug('[ToolCallMatcher] Selected best candidate for file edit:', {
+          sessionId,
+          sessionFileId: file.id,
+          filePath: file.file_path,
+          score: best.score,
+          reasons: best.reasons,
+          toolName: best.window.toolName,
+          toolCallItemId: best.window.toolCallItemId,
+          messageId: best.window.messageId,
+        });
+
+        const previousScore = existingBestScore.get(file.id);
+        if (previousScore != null) {
+          // Already matched — only replace if the new match is strictly better
+          if (best.score <= previousScore) {
+            logger.main.debug('[ToolCallMatcher] Keeping existing match (new score not higher):', {
+              sessionId,
+              sessionFileId: file.id,
+              filePath: file.file_path,
+              previousScore,
+              newScore: best.score,
+            });
+            continue;
+          }
+          logger.main.debug('[ToolCallMatcher] Replacing existing match with higher score:', {
+            sessionId,
+            sessionFileId: file.id,
+            filePath: file.file_path,
+            previousScore,
+            newScore: best.score,
+          });
+          replacedFileIds.push(file.id);
+        }
+
+        matches.push({
+          sessionId,
+          sessionFileId: file.id,
+          messageId: best.window.messageId,
+          toolCallItemId: best.window.toolCallItemId,
+          toolUseId: best.window.toolUseId,
+          score: best.score,
+          reason: `${best.reasons.join(',')}|score=${best.score}|tool=${best.window.toolName}`,
+          fileTimestamp,
+        });
+      }
+
+      // Remove old matches that are being replaced by better ones
+      if (replacedFileIds.length > 0) {
+        await database.query(
+          `DELETE FROM ai_tool_call_file_edits
+           WHERE session_id = $1 AND session_file_id = ANY($2)`,
+          [sessionId, replacedFileIds]
+        );
+        logger.main.debug(`[ToolCallMatcher] Replaced ${replacedFileIds.length} matches with better ones`);
       }
 
       if (matches.length > 0) {
         await this.insertMatchesBatch(matches);
         logger.main.debug(`[ToolCallMatcher] Matched ${matches.length} files for session ${sessionId}`);
+      }
+
+      // Clean up provisional bash side-effect entries that didn't match any tool call.
+      // When multiple sessions share a workspace, each creates a provisional entry
+      // for file changes detected by the watcher. Only the session whose tool call
+      // actually matches should keep the entry — delete the rest.
+      const matchedFileIds = new Set([
+        ...matches.map(m => m.sessionFileId),
+        ...existingBestScore.keys(),
+      ]);
+      const orphanedBashSideEffects = sessionFiles
+        .filter(f => f.metadata?.bashSideEffect === true && !matchedFileIds.has(f.id));
+      if (orphanedBashSideEffects.length > 0) {
+        const orphanIds = orphanedBashSideEffects.map(f => f.id);
+        await database.query(
+          `DELETE FROM session_files WHERE id = ANY($1)`,
+          [orphanIds]
+        );
+        logger.main.debug(`[ToolCallMatcher] Removed ${orphanIds.length} unmatched bash side-effect entries`);
       }
 
       return matches.length;
@@ -832,6 +1240,81 @@ class ToolCallMatcherImpl {
   // -------------------------------------------------------------------------
   // Private helpers
   // -------------------------------------------------------------------------
+
+  /**
+   * Deduplicate tool call windows by toolCallItemId.
+   *
+   * When both item.started and item.completed messages exist for the same
+   * tool call, merge them into a single window using the completed message's
+   * data (which has result/output). When only item.started exists but
+   * subsequent messages prove the session continued past it, keep the window
+   * as a valid match candidate (implicitly closed).
+   *
+   * Windows without a toolCallItemId (null) are kept as-is since they can't
+   * be deduplicated.
+   */
+  private deduplicateWindows(windows: ToolCallWindow[], allMessages: AgentMessageRow[]): ToolCallWindow[] {
+    // Find the latest message timestamp to determine if subsequent messages exist
+    const latestMessageMs = allMessages.length > 0
+      ? Math.max(...allMessages.map(m => ensureNumber(m.created_at_ms)))
+      : 0;
+
+    // Group windows by toolCallItemId
+    const byItemId = new Map<string, ToolCallWindow[]>();
+    const noItemId: ToolCallWindow[] = [];
+
+    for (const w of windows) {
+      if (w.toolCallItemId) {
+        const existing = byItemId.get(w.toolCallItemId);
+        if (existing) {
+          existing.push(w);
+        } else {
+          byItemId.set(w.toolCallItemId, [w]);
+        }
+      } else {
+        noItemId.push(w);
+      }
+    }
+
+    const result: ToolCallWindow[] = [...noItemId];
+
+    for (const group of byItemId.values()) {
+      // Prefer the item.completed window (has output/result data)
+      const completed = group.find(w => w.isCompleted);
+      if (completed) {
+        // Merge: use completed window but ensure args from started are available
+        // (in case completed has fewer args — unlikely but defensive)
+        const started = group.find(w => !w.isCompleted);
+        if (started && !completed.argsText && started.argsText) {
+          completed.argsText = started.argsText;
+          completed.args = started.args;
+        }
+        result.push(completed);
+      } else {
+        // Only item.started exists — treat as implicitly closed if the session
+        // continued past this tool call (subsequent messages exist)
+        const best = group[0];
+        const hasSubsequentMessages = latestMessageMs > best.messageCreatedAt;
+        if (hasSubsequentMessages) {
+          // Implicitly closed: session continued, so this tool call finished
+          // even though we never got item.completed
+          result.push(best);
+        } else {
+          // Tool call is the latest message — may still be running.
+          // Still include it for matching since file edits may already exist.
+          result.push(best);
+        }
+      }
+    }
+
+    if (result.length < windows.length) {
+      logger.main.debug(
+        `[ToolCallMatcher] Deduplicated ${windows.length} windows to ${result.length} (${windows.length - result.length} started+completed merged)`
+      );
+    }
+
+    return result;
+  }
 
   /**
    * Map a database row to a ToolCallFileEdit object.

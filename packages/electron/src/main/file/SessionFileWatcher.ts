@@ -5,7 +5,6 @@ import ignore, { Ignore } from 'ignore';
 import { BrowserWindow } from 'electron';
 import { logger } from '../utils/logger';
 import type { FileSnapshotCache } from './FileSnapshotCache';
-import type { HistoryManager } from '../HistoryManager';
 
 const BINARY_EXTENSIONS = new Set([
   '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.webp', '.svg',
@@ -20,6 +19,7 @@ const BINARY_EXTENSIONS = new Set([
 
 /** TTL for editor save markers (ms). Must exceed chokidar's awaitWriteFinish delay. */
 const EDITOR_SAVE_TTL_MS = 2000;
+const FILE_CHANGED_NOTIFY_DEDUPE_MS = 250;
 
 // ---------------------------------------------------------------------------
 // SharedFSWatcher – one chokidar instance per workspace path, ref-counted
@@ -180,6 +180,13 @@ export function getSharedWatcherRefCount(workspacePath: string): number {
   return sharedWatchers.get(path.resolve(workspacePath))?.refCount ?? 0;
 }
 
+/** Active session IDs currently attached to the shared watcher for a workspace. */
+export function getSharedWatcherSessionIds(workspacePath: string): string[] {
+  const entry = sharedWatchers.get(path.resolve(workspacePath));
+  if (!entry) return [];
+  return [...entry.listeners.keys()];
+}
+
 /** Reset shared watcher state. Only for tests. */
 export function resetSharedWatchers(): void {
   sharedWatchers.clear();
@@ -189,13 +196,19 @@ export function resetSharedWatchers(): void {
 // SessionFileWatcher – per-session wrapper that ref-counts into SharedFSWatcher
 // ---------------------------------------------------------------------------
 
+export interface SessionFileWatcherEditEvent {
+  workspacePath: string;
+  filePath: string;
+  timestamp: number;
+  beforeContent?: string | null;
+}
+
 export class SessionFileWatcher {
   private cache: FileSnapshotCache | null = null;
-  private historyManager: HistoryManager | null = null;
   private sessionId: string | null = null;
   private workspacePath: string | null = null;
   private active = false;
-  private onFileChanged: ((filePath: string) => Promise<void> | void) | null = null;
+  private onFileChanged: ((event: SessionFileWatcherEditEvent) => Promise<void> | void) | null = null;
 
   /**
    * File paths recently saved by the Nimbalyst editor (user saves).
@@ -203,6 +216,7 @@ export class SessionFileWatcher {
    * don't get attributed to AI tool calls.
    */
   private static recentEditorSaves = new Map<string, number>();
+  private static recentDiskNotifications = new Map<string, number>();
 
   /**
    * Mark a file as recently saved by the editor.
@@ -227,13 +241,11 @@ export class SessionFileWatcher {
     workspacePath: string,
     sessionId: string,
     cache: FileSnapshotCache,
-    historyManager: HistoryManager,
-    onFileChanged?: (filePath: string) => Promise<void> | void
+    onFileChanged?: (event: SessionFileWatcherEditEvent) => Promise<void> | void
   ): Promise<void> {
     await this.stop();
 
     this.cache = cache;
-    this.historyManager = historyManager;
     this.sessionId = sessionId;
     this.workspacePath = workspacePath;
     this.active = true;
@@ -253,7 +265,6 @@ export class SessionFileWatcher {
       await releaseSharedWatcher(this.workspacePath, this.sessionId);
     }
     this.cache = null;
-    this.historyManager = null;
     this.sessionId = null;
     this.workspacePath = null;
     this.active = false;
@@ -269,14 +280,16 @@ export class SessionFileWatcher {
   }
 
   private async handleChange(filePath: string): Promise<void> {
-    if (!this.active || !this.cache || !this.historyManager || !this.sessionId) return;
+    if (!this.active || !this.cache || !this.sessionId || !this.workspacePath) return;
     if (this.isBinaryPath(filePath)) return;
     if (this.isRecentEditorSave(filePath)) return;
+    if (!this.isPathInWorkspace(filePath, this.workspacePath)) return;
 
     try {
-      if (this.onFileChanged) {
-        await this.onFileChanged(filePath);
-      }
+      logger.main.debug('[SessionFileWatcher] Change event received:', {
+        sessionId: this.sessionId,
+        filePath,
+      });
 
       const beforeContent = await this.cache.getBeforeState(filePath);
 
@@ -287,59 +300,28 @@ export class SessionFileWatcher {
         return; // File may have been deleted between event and read
       }
 
-      if (beforeContent === null) {
-        if (!this.workspacePath || !this.isPathInWorkspace(filePath, this.workspacePath)) {
-          return;
-        }
-        const pendingTags = await this.historyManager.getPendingTags(filePath);
-        if (!pendingTags || pendingTags.length === 0) {
-          const toolUseId = `codex-file-change-${Date.now()}`;
-          const tagId = `ai-edit-pending-${this.sessionId}-${toolUseId}`;
-
-          await this.historyManager.createTag(
-            filePath,
-            tagId,
-            '',
-            this.sessionId,
-            toolUseId
-          );
-
-          this.notifyFileChanged(filePath);
-
-          logger.main.info('[SessionFileWatcher] Created pre-edit tag for uncached file change:', {
-            file: path.basename(filePath),
-            tagId,
-          });
-        }
-
+      if (beforeContent !== null && beforeContent === currentContent) {
         this.cache.updateSnapshot(filePath, currentContent);
         return;
       }
 
-      if (beforeContent !== currentContent) {
-        // Check if a pre-edit tag already exists for this file
-        const pendingTags = await this.historyManager.getPendingTags(filePath);
-        if (!pendingTags || pendingTags.length === 0) {
-          const toolUseId = `codex-file-change-${Date.now()}`;
-          const tagId = `ai-edit-pending-${this.sessionId}-${toolUseId}`;
-
-          await this.historyManager.createTag(
-            filePath,
-            tagId,
-            beforeContent,
-            this.sessionId,
-            toolUseId
-          );
-
-          // Notify renderer of the file change so it can enter diff mode
-          this.notifyFileChanged(filePath);
-
-          logger.main.info('[SessionFileWatcher] Created pre-edit tag for changed file:', {
-            file: path.basename(filePath),
-            tagId,
-          });
-        }
+      const timestamp = Date.now();
+      if (this.onFileChanged) {
+        await this.onFileChanged({
+          workspacePath: this.workspacePath,
+          filePath,
+          timestamp,
+          beforeContent,
+        });
       }
+
+      this.notifyFileChanged(filePath);
+      logger.main.debug('[SessionFileWatcher] Emitted change event:', {
+        sessionId: this.sessionId,
+        filePath,
+        timestamp,
+        hasBeforeContent: beforeContent !== null,
+      });
 
       // Update cache with current content for subsequent edits
       this.cache.updateSnapshot(filePath, currentContent);
@@ -349,37 +331,16 @@ export class SessionFileWatcher {
   }
 
   private async handleAdd(filePath: string): Promise<void> {
-    if (!this.active || !this.cache || !this.historyManager || !this.sessionId) return;
+    if (!this.active || !this.cache || !this.sessionId || !this.workspacePath) return;
     if (this.isBinaryPath(filePath)) return;
     if (this.isRecentEditorSave(filePath)) return;
+    if (!this.isPathInWorkspace(filePath, this.workspacePath)) return;
 
     try {
-      if (this.onFileChanged) {
-        await this.onFileChanged(filePath);
-      }
-
-      // Check if a pre-edit tag already exists
-      const pendingTags = await this.historyManager.getPendingTags(filePath);
-      if (!pendingTags || pendingTags.length === 0) {
-        const toolUseId = `codex-file-add-${Date.now()}`;
-        const tagId = `ai-edit-pending-${this.sessionId}-${toolUseId}`;
-
-        // New file - empty "before" content
-        await this.historyManager.createTag(
-          filePath,
-          tagId,
-          '',
-          this.sessionId,
-          toolUseId
-        );
-
-        this.notifyFileChanged(filePath);
-
-        logger.main.info('[SessionFileWatcher] Created pre-edit tag for new file:', {
-          file: path.basename(filePath),
-          tagId,
-        });
-      }
+      logger.main.debug('[SessionFileWatcher] Add event received:', {
+        sessionId: this.sessionId,
+        filePath,
+      });
 
       // Cache the new file content
       try {
@@ -387,7 +348,25 @@ export class SessionFileWatcher {
         this.cache.updateSnapshot(filePath, content);
       } catch {
         // File may have been deleted already
+        return;
       }
+
+      const timestamp = Date.now();
+      if (this.onFileChanged) {
+        await this.onFileChanged({
+          workspacePath: this.workspacePath,
+          filePath,
+          timestamp,
+          beforeContent: '',
+        });
+      }
+
+      this.notifyFileChanged(filePath);
+      logger.main.debug('[SessionFileWatcher] Emitted add event:', {
+        sessionId: this.sessionId,
+        filePath,
+        timestamp,
+      });
     } catch (error) {
       logger.main.error('[SessionFileWatcher] Error handling file add:', error);
     }
@@ -405,6 +384,21 @@ export class SessionFileWatcher {
   }
 
   private notifyFileChanged(filePath: string): void {
+    const normalized = path.normalize(filePath);
+    const now = Date.now();
+
+    for (const [trackedPath, notifiedAt] of SessionFileWatcher.recentDiskNotifications.entries()) {
+      if ((now - notifiedAt) > FILE_CHANGED_NOTIFY_DEDUPE_MS) {
+        SessionFileWatcher.recentDiskNotifications.delete(trackedPath);
+      }
+    }
+
+    const lastNotifiedAt = SessionFileWatcher.recentDiskNotifications.get(normalized);
+    if (lastNotifiedAt != null && (now - lastNotifiedAt) < FILE_CHANGED_NOTIFY_DEDUPE_MS) {
+      return;
+    }
+    SessionFileWatcher.recentDiskNotifications.set(normalized, now);
+
     const windows = BrowserWindow.getAllWindows();
     for (const window of windows) {
       if (!window.isDestroyed()) {

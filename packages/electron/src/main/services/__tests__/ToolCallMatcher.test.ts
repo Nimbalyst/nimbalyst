@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('../../database/PGLiteDatabaseWorker', () => ({
   database: {
@@ -19,9 +19,14 @@ vi.mock('../../utils/logger', () => ({
   },
 }));
 
-import { parseToolCallWindows, scoreMatch, type ToolCallWindow } from '../ToolCallMatcher';
+import { database } from '../../database/PGLiteDatabaseWorker';
+import { parseToolCallWindows, scoreMatch, scoreWorkspaceFileEdit, toolCallMatcher, type ToolCallWindow } from '../ToolCallMatcher';
 
 describe('ToolCallMatcher', () => {
+  beforeEach(() => {
+    (database.query as ReturnType<typeof vi.fn>).mockReset();
+  });
+
   describe('parseToolCallWindows', () => {
     const baseDate = new Date('2026-02-20T12:00:00Z');
     const SESSION_ID = 'test-session';
@@ -610,6 +615,117 @@ describe('ToolCallMatcher', () => {
 
       expect(windows).toHaveLength(1);
       expect(windows[0].argsText).toContain('direct.txt');
+    });
+  });
+
+  describe('workspace-scoped attribution', () => {
+    const baseTime = new Date('2026-02-21T01:55:59.477Z').getTime();
+
+    it('scores Bash command text evidence without Bash file-op parsing', () => {
+      const window: ToolCallWindow = {
+        messageId: 101,
+        messageCreatedAt: baseTime,
+        sessionId: 'session-bash',
+        toolName: 'Bash',
+        toolCallItemId: 'item-bash',
+        toolUseId: 'item-bash',
+        argsText: "{\"command\":\"sed -i 's/foo/bar/' /workspace/src/config.ts\"}",
+        outputText: '',
+        args: { command: "sed -i 's/foo/bar/' /workspace/src/config.ts" },
+      };
+
+      const scored = scoreWorkspaceFileEdit('/workspace/src/config.ts', baseTime + 100, window);
+      expect(scored).not.toBeNull();
+      expect(scored!.reasons).toContain('bash_command_path_text');
+      expect(scored!.score).toBeGreaterThanOrEqual(50);
+    });
+
+    it('selects a clear winner across candidate sessions', async () => {
+      (database.query as ReturnType<typeof vi.fn>).mockResolvedValue({
+        rows: [
+          {
+            session_id: 'session-1',
+            id: 1,
+            created_at_ms: baseTime,
+            content: JSON.stringify({
+              type: 'item.completed',
+              item: {
+                type: 'file_change',
+                id: 'item-fc-1',
+                changes: [{ path: '/workspace/src/a.ts', kind: 'update' }],
+              },
+            }),
+          },
+          {
+            session_id: 'session-2',
+            id: 2,
+            created_at_ms: baseTime + 50,
+            content: JSON.stringify({
+              type: 'item.completed',
+              item: {
+                type: 'command_execution',
+                id: 'item-bash-2',
+                command: "echo test >> a.ts",
+              },
+            }),
+          },
+        ],
+      });
+
+      const result = await toolCallMatcher.matchWorkspaceFileEdit({
+        workspacePath: '/workspace',
+        filePath: '/workspace/src/a.ts',
+        fileTimestamp: baseTime + 70,
+        candidateSessionIds: ['session-1', 'session-2'],
+      });
+
+      expect(result.reason).toBe('winner_selected');
+      expect(result.winner?.sessionId).toBe('session-1');
+      expect(result.candidates.length).toBe(2);
+    });
+
+    it('returns no winner when top candidate scores are tied', async () => {
+      (database.query as ReturnType<typeof vi.fn>).mockResolvedValue({
+        rows: [
+          {
+            session_id: 'session-a',
+            id: 11,
+            created_at_ms: baseTime,
+            content: JSON.stringify({
+              type: 'item.completed',
+              item: {
+                type: 'file_change',
+                id: 'item-a',
+                changes: [{ path: '/workspace/src/shared.ts', kind: 'update' }],
+              },
+            }),
+          },
+          {
+            session_id: 'session-b',
+            id: 12,
+            created_at_ms: baseTime,
+            content: JSON.stringify({
+              type: 'item.completed',
+              item: {
+                type: 'file_change',
+                id: 'item-b',
+                changes: [{ path: '/workspace/src/shared.ts', kind: 'update' }],
+              },
+            }),
+          },
+        ],
+      });
+
+      const result = await toolCallMatcher.matchWorkspaceFileEdit({
+        workspacePath: '/workspace',
+        filePath: '/workspace/src/shared.ts',
+        fileTimestamp: baseTime + 50,
+        candidateSessionIds: ['session-a', 'session-b'],
+      });
+
+      expect(result.winner).toBeNull();
+      expect(result.reason).toBe('ambiguous');
+      expect(result.candidates.length).toBe(2);
     });
   });
 });

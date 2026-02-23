@@ -36,6 +36,7 @@ import { logger } from '../../utils/logger';
 import { windowStates, findWindowByWorkspace, getWindowId } from '../../window/WindowManager';
 import { sessionFileTracker } from '../SessionFileTracker';
 import { toolCallMatcher, unwrapShellCommand } from '../ToolCallMatcher';
+import { workspaceFileEditAttributionService } from '../WorkspaceFileEditAttributionService';
 import {AnalyticsService} from "../analytics/AnalyticsService.ts";
 import { historyManager } from '../../HistoryManager';
 import { FileSnapshotCache } from '../../file/FileSnapshotCache';
@@ -2290,14 +2291,13 @@ export class AIService {
               effectiveWorkspacePath,
               session.id,
               cache,
-              historyManager,
-              async (filePath: string) => {
-                await sessionFileTracker.trackBashSideEffect(
-                  session.id,
-                  effectiveWorkspacePath,
-                  filePath,
-                  BrowserWindow.fromWebContents(event.sender)
-                );
+              async (watchEvent) => {
+                workspaceFileEditAttributionService.ingestWatcherEvent({
+                  workspacePath: watchEvent.workspacePath,
+                  filePath: watchEvent.filePath,
+                  timestamp: watchEvent.timestamp,
+                  beforeContent: watchEvent.beforeContent,
+                });
                 safeSend(event, 'session-files:updated', session.id);
               }
             );

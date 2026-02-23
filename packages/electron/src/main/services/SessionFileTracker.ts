@@ -8,11 +8,10 @@
  * 3. Have their tracker items/metadata refreshed in the document service
  */
 
+import * as path from 'path';
 import { BrowserWindow } from 'electron';
 import { SessionFilesRepository } from '@nimbalyst/runtime';
 import type { FileLinkType, EditedFileMetadata, ReadFileMetadata, ReferencedFileMetadata } from '@nimbalyst/runtime/ai/server/types';
-import { parseBashForFileOps } from '@nimbalyst/runtime/ai/server/providers/bashUtils';
-import { unwrapShellCommand } from './ToolCallMatcher';
 import { logger } from '../utils/logger';
 import { startFileWatcher } from '../file/FileWatcher';
 import { documentServices } from '../window/WindowManager';
@@ -56,8 +55,8 @@ function getLinkTypeForTool(toolName: string): FileLinkType | null {
 
 /**
  * Extract file path(s) from tool arguments
- * Returns the first file path found, or null if none
- * For Bash commands, this will be handled separately by extractBashFilePaths
+ * Returns the first file path found, or null if none.
+ * Bash commands are intentionally excluded from file path extraction.
  */
 function extractFilePathFromArgs(toolName: string, args: any): string | null {
   if (!args) return null;
@@ -78,14 +77,6 @@ function extractFilePathFromArgs(toolName: string, args: any): string | null {
   }
 
   return null;
-}
-
-/**
- * Extract file paths from Bash command
- * Uses the same parser from ClaudeCodeProvider to detect file operations
- */
-function extractBashFilePaths(command: string, workspaceId: string): string[] {
-  return parseBashForFileOps(command, workspaceId);
 }
 
 /**
@@ -147,8 +138,14 @@ function extractReadMetadata(toolName: string, args: any, result: any): ReadFile
 
 export class SessionFileTracker {
   private enabled = true;
-  private recentBashToolCalls = new Map<string, { toolUseId: string; command?: string; workspaceId: string; timestamp: number }>();
-  private readonly bashSideEffectWindowMs = 10_000;
+
+  /**
+   * Tracks files recently tracked as edited, keyed by "sessionId:filePath".
+   * Prevents duplicate session_files entries when both trackToolExecution
+   * and follow-up events fire for the same file+session in quick succession.
+   */
+  private recentEdits = new Map<string, number>();
+  private readonly editDedupeMs = 5_000;
 
   /**
    * Track a tool execution and create appropriate file links.
@@ -197,46 +194,25 @@ export class SessionFileTracker {
           return;
         }
         for (const change of changes) {
-          if (change && typeof change.path === 'string') {
-            await this.trackSingleFile(sessionId, workspaceId, change.path, linkType, toolName, args, result, toolUseId, window);
-          }
+          if (!change || typeof change.path !== 'string' || !change.path.trim()) continue;
+          // Resolve relative paths against workspace (Codex sometimes sends relative paths)
+          const changePath = change.path.startsWith('/')
+            ? change.path
+            : path.resolve(workspaceId, change.path);
+          await this.trackSingleFile(sessionId, workspaceId, changePath, linkType, toolName, args, result, toolUseId, window);
         }
         return;
       }
 
-      // Special handling for Bash commands - extract all affected files from the command
+      // Bash commands are intentionally not parsed for file operations.
+      // Watcher-based attribution is responsible for detecting and attributing
+      // file edits caused by shell commands.
       if (toolName === 'Bash') {
         const rawCommand = args?.command;
         if (!rawCommand || typeof rawCommand !== 'string') {
           logger.main.debug('[SessionFileTracker] No command found in Bash args');
-          return;
         }
-
-        // Unwrap shell-wrapped commands (e.g., "/bin/zsh -lc 'sed -i ...'")
-        // so parseBashForFileOps can detect the inner file operations
-        const command = unwrapShellCommand(rawCommand);
-
-        if (toolUseId) {
-          this.recentBashToolCalls.set(sessionId, {
-            toolUseId,
-            command: rawCommand,
-            workspaceId,
-            timestamp: Date.now()
-          });
-        }
-
-        const filePaths = extractBashFilePaths(command, workspaceId);
-        // console.log('[SessionFileTracker] Extracted Bash file paths:', filePaths);
-
-        if (filePaths.length === 0) {
-          logger.main.debug('[SessionFileTracker] No file operations detected in Bash command');
-          return;
-        }
-
-        // Track each affected file
-        for (const filePath of filePaths) {
-          await this.trackSingleFile(sessionId, workspaceId, filePath, linkType, toolName, args, result, toolUseId, window);
-        }
+        logger.main.debug('[SessionFileTracker] Skipping Bash file link extraction (watcher attribution only)');
         return;
       }
 
@@ -259,41 +235,8 @@ export class SessionFileTracker {
   }
 
   /**
-   * Track a file changed by a recent Bash tool call when the command
-   * itself didn't specify the affected files (e.g., running a script).
-   */
-  async trackBashSideEffect(
-    sessionId: string,
-    workspaceId: string,
-    filePath: string,
-    window?: BrowserWindow | null
-  ): Promise<void> {
-    const recent = this.recentBashToolCalls.get(sessionId);
-    if (!recent) return;
-    if (recent.workspaceId !== workspaceId) return;
-
-    const ageMs = Date.now() - recent.timestamp;
-    if (ageMs > this.bashSideEffectWindowMs) {
-      this.recentBashToolCalls.delete(sessionId);
-      return;
-    }
-
-    await this.trackSingleFile(
-      sessionId,
-      workspaceId,
-      filePath,
-      'edited',
-      'Bash',
-      { command: recent.command },
-      null,
-      recent.toolUseId,
-      window
-    );
-  }
-
-  /**
    * Track a single file link
-   * Extracted as a separate method to handle both single-file and multi-file (Bash) tracking
+   * Extracted as a separate method to handle both single-file and multi-file tracking
    */
   private async trackSingleFile(
     sessionId: string,
@@ -307,6 +250,20 @@ export class SessionFileTracker {
     window?: BrowserWindow | null
   ): Promise<void> {
     try {
+      // Dedup: skip if this file+session was already tracked as edited recently.
+      // This prevents duplicate session_files entries when tool events
+      // for the same file arrive in quick succession.
+      if (linkType === 'edited') {
+        const dedupeKey = `${sessionId}:${filePath}`;
+        const trackedAt = this.recentEdits.get(dedupeKey);
+        if (trackedAt != null) {
+          const ageMs = Date.now() - trackedAt;
+          if (ageMs <= this.editDedupeMs) {
+            return; // already tracked recently, skip duplicate
+          }
+          this.recentEdits.delete(dedupeKey);
+        }
+      }
 
       // Prepare metadata based on link type
       let metadata: any = {};
@@ -319,11 +276,9 @@ export class SessionFileTracker {
         // Ensure file watcher is attached for edited files
         // This is critical for detecting subsequent changes, even for files
         // beyond the 5000 file limit in the file tree
-        // console.log(`[SessionFileTracker] Edited file detected: ${filePath}, window provided: ${!!window}, window destroyed: ${window?.isDestroyed?.()}`);
         if (window && !window.isDestroyed()) {
           try {
             await startFileWatcher(window, filePath);
-            // console.log(`[SessionFileTracker] Started file watcher for edited file: ${filePath}`);
           } catch (watchError) {
             // Log but don't fail - file watcher is not critical for tracking
             console.error(`[SessionFileTracker] Failed to start file watcher for ${filePath}:`, watchError);
@@ -339,7 +294,6 @@ export class SessionFileTracker {
         if (documentService) {
           try {
             await documentService.refreshFileMetadata(filePath);
-            // console.log(`[SessionFileTracker] Refreshed tracker/metadata for: ${filePath}`);
           } catch (refreshError) {
             // Log but don't fail - metadata refresh is not critical for tracking
             console.error(`[SessionFileTracker] Failed to refresh metadata for ${filePath}:`, refreshError);
@@ -351,15 +305,6 @@ export class SessionFileTracker {
         metadata = extractReadMetadata(toolName, args, result);
       }
 
-      // console.
-      // '[SessionFileTracker] About to add file link:', {
-      //   sessionId,
-      //   workspaceId,
-      //   filePath,
-      //   linkType,
-      //   metadata
-      // });
-
       // Add file link to database
       const addedLink = await SessionFilesRepository.addFileLink({
         sessionId,
@@ -370,7 +315,13 @@ export class SessionFileTracker {
         metadata
       });
 
-      // console.log('[SessionFileTracker] File link added successfully:', addedLink);
+      // Record this file as recently tracked so subsequent calls from either
+      // trackToolExecution paths don't create duplicates.
+      if (linkType === 'edited') {
+        const dedupeKey = `${sessionId}:${filePath}`;
+        this.recentEdits.set(dedupeKey, Date.now());
+      }
+
       logger.main.debug(`[SessionFileTracker] Tracked ${linkType} link: ${filePath}`);
     } catch (error) {
       logger.main.error('[SessionFileTracker] Failed to track tool execution:', error);
