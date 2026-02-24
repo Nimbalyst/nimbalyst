@@ -1966,14 +1966,17 @@ export const setSelectedWorkstreamAtom = atom(
     // console.trace('[setSelectedWorkstreamAtom] Call stack');
     set(selectedWorkstreamAtom(workspacePath), selection);
 
-    // If selecting a single session, also set it as the global active session
-    if (selection?.type === 'session') {
+    // If selecting a single session OR a worktree session, set it as active immediately.
+    // Worktree selections use a session ID as the selection ID, and may not go through
+    // loadSessionChildrenAtom (e.g. blitz children), so we must initialize active child here.
+    if (selection?.type === 'session' || selection?.type === 'worktree') {
       set(setActiveSessionAtom, selection.id);
-      // For single sessions, the session is both the workstream and the active session
+      // For session/worktree selections, the selected session is both the workstream root
+      // and the active session tab.
       set(setWorkstreamActiveChildAtom, { workstreamId: selection.id, childId: selection.id });
     }
-    // For workstreams and worktrees, do NOT set activeChildId here
-    // Let loadSessionChildren or the persisted state handle it
+    // For workstream parents, do NOT set activeChildId here.
+    // Let loadSessionChildren or persisted state handle it.
 
     // Persist to workspace state (debounced)
     if (selectedWorkstreamPersistTimer) {
@@ -2128,4 +2131,3 @@ export const workstreamTitleAtom = atomFamily((workstreamId: string) =>
     return meta?.title || 'Untitled';
   })
 );
-
