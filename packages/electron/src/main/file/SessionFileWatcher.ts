@@ -420,17 +420,33 @@ export class SessionFileWatcher {
     if (!this.isPathInWorkspace(filePath, this.workspacePath)) return;
 
     try {
+      // Check if we already have a cached state for this file BEFORE reading the new content.
+      // Atomic writes (write-to-temp then rename) trigger 'rename' events on macOS,
+      // which get classified as 'add'. If the cache already has content for this path,
+      // this is an overwrite of an existing file, not a truly new file creation.
+      const beforeContent = await this.cache.getBeforeState(filePath);
+
       logger.main.debug('[SessionFileWatcher] Add event received:', {
         sessionId: this.sessionId,
         filePath,
+        hasExistingCache: beforeContent !== null,
       });
 
-      // Cache the new file content
+      let currentContent: string;
       try {
-        const content = await fs.readFile(filePath, 'utf-8');
-        this.cache.updateSnapshot(filePath, content);
+        currentContent = await fs.readFile(filePath, 'utf-8');
       } catch {
         // File may have been deleted already
+        return;
+      }
+
+      // If we had cached content and it matches the new content, skip (no real change)
+      if (beforeContent !== null && beforeContent === currentContent) {
+        logger.main.debug('[SessionFileWatcher] No-op skip (add event, content unchanged):', {
+          filePath,
+          sessionId: this.sessionId,
+        });
+        this.cache.updateSnapshot(filePath, currentContent);
         return;
       }
 
@@ -440,7 +456,7 @@ export class SessionFileWatcher {
           workspacePath: this.workspacePath,
           filePath,
           timestamp,
-          beforeContent: '',
+          beforeContent: beforeContent ?? '',
         });
       }
 
@@ -450,14 +466,21 @@ export class SessionFileWatcher {
         filePath,
         timestamp,
       });
+
+      // Update cache with current content AFTER firing the event
+      // (matches handleChange pattern - keeps cache at "before" state during event processing)
+      this.cache.updateSnapshot(filePath, currentContent);
     } catch (error) {
       logger.main.error('[SessionFileWatcher] Error handling file add:', error);
     }
   }
 
   private handleUnlink(filePath: string): void {
-    if (!this.active || !this.cache) return;
-    this.cache.removeSnapshot(filePath);
+    // Intentionally do NOT remove from cache on unlink.
+    // Atomic writes (write-to-temp, rename) trigger unlink+add in quick succession.
+    // Removing the cache entry here would lose the "before" state needed by handleAdd
+    // to produce a correct diff. The cache has a bounded memory cap and is cleaned up
+    // when the session stops, so stale entries are not a concern.
   }
 
   private isPathInWorkspace(filePath: string, workspacePath: string): boolean {

@@ -275,8 +275,9 @@ describe('SessionFileWatcher', () => {
   });
 
   describe('add event handling', () => {
-    it('emits add payload with empty before content and updates cache', async () => {
+    it('emits add payload with empty before content for truly new files', async () => {
       const cache = createMockCache();
+      (cache.getBeforeState as any).mockResolvedValue(null);
       setMockFileContent('/test/workspace/src/new-file.ts', 'new file content');
 
       const callback = vi.fn();
@@ -288,6 +289,7 @@ describe('SessionFileWatcher', () => {
       addHandler('/test/workspace/src/new-file.ts');
       await flush();
 
+      expect(cache.getBeforeState).toHaveBeenCalledWith('/test/workspace/src/new-file.ts');
       expect(cache.updateSnapshot).toHaveBeenCalledWith('/test/workspace/src/new-file.ts', 'new file content');
       expect(callback).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -297,6 +299,51 @@ describe('SessionFileWatcher', () => {
           timestamp: expect.any(Number),
         })
       );
+
+      await watcher.stop();
+    });
+
+    it('uses cached before content for atomic rewrites (rename events)', async () => {
+      const cache = createMockCache();
+      (cache.getBeforeState as any).mockResolvedValue('original content');
+      setMockFileContent('/test/workspace/src/file.ts', 'modified content');
+
+      const callback = vi.fn();
+      const watcher = new SessionFileWatcher();
+      await watcher.start(workspacePath, sessionId, cache, callback);
+
+      const addHandler = mockWatcherHandlers.add?.[0];
+      expect(addHandler).toBeDefined();
+      addHandler('/test/workspace/src/file.ts');
+      await flush();
+
+      expect(callback).toHaveBeenCalledWith(
+        expect.objectContaining({
+          workspacePath,
+          filePath: '/test/workspace/src/file.ts',
+          beforeContent: 'original content',
+          timestamp: expect.any(Number),
+        })
+      );
+      expect(cache.updateSnapshot).toHaveBeenCalledWith('/test/workspace/src/file.ts', 'modified content');
+
+      await watcher.stop();
+    });
+
+    it('skips add event when cached content matches new content', async () => {
+      const cache = createMockCache();
+      (cache.getBeforeState as any).mockResolvedValue('same content');
+      setMockFileContent('/test/workspace/src/file.ts', 'same content');
+
+      const callback = vi.fn();
+      const watcher = new SessionFileWatcher();
+      await watcher.start(workspacePath, sessionId, cache, callback);
+
+      const addHandler = mockWatcherHandlers.add?.[0];
+      addHandler('/test/workspace/src/file.ts');
+      await flush();
+
+      expect(callback).not.toHaveBeenCalled();
 
       await watcher.stop();
     });
@@ -318,7 +365,7 @@ describe('SessionFileWatcher', () => {
   });
 
   describe('unlink event handling', () => {
-    it('removes snapshot on unlink', async () => {
+    it('does not remove snapshot on unlink (preserves cache for atomic rewrites)', async () => {
       const cache = createMockCache();
       const watcher = new SessionFileWatcher();
 
@@ -328,7 +375,9 @@ describe('SessionFileWatcher', () => {
       expect(unlinkHandler).toBeDefined();
       unlinkHandler('/test/workspace/src/deleted.ts');
 
-      expect(cache.removeSnapshot).toHaveBeenCalledWith('/test/workspace/src/deleted.ts');
+      // Cache entry is intentionally preserved so that subsequent
+      // atomic write add events can provide correct before-content
+      expect(cache.removeSnapshot).not.toHaveBeenCalled();
 
       await watcher.stop();
     });
