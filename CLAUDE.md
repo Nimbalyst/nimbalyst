@@ -79,14 +79,6 @@ For detailed information about specific packages, see their CLAUDE.md files:
 - **Test UI**: `npm run test:unit:ui`
 - **E2E tests**: See [E2E_TESTING.md](./docs/E2E_TESTING.md) for comprehensive documentation
 
-### Marketing Screenshots & Videos
-- **Capture all**: `cd packages/electron && npm run marketing:screenshots`
-- **Capture by category**: `cd packages/electron && npm run marketing:screenshots:grep -- "hero-"` (also: `editor-`, `ai-`, `settings-`, `feature-`, `video-`)
-- **Requires dev server running** on port 5273 (`cd packages/electron && npm run dev`)
-- **Output**: `packages/electron/marketing/screenshots/{dark,light}/` (1440x900 PNG) and `packages/electron/marketing/videos/{dark,light}/` (WebM)
-- **Post-process videos**: `bash packages/electron/marketing/process-videos.sh` (converts WebM to MP4/GIF via ffmpeg)
-- See [MARKETING_SCREENSHOTS.md](./docs/MARKETING_SCREENSHOTS.md) for architecture, output inventory, and how to add new screenshots
-
 ### Other Packages
 - **iOS (native)**: `npm run ios:test:swift`, `npm run ios:build:transcript`
 - **Capacitor (Android)** *(not in active development - focused on native iOS app)*: `npm run cap:dev`, `npm run cap:android`
@@ -181,7 +173,7 @@ The Nimbalyst app uses **PGLite** (PostgreSQL in WebAssembly) for all data stora
 - **workspace-settings store** for per-project state
 - **PGLite database** for complex data like AI sessions and document history
 
-**CRITICAL: All database timestamps must use `TIMESTAMPTZ`.** Never create `TIMESTAMP` (without timezone) columns. If legacy tables exist, add a migration to convert those columns to `TIMESTAMPTZ`.
+**CRITICAL: All database timestamps must use \****`TIMESTAMPTZ`**\*\*.** Never create `TIMESTAMP` (without timezone) columns. If legacy tables exist, add a migration to convert those columns to `TIMESTAMPTZ`.
 
 For implementation details, see `/packages/electron/CLAUDE.md`.
 
