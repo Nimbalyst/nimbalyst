@@ -220,7 +220,7 @@ Best for quick edits and tasks that do not require multi-file operations.`,
   };
 
   return (
-    <div className="settings-sidebar w-[220px] shrink-0 border-r border-[var(--nim-border)] bg-[var(--nim-bg)] overflow-y-auto">
+    <div className="settings-sidebar w-[240px] shrink-0 border-r border-[var(--nim-border)] bg-[var(--nim-bg)] overflow-y-auto">
       <div className="settings-sidebar-content p-3">
         {filteredGroups.map((group) => (
           <div key={group.title} className="settings-sidebar-group mb-4">
