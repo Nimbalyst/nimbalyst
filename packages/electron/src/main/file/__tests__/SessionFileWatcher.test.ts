@@ -231,6 +231,32 @@ describe('SessionFileWatcher', () => {
       await watcher.stop();
     });
 
+    it('logs no-op skip with reason when content is unchanged', async () => {
+      const { logger } = await import('../../utils/logger');
+      const cache = createMockCache();
+      (cache.getBeforeState as any).mockResolvedValue('same content');
+      setMockFileContent('/test/workspace/src/file.ts', 'same content');
+
+      const watcher = new SessionFileWatcher();
+      await watcher.start(workspacePath, sessionId, cache);
+
+      const changeHandler = mockWatcherHandlers.change?.[0];
+      changeHandler('/test/workspace/src/file.ts');
+      await flush();
+
+      expect(logger.main.debug).toHaveBeenCalledWith(
+        '[SessionFileWatcher] No-op skip (content unchanged):',
+        expect.objectContaining({
+          workspacePath,
+          filePath: '/test/workspace/src/file.ts',
+          sessionId,
+          reason: 'no_content_change',
+        })
+      );
+
+      await watcher.stop();
+    });
+
     it('skips binary files', async () => {
       const cache = createMockCache();
       const callback = vi.fn();

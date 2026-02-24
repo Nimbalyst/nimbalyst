@@ -301,6 +301,12 @@ export class SessionFileWatcher {
       }
 
       if (beforeContent !== null && beforeContent === currentContent) {
+        logger.main.debug('[SessionFileWatcher] No-op skip (content unchanged):', {
+          workspacePath: this.workspacePath,
+          filePath,
+          sessionId: this.sessionId,
+          reason: 'no_content_change',
+        });
         this.cache.updateSnapshot(filePath, currentContent);
         return;
       }

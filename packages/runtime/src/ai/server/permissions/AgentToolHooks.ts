@@ -263,13 +263,10 @@ export class AgentToolHooks {
         return await this.handleExitPlanModeConfirmation(toolInput, toolUseID, options);
       }
 
-      // BASH FILE OPERATION TRACKING: Detect file operations in Bash commands FIRST
-      // Parse the command to find files that will be modified, then tag them
-      // This enables local history and session file tracking for Bash edits
-      // IMPORTANT: This must run BEFORE security checks so it works in bypass-all mode
-      if (toolName === 'Bash') {
-        await this.handleBashFileOperations(toolInput, toolUseID);
-      }
+      // NOTE: Bash file pre-tagging was removed to eliminate race conditions with
+      // watcher-based attribution (WorkspaceFileEditAttributionService). The watcher
+      // attribution service is now the single source of truth for pending diff tags.
+      // Bash editedFilesThisTurn tracking is handled in createPostToolUseHook() instead.
 
       // SECURITY: Check each part of compound Bash commands separately
       // Claude's pattern matching (e.g., Bash(git add:*)) can be bypassed with chained commands
@@ -334,6 +331,13 @@ export class AgentToolHooks {
         const affectedFiles = parseBashForFileOps(command, cwd);
 
         if (affectedFiles.length > 0) {
+          // Track affected files for turn-end snapshots (local history).
+          // This was previously done in the pre-tool hook, but pre-tagging was removed
+          // to avoid racing with watcher-based attribution for diff baselines.
+          for (const filePath of affectedFiles) {
+            this.editedFilesThisTurn.add(filePath);
+          }
+
           // Add delay for file watcher to detect changes from Bash operations
           // Same delay as Edit/Write/MultiEdit to ensure consistent behavior
           await new Promise(resolve => setTimeout(resolve, 200));
@@ -583,7 +587,8 @@ export class AgentToolHooks {
   }
 
   /**
-   * Handle Bash file operations: detect, track, and tag files
+   * @deprecated No longer called. Bash file tracking moved to post-tool hook;
+   * pre-tagging removed to avoid racing with watcher-based attribution.
    */
   private async handleBashFileOperations(
     toolInput: any,

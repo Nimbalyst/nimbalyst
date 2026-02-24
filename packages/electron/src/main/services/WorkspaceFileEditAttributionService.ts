@@ -25,8 +25,50 @@ const EVENT_DEDUPE_WINDOW_MS = 250;
 const EVENT_TTL_MS = 30_000;
 const MAX_QUEUE_SIZE = 500;
 
+/** Per-workspace attribution counters for observability. */
+interface AttributionCounters {
+  eventsReceived: number;
+  eventsDeduped: number;
+  attributedEdits: number;
+  unattributedEdits: number;
+  tagsCreated: number;
+}
+
+/** Interval (ms) between periodic counter summary logs. */
+const COUNTER_LOG_INTERVAL_MS = 60_000;
+
 class WorkspaceFileEditAttributionServiceImpl {
   private readonly stateByWorkspace = new Map<string, WorkspaceQueueState>();
+  private readonly counters = new Map<string, AttributionCounters>();
+  private counterLogTimer: ReturnType<typeof setInterval> | null = null;
+
+  private getCounters(workspacePath: string): AttributionCounters {
+    const existing = this.counters.get(workspacePath);
+    if (existing) return existing;
+    const c: AttributionCounters = { eventsReceived: 0, eventsDeduped: 0, attributedEdits: 0, unattributedEdits: 0, tagsCreated: 0 };
+    this.counters.set(workspacePath, c);
+
+    // Start periodic counter logging on first workspace
+    if (!this.counterLogTimer) {
+      this.counterLogTimer = setInterval(() => this.logCounterSummary(), COUNTER_LOG_INTERVAL_MS);
+      // Unref so it doesn't prevent process exit
+      if (this.counterLogTimer && typeof this.counterLogTimer === 'object' && 'unref' in this.counterLogTimer) {
+        this.counterLogTimer.unref();
+      }
+    }
+
+    return c;
+  }
+
+  private logCounterSummary(): void {
+    for (const [workspacePath, c] of this.counters.entries()) {
+      if (c.eventsReceived === 0) continue;
+      logger.main.info('[WorkspaceFileEditAttributionService] Counter summary:', {
+        workspacePath,
+        ...c,
+      });
+    }
+  }
 
   ingestWatcherEvent(rawEvent: WorkspaceFileEditEvent): void {
     const workspacePath = path.resolve(rawEvent.workspacePath);
@@ -37,6 +79,8 @@ class WorkspaceFileEditAttributionServiceImpl {
       filePath,
     };
     const now = Date.now();
+    const counters = this.getCounters(workspacePath);
+    counters.eventsReceived++;
     const state = this.getOrCreateState(workspacePath);
     this.cleanupState(state, now);
 
@@ -45,6 +89,7 @@ class WorkspaceFileEditAttributionServiceImpl {
       const ingestDiff = now - recent.ingestedAt;
       const eventDiff = Math.abs(event.timestamp - recent.eventTimestamp);
       if (ingestDiff <= EVENT_DEDUPE_WINDOW_MS && eventDiff <= EVENT_DEDUPE_WINDOW_MS) {
+        counters.eventsDeduped++;
         logger.main.debug('[WorkspaceFileEditAttributionService] Deduped watcher event:', {
           workspacePath,
           filePath,
@@ -160,7 +205,10 @@ class WorkspaceFileEditAttributionServiceImpl {
         candidateSessionIds,
       });
 
+      const counters = this.getCounters(event.workspacePath);
+
       if (!matchResult.winner) {
+        counters.unattributedEdits++;
         logger.main.debug('[WorkspaceFileEditAttributionService] No attribution winner for event:', {
           workspacePath: event.workspacePath,
           filePath: event.filePath,
@@ -205,6 +253,8 @@ class WorkspaceFileEditAttributionServiceImpl {
         },
       });
 
+      counters.attributedEdits++;
+
       const tagId = `ai-edit-pending-${winner.sessionId}-${toolUseId}`;
       await historyManager.createTag(
         event.filePath,
@@ -213,6 +263,7 @@ class WorkspaceFileEditAttributionServiceImpl {
         winner.sessionId,
         toolUseId,
       );
+      counters.tagsCreated++;
 
       logger.main.info('[WorkspaceFileEditAttributionService] Attributed file edit:', {
         workspacePath: event.workspacePath,
