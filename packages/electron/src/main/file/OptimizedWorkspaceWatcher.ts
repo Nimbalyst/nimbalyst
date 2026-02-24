@@ -1,3 +1,5 @@
+import * as fs from 'fs';
+import * as path from 'path';
 import { BrowserWindow } from 'electron';
 import chokidar, { FSWatcher } from 'chokidar';
 import { getFolderContents } from '../utils/FileTree';
@@ -5,16 +7,102 @@ import { logger } from '../utils/logger';
 import { getWindowId } from '../window/WindowManager';
 
 /**
- * Optimized workspace watcher using Chokidar
+ * Whether the platform supports `fs.watch(dir, { recursive: true })`.
  *
- * Only watches folders that are currently expanded in the file tree UI.
- * This dramatically reduces CPU usage by not watching collapsed folders.
+ * macOS uses FSEvents (1 FD for the entire tree).
+ * Windows uses ReadDirectoryChangesW (1 handle for the entire tree).
+ * Linux does NOT support recursive: true and throws ERR_FEATURE_UNAVAILABLE_ON_PLATFORM.
+ */
+const supportsRecursiveWatch = process.platform === 'darwin' || process.platform === 'win32';
+
+/**
+ * Directories that should never trigger events.
+ * Checked against every segment of the relative path.
+ */
+const IGNORED_DIRS = new Set([
+    'node_modules',
+    '.git',
+    'dist',
+    'build',
+    'out',
+    'coverage',
+    '.next',
+    '.nuxt',
+    '.vscode',
+    '.idea',
+    'target',
+    'worktrees',
+    '.cache',
+    '.turbo',
+    '.svelte-kit',
+]);
+
+/**
+ * Top-level directory names (relative to workspace root) that are
+ * macOS system/protected dirs and should be ignored entirely.
+ */
+const IGNORED_TOP_DIRS = new Set([
+    '.Trash', 'Library', 'Applications', 'Documents',
+    'Downloads', 'Music', 'Pictures', 'Movies', 'Public',
+    '.Spotlight-V100', '.TemporaryItems', '.fseventsd',
+]);
+
+/**
+ * OS junk files that should be silently ignored.
+ */
+const IGNORED_BASENAMES = new Set(['.DS_Store', 'Thumbs.db']);
+
+/**
+ * Returns true if the given path (relative to the workspace root,
+ * with a leading `/`) should be ignored.
+ */
+function shouldIgnore(relativePath: string): boolean {
+    const segments = relativePath.split('/').filter(Boolean);
+    if (segments.length === 0) return false;
+
+    // Ignore macOS system/protected top-level directories
+    if (IGNORED_TOP_DIRS.has(segments[0])) {
+        return true;
+    }
+
+    // Ignore if any segment is an ignored directory
+    for (const seg of segments) {
+        if (IGNORED_DIRS.has(seg)) {
+            return true;
+        }
+    }
+
+    const basename = segments[segments.length - 1];
+
+    // Ignore OS junk files
+    if (IGNORED_BASENAMES.has(basename)) {
+        return true;
+    }
+
+    // Ignore Unix socket files (e.g. .gnupg/S.gpg-agent)
+    if (basename.startsWith('S.')) {
+        return true;
+    }
+
+    return false;
+}
+
+/**
+ * Optimized workspace watcher.
+ *
+ * On macOS and Windows: uses `fs.watch(dir, { recursive: true })` which
+ * consumes a single file descriptor for the entire directory tree via
+ * FSEvents / ReadDirectoryChangesW.
+ *
+ * On Linux: falls back to chokidar which uses per-file inotify watches
+ * (recursive fs.watch is not supported on Linux).
  */
 export class OptimizedWorkspaceWatcher {
-    private watchers = new Map<number, FSWatcher>();
+    /** Native fs.FSWatcher for macOS/Windows, or chokidar FSWatcher for Linux */
+    private watchers = new Map<number, fs.FSWatcher | FSWatcher>();
     private updateTimers = new Map<number, NodeJS.Timeout>();
     private workspacePaths = new Map<number, string>();
-    private watchedPaths = new Map<number, Set<string>>(); // Track which paths are being watched per window
+    private watchedPaths = new Map<number, Set<string>>();
 
     async start(window: BrowserWindow, workspacePath: string) {
         const windowId = getWindowId(window);
@@ -25,13 +113,10 @@ export class OptimizedWorkspaceWatcher {
 
         this.stop(windowId);
 
-        // logger.workspaceWatcher.info(`Starting optimized workspace watcher for: ${workspacePath}`);
-        // console.log(`[WorkspaceWatcher] Starting watcher for: ${workspacePath}`);
-
         this.workspacePaths.set(windowId, workspacePath);
-        this.watchedPaths.set(windowId, new Set([workspacePath])); // Start by watching the root
+        this.watchedPaths.set(windowId, new Set([workspacePath]));
 
-        // Debounced update function
+        // Debounced update function — shared by both code paths
         const triggerUpdate = () => {
             const existingTimer = this.updateTimers.get(windowId);
             if (existingTimer) {
@@ -40,7 +125,6 @@ export class OptimizedWorkspaceWatcher {
 
             const timer = setTimeout(() => {
                 logger.workspaceWatcher.debug('Updating file tree');
-                // console.log(`[WorkspaceWatcher] Triggering file tree update for window ${windowId}`);
                 const fileTree = getFolderContents(workspacePath);
 
                 if (!window || window.isDestroyed()) {
@@ -49,133 +133,138 @@ export class OptimizedWorkspaceWatcher {
                 }
 
                 window.webContents.send('workspace-file-tree-updated', { fileTree });
-            }, 500); // 500ms debounce to reduce CPU load
+            }, 500);
 
             this.updateTimers.set(windowId, timer);
         };
 
+        if (supportsRecursiveWatch) {
+            this.startRecursiveWatch(window, windowId, workspacePath, triggerUpdate);
+        } else {
+            this.startChokidarWatch(window, windowId, workspacePath, triggerUpdate);
+        }
+    }
+
+    // ---------------------------------------------------------------
+    // macOS / Windows: single recursive fs.watch
+    // ---------------------------------------------------------------
+
+    private startRecursiveWatch(
+        window: BrowserWindow,
+        windowId: number,
+        workspacePath: string,
+        triggerUpdate: () => void
+    ) {
         try {
-            // Create a watcher that only watches directories explicitly added to watchedPaths
+            const watcher = fs.watch(workspacePath, { recursive: true }, (eventType: string, filename: string | null) => {
+                if (!filename) return;
+
+                // filename is relative to workspacePath (forward-slash on all platforms)
+                const relativePath = '/' + filename.split(path.sep).join('/');
+
+                if (shouldIgnore(relativePath)) return;
+
+                const absolutePath = path.join(workspacePath, filename);
+
+                if (eventType === 'change') {
+                    // Content modification — notify editors, do NOT rebuild file tree
+                    if (!window.isDestroyed()) {
+                        window.webContents.send('file-changed-on-disk', { path: absolutePath });
+                    }
+                } else {
+                    // 'rename' — could be add or delete.
+                    // Either way the tree structure changed.
+                    console.log(`[WorkspaceWatcher] rename event: ${absolutePath}`);
+                    triggerUpdate();
+
+                    // Also send file-changed-on-disk for renames so editors
+                    // pick up external renames / deletions.
+                    if (!window.isDestroyed()) {
+                        window.webContents.send('file-changed-on-disk', { path: absolutePath });
+                    }
+                }
+            });
+
+            watcher.on('error', (error: NodeJS.ErrnoException) => {
+                const code = error.code;
+                if (code === 'EMFILE' || code === 'ENFILE') {
+                    logger.workspaceWatcher.warn(
+                        'Too many open files - some file tree changes may not be detected. Try closing other workspaces.'
+                    );
+                } else if (code === 'EPERM' || code === 'EACCES') {
+                    logger.workspaceWatcher.debug(`Skipping unwatchable path: ${error}`);
+                } else {
+                    logger.workspaceWatcher.error('Watcher error:', error);
+                    console.error(`[WorkspaceWatcher] Error:`, error);
+                }
+            });
+
+            this.watchers.set(windowId, watcher);
+        } catch (error) {
+            logger.workspaceWatcher.error('Failed to start recursive workspace watcher:', error);
+            console.error(`[WorkspaceWatcher] Failed to start:`, error);
+        }
+    }
+
+    // ---------------------------------------------------------------
+    // Linux fallback: chokidar (existing behaviour)
+    // ---------------------------------------------------------------
+
+    private startChokidarWatch(
+        window: BrowserWindow,
+        windowId: number,
+        workspacePath: string,
+        triggerUpdate: () => void
+    ) {
+        try {
             const watcher = chokidar.watch(workspacePath, {
-                // Performance settings - critical for avoiding CPU spikes!
-                ignored: (path: string, stats?: any) => {
-                    const relativePath = path.replace(workspacePath, '');
-
-                    // Always ignore common build/dependency directories
-                    if (relativePath.includes('/node_modules/') ||
-                        relativePath.includes('/.git/') ||
-                        relativePath.includes('/dist/') ||
-                        relativePath.includes('/build/') ||
-                        relativePath.includes('/out/') ||
-                        relativePath.includes('/coverage/') ||
-                        relativePath.includes('/.next/') ||
-                        relativePath.includes('/.nuxt/') ||
-                        relativePath.includes('/.vscode/') ||
-                        relativePath.includes('/.idea/') ||
-                        relativePath.includes('/target/') ||
-                        relativePath.includes('/worktrees/') ||
-                        relativePath.includes('/.cache/') ||
-                        relativePath.includes('/.turbo/') ||
-                        relativePath.includes('/.svelte-kit/')) {
-                        return true;
-                    }
-
-                    // Ignore OS files
-                    if (relativePath.endsWith('.DS_Store') ||
-                        relativePath.endsWith('Thumbs.db')) {
-                        return true;
-                    }
-
-                    // Ignore macOS system/protected directories and unwatchable paths.
-                    // These cause EPERM/EACCES errors and are never useful in a file tree.
-                    const topSegment = relativePath.split('/')[1];
-                    if (topSegment) {
-                        const ignoredTopDirs = new Set([
-                            '.Trash', 'Library', 'Applications', 'Documents',
-                            'Downloads', 'Music', 'Pictures', 'Movies', 'Public',
-                            '.Spotlight-V100', '.TemporaryItems', '.fseventsd',
-                        ]);
-                        if (ignoredTopDirs.has(topSegment)) {
-                            return true;
-                        }
-                    }
-
-                    // Ignore Unix socket files (e.g. .gnupg/S.gpg-agent) - not watchable
-                    const basename = relativePath.split('/').pop() || '';
-                    if (basename.startsWith('S.')) {
-                        return true;
-                    }
-
-                    // Watch all files - filtering happens in the UI
-                    return false;
+                ignored: (filePath: string, _stats?: any) => {
+                    const relativePath = filePath.replace(workspacePath, '');
+                    return shouldIgnore(relativePath);
                 },
-
-                // Don't fire events for initial scan
                 ignoreInitial: true,
-
-                // Follow symlinks (optional, set to false if you don't need it)
                 followSymlinks: false,
-
-                // Watch only 1 level deep to prevent recursive watching
-                // Each added folder via watcher.add() will also watch 1 level deep
                 depth: 1,
-
-                // Use native filesystem events (more efficient than polling)
                 usePolling: false,
-
-                // Atomic write handling
                 atomic: true,
                 awaitWriteFinish: {
                     stabilityThreshold: 200,
-                    pollInterval: 100
+                    pollInterval: 100,
                 },
-
-                // Performance: don't track stats for every file
                 alwaysStat: false,
-
-                // Don't use interval-based polling
                 interval: 300,
                 binaryInterval: 500,
             });
 
-            // Handle all events (add, change, unlink, addDir, unlinkDir)
             watcher
-                .on('add', (path) => {
-                    console.log(`[WorkspaceWatcher] *** FILE ADDED EVENT ***: ${path}`);
+                .on('add', (filePath: string) => {
+                    console.log(`[WorkspaceWatcher] *** FILE ADDED EVENT ***: ${filePath}`);
                     triggerUpdate();
                 })
-                .on('change', (path) => {
-                    // console.log(`[WorkspaceWatcher] File changed: ${path}`);
-                    // Send file-changed-on-disk event to renderer for editor updates
+                .on('change', (filePath: string) => {
                     if (!window.isDestroyed()) {
-                        window.webContents.send('file-changed-on-disk', { path });
+                        window.webContents.send('file-changed-on-disk', { path: filePath });
                     }
-                    // NOTE: Do NOT call triggerUpdate() here!
-                    // File content changes do not affect file tree structure.
-                    // Only add/unlink/addDir/unlinkDir events need file tree updates.
                 })
-                .on('unlink', (path) => {
-                    console.log(`[WorkspaceWatcher] File deleted: ${path}`);
+                .on('unlink', (filePath: string) => {
+                    console.log(`[WorkspaceWatcher] File deleted: ${filePath}`);
                     triggerUpdate();
                 })
-                .on('addDir', (path) => {
-                    console.log(`[WorkspaceWatcher] Directory added: ${path}`);
+                .on('addDir', (filePath: string) => {
+                    console.log(`[WorkspaceWatcher] Directory added: ${filePath}`);
                     triggerUpdate();
                 })
-                .on('unlinkDir', (path) => {
-                    console.log(`[WorkspaceWatcher] Directory deleted: ${path}`);
+                .on('unlinkDir', (filePath: string) => {
+                    console.log(`[WorkspaceWatcher] Directory deleted: ${filePath}`);
                     triggerUpdate();
-                })
-                .on('ready', () => {
-                    // console.log(`[WorkspaceWatcher] *** WATCHER READY *** for: ${workspacePath}`);
                 })
                 .on('error', (error: unknown) => {
                     const code = error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined;
                     if (code === 'EMFILE' || code === 'ENFILE') {
-                        logger.workspaceWatcher.warn(`Too many open files - some file tree changes may not be detected. Try closing other workspaces or collapsing large folders.`);
+                        logger.workspaceWatcher.warn(
+                            'Too many open files - some file tree changes may not be detected. Try closing other workspaces or collapsing large folders.'
+                        );
                     } else if (code === 'EPERM' || code === 'EACCES' || code === 'UNKNOWN') {
-                        // Permission errors and unwatchable paths (sockets, protected dirs) are
-                        // expected when watching broad directories. Log at debug, not error.
                         logger.workspaceWatcher.debug(`Skipping unwatchable path: ${error}`);
                     } else {
                         logger.workspaceWatcher.error('Watcher error:', error);
@@ -184,67 +273,91 @@ export class OptimizedWorkspaceWatcher {
                 });
 
             this.watchers.set(windowId, watcher);
-
-            // logger.workspaceWatcher.info(`Optimized workspace watcher started for: ${workspacePath}`);
-            // console.log(`[WorkspaceWatcher] Successfully created watcher for window ${windowId}`);
-
         } catch (error) {
             logger.workspaceWatcher.error('Failed to start workspace watcher:', error);
             console.error(`[WorkspaceWatcher] Failed to start:`, error);
         }
     }
 
-    // Add a folder to watch (called when user expands a folder in the UI)
+    // ---------------------------------------------------------------
+    // Folder expansion tracking
+    // ---------------------------------------------------------------
+
+    /**
+     * Add a folder to watch (called when user expands a folder in the UI).
+     *
+     * On macOS/Windows this is a no-op for watching purposes because the
+     * recursive fs.watch already covers the entire tree. We still track
+     * the path so getStats() reports accurately.
+     *
+     * On Linux (chokidar) this adds the folder to the chokidar watcher.
+     */
     addWatchedFolder(windowId: number, folderPath: string) {
-        const watcher = this.watchers.get(windowId);
         const watchedPaths = this.watchedPaths.get(windowId);
         const workspacePath = this.workspacePaths.get(windowId);
 
-        if (!watcher || !watchedPaths) {
+        if (!watchedPaths) {
             console.log(`[WorkspaceWatcher] No watcher found for window ${windowId}`);
             return;
         }
 
-        // Guard: only watch folders within the workspace to prevent watching
-        // arbitrary filesystem paths (e.g. /var, /tmp) which flood the watcher
+        // Guard: only watch folders within the workspace
         if (workspacePath && !folderPath.startsWith(workspacePath + '/') && folderPath !== workspacePath) {
             console.log(`[WorkspaceWatcher] Rejecting folder outside workspace: ${folderPath}`);
             return;
         }
 
         if (watchedPaths.has(folderPath)) {
-            console.log(`[WorkspaceWatcher] Already watching: ${folderPath}`);
             return;
         }
 
-        console.log(`[WorkspaceWatcher] Adding watch for folder: ${folderPath}`);
-        watcher.add(folderPath);
         watchedPaths.add(folderPath);
+
+        // On Linux, also add to chokidar
+        if (!supportsRecursiveWatch) {
+            const watcher = this.watchers.get(windowId);
+            if (watcher && 'add' in watcher) {
+                console.log(`[WorkspaceWatcher] Adding watch for folder: ${folderPath}`);
+                (watcher as FSWatcher).add(folderPath);
+            }
+        }
     }
 
-    // Remove a folder from watch (called when user collapses a folder in the UI)
+    /**
+     * Remove a folder from watch (called when user collapses a folder in the UI).
+     *
+     * On macOS/Windows this only updates tracking state.
+     * On Linux (chokidar) this also unwatches from chokidar.
+     */
     removeWatchedFolder(windowId: number, folderPath: string) {
-        const watcher = this.watchers.get(windowId);
         const watchedPaths = this.watchedPaths.get(windowId);
-
-        if (!watcher || !watchedPaths) {
+        if (!watchedPaths || !watchedPaths.has(folderPath)) {
             return;
         }
 
-        if (!watchedPaths.has(folderPath)) {
-            return;
-        }
-
-        console.log(`[WorkspaceWatcher] Removing watch for folder: ${folderPath}`);
-        watcher.unwatch(folderPath);
         watchedPaths.delete(folderPath);
+
+        // On Linux, also remove from chokidar
+        if (!supportsRecursiveWatch) {
+            const watcher = this.watchers.get(windowId);
+            if (watcher && 'unwatch' in watcher) {
+                console.log(`[WorkspaceWatcher] Removing watch for folder: ${folderPath}`);
+                (watcher as FSWatcher).unwatch(folderPath);
+            }
+        }
     }
+
+    // ---------------------------------------------------------------
+    // Lifecycle
+    // ---------------------------------------------------------------
 
     stop(windowId: number) {
         const watcher = this.watchers.get(windowId);
         if (watcher) {
             console.log(`[WorkspaceWatcher] Stopping watcher for window ${windowId}`);
-            watcher.close();
+            if ('close' in watcher && typeof watcher.close === 'function') {
+                watcher.close();
+            }
             this.watchers.delete(windowId);
             this.workspacePaths.delete(windowId);
             this.watchedPaths.delete(windowId);
@@ -265,31 +378,45 @@ export class OptimizedWorkspaceWatcher {
         for (const [windowId, watcher] of this.watchers.entries()) {
             try {
                 console.log(`[CLEANUP] Closing workspace watcher for window ${windowId}`);
-                // Log what we're watching
-                const watched = watcher.getWatched();
-                const totalFiles = Object.values(watched).reduce((sum: number, files: any) => sum + files.length, 0);
-                console.log(`[CLEANUP] Watcher for window ${windowId} is watching ${totalFiles} files in ${Object.keys(watched).length} directories`);
-                closePromises.push(watcher.close());
+                if (supportsRecursiveWatch) {
+                    // Native fs.FSWatcher — close() is synchronous
+                    (watcher as fs.FSWatcher).close();
+                } else {
+                    // chokidar FSWatcher — close() returns a Promise
+                    const chokidarWatcher = watcher as FSWatcher;
+                    const watched = chokidarWatcher.getWatched();
+                    const totalFiles = Object.values(watched).reduce(
+                        (sum: number, files: string[]) => sum + files.length,
+                        0
+                    );
+                    console.log(
+                        `[CLEANUP] Watcher for window ${windowId} is watching ${totalFiles} files in ${Object.keys(watched).length} directories`
+                    );
+                    closePromises.push(chokidarWatcher.close());
+                }
             } catch (error) {
                 logger.workspaceWatcher.error(`Error closing watcher for window ${windowId}:`, error);
                 console.error(`[CLEANUP] Error closing workspace watcher for window ${windowId}:`, error);
             }
         }
 
-        // Wait for all watchers to close with a timeout
-        const allClosesPromise = Promise.all(closePromises);
-        const timeoutPromise = new Promise<void>((resolve) => {
-            setTimeout(() => {
-                console.log(`[CLEANUP] Workspace watcher close timed out after 1000ms, forcing cleanup`);
-                resolve();
-            }, 1000);
-        });
+        if (closePromises.length > 0) {
+            // Wait for chokidar watchers to close with a timeout
+            const allClosesPromise = Promise.all(closePromises);
+            const timeoutPromise = new Promise<void>((resolve) => {
+                setTimeout(() => {
+                    console.log(`[CLEANUP] Workspace watcher close timed out after 1000ms, forcing cleanup`);
+                    resolve();
+                }, 1000);
+            });
 
-        await Promise.race([allClosesPromise, timeoutPromise]);
+            await Promise.race([allClosesPromise, timeoutPromise]);
+        }
+
         this.watchers.clear();
         this.workspacePaths.clear();
+        this.watchedPaths.clear();
 
-        // Clear all timers
         for (const timer of this.updateTimers.values()) {
             clearTimeout(timer);
         }
@@ -298,17 +425,21 @@ export class OptimizedWorkspaceWatcher {
     }
 
     getStats() {
-        const stats: Array<{windowId: number, workspacePath: string}> = [];
+        const stats: Array<{ windowId: number; workspacePath: string; watchedFolders: number }> = [];
         for (const [windowId, workspacePath] of this.workspacePaths.entries()) {
+            const watchedPaths = this.watchedPaths.get(windowId);
             stats.push({
                 windowId,
-                workspacePath
+                workspacePath,
+                watchedFolders: watchedPaths?.size ?? 0,
             });
         }
         return {
-            type: 'OptimizedWorkspaceWatcher (chokidar)',
+            type: supportsRecursiveWatch
+                ? 'OptimizedWorkspaceWatcher (fs.watch recursive)'
+                : 'OptimizedWorkspaceWatcher (chokidar)',
             activeWorkspaces: this.watchers.size,
-            workspaces: stats
+            workspaces: stats,
         };
     }
 }

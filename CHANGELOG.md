@@ -50,6 +50,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <!-- Changes to existing functionality go here -->
 
 ### Fixed
+- File descriptor exhaustion from workspace watcher opening per-file FDs (2500+ per workspace), causing spawn EBADF with default ulimit
 - File descriptor leak from session file watchers causing spawn EBADF errors
 - Sub-agents now spawn correctly in packaged builds
 - Worktree timestamps no longer shift by local timezone offset
