@@ -4,7 +4,6 @@ import { useAtomValue } from 'jotai';
 import { MaterialSymbol, getProviderIcon } from '@nimbalyst/runtime';
 import { releaseChannelAtom } from '../../store/atoms/appSettings';
 import { useAlphaFeatures } from '../../hooks/useAlphaFeature';
-import { useBetaFeature } from '../../hooks/useBetaFeature';
 
 export type SettingsCategory =
   | 'agent-permissions'
@@ -59,8 +58,6 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
   // Get release channel and alpha/beta feature flags from Jotai atoms
   const releaseChannel = useAtomValue(releaseChannelAtom);
   const alphaFeatures = useAlphaFeatures(['voice-mode', 'claude-plugins']);
-  const isCodexBetaEnabled = useBetaFeature('codex');
-
   const getStatusDot = (providerId: string): 'success' | 'warning' | 'error' | undefined => {
     const status = providerStatus[providerId];
     if (!status) return undefined;
@@ -108,6 +105,7 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
           id: 'beta-features',
           name: 'Beta Features',
           icon: <MaterialSymbol icon="science" size={16} />,
+          hidden: true,
         },
       ],
     },
@@ -127,10 +125,9 @@ Best for complex coding tasks.`,
         },
         {
           id: 'openai-codex',
-          name: 'OpenAI Codex',
+          name: 'OpenAI Codex (BETA)',
           icon: getProviderIcon('openai', { size: 16 }),
           statusDot: getStatusDot('openai-codex'),
-          hidden: !isCodexBetaEnabled,
         },
       ],
     },
