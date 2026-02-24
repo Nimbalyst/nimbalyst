@@ -20,6 +20,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.54.9] - 2026-02-24
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- Teammate messages no longer hang when lead agent is mid-turn
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.54.8] - 2026-02-23
 
 
