@@ -618,6 +618,64 @@ describe('ToolCallMatcher', () => {
     });
   });
 
+  describe('extractDiffsFromMessageContent', () => {
+    // Access private method for targeted testing
+    const extract = (content: string, targetFilePath: string) =>
+      (toolCallMatcher as any).extractDiffsFromMessageContent(content, targetFilePath);
+
+    it('should not early-return for file_change items with no arguments but with changes content', () => {
+      // file_change items from Codex have no arguments/args/input/parameters,
+      // which previously caused an early return at the `if (!args)` guard
+      const content = JSON.stringify({
+        type: 'item.completed',
+        item: {
+          type: 'file_change',
+          id: 'fc_123',
+          changes: [
+            { path: '/workspace/src/app.ts', kind: 'update', content: 'const x = 1;\n' },
+          ],
+        },
+      });
+
+      const result = extract(content, '/workspace/src/app.ts');
+      expect(result.content).toBe('const x = 1;\n');
+      expect(result.diffs).toEqual([]);
+    });
+
+    it('should return empty diffs for file_change with changes but no content field', () => {
+      // Typical Codex file_change: has changes array but no content on each change
+      const content = JSON.stringify({
+        type: 'item.completed',
+        item: {
+          type: 'file_change',
+          id: 'fc_456',
+          changes: [
+            { path: '/workspace/src/app.ts', kind: 'update' },
+          ],
+        },
+      });
+
+      const result = extract(content, '/workspace/src/app.ts');
+      expect(result.diffs).toEqual([]);
+    });
+
+    it('should return empty diffs for file_change targeting a different file', () => {
+      const content = JSON.stringify({
+        type: 'item.completed',
+        item: {
+          type: 'file_change',
+          id: 'fc_789',
+          changes: [
+            { path: '/workspace/src/other.ts', kind: 'update', content: 'other content' },
+          ],
+        },
+      });
+
+      const result = extract(content, '/workspace/src/app.ts');
+      expect(result.diffs).toEqual([]);
+    });
+  });
+
   describe('workspace-scoped attribution', () => {
     const baseTime = new Date('2026-02-21T01:55:59.477Z').getTime();
 

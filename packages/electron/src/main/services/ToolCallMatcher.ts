@@ -1380,6 +1380,16 @@ class ToolCallMatcherImpl {
         }
       }
 
+      // file_change: check for content in changes array (before args guard,
+      // since file_change items may have no arguments/args/input/parameters)
+      if (itemForChanges && Array.isArray(itemForChanges.changes)) {
+        for (const change of itemForChanges.changes) {
+          if (change.path === targetFilePath && typeof change.content === 'string') {
+            return { diffs: [], content: change.content };
+          }
+        }
+      }
+
       if (!args || typeof args !== 'object') return { diffs: [] };
 
       // Check if this tool call targets the right file
@@ -1418,15 +1428,6 @@ class ToolCallMatcherImpl {
             newString: r.newText || r.new_text || '',
           }));
         if (diffs.length > 0) return { diffs };
-      }
-
-      // file_change: check for content in changes array
-      if (itemForChanges && Array.isArray(itemForChanges.changes)) {
-        for (const change of itemForChanges.changes) {
-          if (change.path === targetFilePath && typeof change.content === 'string') {
-            return { diffs: [], content: change.content };
-          }
-        }
       }
 
       // Bash: attempt to extract appended content from command redirects

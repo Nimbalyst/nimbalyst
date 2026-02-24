@@ -2436,6 +2436,46 @@ export class AIService {
                   const fileSnapshots: Record<string, { content: string | null; error?: string; isBinary?: boolean; truncated?: boolean }> = {};
                   const MAX_SNAPSHOT_SIZE = 100_000; // 100KB per file
 
+                  // Proactive pre-edit snapshot: capture the before-state from the
+                  // FileSnapshotCache BEFORE reading current (post-edit) content.
+                  // The file has already been modified by Codex, so disk reads give
+                  // after-state. The cache holds the content as of session start.
+                  const watcherEntry = this.codexSessionWatchers.get(session.id);
+                  if (watcherEntry) {
+                    for (const change of changes) {
+                      if (!change?.path || change.kind === 'delete') continue;
+                      try {
+                        const beforeContent = await watcherEntry.cache.getBeforeState(change.path);
+                        if (beforeContent !== null) {
+                          const toolUseId = `codex-file-change-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+                          const tagId = `ai-edit-pending-${session.id}-${toolUseId}`;
+                          await historyManager.createTag(
+                            change.path,
+                            tagId,
+                            beforeContent,
+                            session.id,
+                            toolUseId
+                          );
+                          // Track the file edit so getDiffsFromToolCallContent can find it
+                          await sessionFileTracker.trackToolExecution(
+                            session.id,
+                            effectiveWorkspacePath,
+                            'file_change',
+                            { changes: [change] },
+                            undefined,
+                            toolUseId,
+                            null  // Watcher already running for this session
+                          );
+                        }
+                      } catch (preEditError) {
+                        const errorStr = String(preEditError);
+                        if (!errorStr.includes('unique') && !errorStr.includes('UNIQUE') && !errorStr.includes('duplicate')) {
+                          logger.ai.error('[AIService] Failed to create pre-edit snapshot for file_change:', preEditError);
+                        }
+                      }
+                    }
+                  }
+
                   for (const change of changes) {
                     if (!change?.path) continue;
                     if (change.kind === 'delete') {
@@ -2968,8 +3008,12 @@ export class AIService {
                 logger.main.info(`[AIService] Deferring endSession for ${session.id} - ${hasTeammates ? 'teammates still active' : 'lead resuming'}`);
               } else {
                 await stateManager.endSession(session.id);
-                // Stop file watcher - session is fully complete
-                await this.stopCodexSessionWatcher(session.id);
+                // Stop file watcher after a brief delay to let pending
+                // watcher events drain through WorkspaceFileEditAttributionService
+                const sessionIdForCleanup = session.id;
+                setTimeout(() => {
+                  this.stopCodexSessionWatcher(sessionIdForCleanup);
+                }, 500);
 
                 // Play completion sound if enabled
                 const soundService = SoundNotificationService.getInstance();
