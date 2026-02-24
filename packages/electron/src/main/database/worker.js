@@ -602,127 +602,8 @@ class PGLiteWorker {
       CREATE INDEX IF NOT EXISTS idx_session_files_uncommitted_lookup ON session_files(workspace_id, link_type, file_path, timestamp DESC);
     `);
 
-    // AI Tool Call <-> File Edit linkage table
-    // Maps session_files entries to the ai_agent_messages tool call that caused them
-    console.log('[PGLite Worker] Creating ai_tool_call_file_edits table...');
-    try {
-      await this.db.exec(`
-        CREATE TABLE IF NOT EXISTS ai_tool_call_file_edits (
-          id BIGSERIAL PRIMARY KEY,
-          session_id TEXT NOT NULL,
-          session_file_id TEXT NOT NULL,
-          message_id BIGINT NOT NULL,
-          tool_call_item_id TEXT,
-          tool_use_id TEXT,
-          match_score INTEGER NOT NULL DEFAULT 0,
-          match_reason TEXT,
-          file_timestamp TIMESTAMPTZ,
-          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-          CONSTRAINT fk_atcfe_session FOREIGN KEY (session_id) REFERENCES ai_sessions(id) ON DELETE CASCADE,
-          CONSTRAINT fk_atcfe_session_file FOREIGN KEY (session_file_id) REFERENCES session_files(id) ON DELETE CASCADE,
-          CONSTRAINT fk_atcfe_message FOREIGN KEY (message_id) REFERENCES ai_agent_messages(id) ON DELETE CASCADE
-        );
-
-        CREATE INDEX IF NOT EXISTS idx_atcfe_session ON ai_tool_call_file_edits(session_id);
-        CREATE INDEX IF NOT EXISTS idx_atcfe_session_file ON ai_tool_call_file_edits(session_file_id);
-        CREATE INDEX IF NOT EXISTS idx_atcfe_message ON ai_tool_call_file_edits(message_id);
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_atcfe_unique ON ai_tool_call_file_edits(session_file_id, message_id);
-        CREATE INDEX IF NOT EXISTS idx_atcfe_session_tool_call ON ai_tool_call_file_edits(session_id, tool_call_item_id);
-      `);
-      console.log('[PGLite Worker] ai_tool_call_file_edits table created successfully');
-    } catch (error) {
-      console.error('[PGLite Worker] Failed to create ai_tool_call_file_edits table:', error);
-      throw error;
-    }
-
-    // Tracker Items table (JSONB structure)
-    console.log('[PGLite Worker] Creating tracker_items table...');
-    try {
-      await this.db.exec(`
-        CREATE TABLE IF NOT EXISTS tracker_items (
-          id TEXT PRIMARY KEY,
-          type TEXT NOT NULL,
-          data JSONB NOT NULL,
-          workspace TEXT NOT NULL,
-          document_path TEXT,
-          line_number INTEGER,
-          created TIMESTAMPTZ DEFAULT NOW(),
-          updated TIMESTAMPTZ DEFAULT NOW(),
-          last_indexed TIMESTAMPTZ DEFAULT NOW(),
-          title TEXT GENERATED ALWAYS AS (data->>'title') STORED,
-          status TEXT GENERATED ALWAYS AS (data->>'status') STORED
-        );
-
-        CREATE INDEX IF NOT EXISTS idx_tracker_type ON tracker_items(type);
-        CREATE INDEX IF NOT EXISTS idx_tracker_workspace ON tracker_items(workspace);
-        CREATE INDEX IF NOT EXISTS idx_tracker_status ON tracker_items(status);
-        CREATE INDEX IF NOT EXISTS idx_tracker_created ON tracker_items(created);
-        CREATE INDEX IF NOT EXISTS idx_tracker_updated ON tracker_items(updated);
-        CREATE INDEX IF NOT EXISTS idx_tracker_data_gin ON tracker_items USING GIN(data);
-      `);
-      // console.log('[PGLite Worker] tracker_items table created successfully');
-    } catch (error) {
-      console.error('[PGLite Worker] Failed to create tracker_items table:', error);
-      throw error;
-    }
-
-    // Migration: Handle old tracker_items schema (pre-v0.44.0)
-    // Old schema used flat columns with 'module TEXT' instead of JSONB 'data' + 'document_path'
-    // Since tracker items are transient (re-indexed from documents), we drop and recreate if needed
-    try {
-      const result = await this.db.query(`
-        SELECT
-          EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tracker_items' AND column_name = 'module') as has_module,
-          EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tracker_items' AND column_name = 'data') as has_data,
-          EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tracker_items' AND column_name = 'document_path') as has_document_path
-      `);
-
-      const { has_module, has_data, has_document_path } = result.rows[0] || {};
-
-      if (has_module && !has_document_path) {
-        if (!has_data) {
-          // Old flat schema without JSONB - drop and recreate
-          console.log('[PGLite Worker] Detected old tracker_items schema (flat, no JSONB). Dropping and recreating...');
-          await this.db.exec(`DROP TABLE IF EXISTS tracker_items CASCADE`);
-          await this.db.exec(`
-            CREATE TABLE tracker_items (
-              id TEXT PRIMARY KEY,
-              type TEXT NOT NULL,
-              data JSONB NOT NULL,
-              workspace TEXT NOT NULL,
-              document_path TEXT,
-              line_number INTEGER,
-              created TIMESTAMPTZ DEFAULT NOW(),
-              updated TIMESTAMPTZ DEFAULT NOW(),
-              last_indexed TIMESTAMPTZ DEFAULT NOW(),
-              title TEXT GENERATED ALWAYS AS (data->>'title') STORED,
-              status TEXT GENERATED ALWAYS AS (data->>'status') STORED
-            );
-
-            CREATE INDEX IF NOT EXISTS idx_tracker_type ON tracker_items(type);
-            CREATE INDEX IF NOT EXISTS idx_tracker_workspace ON tracker_items(workspace);
-            CREATE INDEX IF NOT EXISTS idx_tracker_status ON tracker_items(status);
-            CREATE INDEX IF NOT EXISTS idx_tracker_created ON tracker_items(created);
-            CREATE INDEX IF NOT EXISTS idx_tracker_updated ON tracker_items(updated);
-            CREATE INDEX IF NOT EXISTS idx_tracker_data_gin ON tracker_items USING GIN(data);
-          `);
-          console.log('[PGLite Worker] Recreated tracker_items table with new schema');
-        } else {
-          // Has JSONB data but wrong column name - just rename
-          console.log('[PGLite Worker] Renaming tracker_items.module -> document_path');
-          await this.db.exec(`
-            ALTER TABLE tracker_items RENAME COLUMN module TO document_path;
-            DROP INDEX IF EXISTS idx_tracker_items_module;
-          `);
-          console.log('[PGLite Worker] Renamed tracker_items column successfully');
-        }
-      }
-    } catch (error) {
-      console.error('[PGLite Worker] Failed to migrate tracker_items schema:', error);
-      // Non-fatal - tracker items will be re-indexed from documents anyway
-    }
-
     // AI Agent Messages table - write-only raw storage for AI interactions
+    // NOTE: Must be created BEFORE ai_tool_call_file_edits which has a FK to this table
     console.log('[PGLite Worker] Creating ai_agent_messages table...');
     try {
       await this.db.exec(`
@@ -844,6 +725,126 @@ class PGLiteWorker {
     } catch (error) {
       // Non-fatal: searches will still work, just slower without the index
       console.warn('[PGLite Worker] Failed to create FTS GIN index:', error);
+    }
+
+    // AI Tool Call <-> File Edit linkage table
+    // Maps session_files entries to the ai_agent_messages tool call that caused them
+    console.log('[PGLite Worker] Creating ai_tool_call_file_edits table...');
+    try {
+      await this.db.exec(`
+        CREATE TABLE IF NOT EXISTS ai_tool_call_file_edits (
+          id BIGSERIAL PRIMARY KEY,
+          session_id TEXT NOT NULL,
+          session_file_id TEXT NOT NULL,
+          message_id BIGINT NOT NULL,
+          tool_call_item_id TEXT,
+          tool_use_id TEXT,
+          match_score INTEGER NOT NULL DEFAULT 0,
+          match_reason TEXT,
+          file_timestamp TIMESTAMPTZ,
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          CONSTRAINT fk_atcfe_session FOREIGN KEY (session_id) REFERENCES ai_sessions(id) ON DELETE CASCADE,
+          CONSTRAINT fk_atcfe_session_file FOREIGN KEY (session_file_id) REFERENCES session_files(id) ON DELETE CASCADE,
+          CONSTRAINT fk_atcfe_message FOREIGN KEY (message_id) REFERENCES ai_agent_messages(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_atcfe_session ON ai_tool_call_file_edits(session_id);
+        CREATE INDEX IF NOT EXISTS idx_atcfe_session_file ON ai_tool_call_file_edits(session_file_id);
+        CREATE INDEX IF NOT EXISTS idx_atcfe_message ON ai_tool_call_file_edits(message_id);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_atcfe_unique ON ai_tool_call_file_edits(session_file_id, message_id);
+        CREATE INDEX IF NOT EXISTS idx_atcfe_session_tool_call ON ai_tool_call_file_edits(session_id, tool_call_item_id);
+      `);
+      console.log('[PGLite Worker] ai_tool_call_file_edits table created successfully');
+    } catch (error) {
+      console.error('[PGLite Worker] Failed to create ai_tool_call_file_edits table:', error);
+      throw error;
+    }
+
+    // Tracker Items table (JSONB structure)
+    console.log('[PGLite Worker] Creating tracker_items table...');
+    try {
+      await this.db.exec(`
+        CREATE TABLE IF NOT EXISTS tracker_items (
+          id TEXT PRIMARY KEY,
+          type TEXT NOT NULL,
+          data JSONB NOT NULL,
+          workspace TEXT NOT NULL,
+          document_path TEXT,
+          line_number INTEGER,
+          created TIMESTAMPTZ DEFAULT NOW(),
+          updated TIMESTAMPTZ DEFAULT NOW(),
+          last_indexed TIMESTAMPTZ DEFAULT NOW(),
+          title TEXT GENERATED ALWAYS AS (data->>'title') STORED,
+          status TEXT GENERATED ALWAYS AS (data->>'status') STORED
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_tracker_type ON tracker_items(type);
+        CREATE INDEX IF NOT EXISTS idx_tracker_workspace ON tracker_items(workspace);
+        CREATE INDEX IF NOT EXISTS idx_tracker_status ON tracker_items(status);
+        CREATE INDEX IF NOT EXISTS idx_tracker_created ON tracker_items(created);
+        CREATE INDEX IF NOT EXISTS idx_tracker_updated ON tracker_items(updated);
+        CREATE INDEX IF NOT EXISTS idx_tracker_data_gin ON tracker_items USING GIN(data);
+      `);
+      // console.log('[PGLite Worker] tracker_items table created successfully');
+    } catch (error) {
+      console.error('[PGLite Worker] Failed to create tracker_items table:', error);
+      throw error;
+    }
+
+    // Migration: Handle old tracker_items schema (pre-v0.44.0)
+    // Old schema used flat columns with 'module TEXT' instead of JSONB 'data' + 'document_path'
+    // Since tracker items are transient (re-indexed from documents), we drop and recreate if needed
+    try {
+      const result = await this.db.query(`
+        SELECT
+          EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tracker_items' AND column_name = 'module') as has_module,
+          EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tracker_items' AND column_name = 'data') as has_data,
+          EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tracker_items' AND column_name = 'document_path') as has_document_path
+      `);
+
+      const { has_module, has_data, has_document_path } = result.rows[0] || {};
+
+      if (has_module && !has_document_path) {
+        if (!has_data) {
+          // Old flat schema without JSONB - drop and recreate
+          console.log('[PGLite Worker] Detected old tracker_items schema (flat, no JSONB). Dropping and recreating...');
+          await this.db.exec(`DROP TABLE IF EXISTS tracker_items CASCADE`);
+          await this.db.exec(`
+            CREATE TABLE tracker_items (
+              id TEXT PRIMARY KEY,
+              type TEXT NOT NULL,
+              data JSONB NOT NULL,
+              workspace TEXT NOT NULL,
+              document_path TEXT,
+              line_number INTEGER,
+              created TIMESTAMPTZ DEFAULT NOW(),
+              updated TIMESTAMPTZ DEFAULT NOW(),
+              last_indexed TIMESTAMPTZ DEFAULT NOW(),
+              title TEXT GENERATED ALWAYS AS (data->>'title') STORED,
+              status TEXT GENERATED ALWAYS AS (data->>'status') STORED
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_tracker_type ON tracker_items(type);
+            CREATE INDEX IF NOT EXISTS idx_tracker_workspace ON tracker_items(workspace);
+            CREATE INDEX IF NOT EXISTS idx_tracker_status ON tracker_items(status);
+            CREATE INDEX IF NOT EXISTS idx_tracker_created ON tracker_items(created);
+            CREATE INDEX IF NOT EXISTS idx_tracker_updated ON tracker_items(updated);
+            CREATE INDEX IF NOT EXISTS idx_tracker_data_gin ON tracker_items USING GIN(data);
+          `);
+          console.log('[PGLite Worker] Recreated tracker_items table with new schema');
+        } else {
+          // Has JSONB data but wrong column name - just rename
+          console.log('[PGLite Worker] Renaming tracker_items.module -> document_path');
+          await this.db.exec(`
+            ALTER TABLE tracker_items RENAME COLUMN module TO document_path;
+            DROP INDEX IF EXISTS idx_tracker_items_module;
+          `);
+          console.log('[PGLite Worker] Renamed tracker_items column successfully');
+        }
+      }
+    } catch (error) {
+      console.error('[PGLite Worker] Failed to migrate tracker_items schema:', error);
+      // Non-fatal - tracker items will be re-indexed from documents anyway
     }
 
     // Queued Prompts table - stores prompts queued from any device for execution
