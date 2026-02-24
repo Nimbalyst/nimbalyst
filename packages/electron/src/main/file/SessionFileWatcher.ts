@@ -1,10 +1,20 @@
-import chokidar, { FSWatcher } from 'chokidar';
+import chokidar, { FSWatcher as ChokidarFSWatcher } from 'chokidar';
 import * as fs from 'fs/promises';
+import * as fsSync from 'fs';
 import * as path from 'path';
 import ignore, { Ignore } from 'ignore';
 import { BrowserWindow } from 'electron';
 import { logger } from '../utils/logger';
 import type { FileSnapshotCache } from './FileSnapshotCache';
+
+/**
+ * Whether the platform supports `fs.watch(dir, { recursive: true })`.
+ *
+ * macOS uses FSEvents (1 FD for the entire tree).
+ * Windows uses ReadDirectoryChangesW (1 handle for the entire tree).
+ * Linux does NOT support recursive: true and throws ERR_FEATURE_UNAVAILABLE_ON_PLATFORM.
+ */
+const supportsRecursiveWatch = process.platform === 'darwin' || process.platform === 'win32';
 
 const BINARY_EXTENSIONS = new Set([
   '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.webp', '.svg',
@@ -22,11 +32,14 @@ const EDITOR_SAVE_TTL_MS = 2000;
 const FILE_CHANGED_NOTIFY_DEDUPE_MS = 250;
 
 // ---------------------------------------------------------------------------
-// SharedFSWatcher – one chokidar instance per workspace path, ref-counted
+// SharedFSWatcher – one watcher per workspace path, ref-counted
+//
+// On macOS/Windows: uses fs.watch(recursive:true) — 1 FD per workspace tree.
+// On Linux: uses chokidar (recursive fs.watch is not supported).
 // ---------------------------------------------------------------------------
 
 interface SharedWatcherEntry {
-  watcher: FSWatcher;
+  watcher: fsSync.FSWatcher | ChokidarFSWatcher;
   /** Session IDs currently using this watcher */
   refCount: number;
   /** Callbacks to invoke for each fs event, keyed by session ID */
@@ -39,7 +52,7 @@ interface SharedWatcherListener {
   onUnlink: (filePath: string) => void;
 }
 
-/** Global registry of shared chokidar watchers, keyed by normalized workspace path. */
+/** Global registry of shared watchers, keyed by normalized workspace path. */
 const sharedWatchers = new Map<string, SharedWatcherEntry>();
 
 /** Fallback patterns used when no .gitignore exists (e.g. non-git projects). */
@@ -89,50 +102,48 @@ async function acquireSharedWatcher(
 
   const ig = await loadGitignoreFilter(workspacePath);
 
-  const watcher = chokidar.watch(workspacePath, {
-    ignored: (filePath: string) => {
-      const relativePath = path.relative(workspacePath, filePath);
-      if (!relativePath) return false;
+  if (supportsRecursiveWatch) {
+    // macOS / Windows: single recursive fs.watch — 1 FD for the entire tree
+    const entry: SharedWatcherEntry = {
+      watcher: null!, // set immediately below
+      refCount: 1,
+      listeners: new Map([[sessionId, listener]]),
+    };
 
-      if (relativePath === '.git' || relativePath.startsWith('.git' + path.sep)) {
-        return true;
+    const watcher = fsSync.watch(workspacePath, { recursive: true }, (eventType: string, filename: string | null) => {
+      if (!filename) return;
+
+      const relativePath = filename.split(path.sep).join('/');
+
+      // Filter .git directory
+      if (relativePath === '.git' || relativePath.startsWith('.git/')) return;
+
+      // Filter gitignored paths
+      if (ig.ignores(relativePath) || ig.ignores(relativePath + '/')) return;
+
+      const absolutePath = path.join(workspacePath, filename);
+
+      if (eventType === 'change') {
+        for (const l of entry.listeners.values()) l.onChange(absolutePath);
+      } else {
+        // 'rename' — could be add or delete. Use fs.access to determine.
+        fs.access(absolutePath).then(
+          () => {
+            // File exists — treat as add
+            for (const l of entry.listeners.values()) l.onAdd(absolutePath);
+          },
+          () => {
+            // File does not exist — treat as unlink
+            for (const l of entry.listeners.values()) l.onUnlink(absolutePath);
+          },
+        );
       }
+    });
 
-      // Test both as file and as directory (trailing slash) so that
-      // directory-only patterns like "node_modules/" match the directory
-      // itself, preventing chokidar from recursing into it.
-      return ig.ignores(relativePath) || ig.ignores(relativePath + '/');
-    },
-    ignoreInitial: true,
-    followSymlinks: false,
-    usePolling: false,
-    atomic: true,
-    awaitWriteFinish: {
-      stabilityThreshold: 50,
-      pollInterval: 20,
-    },
-    alwaysStat: false,
-  });
+    entry.watcher = watcher;
 
-  const entry: SharedWatcherEntry = {
-    watcher,
-    refCount: 1,
-    listeners: new Map([[sessionId, listener]]),
-  };
-  sharedWatchers.set(key, entry);
-
-  watcher
-    .on('change', (filePath: string) => {
-      for (const l of entry.listeners.values()) l.onChange(filePath);
-    })
-    .on('add', (filePath: string) => {
-      for (const l of entry.listeners.values()) l.onAdd(filePath);
-    })
-    .on('unlink', (filePath: string) => {
-      for (const l of entry.listeners.values()) l.onUnlink(filePath);
-    })
-    .on('error', (error: unknown) => {
-      const code = error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined;
+    watcher.on('error', (error: NodeJS.ErrnoException) => {
+      const code = error.code;
       if (code === 'EPERM' || code === 'EACCES' || code === 'UNKNOWN') {
         logger.main.debug('[SessionFileWatcher] Skipping unwatchable path:', error);
       } else {
@@ -140,10 +151,70 @@ async function acquireSharedWatcher(
       }
     });
 
-  logger.main.info('[SessionFileWatcher] Created shared watcher for workspace:', {
-    workspacePath: key,
-    sessionId,
-  });
+    sharedWatchers.set(key, entry);
+
+    logger.main.info('[SessionFileWatcher] Created shared watcher (fs.watch recursive) for workspace:', {
+      workspacePath: key,
+      sessionId,
+    });
+  } else {
+    // Linux: use chokidar (recursive fs.watch is not supported)
+    const watcher = chokidar.watch(workspacePath, {
+      ignored: (filePath: string) => {
+        const relativePath = path.relative(workspacePath, filePath);
+        if (!relativePath) return false;
+
+        if (relativePath === '.git' || relativePath.startsWith('.git' + path.sep)) {
+          return true;
+        }
+
+        // Test both as file and as directory (trailing slash) so that
+        // directory-only patterns like "node_modules/" match the directory
+        // itself, preventing chokidar from recursing into it.
+        return ig.ignores(relativePath) || ig.ignores(relativePath + '/');
+      },
+      ignoreInitial: true,
+      followSymlinks: false,
+      usePolling: false,
+      atomic: true,
+      awaitWriteFinish: {
+        stabilityThreshold: 50,
+        pollInterval: 20,
+      },
+      alwaysStat: false,
+    });
+
+    const entry: SharedWatcherEntry = {
+      watcher,
+      refCount: 1,
+      listeners: new Map([[sessionId, listener]]),
+    };
+    sharedWatchers.set(key, entry);
+
+    watcher
+      .on('change', (filePath: string) => {
+        for (const l of entry.listeners.values()) l.onChange(filePath);
+      })
+      .on('add', (filePath: string) => {
+        for (const l of entry.listeners.values()) l.onAdd(filePath);
+      })
+      .on('unlink', (filePath: string) => {
+        for (const l of entry.listeners.values()) l.onUnlink(filePath);
+      })
+      .on('error', (error: unknown) => {
+        const code = error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined;
+        if (code === 'EPERM' || code === 'EACCES' || code === 'UNKNOWN') {
+          logger.main.debug('[SessionFileWatcher] Skipping unwatchable path:', error);
+        } else {
+          logger.main.error('[SessionFileWatcher] Watcher error:', error);
+        }
+      });
+
+    logger.main.info('[SessionFileWatcher] Created shared watcher (chokidar) for workspace:', {
+      workspacePath: key,
+      sessionId,
+    });
+  }
 }
 
 async function releaseSharedWatcher(workspacePath: string, sessionId: string): Promise<void> {
@@ -156,7 +227,13 @@ async function releaseSharedWatcher(workspacePath: string, sessionId: string): P
 
   if (entry.refCount <= 0) {
     sharedWatchers.delete(key);
-    await entry.watcher.close();
+    if (supportsRecursiveWatch) {
+      // Native fs.FSWatcher — close() is synchronous
+      (entry.watcher as fsSync.FSWatcher).close();
+    } else {
+      // chokidar FSWatcher — close() returns a Promise
+      await (entry.watcher as ChokidarFSWatcher).close();
+    }
     logger.main.info('[SessionFileWatcher] Closed shared watcher for workspace:', {
       workspacePath: key,
       lastSessionId: sessionId,
