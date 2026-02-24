@@ -655,8 +655,12 @@ export const RichTranscriptView = React.forwardRef<
 
   // Compute restart line position: find the first visible message after appStartTime
   // The red restart indicator line renders before this message, or at the bottom if all messages precede the restart
+  // Only shown for sessions that existed before the restart (have pre-restart messages)
   const { restartAfterIndex, restartAtBottom } = useMemo(() => {
     if (!appStartTime || messages.length === 0) return { restartAfterIndex: -1, restartAtBottom: false };
+    // Only show restart indicator if this session has messages from before the restart
+    const hasPreRestartMessages = messages.some(m => m.timestamp <= appStartTime);
+    if (!hasPreRestartMessages) return { restartAfterIndex: -1, restartAtBottom: false };
     // If all messages are before restart, show at bottom
     if (messages[messages.length - 1].timestamp <= appStartTime) return { restartAfterIndex: -1, restartAtBottom: true };
     // Find the first message after restart that will actually be rendered visibly:
