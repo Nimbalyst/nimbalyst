@@ -41,7 +41,7 @@ import {AnalyticsService} from "../analytics/AnalyticsService.ts";
 import { historyManager } from '../../HistoryManager';
 import { FileSnapshotCache } from '../../file/FileSnapshotCache';
 import { SessionFileWatcher } from '../../file/SessionFileWatcher';
-import { getAIProviderOverrides, saveAIProviderOverrides, clearAIProviderOverrides, getWorkspaceState, getDefaultAIModel } from '../../utils/store';
+import { getAIProviderOverrides, saveAIProviderOverrides, clearAIProviderOverrides, getWorkspaceState, getBetaFeatures, getDefaultAIModel } from '../../utils/store';
 import { mergeAISettings } from '../../utils/aiSettingsMerge';
 import { DocumentContextService, type RawDocumentContext, type PreparedDocumentContext } from '@nimbalyst/runtime';
 import { getMessageSyncHandler, getSyncProvider } from '../SyncManager';
@@ -1300,7 +1300,8 @@ export class AIService {
       }
 
       // Check OpenAI Codex (uses its own auth, doesn't need API key in settings)
-      const hasCodex = providerSettings['openai-codex']?.enabled === true;
+      const hasCodex = providerSettings['openai-codex']?.enabled === true &&
+                       getBetaFeatures()['codex'] === true;
       if (hasCodex) return true;
 
       // Check LM Studio (doesn't need API key but needs enabled models)
@@ -4339,7 +4340,7 @@ export class AIService {
         },
         'openai-codex': {
           // Codex SDK uses its own auth (codex auth login), API key is optional
-          enabled: providerSettings['openai-codex']?.enabled === true,
+          enabled: providerSettings['openai-codex']?.enabled === true && getBetaFeatures()['codex'] === true,
         },
         'lmstudio': {
           enabled: providerSettings['lmstudio']?.enabled === true,
