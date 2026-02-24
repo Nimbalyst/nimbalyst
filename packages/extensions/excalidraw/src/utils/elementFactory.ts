@@ -2,7 +2,7 @@
  * Factory functions for creating Excalidraw elements
  */
 
-import type { ExcalidrawElement } from '@excalidraw/excalidraw/types/types';
+import type { ExcalidrawElement } from '@excalidraw/excalidraw/types/element/types';
 
 function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;

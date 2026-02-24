@@ -388,6 +388,9 @@ export interface ExtensionAITool {
   /** Description for Claude to understand when to use it */
   description: string;
 
+  /** Tool scope: 'global' for workspace-wide tools, 'file' for file-specific tools */
+  scope?: 'global' | 'file';
+
   /**
    * JSON Schema for input parameters.
    * Can use either 'inputSchema' or 'parameters' - both are supported.

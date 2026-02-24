@@ -20,6 +20,7 @@
     "**/node_modules",
     "**/dist",
     "**/e2e/**",
+    "packages/electron/marketing/fixtures",
     "packages/collabv3",
     "packages/electron/release",
     "packages/extension-sdk-docs/examples",

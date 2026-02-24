@@ -18,7 +18,6 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
-  isInitializeRequest,
   ErrorCode,
   McpError,
 } from "@modelcontextprotocol/sdk/types.js";
@@ -2013,14 +2012,18 @@ async function readJsonBody(
     return undefined;
   }
 }
+function isInitializeMessage(value: unknown): boolean {
+  return typeof value === 'object' && value !== null && 'method' in value && (value as Record<string, unknown>).method === 'initialize';
+}
+
 function isInitializePayload(payload: unknown): boolean {
   if (!payload) {
     return false;
   }
   if (Array.isArray(payload)) {
-    return payload.some((entry) => isInitializeRequest(entry));
+    return payload.some((entry) => isInitializeMessage(entry));
   }
-  return isInitializeRequest(payload);
+  return isInitializeMessage(payload);
 }
 async function tryCreateExtensionDevServer(port: number): Promise<any> {
   return new Promise((resolve, reject) => {
