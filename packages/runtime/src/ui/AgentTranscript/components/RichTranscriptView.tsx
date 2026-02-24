@@ -1081,15 +1081,22 @@ export const RichTranscriptView = React.forwardRef<
             {isTeammate ? (
               // Group icon for team teammates
               <MaterialSymbol icon="group" size={16} className="rich-transcript-tool-icon sub-agent-icon w-4 h-4 text-[var(--nim-primary)] shrink-0" />
+            ) : isSubAgent && toolArgs?.run_in_background ? (
+              // Cloud icon for background (async) agents
+              <MaterialSymbol icon="cloud_sync" size={16} className="rich-transcript-tool-icon sub-agent-icon w-4 h-4 text-[var(--nim-primary)] shrink-0" />
             ) : isSubAgent ? (
-              // Document/clipboard icon for sub-agents
+              // Document icon for synchronous sub-agents
               <MaterialSymbol icon="description" size={16} className="rich-transcript-tool-icon sub-agent-icon w-4 h-4 text-[var(--nim-primary)] shrink-0" />
             ) : (
               // Wrench icon for regular tools
               <MaterialSymbol icon="build" size={16} className="rich-transcript-tool-icon w-4 h-4 text-[var(--nim-primary)] shrink-0" />
             )}
             <span className="rich-transcript-tool-name font-mono text-sm text-[var(--nim-text)] font-medium" title={tool.name || undefined}>
-              {isTeammate ? (tool.teammateName || 'Teammate') : isSubAgent ? 'Sub-Agent' : toolDisplayName}
+              {isTeammate
+                ? (tool.teammateName || 'Teammate')
+                : isSubAgent
+                  ? (toolArgs?.run_in_background ? 'Background Agent' : 'Sub-Agent')
+                  : toolDisplayName}
               {isTeammate && tool.teammateMode && (
                 <span className="rich-transcript-tool-subagent-type text-[var(--nim-text-muted)] font-normal text-xs ml-1">({tool.teammateMode})</span>
               )}

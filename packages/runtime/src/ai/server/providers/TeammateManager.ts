@@ -29,6 +29,9 @@ export interface ManagedTeammate {
   agentType: string;
   model?: string;
   isBackgroundAgent: boolean;  // true for fire-and-forget background sub-agents (no team, no idle)
+  startedAt: number;           // epoch ms when spawned
+  lastActiveAt: number;        // epoch ms of most recent chunk
+  toolCallCount: number;       // count of tool_use blocks observed
 }
 
 export interface IdleTeammate {
@@ -40,6 +43,7 @@ export interface IdleTeammate {
   color: string;
   cwd: string;
   prompt: string;        // original prompt
+  startedAt?: number;    // epoch ms when originally spawned (preserved across idle)
 }
 
 export interface PendingMessage {
@@ -1134,15 +1138,24 @@ export class TeammateManager {
         agentType: string;
         status: 'running' | 'completed' | 'errored' | 'idle';
         model?: string;
+        startedAt?: number;
+        lastActiveAt?: number;
+        toolCallCount?: number;
       }> = Array.isArray(currentMetadata.currentTeammates) ? currentMetadata.currentTeammates as any[] : [];
 
       const seenAgentIds = new Set<string>();
       const updatedTeammates = existingTeammates.map(tm => {
         seenAgentIds.add(tm.agentId);
+        const managed = this.managedTeammates.get(tm.agentId);
+        const activityFields = managed ? {
+          startedAt: managed.startedAt,
+          lastActiveAt: managed.lastActiveAt,
+          toolCallCount: managed.toolCallCount,
+        } : {};
         if (statusOverrides?.has(tm.agentId)) {
-          return { ...tm, status: statusOverrides.get(tm.agentId)! };
-        } else if (this.managedTeammates.has(tm.agentId)) {
-          return { ...tm, status: 'running' as const };
+          return { ...tm, ...activityFields, status: statusOverrides.get(tm.agentId)! };
+        } else if (managed) {
+          return { ...tm, ...activityFields, status: 'running' as const };
         } else if (this.idleTeammates.has(tm.agentId)) {
           return { ...tm, status: 'idle' as const };
         }
@@ -1158,6 +1171,9 @@ export class TeammateManager {
             agentType: tm.agentType,
             status: statusOverrides?.has(agentId) ? statusOverrides.get(agentId)! : 'running',
             model: tm.model,
+            startedAt: tm.startedAt,
+            lastActiveAt: tm.lastActiveAt,
+            toolCallCount: tm.toolCallCount,
           });
         }
       }
@@ -1171,6 +1187,7 @@ export class TeammateManager {
             agentType: tm.agentType,
             status: statusOverrides?.has(agentId) ? statusOverrides.get(agentId)! : 'idle',
             model: tm.model,
+            startedAt: tm.startedAt,
           });
         }
       }
@@ -1298,6 +1315,7 @@ export class TeammateManager {
     // Register placeholder BEFORE starting the stream so that early
     // chunks can look up the teammate entry (avoids null query race).
     // streamPromise is assigned after streamTeammateOutput() returns.
+    const now = Date.now();
     const placeholder: ManagedTeammate = {
       teamName,
       name,
@@ -1310,6 +1328,9 @@ export class TeammateManager {
       agentType,
       model,
       isBackgroundAgent: false,
+      startedAt: now,
+      lastActiveAt: now,
+      toolCallCount: 0,
     };
     this.managedTeammates.set(agentId, placeholder);
 
@@ -1318,7 +1339,7 @@ export class TeammateManager {
     );
     placeholder.streamPromise = streamPromise;
 
-    const idleTemplate: IdleTeammate = { teamName, name, sessionId: '', agentType, model, color, cwd, prompt };
+    const idleTemplate: IdleTeammate = { teamName, name, sessionId: '', agentType, model, color, cwd, prompt, startedAt: now };
     streamPromise.then((result) => {
       this.handleStreamCompletion(sessionId, agentId, teamName, idleTemplate, result);
     }).catch((err) => {
@@ -1354,6 +1375,7 @@ export class TeammateManager {
 
     const bgAbort = new AbortController();
 
+    const now = Date.now();
     const placeholder: ManagedTeammate = {
       teamName,
       name,
@@ -1366,6 +1388,9 @@ export class TeammateManager {
       agentType,
       model,
       isBackgroundAgent: true,
+      startedAt: now,
+      lastActiveAt: now,
+      toolCallCount: 0,
     };
     this.managedTeammates.set(agentId, placeholder);
 
@@ -1374,7 +1399,7 @@ export class TeammateManager {
     );
     placeholder.streamPromise = streamPromise;
 
-    const idleTemplate: IdleTeammate = { teamName, name, sessionId: '', agentType, model, color, cwd, prompt };
+    const idleTemplate: IdleTeammate = { teamName, name, sessionId: '', agentType, model, color, cwd, prompt, startedAt: now };
     streamPromise.then((result) => {
       this.handleStreamCompletion(sessionId, agentId, teamName, idleTemplate, result);
     }).catch((err) => {
@@ -1494,6 +1519,12 @@ export class TeammateManager {
       }
 
       if (chunk.type === 'assistant' || chunk.type === 'user') {
+        // Update activity tracking on the managed teammate entry
+        const managedEntry = this.managedTeammates.get(agentId);
+        if (managedEntry) {
+          managedEntry.lastActiveAt = Date.now();
+        }
+
         const taggedChunk = {
           ...chunk,
           _isTeammateOutput: true,
@@ -1509,6 +1540,15 @@ export class TeammateManager {
         }
 
         if (chunk.type === 'assistant' && chunk.message?.content && Array.isArray(chunk.message.content)) {
+          // Count tool_use blocks for activity tracking
+          if (managedEntry) {
+            for (const block of chunk.message.content) {
+              if (block.type === 'tool_use') {
+                managedEntry.toolCallCount++;
+              }
+            }
+          }
+
           for (const block of chunk.message.content) {
             if (block.type === 'tool_use' && block.name === 'SendMessage' && block.input) {
               const toolInput = block.input as any;
@@ -1583,6 +1623,8 @@ export class TeammateManager {
       teammateAbort, idleInfo.sessionId
     );
 
+    // Preserve startedAt from idle info; reset activity tracking
+    const now = Date.now();
     this.managedTeammates.set(agentId, {
       teamName: idleInfo.teamName,
       name: idleInfo.name,
@@ -1595,6 +1637,9 @@ export class TeammateManager {
       agentType: idleInfo.agentType,
       model: idleInfo.model,
       isBackgroundAgent: false,
+      startedAt: idleInfo.startedAt ?? now,
+      lastActiveAt: now,
+      toolCallCount: 0,
     });
 
     streamPromise.then((result) => {

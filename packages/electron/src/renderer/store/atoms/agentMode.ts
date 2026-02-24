@@ -161,6 +161,10 @@ export const sessionTeammatesAtom = atomFamily((sessionId: string) =>
   })
 );
 
+/** Write-only atom to request scrolling to a teammate's spawn point in the transcript.
+ *  Set by TeammatePanel on click, consumed by RichTranscriptView.  */
+export const scrollToTeammateAtom = atom<{ sessionId: string; agentId: string } | null>(null);
+
 // ============================================================
 // Debounced Persistence
 // ============================================================

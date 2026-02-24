@@ -65,6 +65,7 @@ import {
   loadInitialQueuedPrompts,
 } from '../../store';
 import { convertToWorkstreamAtom, sessionPromptAdditionsAtom } from '../../store/atoms/sessions';
+import { scrollToTeammateAtom } from '../../store/atoms/agentMode';
 import { usePostHog } from 'posthog-js/react';
 import { setAgentModeSettingsAtom, showPromptAdditionsAtom, hasExternalEditorAtom, externalEditorNameAtom, openInExternalEditorAtom, defaultAgentModelAtom, defaultEffortLevelAtom } from '../../store/atoms/appSettings';
 import { supportsEffortLevel, parseEffortLevel, type EffortLevel } from '../../utils/modelUtils';
@@ -219,6 +220,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
 }, ref) => {
   const posthog = usePostHog();
   const inputRef = useRef<AIInputRef>(null);
+  const transcriptPanelRef = useRef<{ scrollToMessage: (index: number) => void; scrollToTop: () => void }>(null);
 
   // Get effective document context - prefer getter for fresh data (reads from disk at call time)
   const getEffectiveDocumentContext = useCallback(async () => {
@@ -1408,6 +1410,44 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     );
   }, [provider, messages.length, workspacePath, sessionId, handleCommandSelect]);
 
+  // Scroll-to-teammate: when the atom fires for this session, find the spawn
+  // message and scroll the transcript to it.
+  const scrollToTeammate = useAtomValue(scrollToTeammateAtom);
+  const setScrollToTeammate = useSetAtom(scrollToTeammateAtom);
+  useEffect(() => {
+    if (!scrollToTeammate || scrollToTeammate.sessionId !== sessionId) return;
+    const { agentId } = scrollToTeammate;
+    // Clear immediately so we don't re-trigger
+    setScrollToTeammate(null);
+
+    // Find the assistant message that contains the Task tool call that spawned this agent.
+    // Tool messages (role==='tool') are rendered inside the preceding assistant message,
+    // so we look for an assistant message whose content contains a tool_use for Task
+    // where the result text references this agentId.
+    const msgs = messages;
+    for (let i = 0; i < msgs.length; i++) {
+      const msg = msgs[i];
+      if (msg.role === 'tool' && msg.toolCall?.name === 'Task' && msg.toolCall?.isSubAgent) {
+        // Check if this tool call's result references the agentId
+        const agentIdFromTool = msg.toolCall.teammateAgentId;
+        const rawResult = msg.toolCall.result;
+        const resultText = typeof rawResult === 'string' ? rawResult
+          : rawResult ? JSON.stringify(rawResult) : '';
+        if (agentIdFromTool === agentId || resultText.includes(`agent_id: ${agentId}`)) {
+          // Tool messages are hidden - scroll to the preceding assistant message
+          let targetIdx = i - 1;
+          while (targetIdx >= 0 && msgs[targetIdx].role === 'tool') {
+            targetIdx--;
+          }
+          if (targetIdx >= 0) {
+            transcriptPanelRef.current?.scrollToMessage(targetIdx);
+          }
+          return;
+        }
+      }
+    }
+  }, [scrollToTeammate, setScrollToTeammate, sessionId, messages]);
+
   // Loading state
   if (!sessionData) {
     return (
@@ -1435,6 +1475,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
       {!collapseTranscript && (
         <div style={{ flex: 1, overflow: 'hidden', minHeight: 0 }}>
           <AgentTranscriptPanel
+            ref={transcriptPanelRef}
             sessionId={sessionId}
             sessionData={sessionData}
             todos={todos}
