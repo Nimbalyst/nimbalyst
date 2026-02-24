@@ -105,14 +105,8 @@ export class McpConfigService {
       };
     }
 
-    // Include Super Loop progress MCP server if it's started (provides super_loop_progress_update tool)
-    if (this.deps.superLoopProgressServerPort !== null && sessionId) {
-      config['nimbalyst-super-loop-progress'] = {
-        type: 'sse',
-        transport: 'sse',
-        url: `http://127.0.0.1:${this.deps.superLoopProgressServerPort}/mcp?sessionId=${encodeURIComponent(sessionId)}`
-      };
-    }
+    // Super Loop progress MCP server disabled - was leaking into non-super-loop sessions
+    // TODO: Re-enable with proper gating so it only appears in super loop sessions
 
     // Include session context MCP server if it's started (provides session summary, workstream overview, etc.)
     if (this.deps.sessionContextServerPort !== null && sessionId && workspacePath) {

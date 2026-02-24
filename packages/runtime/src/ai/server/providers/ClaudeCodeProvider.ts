@@ -176,7 +176,7 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
       mcpServerPort: ClaudeCodeProvider.mcpServerPort,
       sessionNamingServerPort: ClaudeCodeProvider.sessionNamingServerPort,
       extensionDevServerPort: ClaudeCodeProvider.extensionDevServerPort,
-      superLoopProgressServerPort: ClaudeCodeProvider.superLoopProgressServerPort,
+      superLoopProgressServerPort: null, // Disabled - was leaking into non-super-loop sessions
       sessionContextServerPort: ClaudeCodeProvider.sessionContextServerPort,
       mcpConfigLoader: ClaudeCodeProvider.mcpConfigLoader,
       extensionPluginsLoader: ClaudeCodeProvider.extensionPluginsLoader,

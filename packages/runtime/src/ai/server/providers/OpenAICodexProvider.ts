@@ -175,7 +175,7 @@ export class OpenAICodexProvider extends BaseAgentProvider {
       mcpServerPort: OpenAICodexProvider.mcpServerPort,
       sessionNamingServerPort: OpenAICodexProvider.sessionNamingServerPort,
       extensionDevServerPort: OpenAICodexProvider.extensionDevServerPort,
-      superLoopProgressServerPort: OpenAICodexProvider.superLoopProgressServerPort,
+      superLoopProgressServerPort: null, // Disabled - was leaking into non-super-loop sessions
       sessionContextServerPort: OpenAICodexProvider.sessionContextServerPort,
       mcpConfigLoader: OpenAICodexProvider.mcpConfigLoader,
       extensionPluginsLoader: null,

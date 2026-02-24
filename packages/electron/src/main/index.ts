@@ -70,7 +70,7 @@ import { cliManager, initEnhancedPath, getEnhancedPath, getShellEnvironment } fr
 import { registerWorkspaceWindow, registerExtensionTools, shutdownHttpServer, startMcpHttpServer, updateDocumentState } from './mcp/httpServer';
 import { SessionNamingService } from './services/SessionNamingService';
 import { ExtensionDevService } from './services/ExtensionDevService';
-import { SuperLoopProgressService } from './services/SuperLoopProgressService';
+// SuperLoopProgressService import removed - server disabled (leaking into non-super-loop sessions)
 import { registerMockupHandlers } from './ipc/MockupHandlers';
 import { registerOffscreenEditorHandlers } from './ipc/OffscreenEditorHandlers';
 import { initVoiceModeService } from './services/voice/VoiceModeService';
@@ -1046,13 +1046,8 @@ app.whenReady().then(async () => {
         logger.mcp.error('Failed to start extension dev MCP server:', error);
     }
 
-    // Start Super Loop progress MCP server
-    try {
-        const superLoopProgressService = SuperLoopProgressService.getInstance();
-        await superLoopProgressService.start();
-    } catch (error) {
-        logger.mcp.error('Failed to start Super Loop progress MCP server:', error);
-    }
+    // Super Loop progress MCP server disabled - was leaking into non-super-loop sessions
+    // TODO: Re-enable with proper gating so it only appears in super loop sessions
 
     // Start session context MCP server (session summary, workstream overview, recent sessions)
     try {
@@ -1725,16 +1720,7 @@ app.on('before-quit', async (event) => {
         console.error('[QUIT] Error closing extension dev MCP server:', error);
     }
 
-    try {
-        // Shutdown Super Loop progress MCP server
-        const superLoopProgressService = SuperLoopProgressService.getInstance();
-        const shutdownPromise = superLoopProgressService.shutdown();
-        const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 500));
-        await Promise.race([shutdownPromise, timeoutPromise]);
-        console.log('[QUIT] Super Loop progress MCP server shutdown complete');
-    } catch (error) {
-        console.error('[QUIT] Error closing Super Loop progress MCP server:', error);
-    }
+    // Super Loop progress MCP server shutdown skipped (server disabled)
 
     try {
         // Shutdown session context MCP server
