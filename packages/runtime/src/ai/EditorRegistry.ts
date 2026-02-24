@@ -8,8 +8,10 @@
 import type { LexicalEditor } from 'lexical';
 
 export interface EditorInstance {
+  instanceId?: string;
   filePath: string;
   editor: LexicalEditor;
+  isVisible?: () => boolean;
   hasPendingDiffs: () => boolean;
   applyReplacements: (replacements: any[], requestId?: string) => Promise<{ success: boolean; error?: string }>;
   startStreaming: (config: any) => void;
@@ -21,35 +23,107 @@ export interface EditorInstance {
 export type FileOpenerFunction = (filePath: string, content: string, switchToTab: boolean) => Promise<void> | void;
 
 class EditorRegistry {
-  private editors: Map<string, EditorInstance> = new Map();
+  private editorsByFilePath: Map<string, Map<string, EditorInstance>> = new Map();
+  private activeEditorIdByFilePath: Map<string, string> = new Map();
   private activeFilePath: string | null = null;
   private fileOpener: FileOpenerFunction | null = null;
+
+  private getInstanceId(instance: Pick<EditorInstance, 'instanceId'>): string {
+    return instance.instanceId || 'default';
+  }
+
+  private resolveEditorForFilePath(filePath: string): EditorInstance | undefined {
+    const editorsForFile = this.editorsByFilePath.get(filePath);
+    if (!editorsForFile || editorsForFile.size === 0) {
+      return undefined;
+    }
+
+    if (editorsForFile.size === 1) {
+      return editorsForFile.values().next().value as EditorInstance;
+    }
+
+    const visibleEditors = Array.from(editorsForFile.values()).filter(editor => {
+      try {
+        return editor.isVisible?.() === true;
+      } catch {
+        return false;
+      }
+    });
+
+    if (visibleEditors.length > 0) {
+      const activeEditorId = this.activeEditorIdByFilePath.get(filePath);
+      if (activeEditorId) {
+        const activeVisible = visibleEditors.find(editor => this.getInstanceId(editor) === activeEditorId);
+        if (activeVisible) {
+          return activeVisible;
+        }
+      }
+      return visibleEditors[visibleEditors.length - 1];
+    }
+
+    const activeEditorId = this.activeEditorIdByFilePath.get(filePath);
+    if (activeEditorId) {
+      const activeEditor = editorsForFile.get(activeEditorId);
+      if (activeEditor) {
+        return activeEditor;
+      }
+    }
+
+    const allEditors = Array.from(editorsForFile.values());
+    return allEditors[allEditors.length - 1];
+  }
 
   /**
    * Register an editor instance for a file path
    */
   register(instance: EditorInstance): void {
-    // console.log('[EditorRegistry] Registering editor for:', instance.filePath);
-    this.editors.set(instance.filePath, instance);
+    const instanceId = this.getInstanceId(instance);
+    let editorsForFile = this.editorsByFilePath.get(instance.filePath);
+    if (!editorsForFile) {
+      editorsForFile = new Map();
+      this.editorsByFilePath.set(instance.filePath, editorsForFile);
+    }
+
+    editorsForFile.set(instanceId, instance);
+
     // Set as active if it's the first editor or explicitly set later
     if (!this.activeFilePath) {
       this.activeFilePath = instance.filePath;
+      this.activeEditorIdByFilePath.set(instance.filePath, instanceId);
     }
   }
 
   /**
    * Unregister an editor instance
    */
-  unregister(filePath: string): void {
-    // console.log('[EditorRegistry] Unregistering editor for:', filePath);
-    this.editors.delete(filePath);
-    // If we're unregistering the active editor, clear it
-    if (this.activeFilePath === filePath) {
-      this.activeFilePath = null;
-      // Set a new active editor if one exists
-      const paths = Array.from(this.editors.keys());
-      if (paths.length > 0) {
-        this.activeFilePath = paths[0];
+  unregister(filePath: string, instanceId?: string): void {
+    const editorsForFile = this.editorsByFilePath.get(filePath);
+    if (!editorsForFile) {
+      return;
+    }
+
+    if (instanceId) {
+      editorsForFile.delete(instanceId);
+    } else {
+      editorsForFile.clear();
+    }
+
+    if (editorsForFile.size === 0) {
+      this.editorsByFilePath.delete(filePath);
+      this.activeEditorIdByFilePath.delete(filePath);
+
+      if (this.activeFilePath === filePath) {
+        const remainingPaths = Array.from(this.editorsByFilePath.keys());
+        this.activeFilePath = remainingPaths.length > 0 ? remainingPaths[0] : null;
+      }
+      return;
+    }
+
+    const activeEditorId = this.activeEditorIdByFilePath.get(filePath);
+    if (!activeEditorId || !editorsForFile.has(activeEditorId)) {
+      const resolved = this.resolveEditorForFilePath(filePath);
+      if (resolved) {
+        this.activeEditorIdByFilePath.set(filePath, this.getInstanceId(resolved));
       }
     }
   }
@@ -58,21 +132,22 @@ class EditorRegistry {
    * Get an editor instance by file path
    */
   getEditor(filePath: string): EditorInstance | undefined {
-    return this.editors.get(filePath);
+    return this.resolveEditorForFilePath(filePath);
   }
 
   /**
    * Get all registered file paths
    */
   getFilePaths(): string[] {
-    return Array.from(this.editors.keys());
+    return Array.from(this.editorsByFilePath.keys());
   }
 
   /**
    * Check if an editor is registered for a file path
    */
   has(filePath: string): boolean {
-    return this.editors.has(filePath);
+    const editorsForFile = this.editorsByFilePath.get(filePath);
+    return !!editorsForFile && editorsForFile.size > 0;
   }
 
   /**
@@ -85,19 +160,26 @@ class EditorRegistry {
    *
    * @returns true if the editor was found and set active, false otherwise
    */
-  setActive(filePath: string): boolean {
-    if (this.editors.has(filePath)) {
-      // console.log('[EditorRegistry] Setting active editor:', filePath);
-      this.activeFilePath = filePath;
-      return true;
-    } else {
-      // DEFENSIVE: Don't log as warning during normal tab switching.
-      // The editor may not have mounted yet (race condition) or may have failed
-      // to load. The AIChatIntegrationPlugin will set active when it mounts.
-      // Only log at debug level to reduce noise.
-      // console.debug('[EditorRegistry] Editor not yet registered for:', filePath);
+  setActive(filePath: string, instanceId?: string): boolean {
+    const editorsForFile = this.editorsByFilePath.get(filePath);
+    if (!editorsForFile || editorsForFile.size === 0) {
       return false;
     }
+
+    let targetEditorId = instanceId;
+    if (targetEditorId && !editorsForFile.has(targetEditorId)) {
+      return false;
+    }
+
+    if (!targetEditorId) {
+      const resolved = this.resolveEditorForFilePath(filePath);
+      if (!resolved) return false;
+      targetEditorId = this.getInstanceId(resolved);
+    }
+
+    this.activeFilePath = filePath;
+    this.activeEditorIdByFilePath.set(filePath, targetEditorId);
+    return true;
   }
 
   /**

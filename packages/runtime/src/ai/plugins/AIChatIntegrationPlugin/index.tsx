@@ -144,12 +144,29 @@ export function AIChatIntegrationPlugin(): null {
       return;
     }
 
+    const instanceId = `${filePath}::${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
+    const isEditorVisible = (): boolean => {
+      const currentRoot = editor.getRootElement();
+      if (!currentRoot) return false;
+
+      const style = window.getComputedStyle(currentRoot);
+      if (style.display === 'none' || style.visibility === 'hidden') return false;
+
+      const rect = currentRoot.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return false;
+
+      // offsetParent is null when any ancestor has display:none.
+      // position:fixed elements legitimately have null offsetParent.
+      return currentRoot.offsetParent !== null || style.position === 'fixed';
+    };
+
     // console.log('[AIChatIntegrationPlugin] Registering editor for:', filePath);
 
     // Set up focus listener to track active editor
     const handleFocus = () => {
       // console.log('[AIChatIntegrationPlugin] Editor focused:', filePath);
-      editorRegistry.setActive(filePath);
+      editorRegistry.setActive(filePath, instanceId);
     };
 
     // Add focus listener to root element
@@ -158,8 +175,10 @@ export function AIChatIntegrationPlugin(): null {
 
     // Create the editor instance interface
     const editorInstance = {
+      instanceId,
       filePath,
       editor,
+      isVisible: isEditorVisible,
 
       hasPendingDiffs: (): boolean => {
         let hasDiffs = false;
@@ -317,13 +336,13 @@ export function AIChatIntegrationPlugin(): null {
     const isActive = editorContainer?.getAttribute('data-active') === 'true';
     if (isActive) {
       // console.log('[AIChatIntegrationPlugin] Registering as active editor:', filePath);
-      editorRegistry.setActive(filePath);
+      editorRegistry.setActive(filePath, instanceId);
     }
 
     // Cleanup on unmount
     return () => {
       // console.log('[AIChatIntegrationPlugin] Unregistering editor for:', filePath);
-      editorRegistry.unregister(filePath);
+      editorRegistry.unregister(filePath, instanceId);
       // Clean up any active stream processors
       streamProcessorsRef.current.clear();
       streamConfigRef.current.clear();
