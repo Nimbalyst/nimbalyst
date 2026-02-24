@@ -458,6 +458,15 @@ export class HistoryManager {
         this.emitPendingCountChanged(workspaceId);
       }
     } catch (error: any) {
+      logger.main.warn('[HistoryManager] createTag encountered error:', {
+        filePath,
+        tagId,
+        sessionId,
+        toolUseId,
+        errorCode: error?.code,
+        errorMessage: error?.message,
+      });
+
       // Check if this is a unique constraint violation (duplicate pending pre-edit tag)
       if (error.code === '23505' || error.message?.includes('idx_history_pending_pre_edit_per_file')) {
         logger.main.info('[HistoryManager] Skipping tag creation - file already has pending pre-edit tag:', { filePath });
