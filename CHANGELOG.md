@@ -20,6 +20,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.54.8] - 2026-02-23
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- Codex file_change (apply_patch) diffs no longer missing from tool output
+- Session file watcher no longer exhausts file descriptors on macOS/Windows
+- Workspace watcher no longer exhausts file descriptors on macOS/Windows
+- Super loop progress MCP no longer appears in regular sessions
+- Active session now correctly initialized for worktree selections
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.54.7] - 2026-02-23
 
 
