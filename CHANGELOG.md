@@ -20,6 +20,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.54.7] - 2026-02-23
+
+
+### Added
+- Session file watcher now respects project .gitignore rules
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- Subagent permission bypass prevented by isolating settings per agent
+- Diagnostic logging added to HistoryManager.createTag error path
+- Bash pre-tag race condition that dropped red/green diffs in tool output
+- Restart indicator no longer shown on brand new sessions
+- Cross-session file edit misattribution prevented
+- Non-git projects no longer watch node_modules and build directories
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.54.6] - 2026-02-23
 
 
