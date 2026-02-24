@@ -84,7 +84,7 @@ body[data-dev-mode="true"] .nav-quick-access {
 }
 
 body[data-dev-mode="true"] .nav-quick-access::before {
-  content: 'DEV MODE';
+  content: var(--dev-mode-label, 'DEV MODE');
   position: absolute;
   top: 50%;
   left: 50%;

@@ -12,6 +12,7 @@ import { getTitleBarColors } from '../theme/ThemeManager';
 import { ElectronDocumentService, setupDocumentServiceHandlers } from '../services/ElectronDocumentService';
 import { ElectronFileSystemService } from '../services/ElectronFileSystemService';
 import { isWorktreePath, resolveProjectPath } from '../utils/workspaceDetection';
+import { getPreloadPath } from '../utils/appPaths';
 import { setFileSystemService, clearFileSystemService } from '@nimbalyst/runtime';
 import { navigationHistoryService } from '../services/NavigationHistoryService';
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
@@ -163,27 +164,7 @@ export function createWindow(
         }
         // console.log('[WINDOW-MANAGER] Background color:', backgroundColor);
 
-        // Calculate preload path - with diagnostic logging for debugging theme issues on different platforms
-        const preloadPath = (() => {
-            const appPath = app.getAppPath();
-            let resolvedPath: string;
-            if (app.isPackaged) {
-                resolvedPath = join(appPath, 'out/preload/index.js');
-            } else if (appPath.includes('/out/main') || appPath.includes('\\out\\main')) {
-                resolvedPath = join(appPath, '../preload/index.js');
-            } else {
-                resolvedPath = join(appPath, 'out/preload/index.js');
-            }
-            console.log('[WindowManager] Preload path diagnostic:', {
-                platform: process.platform,
-                arch: process.arch,
-                isPackaged: app.isPackaged,
-                appPath,
-                resolvedPreloadPath: resolvedPath,
-                preloadExists: existsSync(resolvedPath)
-            });
-            return resolvedPath;
-        })();
+        const preloadPath = getPreloadPath();
 
         const windowOptions: Electron.BrowserWindowConstructorOptions = {
             width,

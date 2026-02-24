@@ -84,6 +84,31 @@ For detailed information about specific packages, see their CLAUDE.md files:
 - **Test UI**: `npm run test:unit:ui`
 - **E2E tests**: See [E2E_TESTING.md](./docs/E2E_TESTING.md) for comprehensive documentation
 
+### Marketing Screenshots & Videos
+- **Capture all**: `cd packages/electron && npm run marketing:screenshots`
+- **Capture by category**: `cd packages/electron && npm run marketing:screenshots:grep -- "hero-"` (also: `editor-`, `ai-`, `settings-`, `feature-`, `video-`)
+- **Requires dev server running** on port 5273 (`cd packages/electron && npm run dev`)
+- **Output**: `packages/electron/marketing/screenshots/{dark,light}/` (1440x900 PNG) and `packages/electron/marketing/videos/{dark,light}/` (WebM)
+- **Post-process videos**: `bash packages/electron/marketing/process-videos.sh` (converts WebM to MP4/GIF via ffmpeg)
+- See [MARKETING_SCREENSHOTS.md](./docs/MARKETING_SCREENSHOTS.md) for architecture, output inventory, and how to add new screenshots
+
+### Running Multiple Dev Instances
+
+For testing collaborative features (teams, sync, etc.), you can run multiple isolated Electron instances simultaneously. Each instance needs its own **userData directory** (settings, database, credentials) and **Vite port** to avoid conflicts.
+
+**Second instance on same checkout:**
+```bash
+cd packages/electron && npm run dev:user2
+```
+This uses `NIMBALYST_USER_DATA_DIR` for an isolated userData dir, `VITE_PORT=5274`, and `--outDir=out2` to prevent electron-vite file watcher cross-talk between instances.
+
+**Worktree instance** (via `crystal-run.sh`):
+Worktrees already have separate source/build trees, so no `--outDir` is needed. When `WORKTREE_MODE=true`, `crystal-run.sh` automatically derives a per-worktree userData dir (`electron-wt-<name>`).
+
+**Why separate outDir matters:** Without it, two `electron-vite dev` processes sharing the same `out/main/index.js` cause the file watcher on one instance to restart the other on rebuild. Module-level singletons (like the `electron-store` instances) from one process bleed into the other, cross-pollinating settings, theme, and workspace state.
+
+**Path resolution:** `getPreloadPath()` and `getPackageRoot()` in `src/main/utils/appPaths.ts` correctly resolve preload scripts and worker bundles regardless of which outDir is in use. All window files use these helpers -- do not inline path resolution logic.
+
 ### Other Packages
 - **iOS (native)**: `npm run ios:test:swift`, `npm run ios:build:transcript`
 - **Collaboration server**: `npm run collabv2:dev`, `npm run collabv2:deploy`

@@ -10,5 +10,14 @@ for arg in "$@"; do
   fi
 done
 
-# Run the actual dev command
-npm run build:worker && npx electron-vite dev
+# When NIMBALYST_USER_DATA_DIR is set, use a separate build output directory
+# to avoid triggering the primary dev instance's file watcher. Without this,
+# both electron-vite watchers share out/main/index.js and the module-level
+# singletons from one instance bleed into the other on HMR restart.
+if [ -n "$NIMBALYST_USER_DATA_DIR" ]; then
+  export ELECTRON_ENTRY=out2/main/index.js
+  echo "[dev.sh] Using isolated build output: out2/"
+  npm run build:worker && npx electron-vite dev --outDir=out2
+else
+  npm run build:worker && npx electron-vite dev
+fi

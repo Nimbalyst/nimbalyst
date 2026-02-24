@@ -1,5 +1,6 @@
 import { BrowserWindow, dialog, app } from 'electron';
 import { join, basename } from 'path';
+import { getPreloadPath } from '../utils/appPaths';
 import { existsSync, mkdirSync, statSync, readdirSync } from 'fs';
 import { getRecentItems, addToRecentItems, store, getWorkspaceWindowState, getTheme } from '../utils/store';
 import { createWindow, findWindowByWorkspace } from './WindowManager';
@@ -85,13 +86,7 @@ export function createWorkspaceManagerWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      // Due to code splitting, __dirname is out/main/chunks/, not out/main/
-      preload: (() => {
-        const appPath = app.getAppPath();
-        if (app.isPackaged) return join(appPath, 'out/preload/index.js');
-        if (appPath.includes('/out/main') || appPath.includes('\\out\\main')) return join(appPath, '../preload/index.js');
-        return join(appPath, 'out/preload/index.js');
-      })(),
+      preload: getPreloadPath(),
       webviewTag: false
     },
     show: false,

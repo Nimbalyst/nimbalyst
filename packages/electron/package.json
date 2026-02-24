@@ -10,6 +10,7 @@
   "scripts": {
     "start": "electron-vite preview",
     "dev": "./scripts/dev.sh",
+     "dev:user2": "NIMBALYST_USER_DATA_DIR=\"$HOME/Library/Application Support/@nimbalyst/electron-user2\" VITE_PORT=5274 ./scripts/dev.sh",
     "dev:loop": "./scripts/dev-loop.sh",
     "build": "cross-env NODE_OPTIONS='--max-old-space-size=8192' electron-vite build && npm run build:worker",
     "build:worker": "node build/build-worker.js",

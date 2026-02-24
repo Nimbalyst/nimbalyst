@@ -421,11 +421,25 @@ fi
 # Navigate to the electron package directory
 cd packages/electron
 
+# Derive a unique userData directory name when in worktree mode
+# Without this, all worktree instances share Nimbalyst-Dev and cross-pollinate settings (theme, etc.)
+if [ "$WORKTREE_MODE" = "true" ]; then
+  WORKTREE_NAME=$(basename "$(pwd)")
+  NIMBALYST_USER_DATA="$HOME/Library/Application Support/@nimbalyst/electron-wt-${WORKTREE_NAME}"
+else
+  NIMBALYST_USER_DATA=""
+fi
+
 # Run the dev app with custom port
 if [ "$USE_PRODUCTION_DB" = true ]; then
   echo "Starting Nimbalyst on port $DEV_PORT with PRODUCTION database..."
   echo "WARNING: Changes will affect your real data!"
   VITE_PORT=$DEV_PORT npm run dev:loop
+elif [ -n "$NIMBALYST_USER_DATA" ]; then
+  echo "Starting Nimbalyst on port $DEV_PORT with worktree-isolated user data..."
+  echo "  userData: $NIMBALYST_USER_DATA"
+  echo "Use /restart in AI chat to restart the app."
+  NIMBALYST_USER_DATA_DIR="$NIMBALYST_USER_DATA" VITE_PORT=$DEV_PORT npm run dev:loop
 else
   echo "Starting Nimbalyst on port $DEV_PORT with isolated user data..."
   echo "Use /restart in AI chat to restart the app."

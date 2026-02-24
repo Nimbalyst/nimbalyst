@@ -24,6 +24,16 @@ if (process.env.PLAYWRIGHT === '1') {
 // Expose build mode flags to renderer for dev mode indicators
 contextBridge.exposeInMainWorld('IS_OFFICIAL_BUILD', process.env.OFFICIAL_BUILD === 'true');
 contextBridge.exposeInMainWorld('IS_DEV_MODE', process.env.IS_DEV_MODE === 'true');
+contextBridge.exposeInMainWorld('DEV_MODE_LABEL', (() => {
+  const customDir = process.env.NIMBALYST_USER_DATA_DIR;
+  if (!customDir) return 'DEV MODE';
+  // Extract a short label from the directory name
+  // e.g. "electron-user2" -> "user2", "electron-wt-feature-collab" -> "wt-feature-collab"
+  // Note: can't use require('path') here -- preload runs in a sandboxed context
+  const dirName = customDir.split(/[/\\]/).pop() || '';
+  const label = dirName.replace(/^@?nimbalyst[-/]?/, '').replace(/^electron-?/, '');
+  return `DEV: ${label || 'alt'}`;
+})());
 
 // Capture console logs in development
 if (process.env.NODE_ENV !== 'production') {

@@ -662,4 +662,5 @@ interface Window {
   PLAYWRIGHT?: boolean;
   IS_OFFICIAL_BUILD?: boolean;
   IS_DEV_MODE?: boolean;
+  DEV_MODE_LABEL?: string;
 }

@@ -1,5 +1,6 @@
 import { app, BrowserWindow, nativeTheme } from 'electron';
 import { join } from 'path';
+import { getPreloadPath } from '../utils/appPaths';
 import { getTheme } from '../utils/store';
 
 let aboutWindow: BrowserWindow | null = null;
@@ -25,13 +26,7 @@ export function createAboutWindow() {
         backgroundColor: isDarkTheme ? '#2d2d2d' : '#ffffff',
         titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
         webPreferences: {
-            // Due to code splitting, __dirname is out/main/chunks/, not out/main/
-            preload: (() => {
-                const appPath = app.getAppPath();
-                if (app.isPackaged) return join(appPath, 'out/preload/index.js');
-                if (appPath.includes('/out/main') || appPath.includes('\\out\\main')) return join(appPath, '../preload/index.js');
-                return join(appPath, 'out/preload/index.js');
-            })(),
+            preload: getPreloadPath(),
             nodeIntegration: false,
             contextIsolation: true,
             webviewTag: false

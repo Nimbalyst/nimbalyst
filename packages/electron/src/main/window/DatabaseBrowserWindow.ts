@@ -1,5 +1,6 @@
 import { app, BrowserWindow } from 'electron';
 import { join } from 'path';
+import { getPreloadPath } from '../utils/appPaths';
 import { getTheme } from '../utils/store';
 import { getBackgroundColor } from '../theme/ThemeManager';
 
@@ -20,13 +21,7 @@ export function createDatabaseBrowserWindow() {
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
-            // Due to code splitting, __dirname is out/main/chunks/, not out/main/
-            preload: (() => {
-                const appPath = app.getAppPath();
-                if (app.isPackaged) return join(appPath, 'out/preload/index.js');
-                if (appPath.includes('/out/main') || appPath.includes('\\out\\main')) return join(appPath, '../preload/index.js');
-                return join(appPath, 'out/preload/index.js');
-            })(),
+            preload: getPreloadPath(),
             webviewTag: false
         },
         show: false,

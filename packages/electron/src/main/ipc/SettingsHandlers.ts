@@ -697,9 +697,11 @@ export function registerSettingsHandlers() {
             throw new Error('workspacePath is required for sync:toggle-project');
         }
 
-        const config = getSessionSyncConfig();
+        // Bootstrap config if it doesn't exist yet (e.g., user just authenticated
+        // but hasn't explicitly configured sync settings)
+        let config = getSessionSyncConfig();
         if (!config) {
-            throw new Error('Sync is not configured');
+            config = { enabled: false, serverUrl: '', enabledProjects: [] };
         }
 
         let enabledProjects = config.enabledProjects || [];
