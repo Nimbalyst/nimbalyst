@@ -20,6 +20,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.54.12] - 2026-02-24
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+- Codex moved back behind beta feature flag (reverted public visibility)
+
+### Fixed
+- Settings sidebar widened to fit "OpenAI Codex (BETA)" label without truncation
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.54.11] - 2026-02-24
 
 
