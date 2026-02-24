@@ -1417,35 +1417,57 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   useEffect(() => {
     if (!scrollToTeammate || scrollToTeammate.sessionId !== sessionId) return;
     const { agentId } = scrollToTeammate;
-    // Clear immediately so we don't re-trigger
-    setScrollToTeammate(null);
 
-    // Find the assistant message that contains the Task tool call that spawned this agent.
-    // Tool messages (role==='tool') are rendered inside the preceding assistant message,
-    // so we look for an assistant message whose content contains a tool_use for Task
-    // where the result text references this agentId.
-    const msgs = messages;
-    for (let i = 0; i < msgs.length; i++) {
-      const msg = msgs[i];
-      if (msg.role === 'tool' && msg.toolCall?.name === 'Task' && msg.toolCall?.isSubAgent) {
-        // Check if this tool call's result references the agentId
-        const agentIdFromTool = msg.toolCall.teammateAgentId;
-        const rawResult = msg.toolCall.result;
-        const resultText = typeof rawResult === 'string' ? rawResult
-          : rawResult ? JSON.stringify(rawResult) : '';
-        if (agentIdFromTool === agentId || resultText.includes(`agent_id: ${agentId}`)) {
-          // Tool messages are hidden - scroll to the preceding assistant message
-          let targetIdx = i - 1;
-          while (targetIdx >= 0 && msgs[targetIdx].role === 'tool') {
-            targetIdx--;
-          }
-          if (targetIdx >= 0) {
-            transcriptPanelRef.current?.scrollToMessage(targetIdx);
-          }
-          return;
+    // Find the Task tool call that spawned this agent and map to the visible row index.
+    // In RichTranscriptView, tool messages are rendered with the NEXT assistant message.
+    const findVisibleSpawnIndex = (): number | null => {
+      const msgs = messages;
+      for (let i = 0; i < msgs.length; i++) {
+        const msg = msgs[i];
+        if (msg.role !== 'tool' || msg.toolCall?.name !== 'Task' || !msg.toolCall?.isSubAgent) {
+          continue;
         }
+
+        const rawResult = msg.toolCall.result;
+        const resultText = typeof rawResult === 'string'
+          ? rawResult
+          : rawResult
+            ? JSON.stringify(rawResult)
+            : '';
+        const agentIdFromResult = resultText.match(/\bagent_id:\s*([^\s,;]+)/i)?.[1]?.replace(/^[`"'([{]+|[`"',.;:)\]}]+$/g, '');
+
+        const isMatch =
+          msg.toolCall.teammateAgentId === agentId ||
+          agentIdFromResult === agentId ||
+          resultText.includes(`agent_id: ${agentId}`);
+        if (!isMatch) {
+          continue;
+        }
+
+        // Tool rows are hidden when followed by an assistant row; scroll to that visible assistant.
+        let targetIdx = i + 1;
+        while (targetIdx < msgs.length && msgs[targetIdx].role === 'tool') {
+          targetIdx++;
+        }
+        if (targetIdx < msgs.length && msgs[targetIdx].role === 'assistant') {
+          return targetIdx;
+        }
+
+        // Orphaned tool messages render at their own index.
+        return i;
       }
+
+      return null;
+    };
+
+    const targetIdx = findVisibleSpawnIndex();
+    if (targetIdx === null) {
+      // Keep pending request so it can resolve when messages update.
+      return;
     }
+
+    transcriptPanelRef.current?.scrollToMessage(targetIdx);
+    setScrollToTeammate(null);
   }, [scrollToTeammate, setScrollToTeammate, sessionId, messages]);
 
   // Loading state
