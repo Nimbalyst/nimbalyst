@@ -107,6 +107,9 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
   // with active teammates. Set true when we trigger a continuation, reset when
   // a real teammate message arrives or teammates complete.
   private continuationTriggered: boolean = false;
+  // Resolve function to break the for-await loop immediately when interrupt is called.
+  // Racing this against .next() lets us unblock without waiting for the SDK transport.
+  private interruptResolve: (() => void) | null = null;
 
   // Teammate management: spawning, messaging, lifecycle, config I/O
   private teammateManager: TeammateManager;
@@ -1201,12 +1204,31 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
 
       // Stream the response
       try {
-        for await (const rawChunk of queryIterator) {
-          // Check for abort signal between iterations - SDK subprocess may not honor abort immediately
+        // Use manual iteration with Promise.race so interruptWithMessage() can
+        // break the loop immediately without waiting for the SDK subprocess.
+        const iterator = (queryIterator as AsyncIterable<any>)[Symbol.asyncIterator]();
+        let interruptPromise = new Promise<'interrupted'>(resolve => {
+          this.interruptResolve = () => resolve('interrupted');
+        });
+        while (true) {
+          // Check for abort signal before each iteration
           if (this.abortController?.signal.aborted) {
             console.log('[CLAUDE-CODE] Abort signal detected in streaming loop, breaking out');
             break;
           }
+
+          // Race the next chunk against the interrupt signal
+          const nextPromise = iterator.next();
+          const raceResult = await Promise.race([nextPromise, interruptPromise]);
+
+          if (raceResult === 'interrupted') {
+            console.log('[CLAUDE-CODE] Interrupt signal received, breaking streaming loop');
+            break;
+          }
+
+          const iterResult = raceResult as IteratorResult<any>;
+          if (iterResult.done) break;
+          const rawChunk = iterResult.value;
 
           const chunk = rawChunk as any;
           chunkCount++;
@@ -2383,6 +2405,7 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
       this.leadQuery = null;
       this.abortController = null;
       this.wasInterrupted = false;
+      this.interruptResolve = null;
       // Note: markMessagesAsHidden is reset at the START of sendMessage to prevent race conditions
 
       // If teammate messages are still queued (e.g. streamInput failed for a drained
@@ -2450,6 +2473,13 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
   abort(): void {
     console.log('[CLAUDE-CODE] Abort called, abortController:', this.abortController ? 'exists' : 'NULL');
 
+    // Resolve the interrupt promise so the Promise.race in the streaming loop
+    // settles immediately, preventing the loop from hanging on a dead transport.
+    if (this.interruptResolve) {
+      this.interruptResolve();
+      this.interruptResolve = null;
+    }
+
     // Call base class abort (handles abortController and rejectAllPendingPermissions)
     super.abort();
 
@@ -2516,6 +2546,15 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
     // delivery via a fresh sendMessage call.
     console.log('[CLAUDE-CODE] interruptWithMessage: interrupting active lead query');
     this.wasInterrupted = true;
+
+    // Resolve the interrupt promise FIRST so the Promise.race in the streaming
+    // loop settles immediately — this unblocks the JS side without waiting for
+    // the SDK subprocess to acknowledge the interrupt.
+    if (this.interruptResolve) {
+      this.interruptResolve();
+      this.interruptResolve = null;
+    }
+
     try {
       await this.leadQuery.interrupt();
     } catch (err) {
