@@ -1520,13 +1520,9 @@ export const RichTranscriptView = React.forwardRef<
                         while (prevIdx >= 0 && messages[prevIdx].role !== 'user') prevIdx--;
                         if (prevIdx >= 0 && messages[prevIdx].metadata?.isTeammateMessage) {
                           // The most recent user message before this is a teammate notification.
-                          // Also check: is there a teammate notification after this? (i.e., we're between two)
-                          // OR is there no substantive assistant content worth showing?
-                          let nextUserIdx = index + 1;
-                          while (nextUserIdx < messages.length && messages[nextUserIdx].role !== 'user') nextUserIdx++;
-                          const nextIsTeammate = nextUserIdx < messages.length && messages[nextUserIdx].metadata?.isTeammateMessage;
+                          // Only hide empty processing turns (no substantive content).
                           const hasNoContent = !message.content?.trim();
-                          if (nextIsTeammate || hasNoContent) {
+                          if (hasNoContent) {
                             return <div key={`${sessionId}-${index}`} style={{ display: 'none' }} />;
                           }
                         }
