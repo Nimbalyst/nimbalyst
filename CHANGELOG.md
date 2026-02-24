@@ -20,6 +20,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.54.10] - 2026-02-24
+
+
+### Added
+- Teammate sidebar shows elapsed time, tool count, and click-to-scroll navigation
+
+### Fixed
+- Lead agent no longer hangs waiting for a teammate that already finished
+- All sub-agent cards now visible in transcript
+
 ## [0.54.9] - 2026-02-24
 
 
