@@ -3,6 +3,7 @@
  */
 
 import { BrowserWindow } from 'electron';
+import { execFileSync } from 'child_process';
 import { safeHandle } from '../../utils/ipcRegistry';
 import Store from 'electron-store';
 import { SessionManager, ProviderFactory, ModelRegistry, AIProvider, isAskUserQuestionProvider, ClaudeCodeProvider, OpenAICodexProvider } from '@nimbalyst/runtime/ai/server';
@@ -46,6 +47,8 @@ import { mergeAISettings } from '../../utils/aiSettingsMerge';
 import { DocumentContextService, type RawDocumentContext, type PreparedDocumentContext } from '@nimbalyst/runtime';
 import { getMessageSyncHandler, getSyncProvider } from '../SyncManager';
 import { normalizeCodexProviderConfig, omitModelsField } from '@nimbalyst/runtime/ai/server/utils/modelConfigUtils';
+import { isFileInWorkspaceOrWorktree, resolveProjectPath } from '../../utils/workspaceDetection';
+import { SessionFilesRepository } from '@nimbalyst/runtime';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -465,7 +468,7 @@ export class AIService {
   // Active for openai-codex and claude-code providers.
   // Stopped when sessions complete, error, or are deleted. Multiple sessions on the
   // same workspace share a single chokidar instance (ref-counted inside SessionFileWatcher).
-  private codexSessionWatchers = new Map<string, { cache: FileSnapshotCache; watcher: SessionFileWatcher }>();
+  private codexSessionWatchers = new Map<string, { cache: FileSnapshotCache; watcher: SessionFileWatcher; workspacePath: string }>();
 
   // Debounced tool call matching during active sessions.
   // After each tool execution is tracked, we schedule matchSession with a short delay
@@ -1644,11 +1647,14 @@ export class AIService {
 
       // CRITICAL: If session has a worktree, use its path instead of workspace path
       // This ensures Claude Code runs in the worktree directory
-      const effectiveWorkspacePath = session.worktreePath || workspacePath;
+      let effectiveWorkspacePath = session.worktreePath || workspacePath;
 
       // For worktree sessions, use the parent project path for permission lookups
       // This is passed through documentContext to avoid changing sendMessage signature
-      const permissionsPath = session.worktreeProjectPath || effectiveWorkspacePath;
+      let permissionsPath = session.worktreeProjectPath || effectiveWorkspacePath;
+      if (session.provider === 'openai-codex') {
+        await this.ensureCodexSessionWatcher(session.id, effectiveWorkspacePath, event);
+      }
 
       // Comprehensive logging of what we're sending to Claude
       //   hasDocument: !!documentContext,
@@ -2158,6 +2164,9 @@ export class AIService {
         let chunkCount = 0;
         let textChunks = 0;
         let toolCallCount = 0;
+        const processedBashCommandItemIds = new Set<string>();
+        const bashCommandOccurrences = new Map<string, number>();
+        const pendingBashCommands = new Map<string, string>();
 
         // Get existing messages from session for context
         const sessionMessages = session.messages || [];
@@ -2281,28 +2290,9 @@ export class AIService {
         // Only start once per session; persists across turns
         if ((session.provider === 'openai-codex' || session.provider === 'claude-code')
           && effectiveWorkspacePath
-          && !this.codexSessionWatchers.has(session.id)
         ) {
           try {
-            const cache = new FileSnapshotCache();
-            const watcher = new SessionFileWatcher();
-            await cache.startSession(effectiveWorkspacePath, session.id);
-            await watcher.start(
-              effectiveWorkspacePath,
-              session.id,
-              cache,
-              async (watchEvent) => {
-                workspaceFileEditAttributionService.ingestWatcherEvent({
-                  workspacePath: watchEvent.workspacePath,
-                  filePath: watchEvent.filePath,
-                  timestamp: watchEvent.timestamp,
-                  beforeContent: watchEvent.beforeContent,
-                });
-                safeSend(event, 'session-files:updated', session.id);
-              }
-            );
-            this.codexSessionWatchers.set(session.id, { cache, watcher });
-            logger.main.info('[AIService] Started Codex file watcher for session:', session.id);
+            await this.ensureCodexSessionWatcher(session.id, effectiveWorkspacePath, event);
           } catch (watcherError) {
             logger.main.error('[AIService] Failed to start Codex file watcher:', watcherError);
           }
@@ -2373,6 +2363,15 @@ export class AIService {
                       trackToolName = 'Bash';
                     }
 
+                    if (trackToolName === 'Bash' && typeof trackArgs?.command === 'string') {
+                      const inferredWorktreePath = this.inferWorktreePathFromCommand(trackArgs.command, workspacePath);
+                      if (inferredWorktreePath) {
+                        await this.adoptWorktreeForSession(session, inferredWorktreePath, event);
+                        effectiveWorkspacePath = session.worktreePath || effectiveWorkspacePath;
+                        permissionsPath = session.worktreeProjectPath || permissionsPath;
+                      }
+                    }
+
                     // For Codex sessions, don't use the provider's item IDs as toolUseId
                     // because Codex reuses item IDs across turns (e.g., item_4 in turn 1
                     // and item_4 in turn 5 are different tool calls). Without toolUseId,
@@ -2392,6 +2391,32 @@ export class AIService {
                       toolUseId,
                       window  // Pass window to enable file watcher attachment for edited files
                     );
+
+                    // Fallback for Bash edits in ignored/unwatched paths.
+                    // Codex emits both item.started and item.completed for command_execution;
+                    // run fallback on the second occurrence (usually completed) so we diff
+                    // against post-command file content.
+                    if (trackToolName === 'Bash' && typeof trackArgs?.command === 'string') {
+                      const commandItemId = typeof chunk.toolCall.id === 'string'
+                        ? chunk.toolCall.id
+                        : `${trackArgs.command.slice(0, 200)}:${toolCallCount}`;
+                      const seenCount = (bashCommandOccurrences.get(commandItemId) ?? 0) + 1;
+                      bashCommandOccurrences.set(commandItemId, seenCount);
+                      pendingBashCommands.set(commandItemId, trackArgs.command);
+
+                      if (seenCount >= 2 && !processedBashCommandItemIds.has(commandItemId)) {
+                        const tracked = await this.trackBashFileEditsFromCommand(
+                          session,
+                          workspacePath,
+                          trackArgs.command,
+                          commandItemId
+                        );
+                        if (tracked) {
+                          processedBashCommandItemIds.add(commandItemId);
+                        }
+                      }
+                    }
+
                     // Notify renderer that files were tracked
                     safeSend(event, 'session-files:updated', session.id);
 
@@ -2433,6 +2458,18 @@ export class AIService {
                 // Snapshot file contents for file_change events before saving
                 if (toolName === 'file_change' && toolArgs?.changes) {
                   const changes = toolArgs.changes as Array<{ path: string; kind: string }>;
+
+                  for (const change of changes) {
+                    if (!change?.path) continue;
+                    const inferredWorktreePath = this.inferWorktreePathFromFilePath(workspacePath, change.path);
+                    if (inferredWorktreePath) {
+                      await this.adoptWorktreeForSession(session, inferredWorktreePath, event);
+                      effectiveWorkspacePath = session.worktreePath || effectiveWorkspacePath;
+                      permissionsPath = session.worktreeProjectPath || permissionsPath;
+                      break;
+                    }
+                  }
+
                   const fileSnapshots: Record<string, { content: string | null; error?: string; isBinary?: boolean; truncated?: boolean }> = {};
                   const MAX_SNAPSHOT_SIZE = 100_000; // 100KB per file
 
@@ -2445,28 +2482,36 @@ export class AIService {
                     for (const change of changes) {
                       if (!change?.path || change.kind === 'delete') continue;
                       try {
-                        const beforeContent = await watcherEntry.cache.getBeforeState(change.path);
-                        if (beforeContent !== null) {
-                          const toolUseId = `codex-file-change-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-                          const tagId = `ai-edit-pending-${session.id}-${toolUseId}`;
-                          await historyManager.createTag(
-                            change.path,
-                            tagId,
-                            beforeContent,
-                            session.id,
-                            toolUseId
-                          );
-                          // Track the file edit so getDiffsFromToolCallContent can find it
-                          await sessionFileTracker.trackToolExecution(
-                            session.id,
-                            effectiveWorkspacePath,
-                            'file_change',
-                            { changes: [change] },
-                            undefined,
-                            toolUseId,
-                            null  // Watcher already running for this session
-                          );
+                        let beforeContent = await watcherEntry.cache.getBeforeState(change.path);
+                        if (beforeContent === null) {
+                          // Ensure apply_patch edits still create pending-review tags when
+                          // the snapshot cache has no baseline (new/ignored files).
+                          // Skip binary files to avoid invalid diff baselines.
+                          if (isBinaryFile(change.path)) {
+                            continue;
+                          }
+                          beforeContent = '';
                         }
+
+                        const toolUseId = `codex-file-change-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+                        const tagId = `ai-edit-pending-${session.id}-${toolUseId}`;
+                        await historyManager.createTag(
+                          change.path,
+                          tagId,
+                          beforeContent,
+                          session.id,
+                          toolUseId
+                        );
+                        // Track the file edit so getDiffsFromToolCallContent can find it
+                        await sessionFileTracker.trackToolExecution(
+                          session.id,
+                          effectiveWorkspacePath,
+                          'file_change',
+                          { changes: [change] },
+                          undefined,
+                          toolUseId,
+                          null  // Watcher already running for this session
+                        );
                       } catch (preEditError) {
                         const errorStr = String(preEditError);
                         if (!errorStr.includes('unique') && !errorStr.includes('UNIQUE') && !errorStr.includes('duplicate')) {
@@ -3078,6 +3123,25 @@ export class AIService {
               }
 
               break;
+          }
+        }
+
+        // Flush any Bash commands that only emitted one observable tool event
+        // so they still get pending-review tags and tool-call-linked diffs.
+        for (const [commandItemId, command] of pendingBashCommands.entries()) {
+          if (processedBashCommandItemIds.has(commandItemId)) continue;
+          try {
+            const tracked = await this.trackBashFileEditsFromCommand(
+              session,
+              workspacePath,
+              command,
+              commandItemId
+            );
+            if (tracked) {
+              processedBashCommandItemIds.add(commandItemId);
+            }
+          } catch (bashFallbackError) {
+            logger.main.error('[AIService] Failed to flush Bash fallback edits:', bashFallbackError);
           }
         }
 
@@ -4666,6 +4730,218 @@ export class AIService {
       masked[provider] = this.maskApiKey(key);
     }
     return masked;
+  }
+
+  private inferWorktreePathFromFilePath(workspacePath: string, filePath: string): string | null {
+    if (!workspacePath || !filePath) return null;
+    const normalizedWorkspace = path.normalize(workspacePath);
+    const normalizedFile = path.normalize(filePath);
+    const worktreePrefix = `${normalizedWorkspace}_worktrees${path.sep}`;
+    if (!normalizedFile.startsWith(worktreePrefix)) return null;
+
+    const remainder = normalizedFile.slice(worktreePrefix.length);
+    const worktreeName = remainder.split(path.sep)[0];
+    if (!worktreeName) return null;
+
+    const worktreePath = path.join(`${normalizedWorkspace}_worktrees`, worktreeName);
+    return worktreePath;
+  }
+
+  private inferWorktreePathFromCommand(command: string | undefined, workspacePath: string): string | null {
+    if (!command || !workspacePath) return null;
+    const normalizedWorkspace = path.normalize(workspacePath);
+    const worktreePrefix = `${normalizedWorkspace}_worktrees${path.sep}`;
+    const normalizedCommand = command.replace(/\\/g, path.sep);
+    const idx = normalizedCommand.indexOf(worktreePrefix);
+    if (idx === -1) return null;
+
+    const after = normalizedCommand.slice(idx + worktreePrefix.length);
+    const worktreeName = after.split(/[\s'"\r\n\\/]/)[0];
+    if (!worktreeName) return null;
+
+    return path.join(`${normalizedWorkspace}_worktrees`, worktreeName);
+  }
+
+  private async ensureCodexSessionWatcher(
+    sessionId: string,
+    workspacePath: string,
+    event: Electron.IpcMainInvokeEvent
+  ): Promise<void> {
+    const existing = this.codexSessionWatchers.get(sessionId);
+    if (existing && existing.workspacePath === workspacePath) {
+      return;
+    }
+
+    if (existing) {
+      try {
+        await existing.watcher.stop();
+        existing.cache.stopSession();
+      } catch (error) {
+        logger.main.error('[AIService] Failed to stop existing Codex file watcher:', error);
+      }
+      this.codexSessionWatchers.delete(sessionId);
+    }
+
+    const cache = new FileSnapshotCache();
+    const watcher = new SessionFileWatcher();
+    await cache.startSession(workspacePath, sessionId);
+    await watcher.start(
+      workspacePath,
+      sessionId,
+      cache,
+      async (watchEvent) => {
+        workspaceFileEditAttributionService.ingestWatcherEvent({
+          workspacePath: watchEvent.workspacePath,
+          filePath: watchEvent.filePath,
+          timestamp: watchEvent.timestamp,
+          beforeContent: watchEvent.beforeContent,
+        });
+        safeSend(event, 'session-files:updated', sessionId);
+      }
+    );
+    this.codexSessionWatchers.set(sessionId, { cache, watcher, workspacePath });
+    logger.main.info('[AIService] Started Codex file watcher for session:', sessionId, { workspacePath });
+  }
+
+  private async adoptWorktreeForSession(
+    session: SessionData,
+    worktreePath: string,
+    event: Electron.IpcMainInvokeEvent
+  ): Promise<void> {
+    if (!worktreePath || session.worktreePath === worktreePath) {
+      return;
+    }
+
+    const worktreeProjectPath = resolveProjectPath(worktreePath);
+    const { AISessionsRepository } = await import('@nimbalyst/runtime/storage/repositories/AISessionsRepository');
+    await AISessionsRepository.updateMetadata(session.id, {
+      worktreePath,
+      worktreeProjectPath,
+    });
+
+    session.worktreePath = worktreePath;
+    session.worktreeProjectPath = worktreeProjectPath;
+    await this.ensureCodexSessionWatcher(session.id, worktreePath, event);
+
+    logger.main.info('[AIService] Adopted worktree path for session:', {
+      sessionId: session.id,
+      worktreePath,
+      worktreeProjectPath,
+    });
+  }
+
+  private extractFilePathsFromCommand(command: string, workspacePath: string, cwd: string): string[] {
+    const results = new Set<string>();
+    const normalizedCommand = command.replace(/\\/g, path.sep);
+
+    const absoluteMatches = normalizedCommand.match(/\/[^\s'"]+/g) || [];
+    for (const raw of absoluteMatches) {
+      const cleaned = raw.replace(/[);:,]+$/, '');
+      if (!cleaned) continue;
+      const normalizedPath = path.normalize(cleaned);
+      if (isFileInWorkspaceOrWorktree(normalizedPath, workspacePath) && fs.existsSync(normalizedPath)) {
+        results.add(normalizedPath);
+      }
+    }
+
+    const tokens = normalizedCommand.split(/\s+/);
+    for (const token of tokens) {
+      if (!token) continue;
+      const cleaned = token.replace(/^['"]|['"]$/g, '').replace(/[);:,]+$/, '');
+      if (!cleaned || path.isAbsolute(cleaned)) continue;
+      if (!cleaned.includes(path.sep) && !cleaned.includes('/')) continue;
+      const resolved = path.normalize(path.resolve(cwd, cleaned));
+      if (isFileInWorkspaceOrWorktree(resolved, workspacePath) && fs.existsSync(resolved)) {
+        results.add(resolved);
+      }
+    }
+
+    return [...results];
+  }
+
+  private async trackBashFileEditsFromCommand(
+    session: SessionData,
+    workspacePath: string,
+    command: string,
+    commandItemId?: string
+  ): Promise<boolean> {
+    const effectivePath = session.worktreePath || workspacePath;
+    const filePaths = this.extractFilePathsFromCommand(command, workspacePath, effectivePath);
+    if (filePaths.length === 0) return false;
+
+    let trackedAny = false;
+
+    for (const filePath of filePaths) {
+      if (fs.existsSync(filePath) && isBinaryFile(filePath)) continue;
+
+      const pendingTags = await historyManager.getPendingTags(filePath);
+      if (pendingTags && pendingTags.length > 0) {
+        continue;
+      }
+
+      let beforeContent = '';
+
+      let currentContent = '';
+      if (fs.existsSync(filePath)) {
+        try {
+          currentContent = fs.readFileSync(filePath, 'utf-8');
+        } catch (error) {
+          logger.main.warn('[AIService] Failed to read current Bash content:', {
+            sessionId: session.id,
+            filePath,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          continue;
+        }
+      }
+
+      // Prefer immutable HEAD baseline so command timing does not affect diff capture.
+      try {
+        const relativePath = path.relative(effectivePath, filePath);
+        if (!relativePath.startsWith('..') && !path.isAbsolute(relativePath)) {
+          beforeContent = execFileSync(
+            'git',
+            ['show', `HEAD:${relativePath}`],
+            { cwd: effectivePath, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] }
+          );
+        }
+      } catch {
+        // File may be untracked/new. Keep empty baseline.
+      }
+
+      // If baseline equals current content, command did not materially change this file.
+      if (beforeContent === currentContent) {
+        continue;
+      }
+
+      const toolUseId = commandItemId || `codex-bash-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const tagId = `ai-edit-pending-${session.id}-${toolUseId}`;
+
+      await historyManager.createTag(
+        filePath,
+        tagId,
+        beforeContent,
+        session.id,
+        toolUseId
+      );
+
+      await SessionFilesRepository.addFileLink({
+        sessionId: session.id,
+        workspaceId: effectivePath,
+        filePath,
+        linkType: 'edited',
+        timestamp: Date.now(),
+        metadata: {
+          toolName: 'Bash',
+          operation: 'bash',
+          toolUseId,
+          bashCommand: command.slice(0, 500),
+        },
+      });
+      trackedAny = true;
+    }
+
+    return trackedAny;
   }
 
   private async stopCodexSessionWatcher(sessionId: string): Promise<void> {
