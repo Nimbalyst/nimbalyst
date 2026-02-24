@@ -20,6 +20,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.54.11] - 2026-02-24
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+- Codex moved back behind beta feature flag
+
+### Fixed
+- AI file diffs now show only changed lines instead of entire file
+- AI diffs route to the visible editor instance instead of potentially targeting a hidden one
+- Database schema creation order fixed so ai_agent_messages precedes ai_tool_call_file_edits
+- AI agents more reliably name sessions on their first turn
+- Clicking a teammate in the sidebar scrolls to its spawn message in the transcript
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.54.10] - 2026-02-24
 
 
@@ -4305,3 +4324,6 @@ Welcome to the first public alpha release of Nimbalyst, a markdown editor with i
 ### Internal
 - Modernized end-to-end test infrastructure
 
+
+<!-- system test edit 2026-02-24 -->
+<!-- system test: minor edit -->
