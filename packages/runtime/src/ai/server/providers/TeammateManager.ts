@@ -1410,6 +1410,12 @@ export class TeammateManager {
       maxTurns: 20,
       permissionMode: 'default',
       persistSession: true,
+      // SECURITY: Use empty settingSources so the subprocess cannot load
+      // allow-rules from settings files and auto-approve tools internally.
+      // All permission decisions must flow through our canUseTool callback,
+      // which routes to Nimbalyst's ToolPermissionService and shows the
+      // permission dialog to the user.
+      settingSources: [],
       cwd,
       abortController,
       extraArgs: {
