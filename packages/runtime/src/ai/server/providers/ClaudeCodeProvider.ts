@@ -104,9 +104,10 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
   // the transport is dead and streamInput will always fail, so skip the while loop.
   private wasInterrupted: boolean = false;
   // Guard: prevents infinite continuation loops when the lead's turn keeps ending
-  // with active teammates. Set true when we trigger a continuation, reset when
-  // a real teammate message arrives or teammates complete.
-  private continuationTriggered: boolean = false;
+  // with active teammates. Incremented on each continuation, reset when a real
+  // teammate message arrives or teammates complete. Abandon after MAX_CONTINUATIONS.
+  private continuationCount: number = 0;
+  private static readonly MAX_CONTINUATIONS = 3;
   // Resolve function to break the for-await loop immediately when interrupt is called.
   // Racing this against .next() lets us unblock without waiting for the SDK transport.
   private interruptResolve: (() => void) | null = null;
@@ -2444,25 +2445,48 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
           // The session stays deferred; teammates:allCompleted will fire when they finish
           // and deliverMessageToLead will restart the lead if there are results to deliver.
           console.log(`[CLAUDE-CODE] Lead turn ended with ${this.teammateManager.getActiveAgentCount()} background agent(s) still running, waiting for completion`);
-          this.continuationTriggered = false;
-        } else if (!this.continuationTriggered) {
+          this.continuationCount = 0;
+        } else if (this.teammateManager.hasPendingTeammateMessages()) {
+          // Messages arrived while we were in the finally block (race between
+          // streaming loop exit and interruptWithMessage). Drain and deliver them
+          // instead of triggering a continuation or abandoning.
+          const messages: Array<{teammateName: string; content: string; summary: string}> = [];
+          while (this.teammateManager.hasPendingTeammateMessages()) {
+            const msg = this.teammateManager.drainNextTeammateMessage();
+            if (msg) messages.push(msg);
+            else break;
+          }
+          if (messages.length > 0) {
+            const formatted = messages
+              .map(msg => `[Teammate message from "${msg.teammateName}"]\n\n${msg.content}`)
+              .join('\n\n---\n\n');
+            const summaries = messages.map(msg => msg.summary).join(', ');
+            console.log(`[CLAUDE-CODE] Finally block found ${messages.length} pending teammate message(s), delivering: "${summaries}"`);
+            this.continuationCount = 0;
+            this.teammateIdleMessagePending = true;
+            this.emit('teammate:messageWhileIdle', {
+              sessionId: this.teammateManager.lastUsedSessionId,
+              message: formatted,
+            });
+          }
+        } else if (this.continuationCount < ClaudeCodeProvider.MAX_CONTINUATIONS) {
           // The lead's turn ended naturally but idle teammates exist that need managing.
-          // Trigger a single continuation so the lead gets another turn.
-          // Guard: continuationTriggered prevents infinite loops if the lead's
-          // continuation turn also ends without resolving agents.
-          console.log('[CLAUDE-CODE] Lead turn ended with active agents, triggering continuation');
-          this.continuationTriggered = true;
+          // Trigger a continuation so the lead gets another turn.
+          // Guard: continuationCount prevents infinite loops if the lead's
+          // continuation turns keep ending without resolving agents.
+          console.log(`[CLAUDE-CODE] Lead turn ended with active agents, triggering continuation (${this.continuationCount + 1}/${ClaudeCodeProvider.MAX_CONTINUATIONS})`);
+          this.continuationCount++;
           this.teammateIdleMessagePending = true;
           this.emit('teammate:messageWhileIdle', {
             sessionId: this.teammateManager.lastUsedSessionId,
             message: '[System: Your previous turn ended but you still have active agents. Wait for their results, or take other actions as needed.]',
           });
         } else {
-          // Continuation already fired and the lead still didn't resolve teammates.
+          // Max continuations exhausted and the lead still didn't resolve teammates.
           // Abandon idle teammates to unstick the session.
-          console.log('[CLAUDE-CODE] Lead continuation failed to resolve teammates, abandoning idle teammates');
+          console.log(`[CLAUDE-CODE] Lead exhausted ${ClaudeCodeProvider.MAX_CONTINUATIONS} continuations without resolving teammates, abandoning idle teammates`);
           this.teammateManager.abandonIdleTeammates(sessionId);
-          this.continuationTriggered = false;
+          this.continuationCount = 0;
         }
       }
 
@@ -2507,7 +2531,7 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
     // A real teammate message arrived — reset the continuation guard so
     // the lead can get another continuation if its next turn also ends
     // with active teammates.
-    this.continuationTriggered = false;
+    this.continuationCount = 0;
 
     if (!this.leadQuery) {
       // Guard against duplicate idle triggers: if a teammate:messageWhileIdle event
