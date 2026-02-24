@@ -31,7 +31,9 @@ Bad examples:
 - "Update code" (too vague)
 - "Working on feature" (not descriptive)
 
-Call this tool as soon as you understand what the user wants to accomplish. Usually this means you will call it right away, but for example if the user asks you to 'implement plan.md' you would want to look at plan.md to understand before giving the session a name. You **MUST** call this before the end of your first turn. After it has been called once successfully in a conversation, subsequent calls will return an error. If you see a successful call anywhere in your chat history, you should not call it again.`;
+Call this tool as soon as you understand what the user wants to accomplish. Usually this means you will call it right away, but for example if the user asks you to 'implement plan.md' you would want to look at plan.md to understand before giving the session a name. You **MUST** call this before the end of your first turn. After it has been called once successfully in a conversation, subsequent calls will return an error. If you see a successful call anywhere in your chat history, you should not call it again.
+
+**IMPORTANT: You must name the session before ending your first turn.** This is a hard requirement - do not finish your first response without calling \`mcp__nimbalyst-session-naming__name_session\`.`;
 }
 
 /**
