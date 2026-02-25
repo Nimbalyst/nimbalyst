@@ -171,6 +171,180 @@ function getAllFolderPaths(node: DirectoryNode, paths: string[] = []): string[] 
   return paths;
 }
 
+interface StructuredCommitResult {
+  action?: string;
+  commitHash?: string;
+  commitDate?: string;
+  commitMessage?: string;
+  error?: string;
+  success?: boolean;
+  status?: string;
+}
+
+/**
+ * Extract plain text from different tool result shapes.
+ * Supports:
+ * - Claude/legacy: string or content-block arrays
+ * - Codex: nested object wrapper { success, result, status, error }
+ */
+function extractToolResultText(value: unknown, seen: Set<object> = new Set()): string {
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => extractToolResultText(item, seen))
+      .filter(Boolean)
+      .join('\n');
+  }
+
+  if (!value || typeof value !== 'object') {
+    return '';
+  }
+
+  if (seen.has(value)) {
+    return '';
+  }
+  seen.add(value);
+
+  const record = value as Record<string, unknown>;
+
+  if (typeof record.text === 'string' && record.text.trim()) {
+    return record.text;
+  }
+
+  if (record.content !== undefined) {
+    const contentText = extractToolResultText(record.content, seen);
+    if (contentText) {
+      return contentText;
+    }
+  }
+
+  if (record.result !== undefined) {
+    const resultText = extractToolResultText(record.result, seen);
+    if (resultText) {
+      return resultText;
+    }
+  }
+
+  if (typeof record.message === 'string' && record.message.trim()) {
+    return record.message;
+  }
+
+  if (typeof record.output === 'string' && record.output.trim()) {
+    return record.output;
+  }
+
+  if (typeof record.error === 'string' && record.error.trim()) {
+    return `Error: ${record.error}`;
+  }
+
+  return '';
+}
+
+/**
+ * Walk a result object and extract structured commit fields when present.
+ */
+function extractStructuredCommitResult(value: unknown, seen: Set<object> = new Set()): StructuredCommitResult | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  if (seen.has(value)) {
+    return null;
+  }
+  seen.add(value);
+
+  const record = value as Record<string, unknown>;
+  const result: StructuredCommitResult = {};
+  let hasAnyField = false;
+
+  if (typeof record.action === 'string') {
+    result.action = record.action;
+    hasAnyField = true;
+  }
+  if (typeof record.commitHash === 'string') {
+    result.commitHash = record.commitHash;
+    hasAnyField = true;
+  }
+  if (typeof record.commitDate === 'string') {
+    result.commitDate = record.commitDate;
+    hasAnyField = true;
+  }
+  if (typeof record.commitMessage === 'string') {
+    result.commitMessage = record.commitMessage;
+    hasAnyField = true;
+  }
+  if (typeof record.error === 'string') {
+    result.error = record.error;
+    hasAnyField = true;
+  }
+  if (typeof record.success === 'boolean') {
+    result.success = record.success;
+    hasAnyField = true;
+  }
+  if (typeof record.status === 'string') {
+    result.status = record.status;
+    hasAnyField = true;
+  }
+
+  const nestedCandidates = [record.result, record.content];
+  for (const candidate of nestedCandidates) {
+    if (!candidate || typeof candidate !== 'object') {
+      continue;
+    }
+    const nested = extractStructuredCommitResult(candidate, seen);
+    if (!nested) {
+      continue;
+    }
+
+    result.action = result.action ?? nested.action;
+    result.commitHash = result.commitHash ?? nested.commitHash;
+    result.commitDate = result.commitDate ?? nested.commitDate;
+    result.commitMessage = result.commitMessage ?? nested.commitMessage;
+    result.error = result.error ?? nested.error;
+    result.success = result.success ?? nested.success;
+    result.status = result.status ?? nested.status;
+    hasAnyField = true;
+  }
+
+  return hasAnyField ? result : null;
+}
+
+function isToolResultCompleted(rawToolResult: unknown, toolResultText: string, structured: StructuredCommitResult | null): boolean {
+  if (rawToolResult === undefined || rawToolResult === null) {
+    return false;
+  }
+
+  if (typeof rawToolResult === 'string') {
+    return rawToolResult.trim().length > 0;
+  }
+
+  if (Array.isArray(rawToolResult)) {
+    return toolResultText.trim().length > 0;
+  }
+
+  if (structured) {
+    if (structured.action) return true;
+    if (structured.success !== undefined) return true;
+    if (structured.error) return true;
+    if (structured.status) {
+      const normalized = structured.status.toLowerCase();
+      if (normalized === 'completed' || normalized === 'failed' || normalized === 'cancelled' || normalized === 'canceled') {
+        return true;
+      }
+    }
+  }
+
+  const record = rawToolResult as Record<string, unknown>;
+  if (record.result !== undefined && record.result !== null) {
+    return true;
+  }
+
+  return toolResultText.trim().length > 0;
+}
+
 // ============================================================
 // Widget Component
 // ============================================================
@@ -219,31 +393,77 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
   );
   const initialCommitMessage: string = args.commitMessage || '';
   const reasoning: string = args.reasoning || '';
-  // Parse the tool result to determine completion state
-  // The result can be a string or an array of content blocks [{type: 'text', text: '...'}]
   const rawToolResult = toolCall.result;
+  const structuredResult = useMemo(
+    () => extractStructuredCommitResult(rawToolResult),
+    [rawToolResult]
+  );
   const toolResult = useMemo(() => {
-    if (typeof rawToolResult === 'string') return rawToolResult;
-    if (Array.isArray(rawToolResult)) {
-      // Extract text from content blocks
-      return rawToolResult
-        .filter((block: any) => block.type === 'text' && block.text)
-        .map((block: any) => block.text)
-        .join('\n');
-    }
-    return '';
+    return extractToolResultText(rawToolResult);
   }, [rawToolResult]);
-  const isCompleted = toolResult !== undefined && toolResult !== null && toolResult !== '';
+  const isCompleted = useMemo(
+    () => isToolResultCompleted(rawToolResult, toolResult, structuredResult),
+    [rawToolResult, toolResult, structuredResult]
+  );
 
   // Parse completed state from result
   const completedState = useMemo(() => {
-    if (!isCompleted || !toolResult) return null;
+    if (!isCompleted) return null;
+
+    const hashMatch = toolResult.match(/commit hash[:\s]+([a-f0-9]+)/i);
+    const dateMatch = toolResult.match(/commit date[:\s]+(.+)/i);
+
+    if (structuredResult?.action) {
+      const action = structuredResult.action.toLowerCase();
+      if (action === 'committed') {
+        return {
+          type: 'committed' as const,
+          commitHash: structuredResult.commitHash || hashMatch?.[1],
+          commitDate: structuredResult.commitDate || dateMatch?.[1]?.trim(),
+        };
+      }
+      if (action === 'cancelled' || action === 'canceled') {
+        return { type: 'cancelled' as const };
+      }
+    }
+
+    if (structuredResult?.error) {
+      return { type: 'error' as const, error: structuredResult.error };
+    }
+
+    if (structuredResult?.success === false) {
+      return { type: 'error' as const, error: toolResult || 'Commit failed' };
+    }
+
+    if (structuredResult?.status) {
+      const status = structuredResult.status.toLowerCase();
+      if (status === 'failed') {
+        return { type: 'error' as const, error: toolResult || structuredResult.error || 'Commit failed' };
+      }
+      if (status === 'cancelled' || status === 'canceled') {
+        return { type: 'cancelled' as const };
+      }
+      if (status === 'completed') {
+        return {
+          type: 'committed' as const,
+          commitHash: structuredResult.commitHash || hashMatch?.[1],
+          commitDate: structuredResult.commitDate || dateMatch?.[1]?.trim(),
+        };
+      }
+    }
+
+    if (!toolResult) {
+      // Completed with no textual payload - treat as committed fallback.
+      return {
+        type: 'committed' as const,
+        commitHash: structuredResult?.commitHash,
+        commitDate: structuredResult?.commitDate,
+      };
+    }
 
     const resultLower = toolResult.toLowerCase();
     if (resultLower.includes('committed') || resultLower.includes('commit hash')) {
       // Extract commit hash and date if present
-      const hashMatch = toolResult.match(/commit hash[:\s]+([a-f0-9]+)/i);
-      const dateMatch = toolResult.match(/commit date[:\s]+(.+)/i);
       return {
         type: 'committed' as const,
         commitHash: hashMatch?.[1],
@@ -254,8 +474,12 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
     } else if (resultLower.includes('failed') || resultLower.includes('error')) {
       return { type: 'error' as const, error: toolResult };
     }
-    return null;
-  }, [isCompleted, toolResult]);
+    return {
+      type: 'committed' as const,
+      commitHash: structuredResult?.commitHash || hashMatch?.[1],
+      commitDate: structuredResult?.commitDate || dateMatch?.[1]?.trim(),
+    };
+  }, [isCompleted, toolResult, structuredResult]);
 
   // The proposalId is simply the tool call ID - no need for a separate atom
   // The MCP server uses toolUseId (which equals toolCall.id) as the proposalId

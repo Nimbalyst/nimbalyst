@@ -2298,11 +2298,25 @@ The commit message should follow these guidelines:
           };
         }
 
-        // Use Claude's tool_use ID as the proposal ID for proper matching
-        // This ID is passed via _meta by Claude Code SDK
-        const toolUseId = (request.params._meta as any)?.[
-          "claudecode/toolUseId"
-        ];
+        // Use provider tool-call ID as the proposal ID when available so widget
+        // responses can resolve the exact pending MCP call.
+        const requestMeta =
+          request.params && typeof request.params._meta === "object"
+            ? (request.params._meta as Record<string, unknown>)
+            : undefined;
+        const toolUseId = (
+          [
+            requestMeta?.["claudecode/toolUseId"],
+            requestMeta?.["openai/toolUseId"],
+            requestMeta?.["openai/toolCallId"],
+            requestMeta?.["toolUseId"],
+            requestMeta?.["tool_use_id"],
+            requestMeta?.["toolCallId"],
+            typeof request.id === "string" ? request.id : undefined,
+          ].find((value) => typeof value === "string" && value.length > 0) as
+            | string
+            | undefined
+        );
         const proposalId =
           toolUseId ||
           `git-commit-proposal-${Date.now()}-${Math.random()
