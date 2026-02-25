@@ -94,7 +94,7 @@ export const SharedLinksPanel: React.FC = () => {
   };
 
   const formatExpiry = (expiresAt: string | null) => {
-    if (!expiresAt) return null;
+    if (!expiresAt) return 'No expiration';
     const expires = new Date(expiresAt);
     const now = new Date();
     const diffMs = expires.getTime() - now.getTime();

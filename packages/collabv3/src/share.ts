@@ -30,12 +30,11 @@ const MAX_TTL_DAYS = 365;
 
 /**
  * Parse X-TTL-Days header.
- * Returns:
- * - null => no expiration (explicit "0")
- * - number => clamped day count [1, MAX_TTL_DAYS]
- * - undefined => invalid/missing header (caller should use default)
+ * Returns a clamped day count [1, MAX_TTL_DAYS], or undefined for
+ * invalid/missing/zero values (caller should use default).
+ * "No expiration" is not supported - all shares must expire.
  */
-function parseTtlDaysHeader(headerValue: string | null): number | null | undefined {
+function parseTtlDaysHeader(headerValue: string | null): number | undefined {
   if (headerValue === null) {
     return undefined;
   }
@@ -46,8 +45,8 @@ function parseTtlDaysHeader(headerValue: string | null): number | null | undefin
   }
 
   const ttlDays = parseInt(trimmed, 10);
-  if (ttlDays === 0) {
-    return null;
+  if (ttlDays <= 0) {
+    return undefined;
   }
 
   return Math.min(Math.max(ttlDays, 1), MAX_TTL_DAYS);
@@ -111,13 +110,11 @@ export async function handleShareUpload(
     const now = new Date();
 
     // Determine TTL from client header, or use default.
-    // Only explicit "0" maps to no-expiration; malformed values fall back to default.
+    // All shares must expire - "no expiration" is not supported.
     const ttlDaysHeader = request.headers.get('X-TTL-Days');
     const parsedTtlDays = parseTtlDaysHeader(ttlDaysHeader);
-    let expiresAt: Date | null;
-    if (parsedTtlDays === null) {
-      expiresAt = null;
-    } else if (typeof parsedTtlDays === 'number') {
+    let expiresAt: Date;
+    if (typeof parsedTtlDays === 'number') {
       expiresAt = new Date(now.getTime() + parsedTtlDays * 24 * 60 * 60 * 1000);
     } else {
       if (ttlDaysHeader !== null) {
@@ -154,7 +151,7 @@ export async function handleShareUpload(
 
       await env.DB.prepare(
         `UPDATE shared_sessions SET title = ?, size_bytes = ?, updated_at = ?, expires_at = ?, r2_key = ? WHERE id = ?`
-      ).bind(title, bodySize, now.toISOString(), expiresAt ? expiresAt.toISOString() : null, r2Key, shareId).run();
+      ).bind(title, bodySize, now.toISOString(), expiresAt.toISOString(), r2Key, shareId).run();
     } else {
       // Create new share
       shareId = generateShareId();
@@ -167,7 +164,7 @@ export async function handleShareUpload(
       await env.DB.prepare(
         `INSERT INTO shared_sessions (id, user_id, session_id, title, r2_key, size_bytes, created_at, expires_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-      ).bind(shareId, auth.userId, sessionId, title, r2Key, bodySize, now.toISOString(), expiresAt ? expiresAt.toISOString() : null).run();
+      ).bind(shareId, auth.userId, sessionId, title, r2Key, bodySize, now.toISOString(), expiresAt.toISOString()).run();
     }
 
     // Build share URL - use share.nimbalyst.com in production, request origin otherwise
