@@ -29,6 +29,125 @@ let pathDetectionPromise: Promise<DetectedPaths> | null = null;
 // Contains all env vars from the user's login shell EXCEPT PATH (which has special handling)
 let cachedShellEnvironment: Record<string, string> | null = null;
 
+function getPotentialNodeModulesDirs(): string[] {
+  const dirs: string[] = [];
+
+  // Start from cwd and walk up to find hoisted node_modules directories.
+  let currentDir = process.cwd();
+  for (let i = 0; i < 8; i++) {
+    dirs.push(path.join(currentDir, 'node_modules'));
+    const parent = path.dirname(currentDir);
+    if (parent === currentDir) break;
+    currentDir = parent;
+  }
+
+  // Packaged app locations.
+  if (process.resourcesPath) {
+    dirs.push(path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules'));
+    dirs.push(path.join(process.resourcesPath, 'node_modules'));
+  }
+
+  return [...new Set(dirs)];
+}
+
+function resolveAnthropicRipgrepDir(): string | null {
+  const platform = process.platform;
+  const arch = process.arch;
+
+  let binaryDir: string | null = null;
+  if (platform === 'darwin') {
+    binaryDir = arch === 'arm64' ? 'arm64-darwin' : 'x64-darwin';
+  } else if (platform === 'linux') {
+    binaryDir = arch === 'arm64' ? 'arm64-linux' : 'x64-linux';
+  } else if (platform === 'win32') {
+    binaryDir = arch === 'arm64' ? 'arm64-win32' : 'x64-win32';
+  }
+
+  if (!binaryDir) return null;
+
+  const binaryName = platform === 'win32' ? 'rg.exe' : 'rg';
+  for (const nodeModulesDir of getPotentialNodeModulesDirs()) {
+    const binaryPath = path.join(
+      nodeModulesDir,
+      '@anthropic-ai',
+      'claude-agent-sdk',
+      'vendor',
+      'ripgrep',
+      binaryDir,
+      binaryName
+    );
+    if (fsSync.existsSync(binaryPath)) {
+      return path.dirname(binaryPath);
+    }
+  }
+
+  return null;
+}
+
+function resolveOpenAICodexRipgrepDir(): string | null {
+  const platform = process.platform;
+  const arch = process.arch;
+
+  let packageName: string | null = null;
+  let targetTriple: string | null = null;
+
+  if (platform === 'darwin' && arch === 'arm64') {
+    packageName = 'codex-darwin-arm64';
+    targetTriple = 'aarch64-apple-darwin';
+  } else if (platform === 'darwin' && arch === 'x64') {
+    packageName = 'codex-darwin-x64';
+    targetTriple = 'x86_64-apple-darwin';
+  } else if (platform === 'linux' && arch === 'arm64') {
+    packageName = 'codex-linux-arm64';
+    targetTriple = 'aarch64-unknown-linux-musl';
+  } else if (platform === 'linux' && arch === 'x64') {
+    packageName = 'codex-linux-x64';
+    targetTriple = 'x86_64-unknown-linux-musl';
+  } else if (platform === 'win32' && arch === 'arm64') {
+    packageName = 'codex-win32-arm64';
+    targetTriple = 'aarch64-pc-windows-msvc';
+  } else if (platform === 'win32' && arch === 'x64') {
+    packageName = 'codex-win32-x64';
+    targetTriple = 'x86_64-pc-windows-msvc';
+  }
+
+  if (!packageName || !targetTriple) return null;
+
+  const binaryName = platform === 'win32' ? 'rg.exe' : 'rg';
+  for (const nodeModulesDir of getPotentialNodeModulesDirs()) {
+    const binaryPath = path.join(
+      nodeModulesDir,
+      '@openai',
+      packageName,
+      'vendor',
+      targetTriple,
+      'path',
+      binaryName
+    );
+    if (fsSync.existsSync(binaryPath)) {
+      return path.dirname(binaryPath);
+    }
+  }
+
+  return null;
+}
+
+function getVendoredRipgrepDirs(): string[] {
+  const dirs: string[] = [];
+
+  const openAIRipgrepDir = resolveOpenAICodexRipgrepDir();
+  if (openAIRipgrepDir) {
+    dirs.push(openAIRipgrepDir);
+  }
+
+  const anthropicRipgrepDir = resolveAnthropicRipgrepDir();
+  if (anthropicRipgrepDir) {
+    dirs.push(anthropicRipgrepDir);
+  }
+
+  return dirs;
+}
+
 interface InstallationStatus {
   installed: boolean;
   version?: string;
@@ -1179,6 +1298,9 @@ export function getEnhancedPath(): string {
     const customPaths = customPathDirs.split(separator).map(p => p.trim()).filter(Boolean);
     paths.push(...customPaths);
   }
+
+  // Ensure vendored ripgrep is available even when rg is not system-installed.
+  paths.push(...getVendoredRipgrepDirs());
 
   // Start with existing PATH
   if (process.env.PATH) {
