@@ -37,6 +37,7 @@ vi.mock('fs/promises', () => ({
 }));
 
 import { FileSnapshotCache } from '../FileSnapshotCache';
+import { logger } from '../../utils/logger';
 
 describe('FileSnapshotCache', () => {
   const workspacePath = '/test/workspace';
@@ -324,6 +325,57 @@ describe('FileSnapshotCache', () => {
       expect(stats.totalBytes).toBe(0);
       expect(stats.sessionId).toBeNull();
       expect(stats.isGitRepo).toBe(false);
+    });
+  });
+
+  describe('dirty file rate limiting', () => {
+    it('should cap cached dirty files at MAX_DIRTY_FILES (200)', async () => {
+      // Generate 300 dirty files in git status output
+      const lines = Array.from({ length: 300 }, (_, i) => `?? file${i}.ts`).join('\n');
+      setupGitMocks({
+        'status --porcelain': lines,
+      });
+
+      mockReadFile.mockImplementation(async (filePath: string) => `content of ${path.basename(filePath)}`);
+
+      const cache = new FileSnapshotCache();
+      await cache.startSession(workspacePath, 'session-1');
+
+      const stats = cache.getStats();
+      expect(stats.fileCount).toBe(200);
+      expect(logger.main.warn).toHaveBeenCalledWith(
+        expect.stringContaining('300 dirty files exceeds limit of 200')
+      );
+    });
+
+    it('should cap walkAndCache files at MAX_DIRTY_FILES for non-git repos', async () => {
+      // Non-git repo
+      mockExecFile.mockImplementation(
+        (cmd: string, args: string[], opts: any, callback: Function) => {
+          callback(new Error('not a git repo'), '', '');
+        }
+      );
+
+      // Generate 300 files in a flat directory
+      const fileEntries = Array.from({ length: 300 }, (_, i) => ({
+        name: `file${i}.ts`,
+        isDirectory: () => false,
+        isFile: () => true,
+      }));
+
+      mockReaddir.mockImplementation(async (dir: string) => {
+        if (dir === workspacePath) return fileEntries;
+        return [];
+      });
+
+      mockStat.mockResolvedValue({ size: 500 });
+      mockReadFile.mockImplementation(async (filePath: string) => `content of ${path.basename(filePath)}`);
+
+      const cache = new FileSnapshotCache();
+      await cache.startSession(workspacePath, 'session-1');
+
+      const stats = cache.getStats();
+      expect(stats.fileCount).toBe(200);
     });
   });
 });

@@ -31,6 +31,7 @@ const IGNORED_DIRS = new Set([
 
 const MAX_FILE_SIZE = 1_000_000; // 1MB
 const MAX_CACHE_BYTES = 100_000_000; // 100MB memory cap
+const MAX_DIRTY_FILES = 200; // Cap upfront file reads to avoid I/O storms from large dirty sets
 
 export class FileSnapshotCache {
   private cache = new Map<string, string>();
@@ -165,6 +166,7 @@ export class FileSnapshotCache {
       const { stdout } = await execFileAsync('git', ['status', '--porcelain'], {
         cwd: workspacePath,
         timeout: 10000,
+        maxBuffer: 5_000_000, // 5MB cap on git status output
       });
       const dirtyFiles = new Set<string>();
       for (const line of stdout.split('\n')) {
@@ -179,8 +181,15 @@ export class FileSnapshotCache {
         dirtyFiles.add(filePart);
       }
 
-      // Read each dirty file into cache
+      if (dirtyFiles.size > MAX_DIRTY_FILES) {
+        logger.main.warn(`[FileSnapshotCache] ${dirtyFiles.size} dirty files exceeds limit of ${MAX_DIRTY_FILES}, caching only first ${MAX_DIRTY_FILES} (rest use git fallback)`);
+      }
+
+      // Read each dirty file into cache (capped to avoid I/O storms)
+      let cached = 0;
       for (const relativePath of dirtyFiles) {
+        if (cached >= MAX_DIRTY_FILES) break;
+
         const absPath = path.resolve(workspacePath, relativePath);
         if (this.isBinaryPath(absPath)) continue;
 
@@ -189,6 +198,7 @@ export class FileSnapshotCache {
           const content = await this.readFileIfEligible(absPath);
           if (content !== null) {
             this.addToCache(absPath, content);
+            cached++;
           }
         } catch {
           // Skip files that can't be read
@@ -224,7 +234,7 @@ export class FileSnapshotCache {
         await this.walkAndCache(fullPath, rootPath);
       } else if (entry.isFile()) {
         if (this.isBinaryPath(fullPath)) continue;
-        if (this.totalBytes >= MAX_CACHE_BYTES) break;
+        if (this.cache.size >= MAX_DIRTY_FILES || this.totalBytes >= MAX_CACHE_BYTES) break;
 
         const content = await this.readFileIfEligible(fullPath);
         if (content !== null) {
