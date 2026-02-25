@@ -69,7 +69,11 @@ export function OpenAICodexPanel({
       {config.enabled && (
         <>
           <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
-            <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">API Configuration</h4>
+            <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">API Configuration <span className="text-xs font-normal text-[var(--nim-text-muted)]">(optional)</span></h4>
+            <p className="text-[13px] text-[var(--nim-text-muted)] mb-3 leading-relaxed">
+              By default, Codex uses your CLI login session. Providing an API key is optional and will use
+              OpenAI's API pricing, which is more expensive than the Codex CLI's built-in pricing.
+            </p>
             <div className="api-key-section mt-4">
               <div className="api-key-row flex gap-2 items-center">
                 <input
@@ -77,7 +81,7 @@ export function OpenAICodexPanel({
                   value={apiKeys['openai-codex'] || ''}
                   onChange={(e) => onApiKeyChange('openai-codex', e.target.value)}
                   onFocus={(e) => e.target.select()}
-                  placeholder="sk-..."
+                  placeholder="sk-... (optional)"
                   className="api-key-input flex-1 py-2 px-3 rounded-md bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] text-[var(--nim-text)] outline-none font-mono focus:border-[var(--nim-primary)]"
                 />
                 <button
