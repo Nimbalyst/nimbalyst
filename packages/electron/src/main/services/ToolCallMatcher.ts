@@ -155,6 +155,14 @@ function stripOuterQuotes(s: string): string {
 }
 
 /**
+ * Escape SQL LIKE wildcard characters in a string so it can be safely
+ * interpolated into a LIKE pattern. Use with ESCAPE '\' in the query.
+ */
+function escapeSqlLikeWildcards(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+}
+
+/**
  * Unwrap a shell-wrapped command to extract the inner command.
  *
  * macOS/Linux: /bin/zsh -lc "sed -n '1,260p' file.ts"
@@ -1653,7 +1661,7 @@ class ToolCallMatcherImpl {
       // Find the pre-edit tag for this file+session from document_history.
       // When toolUseId is provided, find the exact tag for that tool call.
       // Otherwise fall back to the latest tag (legacy behavior).
-      const result = toolUseId
+      let result = toolUseId
         ? await database.query<{ content: Buffer }>(`
             SELECT content
             FROM document_history
@@ -1673,6 +1681,20 @@ class ToolCallMatcherImpl {
             ORDER BY timestamp DESC
             LIMIT 1
           `, [filePath, sessionId]);
+
+      // If the toolUseId-specific query returned no rows, fall back to the
+      // latest-tag query (best-effort) before giving up.
+      if (toolUseId && result.rows.length === 0) {
+        result = await database.query<{ content: Buffer }>(`
+            SELECT content
+            FROM document_history
+            WHERE file_path = $1
+              AND metadata->>'sessionId' = $2
+              AND metadata->>'type' = 'pre-edit'
+            ORDER BY timestamp DESC
+            LIMIT 1
+          `, [filePath, sessionId]);
+      }
 
       if (result.rows.length === 0) return null;
 
@@ -1777,6 +1799,7 @@ class ToolCallMatcherImpl {
       // Match by toolCallItemId only — the old '%item.completed%' filter excluded
       // raw Claude API messages (Format 1: {"type":"assistant","message":{...}})
       // which never contain that string.
+      const escapedToolCallItemId = escapeSqlLikeWildcards(toolCallItemId);
       const messageResult = toolCallTimestamp != null
         ? await database.query<{
           id: number;
@@ -1785,10 +1808,10 @@ class ToolCallMatcherImpl {
         }>(
           `SELECT id, content, EXTRACT(EPOCH FROM created_at) * 1000 AS created_at_ms
            FROM ai_agent_messages
-           WHERE session_id = $1 AND content LIKE $2
+           WHERE session_id = $1 AND content LIKE $2 ESCAPE '\'
            ORDER BY ABS((EXTRACT(EPOCH FROM created_at) * 1000) - $3) ASC, id DESC
            LIMIT 50`,
-          [sessionId, `%\"id\":\"${toolCallItemId}\"%`, toolCallTimestamp]
+          [sessionId, `%\"id\":\"${escapedToolCallItemId}\"%`, toolCallTimestamp]
         )
         : await database.query<{
         id: number;
@@ -1796,10 +1819,10 @@ class ToolCallMatcherImpl {
       }>(
         `SELECT id, content
            FROM ai_agent_messages
-           WHERE session_id = $1 AND content LIKE $2
+           WHERE session_id = $1 AND content LIKE $2 ESCAPE '\'
            ORDER BY id DESC
            LIMIT 50`,
-          [sessionId, `%\"id\":\"${toolCallItemId}\"%`]
+          [sessionId, `%\"id\":\"${escapedToolCallItemId}\"%`]
         );
 
       // Determine tool name from message content

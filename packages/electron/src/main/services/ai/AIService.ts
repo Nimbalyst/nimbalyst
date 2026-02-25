@@ -4767,7 +4767,7 @@ export class AIService {
     const worktreeName = remainder.split(path.sep)[0];
     if (!worktreeName || worktreeName.includes('..')) return null;
 
-    const worktreePath = path.join(`${normalizedWorkspace}_worktrees`, worktreeName);
+    const worktreePath = path.resolve(path.join(`${normalizedWorkspace}_worktrees`, worktreeName));
     if (!worktreePath.startsWith(worktreePrefix.slice(0, -1))) return null;
     return worktreePath;
   }
@@ -4784,7 +4784,7 @@ export class AIService {
     const worktreeName = after.split(/[\s'"\r\n\\/]/)[0];
     if (!worktreeName || worktreeName.includes('..')) return null;
 
-    const result = path.join(`${normalizedWorkspace}_worktrees`, worktreeName);
+    const result = path.resolve(path.join(`${normalizedWorkspace}_worktrees`, worktreeName));
     if (!result.startsWith(worktreePrefix.slice(0, -1))) return null;
     return result;
   }
@@ -4875,7 +4875,10 @@ export class AIService {
 
     const candidates: string[] = [];
 
-    const absoluteMatches = normalizedCommand.match(/\/[^\s'"]+/g) || [];
+    const absoluteMatches = [
+      ...(normalizedCommand.match(/\/[^\s'"]+/g) || []),
+      ...(normalizedCommand.match(/[A-Za-z]:[\\\/][^\s'"]+/g) || []),
+    ];
     for (const raw of absoluteMatches) {
       const cleaned = raw.replace(/[);:,]+$/, '');
       if (!cleaned) continue;
@@ -4916,7 +4919,7 @@ export class AIService {
       }
 
       const pendingTags = await historyManager.getPendingTags(filePath);
-      if (pendingTags && pendingTags.length > 0) {
+      if (pendingTags && pendingTags.some(t => t.sessionId === session.id)) {
         continue;
       }
 
