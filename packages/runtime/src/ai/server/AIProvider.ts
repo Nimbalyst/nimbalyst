@@ -109,6 +109,14 @@ export abstract class BaseAIProvider extends EventEmitter implements AIProvider 
   protected config: ProviderConfig = {};
   protected correlationId: string | null = null;
 
+  /**
+   * Set of in-flight non-blocking write promises.
+   * Each logAgentMessageNonBlocking call adds its promise here;
+   * the promise self-removes on settle. flushPendingWrites() awaits them all
+   * so callers (e.g. the completion path) can ensure DB consistency.
+   */
+  private pendingWritePromises = new Set<Promise<void>>();
+
   abstract initialize(config: ProviderConfig): Promise<void>;
   abstract sendMessage(
     message: string,
@@ -275,6 +283,10 @@ export abstract class BaseAIProvider extends EventEmitter implements AIProvider 
    * Use this ONLY for streaming chunks where some loss is acceptable.
    * NEVER use this for user input messages or final output messages.
    *
+   * The write promise is tracked so flushPendingWrites() can await all
+   * outstanding writes before session completion, preventing race conditions
+   * where the UI reloads before the DB has committed the final messages.
+   *
    * Errors are logged but not propagated.
    */
   protected logAgentMessageNonBlocking(
@@ -287,11 +299,25 @@ export abstract class BaseAIProvider extends EventEmitter implements AIProvider 
     providerMessageId?: string,
     searchable?: boolean
   ): void {
-    this.logAgentMessage(sessionId, source, direction, content, metadata, hidden, providerMessageId, searchable)
+    const writePromise = this.logAgentMessage(sessionId, source, direction, content, metadata, hidden, providerMessageId, searchable)
       .catch(error => {
         // For non-blocking calls, we've already logged the error in logAgentMessage
         // Just suppress the unhandled rejection
+      })
+      .finally(() => {
+        this.pendingWritePromises.delete(writePromise);
       });
+    this.pendingWritePromises.add(writePromise);
+  }
+
+  /**
+   * Await all in-flight non-blocking message writes.
+   * Call this before yielding the completion event to ensure all messages
+   * are committed to the database before the UI reloads.
+   */
+  protected async flushPendingWrites(): Promise<void> {
+    if (this.pendingWritePromises.size === 0) return;
+    await Promise.all(this.pendingWritePromises);
   }
 
   /**
