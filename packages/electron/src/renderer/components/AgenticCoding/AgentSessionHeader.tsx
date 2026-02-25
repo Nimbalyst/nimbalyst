@@ -10,7 +10,7 @@ import {
   worktreeGitStatusAtom,
 } from '../../store';
 import { LayoutControls } from '../UnifiedAI/LayoutControls';
-import { errorNotificationService } from '../../services/ErrorNotificationService';
+import { ShareDialog } from '../ShareDialog/ShareDialog';
 
 interface WorktreeMetadata {
   id: string;
@@ -151,30 +151,7 @@ export const AgentSessionHeader: React.FC<AgentSessionHeaderProps> = ({
     return () => unsubscribe?.();
   }, [worktreeId]);
 
-  const [isSharing, setIsSharing] = useState(false);
-
-  const handleShareLink = useCallback(async () => {
-    if (!sessionData || isSharing) return;
-    setIsSharing(true);
-    try {
-      const result = await (window as any).electronAPI?.shareSessionAsLink({ sessionId: sessionData.id });
-      if (result?.success) {
-        const expiryDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-        const expiryStr = expiryDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        errorNotificationService.showInfo(
-          result.isUpdate ? 'Share link updated' : 'Share link copied',
-          `Link copied to clipboard. Expires ${expiryStr}.`,
-          { duration: 4000 }
-        );
-      } else if (result?.error) {
-        errorNotificationService.showError('Share failed', result.error);
-      }
-    } catch (error) {
-      errorNotificationService.showError('Share failed', error instanceof Error ? error.message : 'An unexpected error occurred');
-    } finally {
-      setIsSharing(false);
-    }
-  }, [sessionData, isSharing]);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
 
   if (!sessionData) {
     return null;
@@ -251,13 +228,19 @@ export const AgentSessionHeader: React.FC<AgentSessionHeaderProps> = ({
 
         {/* Share button */}
         <button
-          className="agent-session-header-share shrink-0 flex items-center justify-center w-7 h-7 rounded-md bg-transparent border-none text-[var(--nim-text-faint)] cursor-pointer transition-colors duration-150 hover:text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)] disabled:opacity-50 disabled:cursor-default"
-          title={isSharing ? 'Sharing...' : 'Share session link'}
-          onClick={handleShareLink}
-          disabled={isSharing}
+          className="agent-session-header-share shrink-0 flex items-center justify-center w-7 h-7 rounded-md bg-transparent border-none text-[var(--nim-text-faint)] cursor-pointer transition-colors duration-150 hover:text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]"
+          title="Share session link"
+          onClick={() => setShareDialogOpen(true)}
         >
-          <MaterialSymbol icon={isSharing ? 'progress_activity' : 'link'} size={16} className={isSharing ? 'animate-spin' : ''} />
+          <MaterialSymbol icon="link" size={16} />
         </button>
+        <ShareDialog
+          isOpen={shareDialogOpen}
+          onClose={() => setShareDialogOpen(false)}
+          contentType="session"
+          sessionId={sessionData.id}
+          title={displayTitle}
+        />
 
         {/* Export button */}
         <button

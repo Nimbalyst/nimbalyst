@@ -107,9 +107,9 @@ export function registerShareHandlers() {
     'share:sessionAsLink',
     async (
       _event,
-      options: { sessionId: string }
+      options: { sessionId: string; expirationDays?: number | null }
     ): Promise<{ success: boolean; url?: string; shareId?: string; isUpdate?: boolean; encryptionKey?: string; error?: string }> => {
-      const { sessionId } = options;
+      const { sessionId, expirationDays } = options;
 
       if (!sessionId) {
         return { success: false, error: 'sessionId is required' };
@@ -158,15 +158,26 @@ export function registerShareHandlers() {
         const encrypted = encryptContent(html, shareKey);
         const urlSafeKey = keyToUrlSafe(shareKey);
 
+        // Build headers for upload
+        const headers: Record<string, string> = {
+          'Authorization': `Bearer ${jwt}`,
+          'Content-Type': 'application/octet-stream',
+          'X-Session-Title': 'Encrypted session',
+          'X-Session-Id': sessionId,
+        };
+
+        // Resolve TTL: explicit param > stored preference > default (7 days)
+        const ttlDays = expirationDays !== undefined ? expirationDays : store.get('shareExpirationDays') ?? 7;
+        if (ttlDays === null || ttlDays === 0) {
+          headers['X-TTL-Days'] = '0'; // No expiration
+        } else {
+          headers['X-TTL-Days'] = String(ttlDays);
+        }
+
         // Upload encrypted content to server
         const response = await net.fetch(`${serverUrl}/share`, {
           method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${jwt}`,
-            'Content-Type': 'application/octet-stream',
-            'X-Session-Title': 'Encrypted session',
-            'X-Session-Id': sessionId,
-          },
+          headers,
           body: encrypted,
         });
 
@@ -180,9 +191,6 @@ export function registerShareHandlers() {
 
         // Append decryption key to URL fragment
         const fullUrl = `${data.url}#key=${urlSafeKey}`;
-
-        // Copy URL to clipboard
-        clipboard.writeText(fullUrl);
 
         logger.file.info(`[ShareHandlers] Session ${data.isUpdate ? 'updated' : 'shared'}: ${data.url}`);
 
@@ -313,9 +321,9 @@ export function registerShareHandlers() {
     'share:fileAsLink',
     async (
       _event,
-      options: { filePath: string }
+      options: { filePath: string; expirationDays?: number | null }
     ): Promise<{ success: boolean; url?: string; shareId?: string; isUpdate?: boolean; encryptionKey?: string; error?: string }> => {
-      const { filePath } = options;
+      const { filePath, expirationDays } = options;
 
       if (!filePath) {
         return { success: false, error: 'filePath is required' };
@@ -348,15 +356,26 @@ export function registerShareHandlers() {
         const encrypted = encryptContent(html, shareKey);
         const urlSafeKey = keyToUrlSafe(shareKey);
 
-        // Upload encrypted content to server (zero-knowledge: no filename sent)
+        // Build headers for upload (zero-knowledge: no filename sent)
+        const fileHeaders: Record<string, string> = {
+          'Authorization': `Bearer ${jwt}`,
+          'Content-Type': 'application/octet-stream',
+          'X-Session-Title': 'Encrypted file',
+          'X-Session-Id': keyId,
+        };
+
+        // Resolve TTL: explicit param > stored preference > default (7 days)
+        const fileTtlDays = expirationDays !== undefined ? expirationDays : store.get('shareExpirationDays') ?? 7;
+        if (fileTtlDays === null || fileTtlDays === 0) {
+          fileHeaders['X-TTL-Days'] = '0'; // No expiration
+        } else {
+          fileHeaders['X-TTL-Days'] = String(fileTtlDays);
+        }
+
+        // Upload encrypted content to server
         const response = await net.fetch(`${serverUrl}/share`, {
           method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${jwt}`,
-            'Content-Type': 'application/octet-stream',
-            'X-Session-Title': 'Encrypted file',
-            'X-Session-Id': keyId,
-          },
+          headers: fileHeaders,
           body: encrypted,
         });
 
@@ -370,9 +389,6 @@ export function registerShareHandlers() {
 
         // Append decryption key to URL fragment
         const fullUrl = `${data.url}#key=${urlSafeKey}`;
-
-        // Copy URL to clipboard
-        clipboard.writeText(fullUrl);
 
         logger.file.info(`[ShareHandlers] File ${data.isUpdate ? 'updated' : 'shared'}: ${data.url}`);
 
@@ -413,6 +429,29 @@ export function registerShareHandlers() {
         urlSafeKeys[sessionId] = keyToUrlSafe(key as string);
       }
       return urlSafeKeys;
+    }
+  );
+
+  /**
+   * Get the user's preferred share expiration (in days).
+   * Returns null for no expiration, or a number of days.
+   */
+  safeHandle(
+    'share:getExpirationPreference',
+    async (): Promise<number | null> => {
+      const pref = store.get('shareExpirationDays');
+      return pref !== undefined ? pref : 7; // Default to 7 days
+    }
+  );
+
+  /**
+   * Set the user's preferred share expiration (in days).
+   * Pass null for no expiration.
+   */
+  safeHandle(
+    'share:setExpirationPreference',
+    async (_event, days: number | null): Promise<void> => {
+      store.set('shareExpirationDays', days);
     }
   );
 }

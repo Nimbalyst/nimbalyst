@@ -10,13 +10,13 @@ import {
   reparentSessionAtom,
   refreshSessionListAtom,
   sessionShareAtom,
-  addSessionShareAtom,
   removeSessionShareAtom,
   shareKeysAtom,
   buildShareUrl,
 } from '../../store';
 import { errorNotificationService } from '../../services/ErrorNotificationService';
 import { getRelativeTimeString } from '../../utils/dateFormatting';
+import { ShareDialog } from '../ShareDialog/ShareDialog';
 
 /**
  * Unified component for rendering expandable session groups in the session history.
@@ -266,9 +266,8 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
   // Workstream session-share state (used only when type === 'workstream')
   const workstreamShareInfo = useAtomValue(sessionShareAtom(id));
   const shareKeys = useAtomValue(shareKeysAtom);
-  const addShare = useSetAtom(addSessionShareAtom);
   const removeShare = useSetAtom(removeSessionShareAtom);
-  const [isSharingWorkstream, setIsSharingWorkstream] = useState(false);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -423,41 +422,12 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
     (window as any).electronAPI?.exportSessionToClipboard({ sessionId: id });
   }, [type, id]);
 
-  const handleWorkstreamShareLink = useCallback(async (e: React.MouseEvent) => {
+  const handleWorkstreamShareLink = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     setShowContextMenu(false);
     if (type !== 'workstream') return;
-
-    setIsSharingWorkstream(true);
-    try {
-      const result = await (window as any).electronAPI?.shareSessionAsLink({ sessionId: id });
-      if (result?.success && result.shareId) {
-        addShare({
-          shareId: result.shareId,
-          sessionId: id,
-          title,
-          sizeBytes: 0,
-          createdAt: new Date().toISOString(),
-          expiresAt: null,
-          viewCount: 0,
-          encryptionKey: result.encryptionKey,
-        });
-        const expiryDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-        const expiryStr = expiryDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        errorNotificationService.showInfo(
-          result.isUpdate ? 'Share link updated' : 'Share link copied',
-          `Link copied to clipboard. Expires ${expiryStr}.`,
-          { duration: 4000 }
-        );
-      } else if (result?.error) {
-        errorNotificationService.showError('Share failed', result.error);
-      }
-    } catch (error) {
-      errorNotificationService.showError('Share failed', error instanceof Error ? error.message : 'An unexpected error occurred');
-    } finally {
-      setIsSharingWorkstream(false);
-    }
-  }, [type, id, title, addShare]);
+    setShareDialogOpen(true);
+  }, [type]);
 
   const handleWorkstreamCopyShareLink = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -843,12 +813,11 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
             </>
           ) : type === 'workstream' ? (
             <button
-              className="workstream-group-context-menu-item flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] disabled:opacity-60 disabled:cursor-default"
+              className="workstream-group-context-menu-item flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
               onClick={handleWorkstreamShareLink}
-              disabled={isSharingWorkstream}
             >
               <MaterialSymbol icon="link" size={14} />
-              {isSharingWorkstream ? 'Sharing...' : 'Share link'}
+              Share link
             </button>
           ) : null}
           {type === 'workstream' && (
@@ -889,6 +858,14 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
           )}
         </div>
       )}
+
+      <ShareDialog
+        isOpen={shareDialogOpen}
+        onClose={() => setShareDialogOpen(false)}
+        contentType="session"
+        sessionId={id}
+        title={title}
+      />
 
       {/* Keyframe animation styles */}
       <style>{`
@@ -1006,9 +983,8 @@ const WorkstreamSessionItem: React.FC<WorkstreamSessionItemProps> = ({
   const renameInputRef = useRef<HTMLInputElement>(null);
   const shareInfo = useAtomValue(sessionShareAtom(session.id));
   const shareKeys = useAtomValue(shareKeysAtom);
-  const addShare = useSetAtom(addSessionShareAtom);
   const removeShare = useSetAtom(removeSessionShareAtom);
-  const [isSharing, setIsSharing] = useState(false);
+  const [childShareDialogOpen, setChildShareDialogOpen] = useState(false);
 
   const displayTitle = session.title || 'Untitled Session';
 
@@ -1093,38 +1069,10 @@ const WorkstreamSessionItem: React.FC<WorkstreamSessionItemProps> = ({
     (window as any).electronAPI?.exportSessionToClipboard({ sessionId: session.id });
   };
 
-  const handleShareLink = async (e: React.MouseEvent) => {
+  const handleShareLink = (e: React.MouseEvent) => {
     e.stopPropagation();
     setShowContextMenu(false);
-    setIsSharing(true);
-    try {
-      const result = await (window as any).electronAPI?.shareSessionAsLink({ sessionId: session.id });
-      if (result?.success && result.shareId) {
-        addShare({
-          shareId: result.shareId,
-          sessionId: session.id,
-          title: displayTitle,
-          sizeBytes: 0,
-          createdAt: new Date().toISOString(),
-          expiresAt: null,
-          viewCount: 0,
-          encryptionKey: result.encryptionKey,
-        });
-        const expiryDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-        const expiryStr = expiryDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        errorNotificationService.showInfo(
-          result.isUpdate ? 'Share link updated' : 'Share link copied',
-          `Link copied to clipboard. Expires ${expiryStr}.`,
-          { duration: 4000 }
-        );
-      } else if (result?.error) {
-        errorNotificationService.showError('Share failed', result.error);
-      }
-    } catch (error) {
-      errorNotificationService.showError('Share failed', error instanceof Error ? error.message : 'An unexpected error occurred');
-    } finally {
-      setIsSharing(false);
-    }
+    setChildShareDialogOpen(true);
   };
 
   const handleCopyShareLink = (e: React.MouseEvent) => {
@@ -1283,12 +1231,11 @@ const WorkstreamSessionItem: React.FC<WorkstreamSessionItemProps> = ({
             </>
           ) : (
             <button
-              className="workstream-group-context-menu-item flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] disabled:opacity-60 disabled:cursor-default"
+              className="workstream-group-context-menu-item flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
               onClick={handleShareLink}
-              disabled={isSharing}
             >
               <MaterialSymbol icon="link" size={14} />
-              {isSharing ? 'Sharing...' : 'Share link'}
+              Share link
             </button>
           )}
           <button
@@ -1325,6 +1272,13 @@ const WorkstreamSessionItem: React.FC<WorkstreamSessionItemProps> = ({
           )}
         </div>
       )}
+      <ShareDialog
+        isOpen={childShareDialogOpen}
+        onClose={() => setChildShareDialogOpen(false)}
+        contentType="session"
+        sessionId={session.id}
+        title={displayTitle}
+      />
     </div>
   );
 };

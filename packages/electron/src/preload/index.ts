@@ -259,7 +259,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('export:sessionToClipboard', options) as Promise<{ success: boolean; error?: string }>,
 
   // Share operations
-  shareSessionAsLink: (options: { sessionId: string }) =>
+  shareSessionAsLink: (options: { sessionId: string; expirationDays?: number | null }) =>
     ipcRenderer.invoke('share:sessionAsLink', options) as Promise<{ success: boolean; url?: string; shareId?: string; isUpdate?: boolean; encryptionKey?: string; error?: string }>,
   listShares: () =>
     ipcRenderer.invoke('share:list') as Promise<{ success: boolean; shares?: Array<{ shareId: string; sessionId: string; title: string; sizeBytes: number; createdAt: string; expiresAt: string | null; viewCount: number }>; error?: string }>,
@@ -267,8 +267,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('share:delete', options) as Promise<{ success: boolean; error?: string }>,
   getShareKeys: () =>
     ipcRenderer.invoke('share:getKeys') as Promise<Record<string, string>>,
-  shareFileAsLink: (options: { filePath: string }) =>
+  shareFileAsLink: (options: { filePath: string; expirationDays?: number | null }) =>
     ipcRenderer.invoke('share:fileAsLink', options) as Promise<{ success: boolean; url?: string; shareId?: string; isUpdate?: boolean; encryptionKey?: string; error?: string }>,
+  getShareExpirationPreference: () =>
+    ipcRenderer.invoke('share:getExpirationPreference') as Promise<number | null>,
+  setShareExpirationPreference: (days: number | null) =>
+    ipcRenderer.invoke('share:setExpirationPreference', days) as Promise<void>,
 
   // Window operations
   setDocumentEdited: (edited: boolean) => ipcRenderer.send('set-document-edited', edited),

@@ -83,7 +83,22 @@ export async function handleShareUpload(
 
   try {
     const now = new Date();
-    const expiresAt = new Date(now.getTime() + DEFAULT_TTL_MS);
+
+    // Parse optional TTL from X-TTL-Days header
+    const ttlDaysHeader = request.headers.get('X-TTL-Days');
+    let expiresAt: Date | null;
+    if (ttlDaysHeader !== null) {
+      const ttlDays = parseInt(ttlDaysHeader, 10);
+      if (ttlDays === 0 || isNaN(ttlDays)) {
+        expiresAt = null; // No expiration
+      } else {
+        const clampedDays = Math.min(Math.max(ttlDays, 1), 365);
+        expiresAt = new Date(now.getTime() + clampedDays * 24 * 60 * 60 * 1000);
+      }
+    } else {
+      expiresAt = new Date(now.getTime() + DEFAULT_TTL_MS);
+    }
+
     let shareId: string;
     let r2Key: string;
     let isUpdate = false;
@@ -112,7 +127,7 @@ export async function handleShareUpload(
 
       await env.DB.prepare(
         `UPDATE shared_sessions SET title = ?, size_bytes = ?, updated_at = ?, expires_at = ?, r2_key = ? WHERE id = ?`
-      ).bind(title, bodySize, now.toISOString(), expiresAt.toISOString(), r2Key, shareId).run();
+      ).bind(title, bodySize, now.toISOString(), expiresAt ? expiresAt.toISOString() : null, r2Key, shareId).run();
     } else {
       // Create new share
       shareId = generateShareId();
@@ -125,7 +140,7 @@ export async function handleShareUpload(
       await env.DB.prepare(
         `INSERT INTO shared_sessions (id, user_id, session_id, title, r2_key, size_bytes, created_at, expires_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-      ).bind(shareId, auth.userId, sessionId, title, r2Key, bodySize, now.toISOString(), expiresAt.toISOString()).run();
+      ).bind(shareId, auth.userId, sessionId, title, r2Key, bodySize, now.toISOString(), expiresAt ? expiresAt.toISOString() : null).run();
     }
 
     // Build share URL - use share.nimbalyst.com in production, request origin otherwise

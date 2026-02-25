@@ -2,9 +2,10 @@ import React, { useState, useCallback, useEffect, useRef, useMemo, memo } from '
 import { useAtomValue, useSetAtom } from 'jotai';
 import { MaterialSymbol, ProviderIcon } from '@nimbalyst/runtime';
 import { getRelativeTimeString } from '../../utils/dateFormatting';
-import { sessionOrChildProcessingAtom, sessionUnreadAtom, sessionPendingPromptAtom, sessionHasPendingInteractivePromptAtom, reparentSessionAtom, refreshSessionListAtom, sessionShareAtom, addSessionShareAtom, removeSessionShareAtom, shareKeysAtom, buildShareUrl } from '../../store';
+import { sessionOrChildProcessingAtom, sessionUnreadAtom, sessionPendingPromptAtom, sessionHasPendingInteractivePromptAtom, reparentSessionAtom, refreshSessionListAtom, sessionShareAtom, removeSessionShareAtom, shareKeysAtom, buildShareUrl } from '../../store';
 import type { ShareInfo } from '../../store';
 import { errorNotificationService } from '../../services/ErrorNotificationService';
+import { ShareDialog } from '../ShareDialog/ShareDialog';
 
 /**
  * Combined status indicator that subscribes to this session's state atoms.
@@ -145,8 +146,8 @@ export const SessionListItem = memo<SessionListItemProps>(({
   // Share state
   const shareInfo = useAtomValue(sessionShareAtom(id));
   const shareKeys = useAtomValue(shareKeysAtom);
-  const addShare = useSetAtom(addSessionShareAtom);
   const removeShare = useSetAtom(removeSessionShareAtom);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
 
   // Determine if this session can be dragged
   // Can drag if: (1) Has a parent (is a child session), OR (2) Is an orphan (no parent, no children)
@@ -208,40 +209,10 @@ export const SessionListItem = memo<SessionListItemProps>(({
     (window as any).electronAPI?.exportSessionToClipboard({ sessionId: id });
   };
 
-  const [isSharing, setIsSharing] = useState(false);
-
-  const handleShareLink = async (e: React.MouseEvent) => {
+  const handleShareLink = (e: React.MouseEvent) => {
     e.stopPropagation();
     setShowContextMenu(false);
-    setIsSharing(true);
-    try {
-      const result = await (window as any).electronAPI?.shareSessionAsLink({ sessionId: id });
-      if (result?.success && result.shareId) {
-        addShare({
-          shareId: result.shareId,
-          sessionId: id,
-          title: title,
-          sizeBytes: 0,
-          createdAt: new Date().toISOString(),
-          expiresAt: null,
-          viewCount: 0,
-          encryptionKey: result.encryptionKey,
-        });
-        const expiryDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-        const expiryStr = expiryDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        errorNotificationService.showInfo(
-          result.isUpdate ? 'Share link updated' : 'Share link copied',
-          `Link copied to clipboard. Expires ${expiryStr}.`,
-          { duration: 4000 }
-        );
-      } else if (result?.error) {
-        errorNotificationService.showError('Share failed', result.error);
-      }
-    } catch (error) {
-      errorNotificationService.showError('Share failed', error instanceof Error ? error.message : 'An unexpected error occurred');
-    } finally {
-      setIsSharing(false);
-    }
+    setShareDialogOpen(true);
   };
 
   const handleCopyShareLink = (e: React.MouseEvent) => {
@@ -666,10 +637,9 @@ export const SessionListItem = memo<SessionListItemProps>(({
             <button
               className="session-list-item-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
               onClick={handleShareLink}
-              disabled={isSharing}
             >
               <MaterialSymbol icon="link" size={14} />
-              {isSharing ? 'Sharing...' : 'Share link'}
+              Share link
             </button>
           )}
           <button
@@ -713,6 +683,13 @@ export const SessionListItem = memo<SessionListItemProps>(({
           )}
         </div>
       )}
+      <ShareDialog
+        isOpen={shareDialogOpen}
+        onClose={() => setShareDialogOpen(false)}
+        contentType="session"
+        sessionId={id}
+        title={title}
+      />
     </div>
   );
 }, (prev, next) => {
