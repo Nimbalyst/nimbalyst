@@ -3,7 +3,8 @@
  */
 
 import { BrowserWindow } from 'electron';
-import { execFileSync } from 'child_process';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import { safeHandle } from '../../utils/ipcRegistry';
 import Store from 'electron-store';
 import { SessionManager, ProviderFactory, ModelRegistry, AIProvider, isAskUserQuestionProvider, ClaudeCodeProvider, OpenAICodexProvider } from '@nimbalyst/runtime/ai/server';
@@ -51,6 +52,17 @@ import { isFileInWorkspaceOrWorktree, resolveProjectPath } from '../../utils/wor
 import { SessionFilesRepository } from '@nimbalyst/runtime';
 import * as fs from 'fs';
 import * as path from 'path';
+
+const execFileAsync = promisify(execFile);
+
+/** Read file content as UTF-8. Returns '' for missing files, null for other errors. */
+async function readFileContentOrNull(filePath: string): Promise<string | null> {
+  try {
+    return await fs.promises.readFile(filePath, 'utf-8');
+  } catch (error: any) {
+    return error?.code === 'ENOENT' ? '' : null;
+  }
+}
 
 const LOG_PREVIEW_LENGTH = 400;
 
@@ -2497,16 +2509,7 @@ export class AIService {
                         // Guard against stale cache baselines that already match post-edit
                         // disk content. In that case, watcher attribution will provide a
                         // better before-state; creating a tag here would produce no visible diff.
-                        let currentContentForCheck: string | null = null;
-                        try {
-                          if (fs.existsSync(change.path)) {
-                            currentContentForCheck = fs.readFileSync(change.path, 'utf-8');
-                          } else {
-                            currentContentForCheck = '';
-                          }
-                        } catch {
-                          currentContentForCheck = null;
-                        }
+                        const currentContentForCheck = await readFileContentOrNull(change.path);
                         if (currentContentForCheck !== null && beforeContent === currentContentForCheck) {
                           continue;
                         }
@@ -4762,9 +4765,10 @@ export class AIService {
 
     const remainder = normalizedFile.slice(worktreePrefix.length);
     const worktreeName = remainder.split(path.sep)[0];
-    if (!worktreeName) return null;
+    if (!worktreeName || worktreeName.includes('..')) return null;
 
     const worktreePath = path.join(`${normalizedWorkspace}_worktrees`, worktreeName);
+    if (!worktreePath.startsWith(worktreePrefix.slice(0, -1))) return null;
     return worktreePath;
   }
 
@@ -4778,9 +4782,11 @@ export class AIService {
 
     const after = normalizedCommand.slice(idx + worktreePrefix.length);
     const worktreeName = after.split(/[\s'"\r\n\\/]/)[0];
-    if (!worktreeName) return null;
+    if (!worktreeName || worktreeName.includes('..')) return null;
 
-    return path.join(`${normalizedWorkspace}_worktrees`, worktreeName);
+    const result = path.join(`${normalizedWorkspace}_worktrees`, worktreeName);
+    if (!result.startsWith(worktreePrefix.slice(0, -1))) return null;
+    return result;
   }
 
   private async ensureCodexSessionWatcher(
@@ -4851,18 +4857,29 @@ export class AIService {
     });
   }
 
-  private extractFilePathsFromCommand(command: string, workspacePath: string, cwd: string): string[] {
+  private async extractFilePathsFromCommand(command: string, workspacePath: string, cwd: string): Promise<string[]> {
     const results = new Set<string>();
     const normalizedCommand = command.replace(/\\/g, path.sep);
+
+    const resolveAndCheck = async (candidate: string): Promise<void> => {
+      try {
+        // Resolve symlinks so boundary check cannot be bypassed via symlinks
+        const realPath = await fs.promises.realpath(candidate);
+        if (isFileInWorkspaceOrWorktree(realPath, workspacePath)) {
+          results.add(realPath);
+        }
+      } catch {
+        // File does not exist or is inaccessible - skip
+      }
+    };
+
+    const candidates: string[] = [];
 
     const absoluteMatches = normalizedCommand.match(/\/[^\s'"]+/g) || [];
     for (const raw of absoluteMatches) {
       const cleaned = raw.replace(/[);:,]+$/, '');
       if (!cleaned) continue;
-      const normalizedPath = path.normalize(cleaned);
-      if (isFileInWorkspaceOrWorktree(normalizedPath, workspacePath) && fs.existsSync(normalizedPath)) {
-        results.add(normalizedPath);
-      }
+      candidates.push(path.normalize(cleaned));
     }
 
     const tokens = normalizedCommand.split(/\s+/);
@@ -4871,12 +4888,10 @@ export class AIService {
       const cleaned = token.replace(/^['"]|['"]$/g, '').replace(/[);:,]+$/, '');
       if (!cleaned || path.isAbsolute(cleaned)) continue;
       if (!cleaned.includes(path.sep) && !cleaned.includes('/')) continue;
-      const resolved = path.normalize(path.resolve(cwd, cleaned));
-      if (isFileInWorkspaceOrWorktree(resolved, workspacePath) && fs.existsSync(resolved)) {
-        results.add(resolved);
-      }
+      candidates.push(path.normalize(path.resolve(cwd, cleaned)));
     }
 
+    await Promise.all(candidates.map(c => resolveAndCheck(c)));
     return [...results];
   }
 
@@ -4887,13 +4902,18 @@ export class AIService {
     commandItemId?: string
   ): Promise<boolean> {
     const effectivePath = session.worktreePath || workspacePath;
-    const filePaths = this.extractFilePathsFromCommand(command, workspacePath, effectivePath);
+    const filePaths = await this.extractFilePathsFromCommand(command, workspacePath, effectivePath);
     if (filePaths.length === 0) return false;
 
     let trackedAny = false;
 
     for (const filePath of filePaths) {
-      if (fs.existsSync(filePath) && isBinaryFile(filePath)) continue;
+      try {
+        await fs.promises.access(filePath);
+        if (isBinaryFile(filePath)) continue;
+      } catch {
+        // File does not exist - proceed (it may be a new file)
+      }
 
       const pendingTags = await historyManager.getPendingTags(filePath);
       if (pendingTags && pendingTags.length > 0) {
@@ -4902,29 +4922,26 @@ export class AIService {
 
       let beforeContent = '';
 
-      let currentContent = '';
-      if (fs.existsSync(filePath)) {
-        try {
-          currentContent = fs.readFileSync(filePath, 'utf-8');
-        } catch (error) {
-          logger.main.warn('[AIService] Failed to read current Bash content:', {
-            sessionId: session.id,
-            filePath,
-            error: error instanceof Error ? error.message : String(error),
-          });
-          continue;
-        }
+      const currentContentResult = await readFileContentOrNull(filePath);
+      if (currentContentResult === null) {
+        logger.main.warn('[AIService] Failed to read current Bash content:', {
+          sessionId: session.id,
+          filePath,
+        });
+        continue;
       }
+      const currentContent = currentContentResult;
 
       // Prefer immutable HEAD baseline so command timing does not affect diff capture.
       try {
         const relativePath = path.relative(effectivePath, filePath);
-        if (!relativePath.startsWith('..') && !path.isAbsolute(relativePath)) {
-          beforeContent = execFileSync(
+        if (!relativePath.startsWith('..') && !path.isAbsolute(relativePath) && !relativePath.startsWith(':')) {
+          const { stdout } = await execFileAsync(
             'git',
             ['show', `HEAD:${relativePath}`],
-            { cwd: effectivePath, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] }
+            { cwd: effectivePath, encoding: 'utf-8' }
           );
+          beforeContent = stdout;
         }
       } catch {
         // File may be untracked/new. Keep empty baseline.

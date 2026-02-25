@@ -147,9 +147,13 @@ export class SessionFileTracker {
    */
   private recentEdits = new Map<string, number>();
   private readonly editDedupeMs = 5_000;
+  private dedupeCounter = 0;
 
   private makeEditDedupeKey(sessionId: string, filePath: string, toolUseId?: string): string {
-    return `${sessionId}:${filePath}:${toolUseId || 'no-tool-use-id'}`;
+    // Use a monotonic counter when toolUseId is missing to avoid collisions
+    // between distinct tool calls that both lack an ID.
+    const id = toolUseId || `anon-${++this.dedupeCounter}`;
+    return `${sessionId}:${filePath}:${id}`;
   }
 
   /**
