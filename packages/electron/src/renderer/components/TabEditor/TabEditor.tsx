@@ -1248,14 +1248,10 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           return;
         }
 
-        // Apply time-based heuristic to avoid reloading after own save
-        // BUT: Skip this for custom editors with pending AI edits (they need to reload)
+        // Keep a recent-save timestamp for conflict handling below.
+        // Do not suppress external reloads based on time alone; legitimate AI edits
+        // can happen immediately after a save and must still be applied.
         const timeSinceLastSave = lastSaveTimeRef.current ? Date.now() - lastSaveTimeRef.current : Infinity;
-        if (timeSinceLastSave < 2000 && !hasPendingAIEditForCustomEditor) {
-          // console.log(`[TabEditor] Skipping file change - recent save (${timeSinceLastSave}ms ago)`);
-          processingFileChangeRef.current = false;
-          return;
-        }
 
         const applyReload = async () => {
           // For custom editors using EditorHost: Just notify them of the file change
