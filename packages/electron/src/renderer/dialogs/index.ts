@@ -41,6 +41,7 @@ export {
   type OnboardingData,
 } from './onboardingDialogs';
 export { useNavigationDialogs, type UseNavigationDialogsReturn } from './useNavigationDialogs';
+export { dialogRef, dialogReadyAtom, hasActiveDialogsAtom } from '../contexts/DialogContext';
 
 // Re-export types from context
 export type {
