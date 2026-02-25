@@ -259,5 +259,3 @@ export class FileSnapshotCache {
     return BINARY_EXTENSIONS.has(path.extname(filePath).toLowerCase());
   }
 }
-
-// codex watch test

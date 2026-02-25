@@ -412,8 +412,14 @@ export class HistoryManager {
 
       // If the SAME session already has a pending tag for this file, keep it.
       // The original pre-edit baseline is the correct one for cumulative diffs.
-      const existing = await database.query<{ session_id: string }>(`
-        SELECT metadata->>'sessionId' as session_id
+      //
+      // EXCEPTION: If the existing tag has empty content but the new content is
+      // non-empty, update the existing tag. This fixes a race condition where
+      // the watcher-based WorkspaceFileEditAttributionService creates a tag with
+      // empty beforeContent (cache miss / null fallback) before the proactive
+      // file_change handler can supply the correct baseline from the snapshot cache.
+      const existing = await database.query<{ session_id: string; content: Buffer; tag_id: string }>(`
+        SELECT metadata->>'sessionId' as session_id, content, metadata->>'tagId' as tag_id
         FROM document_history
         WHERE file_path = $1
           AND metadata->>'status' = 'pending-review'
@@ -421,6 +427,31 @@ export class HistoryManager {
       `, [filePath]);
 
       if (existing.rows.length > 0 && existing.rows[0].session_id === sessionId) {
+        // Check if the existing tag has empty content and we have better content
+        const existingContent = existing.rows[0].content;
+        let existingIsEmpty = !existingContent || existingContent.length === 0;
+        if (!existingIsEmpty) {
+          try {
+            existingIsEmpty = (await gunzip(existingContent)).toString('utf-8').length === 0;
+          } catch {
+            // Decompression failed — treat as non-empty to avoid overwriting
+            existingIsEmpty = false;
+          }
+        }
+
+        if (existingIsEmpty && content.length > 0) {
+          // Upgrade the empty tag with real baseline content
+          const existingTagId = existing.rows[0].tag_id;
+          logger.main.info('[HistoryManager] Upgrading empty pre-edit tag with real baseline:', {
+            filePath,
+            sessionId,
+            existingTagId,
+            newContentLength: content.length,
+          });
+          await this.updateTagContent(filePath, existingTagId, content);
+          return;
+        }
+
         logger.main.info('[HistoryManager] Keeping existing pre-edit tag for same session:', { filePath, sessionId });
         return;
       }
@@ -1024,6 +1055,15 @@ export class HistoryManager {
       }
 
       const pendingTag = pendingTags[0];
+      const contentLength = pendingTag.content?.length ?? 0;
+      if (contentLength === 0) {
+        logger.main.warn('[HistoryManager] getDiffBaseline returning empty content:', {
+          filePath,
+          tagId: pendingTag.id,
+          tagType: pendingTag.type,
+          sessionId: pendingTag.sessionId,
+        });
+      }
       return {
         content: pendingTag.content,
         tagType: pendingTag.type as 'pre-edit' | 'incremental-approval'

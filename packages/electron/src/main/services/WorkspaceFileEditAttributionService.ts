@@ -255,11 +255,20 @@ class WorkspaceFileEditAttributionServiceImpl {
 
       counters.attributedEdits++;
 
+      const beforeContent = event.beforeContent ?? '';
+      if (!event.beforeContent) {
+        logger.main.warn('[WorkspaceFileEditAttributionService] Creating tag with empty beforeContent (cache miss):', {
+          filePath: event.filePath,
+          sessionId: winner.sessionId,
+          toolUseId,
+        });
+      }
+
       const tagId = `ai-edit-pending-${winner.sessionId}-${toolUseId}`;
       await historyManager.createTag(
         event.filePath,
         tagId,
-        event.beforeContent ?? '',
+        beforeContent,
         winner.sessionId,
         toolUseId,
       );
