@@ -20,6 +20,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.54.15] - 2026-02-25
+
+
+### Added
+- Share dialog shows inline sign-in (Google/magic-link) when not authenticated instead of redirecting to Settings
+
+### Changed
+- Share link expiration capped at 30 days; "No expiration" option removed
+- Legacy null (no-expiration) share preferences convert to 7-day default
+- Codex API key field labeled as optional with explanation of account-based vs API key pricing
+
+### Fixed
+- External file edits no longer dropped when they arrive immediately after a save
+- Pre-edit baseline preserved correctly when watcher tag starts empty
+- Codex commit widget completion state persists across tab navigation
+- Vendored ripgrep now available in enhanced PATH for search functionality
+- Community modal social icons restyled to match design (transparent background, blue icons, larger text)
+- Community modal stays open when clicking social links; "Accept Invite" renamed to "Join Discord"
+
 ## [0.54.14] - 2026-02-25
 
 
