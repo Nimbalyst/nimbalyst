@@ -641,7 +641,7 @@ export class AIService {
       case 'openai':
         return globalApiKeys['openai'] || process.env.OPENAI_API_KEY;
       case 'openai-codex':
-        return globalApiKeys['openai-codex'] || process.env.OPENAI_API_KEY;
+        return globalApiKeys['openai-codex'];
       case 'lmstudio':
         return 'not-required';
       default:
@@ -1751,7 +1751,7 @@ export class AIService {
             break;
           case 'openai-codex':
             // Codex SDK uses its own auth (codex auth login), API key is optional
-            apiKey = apiKeys['openai-codex'] || process.env.OPENAI_API_KEY;
+            apiKey = apiKeys['openai-codex'];
             requiresApiKey = false;
             break;
           case 'lmstudio':
@@ -4170,7 +4170,7 @@ export class AIService {
           }
           break;
         case 'openai-codex':
-          apiKey = apiKeys['openai-codex'] || process.env.OPENAI_API_KEY;
+          apiKey = apiKeys['openai-codex'];
           if (!apiKey) {
             return { success: false, error: 'OpenAI API key not configured' };
           }
