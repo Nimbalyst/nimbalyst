@@ -1,4 +1,3 @@
-import { clipboard } from 'electron';
 import { net } from 'electron';
 import { randomBytes, createCipheriv, createHash } from 'crypto';
 import { promises as fs } from 'fs';
@@ -13,6 +12,7 @@ import { getSessionJwt, refreshSession } from '../services/StytchAuthService';
 import { store } from '../utils/store';
 
 const SHARE_SERVER_URL = 'https://sync.nimbalyst.com';
+const DEFAULT_SHARE_EXPIRATION_DAYS = 7;
 
 // --- Encryption utilities ---
 
@@ -57,6 +57,32 @@ function removeShareKey(sessionId: string): void {
     const { [sessionId]: _, ...rest } = keys;
     store.set('shareKeys', rest);
   }
+}
+
+/**
+ * Normalize expiration preference values.
+ * Accepts days (number), null (no expiration), or undefined (fallback).
+ */
+function normalizeShareExpirationDays(
+  value: unknown,
+  fallback: number | null = DEFAULT_SHARE_EXPIRATION_DAYS
+): number | null {
+  const candidate = value === undefined ? fallback : value;
+
+  if (candidate === null) {
+    return null;
+  }
+
+  if (typeof candidate !== 'number' || !Number.isFinite(candidate)) {
+    return fallback;
+  }
+
+  const days = Math.trunc(candidate);
+  if (days === 0) {
+    return null;
+  }
+
+  return Math.min(Math.max(days, 1), 365);
 }
 
 // --- Auth ---
@@ -167,8 +193,9 @@ export function registerShareHandlers() {
         };
 
         // Resolve TTL: explicit param > stored preference > default (7 days)
-        const ttlDays = expirationDays !== undefined ? expirationDays : store.get('shareExpirationDays') ?? 7;
-        if (ttlDays === null || ttlDays === 0) {
+        const storedPreference = normalizeShareExpirationDays(store.get('shareExpirationDays'));
+        const ttlDays = normalizeShareExpirationDays(expirationDays, storedPreference);
+        if (ttlDays === null) {
           headers['X-TTL-Days'] = '0'; // No expiration
         } else {
           headers['X-TTL-Days'] = String(ttlDays);
@@ -365,8 +392,9 @@ export function registerShareHandlers() {
         };
 
         // Resolve TTL: explicit param > stored preference > default (7 days)
-        const ttlDays = expirationDays !== undefined ? expirationDays : store.get('shareExpirationDays') ?? 7;
-        if (ttlDays === null || ttlDays === 0) {
+        const storedPreference = normalizeShareExpirationDays(store.get('shareExpirationDays'));
+        const ttlDays = normalizeShareExpirationDays(expirationDays, storedPreference);
+        if (ttlDays === null) {
           headers['X-TTL-Days'] = '0'; // No expiration
         } else {
           headers['X-TTL-Days'] = String(ttlDays);
@@ -439,8 +467,7 @@ export function registerShareHandlers() {
   safeHandle(
     'share:getExpirationPreference',
     async (): Promise<number | null> => {
-      const pref = store.get('shareExpirationDays');
-      return pref !== undefined ? pref : 7; // Default to 7 days
+      return normalizeShareExpirationDays(store.get('shareExpirationDays'));
     }
   );
 
@@ -451,7 +478,7 @@ export function registerShareHandlers() {
   safeHandle(
     'share:setExpirationPreference',
     async (_event, days: number | null): Promise<void> => {
-      store.set('shareExpirationDays', days);
+      store.set('shareExpirationDays', normalizeShareExpirationDays(days));
     }
   );
 }

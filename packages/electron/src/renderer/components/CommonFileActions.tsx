@@ -13,7 +13,6 @@
 import React from 'react';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import { useFileActions } from '../hooks/useFileActions';
-import { ShareDialog } from './ShareDialog/ShareDialog';
 
 interface CommonFileActionsProps {
   filePath: string;
@@ -89,21 +88,12 @@ export function CommonFileActions({
       {actions.isShareable && (
         <Item
           className={menuItemClass}
-          onClick={() => { actions.openShareDialog(); onClose(); }}
+          onClick={() => { actions.shareLink(); onClose(); }}
         >
           {showIcons && <MaterialSymbol icon="share" size={iconSize} />}
           <span>Share Link</span>
         </Item>
       )}
-
-      {/* Share Dialog */}
-      <ShareDialog
-        isOpen={actions.shareDialogOpen}
-        onClose={actions.closeShareDialog}
-        contentType="file"
-        filePath={filePath}
-        title={fileName}
-      />
     </>
   );
 }

@@ -26,6 +26,32 @@ const SHARE_ID_LENGTH = 22;
 
 /** Default TTL: 1 week in milliseconds */
 const DEFAULT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const MAX_TTL_DAYS = 365;
+
+/**
+ * Parse X-TTL-Days header.
+ * Returns:
+ * - null => no expiration (explicit "0")
+ * - number => clamped day count [1, MAX_TTL_DAYS]
+ * - undefined => invalid/missing header (caller should use default)
+ */
+function parseTtlDaysHeader(headerValue: string | null): number | null | undefined {
+  if (headerValue === null) {
+    return undefined;
+  }
+
+  const trimmed = headerValue.trim();
+  if (!/^-?\d+$/.test(trimmed)) {
+    return undefined;
+  }
+
+  const ttlDays = parseInt(trimmed, 10);
+  if (ttlDays === 0) {
+    return null;
+  }
+
+  return Math.min(Math.max(ttlDays, 1), MAX_TTL_DAYS);
+}
 
 /**
  * Generate a cryptographically random base62 share ID.
@@ -84,18 +110,19 @@ export async function handleShareUpload(
   try {
     const now = new Date();
 
-    // Determine TTL from client header, or use default
+    // Determine TTL from client header, or use default.
+    // Only explicit "0" maps to no-expiration; malformed values fall back to default.
     const ttlDaysHeader = request.headers.get('X-TTL-Days');
+    const parsedTtlDays = parseTtlDaysHeader(ttlDaysHeader);
     let expiresAt: Date | null;
-    if (ttlDaysHeader !== null) {
-      const ttlDays = parseInt(ttlDaysHeader, 10);
-      if (ttlDays === 0 || isNaN(ttlDays)) {
-        expiresAt = null; // No expiration
-      } else {
-        const clampedDays = Math.min(Math.max(ttlDays, 1), 365);
-        expiresAt = new Date(now.getTime() + clampedDays * 24 * 60 * 60 * 1000);
-      }
+    if (parsedTtlDays === null) {
+      expiresAt = null;
+    } else if (typeof parsedTtlDays === 'number') {
+      expiresAt = new Date(now.getTime() + parsedTtlDays * 24 * 60 * 60 * 1000);
     } else {
+      if (ttlDaysHeader !== null) {
+        log.warn('Invalid X-TTL-Days header; falling back to default TTL', ttlDaysHeader);
+      }
       expiresAt = new Date(now.getTime() + DEFAULT_TTL_MS);
     }
 
