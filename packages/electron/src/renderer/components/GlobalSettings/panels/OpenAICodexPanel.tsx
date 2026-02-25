@@ -72,7 +72,7 @@ export function OpenAICodexPanel({
             <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">API Configuration <span className="text-xs font-normal text-[var(--nim-text-muted)]">(optional)</span></h4>
             <p className="text-[13px] text-[var(--nim-text-muted)] mb-3 leading-relaxed">
               By default, Codex uses your CLI login session. Providing an API key is optional and will use
-              OpenAI's API pricing, which is more expensive than the Codex CLI's built-in pricing.
+              OpenAI's API pricing, which is more expensive than the Codex account based pricing.
             </p>
             <div className="api-key-section mt-4">
               <div className="api-key-row flex gap-2 items-center">
