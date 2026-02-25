@@ -231,6 +231,7 @@ All events include `$session_id` property automatically. Dev users are marked wi
 | `help_accessed` | `ApplicationMenu.ts:1336, 1348, 1363, 1381, 1396, 1408, 1423` | User clicks help menu items | Varies by help item | v0.45.25 (2025-11-14) |  |
 | `keyboard_shortcut_used` | `AnalyticsHandlers.ts:29` | User triggers keyboard shortcut (reported from renderer) | `shortcut`<br/>`context` | v0.45.25 (2025-11-14) |  |
 | `toolbar_button_clicked` | `AnalyticsHandlers.ts:37` | User clicks toolbar button (reported from renderer) | `button`<br/>`isFirstUse` | v0.45.25 (2025-11-14) |  |
+| `social_link_clicked` | `DiscordInvitation.tsx:99` | User clicks a social media link or Discord link in the community popup | `channel` (discord/linkedin/youtube/x/tiktok/instagram) | (pending release) |  |
 
 ### System & Database
 
@@ -354,9 +355,9 @@ Events from the iOS companion app. These events share the same PostHog project a
 
 ## Event Summary Statistics
 
-- **Total Events**: 109 unique event names
+- **Total Events**: 110 unique event names
 - **Main Process Events**: 56 (via AnalyticsService)
-- **Renderer Process Events**: 46 (via usePostHog hook)
+- **Renderer Process Events**: 47 (via usePostHog hook)
 - **Mobile Events**: 7 (via Capacitor AnalyticsService)
 - **File Operations**: 7 events
 - **Workspace Operations**: 4 events
