@@ -74,6 +74,12 @@ async function readFileContentOrNull(filePath: string): Promise<string | null> {
   }
 }
 
+function isCreateLikeChangeKind(kind: string | undefined): boolean {
+  if (!kind) return false;
+  const normalized = kind.toLowerCase();
+  return normalized === 'create' || normalized === 'add' || normalized === 'new';
+}
+
 const LOG_PREVIEW_LENGTH = 400;
 
 function previewForLog(value?: string, max: number = LOG_PREVIEW_LENGTH): string {
@@ -2480,11 +2486,14 @@ export class AIService {
 
                 // Snapshot file contents for file_change events before saving
                 if (toolName === 'file_change' && toolArgs?.changes) {
-                  const changes = toolArgs.changes as Array<{ path: string; kind: string }>;
+                  const rawChanges = toolArgs.changes as Array<{ path: string; kind?: string }>;
 
-                  for (const change of changes) {
+                  for (const change of rawChanges) {
                     if (!change?.path) continue;
-                    const inferredWorktreePath = this.inferWorktreePathFromFilePath(workspacePath, change.path);
+                    const candidatePath = path.isAbsolute(change.path)
+                      ? path.normalize(change.path)
+                      : path.resolve(effectiveWorkspacePath, change.path);
+                    const inferredWorktreePath = this.inferWorktreePathFromFilePath(workspacePath, candidatePath);
                     if (inferredWorktreePath) {
                       await this.adoptWorktreeForSession(session, inferredWorktreePath, event);
                       effectiveWorkspacePath = session.worktreePath || effectiveWorkspacePath;
@@ -2492,6 +2501,15 @@ export class AIService {
                       break;
                     }
                   }
+
+                  const changes = rawChanges
+                    .filter((change): change is { path: string; kind?: string } => !!change?.path)
+                    .map((change) => ({
+                      ...change,
+                      path: path.isAbsolute(change.path)
+                        ? path.normalize(change.path)
+                        : path.resolve(effectiveWorkspacePath, change.path),
+                    }));
 
                   const fileSnapshots: Record<string, { content: string | null; error?: string; isBinary?: boolean; truncated?: boolean }> = {};
                   const MAX_SNAPSHOT_SIZE = 100_000; // 100KB per file
@@ -2511,6 +2529,14 @@ export class AIService {
                           // the snapshot cache has no baseline (new/ignored files).
                           // Skip binary files to avoid invalid diff baselines.
                           if (isBinaryFile(change.path)) {
+                            continue;
+                          }
+                          if (!isCreateLikeChangeKind(change.kind)) {
+                            logger.ai.debug('[AIService] Skipping Codex pre-edit tag without baseline for non-create change', {
+                              filePath: change.path,
+                              kind: change.kind,
+                              sessionId: session.id,
+                            });
                             continue;
                           }
                           beforeContent = '';
