@@ -80,6 +80,51 @@ function isCreateLikeChangeKind(kind: string | undefined): boolean {
   return normalized === 'create' || normalized === 'add' || normalized === 'new';
 }
 
+/**
+ * Best-effort fallback baseline for files missing cache baseline (commonly gitignored files).
+ * Prefers non-tag snapshots and skips snapshots that match current on-disk content.
+ */
+async function recoverBaselineFromHistory(
+  filePath: string,
+  currentContent: string | null
+): Promise<string | null> {
+  try {
+    const snapshots = await historyManager.listSnapshots(filePath);
+    if (snapshots.length === 0) {
+      return null;
+    }
+
+    const nonTagSnapshots = snapshots.filter((snapshot) => {
+      const type = String(snapshot.metadata?.type ?? snapshot.type ?? '').toLowerCase();
+      return type !== 'pre-edit' && type !== 'incremental-approval';
+    });
+    const orderedCandidates = [...nonTagSnapshots, ...snapshots];
+
+    const seenTimestamps = new Set<string>();
+    let checked = 0;
+    for (const snapshot of orderedCandidates) {
+      if (checked >= 8) break;
+      if (seenTimestamps.has(snapshot.timestamp)) continue;
+      seenTimestamps.add(snapshot.timestamp);
+      checked++;
+
+      const candidateContent = await historyManager.loadSnapshot(filePath, snapshot.timestamp);
+      if (currentContent !== null && candidateContent === currentContent) {
+        continue;
+      }
+      return candidateContent;
+    }
+
+    return null;
+  } catch (error) {
+    logger.ai.debug('[AIService] Failed recovering baseline from history', {
+      filePath,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
+
 const LOG_PREVIEW_LENGTH = 400;
 
 function previewForLog(value?: string, max: number = LOG_PREVIEW_LENGTH): string {
@@ -2523,6 +2568,7 @@ export class AIService {
                     for (const change of changes) {
                       if (!change?.path || change.kind === 'delete') continue;
                       try {
+                        const currentContentForCheck = await readFileContentOrNull(change.path);
                         let beforeContent = await watcherEntry.cache.getBeforeState(change.path);
                         if (beforeContent === null) {
                           // Ensure apply_patch edits still create pending-review tags when
@@ -2532,20 +2578,28 @@ export class AIService {
                             continue;
                           }
                           if (!isCreateLikeChangeKind(change.kind)) {
-                            logger.ai.debug('[AIService] Skipping Codex pre-edit tag without baseline for non-create change', {
-                              filePath: change.path,
-                              kind: change.kind,
-                              sessionId: session.id,
-                            });
-                            continue;
+                            const recoveredBaseline = await recoverBaselineFromHistory(change.path, currentContentForCheck);
+                            if (recoveredBaseline !== null) {
+                              beforeContent = recoveredBaseline;
+                            } else {
+                              // Last-resort fallback: keep diff mode functional even when we
+                              // cannot reconstruct precise pre-edit content (e.g. ignored files
+                              // with no prior snapshots).
+                              logger.ai.warn('[AIService] Missing baseline for non-create change; using empty fallback baseline', {
+                                filePath: change.path,
+                                kind: change.kind,
+                                sessionId: session.id,
+                              });
+                              beforeContent = '';
+                            }
+                          } else {
+                            beforeContent = '';
                           }
-                          beforeContent = '';
                         }
 
                         // Guard against stale cache baselines that already match post-edit
                         // disk content. In that case, watcher attribution will provide a
                         // better before-state; creating a tag here would produce no visible diff.
-                        const currentContentForCheck = await readFileContentOrNull(change.path);
                         if (currentContentForCheck !== null && beforeContent === currentContentForCheck) {
                           continue;
                         }
