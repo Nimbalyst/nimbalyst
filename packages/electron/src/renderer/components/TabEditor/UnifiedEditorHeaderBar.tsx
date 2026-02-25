@@ -13,6 +13,7 @@ import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { useSetAtom } from 'jotai';
 import { $isHeadingNode } from '@lexical/rich-text';
 import { $getRoot } from 'lexical';
+import { ShareDialog } from '../ShareDialog/ShareDialog';
 import {
   $convertToEnhancedMarkdownString,
   $convertFromEnhancedMarkdownString,
@@ -373,40 +374,11 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
   }, [lexicalEditor]);
 
   // Handle share link
-  const handleShareLink = useCallback(async () => {
-    const electronAPI = (window as any).electronAPI;
-    if (!electronAPI || !filePath) return;
-
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const handleShareLink = useCallback(() => {
     setShowActionsMenu(false);
-
-    try {
-      const result = await electronAPI.shareFileAsLink({ filePath });
-      const { errorNotificationService } = await import('../../services/ErrorNotificationService');
-      if (result?.success) {
-        const expiryDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-        const expiryStr = expiryDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        errorNotificationService.showInfo(
-          result.isUpdate ? 'Share link updated' : 'Share link copied',
-          `Link copied to clipboard. Expires ${expiryStr}.`,
-          { duration: 4000 }
-        );
-      } else {
-        errorNotificationService.showError(
-          'Share failed',
-          result?.error || 'Failed to share file',
-          { duration: 5000 }
-        );
-      }
-    } catch (error) {
-      console.error('[UnifiedHeaderBar] Failed to share file:', error);
-      const { errorNotificationService } = await import('../../services/ErrorNotificationService');
-      errorNotificationService.showError(
-        'Share failed',
-        error instanceof Error ? error.message : 'An unexpected error occurred',
-        { duration: 5000 }
-      );
-    }
-  }, [filePath]);
+    setShareDialogOpen(true);
+  }, []);
 
   // Handle export to PDF
   const handleExportToPdf = useCallback(async () => {
@@ -801,6 +773,23 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
           </div>
         )}
 
+        {/* Share Link Button (markdown files only) */}
+        {isMarkdown && (
+          <button
+            className="unified-header-button nim-btn-icon w-7 h-7 rounded border-none bg-transparent cursor-pointer flex items-center justify-center transition-all duration-150 text-[var(--nim-text-muted)] hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)]"
+            onClick={handleShareLink}
+            title="Share Link"
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="18" cy="5" r="3"/>
+              <circle cx="6" cy="12" r="3"/>
+              <circle cx="18" cy="19" r="3"/>
+              <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+              <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+            </svg>
+          </button>
+        )}
+
         {/* Actions Menu Button */}
         <div className="unified-header-dropdown-container relative">
           <button
@@ -903,19 +892,6 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
                       Export to PDF...
                     </button>
                   )}
-
-                  {/* Share Link */}
-                  <button
-                    className="dropdown-item w-full py-2 px-3 border-none bg-transparent text-[13px] text-left cursor-pointer flex items-center gap-2.5 transition-colors duration-150 text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]"
-                    onClick={handleShareLink}
-                  >
-                    <svg className="w-4 h-4 opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
-                      <polyline points="16 6 12 2 8 6"/>
-                      <line x1="12" y1="2" x2="12" y2="15"/>
-                    </svg>
-                    Share Link
-                  </button>
 
                   {/* Set Document Type with submenu */}
                   {lexicalEditor && (
@@ -1058,6 +1034,13 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
           )}
         </div>
       </div>
+      <ShareDialog
+        isOpen={shareDialogOpen}
+        onClose={() => setShareDialogOpen(false)}
+        contentType="file"
+        filePath={filePath}
+        title={fileName}
+      />
     </div>
   );
 };

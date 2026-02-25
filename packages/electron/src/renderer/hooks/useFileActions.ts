@@ -5,7 +5,7 @@
  * (file tree, tab bar, editor header) into a single reusable hook.
  */
 
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import {
   hasExternalEditorAtom,
@@ -34,7 +34,13 @@ export interface FileActions {
   openInExternalEditor: () => void;
   revealInFinder: () => void;
   copyFilePath: () => void;
-  shareLink: () => Promise<void>;
+  openShareDialog: () => void;
+  shareDialogOpen: boolean;
+  closeShareDialog: () => void;
+  /** File path for ShareDialog */
+  shareFilePath: string;
+  /** File name for ShareDialog title */
+  shareFileName: string;
 }
 
 export function useFileActions(filePath: string, fileName: string): FileActions {
@@ -45,6 +51,8 @@ export function useFileActions(filePath: string, fileName: string): FileActions 
   const copyFilePathAction = useSetAtom(copyFilePathAtom);
 
   const isShareable = isShareableFile(fileName);
+
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
 
   const openInDefaultApp = useCallback(async () => {
     if (typeof window !== 'undefined' && window.electronAPI) {
@@ -67,38 +75,13 @@ export function useFileActions(filePath: string, fileName: string): FileActions 
     copyFilePathAction(filePath);
   }, [copyFilePathAction, filePath]);
 
-  const shareLink = useCallback(async () => {
-    if (typeof window === 'undefined' || !window.electronAPI) return;
+  const openShareDialog = useCallback(() => {
+    setShareDialogOpen(true);
+  }, []);
 
-    try {
-      const result = await window.electronAPI.shareFileAsLink({ filePath });
-      if (result?.success) {
-        const { errorNotificationService } = await import('../services/ErrorNotificationService');
-        const expiryDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-        const expiryStr = expiryDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        errorNotificationService.showInfo(
-          result.isUpdate ? 'Share link updated' : 'Share link copied',
-          `Link copied to clipboard. Expires ${expiryStr}.`,
-          { duration: 4000 }
-        );
-      } else {
-        const { errorNotificationService } = await import('../services/ErrorNotificationService');
-        errorNotificationService.showError(
-          'Share failed',
-          result?.error || 'Failed to share file',
-          { duration: 5000 }
-        );
-      }
-    } catch (error) {
-      console.error('Failed to share file:', error);
-      const { errorNotificationService } = await import('../services/ErrorNotificationService');
-      errorNotificationService.showError(
-        'Share failed',
-        error instanceof Error ? error.message : 'An unexpected error occurred',
-        { duration: 5000 }
-      );
-    }
-  }, [filePath]);
+  const closeShareDialog = useCallback(() => {
+    setShareDialogOpen(false);
+  }, []);
 
   return {
     hasExternalEditor: hasExtEditor,
@@ -108,6 +91,10 @@ export function useFileActions(filePath: string, fileName: string): FileActions 
     openInExternalEditor,
     revealInFinder,
     copyFilePath,
-    shareLink,
+    openShareDialog,
+    shareDialogOpen,
+    closeShareDialog,
+    shareFilePath: filePath,
+    shareFileName: fileName,
   };
 }
