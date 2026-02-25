@@ -165,22 +165,10 @@ export const DiscordInvitation: React.FC<DiscordInvitationProps> = ({
               {socialLinks.map((link) => (
                 <button
                   key={link.name}
-                  className="w-9 h-9 rounded-full flex items-center justify-center border border-[var(--nim-border)] bg-[var(--nim-bg)] text-[var(--nim-text-muted)] cursor-pointer transition-all duration-200 hover:-translate-y-0.5"
+                  className="w-10 h-10 rounded-lg flex items-center justify-center border-none bg-[var(--nim-primary)] text-white cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:opacity-90"
                   onClick={() => handleOpenLink(link.url, link.name)}
                   aria-label={link.name}
                   title={link.name}
-                  onMouseEnter={(e) => {
-                    const btn = e.currentTarget;
-                    btn.style.backgroundColor = link.color;
-                    btn.style.color = '#fff';
-                    btn.style.borderColor = 'transparent';
-                  }}
-                  onMouseLeave={(e) => {
-                    const btn = e.currentTarget;
-                    btn.style.backgroundColor = '';
-                    btn.style.color = '';
-                    btn.style.borderColor = '';
-                  }}
                 >
                   {link.icon}
                 </button>

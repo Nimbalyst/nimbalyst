@@ -96,13 +96,13 @@ interface ElectronAPI {
   showErrorDialog: (title: string, message: string) => Promise<void>;
 
   // Share operations
-  shareSessionAsLink: (options: { sessionId: string; expirationDays?: number | null }) => Promise<{ success: boolean; url?: string; shareId?: string; isUpdate?: boolean; encryptionKey?: string; error?: string }>;
+  shareSessionAsLink: (options: { sessionId: string; expirationDays?: number }) => Promise<{ success: boolean; url?: string; shareId?: string; isUpdate?: boolean; encryptionKey?: string; error?: string }>;
   listShares: () => Promise<{ success: boolean; shares?: Array<{ shareId: string; sessionId: string; title: string; sizeBytes: number; createdAt: string; expiresAt: string | null; viewCount: number }>; error?: string }>;
   deleteShare: (options: { shareId: string; sessionId?: string }) => Promise<{ success: boolean; error?: string }>;
   getShareKeys: () => Promise<Record<string, string>>;
-  shareFileAsLink: (options: { filePath: string; expirationDays?: number | null }) => Promise<{ success: boolean; url?: string; shareId?: string; isUpdate?: boolean; encryptionKey?: string; error?: string }>;
-  getShareExpirationPreference: () => Promise<number | null>;
-  setShareExpirationPreference: (days: number | null) => Promise<void>;
+  shareFileAsLink: (options: { filePath: string; expirationDays?: number }) => Promise<{ success: boolean; url?: string; shareId?: string; isUpdate?: boolean; encryptionKey?: string; error?: string }>;
+  getShareExpirationPreference: () => Promise<number>;
+  setShareExpirationPreference: (days: number) => Promise<void>;
 
   setDocumentEdited: (edited: boolean) => void;
   setTitle: (title: string) => void;

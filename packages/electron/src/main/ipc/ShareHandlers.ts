@@ -61,16 +61,18 @@ function removeShareKey(sessionId: string): void {
 
 /**
  * Normalize expiration preference values.
- * Accepts days (number), null (no expiration), or undefined (fallback).
+ * Accepts days (number) or undefined (fallback). Max 30 days.
+ * Legacy null values (no expiration) are converted to the default.
  */
 function normalizeShareExpirationDays(
   value: unknown,
-  fallback: number | null = DEFAULT_SHARE_EXPIRATION_DAYS
-): number | null {
+  fallback: number = DEFAULT_SHARE_EXPIRATION_DAYS
+): number {
   const candidate = value === undefined ? fallback : value;
 
+  // Legacy: null meant "no expiration" - convert to default
   if (candidate === null) {
-    return null;
+    return fallback;
   }
 
   if (typeof candidate !== 'number' || !Number.isFinite(candidate)) {
@@ -78,11 +80,11 @@ function normalizeShareExpirationDays(
   }
 
   const days = Math.trunc(candidate);
-  if (days === 0) {
-    return null;
+  if (days <= 0) {
+    return fallback;
   }
 
-  return Math.min(Math.max(days, 1), 365);
+  return Math.min(Math.max(days, 1), 30);
 }
 
 // --- Auth ---
@@ -195,11 +197,7 @@ export function registerShareHandlers() {
         // Resolve TTL: explicit param > stored preference > default (7 days)
         const storedPreference = normalizeShareExpirationDays(store.get('shareExpirationDays'));
         const ttlDays = normalizeShareExpirationDays(expirationDays, storedPreference);
-        if (ttlDays === null) {
-          headers['X-TTL-Days'] = '0'; // No expiration
-        } else {
-          headers['X-TTL-Days'] = String(ttlDays);
-        }
+        headers['X-TTL-Days'] = String(ttlDays);
 
         // Upload encrypted content to server
         const response = await net.fetch(`${serverUrl}/share`, {
@@ -394,11 +392,7 @@ export function registerShareHandlers() {
         // Resolve TTL: explicit param > stored preference > default (7 days)
         const storedPreference = normalizeShareExpirationDays(store.get('shareExpirationDays'));
         const ttlDays = normalizeShareExpirationDays(expirationDays, storedPreference);
-        if (ttlDays === null) {
-          headers['X-TTL-Days'] = '0'; // No expiration
-        } else {
-          headers['X-TTL-Days'] = String(ttlDays);
-        }
+        headers['X-TTL-Days'] = String(ttlDays);
 
         // Upload encrypted content to server
         const response = await net.fetch(`${serverUrl}/share`, {
@@ -462,18 +456,16 @@ export function registerShareHandlers() {
 
   /**
    * Get the user's preferred share expiration (in days).
-   * Returns null for no expiration, or a number of days.
    */
   safeHandle(
     'share:getExpirationPreference',
-    async (): Promise<number | null> => {
+    async (): Promise<number> => {
       return normalizeShareExpirationDays(store.get('shareExpirationDays'));
     }
   );
 
   /**
    * Set the user's preferred share expiration (in days).
-   * Pass null for no expiration.
    */
   safeHandle(
     'share:setExpirationPreference',

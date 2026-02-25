@@ -89,8 +89,8 @@ interface AppStoreSchema {
   extensionDevToolsEnabled?: boolean;
   // Share encryption keys: maps sessionId -> base64 AES-256 key (for re-sharing with stable URLs)
   shareKeys?: Record<string, string>;
-  // Share expiration preference: number of days (1, 7, 30) or null for no expiration
-  shareExpirationDays?: number | null;
+  // Share expiration preference: number of days (1, 7, 30). Max 30 days.
+  shareExpirationDays?: number;
   // Session Sync (optional device sync)
   sessionSync?: {
     enabled: boolean;
