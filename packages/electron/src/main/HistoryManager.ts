@@ -410,17 +410,30 @@ export class HistoryManager {
         workspaceId = dirPath;
       }
 
-      // CRITICAL: Mark any existing pending tags as reviewed
-      // The unique index ensures only ONE can be pending-review at a time
-      // When starting a new AI edit (creating pre-edit tag), any previous pending
-      // incremental-approval tag should be marked as reviewed since the user is
-      // moving forward with new edits
-      await database.query(`
-        UPDATE document_history
-        SET metadata = jsonb_set(metadata, '{status}', to_jsonb('reviewed'::text))
+      // If the SAME session already has a pending tag for this file, keep it.
+      // The original pre-edit baseline is the correct one for cumulative diffs.
+      const existing = await database.query<{ session_id: string }>(`
+        SELECT metadata->>'sessionId' as session_id
+        FROM document_history
         WHERE file_path = $1
           AND metadata->>'status' = 'pending-review'
+        LIMIT 1
       `, [filePath]);
+
+      if (existing.rows.length > 0 && existing.rows[0].session_id === sessionId) {
+        logger.main.info('[HistoryManager] Keeping existing pre-edit tag for same session:', { filePath, sessionId });
+        return;
+      }
+
+      // Clear pending tags from OTHER sessions (different session taking over this file)
+      if (existing.rows.length > 0) {
+        await database.query(`
+          UPDATE document_history
+          SET metadata = jsonb_set(metadata, '{status}', to_jsonb('reviewed'::text))
+          WHERE file_path = $1
+            AND metadata->>'status' = 'pending-review'
+        `, [filePath]);
+      }
 
       // Store tag as a special history entry with tag metadata
       await database.query(`
