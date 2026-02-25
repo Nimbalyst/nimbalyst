@@ -402,23 +402,6 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     if (!sessionError) return;
 
     const handleError = async () => {
-      // For server errors (500, internal server error - Claude may be down)
-      if (sessionError.isServerError) {
-        await confirm({
-          title: 'Service Error',
-          message: [
-            'Claude appears to be experiencing issues.',
-            '',
-            'This could be a temporary service disruption.',
-            'Check the status page for more information:',
-            '',
-            'https://status.anthropic.com'
-          ].join('\n'),
-          confirmLabel: 'OK',
-          cancelLabel: ''
-        });
-      }
-
       // For tool search errors (common with alternative AI providers like Bedrock)
       if (sessionError.isBedrockToolError) {
         const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
