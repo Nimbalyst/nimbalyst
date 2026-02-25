@@ -5015,6 +5015,7 @@ export class AIService {
     commandItemId?: string
   ): Promise<boolean> {
     const effectivePath = session.worktreePath || workspacePath;
+    const watcherEntry = this.codexSessionWatchers.get(session.id);
     const filePaths = await this.extractFilePathsFromCommand(command, workspacePath, effectivePath);
     if (filePaths.length === 0) return false;
 
@@ -5033,7 +5034,7 @@ export class AIService {
         continue;
       }
 
-      let beforeContent = '';
+      let beforeContent: string | null = null;
 
       const currentContentResult = await readFileContentOrNull(filePath);
       if (currentContentResult === null) {
@@ -5045,23 +5046,44 @@ export class AIService {
       }
       const currentContent = currentContentResult;
 
-      // Prefer immutable HEAD baseline so command timing does not affect diff capture.
-      try {
-        const relativePath = path.relative(effectivePath, filePath);
-        if (!relativePath.startsWith('..') && !path.isAbsolute(relativePath) && !relativePath.startsWith(':')) {
-          const { stdout } = await execFileAsync(
-            'git',
-            ['show', `HEAD:${relativePath}`],
-            { cwd: effectivePath, encoding: 'utf-8' }
-          );
-          beforeContent = stdout;
+      // Prefer the same cache/history baseline strategy as file_change tracking.
+      // This avoids whole-file green diffs for gitignored/untracked bash edits.
+      if (watcherEntry) {
+        try {
+          beforeContent = await watcherEntry.cache.getBeforeState(filePath);
+        } catch {
+          // Best-effort; we'll continue with history/git fallbacks.
         }
-      } catch {
-        // File may be untracked/new. Keep empty baseline.
       }
 
+      if (beforeContent === null) {
+        const recoveredBaseline = await recoverBaselineFromHistory(filePath, currentContent);
+        if (recoveredBaseline !== null) {
+          beforeContent = recoveredBaseline;
+        }
+      }
+
+      // Last-resort fallback to git HEAD when cache/history are unavailable.
+      if (beforeContent === null) {
+        try {
+          const relativePath = path.relative(effectivePath, filePath);
+          if (!relativePath.startsWith('..') && !path.isAbsolute(relativePath) && !relativePath.startsWith(':')) {
+            const { stdout } = await execFileAsync(
+              'git',
+              ['show', `HEAD:${relativePath}`],
+              { cwd: effectivePath, encoding: 'utf-8' }
+            );
+            beforeContent = stdout;
+          }
+        } catch {
+          // File may be untracked/new. Keep null and fall back to empty baseline.
+        }
+      }
+
+      const resolvedBeforeContent = beforeContent ?? '';
+
       // If baseline equals current content, command did not materially change this file.
-      if (beforeContent === currentContent) {
+      if (resolvedBeforeContent === currentContent) {
         continue;
       }
 
@@ -5071,7 +5093,7 @@ export class AIService {
       await historyManager.createTag(
         filePath,
         tagId,
-        beforeContent,
+        resolvedBeforeContent,
         session.id,
         toolUseId
       );
