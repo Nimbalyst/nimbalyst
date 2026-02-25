@@ -43,9 +43,10 @@ interface AppStoreSchema {
   openWorkspaces: Array<{ path: string; windowId?: number }>;
   sessionState?: SessionState;
   loggerConfig?: unknown;
-  // Discord invitation tracking
+  // Community popup tracking
   launchCount?: number;
   discordInvitationDismissed?: boolean;
+  completedSessionCount?: number;
   // Sound notifications
   completionSoundEnabled?: boolean;
   completionSoundType?: CompletionSoundType;
@@ -86,6 +87,8 @@ interface AppStoreSchema {
   extensionDevToolsEnabled?: boolean;
   // Share encryption keys: maps sessionId -> base64 AES-256 key (for re-sharing with stable URLs)
   shareKeys?: Record<string, string>;
+  // Share expiration preference: number of days (1, 7, 30) or null for no expiration
+  shareExpirationDays?: number | null;
   // Session Sync (optional device sync)
   sessionSync?: {
     enabled: boolean;
@@ -966,10 +969,28 @@ export function dismissDiscordInvitation(): void {
   getAppStore().set('discordInvitationDismissed', true);
 }
 
-export function shouldShowDiscordInvitation(): boolean {
-  const launchCount = getLaunchCount();
+export function getCompletedSessionCount(): number {
+  return getAppStore().get('completedSessionCount', 0);
+}
+
+export function incrementCompletedSessionCount(): number {
+  const current = getCompletedSessionCount();
+  const next = current + 1;
+  getAppStore().set('completedSessionCount', next);
+  return next;
+}
+
+export function shouldShowCommunityPopup(): boolean {
   const dismissed = isDiscordInvitationDismissed();
-  return launchCount >= 3 && !dismissed;
+  if (dismissed) return false;
+  // Show after first completed AI session (success moment)
+  const completedSessions = getCompletedSessionCount();
+  return completedSessions >= 1;
+}
+
+/** @deprecated Use shouldShowCommunityPopup instead */
+export function shouldShowDiscordInvitation(): boolean {
+  return shouldShowCommunityPopup();
 }
 
 // Completion Sound Settings

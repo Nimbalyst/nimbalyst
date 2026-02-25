@@ -52,7 +52,6 @@ import {
     incrementLaunchCount,
     markClaudeCodeInstallationChecked,
     setTheme,
-    shouldShowDiscordInvitation,
     updateWorkspaceState,
     runMigrations
 } from './utils/store';
@@ -1258,40 +1257,8 @@ app.whenReady().then(async () => {
         await handleDeepLink(urlToHandle);
     }
 
-    // Check if we should show Discord invitation after windows are fully loaded
-    // Skip in Playwright test environment
-    if (shouldShowDiscordInvitation() && !process.env.PLAYWRIGHT) {
-        // Set up a listener to show invitation when a workspace window finishes loading
-        const showInvitationOnWindowReady = () => {
-            const allWindows = BrowserWindow.getAllWindows();
-            logger.main.info(`Discord invitation check: ${allWindows.length} windows available`);
-
-            // Find a workspace window (not special windows like workspace-manager)
-            const workspaceWindow = allWindows.find(win => {
-                const url = win.webContents.getURL();
-                return !url.includes('mode=workspace-manager') &&
-                       !url.includes('mode=session-manager');
-            });
-
-            if (workspaceWindow && workspaceWindow.webContents.isLoading() === false) {
-                logger.main.info('Showing Discord invitation to user');
-                // Wait a bit for React to mount and register IPC handlers
-                setTimeout(() => {
-                    workspaceWindow.webContents.send('show-discord-invitation');
-                }, 500);
-                return true;
-            }
-            return false;
-        };
-
-        // Try immediately in case windows are already loaded
-        setTimeout(() => {
-            if (!showInvitationOnWindowReady()) {
-                // If not ready yet, wait and try again
-                setTimeout(showInvitationOnWindowReady, 3000);
-            }
-        }, 2000);
-    }
+    // Community popup is now triggered after first completed AI session (success moment)
+    // instead of on app startup. See AIService.ts session completion handler.
 
     // Create application menu
     await createApplicationMenu();

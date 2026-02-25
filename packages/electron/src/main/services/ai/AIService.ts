@@ -43,7 +43,7 @@ import {AnalyticsService} from "../analytics/AnalyticsService.ts";
 import { historyManager } from '../../HistoryManager';
 import { FileSnapshotCache } from '../../file/FileSnapshotCache';
 import { SessionFileWatcher } from '../../file/SessionFileWatcher';
-import { getAIProviderOverrides, saveAIProviderOverrides, clearAIProviderOverrides, getWorkspaceState, getDefaultAIModel } from '../../utils/store';
+import { getAIProviderOverrides, saveAIProviderOverrides, clearAIProviderOverrides, getWorkspaceState, getDefaultAIModel, incrementCompletedSessionCount, shouldShowCommunityPopup } from '../../utils/store';
 import { mergeAISettings } from '../../utils/aiSettingsMerge';
 import { DocumentContextService, type RawDocumentContext, type PreparedDocumentContext } from '@nimbalyst/runtime';
 import { getMessageSyncHandler, getSyncProvider } from '../SyncManager';
@@ -3113,6 +3113,19 @@ export class AIService {
                   );
                 } else {
                   logger.main.info('[AIService] No syncProvider for mobile push');
+                }
+
+                // Show community popup after first completed session (success moment trigger)
+                if (!hadError) {
+                  const count = incrementCompletedSessionCount();
+                  if (count === 1 && shouldShowCommunityPopup()) {
+                    const senderWindow = BrowserWindow.fromWebContents(event.sender);
+                    if (senderWindow && !senderWindow.isDestroyed()) {
+                      setTimeout(() => {
+                        senderWindow.webContents.send('show-discord-invitation');
+                      }, 2000);
+                    }
+                  }
                 }
 
                 // AUTO-FETCH CONTEXT USAGE: Previously used /context command to get token usage.
