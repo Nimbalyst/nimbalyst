@@ -20,6 +20,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.54.13] - 2026-02-25
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- Hardened diff tracking security with path validation and size limits
+- Same-session multi-edits now show cumulative diffs instead of only the last edit
+- Per-tool-call diff tracking correctly isolates diffs for multi-edit files
+- Codex diff tracking hardened for async safety, deduplication, and edge cases
+- Per-tool diffs preserved correctly for Codex file_change edits
+- Codex Bash edits now consistently produce viewable diffs
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.54.12] - 2026-02-24
 
 
