@@ -140,12 +140,17 @@ export class SessionFileTracker {
   private enabled = true;
 
   /**
-   * Tracks files recently tracked as edited, keyed by "sessionId:filePath".
-   * Prevents duplicate session_files entries when both trackToolExecution
-   * and follow-up events fire for the same file+session in quick succession.
+   * Tracks files recently tracked as edited, keyed by
+   * "sessionId:filePath:toolUseId".
+   * Prevents duplicate session_files entries for the same tool invocation,
+   * while allowing successive edits to the same file from different tool calls.
    */
   private recentEdits = new Map<string, number>();
   private readonly editDedupeMs = 5_000;
+
+  private makeEditDedupeKey(sessionId: string, filePath: string, toolUseId?: string): string {
+    return `${sessionId}:${filePath}:${toolUseId || 'no-tool-use-id'}`;
+  }
 
   /**
    * Track a tool execution and create appropriate file links.
@@ -254,7 +259,7 @@ export class SessionFileTracker {
       // This prevents duplicate session_files entries when tool events
       // for the same file arrive in quick succession.
       if (linkType === 'edited') {
-        const dedupeKey = `${sessionId}:${filePath}`;
+        const dedupeKey = this.makeEditDedupeKey(sessionId, filePath, toolUseId);
         const trackedAt = this.recentEdits.get(dedupeKey);
         if (trackedAt != null) {
           const ageMs = Date.now() - trackedAt;
@@ -318,7 +323,7 @@ export class SessionFileTracker {
       // Record this file as recently tracked so subsequent calls from either
       // trackToolExecution paths don't create duplicates.
       if (linkType === 'edited') {
-        const dedupeKey = `${sessionId}:${filePath}`;
+        const dedupeKey = this.makeEditDedupeKey(sessionId, filePath, toolUseId);
         this.recentEdits.set(dedupeKey, Date.now());
       }
 

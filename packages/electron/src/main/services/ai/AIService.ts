@@ -2372,15 +2372,16 @@ export class AIService {
                       }
                     }
 
-                    // For Codex sessions, don't use the provider's item IDs as toolUseId
-                    // because Codex reuses item IDs across turns (e.g., item_4 in turn 1
-                    // and item_4 in turn 5 are different tool calls). Without toolUseId,
-                    // matching falls through to filename/time heuristics which are reliable.
+                    // Codex reuses item IDs across turns, so we normally avoid storing
+                    // provider IDs as toolUseId. Exception: file_change events need
+                    // stable per-item IDs so `session-files:get-tool-call-diffs` can
+                    // resolve the exact file_change call that produced a diff.
+                    const providerToolUseId = typeof (chunk.toolCall as any)?.toolUseId === 'string'
+                      ? (chunk.toolCall as any).toolUseId
+                      : (typeof chunk.toolCall.id === 'string' ? chunk.toolCall.id : undefined);
                     const toolUseId = session.provider === 'openai-codex'
-                      ? undefined
-                      : (typeof (chunk.toolCall as any)?.toolUseId === 'string'
-                        ? (chunk.toolCall as any).toolUseId
-                        : (typeof chunk.toolCall.id === 'string' ? chunk.toolCall.id : undefined));
+                      ? (trackToolName === 'file_change' ? providerToolUseId : undefined)
+                      : providerToolUseId;
 
                     await sessionFileTracker.trackToolExecution(
                       session.id,
@@ -2493,7 +2494,27 @@ export class AIService {
                           beforeContent = '';
                         }
 
-                        const toolUseId = `codex-file-change-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+                        // Guard against stale cache baselines that already match post-edit
+                        // disk content. In that case, watcher attribution will provide a
+                        // better before-state; creating a tag here would produce no visible diff.
+                        let currentContentForCheck: string | null = null;
+                        try {
+                          if (fs.existsSync(change.path)) {
+                            currentContentForCheck = fs.readFileSync(change.path, 'utf-8');
+                          } else {
+                            currentContentForCheck = '';
+                          }
+                        } catch {
+                          currentContentForCheck = null;
+                        }
+                        if (currentContentForCheck !== null && beforeContent === currentContentForCheck) {
+                          continue;
+                        }
+
+                        const toolUseId =
+                          typeof chunk.toolCall.id === 'string'
+                            ? chunk.toolCall.id
+                            : `codex-file-change-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
                         const tagId = `ai-edit-pending-${session.id}-${toolUseId}`;
                         await historyManager.createTag(
                           change.path,

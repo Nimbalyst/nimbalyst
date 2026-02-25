@@ -468,7 +468,11 @@ export class HistoryManager {
       });
 
       // Check if this is a unique constraint violation (duplicate pending pre-edit tag)
-      if (error.code === '23505' || error.message?.includes('idx_history_pending_pre_edit_per_file')) {
+      if (
+        error.code === '23505' ||
+        error.message?.includes('idx_history_pending_pre_edit_per_file') ||
+        error.message?.includes('idx_history_one_pending_per_file')
+      ) {
         logger.main.info('[HistoryManager] Skipping tag creation - file already has pending pre-edit tag:', { filePath });
         // This is expected when AI makes multiple rapid edits - silently ignore
         return;
