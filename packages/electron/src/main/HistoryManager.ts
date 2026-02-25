@@ -497,6 +497,16 @@ export class HistoryManager {
 
       logger.main.info('[HistoryManager] Created tag:', { filePath, tagId, sessionId, toolUseId });
 
+      // Re-emit file change after pending tag creation so open editors can
+      // re-evaluate diff mode with a guaranteed persisted baseline. The original
+      // disk watcher event may arrive before this tag commit.
+      const windows = BrowserWindow.getAllWindows();
+      for (const window of windows) {
+        if (!window.isDestroyed()) {
+          window.webContents.send('file-changed-on-disk', { path: filePath });
+        }
+      }
+
       // Emit pending count changed event
       if (workspaceId) {
         this.emitPendingCountChanged(workspaceId);

@@ -215,6 +215,19 @@ export function initFileStateListeners(workspacePath: string): () => void {
 
           // Also refresh git status for these files
           await refreshSessionGitStatus(sessionId);
+
+          // Keep pending-review atom in sync for this session.
+          // This prevents stale UI state when pending tags are created/updated
+          // close to file-edit events.
+          const wsPath = sessionWorkspaceRegistry.get(sessionId);
+          if (wsPath) {
+            const pendingFiles: string[] = await window.electronAPI.invoke(
+              'history:get-pending-files-for-session',
+              wsPath,
+              sessionId
+            );
+            store.set(sessionPendingReviewFilesAtom(sessionId), new Set(pendingFiles));
+          }
         }
       } catch (error) {
         console.error('[fileStateListeners] Failed to fetch file edits for session:', sessionId, error);

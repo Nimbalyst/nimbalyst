@@ -999,18 +999,19 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           logger.ui.error(`[TabEditor] Failed to check for pending tags:`, error);
         }
 
-        // For custom editors with pending AI tags, skip the "matches last saved" check
-        // because the AI edit IS the new content that needs to be shown
-        const hasPendingAIEditForCustomEditor = isCustom && pendingTags.length > 0;
+        // If a pending tag exists, we must process diff mode even when disk content
+        // matches lastSavedContentRef (the original watcher event may have arrived
+        // before tag persistence).
+        const hasPendingAIEdit = pendingTags.length > 0;
 
         // CRITICAL: Check if this is content we just saved
         // If the disk content matches what we last saved, this is definitely our own save
         // Don't reload even if the user has typed more since then
-        // BUT: Skip this check for custom editors with pending AI edits
+        // BUT: Skip this check whenever pending AI tags exist
         const contentMatchesLastSave = newContent === lastSavedContentRef.current;
         // console.log(`[TabEditor] File change for ${fileName}: contentMatchesLastSave=${contentMatchesLastSave}, isCustom=${isCustom}`);
 
-        if (contentMatchesLastSave && !hasPendingAIEditForCustomEditor) {
+        if (contentMatchesLastSave && !hasPendingAIEdit) {
           // console.log(`[TabEditor] Skipping file change - content matches last save`);
           processingFileChangeRef.current = false;
           return;
