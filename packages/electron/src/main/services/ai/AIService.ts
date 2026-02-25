@@ -3216,6 +3216,9 @@ export class AIService {
             );
             if (tracked) {
               processedBashCommandItemIds.add(commandItemId);
+              // Ensure renderer updates immediately when bash fallback tracking
+              // adds late session_files rows (single-event command_execution cases).
+              safeSend(event, 'session-files:updated', session.id);
             }
           } catch (bashFallbackError) {
             logger.main.error('[AIService] Failed to flush Bash fallback edits:', bashFallbackError);

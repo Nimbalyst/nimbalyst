@@ -6,6 +6,7 @@ const mockExecFile = vi.fn();
 const mockReaddir = vi.fn();
 const mockReadFile = vi.fn();
 const mockStat = vi.fn();
+const mockRealpath = vi.fn();
 
 // Mock the logger module (avoids electron-log/electron-store initialization)
 vi.mock('../../utils/logger', () => ({
@@ -32,6 +33,7 @@ vi.mock('fs/promises', () => ({
   readdir: (...args: any[]) => mockReaddir(...args),
   readFile: (...args: any[]) => mockReadFile(...args),
   stat: (...args: any[]) => mockStat(...args),
+  realpath: (...args: any[]) => mockRealpath(...args),
 }));
 
 import { FileSnapshotCache } from '../FileSnapshotCache';
@@ -42,6 +44,7 @@ describe('FileSnapshotCache', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockStat.mockResolvedValue({ size: 500 });
+    mockRealpath.mockImplementation(async (targetPath: string) => targetPath);
   });
 
   function setupGitMocks(overrides: Record<string, string | Error> = {}) {
@@ -216,6 +219,28 @@ describe('FileSnapshotCache', () => {
 
       const content = await cache.getBeforeState('/outside/workspace/file.ts');
       expect(content).toBeNull();
+    });
+
+    it('should resolve baseline through realpath when workspace path differs (symlink/casing)', async () => {
+      setupGitMocks({
+        'show abc123:src/clean.ts': 'clean tracked content',
+      });
+
+      const symlinkWorkspacePath = '/workspace-link';
+      const canonicalWorkspacePath = '/workspace-real';
+      const canonicalFilePath = '/workspace-real/src/clean.ts';
+
+      mockRealpath.mockImplementation(async (targetPath: string) => {
+        if (targetPath === symlinkWorkspacePath) return canonicalWorkspacePath;
+        if (targetPath === canonicalFilePath) return canonicalFilePath;
+        return targetPath;
+      });
+
+      const cache = new FileSnapshotCache();
+      await cache.startSession(symlinkWorkspacePath, 'session-1');
+
+      const content = await cache.getBeforeState(canonicalFilePath);
+      expect(content).toBe('clean tracked content');
     });
 
     it('should cache git show results for subsequent lookups', async () => {

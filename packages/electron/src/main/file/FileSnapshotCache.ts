@@ -75,10 +75,10 @@ export class FileSnapshotCache {
     // Tier 2: git on-demand
     if (this.isGitRepo && this.startSha && this.workspacePath) {
       try {
-        const relativePath = path.relative(this.workspacePath, filePath);
-        if (relativePath.startsWith('..')) return null;
+        const resolved = await this.resolveRelativePathInWorkspace(filePath);
+        if (!resolved) return null;
 
-        const content = await this.gitShow(this.workspacePath, this.startSha, relativePath);
+        const content = await this.gitShow(resolved.workspacePath, this.startSha, resolved.relativePath);
         // Cache for future lookups
         this.addToCache(filePath, content);
         return content;
@@ -253,6 +253,41 @@ export class FileSnapshotCache {
       { cwd: workspacePath, timeout: 5000, maxBuffer: MAX_FILE_SIZE }
     );
     return stdout;
+  }
+
+  /**
+   * Resolve file path to a safe, workspace-relative path.
+   *
+   * Primary path uses raw workspace/file strings.
+   * Fallback handles symlink/casing differences by comparing canonical realpaths.
+   */
+  private async resolveRelativePathInWorkspace(
+    filePath: string
+  ): Promise<{ workspacePath: string; relativePath: string } | null> {
+    if (!this.workspacePath) return null;
+
+    const directRelative = path.relative(this.workspacePath, filePath);
+    if (this.isRelativeInsideWorkspace(directRelative)) {
+      return { workspacePath: this.workspacePath, relativePath: directRelative };
+    }
+
+    try {
+      const [realWorkspacePath, realFilePath] = await Promise.all([
+        fs.realpath(this.workspacePath),
+        fs.realpath(filePath),
+      ]);
+      const canonicalRelative = path.relative(realWorkspacePath, realFilePath);
+      if (!this.isRelativeInsideWorkspace(canonicalRelative)) {
+        return null;
+      }
+      return { workspacePath: realWorkspacePath, relativePath: canonicalRelative };
+    } catch {
+      return null;
+    }
+  }
+
+  private isRelativeInsideWorkspace(relativePath: string): boolean {
+    return !!relativePath && !relativePath.startsWith('..') && !path.isAbsolute(relativePath);
   }
 
   private isBinaryPath(filePath: string): boolean {
