@@ -62,8 +62,26 @@ export function FileGutter({ sessionId, workspacePath, type, onFileClick, pendin
 
   // Group files by path and aggregate stats
   const groupedFiles = useMemo(() => {
+    // In Files mode, pending-review can update before session_files linkage.
+    // Merge pending file paths so the Edited list stays in sync with the
+    // pending-review banner without requiring a manual refresh.
+    let sourceFiles = files;
+    if (type === 'edited' && pendingReviewFiles && pendingReviewFiles.size > 0) {
+      const existingPaths = new Set(files.map(file => file.filePath));
+      const pendingOnly: FileData[] = [];
+      for (const filePath of pendingReviewFiles) {
+        if (!existingPaths.has(filePath)) {
+          pendingOnly.push({ filePath });
+          existingPaths.add(filePath);
+        }
+      }
+      if (pendingOnly.length > 0) {
+        sourceFiles = [...files, ...pendingOnly];
+      }
+    }
+
     const groups = new Map<string, FileData>();
-    files.forEach(file => {
+    sourceFiles.forEach(file => {
       const existing = groups.get(file.filePath);
       if (existing) {
         // Aggregate stats
@@ -78,7 +96,7 @@ export function FileGutter({ sessionId, workspacePath, type, onFileClick, pendin
       }
     });
     return Array.from(groups.values());
-  }, [files]);
+  }, [files, pendingReviewFiles, type]);
 
   // Build directory tree from file list
   const buildDirectoryTree = (fileList: FileData[]): DirectoryNode => {
@@ -180,6 +198,33 @@ export function FileGutter({ sessionId, workspacePath, type, onFileClick, pendin
     setExpandedFolders(new Set());
   };
 
+  const fetchFiles = useCallback(async () => {
+    if (!sessionId) {
+      setFiles([]);
+      return;
+    }
+    try {
+      if (typeof window !== 'undefined' && (window as any).electronAPI) {
+        const result = await (window as any).electronAPI.invoke(
+          'session-files:get-by-session',
+          sessionId,
+          type
+        );
+        if (result.success && result.files) {
+          const fileData: FileData[] = result.files.map((f: any) => ({
+            filePath: f.filePath,
+            operation: f.metadata?.operation,
+            linesAdded: f.metadata?.linesAdded,
+            linesRemoved: f.metadata?.linesRemoved
+          }));
+          setFiles(fileData);
+        }
+      }
+    } catch (error) {
+      console.error('[FileGutter] Failed to fetch file links:', error);
+    }
+  }, [sessionId, type]);
+
   // Auto-expand all folders when groupByDirectory is enabled or files change
   useEffect(() => {
     if (groupByDirectory && groupedFiles.length > 0) {
@@ -190,37 +235,8 @@ export function FileGutter({ sessionId, workspacePath, type, onFileClick, pendin
   }, [groupByDirectory, groupedFiles]);
 
   useEffect(() => {
-    if (!sessionId) {
-      setFiles([]);
-      return;
-    }
-
-    const fetchFiles = async () => {
-      try {
-        if (typeof window !== 'undefined' && (window as any).electronAPI) {
-          const result = await (window as any).electronAPI.invoke(
-            'session-files:get-by-session',
-            sessionId,
-            type
-          );
-          if (result.success && result.files) {
-            // Keep full file data including metadata
-            const fileData: FileData[] = result.files.map((f: any) => ({
-              filePath: f.filePath,
-              operation: f.metadata?.operation,
-              linesAdded: f.metadata?.linesAdded,
-              linesRemoved: f.metadata?.linesRemoved
-            }));
-            setFiles(fileData);
-          }
-        }
-      } catch (error) {
-        console.error('[FileGutter] Failed to fetch file links:', error);
-      }
-    };
-
     fetchFiles();
-  }, [sessionId, type]);
+  }, [fetchFiles]);
 
   // Listen for file tracking updates and refresh
   useEffect(() => {
@@ -228,37 +244,29 @@ export function FileGutter({ sessionId, workspacePath, type, onFileClick, pendin
       return;
     }
 
-    const handleFileUpdate = async (updatedSessionId: string) => {
+    const handleFileUpdate = (updatedSessionId: string) => {
       if (updatedSessionId === sessionId) {
-        try {
-          const result = await (window as any).electronAPI.invoke(
-            'session-files:get-by-session',
-            sessionId,
-            type
-          );
-          if (result.success && result.files) {
-            const fileData: FileData[] = result.files.map((f: any) => ({
-              filePath: f.filePath,
-              operation: f.metadata?.operation,
-              linesAdded: f.metadata?.linesAdded,
-              linesRemoved: f.metadata?.linesRemoved
-            }));
-            setFiles(fileData);
-          }
-        } catch (error) {
-          console.error('[FileGutter] Failed to refresh file links:', error);
-        }
+        fetchFiles();
       }
     };
 
     (window as any).electronAPI.on('session-files:updated', handleFileUpdate);
 
+    const unsubscribePendingCount = (window as any).electronAPI.history?.onPendingCountChanged?.(
+      (data: { workspacePath: string }) => {
+        if (workspacePath && data.workspacePath === workspacePath) {
+          fetchFiles();
+        }
+      }
+    );
+
     return () => {
       if ((window as any).electronAPI?.off) {
         (window as any).electronAPI.off('session-files:updated', handleFileUpdate);
       }
+      unsubscribePendingCount?.();
     };
-  }, [sessionId, type]);
+  }, [sessionId, workspacePath, fetchFiles]);
 
   // Fetch git status for edited files
   useEffect(() => {

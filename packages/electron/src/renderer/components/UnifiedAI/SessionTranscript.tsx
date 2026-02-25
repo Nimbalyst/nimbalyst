@@ -61,6 +61,7 @@ import {
   // Centralized transcript state atoms
   sessionErrorAtom,
   sessionQueuedPromptsAtom,
+  sessionPendingReviewFilesAtom,
   clearSessionError,
   loadInitialQueuedPrompts,
 } from '../../store';
@@ -72,6 +73,7 @@ import { supportsEffortLevel, parseEffortLevel, type EffortLevel } from '../../u
 import { buildPlanModeInstructions, PLAN_MODE_DEACTIVATION } from '@nimbalyst/runtime/ai/services/planModePrompts';
 import { resolvePlanFilePath } from '../../utils/pathUtils';
 import { autoCommitEnabledAtom, setAutoCommitEnabledAtom } from '../../store/atoms/autoCommitAtoms';
+import { registerSessionWorkspace, loadInitialSessionFileState } from '../../store/listeners/fileStateListeners';
 
 interface Todo {
   status: 'pending' | 'in_progress' | 'completed';
@@ -309,7 +311,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
 
   // Local state
   const [todos, setTodos] = useState<Todo[]>([]);
-  const [pendingReviewFiles, setPendingReviewFiles] = useState<Set<string>>(new Set());
+  const pendingReviewFiles = useAtomValue(sessionPendingReviewFilesAtom(sessionId));
   // Prompt additions state (dev mode) - uses Jotai atom for persistence across navigation
   const [promptAdditions, setPromptAdditions] = useAtom(sessionPromptAdditionsAtom(sessionId));
   // Queued prompts - centralized in atom, updated by sessionTranscriptListeners
@@ -361,6 +363,15 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
       loadSessionData({ sessionId, workspacePath });
     }
   }, [sessionId, workspacePath, sessionData, loadSessionData]);
+
+  // Ensure centralized file/pending atoms are initialized for this session in Files mode.
+  useEffect(() => {
+    if (!sessionId || !workspacePath) return;
+    registerSessionWorkspace(sessionId, workspacePath);
+    loadInitialSessionFileState(sessionId, workspacePath).catch((error) => {
+      console.error('[SessionTranscript] Failed to load initial session file state:', error);
+    });
+  }, [sessionId, workspacePath]);
 
   // Initialize lastSentModeRef when session loads with existing messages
   // This ensures mode transitions are detected correctly for existing sessions
@@ -484,46 +495,6 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
       setPromptAdditions(null);
     }
   }, [showPromptAdditions, setPromptAdditions]);
-
-  // ============================================================
-  // Pending review files
-  // ============================================================
-  useEffect(() => {
-    if (!workspacePath || !sessionId) {
-      setPendingReviewFiles(new Set());
-      return;
-    }
-
-    const fetchPendingFiles = async () => {
-      try {
-        if (window.electronAPI?.history?.getPendingFilesForSession) {
-          const files = await window.electronAPI.history.getPendingFilesForSession(workspacePath, sessionId);
-          setPendingReviewFiles(new Set(files));
-        }
-      } catch (error) {
-        console.error('[SessionTranscript] Failed to fetch pending review files:', error);
-      }
-    };
-
-    fetchPendingFiles();
-
-    const unsubscribe = window.electronAPI?.history?.onPendingCleared?.(
-      (data: { workspacePath: string }) => {
-        if (data.workspacePath === workspacePath) fetchPendingFiles();
-      }
-    );
-
-    const unsubscribeCount = window.electronAPI?.history?.onPendingCountChanged?.(
-      (data: { workspacePath: string }) => {
-        if (data.workspacePath === workspacePath) fetchPendingFiles();
-      }
-    );
-
-    return () => {
-      unsubscribe?.();
-      unsubscribeCount?.();
-    };
-  }, [workspacePath, sessionId]);
 
   // ============================================================
   // Queued prompts - centralized in sessionTranscriptListeners.ts
