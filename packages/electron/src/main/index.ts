@@ -43,13 +43,18 @@ import { getSuperLoopService } from './services/SuperLoopService';
 import {
     type AppTheme,
     dismissClaudeCodeWindowsWarning,
+    dismissCommunityPopup,
     dismissDiscordInvitation,
+    getCompletedSessionsWithTools,
+    markCommunityPopupShown,
+    shouldShowCommunityPopup,
     shouldShowRosettaWarning,
     dismissRosettaWarning,
     getSessionSyncConfig,
     getTheme,
     hasCheckedClaudeCodeInstallation,
     incrementLaunchCount,
+    wasCommunityPopupShownThisLaunch,
     markClaudeCodeInstallationChecked,
     setTheme,
     updateWorkspaceState,
@@ -622,7 +627,7 @@ app.whenReady().then(async () => {
     // Run migrations based on version changes
     runMigrations(app.getVersion());
 
-    // Track app launch for Discord invitation
+    // Track app launch for community popup fallback
     const launchCount = incrementLaunchCount();
     logger.main.info(`App launch count: ${launchCount}`);
 
@@ -1097,7 +1102,8 @@ app.whenReady().then(async () => {
 
     // Set up IPC handler for Discord invitation dismissal
     safeOn('dismiss-discord-invitation', (event) => {
-        logger.main.info('User dismissed Discord invitation permanently');
+        logger.main.info('User dismissed community popup permanently');
+        dismissCommunityPopup();
         dismissDiscordInvitation();
     });
 
@@ -1257,8 +1263,31 @@ app.whenReady().then(async () => {
         await handleDeepLink(urlToHandle);
     }
 
-    // Community popup is now triggered after first completed AI session (success moment)
-    // instead of on app startup. See AIService.ts session completion handler.
+    // Community popup fallback for passive users:
+    // show on launch 5+ if success-moment trigger (3 tool sessions) has not fired.
+    if (
+        shouldShowCommunityPopup()
+        && launchCount >= 5
+        && getCompletedSessionsWithTools() < 3
+        && !wasCommunityPopupShownThisLaunch()
+    ) {
+        setTimeout(() => {
+            if (wasCommunityPopupShownThisLaunch()) {
+                return;
+            }
+
+            const windows = BrowserWindow.getAllWindows().filter(window => !window.isDestroyed());
+            const focusedWindow = BrowserWindow.getFocusedWindow();
+            const targetWindow = focusedWindow && !focusedWindow.isDestroyed() ? focusedWindow : windows[0];
+
+            if (!targetWindow || targetWindow.isDestroyed()) {
+                return;
+            }
+
+            targetWindow.webContents.send('show-discord-invitation');
+            markCommunityPopupShown();
+        }, 2000);
+    }
 
     // Create application menu
     await createApplicationMenu();

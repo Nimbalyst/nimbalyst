@@ -13,7 +13,6 @@ import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { useSetAtom } from 'jotai';
 import { $isHeadingNode } from '@lexical/rich-text';
 import { $getRoot } from 'lexical';
-import { ShareDialog } from '../ShareDialog/ShareDialog';
 import {
   $convertToEnhancedMarkdownString,
   $convertFromEnhancedMarkdownString,
@@ -31,6 +30,8 @@ import { revealFolderAtom, revealFileAtom, openFileRequestAtom, setWindowModeAto
 import { getDocumentService } from '../../services/RendererDocumentService';
 import { isWorktreePath } from '../../../shared/pathUtils';
 import { CommonFileActions } from '../CommonFileActions';
+import { dialogRef, DIALOG_IDS } from '../../dialogs';
+import type { ShareDialogData } from '../../dialogs';
 
 // Built-in tracker types that support full-document mode
 const TRACKER_TYPES: TrackerTypeInfo[] = [
@@ -374,11 +375,15 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
   }, [lexicalEditor]);
 
   // Handle share link
-  const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const handleShareLink = useCallback(() => {
+    if (!filePath) return;
     setShowActionsMenu(false);
-    setShareDialogOpen(true);
-  }, []);
+    dialogRef.current?.open<ShareDialogData>(DIALOG_IDS.SHARE, {
+      contentType: 'file',
+      filePath,
+      title: fileName,
+    });
+  }, [filePath, fileName]);
 
   // Handle export to PDF
   const handleExportToPdf = useCallback(async () => {
@@ -1034,13 +1039,6 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
           )}
         </div>
       </div>
-      <ShareDialog
-        isOpen={shareDialogOpen}
-        onClose={() => setShareDialogOpen(false)}
-        contentType="file"
-        filePath={filePath}
-        title={fileName}
-      />
     </div>
   );
 };

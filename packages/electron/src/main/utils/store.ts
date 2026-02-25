@@ -46,7 +46,9 @@ interface AppStoreSchema {
   // Community popup tracking
   launchCount?: number;
   discordInvitationDismissed?: boolean;
+  communityPopupDismissed?: boolean;
   completedSessionCount?: number;
+  completedSessionsWithTools?: number;
   // Sound notifications
   completionSoundEnabled?: boolean;
   completionSoundType?: CompletionSoundType;
@@ -913,7 +915,18 @@ function normalizeAIProviderOverrides(overrides: AIProviderOverrides | undefined
   };
 }
 
-// Discord Invitation Management
+// Community popup shown state for current process launch (non-persisted)
+let communityPopupShownThisLaunch = false;
+
+export function markCommunityPopupShown(): void {
+  communityPopupShownThisLaunch = true;
+}
+
+export function wasCommunityPopupShownThisLaunch(): boolean {
+  return communityPopupShownThisLaunch;
+}
+
+// Discord / community popup management
 export function incrementLaunchCount(): number {
   const current = getAppStore().get('launchCount', 0);
   const next = current + 1;
@@ -965,8 +978,17 @@ export function isDiscordInvitationDismissed(): boolean {
   return getAppStore().get('discordInvitationDismissed', false);
 }
 
+export function isCommunityPopupDismissed(): boolean {
+  return getAppStore().get('communityPopupDismissed', false);
+}
+
+export function dismissCommunityPopup(): void {
+  getAppStore().set('communityPopupDismissed', true);
+}
+
 export function dismissDiscordInvitation(): void {
   getAppStore().set('discordInvitationDismissed', true);
+  dismissCommunityPopup();
 }
 
 export function getCompletedSessionCount(): number {
@@ -980,12 +1002,25 @@ export function incrementCompletedSessionCount(): number {
   return next;
 }
 
+export function getCompletedSessionsWithTools(): number {
+  return getAppStore().get('completedSessionsWithTools', 0);
+}
+
+export function incrementCompletedSessionsWithTools(): number {
+  const current = getCompletedSessionsWithTools();
+  const next = current + 1;
+  getAppStore().set('completedSessionsWithTools', next);
+  return next;
+}
+
 export function shouldShowCommunityPopup(): boolean {
-  const dismissed = isDiscordInvitationDismissed();
+  const dismissed = isCommunityPopupDismissed();
   if (dismissed) return false;
-  // Show after first completed AI session (success moment)
-  const completedSessions = getCompletedSessionCount();
-  return completedSessions >= 1;
+  const completedSessionsWithTools = getCompletedSessionsWithTools();
+  if (completedSessionsWithTools >= 3) return true;
+  const launchCount = getLaunchCount();
+  if (launchCount >= 5) return true;
+  return false;
 }
 
 /** @deprecated Use shouldShowCommunityPopup instead */

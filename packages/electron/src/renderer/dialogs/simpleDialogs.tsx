@@ -12,6 +12,7 @@ import { KeyboardShortcutsDialog } from '../components/KeyboardShortcutsDialog/K
 import { DiscordInvitation } from '../components/DiscordInvitation/DiscordInvitation';
 import { PostHogSurvey } from '../components/PostHogSurvey/PostHogSurvey';
 import { ApiKeyDialog } from '../components/ApiKeyDialog';
+import { ShareDialog } from '../components/ShareDialog/ShareDialog';
 import { DIALOG_IDS } from './registry';
 
 // Type definitions for dialog data
@@ -30,6 +31,13 @@ export interface PostHogSurveyData {
 
 export interface ApiKeyDialogData {
   onOpenPreferences: () => void;
+}
+
+export interface ShareDialogData {
+  contentType: 'session' | 'file';
+  sessionId?: string;
+  filePath?: string;
+  title?: string;
 }
 
 // Wrapper components that bridge DialogComponentProps to the original component props
@@ -101,6 +109,27 @@ function ApiKeyDialogWrapper({
   );
 }
 
+function ShareDialogWrapper({
+  isOpen,
+  onClose,
+  data,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  data: ShareDialogData;
+}) {
+  return (
+    <ShareDialog
+      isOpen={isOpen}
+      onClose={onClose}
+      contentType={data.contentType}
+      sessionId={data.sessionId}
+      filePath={data.filePath}
+      title={data.title}
+    />
+  );
+}
+
 // Register all simple dialogs
 export function registerSimpleDialogs() {
   registerDialog<KeyboardShortcutsData>({
@@ -132,5 +161,12 @@ export function registerSimpleDialogs() {
     group: 'settings',
     component: ApiKeyDialogWrapper as DialogConfig<ApiKeyDialogData>['component'],
     priority: 200,
+  });
+
+  registerDialog<ShareDialogData>({
+    id: DIALOG_IDS.SHARE,
+    group: 'system',
+    component: ShareDialogWrapper as DialogConfig<ShareDialogData>['component'],
+    priority: 250,
   });
 }

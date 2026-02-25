@@ -5,7 +5,7 @@
  * (file tree, tab bar, editor header) into a single reusable hook.
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import {
   hasExternalEditorAtom,
@@ -14,6 +14,8 @@ import {
   revealInFinderAtom,
   copyFilePathAtom,
 } from '../store/atoms/appSettings';
+import { dialogRef, DIALOG_IDS } from '../dialogs';
+import type { ShareDialogData } from '../dialogs';
 
 /** File extensions that support sharing as rendered HTML links. */
 const SHAREABLE_EXTENSIONS = new Set(['.md', '.markdown']);
@@ -34,13 +36,7 @@ export interface FileActions {
   openInExternalEditor: () => void;
   revealInFinder: () => void;
   copyFilePath: () => void;
-  openShareDialog: () => void;
-  shareDialogOpen: boolean;
-  closeShareDialog: () => void;
-  /** File path for ShareDialog */
-  shareFilePath: string;
-  /** File name for ShareDialog title */
-  shareFileName: string;
+  shareLink: () => void;
 }
 
 export function useFileActions(filePath: string, fileName: string): FileActions {
@@ -51,8 +47,6 @@ export function useFileActions(filePath: string, fileName: string): FileActions 
   const copyFilePathAction = useSetAtom(copyFilePathAtom);
 
   const isShareable = isShareableFile(fileName);
-
-  const [shareDialogOpen, setShareDialogOpen] = useState(false);
 
   const openInDefaultApp = useCallback(async () => {
     if (typeof window !== 'undefined' && window.electronAPI) {
@@ -75,13 +69,13 @@ export function useFileActions(filePath: string, fileName: string): FileActions 
     copyFilePathAction(filePath);
   }, [copyFilePathAction, filePath]);
 
-  const openShareDialog = useCallback(() => {
-    setShareDialogOpen(true);
-  }, []);
-
-  const closeShareDialog = useCallback(() => {
-    setShareDialogOpen(false);
-  }, []);
+  const shareLink = useCallback(() => {
+    dialogRef.current?.open<ShareDialogData>(DIALOG_IDS.SHARE, {
+      contentType: 'file',
+      filePath,
+      title: fileName,
+    });
+  }, [filePath, fileName]);
 
   return {
     hasExternalEditor: hasExtEditor,
@@ -91,10 +85,6 @@ export function useFileActions(filePath: string, fileName: string): FileActions 
     openInExternalEditor,
     revealInFinder,
     copyFilePath,
-    openShareDialog,
-    shareDialogOpen,
-    closeShareDialog,
-    shareFilePath: filePath,
-    shareFileName: fileName,
+    shareLink,
   };
 }

@@ -24,6 +24,7 @@ export {
   type DiscordInvitationData,
   type PostHogSurveyData,
   type ApiKeyDialogData,
+  type ShareDialogData,
 } from './simpleDialogs';
 export {
   registerDataDialogs,

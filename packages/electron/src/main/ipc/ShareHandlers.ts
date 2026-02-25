@@ -357,7 +357,7 @@ export function registerShareHandlers() {
         const urlSafeKey = keyToUrlSafe(shareKey);
 
         // Build headers for upload (zero-knowledge: no filename sent)
-        const fileHeaders: Record<string, string> = {
+        const headers: Record<string, string> = {
           'Authorization': `Bearer ${jwt}`,
           'Content-Type': 'application/octet-stream',
           'X-Session-Title': 'Encrypted file',
@@ -365,17 +365,17 @@ export function registerShareHandlers() {
         };
 
         // Resolve TTL: explicit param > stored preference > default (7 days)
-        const fileTtlDays = expirationDays !== undefined ? expirationDays : store.get('shareExpirationDays') ?? 7;
-        if (fileTtlDays === null || fileTtlDays === 0) {
-          fileHeaders['X-TTL-Days'] = '0'; // No expiration
+        const ttlDays = expirationDays !== undefined ? expirationDays : store.get('shareExpirationDays') ?? 7;
+        if (ttlDays === null || ttlDays === 0) {
+          headers['X-TTL-Days'] = '0'; // No expiration
         } else {
-          fileHeaders['X-TTL-Days'] = String(fileTtlDays);
+          headers['X-TTL-Days'] = String(ttlDays);
         }
 
         // Upload encrypted content to server
         const response = await net.fetch(`${serverUrl}/share`, {
           method: 'POST',
-          headers: fileHeaders,
+          headers,
           body: encrypted,
         });
 

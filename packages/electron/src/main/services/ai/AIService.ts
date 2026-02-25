@@ -43,7 +43,17 @@ import {AnalyticsService} from "../analytics/AnalyticsService.ts";
 import { historyManager } from '../../HistoryManager';
 import { FileSnapshotCache } from '../../file/FileSnapshotCache';
 import { SessionFileWatcher } from '../../file/SessionFileWatcher';
-import { getAIProviderOverrides, saveAIProviderOverrides, clearAIProviderOverrides, getWorkspaceState, getDefaultAIModel, incrementCompletedSessionCount, shouldShowCommunityPopup } from '../../utils/store';
+import {
+  getAIProviderOverrides,
+  saveAIProviderOverrides,
+  clearAIProviderOverrides,
+  getWorkspaceState,
+  getDefaultAIModel,
+  incrementCompletedSessionsWithTools,
+  markCommunityPopupShown,
+  shouldShowCommunityPopup,
+  wasCommunityPopupShownThisLaunch
+} from '../../utils/store';
 import { mergeAISettings } from '../../utils/aiSettingsMerge';
 import { DocumentContextService, type RawDocumentContext, type PreparedDocumentContext } from '@nimbalyst/runtime';
 import { getMessageSyncHandler, getSyncProvider } from '../SyncManager';
@@ -3115,14 +3125,18 @@ export class AIService {
                   logger.main.info('[AIService] No syncProvider for mobile push');
                 }
 
-                // Show community popup after first completed session (success moment trigger)
-                if (!hadError) {
-                  const count = incrementCompletedSessionCount();
-                  if (count === 1 && shouldShowCommunityPopup()) {
+                // Show community popup after 3 completed sessions that used tools.
+                if (!hadError && toolCallCount > 0) {
+                  const count = incrementCompletedSessionsWithTools();
+                  if (count === 3 && shouldShowCommunityPopup() && !wasCommunityPopupShownThisLaunch()) {
                     const senderWindow = BrowserWindow.fromWebContents(event.sender);
                     if (senderWindow && !senderWindow.isDestroyed()) {
                       setTimeout(() => {
+                        if (senderWindow.isDestroyed() || wasCommunityPopupShownThisLaunch()) {
+                          return;
+                        }
                         senderWindow.webContents.send('show-discord-invitation');
+                        markCommunityPopupShown();
                       }, 2000);
                     }
                   }

@@ -10,7 +10,8 @@ import {
   worktreeGitStatusAtom,
 } from '../../store';
 import { LayoutControls } from '../UnifiedAI/LayoutControls';
-import { ShareDialog } from '../ShareDialog/ShareDialog';
+import { dialogRef, DIALOG_IDS } from '../../dialogs';
+import type { ShareDialogData } from '../../dialogs';
 
 interface WorktreeMetadata {
   id: string;
@@ -151,7 +152,14 @@ export const AgentSessionHeader: React.FC<AgentSessionHeaderProps> = ({
     return () => unsubscribe?.();
   }, [worktreeId]);
 
-  const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const handleShareLink = useCallback(() => {
+    if (!sessionData) return;
+    dialogRef.current?.open<ShareDialogData>(DIALOG_IDS.SHARE, {
+      contentType: 'session',
+      sessionId: sessionData.id,
+      title: sessionData.title || 'Untitled Session',
+    });
+  }, [sessionData]);
 
   if (!sessionData) {
     return null;
@@ -230,17 +238,10 @@ export const AgentSessionHeader: React.FC<AgentSessionHeaderProps> = ({
         <button
           className="agent-session-header-share shrink-0 flex items-center justify-center w-7 h-7 rounded-md bg-transparent border-none text-[var(--nim-text-faint)] cursor-pointer transition-colors duration-150 hover:text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]"
           title="Share session link"
-          onClick={() => setShareDialogOpen(true)}
+          onClick={handleShareLink}
         >
           <MaterialSymbol icon="link" size={16} />
         </button>
-        <ShareDialog
-          isOpen={shareDialogOpen}
-          onClose={() => setShareDialogOpen(false)}
-          contentType="session"
-          sessionId={sessionData.id}
-          title={displayTitle}
-        />
 
         {/* Export button */}
         <button

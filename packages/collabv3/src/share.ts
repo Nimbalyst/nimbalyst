@@ -84,7 +84,7 @@ export async function handleShareUpload(
   try {
     const now = new Date();
 
-    // Parse optional TTL from X-TTL-Days header
+    // Determine TTL from client header, or use default
     const ttlDaysHeader = request.headers.get('X-TTL-Days');
     let expiresAt: Date | null;
     if (ttlDaysHeader !== null) {

@@ -46,6 +46,9 @@ export const DIALOG_IDS = {
 
   // Creation group
   BLITZ_CREATE: 'blitz-create',
+
+  // Share group
+  SHARE: 'share',
 } as const;
 
 export type DialogId = (typeof DIALOG_IDS)[keyof typeof DIALOG_IDS];

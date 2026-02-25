@@ -5,7 +5,8 @@ import { getRelativeTimeString } from '../../utils/dateFormatting';
 import { sessionOrChildProcessingAtom, sessionUnreadAtom, sessionPendingPromptAtom, sessionHasPendingInteractivePromptAtom, reparentSessionAtom, refreshSessionListAtom, sessionShareAtom, removeSessionShareAtom, shareKeysAtom, buildShareUrl } from '../../store';
 import type { ShareInfo } from '../../store';
 import { errorNotificationService } from '../../services/ErrorNotificationService';
-import { ShareDialog } from '../ShareDialog/ShareDialog';
+import { dialogRef, DIALOG_IDS } from '../../dialogs';
+import type { ShareDialogData } from '../../dialogs';
 
 /**
  * Combined status indicator that subscribes to this session's state atoms.
@@ -147,7 +148,6 @@ export const SessionListItem = memo<SessionListItemProps>(({
   const shareInfo = useAtomValue(sessionShareAtom(id));
   const shareKeys = useAtomValue(shareKeysAtom);
   const removeShare = useSetAtom(removeSessionShareAtom);
-  const [shareDialogOpen, setShareDialogOpen] = useState(false);
 
   // Determine if this session can be dragged
   // Can drag if: (1) Has a parent (is a child session), OR (2) Is an orphan (no parent, no children)
@@ -212,7 +212,11 @@ export const SessionListItem = memo<SessionListItemProps>(({
   const handleShareLink = (e: React.MouseEvent) => {
     e.stopPropagation();
     setShowContextMenu(false);
-    setShareDialogOpen(true);
+    dialogRef.current?.open<ShareDialogData>(DIALOG_IDS.SHARE, {
+      contentType: 'session',
+      sessionId: id,
+      title,
+    });
   };
 
   const handleCopyShareLink = (e: React.MouseEvent) => {
@@ -683,13 +687,6 @@ export const SessionListItem = memo<SessionListItemProps>(({
           )}
         </div>
       )}
-      <ShareDialog
-        isOpen={shareDialogOpen}
-        onClose={() => setShareDialogOpen(false)}
-        contentType="session"
-        sessionId={id}
-        title={title}
-      />
     </div>
   );
 }, (prev, next) => {

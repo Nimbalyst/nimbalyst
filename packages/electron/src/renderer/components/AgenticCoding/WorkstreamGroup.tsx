@@ -16,7 +16,8 @@ import {
 } from '../../store';
 import { errorNotificationService } from '../../services/ErrorNotificationService';
 import { getRelativeTimeString } from '../../utils/dateFormatting';
-import { ShareDialog } from '../ShareDialog/ShareDialog';
+import { dialogRef, DIALOG_IDS } from '../../dialogs';
+import type { ShareDialogData } from '../../dialogs';
 
 /**
  * Unified component for rendering expandable session groups in the session history.
@@ -266,9 +267,8 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
   // Workstream session-share state (used only when type === 'workstream')
   const workstreamShareInfo = useAtomValue(sessionShareAtom(id));
   const shareKeys = useAtomValue(shareKeysAtom);
-  const removeShare = useSetAtom(removeSessionShareAtom);
-  const [shareDialogOpen, setShareDialogOpen] = useState(false);
 
+  const removeShare = useSetAtom(removeSessionShareAtom);
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -426,8 +426,12 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
     e.stopPropagation();
     setShowContextMenu(false);
     if (type !== 'workstream') return;
-    setShareDialogOpen(true);
-  }, [type]);
+    dialogRef.current?.open<ShareDialogData>(DIALOG_IDS.SHARE, {
+      contentType: 'session',
+      sessionId: id,
+      title,
+    });
+  }, [type, id, title]);
 
   const handleWorkstreamCopyShareLink = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -859,14 +863,6 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
         </div>
       )}
 
-      <ShareDialog
-        isOpen={shareDialogOpen}
-        onClose={() => setShareDialogOpen(false)}
-        contentType="session"
-        sessionId={id}
-        title={title}
-      />
-
       {/* Keyframe animation styles */}
       <style>{`
         @keyframes workstreamSlideDown {
@@ -983,8 +979,8 @@ const WorkstreamSessionItem: React.FC<WorkstreamSessionItemProps> = ({
   const renameInputRef = useRef<HTMLInputElement>(null);
   const shareInfo = useAtomValue(sessionShareAtom(session.id));
   const shareKeys = useAtomValue(shareKeysAtom);
+
   const removeShare = useSetAtom(removeSessionShareAtom);
-  const [childShareDialogOpen, setChildShareDialogOpen] = useState(false);
 
   const displayTitle = session.title || 'Untitled Session';
 
@@ -1072,7 +1068,11 @@ const WorkstreamSessionItem: React.FC<WorkstreamSessionItemProps> = ({
   const handleShareLink = (e: React.MouseEvent) => {
     e.stopPropagation();
     setShowContextMenu(false);
-    setChildShareDialogOpen(true);
+    dialogRef.current?.open<ShareDialogData>(DIALOG_IDS.SHARE, {
+      contentType: 'session',
+      sessionId: session.id,
+      title: displayTitle,
+    });
   };
 
   const handleCopyShareLink = (e: React.MouseEvent) => {
@@ -1272,13 +1272,6 @@ const WorkstreamSessionItem: React.FC<WorkstreamSessionItemProps> = ({
           )}
         </div>
       )}
-      <ShareDialog
-        isOpen={childShareDialogOpen}
-        onClose={() => setChildShareDialogOpen(false)}
-        contentType="session"
-        sessionId={session.id}
-        title={displayTitle}
-      />
     </div>
   );
 };
