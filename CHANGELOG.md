@@ -20,6 +20,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.54.16] - 2026-02-25
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- Shared links can no longer be created without expiration
+- Stable baseline used for Bash file diffs
+- Pending AI diffs now apply without manual refresh
+- Pending-review diffs preserved for ignored file updates
+- Unified files-mode pending review and edited file sync
+- Stabilized Codex file baseline and Bash edit visibility
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.54.15] - 2026-02-25
 
 
