@@ -773,34 +773,31 @@ class ToolCallMatcherImpl {
          WHERE session_id = $1 AND link_type = 'edited'`,
         [sessionId]
       );
-      // Deduplicate session_files by file path: if multiple rows exist for the
-      // same path (from both trackToolExecution and trackWatcherSideEffect), keep
-      // the best entry using this priority:
-      //   1. Entry with toolUseId (definitive link from trackToolExecution)
-      //   2. Most recent timestamp (closest to the tool call that created it)
-      // This matters for Codex sessions where toolUseId is always undefined
-      // and the DB may return rows in any order.
-      const sessionFilesByPath = new Map<string, SessionFileRow>();
+      // Deduplicate session_files: keep every row with a distinct toolUseId
+      // (each represents a separate tool call edit). For rows WITHOUT a
+      // toolUseId (Codex, watcher side-effects), dedup by file path keeping
+      // the most recent timestamp.
+      const sessionFilesByKey = new Map<string, SessionFileRow>();
       for (const file of filesResult.rows) {
-        const existing = sessionFilesByPath.get(file.file_path);
-        if (!existing) {
-          sessionFilesByPath.set(file.file_path, file);
+        const toolUseId = file.metadata?.toolUseId;
+        if (toolUseId) {
+          // Rows with a toolUseId are unique per tool call — keep all of them.
+          // Use toolUseId as key so duplicates from watcher + tracker collapse.
+          const key = `${file.file_path}::${toolUseId}`;
+          const existing = sessionFilesByKey.get(key);
+          if (!existing || ensureNumber(file.timestamp_ms) > ensureNumber(existing.timestamp_ms)) {
+            sessionFilesByKey.set(key, file);
+          }
         } else {
-          const existingHasToolUseId = !!existing.metadata?.toolUseId;
-          const newHasToolUseId = !!file.metadata?.toolUseId;
-          if (newHasToolUseId && !existingHasToolUseId) {
-            // Prefer entry with toolUseId (definitive)
-            sessionFilesByPath.set(file.file_path, file);
-          } else if (!existingHasToolUseId && !newHasToolUseId) {
-            // Neither has toolUseId (Codex): prefer the most recent timestamp
-            // so the entry closest to its tool call is used for time-based matching
-            if (ensureNumber(file.timestamp_ms) > ensureNumber(existing.timestamp_ms)) {
-              sessionFilesByPath.set(file.file_path, file);
-            }
+          // No toolUseId (Codex): dedup by file path, keep most recent
+          const key = `no-tool::${file.file_path}`;
+          const existing = sessionFilesByKey.get(key);
+          if (!existing || ensureNumber(file.timestamp_ms) > ensureNumber(existing.timestamp_ms)) {
+            sessionFilesByKey.set(key, file);
           }
         }
       }
-      const sessionFiles = [...sessionFilesByPath.values()];
+      const sessionFiles = [...sessionFilesByKey.values()];
 
       // 3. Load output messages
       // Use EXTRACT(EPOCH) for timestamp safety across legacy/modern schemas.
@@ -1218,7 +1215,7 @@ class ToolCallMatcherImpl {
       // Use history snapshot (before-content from file watcher vs current file on disk)
       for (const result of results) {
         if (result.diffs.length === 0 && !result.content) {
-          const historyDiff = await this.computeHistoryDiff(sessionId, result.filePath);
+          const historyDiff = await this.computeHistoryDiff(sessionId, result.filePath, lookup.toolCallItemId);
           if (historyDiff) {
             result.diffs = [{ oldString: historyDiff.oldString, newString: historyDiff.newString }];
             result.linesAdded = historyDiff.linesAdded;
@@ -1649,21 +1646,33 @@ class ToolCallMatcherImpl {
    */
   private async computeHistoryDiff(
     sessionId: string,
-    filePath: string
+    filePath: string,
+    toolUseId?: string
   ): Promise<{ oldString: string; newString: string; linesAdded: number; linesRemoved: number } | null> {
     try {
-      // Find the pre-edit tag for this file+session from document_history
-      const result = await database.query<{
-        content: Buffer;
-      }>(`
-        SELECT content
-        FROM document_history
-        WHERE file_path = $1
-          AND metadata->>'sessionId' = $2
-          AND metadata->>'type' = 'pre-edit'
-        ORDER BY timestamp DESC
-        LIMIT 1
-      `, [filePath, sessionId]);
+      // Find the pre-edit tag for this file+session from document_history.
+      // When toolUseId is provided, find the exact tag for that tool call.
+      // Otherwise fall back to the latest tag (legacy behavior).
+      const result = toolUseId
+        ? await database.query<{ content: Buffer }>(`
+            SELECT content
+            FROM document_history
+            WHERE file_path = $1
+              AND metadata->>'sessionId' = $2
+              AND metadata->>'type' = 'pre-edit'
+              AND metadata->>'toolUseId' = $3
+            ORDER BY timestamp DESC
+            LIMIT 1
+          `, [filePath, sessionId, toolUseId])
+        : await database.query<{ content: Buffer }>(`
+            SELECT content
+            FROM document_history
+            WHERE file_path = $1
+              AND metadata->>'sessionId' = $2
+              AND metadata->>'type' = 'pre-edit'
+            ORDER BY timestamp DESC
+            LIMIT 1
+          `, [filePath, sessionId]);
 
       if (result.rows.length === 0) return null;
 
@@ -1764,7 +1773,10 @@ class ToolCallMatcherImpl {
 
       if (filePaths.length === 0) return [];
 
-      // Find the matching message content for extracting diffs from tool args
+      // Find the matching message content for extracting diffs from tool args.
+      // Match by toolCallItemId only — the old '%item.completed%' filter excluded
+      // raw Claude API messages (Format 1: {"type":"assistant","message":{...}})
+      // which never contain that string.
       const messageResult = toolCallTimestamp != null
         ? await database.query<{
           id: number;
@@ -1773,10 +1785,10 @@ class ToolCallMatcherImpl {
         }>(
           `SELECT id, content, EXTRACT(EPOCH FROM created_at) * 1000 AS created_at_ms
            FROM ai_agent_messages
-           WHERE session_id = $1 AND content LIKE $2 AND content LIKE $3
-           ORDER BY ABS((EXTRACT(EPOCH FROM created_at) * 1000) - $4) ASC, id DESC
+           WHERE session_id = $1 AND content LIKE $2
+           ORDER BY ABS((EXTRACT(EPOCH FROM created_at) * 1000) - $3) ASC, id DESC
            LIMIT 50`,
-          [sessionId, `%\"id\":\"${toolCallItemId}\"%`, '%item.completed%', toolCallTimestamp]
+          [sessionId, `%\"id\":\"${toolCallItemId}\"%`, toolCallTimestamp]
         )
         : await database.query<{
         id: number;
@@ -1784,10 +1796,10 @@ class ToolCallMatcherImpl {
       }>(
         `SELECT id, content
            FROM ai_agent_messages
-           WHERE session_id = $1 AND content LIKE $2 AND content LIKE $3
+           WHERE session_id = $1 AND content LIKE $2
            ORDER BY id DESC
            LIMIT 50`,
-          [sessionId, `%\"id\":\"${toolCallItemId}\"%`, '%item.completed%']
+          [sessionId, `%\"id\":\"${toolCallItemId}\"%`]
         );
 
       // Determine tool name from message content
@@ -1851,10 +1863,12 @@ class ToolCallMatcherImpl {
         results.push(diffResult);
       }
 
-      // History snapshot fallback for entries with no extractable diff data
+      // History snapshot fallback for entries with no extractable diff data.
+      // Pass toolCallItemId so computeHistoryDiff finds the exact pre-edit
+      // snapshot for this tool call (not just the latest one).
       for (const result of results) {
         if (result.diffs.length === 0 && !result.content) {
-          const historyDiff = await this.computeHistoryDiff(sessionId, result.filePath);
+          const historyDiff = await this.computeHistoryDiff(sessionId, result.filePath, toolCallItemId);
           if (historyDiff) {
             result.diffs = [{ oldString: historyDiff.oldString, newString: historyDiff.newString }];
             result.linesAdded = historyDiff.linesAdded;
