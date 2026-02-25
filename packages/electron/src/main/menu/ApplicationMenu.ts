@@ -1396,15 +1396,52 @@ export async function createApplicationMenu() {
                 },
                 { type: 'separator' },
                 {
-                    label: 'Join Discord Community',
-                    click: async () => {
-                        // Track help accessed
-                        AnalyticsService.getInstance().sendEvent('help_accessed', {
-                            helpType: 'discord',
-                            context: 'menu',
-                        });
-                        shell.openExternal('https://discord.gg/ubZDt4esEn');
-                    }
+                    label: 'Community',
+                    submenu: [
+                        {
+                            label: 'Join Discord',
+                            click: async () => {
+                                AnalyticsService.getInstance().sendEvent('help_accessed', { helpType: 'discord', context: 'menu' });
+                                shell.openExternal('https://discord.gg/ubZDt4esEn');
+                            }
+                        },
+                        { type: 'separator' },
+                        {
+                            label: 'YouTube',
+                            click: async () => {
+                                AnalyticsService.getInstance().sendEvent('help_accessed', { helpType: 'youtube', context: 'menu' });
+                                shell.openExternal('https://youtube.com/@nimbalyst');
+                            }
+                        },
+                        {
+                            label: 'LinkedIn',
+                            click: async () => {
+                                AnalyticsService.getInstance().sendEvent('help_accessed', { helpType: 'linkedin', context: 'menu' });
+                                shell.openExternal('https://linkedin.com/company/nimbalyst');
+                            }
+                        },
+                        {
+                            label: 'X (Twitter)',
+                            click: async () => {
+                                AnalyticsService.getInstance().sendEvent('help_accessed', { helpType: 'x', context: 'menu' });
+                                shell.openExternal('https://x.com/nimbalyst');
+                            }
+                        },
+                        {
+                            label: 'TikTok',
+                            click: async () => {
+                                AnalyticsService.getInstance().sendEvent('help_accessed', { helpType: 'tiktok', context: 'menu' });
+                                shell.openExternal('https://www.tiktok.com/@nimbalyst');
+                            }
+                        },
+                        {
+                            label: 'Instagram',
+                            click: async () => {
+                                AnalyticsService.getInstance().sendEvent('help_accessed', { helpType: 'instagram', context: 'menu' });
+                                shell.openExternal('https://www.instagram.com/nimbalyst');
+                            }
+                        },
+                    ]
                 }
             ]
         });
@@ -1477,15 +1514,52 @@ export async function createApplicationMenu() {
                 },
                 { type: 'separator' },
                 {
-                    label: 'Join Discord Community',
-                    click: async () => {
-                        // Track help accessed
-                        AnalyticsService.getInstance().sendEvent('help_accessed', {
-                            helpType: 'discord',
-                            context: 'menu',
-                        });
-                        shell.openExternal('https://discord.gg/ubZDt4esEn');
-                    }
+                    label: 'Community',
+                    submenu: [
+                        {
+                            label: 'Join Discord',
+                            click: async () => {
+                                AnalyticsService.getInstance().sendEvent('help_accessed', { helpType: 'discord', context: 'menu' });
+                                shell.openExternal('https://discord.gg/ubZDt4esEn');
+                            }
+                        },
+                        { type: 'separator' },
+                        {
+                            label: 'YouTube',
+                            click: async () => {
+                                AnalyticsService.getInstance().sendEvent('help_accessed', { helpType: 'youtube', context: 'menu' });
+                                shell.openExternal('https://youtube.com/@nimbalyst');
+                            }
+                        },
+                        {
+                            label: 'LinkedIn',
+                            click: async () => {
+                                AnalyticsService.getInstance().sendEvent('help_accessed', { helpType: 'linkedin', context: 'menu' });
+                                shell.openExternal('https://linkedin.com/company/nimbalyst');
+                            }
+                        },
+                        {
+                            label: 'X (Twitter)',
+                            click: async () => {
+                                AnalyticsService.getInstance().sendEvent('help_accessed', { helpType: 'x', context: 'menu' });
+                                shell.openExternal('https://x.com/nimbalyst');
+                            }
+                        },
+                        {
+                            label: 'TikTok',
+                            click: async () => {
+                                AnalyticsService.getInstance().sendEvent('help_accessed', { helpType: 'tiktok', context: 'menu' });
+                                shell.openExternal('https://www.tiktok.com/@nimbalyst');
+                            }
+                        },
+                        {
+                            label: 'Instagram',
+                            click: async () => {
+                                AnalyticsService.getInstance().sendEvent('help_accessed', { helpType: 'instagram', context: 'menu' });
+                                shell.openExternal('https://www.instagram.com/nimbalyst');
+                            }
+                        },
+                    ]
                 },
                 { type: 'separator' },
                 {
