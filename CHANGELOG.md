@@ -20,6 +20,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.54.14] - 2026-02-25
+
+
+### Added
+- Share modal with expiration options (1/7/30 days or none) and end-to-end encryption notice
+- Community channels popup replacing Discord-only popup, with links to Discord, YouTube, LinkedIn, X, TikTok, Instagram
+- Persistent Community submenu in Help menu with all social channels
+- Smarter community popup timing: triggers after 3 completed AI sessions instead of on app launch
+
+### Changed
+- Share link button moved to header bar; removed duplicate from editor dropdown menu
+
+### Fixed
+- Share TTL defaults normalized to prevent bad expiration values
+- Codex diff baselines preserved correctly for existing files (path normalization, empty-baseline skip)
+- Restored dialogRef export from dialogs index (fixes SessionListItem module loading)
+- Removed redundant service error modal for Claude outages (error already shown inline)
+- Codex no longer inherits OPENAI_API_KEY env variable (must be set explicitly)
+
 ## [0.54.13] - 2026-02-25
 
 
