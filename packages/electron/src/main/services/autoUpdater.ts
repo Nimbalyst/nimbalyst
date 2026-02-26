@@ -4,6 +4,8 @@ import log from 'electron-log/main';
 import { getReleaseChannel, store } from '../utils/store';
 import { safeHandle, safeOn } from '../utils/ipcRegistry';
 import { AnalyticsService } from './analytics/AnalyticsService';
+import { hasActiveStreamingSessions } from '../ipc/SessionStateHandlers';
+import { getSessionStateManager } from '@nimbalyst/runtime/ai/server/SessionStateManager';
 
 // Reminder suppression duration: 24 hours
 const REMINDER_SUPPRESSION_DURATION_MS = 24 * 60 * 60 * 1000;
@@ -262,6 +264,29 @@ export class AutoUpdaterService {
     }
   }
 
+  /**
+   * Perform the actual quit-and-install sequence.
+   * Shared by immediate install and deferred (wait-for-sessions) install.
+   */
+  private performQuitAndInstall() {
+    setImmediate(() => {
+      try {
+        log.info('Performing quit and install...');
+        AutoUpdaterService.isUpdating = true;
+        app.removeAllListeners('before-quit');
+        app.removeAllListeners('window-all-closed');
+        autoUpdater.quitAndInstall(false, true);
+      } catch (error) {
+        log.error('Failed to quit and install:', error);
+        AutoUpdaterService.isUpdating = true;
+        app.removeAllListeners('before-quit');
+        app.removeAllListeners('window-all-closed');
+        app.relaunch();
+        app.exit(0);
+      }
+    });
+  }
+
   public reconfigureFeedURL() {
     this.configureFeedURL();
   }
@@ -362,31 +387,37 @@ export class AutoUpdaterService {
         new_version: this.pendingUpdateInfo?.version || 'unknown'
       });
 
-      setImmediate(() => {
-        try {
-          // Set flag to bypass quit prevention
-          AutoUpdaterService.isUpdating = true;
-          // Force remove all before-quit listeners that might prevent quit
-          app.removeAllListeners('before-quit');
-          app.removeAllListeners('window-all-closed');
-          // Now quit and install
-          autoUpdater.quitAndInstall(false, true);
-        } catch (error) {
-          log.error('Failed to quit and install:', error);
+      this.performQuitAndInstall();
+    });
 
-          // Track install error
-          AnalyticsService.getInstance().sendEvent('update_error', {
-            stage: 'install',
-            error_type: classifyUpdateError(error instanceof Error ? error : new Error(String(error))),
-            release_channel: getReleaseChannel()
-          });
+    // Check if any AI sessions are currently active
+    safeHandle('update:has-active-sessions', () => {
+      return { hasActiveSessions: hasActiveStreamingSessions() };
+    });
 
-          // Fallback to force quit
-          AutoUpdaterService.isUpdating = true;
-          app.removeAllListeners('before-quit');
-          app.removeAllListeners('window-all-closed');
-          app.relaunch();
-          app.exit(0);
+    // Deferred install: wait for all AI sessions to finish, then install
+    safeOn('update-toast:install-when-idle', () => {
+      log.info('Update toast: Deferring install until AI sessions finish...');
+
+      AnalyticsService.getInstance().sendEvent('update_install_deferred', {
+        new_version: this.pendingUpdateInfo?.version || 'unknown'
+      });
+
+      // Subscribe to session state changes to detect when all sessions complete
+      const stateManager = getSessionStateManager();
+      const unsubscribe = stateManager.subscribe((event) => {
+        if (event.type === 'session:completed' || event.type === 'session:interrupted') {
+          // Check if there are still active sessions
+          if (!hasActiveStreamingSessions()) {
+            log.info('Update toast: All AI sessions finished, proceeding with install');
+            unsubscribe();
+            // Notify renderer that we're about to install
+            this.sendToFrontmostWindow('update-toast:sessions-finished');
+            // Small delay to let the user see the transition
+            setTimeout(() => {
+              this.performQuitAndInstall();
+            }, 1500);
+          }
         }
       });
     });

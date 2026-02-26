@@ -5,7 +5,7 @@ import { ReleaseNotesDialog } from './ReleaseNotesDialog';
 import { DownloadProgressToast } from './DownloadProgressToast';
 import { UpdateReadyToast } from './UpdateReadyToast';
 
-export type UpdateState = 'idle' | 'checking' | 'up-to-date' | 'available' | 'viewing-notes' | 'downloading' | 'ready' | 'error';
+export type UpdateState = 'idle' | 'checking' | 'up-to-date' | 'available' | 'viewing-notes' | 'downloading' | 'ready' | 'waiting-for-sessions' | 'error';
 
 export interface UpdateInfo {
   version: string;
@@ -104,6 +104,11 @@ export function UpdateToast(): React.ReactElement | null {
       }, 3000);
     };
 
+    const handleSessionsFinished = () => {
+      console.log('[UpdateToast] All AI sessions finished, installing update...');
+      setState('ready');
+    };
+
     // Register listeners
     window.electronAPI.on('update-toast:show-available', handleUpdateAvailable);
     window.electronAPI.on('update-toast:progress', handleDownloadProgress);
@@ -111,6 +116,7 @@ export function UpdateToast(): React.ReactElement | null {
     window.electronAPI.on('update-toast:error', handleUpdateError);
     window.electronAPI.on('update-toast:checking', handleCheckingForUpdate);
     window.electronAPI.on('update-toast:up-to-date', handleUpToDate);
+    window.electronAPI.on('update-toast:sessions-finished', handleSessionsFinished);
 
     // Get current version
     window.electronAPI.invoke('get-current-version').then((version: string) => {
@@ -126,6 +132,7 @@ export function UpdateToast(): React.ReactElement | null {
       window.electronAPI.off?.('update-toast:error', handleUpdateError);
       window.electronAPI.off?.('update-toast:checking', handleCheckingForUpdate);
       window.electronAPI.off?.('update-toast:up-to-date', handleUpToDate);
+      window.electronAPI.off?.('update-toast:sessions-finished', handleSessionsFinished);
     };
   }, [state, checkReminderSuppression]);
 
@@ -192,10 +199,35 @@ export function UpdateToast(): React.ReactElement | null {
     setDownloadProgress(null);
   }, []);
 
-  const handleRelaunch = useCallback(() => {
+  const handleRelaunch = useCallback(async () => {
     console.log('[UpdateToast] Relaunch clicked');
+    try {
+      const result = await window.electronAPI.invoke('update:has-active-sessions');
+      if (result.hasActiveSessions) {
+        console.log('[UpdateToast] Active AI sessions detected, deferring install');
+        posthog?.capture('update_toast_action', {
+          action: 'install_deferred',
+          reason: 'active_ai_sessions',
+          new_version: updateInfo?.version || 'unknown'
+        });
+        setState('waiting-for-sessions');
+        window.electronAPI.send('update-toast:install-when-idle');
+        return;
+      }
+    } catch (error) {
+      console.error('[UpdateToast] Failed to check active sessions, proceeding with install:', error);
+    }
     window.electronAPI.send('update-toast:install');
-  }, []);
+  }, [posthog, updateInfo?.version]);
+
+  const handleForceRestart = useCallback(() => {
+    console.log('[UpdateToast] Force restart clicked');
+    posthog?.capture('update_toast_action', {
+      action: 'force_restart_clicked',
+      new_version: updateInfo?.version || 'unknown'
+    });
+    window.electronAPI.send('update-toast:install');
+  }, [posthog, updateInfo?.version]);
 
   const handleDoItLater = useCallback(() => {
     console.log('[UpdateToast] Do it later clicked');
@@ -212,7 +244,7 @@ export function UpdateToast(): React.ReactElement | null {
   return (
     <>
       {/* Toast container for all toast states */}
-      {(state === 'checking' || state === 'up-to-date' || state === 'available' || state === 'downloading' || state === 'ready' || state === 'error') && (
+      {(state === 'checking' || state === 'up-to-date' || state === 'available' || state === 'downloading' || state === 'ready' || state === 'waiting-for-sessions' || state === 'error') && (
         <div
           className="update-toast-container fixed bottom-5 right-5 z-[10000] animate-[slideUp_0.3s_ease-out]"
           data-testid="update-toast-container"
@@ -272,10 +304,12 @@ export function UpdateToast(): React.ReactElement | null {
             />
           )}
 
-          {state === 'ready' && updateInfo && (
+          {(state === 'ready' || state === 'waiting-for-sessions') && updateInfo && (
             <UpdateReadyToast
               version={updateInfo.version}
+              waitingForSessions={state === 'waiting-for-sessions'}
               onRelaunch={handleRelaunch}
+              onForceRestart={handleForceRestart}
               onDoItLater={handleDoItLater}
               onDismiss={handleDismiss}
             />
