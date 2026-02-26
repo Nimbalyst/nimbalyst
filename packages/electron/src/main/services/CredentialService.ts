@@ -140,9 +140,22 @@ export function getCredentials(): SyncCredentials {
       createdAt: new Date(credentials.createdAt).toISOString(),
     });
   } else {
-    logger.main.info('[CredentialService] Loaded existing credentials', {
-      createdAt: new Date(credentials.createdAt).toISOString(),
-    });
+    // Validate seed has sufficient entropy.
+    // crypto.randomBytes(32).toString('base64') produces a 44-char string (32 bytes = 256 bits).
+    // Reject anything shorter than 43 chars (minimum for 32 bytes of base64).
+    const MIN_SEED_LENGTH = 43;
+    if (!credentials.encryptionKeySeed || credentials.encryptionKeySeed.length < MIN_SEED_LENGTH) {
+      logger.main.error(
+        '[CredentialService] Encryption seed too short or missing, regenerating.',
+        { length: credentials.encryptionKeySeed?.length ?? 0 }
+      );
+      credentials = createCredentials();
+      saveCredentials(credentials);
+    } else {
+      logger.main.info('[CredentialService] Loaded existing credentials', {
+        createdAt: new Date(credentials.createdAt).toISOString(),
+      });
+    }
   }
 
   // Cache for subsequent calls

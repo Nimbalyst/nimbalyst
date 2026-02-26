@@ -4,6 +4,9 @@ import { AISessionsRepository } from '@nimbalyst/runtime';
 import {
   startSessionNamingServer,
   setUpdateSessionTitleFn,
+  setUpdateSessionMetadataFn,
+  setGetWorkspaceTagsFn,
+  setGetSessionTagsFn,
   shutdownSessionNamingHttpServer
 } from '../mcp/sessionNamingServer';
 import { getDatabase } from '../database/initialize';
@@ -124,6 +127,55 @@ export class SessionNamingService {
               console.error('[SessionNamingService] Failed to update worktree display name:', error);
             }
           }
+        });
+
+        // Set the metadata update function (for tags, phase, etc.)
+        setUpdateSessionMetadataFn(async (sessionId: string, metadata: Record<string, unknown>) => {
+          await AISessionsRepository.updateMetadata(sessionId, { metadata });
+
+          // Notify renderer windows so UI updates in real time
+          const windows = BrowserWindow.getAllWindows();
+          for (const window of windows) {
+            if (!window.isDestroyed()) {
+              window.webContents.send('sessions:session-updated', sessionId, metadata);
+            }
+          }
+        });
+
+        // Set the workspace tags query function
+        setGetWorkspaceTagsFn(async (sessionId: string) => {
+          const db = getDatabase();
+          if (!db) return [];
+
+          try {
+            // Look up workspace_id from the session row, then query tags across that workspace
+            const wsResult = await db.query<{ workspace_id: string }>(
+              `SELECT workspace_id FROM ai_sessions WHERE id = $1 LIMIT 1`,
+              [sessionId]
+            );
+            const workspaceId = wsResult.rows[0]?.workspace_id;
+            if (!workspaceId) return [];
+
+            const result = await db.query<{ tag: string; count: number }>(
+              `SELECT t.tag, COUNT(*)::int as count
+               FROM ai_sessions s,
+                    jsonb_array_elements_text(s.metadata->'tags') AS t(tag)
+               WHERE s.workspace_id = $1
+                 AND s.is_archived = false
+               GROUP BY t.tag
+               ORDER BY count DESC`,
+              [workspaceId]
+            );
+            return result.rows.map(r => ({ name: r.tag, count: r.count }));
+          } catch {
+            return [];
+          }
+        });
+
+        // Set the session tags query function (for update_tags to read current tags)
+        setGetSessionTagsFn(async (sessionId: string) => {
+          const session = await AISessionsRepository.get(sessionId);
+          return (session?.metadata as any)?.tags || [];
         });
 
         // Start the MCP server

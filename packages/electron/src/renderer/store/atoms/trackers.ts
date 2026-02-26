@@ -253,10 +253,99 @@ export async function initTrackerPanelLayout(workspacePath: string): Promise<voi
     };
 
     store.set(trackerPanelLayoutAtom, restoredLayout);
+
+    // Also restore tracker mode layout
+    const savedModeLayout = workspaceState?.trackerModeLayout;
+    if (savedModeLayout && typeof savedModeLayout === 'object') {
+      store.set(trackerModeLayoutAtom, {
+        selectedType: savedModeLayout.selectedType ?? DEFAULT_MODE_LAYOUT.selectedType,
+        selectedView: savedModeLayout.selectedView ?? DEFAULT_MODE_LAYOUT.selectedView,
+        viewMode: savedModeLayout.viewMode ?? DEFAULT_MODE_LAYOUT.viewMode,
+        selectedItemId: savedModeLayout.selectedItemId ?? DEFAULT_MODE_LAYOUT.selectedItemId,
+      });
+    }
   } catch (err) {
     console.error('[trackers] Failed to load layout:', err);
   }
 }
+
+// ============================================================
+// Tracker Mode State (full-screen mode)
+// ============================================================
+
+/**
+ * Tracker mode layout state.
+ * Persisted to workspace state so it survives app restarts.
+ */
+export interface TrackerModeLayout {
+  /** Selected type filter in sidebar ('all' or specific type) */
+  selectedType: string;
+  /** Active view in sidebar */
+  selectedView: 'all' | 'high-priority' | 'recently-updated' | 'sessions';
+  /** Table or kanban display */
+  viewMode: 'table' | 'kanban';
+  /** Currently selected tracker item ID (opens detail panel when non-null) */
+  selectedItemId: string | null;
+}
+
+const DEFAULT_MODE_LAYOUT: TrackerModeLayout = {
+  selectedType: 'all',
+  selectedView: 'all',
+  viewMode: 'table',
+  selectedItemId: null,
+};
+
+/** Main atom for tracker mode layout. */
+export const trackerModeLayoutAtom = atom<TrackerModeLayout>(DEFAULT_MODE_LAYOUT);
+
+/** Selected type in tracker mode sidebar. */
+export const trackerModeSelectedTypeAtom = atom(
+  (get) => get(trackerModeLayoutAtom).selectedType
+);
+
+/** Selected view in tracker mode sidebar. */
+export const trackerModeSelectedViewAtom = atom(
+  (get) => get(trackerModeLayoutAtom).selectedView
+);
+
+/** View mode (table/kanban) in tracker mode. */
+export const trackerModeViewModeAtom = atom(
+  (get) => get(trackerModeLayoutAtom).viewMode
+);
+
+/** Currently selected item ID in tracker mode (opens detail panel). */
+export const trackerModeSelectedItemIdAtom = atom(
+  (get) => get(trackerModeLayoutAtom).selectedItemId
+);
+
+let modeLayoutPersistTimer: ReturnType<typeof setTimeout> | null = null;
+
+function scheduleModeLayoutPersist(workspacePath: string, layout: TrackerModeLayout): void {
+  if (modeLayoutPersistTimer) clearTimeout(modeLayoutPersistTimer);
+  modeLayoutPersistTimer = setTimeout(async () => {
+    try {
+      await window.electronAPI.invoke('workspace:update-state', workspacePath, {
+        trackerModeLayout: layout,
+      });
+    } catch (err) {
+      console.error('[trackers] Failed to persist mode layout:', err);
+    }
+  }, 300);
+}
+
+/** Update tracker mode layout with partial values and persist. */
+export const setTrackerModeLayoutAtom = atom(
+  null,
+  (get, set, updates: Partial<TrackerModeLayout>) => {
+    const current = get(trackerModeLayoutAtom);
+    const newLayout = { ...current, ...updates };
+    set(trackerModeLayoutAtom, newLayout);
+
+    if (currentWorkspacePath) {
+      scheduleModeLayoutPersist(currentWorkspacePath, newLayout);
+    }
+  }
+);
 
 // ============================================================
 // Tracker Data Atoms (separate from layout)

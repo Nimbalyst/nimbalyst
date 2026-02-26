@@ -5,7 +5,7 @@
  * Supports multiple layout algorithms and incremental placement.
  */
 
-import type { ExcalidrawElement } from '@excalidraw/excalidraw/types/types';
+import type { ExcalidrawElement } from '@excalidraw/excalidraw/types/element/types';
 import type { LayoutAlgorithm, LayoutOptions } from '../types';
 
 interface LayoutNode {

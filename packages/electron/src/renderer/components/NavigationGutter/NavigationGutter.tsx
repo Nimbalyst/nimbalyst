@@ -1,6 +1,6 @@
 import React from 'react';
 import { usePostHog } from 'posthog-js/react';
-import { useAtomValue, useSetAtom } from 'jotai';
+import { useAtomValue } from 'jotai';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import type { ContentMode } from '../../types/WindowModeTypes';
 import { KeyboardShortcuts, getShortcutDisplay } from '../../../shared/KeyboardShortcuts';
@@ -14,11 +14,6 @@ import { VoiceModeButton } from '../UnifiedAI/VoiceModeButton';
 import { useExtensionGutterButtons } from '../../extensions/panels/usePanels';
 import { HelpTooltip } from '../../help';
 import { terminalFeatureAvailableAtom } from '../../store/atoms/appSettings';
-import {
-  activeTrackerTypeAtom,
-  toggleTrackerPanelAtom,
-  closeTrackerPanelAtom,
-} from '../../store/atoms/trackers';
 
 export type NavigationMode = 'planning' | 'coding';
 export type SidebarView = 'files' | 'settings';
@@ -81,10 +76,6 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
 }) => {
   const posthog = usePostHog();
 
-  // Tracker panel state from atoms
-  const activeTrackerType = useAtomValue(activeTrackerTypeAtom);
-  const toggleTrackerPanel = useSetAtom(toggleTrackerPanelAtom);
-  const closeTrackerPanel = useSetAtom(closeTrackerPanelAtom);
 
   // Check if terminal feature is available (developer mode + feature enabled)
   const isTerminalAvailable = useAtomValue(terminalFeatureAvailableAtom);
@@ -111,6 +102,26 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
     },
   ];
 
+  // Content mode buttons - tracker section
+  const contentModeButtonsTracker: NavButton[] = [
+    {
+      id: 'tracker-mode',
+      icon: 'assignment',
+      label: `Tracker (${getShortcutDisplay(KeyboardShortcuts.view.trackerMode)})`,
+      contentMode: 'tracker',
+    },
+  ];
+
+  // Content mode buttons - collab section
+  const contentModeButtonsCollab: NavButton[] = [
+    {
+      id: 'collab-mode',
+      icon: 'cloud_sync',
+      label: 'Shared Docs',
+      contentMode: 'collab',
+    },
+  ];
+
   // Quick access buttons - secondary actions (middle)
   const quickAccessButtons: NavButton[] = [
     // Session History removed - use Cmd+Y for file history instead
@@ -126,14 +137,6 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
       label: 'Terminal (Ctrl+`)',
       onClick: onToggleTerminalPanel,
     }] : []),
-    {
-      id: 'tracker',
-      icon: 'edit_note',
-      label: 'Trackers (Cmd+T)',
-      onClick: () => {
-        toggleTrackerPanel();
-      },
-    }
   ];
 
   // Settings button - always at bottom
@@ -258,6 +261,62 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
         })}
       </div>
 
+      {/* Content Mode Switcher - Tracker Group */}
+      <div className="nav-section nav-content-modes flex flex-col items-center gap-1 w-full px-1.5 py-1">
+        {contentModeButtonsTracker.map((button) => {
+          const testId = `${button.id}-button`;
+          return (
+            <HelpTooltip key={button.id} testId={testId}>
+              <button
+                className={`nav-button relative w-9 h-9 flex items-center justify-center border-none rounded-md cursor-pointer transition-all duration-150 p-0 active:scale-95 focus-visible:outline-2 focus-visible:outline-[var(--nim-primary)] focus-visible:outline-offset-2 ${contentMode === button.contentMode && !activeExtensionPanel ? 'active bg-nim-primary text-white hover:bg-nim-primary-hover' : 'bg-transparent text-nim-muted hover:bg-nim-tertiary hover:text-nim'}`}
+                onClick={() => {
+                  // Clear any active fullscreen extension panel when switching to a content mode
+                  onExtensionPanelChange?.(null);
+                  handleButtonClick(button);
+                }}
+                aria-pressed={contentMode === button.contentMode && !activeExtensionPanel}
+                data-mode={button.contentMode || button.id}
+                data-testid={testId}
+              >
+                <MaterialSymbol
+                  icon={button.icon}
+                  size={20}
+                  fill={contentMode === button.contentMode && !activeExtensionPanel}
+                />
+              </button>
+            </HelpTooltip>
+          );
+        })}
+      </div>
+
+      {/* Content Mode Switcher - Collab Group (Shared Docs) */}
+      <div className="nav-section nav-content-modes flex flex-col items-center gap-1 w-full px-1.5 py-1">
+        {contentModeButtonsCollab.map((button) => {
+          const testId = `${button.id}-button`;
+          return (
+            <HelpTooltip key={button.id} testId={testId}>
+              <button
+                className={`nav-button relative w-9 h-9 flex items-center justify-center border-none rounded-md cursor-pointer transition-all duration-150 p-0 active:scale-95 focus-visible:outline-2 focus-visible:outline-[var(--nim-primary)] focus-visible:outline-offset-2 ${contentMode === button.contentMode && !activeExtensionPanel ? 'active bg-nim-primary text-white hover:bg-nim-primary-hover' : 'bg-transparent text-nim-muted hover:bg-nim-tertiary hover:text-nim'}`}
+                onClick={() => {
+                  // Clear any active fullscreen extension panel when switching to a content mode
+                  onExtensionPanelChange?.(null);
+                  handleButtonClick(button);
+                }}
+                aria-pressed={contentMode === button.contentMode && !activeExtensionPanel}
+                data-mode={button.contentMode || button.id}
+                data-testid={testId}
+              >
+                <MaterialSymbol
+                  icon={button.icon}
+                  size={20}
+                  fill={contentMode === button.contentMode && !activeExtensionPanel}
+                />
+              </button>
+            </HelpTooltip>
+          );
+        })}
+      </div>
+
       {/* Fullscreen Extension Panels - appear below Agent as additional modes */}
       {extensionPanelButtons.filter(p => p.placement === 'fullscreen').length > 0 && (
         <div className="nav-section nav-extension-modes flex flex-col items-center gap-1 w-full px-1.5 py-1 pt-2 mt-1 border-t border-nim">
@@ -354,9 +413,7 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
       {/* Bottom Panel Toggles - Above Settings */}
       <div className="nav-section nav-bottom-panels flex flex-col items-center gap-1 w-full px-1.5 py-1">
         {bottomPanelButtons.map((button) => {
-          const isActive = button.id === 'terminal'
-            ? terminalPanelVisible
-            : button.id === 'tracker' && activeTrackerType !== null;
+          const isActive = button.id === 'terminal' && terminalPanelVisible;
           const testId = `${button.id}-panel-button`;
           return (
             <HelpTooltip key={button.id} testId={testId}>

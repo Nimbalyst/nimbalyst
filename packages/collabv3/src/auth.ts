@@ -163,7 +163,7 @@ async function validateJWT(
     const CLOCK_SKEW_SECONDS = 30;
 
     if (payload.exp && payload.exp < now - CLOCK_SKEW_SECONDS) {
-      log.warn('JWT expired');
+      log.warn('JWT expired. exp:', payload.exp, 'now:', now, 'expired', now - payload.exp, 'seconds ago, sub:', payload.sub);
       return null;
     }
 
@@ -232,10 +232,18 @@ async function verifyJWTSignature(
     }
 
     // Find the key by kid
-    const key = jwks.keys.find((k) => k.kid === header.kid);
+    let key = jwks.keys.find((k) => k.kid === header.kid);
     if (!key) {
-      log.warn('Key not found in JWKS. Looking for kid:', header.kid);
-      return false;
+      // Cache miss -- force refresh JWKS in case Stytch rotated signing keys
+      log.info('Key not found in cached JWKS, force-refreshing. kid:', header.kid);
+      const freshJwks = await fetchJWKS(config, true);
+      if (freshJwks) {
+        key = freshJwks.keys.find((k) => k.kid === header.kid);
+      }
+      if (!key) {
+        log.warn('Key still not found after JWKS refresh. kid:', header.kid);
+        return false;
+      }
     }
 
     // Import the public key
@@ -274,8 +282,9 @@ async function verifyJWTSignature(
 
 /**
  * Fetch JWKS from Stytch (with caching).
+ * @param forceRefresh - If true, bypass cache and fetch fresh keys (used on kid cache miss)
  */
-async function fetchJWKS(config: AuthConfig): Promise<JsonWebKeySet | null> {
+async function fetchJWKS(config: AuthConfig, forceRefresh = false): Promise<JsonWebKeySet | null> {
   // Determine JWKS URL
   let jwksUrl = config.stytchJwksUrl;
 
@@ -290,10 +299,12 @@ async function fetchJWKS(config: AuthConfig): Promise<JsonWebKeySet | null> {
     return null;
   }
 
-  // Check per-URL cache
-  const cached = jwksCaches.get(jwksUrl);
-  if (cached && Date.now() - cached.time < JWKS_CACHE_TTL) {
-    return cached.keys;
+  // Check per-URL cache (skip if force refreshing)
+  if (!forceRefresh) {
+    const cached = jwksCaches.get(jwksUrl);
+    if (cached && Date.now() - cached.time < JWKS_CACHE_TTL) {
+      return cached.keys;
+    }
   }
 
   try {

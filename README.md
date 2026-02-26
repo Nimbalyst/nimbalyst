@@ -15,10 +15,8 @@ The power is in the combination: complex visual editors with rich UIs (spreadshe
 
 ## Packages
 
-- **`packages/rexical`** - The core Lexical-based editor library
 - **`packages/electron`** - Desktop application (Electron)
-- **`packages/capacitor`** - Mobile application (Capacitor)
-- **`packages/runtime`** - Cross-platform runtime services (AI, sync)
+- **`packages/runtime`** - Cross-platform runtime services (AI, sync, Lexical editor)
 - **`packages/extension-sdk`** - Extension development kit
 - **`packages/extensions`** - Built-in extensions
 - **`packages/core`** - Shared utilities
@@ -98,9 +96,6 @@ npm run build
 ### Electron Development
 
 ```bash
-# Build the rexical library first
-npm run build
-
 # Navigate to electron package
 cd packages/electron
 
@@ -130,29 +125,6 @@ The Electron app features:
 - **AI Chat integration** - Built-in Claude AI assistant with context-aware editing
 - **Session Manager** - Global view of all AI chat sessions across projects
 - **Drag and drop** file operations in the project sidebar with copy/move support
-
-### Playground Development
-
-The monorepo uses a simplified development setup with hot module replacement (HMR):
-
-```bash
-# Start development server
-npm run dev
-
-# This runs the playground dev server on port 4101
-# The playground imports directly from the library source files via custom Vite plugin
-
-# Build playground for deployment
-npm run build:playground
-```
-
-#### Hot Module Replacement (HMR)
-
-The development setup provides seamless HMR:
-- Changes to `packages/rexical` source files are immediately reflected in the playground
-- A custom Vite plugin handles module resolution to import directly from TypeScript source
-- Both CSS and TypeScript changes trigger instant updates
-- No manual rebuilds or separate library dev server required
 
 ### Library Installation (for end users)
 
@@ -358,9 +330,7 @@ Custom Lexical nodes extend base functionality:
 ```
 packages/
 ├── electron/              # Electron desktop app
-├── rexical/               # Core Lexical-based editor
-├── runtime/               # Cross-platform services (AI, sync)
-├── capacitor/             # Mobile app (iOS/Android)
+├── runtime/               # Cross-platform services (AI, sync, Lexical editor)
 ├── extension-sdk/         # Extension development kit
 ├── extensions/            # Built-in extensions
 └── core/                  # Shared utilities

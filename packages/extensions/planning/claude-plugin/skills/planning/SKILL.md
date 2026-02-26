@@ -53,18 +53,34 @@ planStatus:
 Track bugs, tasks, ideas, and other items in `nimbalyst-local/tracker/`:
 
 ```markdown
-- [Brief description] #[type][id:[type]_[ulid] status:to-do priority:medium created:YYYY-MM-DD]
+- [Brief description] #[type][id:[idPrefix]_[ulid] status:[default-status] priority:medium created:YYYY-MM-DD]
 ```
 
-### Tracker Types
+### CRITICAL: Custom Tracker Types
 
-- **bugs.md**: Issues and defects
-- **tasks.md**: Work items and todos
-- **ideas.md**: Concepts to explore
-- **decisions.md**: Important decisions and rationale
-- **feature-requests.md**: User-requested features
-- **feedback.md**: User feedback and insights
-- **tech-debt.md**: Technical debt items
+**Before creating any tracker item, always check `.nimbalyst/trackers/*.yaml` in the workspace root for custom tracker type definitions.** Each YAML file defines a tracker type with:
+- `type`: The type name used in `#[type][...]` syntax (e.g., `devblog-post`)
+- `idPrefix`: The prefix for generated IDs (e.g., `dev` produces `dev_abc123`)
+- `fields`: Available fields including status options with custom values
+- `sync`: Whether items sync to the team (shared/local/hybrid)
+
+**Always use the exact `type` name from the YAML when creating items.** Do not substitute a built-in type when a custom type matches the user's intent.
+
+### Built-in Tracker Types
+
+- **bugs.md**: Issues and defects (`#bug`, prefix: `bug`)
+- **tasks.md**: Work items and todos (`#task`, prefix: `tsk`)
+- **ideas.md**: Concepts to explore (`#idea`, prefix: `id`)
+- **decisions.md**: Important decisions (`#decision`, prefix: `dec`)
+- **plans.md**: Plans and features (`#plan`, prefix: `pln`)
+
+### Custom Tracker Types (per-workspace)
+
+Defined in `.nimbalyst/trackers/*.yaml`. Examples:
+- **feature-requests.md** (`#feature-request`, prefix: `feat`)
+- **tech-debt.md** (`#tech-debt`, prefix: `debt`)
+- **devblog-posts.md** (`#devblog-post`, prefix: `dev`)
+- Any other type defined in the workspace's YAML files
 
 ## When to Use
 
@@ -76,10 +92,11 @@ Track bugs, tasks, ideas, and other items in `nimbalyst-local/tracker/`:
 ## File Naming
 
 - Plans: `nimbalyst-local/plans/[descriptive-name].md` (kebab-case)
-- Trackers: `nimbalyst-local/tracker/[type]s.md`
+- Trackers: `nimbalyst-local/tracker/[type]s.md` (pluralize the type name)
 
 ## Best Practices
 
+- Always check `.nimbalyst/trackers/` for custom types before using built-in types
 - Keep plans focused on a single objective
 - Update progress regularly as work proceeds
 - Use appropriate priorities (low, medium, high, critical)

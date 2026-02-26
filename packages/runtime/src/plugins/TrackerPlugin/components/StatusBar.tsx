@@ -6,7 +6,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import type { TrackerDataModel, FieldDefinition } from '../models/TrackerDataModel';
 import { MaterialSymbol } from '../../../ui/icons/MaterialSymbol';
-import { CustomSelect } from './CustomSelect';
+import { TrackerFieldEditor } from './TrackerFieldEditor';
 import './StatusBarSlider.css';
 
 export interface StatusBarProps {
@@ -32,162 +32,21 @@ export const StatusBar: React.FC<StatusBarProps> = ({ model, data, onChange, onC
 
   const renderField = useCallback((field: FieldDefinition, width: number | 'auto') => {
     const value = localData[field.name];
-    const fieldId = `status-bar-${field.name}`;
 
     const fieldStyle: React.CSSProperties = {
       width: width === 'auto' ? 'auto' : `${width}px`,
       flex: width === 'auto' ? '1' : '0 0 auto',
     };
 
-    const fieldBaseClasses = "status-bar-field flex flex-col gap-1 min-w-[120px]";
-    const labelClasses = "text-[11px] font-medium text-[var(--nim-text-muted)] uppercase tracking-[0.5px]";
-    const inputClasses = "py-1.5 px-2 border border-[var(--nim-border)] rounded bg-[var(--nim-bg)] text-[var(--nim-text)] text-[13px] font-inherit transition-colors duration-200 focus:outline-none focus:border-[var(--nim-primary)] focus:shadow-[0_0_0_2px_rgba(59,130,246,0.1)]";
-
-    switch (field.type) {
-      case 'select':
-        return (
-          <div key={field.name} className={fieldBaseClasses} style={fieldStyle}>
-            <label htmlFor={fieldId} className={labelClasses}>{field.name}</label>
-            <CustomSelect
-              value={value || field.default || ''}
-              options={field.options || []}
-              onChange={(newValue) => handleFieldChange(field.name, newValue)}
-              required={field.required}
-            />
-          </div>
-        );
-
-      case 'number':
-        // Use slider for progress fields or any number field with min/max bounds
-        const useSlider = field.min !== undefined && field.max !== undefined;
-
-        if (useSlider) {
-          return (
-            <div key={field.name} className={`${fieldBaseClasses} status-bar-field-slider`} style={fieldStyle}>
-              <div className="slider-header flex justify-between items-center gap-2 mb-1">
-                <label htmlFor={fieldId} className={`${labelClasses} flex-1 mb-0`}>{field.name}</label>
-                <input
-                  type="number"
-                  className="slider-number-input w-[60px] py-1 px-2 border border-[var(--nim-border)] rounded bg-[var(--nim-bg)] text-[var(--nim-text)] text-[13px] font-semibold font-inherit text-center transition-colors duration-200 focus:outline-none focus:border-[var(--nim-primary)] focus:shadow-[0_0_0_2px_rgba(59,130,246,0.1)]"
-                  value={value ?? field.default ?? field.min}
-                  min={field.min}
-                  max={field.max}
-                  onChange={(e) => {
-                    const newValue = Number(e.target.value);
-                    if (!isNaN(newValue)) {
-                      handleFieldChange(field.name, newValue);
-                    }
-                  }}
-                />
-              </div>
-              <input
-                id={fieldId}
-                type="range"
-                value={value ?? field.default ?? field.min}
-                min={field.min}
-                max={field.max}
-                onChange={(e) => handleFieldChange(field.name, Number(e.target.value))}
-              />
-            </div>
-          );
-        }
-
-        return (
-          <div key={field.name} className={fieldBaseClasses} style={fieldStyle}>
-            <label htmlFor={fieldId} className={labelClasses}>{field.name}</label>
-            <input
-              id={fieldId}
-              type="number"
-              className={inputClasses}
-              value={value ?? field.default ?? ''}
-              min={field.min}
-              max={field.max}
-              onChange={(e) => handleFieldChange(field.name, Number(e.target.value))}
-            />
-          </div>
-        );
-
-      case 'date': {
-        // Format Date objects to YYYY-MM-DD for the date input
-        let dateValue = value || '';
-        if (value instanceof Date && !isNaN(value.getTime())) {
-          const y = value.getFullYear();
-          const m = String(value.getMonth() + 1).padStart(2, '0');
-          const d = String(value.getDate()).padStart(2, '0');
-          dateValue = `${y}-${m}-${d}`;
-        }
-        return (
-          <div key={field.name} className={fieldBaseClasses} style={fieldStyle}>
-            <label htmlFor={fieldId} className={labelClasses}>{field.name}</label>
-            <input
-              id={fieldId}
-              type="date"
-              className={inputClasses}
-              value={dateValue}
-              onChange={(e) => handleFieldChange(field.name, e.target.value)}
-            />
-          </div>
-        );
-      }
-
-      case 'string':
-      case 'user':
-        return (
-          <div key={field.name} className={fieldBaseClasses} style={fieldStyle}>
-            <label htmlFor={fieldId} className={labelClasses}>{field.name}</label>
-            <input
-              id={fieldId}
-              type="text"
-              className={inputClasses}
-              value={value || ''}
-              onChange={(e) => handleFieldChange(field.name, e.target.value)}
-              placeholder={field.required ? 'Required' : 'Optional'}
-            />
-          </div>
-        );
-
-      case 'array':
-        // Simple comma-separated input for arrays
-        const arrayValue = Array.isArray(value) ? value.join(', ') : '';
-        return (
-          <div key={field.name} className={fieldBaseClasses} style={fieldStyle}>
-            <label htmlFor={fieldId} className={labelClasses}>{field.name}</label>
-            <input
-              id={fieldId}
-              type="text"
-              className={inputClasses}
-              value={arrayValue}
-              onChange={(e) => {
-                const newValue = e.target.value
-                  .split(',')
-                  .map(v => v.trim())
-                  .filter(v => v.length > 0);
-                handleFieldChange(field.name, newValue);
-              }}
-              placeholder="Comma-separated values"
-            />
-          </div>
-        );
-
-      case 'boolean':
-        return (
-          <div key={field.name} className="status-bar-field status-bar-field-checkbox flex flex-row items-center min-w-[120px]" style={fieldStyle}>
-            <label htmlFor={fieldId} className="flex items-center gap-1.5 normal-case tracking-normal text-[13px] cursor-pointer">
-              <input
-                id={fieldId}
-                type="checkbox"
-                className="cursor-pointer w-4 h-4"
-                checked={value || false}
-                onChange={(e) => handleFieldChange(field.name, e.target.checked)}
-              />
-              {field.name}
-            </label>
-          </div>
-        );
-
-      default:
-        return null;
-    }
+    return (
+      <div key={field.name} style={fieldStyle}>
+        <TrackerFieldEditor
+          field={field}
+          value={value}
+          onChange={(newValue) => handleFieldChange(field.name, newValue)}
+        />
+      </div>
+    );
   }, [localData, handleFieldChange]);
 
   if (isCollapsed) {
@@ -202,7 +61,6 @@ export const StatusBar: React.FC<StatusBarProps> = ({ model, data, onChange, onC
             <MaterialSymbol icon={model.icon} size={18} />
             <span>{model.displayName}</span>
           </div>
-          {/*<MaterialSymbol icon="expand_more" size={18} />*/}
         </button>
       </div>
     );
@@ -258,4 +116,3 @@ export const StatusBar: React.FC<StatusBarProps> = ({ model, data, onChange, onC
     </div>
   );
 };
-

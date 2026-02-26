@@ -1762,6 +1762,7 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
 
               // CRITICAL: Send completion and break on result errors (like "prompt too long")
               // Without this, the UI thinks the agent is still processing and /compact won't work
+              await this.flushPendingWrites();
               yield {
                 type: 'complete',
                 isComplete: true
@@ -2283,6 +2284,12 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
       // Send completion event
       const totalTime = Date.now() - startTime;
 
+      // Flush all pending non-blocking DB writes before signaling completion.
+      // Without this, the UI receives session:completed and reloads from DB
+      // before the final messages (e.g. compact_boundary, continuation, result)
+      // have been committed, causing a stale transcript.
+      await this.flushPendingWrites();
+
       // Create snapshots for all files edited during this turn
       if (this.toolHooksService && this.toolHooksService.getEditedFiles().size > 0) {
         await this.toolHooksService.createTurnEndSnapshots();
@@ -2353,6 +2360,7 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
 
       if (isAbort) {
         // Abort is expected - user cancelled, don't log as error
+        await this.flushPendingWrites();
         yield {
           type: 'complete',
           isComplete: true
@@ -2374,6 +2382,7 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
             };
 
             // CRITICAL: Always send completion after error to clean up UI state
+            await this.flushPendingWrites();
             yield {
               type: 'complete'
             };
@@ -2398,6 +2407,7 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
         };
 
         // CRITICAL: Always send completion after error to clean up UI state
+        await this.flushPendingWrites();
         yield {
           type: 'complete'
         };
@@ -3494,6 +3504,13 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
           };
         }
       } catch (error) {
+        // Emit resolved event on error path so the "waiting for input" indicator is cleared
+        this.emit('toolPermission:resolved', {
+          requestId,
+          sessionId,
+          response: { decision: 'deny', scope: 'once' },
+          timestamp: Date.now()
+        });
         this.logSecurity('[canUseTool] Permission request failed (fallback):', {
           toolName,
           error: error instanceof Error ? error.message : 'Unknown error',

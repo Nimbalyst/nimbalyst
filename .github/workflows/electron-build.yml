@@ -83,12 +83,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build rexical package
-        working-directory: packages/rexical
-        env:
-          NODE_ENV: production
-        run: npm run build
-
       - name: Build runtime package (for theme assets)
         working-directory: packages/runtime
         env:

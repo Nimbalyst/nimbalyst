@@ -72,9 +72,11 @@ export class OptimizedWorkspaceWatcher {
             onUnlink: (filePath: string) => {
                 // Tree structure changed
                 triggerUpdate();
-                // Also send file-changed-on-disk for deletions
                 if (!window.isDestroyed()) {
+                    // Notify editors of the change
                     window.webContents.send('file-changed-on-disk', { path: filePath });
+                    // Notify renderer to close the tab for this deleted file
+                    window.webContents.send('file-deleted', { filePath });
                 }
             },
         });

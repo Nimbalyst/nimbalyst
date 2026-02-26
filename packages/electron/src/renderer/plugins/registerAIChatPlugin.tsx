@@ -2,7 +2,7 @@
  * Register the AIChatIntegrationPlugin with the Electron app
  */
 
-import { pluginRegistry, type PluginPackage } from 'rexical';
+import { pluginRegistry, type PluginPackage } from '@nimbalyst/runtime';
 import { AIChatIntegrationPlugin } from '@nimbalyst/runtime/ai/plugins/AIChatIntegrationPlugin';
 
 // Create plugin package for AI Chat Integration

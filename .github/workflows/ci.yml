@@ -29,10 +29,6 @@ jobs:
         run: npm ci
 
       # Build packages that export types (required before typecheck)
-      - name: Build rexical
-        working-directory: packages/rexical
-        run: npm run build
-
       - name: Build extension-sdk
         working-directory: packages/extension-sdk
         run: npm run build
@@ -50,16 +46,8 @@ jobs:
         working-directory: packages/runtime
         run: npx tsc --noEmit
 
-      - name: TypeScript check - rexical
-        working-directory: packages/rexical
-        run: npx tsc --noEmit
-
       - name: TypeScript check - extension-sdk
         working-directory: packages/extension-sdk
-        run: npx tsc --noEmit
-
-      - name: TypeScript check - capacitor
-        working-directory: packages/capacitor
         run: npx tsc --noEmit
 
       # Typecheck extensions

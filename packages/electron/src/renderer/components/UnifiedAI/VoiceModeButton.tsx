@@ -401,6 +401,9 @@ export function VoiceModeButton({ workspacePath }: VoiceModeButtonProps) {
     }
   };
 
+  // Context usage ring (wraps button when voice is active -- both listening and sleeping)
+  const tokenUsage = useAtomValue(voiceTokenUsageAtom);
+
   if (!voiceModeEnabled) {
     return null;
   }
@@ -424,8 +427,6 @@ export function VoiceModeButton({ workspacePath }: VoiceModeButtonProps) {
   // Disabled when no session is selected and voice isn't already active
   const isDisabled = isConnecting || (!isVoiceActive && !activeSessionId);
 
-  // Context usage ring (wraps button when voice is active -- both listening and sleeping)
-  const tokenUsage = useAtomValue(voiceTokenUsageAtom);
   const CONTEXT_WINDOW_TOKENS = 28000;
   const RING_RADIUS = 16;
   const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;

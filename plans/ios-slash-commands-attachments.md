@@ -2,15 +2,15 @@
 planStatus:
   planId: plan-ios-slash-commands-attachments
   title: iOS Slash Command Typeahead + Image Attachments
-  status: draft
+  status: done
   planType: feature
   priority: high
   owner: ghinkle
   stakeholders: []
   tags: [ios, mobile, sync, slash-commands, attachments, camera]
   created: "2026-02-18"
-  updated: "2026-02-18T00:00:00.000Z"
-  progress: 0
+  updated: "2026-02-20T00:00:00.000Z"
+  progress: 100
 ---
 
 # iOS Slash Command Typeahead + Image Attachments

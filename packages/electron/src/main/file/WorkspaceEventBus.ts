@@ -515,9 +515,14 @@ function startRecursiveWatch(
     watcher.on('error', (error: NodeJS.ErrnoException) => {
       const code = error.code;
       if (code === 'EMFILE' || code === 'ENFILE') {
-        logger.workspaceWatcher.warn(
-          'Too many open files - some file tree changes may not be detected. Try closing other workspaces.'
+        logger.main.error(
+          `[WorkspaceEventBus] Too many open files (${code}) for "${key}" — ` +
+          `closing watcher. File changes will not be detected.`
         );
+        if (busEntries.has(key)) {
+          (watcher as fs.FSWatcher).close();
+          busEntries.delete(key);
+        }
       } else if (code === 'EPERM' || code === 'EACCES' || code === 'UNKNOWN') {
         logger.main.debug('[WorkspaceEventBus] Skipping unwatchable path:', error);
       } else {
@@ -535,6 +540,20 @@ function startRecursiveWatch(
     logger.main.error('[WorkspaceEventBus] Failed to start recursive watcher:', error);
   }
 }
+
+/**
+ * Max initial watch depth for chokidar on Linux.
+ *
+ * On Linux, every directory is a separate inotify watch. An unbounded
+ * recursive crawl of a large project (no .gitignore, deep node_modules
+ * that slipped through) can exhaust inotify limits and block the event
+ * loop during setup. Capping depth limits the damage; deeper folders
+ * get watched on-demand via addWatchedPath() when the user expands them.
+ *
+ * This does NOT apply to macOS/Windows — fs.watch(recursive:true) is
+ * a single kernel call regardless of tree depth.
+ */
+const CHOKIDAR_MAX_DEPTH = 10;
 
 function startChokidarWatch(
   key: string,
@@ -559,6 +578,7 @@ function startChokidarWatch(
         pollInterval: 20,
       },
       alwaysStat: false,
+      depth: CHOKIDAR_MAX_DEPTH,
     });
 
     const cb = createCircuitBreaker();
@@ -597,9 +617,16 @@ function startChokidarWatch(
       .on('error', (error: unknown) => {
         const code = error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined;
         if (code === 'EMFILE' || code === 'ENFILE') {
-          logger.workspaceWatcher.warn(
-            'Too many open files - some file tree changes may not be detected.'
+          // Kill the watcher immediately. Chokidar retries internally on
+          // EMFILE, which causes retry-spam that floods the log and burns CPU.
+          logger.main.error(
+            `[WorkspaceEventBus] Too many open files (${code}) for "${key}" — ` +
+            `closing watcher to stop retry-spam. File changes will not be detected.`
           );
+          if (busEntries.has(key)) {
+            closeWatcher(entry.watcher);
+            busEntries.delete(key);
+          }
         } else if (code === 'EPERM' || code === 'EACCES' || code === 'UNKNOWN') {
           logger.main.debug('[WorkspaceEventBus] Skipping unwatchable path:', error);
         } else {

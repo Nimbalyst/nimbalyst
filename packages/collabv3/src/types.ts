@@ -12,8 +12,14 @@
 export type SessionRoomId = `org:${string}:user:${string}:session:${string}`;
 export type IndexRoomId = `org:${string}:user:${string}:index`;
 export type ProjectsRoomId = `org:${string}:user:${string}:projects`;
+/** Document room ID format: org:{orgId}:doc:{documentId} (org-scoped, not user-scoped) */
+export type DocumentRoomId = `org:${string}:doc:${string}`;
+/** Tracker room ID format: org:{orgId}:tracker:{projectId} (org-scoped, not user-scoped) */
+export type TrackerRoomId = `org:${string}:tracker:${string}`;
+/** Team room ID format: org:{orgId}:team (org-scoped, consolidated team state) */
+export type TeamRoomId = `org:${string}:team`;
 
-export type RoomId = SessionRoomId | IndexRoomId | ProjectsRoomId;
+export type RoomId = SessionRoomId | IndexRoomId | ProjectsRoomId | DocumentRoomId | TrackerRoomId | TeamRoomId;
 
 // ============================================================================
 // Client → Server Messages
@@ -445,6 +451,424 @@ export interface ProjectIndexEntry {
 }
 
 // ============================================================================
+// DocumentRoom Client → Server Messages
+// ============================================================================
+
+export type DocClientMessage =
+  | DocSyncRequestMessage
+  | DocUpdateMessage
+  | DocCompactMessage
+  | DocAwarenessMessage
+  | AddKeyEnvelopeMessage
+  | RequestKeyEnvelopeMessage;
+
+/** Request document updates since a sequence number */
+export interface DocSyncRequestMessage {
+  type: 'docSyncRequest';
+  sinceSeq: number;
+}
+
+/** Send an encrypted Yjs update */
+export interface DocUpdateMessage {
+  type: 'docUpdate';
+  encryptedUpdate: string;
+  iv: string;
+}
+
+/** Send an encrypted compacted state snapshot */
+export interface DocCompactMessage {
+  type: 'docCompact';
+  encryptedState: string;
+  iv: string;
+  replacesUpTo: number;
+}
+
+/** Send encrypted awareness state (cursor, selection) */
+export interface DocAwarenessMessage {
+  type: 'docAwareness';
+  encryptedState: string;
+  iv: string;
+}
+
+/** Upload a wrapped document key for a target user (ECDH key exchange) */
+export interface AddKeyEnvelopeMessage {
+  type: 'addKeyEnvelope';
+  targetUserId: string;
+  wrappedKey: string;
+  iv: string;
+  senderPublicKey: string;
+}
+
+/** Request the caller's key envelope */
+export interface RequestKeyEnvelopeMessage {
+  type: 'requestKeyEnvelope';
+}
+
+// ============================================================================
+// DocumentRoom Server → Client Messages
+// ============================================================================
+
+export type DocServerMessage =
+  | DocSyncResponseMessage
+  | DocUpdateBroadcastMessage
+  | DocAwarenessBroadcastMessage
+  | KeyEnvelopeMessage
+  | DocErrorMessage;
+
+/** Response to docSyncRequest with paginated encrypted updates */
+export interface DocSyncResponseMessage {
+  type: 'docSyncResponse';
+  updates: EncryptedDocUpdate[];
+  snapshot?: EncryptedDocSnapshot;
+  hasMore: boolean;
+  cursor: number;
+}
+
+/** Broadcast an encrypted Yjs update to other connections */
+export interface DocUpdateBroadcastMessage {
+  type: 'docUpdateBroadcast';
+  encryptedUpdate: string;
+  iv: string;
+  senderId: string;
+  sequence: number;
+}
+
+/** Broadcast encrypted awareness state to other connections */
+export interface DocAwarenessBroadcastMessage {
+  type: 'docAwarenessBroadcast';
+  encryptedState: string;
+  iv: string;
+  fromUserId: string;
+}
+
+/** Deliver a key envelope to the requesting user */
+export interface KeyEnvelopeMessage {
+  type: 'keyEnvelope';
+  wrappedKey: string;
+  iv: string;
+  senderPublicKey: string;
+  /** User ID of the user who created this envelope */
+  senderUserId: string;
+}
+
+/** DocumentRoom error response */
+export interface DocErrorMessage {
+  type: 'error';
+  code: string;
+  message: string;
+}
+
+// ============================================================================
+// DocumentRoom Data Types
+// ============================================================================
+
+/** Encrypted Yjs update as stored/transmitted */
+export interface EncryptedDocUpdate {
+  sequence: number;
+  encryptedUpdate: string;
+  iv: string;
+  senderId: string;
+  createdAt: number;
+}
+
+/** Encrypted compacted Y.Doc state snapshot */
+export interface EncryptedDocSnapshot {
+  encryptedState: string;
+  iv: string;
+  replacesUpTo: number;
+  createdAt: number;
+}
+
+// ============================================================================
+// TrackerRoom Client → Server Messages
+// ============================================================================
+
+export type TrackerClientMessage =
+  | TrackerSyncRequestMessage
+  | TrackerUpsertMessage
+  | TrackerDeleteMessage
+  | TrackerBatchUpsertMessage;
+
+/** Request tracker items since a sequence number */
+export interface TrackerSyncRequestMessage {
+  type: 'trackerSync';
+  sinceSequence: number;
+}
+
+/** Create or update an encrypted tracker item */
+export interface TrackerUpsertMessage {
+  type: 'trackerUpsert';
+  itemId: string;
+  encryptedPayload: string;
+  iv: string;
+}
+
+/** Delete a tracker item */
+export interface TrackerDeleteMessage {
+  type: 'trackerDelete';
+  itemId: string;
+}
+
+/** Batch create/update encrypted tracker items */
+export interface TrackerBatchUpsertMessage {
+  type: 'trackerBatchUpsert';
+  items: { itemId: string; encryptedPayload: string; iv: string }[];
+}
+
+// ============================================================================
+// TrackerRoom Server → Client Messages
+// ============================================================================
+
+export type TrackerServerMessage =
+  | TrackerSyncResponseMessage
+  | TrackerUpsertBroadcastMessage
+  | TrackerDeleteBroadcastMessage
+  | TrackerErrorMessage;
+
+/** Response to trackerSync with changelog entries since the requested sequence */
+export interface TrackerSyncResponseMessage {
+  type: 'trackerSyncResponse';
+  items: EncryptedTrackerItem[];
+  deletedItemIds: string[];
+  sequence: number;
+  hasMore: boolean;
+}
+
+/** Broadcast an upserted tracker item to other connections */
+export interface TrackerUpsertBroadcastMessage {
+  type: 'trackerUpsertBroadcast';
+  item: EncryptedTrackerItem;
+}
+
+/** Broadcast a tracker item deletion to other connections */
+export interface TrackerDeleteBroadcastMessage {
+  type: 'trackerDeleteBroadcast';
+  itemId: string;
+  sequence: number;
+}
+
+/** TrackerRoom error response */
+export interface TrackerErrorMessage {
+  type: 'error';
+  code: string;
+  message: string;
+}
+
+// ============================================================================
+// TrackerRoom Data Types
+// ============================================================================
+
+/** Encrypted tracker item as stored/transmitted */
+export interface EncryptedTrackerItem {
+  itemId: string;
+  version: number;
+  encryptedPayload: string;
+  iv: string;
+  createdAt: number;
+  updatedAt: number;
+  /** Sequence number in the changelog (for cursor-based sync) */
+  sequence: number;
+}
+
+// ============================================================================
+// TeamRoom Client → Server Messages
+// ============================================================================
+
+export type TeamClientMessage =
+  | TeamSyncRequestMessage
+  | TeamUploadIdentityKeyMessage
+  | TeamRequestIdentityKeyMessage
+  | TeamRequestKeyEnvelopeMessage
+  | TeamDocIndexSyncRequestMessage
+  | TeamDocIndexRegisterMessage
+  | TeamDocIndexUpdateMessage
+  | TeamDocIndexRemoveMessage;
+
+/** Request full team state snapshot */
+export interface TeamSyncRequestMessage {
+  type: 'teamSync';
+}
+
+/** Upload own ECDH public key */
+export interface TeamUploadIdentityKeyMessage {
+  type: 'uploadIdentityKey';
+  publicKeyJwk: string;
+}
+
+/** Fetch a member's public key */
+export interface TeamRequestIdentityKeyMessage {
+  type: 'requestIdentityKey';
+  targetUserId: string;
+}
+
+/** Request own key envelope */
+export interface TeamRequestKeyEnvelopeMessage {
+  type: 'requestKeyEnvelope';
+}
+
+/** Request the full document list */
+export interface TeamDocIndexSyncRequestMessage {
+  type: 'docIndexSync';
+}
+
+/** Register a new shared document in the index */
+export interface TeamDocIndexRegisterMessage {
+  type: 'docIndexRegister';
+  documentId: string;
+  encryptedTitle: string;
+  titleIv: string;
+  documentType: string;
+}
+
+/** Update a document's encrypted title */
+export interface TeamDocIndexUpdateMessage {
+  type: 'docIndexUpdate';
+  documentId: string;
+  encryptedTitle: string;
+  titleIv: string;
+}
+
+/** Remove a document from the index */
+export interface TeamDocIndexRemoveMessage {
+  type: 'docIndexRemove';
+  documentId: string;
+}
+
+// ============================================================================
+// TeamRoom Server → Client Messages
+// ============================================================================
+
+export type TeamServerMessage =
+  | TeamSyncResponseMessage
+  | TeamMemberAddedMessage
+  | TeamMemberRemovedMessage
+  | TeamMemberRoleChangedMessage
+  | TeamKeyEnvelopeAvailableMessage
+  | TeamKeyEnvelopeMessage
+  | TeamIdentityKeyResponseMessage
+  | TeamDocIndexSyncResponseMessage
+  | TeamDocIndexBroadcastMessage
+  | TeamDocIndexRemoveBroadcastMessage
+  | TeamErrorMessage;
+
+/** Full team state snapshot */
+export interface TeamSyncResponseMessage {
+  type: 'teamSyncResponse';
+  team: TeamState;
+}
+
+/** Broadcast: member added */
+export interface TeamMemberAddedMessage {
+  type: 'memberAdded';
+  member: MemberInfo;
+}
+
+/** Broadcast: member removed */
+export interface TeamMemberRemovedMessage {
+  type: 'memberRemoved';
+  userId: string;
+}
+
+/** Broadcast: member role changed */
+export interface TeamMemberRoleChangedMessage {
+  type: 'memberRoleChanged';
+  userId: string;
+  role: string;
+}
+
+/** Push notification: a key envelope is now available for target user */
+export interface TeamKeyEnvelopeAvailableMessage {
+  type: 'keyEnvelopeAvailable';
+  targetUserId: string;
+}
+
+/** Delivery of a key envelope to the requesting user */
+export interface TeamKeyEnvelopeMessage {
+  type: 'keyEnvelope';
+  wrappedKey: string;
+  iv: string;
+  senderPublicKey: string;
+  /** User ID of the user who created this envelope */
+  senderUserId: string;
+}
+
+/** Response with a peer's public key */
+export interface TeamIdentityKeyResponseMessage {
+  type: 'identityKeyResponse';
+  userId: string;
+  publicKeyJwk: string;
+}
+
+/** Full document list response */
+export interface TeamDocIndexSyncResponseMessage {
+  type: 'docIndexSyncResponse';
+  documents: EncryptedDocIndexEntry[];
+}
+
+/** Broadcast: document registered or updated */
+export interface TeamDocIndexBroadcastMessage {
+  type: 'docIndexBroadcast';
+  document: EncryptedDocIndexEntry;
+}
+
+/** Broadcast: document removed */
+export interface TeamDocIndexRemoveBroadcastMessage {
+  type: 'docIndexRemoveBroadcast';
+  documentId: string;
+}
+
+/** TeamRoom error response */
+export interface TeamErrorMessage {
+  type: 'error';
+  code: string;
+  message: string;
+}
+
+// ============================================================================
+// TeamRoom Data Types
+// ============================================================================
+
+/** Encrypted document index entry as stored/transmitted */
+export interface EncryptedDocIndexEntry {
+  documentId: string;
+  encryptedTitle: string;
+  titleIv: string;
+  documentType: string;
+  createdBy: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** Full team state snapshot sent on teamSync */
+export interface TeamState {
+  metadata: {
+    orgId: string;
+    name: string;
+    gitRemoteHash: string | null;
+    createdBy: string;
+    createdAt: number;
+  } | null;
+  members: MemberInfo[];
+  documents: EncryptedDocIndexEntry[];
+  /** Caller's own key envelope (if exists) */
+  keyEnvelope?: {
+    wrappedKey: string;
+    iv: string;
+    senderPublicKey: string;
+    senderUserId?: string;
+  } | null;
+}
+
+/** Information about a team member */
+export interface MemberInfo {
+  userId: string;
+  role: string;
+  email: string | null;
+  hasKeyEnvelope: boolean;
+  hasIdentityKey: boolean;
+}
+
+// ============================================================================
 // Auth Types
 // ============================================================================
 
@@ -462,6 +886,9 @@ export interface AuthContext {
 export interface Env {
   SESSION_ROOM: DurableObjectNamespace;
   INDEX_ROOM: DurableObjectNamespace;
+  DOCUMENT_ROOM: DurableObjectNamespace;
+  TRACKER_ROOM: DurableObjectNamespace;
+  TEAM_ROOM: DurableObjectNamespace;
   DB: D1Database;
   SESSION_SHARES: R2Bucket;
   ENVIRONMENT: string;
@@ -479,4 +906,6 @@ export interface Env {
   APNS_TEAM_ID?: string;    // Team ID from Apple Developer Portal
   APNS_BUNDLE_ID?: string;  // App bundle ID (e.g., com.nimbalyst.app)
   APNS_SANDBOX?: string;    // 'true' for sandbox, otherwise production
+  // Test-only: bypass JWT auth in dev mode (parse user_id/org_id from query params)
+  TEST_AUTH_BYPASS?: string;
 }

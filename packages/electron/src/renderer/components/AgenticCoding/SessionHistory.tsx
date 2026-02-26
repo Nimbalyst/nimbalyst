@@ -194,7 +194,8 @@ const GroupCardStatus: React.FC<{ sessionIds: string[] }> = ({ sessionIds }) => 
   const { hasPendingInteractivePrompt, hasProcessing, hasPendingPrompt, hasUnread } = useAtomValue(groupSessionStatusAtom(sessionIdsKey));
 
   // Priority: interactive prompt > processing > pending prompt > unread (same as SessionListItem)
-  if (hasPendingInteractivePrompt) {
+  // Only show "waiting" if something is also processing (safety net for stale atom state)
+  if (hasPendingInteractivePrompt && hasProcessing) {
     return (
       <div className="session-card-status-indicator waiting-for-input flex items-center justify-center text-[var(--nim-warning)] animate-pulse" title="Waiting for your response">
         <MaterialSymbol icon="contact_support" size={14} />
@@ -2766,6 +2767,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                     projectPath={session.workspaceId}
                     uncommittedCount={session.uncommittedCount}
                     branchedAt={session.branchedAt}
+                    phase={session.phase}
                   />
                 );
               }}

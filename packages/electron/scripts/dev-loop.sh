@@ -8,25 +8,27 @@
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ELECTRON_DIR="$(dirname "$SCRIPT_DIR")"
-RESTART_SIGNAL="$ELECTRON_DIR/.restart-requested"
+
+# Use a unique restart signal file per instance to avoid cross-talk
+if [ -n "$NIMBALYST_USER_DATA_DIR" ]; then
+  INSTANCE_SUFFIX="-$(basename "$NIMBALYST_USER_DATA_DIR")"
+else
+  INSTANCE_SUFFIX=""
+fi
+RESTART_SIGNAL="$ELECTRON_DIR/.restart-requested${INSTANCE_SUFFIX}"
 
 cd "$ELECTRON_DIR"
 
 # Clean up any stale restart signal
 rm -f "$RESTART_SIGNAL"
 
-# Add signal file to gitignore if not already there
-if ! grep -q "^\.restart-requested$" .gitignore 2>/dev/null; then
-  echo ".restart-requested" >> .gitignore
-fi
-
 echo "Starting Nimbalyst dev loop..."
 echo "Use /restart in the AI chat to restart the app."
 echo ""
 
 while true; do
-  # Run the dev server
-  npm run dev
+  # Run the dev server (use dev.sh directly so env vars like NIMBALYST_USER_DATA_DIR propagate)
+  ./scripts/dev.sh
   EXIT_CODE=$?
 
   # Check if restart was requested

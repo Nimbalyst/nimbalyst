@@ -9,6 +9,7 @@ import { basename } from 'path';
 import { logger } from '../utils/logger';
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
 import { GitStatusService } from '../services/GitStatusService';
+import { autoMatchTeamForWorkspace } from '../services/TeamService';
 
 // Save session state
 export async function saveSessionState() {
@@ -156,6 +157,9 @@ export async function restoreSessionState(): Promise<boolean> {
                         // Restore workspace window
                         window = createWindow(false, true, sessionWindow.workspacePath, sessionWindow.bounds);
                         logger.session.info(`Restored workspace window: ${sessionWindow.workspacePath}`);
+
+                        // Auto-match workspace to team (fire-and-forget)
+                        autoMatchTeamForWorkspace(sessionWindow.workspacePath).catch(() => {});
 
                         // Note: Workspace tabs will be restored by the workspace's own tab state management
                         // We don't manually open files here to avoid interfering with tab restoration

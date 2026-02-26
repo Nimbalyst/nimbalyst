@@ -136,6 +136,13 @@ export const PromptsMenuButton: React.FC<PromptsMenuButtonProps> = ({
 // FloatingTranscriptActions - Container with prompts menu + history toggle
 // =============================================================================
 
+/** Phase column definition for the kanban board */
+export interface PhaseColumn {
+  value: string;
+  label: string;
+  color: string;
+}
+
 interface FloatingTranscriptActionsProps {
   prompts: PromptMarker[];
   /** Whether the sidebar is collapsed (only used if onToggleSidebar is provided) */
@@ -143,6 +150,12 @@ interface FloatingTranscriptActionsProps {
   /** Optional: Toggle sidebar visibility. If not provided, the toggle button is hidden. */
   onToggleSidebar?: () => void;
   onNavigateToPrompt: (marker: PromptMarker) => void;
+  /** Current session phase for the kanban board */
+  currentPhase?: string | null;
+  /** Available phase columns */
+  phaseColumns?: PhaseColumn[];
+  /** Callback when phase is changed. If not provided, the phase button is hidden. */
+  onSetPhase?: (phase: string | null) => void;
 }
 
 export const FloatingTranscriptActions: React.FC<FloatingTranscriptActionsProps> = ({
@@ -150,9 +163,96 @@ export const FloatingTranscriptActions: React.FC<FloatingTranscriptActionsProps>
   isSidebarCollapsed,
   onToggleSidebar,
   onNavigateToPrompt,
+  currentPhase,
+  phaseColumns,
+  onSetPhase,
 }) => {
+  const [showPhaseMenu, setShowPhaseMenu] = useState(false);
+  const phaseButtonRef = useRef<HTMLButtonElement>(null);
+  const phaseMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close phase menu when clicking outside
+  useEffect(() => {
+    if (!showPhaseMenu) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        phaseButtonRef.current &&
+        !phaseButtonRef.current.contains(event.target as Node) &&
+        phaseMenuRef.current &&
+        !phaseMenuRef.current.contains(event.target as Node)
+      ) {
+        setShowPhaseMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showPhaseMenu]);
+
+  const currentPhaseCol = phaseColumns?.find(c => c.value === currentPhase);
+
   return (
     <div className="floating-transcript-actions absolute top-1.5 right-3 flex gap-2 z-[100] pointer-events-none">
+      {/* Phase Picker Button */}
+      {onSetPhase && phaseColumns && (
+        <div className="relative inline-flex">
+          <button
+            ref={phaseButtonRef}
+            className="floating-transcript-button pointer-events-auto h-9 rounded-md border border-[var(--nim-border)] bg-[var(--nim-bg)] text-[var(--nim-text)] cursor-pointer flex items-center gap-1.5 px-2.5 transition-all relative shadow-sm hover:bg-[var(--nim-bg-tertiary)] active:scale-95 text-[12px]"
+            onClick={() => setShowPhaseMenu(!showPhaseMenu)}
+            aria-label="Set phase"
+            title={currentPhase ? `Phase: ${currentPhaseCol?.label || currentPhase}` : 'Set kanban phase'}
+          >
+            {currentPhaseCol ? (
+              <>
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: currentPhaseCol.color }} />
+                <span>{currentPhaseCol.label}</span>
+              </>
+            ) : (
+              <>
+                <MaterialSymbol icon="view_kanban" size={16} />
+                <span className="text-[var(--nim-text-faint)]">Phase</span>
+              </>
+            )}
+          </button>
+          {showPhaseMenu && (
+            <div
+              ref={phaseMenuRef}
+              className="absolute top-11 right-0 min-w-[160px] p-1 bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-md shadow-lg z-[101] pointer-events-auto"
+            >
+              {phaseColumns.map((col) => (
+                <button
+                  key={col.value}
+                  className={`flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] ${currentPhase === col.value ? 'text-[var(--nim-primary)]' : 'text-[var(--nim-text)]'}`}
+                  onClick={() => {
+                    onSetPhase(col.value);
+                    setShowPhaseMenu(false);
+                  }}
+                >
+                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: col.color }} />
+                  {col.label}
+                  {currentPhase === col.value && <MaterialSymbol icon="check" size={14} className="ml-auto" />}
+                </button>
+              ))}
+              {currentPhase && (
+                <>
+                  <div className="h-px bg-[var(--nim-border)] my-1" />
+                  <button
+                    className="flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text-faint)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
+                    onClick={() => {
+                      onSetPhase(null);
+                      setShowPhaseMenu(false);
+                    }}
+                  >
+                    <MaterialSymbol icon="close" size={14} />
+                    Remove from board
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Prompts Menu Button */}
       <PromptsMenuButton
         prompts={prompts}
@@ -168,10 +268,8 @@ export const FloatingTranscriptActions: React.FC<FloatingTranscriptActionsProps>
           title={isSidebarCollapsed ? 'Show file history' : 'Hide file history'}
         >
           {isSidebarCollapsed ? (
-            // Show history icon (clock to expand)
             <MaterialSymbol icon="schedule" size={20} />
           ) : (
-            // Hide history icon (chevron right to collapse)
             <MaterialSymbol icon="chevron_right" size={20} />
           )}
         </button>

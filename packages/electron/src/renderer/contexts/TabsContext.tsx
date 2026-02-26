@@ -8,6 +8,7 @@
 
 import React, { createContext, useContext, useRef, useCallback, useSyncExternalStore, useMemo } from 'react';
 import { getFileName } from '../utils/pathUtils';
+import { isCollabUri } from '../utils/collabUri';
 import { store as jotaiStore, editorDirtyAtom, makeEditorKey } from '@nimbalyst/runtime/store';
 
 export interface TabData {
@@ -162,8 +163,8 @@ export function TabsProvider({
     store.tabs.delete(tabId);
     store.tabOrder = store.tabOrder.filter(id => id !== tabId);
 
-    // Stop watching file
-    if (window.electronAPI && !tab.filePath.startsWith('virtual://')) {
+    // Stop watching file (skip virtual and collaborative documents)
+    if (window.electronAPI && !tab.filePath.startsWith('virtual://') && !isCollabUri(tab.filePath)) {
       window.electronAPI.invoke('stop-watching-file', tab.filePath).catch(() => {});
     }
 
@@ -218,8 +219,8 @@ export function TabsProvider({
       store.activeTabId = tabId;
     }
 
-    // Start watching file
-    if (window.electronAPI && !filePath.startsWith('virtual://')) {
+    // Start watching file (skip virtual and collaborative documents)
+    if (window.electronAPI && !filePath.startsWith('virtual://') && !isCollabUri(filePath)) {
       window.electronAPI.invoke('start-watching-file', filePath).catch(() => {});
     }
 
@@ -407,6 +408,10 @@ export function TabsProvider({
           const restoredOrder: string[] = [];
 
           for (const tabData of savedState.tabs) {
+            // Skip collab tabs -- they need fresh auth/crypto config
+            // that only exists in-memory from openCollabDocument()
+            if (isCollabUri(tabData.filePath)) continue;
+
             restoredTabs.set(tabData.id, {
               ...tabData,
               content: '',
@@ -430,10 +435,10 @@ export function TabsProvider({
             }));
           }
 
-          // Start watching all restored tabs
+          // Start watching all restored tabs (skip virtual and collaborative documents)
           if (window.electronAPI) {
             for (const tab of restoredTabs.values()) {
-              if (!tab.filePath.startsWith('virtual://')) {
+              if (!tab.filePath.startsWith('virtual://') && !isCollabUri(tab.filePath)) {
                 window.electronAPI.invoke('start-watching-file', tab.filePath).catch(() => {});
               }
             }
@@ -467,6 +472,8 @@ export function TabsProvider({
       const tabsArray = store.tabOrder
         .map(id => store.tabs.get(id))
         .filter((tab): tab is TabData => tab !== undefined)
+        // Skip collab tabs -- they can't be restored without crypto keys
+        .filter(tab => !isCollabUri(tab.filePath))
         .map(tab => ({
           id: tab.id,
           filePath: tab.filePath,

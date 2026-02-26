@@ -24,6 +24,16 @@ if (process.env.PLAYWRIGHT === '1') {
 // Expose build mode flags to renderer for dev mode indicators
 contextBridge.exposeInMainWorld('IS_OFFICIAL_BUILD', process.env.OFFICIAL_BUILD === 'true');
 contextBridge.exposeInMainWorld('IS_DEV_MODE', process.env.IS_DEV_MODE === 'true');
+contextBridge.exposeInMainWorld('DEV_MODE_LABEL', (() => {
+  const customDir = process.env.NIMBALYST_USER_DATA_DIR;
+  if (!customDir) return 'DEV MODE';
+  // Extract a short label from the directory name
+  // e.g. "electron-user2" -> "user2", "electron-wt-feature-collab" -> "wt-feature-collab"
+  // Note: can't use require('path') here -- preload runs in a sandboxed context
+  const dirName = customDir.split(/[/\\]/).pop() || '';
+  const label = dirName.replace(/^@?nimbalyst[-/]?/, '').replace(/^electron-?/, '');
+  return `DEV: ${label || 'alt'}`;
+})());
 
 // Capture console logs in development
 if (process.env.NODE_ENV !== 'production') {
@@ -301,6 +311,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   showInFinder: (filePath: string) => ipcRenderer.invoke('show-in-finder', filePath),
   moveFile: (sourcePath: string, targetPath: string) => ipcRenderer.invoke('move-file', sourcePath, targetPath),
   copyFile: (sourcePath: string, targetPath: string) => ipcRenderer.invoke('copy-file', sourcePath, targetPath),
+  copyToClipboard: (text: string) => ipcRenderer.invoke('copy-to-clipboard', text),
 
   // File change event listeners
   onFileRenamed: (callback: (data: { oldPath: string; newPath: string }) => void) => {
@@ -462,7 +473,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Aliases for consistency with component naming
   aiGetSettings: () => ipcRenderer.invoke('ai:getSettings'),
   aiSaveSettings: (settings: any) => ipcRenderer.invoke('ai:saveSettings', settings),
-  aiTestConnection: (provider: string) => ipcRenderer.invoke('ai:testConnection', provider),
+  aiTestConnection: (provider: string, workspacePath?: string) =>
+    ipcRenderer.invoke('ai:testConnection', provider, workspacePath),
   aiGetModels: () => ipcRenderer.invoke('ai:getModels'),
   aiGetAllModels: () => ipcRenderer.invoke('ai:getAllModels'),
   aiIsStandaloneBinaryAvailable: (): Promise<boolean> => ipcRenderer.invoke('ai:isStandaloneBinaryAvailable'),
@@ -636,6 +648,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('sessions:get-fts-index-status', workspaceId) as Promise<{ indexExists: boolean; messageCount: number; error?: string }>,
     buildFtsIndex: () =>
       ipcRenderer.invoke('sessions:build-fts-index') as Promise<{ success: boolean; error?: string }>,
+
+    // Transcript peek (lazy-loaded tail messages for preview)
+    getTailMessages: (sessionId: string, count?: number) =>
+      ipcRenderer.invoke('sessions:get-tail-messages', sessionId, count ?? 10) as Promise<any[]>,
   },
 
   // Workspace Manager
@@ -669,7 +685,112 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.on('document-service:documents-changed', handler);
       return () => ipcRenderer.removeListener('document-service:documents-changed', handler);
     },
-    loadVirtual: (virtualPath: string) => ipcRenderer.invoke('document-service:load-virtual', virtualPath)
+    loadVirtual: (virtualPath: string) => ipcRenderer.invoke('document-service:load-virtual', virtualPath),
+    createTrackerItem: (item: {
+      id: string;
+      type: string;
+      title: string;
+      status: string;
+      priority: string;
+      workspace: string;
+      description?: string;
+      owner?: string;
+      tags?: string[];
+      customFields?: Record<string, any>;
+      syncMode?: string;
+    }) => ipcRenderer.invoke('document-service:create-tracker-item', item) as Promise<{ success: boolean; item?: any; error?: string }>,
+    updateTrackerItem: (payload: {
+      itemId: string;
+      updates: Record<string, any>;
+      syncMode?: string;
+    }) => ipcRenderer.invoke('document-service:update-tracker-item', payload) as Promise<{ success: boolean; item?: any; error?: string }>,
+  },
+
+  // Tracker Sync
+  trackerSync: {
+    getStatus: () => ipcRenderer.invoke('tracker-sync:get-status') as Promise<{ status: string; projectId: string | null; active: boolean }>,
+    connect: (workspacePath: string) => ipcRenderer.invoke('tracker-sync:connect', { workspacePath }) as Promise<{ success: boolean; status?: string; projectId?: string; error?: string }>,
+    disconnect: () => ipcRenderer.invoke('tracker-sync:disconnect') as Promise<{ success: boolean }>,
+    upsertItem: (item: any) => ipcRenderer.invoke('tracker-sync:upsert-item', { item }) as Promise<{ success: boolean; error?: string }>,
+    deleteItem: (itemId: string) => ipcRenderer.invoke('tracker-sync:delete-item', { itemId }) as Promise<{ success: boolean; error?: string }>,
+    onStatusChanged: (callback: (status: string) => void) => {
+      const handler = (_event: any, status: string) => callback(status);
+      ipcRenderer.on('tracker-sync:status-changed', handler);
+      return () => ipcRenderer.removeListener('tracker-sync:status-changed', handler);
+    },
+    onItemUpserted: (callback: (data: { itemId: string; type: string; title: string; status: string }) => void) => {
+      const handler = (_event: any, data: any) => callback(data);
+      ipcRenderer.on('tracker-sync:item-upserted', handler);
+      return () => ipcRenderer.removeListener('tracker-sync:item-upserted', handler);
+    },
+    onItemDeleted: (callback: (data: { itemId: string }) => void) => {
+      const handler = (_event: any, data: any) => callback(data);
+      ipcRenderer.on('tracker-sync:item-deleted', handler);
+      return () => ipcRenderer.removeListener('tracker-sync:item-deleted', handler);
+    },
+  },
+
+  // Document Sync (collaborative editing)
+  documentSync: {
+    open: (workspacePath: string, documentId: string, title?: string) =>
+      ipcRenderer.invoke('document-sync:open', { workspacePath, documentId, title }) as Promise<{
+        success: boolean;
+        config?: {
+          orgId: string;
+          documentId: string;
+          title: string;
+          orgKeyBase64: string;
+          serverUrl: string;
+          userId: string;
+        };
+        error?: string;
+      }>,
+    getJwt: (orgId: string) =>
+      ipcRenderer.invoke('document-sync:get-jwt', { orgId }) as Promise<{
+        success: boolean;
+        jwt?: string;
+        error?: string;
+      }>,
+    resolveIndexConfig: (workspacePath: string) =>
+      ipcRenderer.invoke('document-sync:resolve-index-config', { workspacePath }) as Promise<{
+        success: boolean;
+        config?: {
+          orgId: string;
+          orgKeyBase64: string;
+          serverUrl: string;
+          userId: string;
+        };
+        error?: string;
+      }>,
+    // WebSocket proxy: create WebSocket connections in main process (Node.js)
+    // to work around Cloudflare blocking browser WebSocket upgrades
+    wsConnect: (url: string) =>
+      ipcRenderer.invoke('document-sync:ws-connect', { url }) as Promise<{
+        success: boolean;
+        wsId?: string;
+        error?: string;
+      }>,
+    wsSend: (wsId: string, data: string) =>
+      ipcRenderer.invoke('document-sync:ws-send', { wsId, data }) as Promise<{
+        success: boolean;
+        error?: string;
+      }>,
+    wsClose: (wsId: string) =>
+      ipcRenderer.invoke('document-sync:ws-close', { wsId }) as Promise<{
+        success: boolean;
+      }>,
+    onWsEvent: (callback: (data: {
+      wsId: string;
+      type: 'open' | 'message' | 'close' | 'error';
+      data?: string;
+      code?: number;
+      reason?: string;
+      error?: string;
+    }) => void) => {
+      const handler = (_event: any, data: any) => callback(data);
+      ipcRenderer.on('document-sync:ws-event', handler);
+      return () => ipcRenderer.removeListener('document-sync:ws-event', handler);
+    },
   },
 
   // Worktree operations
@@ -760,6 +881,33 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Dev only: switch between test and live Stytch environments
     switchEnvironment: (environment: 'development' | 'production') =>
       ipcRenderer.invoke('stytch:switch-environment', environment),
+  },
+
+  // Team Management (all member ops take explicit orgId -- per-workspace, not global)
+  team: {
+    list: () => ipcRenderer.invoke('team:list'),
+    findForWorkspace: (workspacePath: string) => ipcRenderer.invoke('team:find-for-workspace', workspacePath),
+    get: (orgId: string) => ipcRenderer.invoke('team:get', orgId),
+    create: (name: string, workspacePath?: string) => ipcRenderer.invoke('team:create', name, workspacePath),
+    acceptInvite: (orgId: string) => ipcRenderer.invoke('team:accept-invite', orgId),
+    listMembers: (orgId: string) => ipcRenderer.invoke('team:list-members', orgId),
+    invite: (orgId: string, email: string) => ipcRenderer.invoke('team:invite', orgId, email),
+    removeMember: (orgId: string, memberId: string) => ipcRenderer.invoke('team:remove-member', orgId, memberId),
+    deleteTeam: (orgId: string) => ipcRenderer.invoke('team:delete', orgId),
+    updateRole: (orgId: string, memberId: string, role: string) => ipcRenderer.invoke('team:update-role', orgId, memberId, role),
+    getGitRemote: (workspacePath: string) => ipcRenderer.invoke('team:get-git-remote', workspacePath),
+    ensureOrgKey: (orgId: string) => ipcRenderer.invoke('team:ensure-org-key', orgId),
+    getOrgKeyStatus: (orgId: string) => ipcRenderer.invoke('team:get-org-key-status', orgId),
+    listKeyEnvelopes: (orgId: string) => ipcRenderer.invoke('team:list-key-envelopes', orgId),
+    setProjectIdentity: (orgId: string, workspacePath: string) => ipcRenderer.invoke('team:set-project-identity', orgId, workspacePath),
+    clearProjectIdentity: (orgId: string) => ipcRenderer.invoke('team:clear-project-identity', orgId),
+    ensureWorkspaceKey: (workspacePath: string) => ipcRenderer.invoke('team:ensure-workspace-key', workspacePath),
+    getMemberFingerprint: (orgId: string, memberId: string) => ipcRenderer.invoke('team:get-member-fingerprint', orgId, memberId),
+    getMyFingerprint: (orgId: string) => ipcRenderer.invoke('team:get-my-fingerprint', orgId),
+    verifyMember: (orgId: string, memberId: string, fingerprint: string) => ipcRenderer.invoke('team:verify-member', orgId, memberId, fingerprint),
+    revokeMemberTrust: (orgId: string, memberId: string) => ipcRenderer.invoke('team:revoke-member-trust', orgId, memberId),
+    reshareKey: (orgId: string, memberId: string) => ipcRenderer.invoke('team:reshare-key', orgId, memberId),
+    refreshMyKey: (orgId: string) => ipcRenderer.invoke('team:refresh-my-key', orgId),
   },
 
   // Extensions API

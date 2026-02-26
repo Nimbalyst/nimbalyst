@@ -4,7 +4,7 @@
  * Shared utilities for Monaco editor integration.
  */
 
-import type { ConfigTheme } from 'rexical';
+import type { ConfigTheme } from '../editor';
 
 /**
  * Map of extension theme IDs to their Monaco theme names.

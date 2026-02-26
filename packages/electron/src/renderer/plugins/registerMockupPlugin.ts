@@ -13,7 +13,7 @@ import {
   MOCKUP_TRANSFORMER,
   INSERT_MOCKUP_COMMAND,
 } from '@nimbalyst/runtime';
-import { pluginRegistry, type PluginPackage } from 'rexical';
+import { pluginRegistry, type PluginPackage } from '@nimbalyst/runtime';
 import { MockupPlatformServiceImpl } from '../services/MockupPlatformServiceImpl';
 import { showMockupPickerMenu } from '../components/MockupPickerMenu';
 

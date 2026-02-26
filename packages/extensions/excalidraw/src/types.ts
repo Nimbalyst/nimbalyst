@@ -1,4 +1,5 @@
-import type { ExcalidrawElement, AppState, BinaryFiles, ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types/types';
+import type { ExcalidrawElement } from '@excalidraw/excalidraw/types/element/types';
+import type { AppState, BinaryFiles, ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types/types';
 
 /**
  * Excalidraw file format

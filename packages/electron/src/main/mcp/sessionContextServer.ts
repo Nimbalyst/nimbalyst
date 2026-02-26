@@ -4,7 +4,6 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
-  isInitializeRequest,
   ErrorCode,
   McpError,
 } from "@modelcontextprotocol/sdk/types.js";
@@ -241,6 +240,18 @@ function formatDate(timestamp: number): string {
   });
 }
 
+/**
+ * Strip workspace path prefix from file paths to save context window space.
+ * "/Users/ghinkle/sources/stravu-editor/packages/foo.ts" -> "packages/foo.ts"
+ */
+function stripWorkspacePath(filePath: string, workspacePath: string): string {
+  if (workspacePath && filePath.startsWith(workspacePath)) {
+    const relative = filePath.slice(workspacePath.length);
+    return relative.startsWith("/") ? relative.slice(1) : relative;
+  }
+  return filePath;
+}
+
 // ─── Tool handlers ──────────────────────────────────────────────────
 
 async function handleGetSessionSummary(
@@ -268,14 +279,14 @@ async function handleGetSessionSummary(
       sessionId,
       "edited"
     );
-    editedFiles = fileLinks.map((f) => f.filePath);
+    editedFiles = fileLinks.map((f: any) => f.filePath);
   } catch {
     // File tracking might not be available for all sessions
   }
 
   const lines: string[] = [];
   lines.push(
-    `Session: "${session.title || "Untitled"}" (${sessionId.substring(0, 8)})`
+    `Session: "${session.title || "Untitled"}" (${sessionId})`
   );
   lines.push(
     `Provider: ${session.provider}${session.model ? ` | Model: ${session.model}` : ""}`
@@ -289,6 +300,16 @@ async function handleGetSessionSummary(
     if (parent) {
       lines.push(`Workstream: "${parent.title || "Untitled"}"`);
     }
+  }
+
+  const metadata = session.metadata as Record<string, unknown> | undefined;
+  const phase = metadata?.phase as string | undefined;
+  const tags = metadata?.tags as string[] | undefined;
+  if (phase) {
+    lines.push(`Phase: ${phase}`);
+  }
+  if (tags && tags.length > 0) {
+    lines.push(`Tags: ${tags.map(t => `#${t}`).join(", ")}`);
   }
 
   lines.push("");
@@ -315,7 +336,7 @@ async function handleGetSessionSummary(
     lines.push("");
     lines.push(`Files edited (${editedFiles.length}):`);
     for (const file of editedFiles) {
-      lines.push(`- ${file}`);
+      lines.push(`- ${stripWorkspacePath(file, workspaceId)}`);
     }
   }
 
@@ -355,7 +376,7 @@ async function handleGetWorkstreamOverview(
   );
 
   if (rows.length === 0) {
-    return `Workstream: "${parent.title || "Untitled"}" (${parentId.substring(0, 8)})\nNo child sessions found.`;
+    return `Workstream: "${parent.title || "Untitled"}" (${parentId})\nNo child sessions found.`;
   }
 
   const childIds = rows.map((r: any) => r.id);
@@ -389,7 +410,7 @@ async function handleGetWorkstreamOverview(
 
   const lines: string[] = [];
   lines.push(
-    `Workstream: "${parent.title || "Untitled"}" (${parentId.substring(0, 8)})`
+    `Workstream: "${parent.title || "Untitled"}" (${parentId})`
   );
   lines.push(`Sessions (${rows.length}):`);
   lines.push("");
@@ -405,11 +426,11 @@ async function handleGetWorkstreamOverview(
     const isCurrentSession = row.id === currentSessionId;
 
     lines.push(
-      `${i + 1}. "${row.title || "Untitled"}" (${row.id.substring(0, 8)}) - ${msgCount} messages, last active ${formatRelativeTime(updatedAt)}${isCurrentSession ? " [CURRENT]" : ""}`
+      `${i + 1}. "${row.title || "Untitled"}" (${row.id}) - ${msgCount} messages, last active ${formatRelativeTime(updatedAt)}${isCurrentSession ? " [CURRENT]" : ""}`
     );
 
     if (sessionFiles.length > 0) {
-      const shown = sessionFiles.slice(0, 3);
+      const shown = sessionFiles.slice(0, 3).map(f => stripWorkspacePath(f, workspaceId));
       const more = sessionFiles.length - shown.length;
       lines.push(
         `   Files: ${shown.join(", ")}${more > 0 ? ` (+${more} more)` : ""}`
@@ -428,7 +449,7 @@ async function handleGetWorkstreamOverview(
       `All files edited across workstream (${allUniqueFiles.size} unique):`
     );
     for (const file of allUniqueFiles) {
-      lines.push(`- ${file}`);
+      lines.push(`- ${stripWorkspacePath(file, workspaceId)}`);
     }
   }
 
@@ -438,6 +459,7 @@ async function handleGetWorkstreamOverview(
 async function handleListRecentSessions(
   query: string | undefined,
   limit: number,
+  offset: number,
   workspaceId: string,
   currentSessionId: string
 ): Promise<string> {
@@ -452,7 +474,7 @@ async function handleListRecentSessions(
   const leafSessions = sessions.filter(
     (s) => s.sessionType !== "workstream"
   );
-  const limited = leafSessions.slice(0, limit);
+  const limited = leafSessions.slice(offset, offset + limit);
 
   if (limited.length === 0) {
     return query
@@ -481,18 +503,29 @@ async function handleListRecentSessions(
     }
   }
 
+  // list() and search() return messageCount: 0 for performance, so fetch actual counts
+  const sessionIds = limited.map((s) => s.id);
+  let messageCounts = new Map<string, number>();
+  try {
+    messageCounts = await AgentMessagesRepository.getMessageCounts(sessionIds);
+  } catch {
+    // Fall back to empty counts
+  }
+
   const lines: string[] = [];
   const totalLabel = query ? `matching "${query}"` : "total";
+  const offsetLabel = offset > 0 ? `, offset ${offset}` : "";
   lines.push(
-    `Recent sessions (showing ${limited.length} of ${leafSessions.length} ${totalLabel}):`
+    `Recent sessions (showing ${limited.length} of ${leafSessions.length} ${totalLabel}${offsetLabel}):`
   );
   lines.push("");
 
   for (let i = 0; i < limited.length; i++) {
     const s = limited[i];
     const isCurrentSession = s.id === currentSessionId;
+    const msgCount = messageCounts.get(s.id) || 0;
 
-    let line = `${i + 1}. "${s.title}" (${s.id.substring(0, 8)}) - ${formatRelativeTime(s.updatedAt)}, ${s.messageCount} messages`;
+    let line = `${i + 1}. "${s.title}" (${s.id}) - ${formatRelativeTime(s.updatedAt)}, ${msgCount} messages`;
     if (isCurrentSession) {
       line += " [CURRENT]";
     }
@@ -508,6 +541,12 @@ async function handleListRecentSessions(
       if (parentTitle) {
         meta.push(`Workstream: "${parentTitle}"`);
       }
+    }
+    if (s.phase) {
+      meta.push(`Phase: ${s.phase}`);
+    }
+    if (s.tags && s.tags.length > 0) {
+      meta.push(`Tags: ${s.tags.map(t => `#${t}`).join(", ")}`);
     }
     lines.push(`   ${meta.join(" | ")}`);
   }
@@ -534,7 +573,7 @@ async function handleGetWorkstreamEditedFiles(
     if (files.length === 0) {
       return "No files have been edited in this session. This session is not part of a workstream.";
     }
-    return `This session is not part of a workstream. Files edited in current session (${files.length}):\n${files.map((f) => `- ${f.filePath}`).join("\n")}`;
+    return `This session is not part of a workstream. Files edited in current session (${files.length}):\n${files.map((f) => `- ${stripWorkspacePath(f.filePath, workspaceId)}`).join("\n")}`;
   }
 
   const { database } = await import("../database/PGLiteDatabaseWorker");
@@ -578,9 +617,9 @@ async function handleGetWorkstreamEditedFiles(
 
     for (const [sessionId, files] of grouped) {
       const title = titleMap.get(sessionId) || "Untitled";
-      lines.push(`Session: "${title}" (${sessionId.substring(0, 8)})`);
+      lines.push(`Session: "${title}" (${sessionId})`);
       for (const file of files) {
-        lines.push(`- ${file}`);
+        lines.push(`- ${stripWorkspacePath(file, workspaceId)}`);
       }
       lines.push("");
     }
@@ -596,7 +635,7 @@ async function handleGetWorkstreamEditedFiles(
       `Files edited across workstream (${allLinks.length} total, ${uniqueFiles.size} unique):`
     );
     for (const file of uniqueFiles) {
-      lines.push(`- ${file}`);
+      lines.push(`- ${stripWorkspacePath(file, workspaceId)}`);
     }
     return lines.join("\n");
   }
@@ -670,7 +709,12 @@ function createSessionContextMcpServer(
               limit: {
                 type: "number",
                 description:
-                  "Maximum number of results (default 10, max 25).",
+                  "Maximum number of results (default 10, max 250).",
+              },
+              offset: {
+                type: "number",
+                description:
+                  "Number of sessions to skip before returning results (default 0). Use with limit for pagination.",
               },
             },
             required: [],
@@ -690,6 +734,41 @@ function createSessionContextMcpServer(
               },
             },
             required: [],
+          },
+        },
+        {
+          name: "update_session_board",
+          description:
+            "Update a session's kanban board metadata (phase and/or tags). Phase controls which column the session appears in on the Sessions Board. Tags are free-form strings for categorization. Either field can be provided independently.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              sessionId: {
+                type: "string",
+                description:
+                  "ID of the session to update. Use list_recent_sessions to find session IDs.",
+              },
+              phase: {
+                type: ["string", "null"],
+                enum: [
+                  "backlog",
+                  "planning",
+                  "implementing",
+                  "validating",
+                  "complete",
+                  null,
+                ],
+                description:
+                  "The phase to set. Use null to remove the session from the board. Omit to leave unchanged.",
+              },
+              tags: {
+                type: "array",
+                items: { type: "string" },
+                description:
+                  "Array of tag strings. Pass an empty array to clear tags. Omit to leave unchanged.",
+              },
+            },
+            required: ["sessionId"],
           },
         },
       ],
@@ -732,11 +811,13 @@ function createSessionContextMcpServer(
         case "list_recent_sessions": {
           const limit = Math.min(
             Math.max((args?.limit as number) || 10, 1),
-            25
+            250
           );
+          const offset = Math.max((args?.offset as number) || 0, 0);
           const result = await handleListRecentSessions(
             args?.query as string | undefined,
             limit,
+            offset,
             workspaceId,
             aiSessionId
           );
@@ -755,6 +836,76 @@ function createSessionContextMcpServer(
           return {
             content: [{ type: "text", text: result }],
             isError: result.startsWith("Error:"),
+          };
+        }
+
+        case "update_session_board": {
+          const sessionId = args?.sessionId as string;
+          const phase = args?.phase as string | null | undefined;
+          const tags = args?.tags as string[] | undefined;
+
+          if (!sessionId) {
+            return {
+              content: [{ type: "text", text: "Error: sessionId is required" }],
+              isError: true,
+            };
+          }
+
+          if (phase === undefined && tags === undefined) {
+            return {
+              content: [{ type: "text", text: "Error: at least one of phase or tags must be provided" }],
+              isError: true,
+            };
+          }
+
+          const validPhases = ["backlog", "planning", "implementing", "validating", "complete"];
+          if (phase !== undefined && phase !== null && !validPhases.includes(phase)) {
+            return {
+              content: [{ type: "text", text: `Error: Invalid phase "${phase}". Valid phases: ${validPhases.join(", ")}` }],
+              isError: true,
+            };
+          }
+
+          if (tags !== undefined && !Array.isArray(tags)) {
+            return {
+              content: [{ type: "text", text: "Error: tags must be an array of strings" }],
+              isError: true,
+            };
+          }
+
+          // Build metadata update with only provided fields
+          const metadataUpdate: Record<string, unknown> = {};
+          if (phase !== undefined) metadataUpdate.phase = phase ?? undefined;
+          if (tags !== undefined) metadataUpdate.tags = tags;
+
+          await AISessionsRepository.updateMetadata(sessionId, {
+            metadata: metadataUpdate,
+          });
+
+          // Notify renderer windows so kanban board updates in real time
+          const rendererUpdate: Record<string, unknown> = {};
+          if (phase !== undefined) rendererUpdate.phase = phase;
+          if (tags !== undefined) rendererUpdate.tags = tags;
+
+          const { BrowserWindow } = await import("electron");
+          BrowserWindow.getAllWindows().forEach((window) => {
+            if (!window.isDestroyed()) {
+              window.webContents.send("sessions:session-updated", sessionId, rendererUpdate);
+            }
+          });
+
+          const session = await AISessionsRepository.get(sessionId);
+          const title = session?.title || sessionId;
+          const parts: string[] = [];
+          if (phase !== undefined) {
+            parts.push(phase ? `phase="${phase}"` : "removed from board");
+          }
+          if (tags !== undefined) {
+            parts.push(tags.length > 0 ? `tags=[${tags.join(", ")}]` : "tags cleared");
+          }
+          return {
+            content: [{ type: "text", text: `Updated "${title}": ${parts.join(", ")}` }],
+            isError: false,
           };
         }
 
@@ -806,11 +957,15 @@ async function readJsonBody(
   }
 }
 
+function isInitializeMessage(value: unknown): boolean {
+  return typeof value === 'object' && value !== null && 'method' in value && (value as Record<string, unknown>).method === 'initialize';
+}
+
 function isInitializePayload(payload: unknown): boolean {
   if (!payload) return false;
   if (Array.isArray(payload))
-    return payload.some((entry) => isInitializeRequest(entry));
-  return isInitializeRequest(payload);
+    return payload.some((entry) => isInitializeMessage(entry));
+  return isInitializeMessage(payload);
 }
 
 async function tryCreateSessionContextServer(port: number): Promise<any> {

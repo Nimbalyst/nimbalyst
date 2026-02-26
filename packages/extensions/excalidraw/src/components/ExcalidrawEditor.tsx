@@ -6,7 +6,8 @@
 
 import { useEffect, useRef, useCallback, useState, forwardRef } from 'react';
 import { Excalidraw } from '@excalidraw/excalidraw';
-import type { ExcalidrawImperativeAPI, ExcalidrawElement, AppState, BinaryFiles } from '@excalidraw/excalidraw/types/types';
+import type { ExcalidrawElement } from '@excalidraw/excalidraw/types/element/types';
+import type { ExcalidrawImperativeAPI, AppState, BinaryFiles } from '@excalidraw/excalidraw/types/types';
 import type { EditorHostProps } from '@nimbalyst/runtime';
 import type { ExcalidrawFile } from '../types';
 import { registerEditor, unregisterEditor } from '../editorRegistry';
@@ -165,7 +166,7 @@ export const ExcalidrawEditor = forwardRef<any, EditorHostProps>(function Excali
           try {
             api.updateScene({
               elements,
-              appState: data.appState,
+              appState: data.appState as any,
             });
           } finally {
             // Reset after a microtask to ensure onChange has fired

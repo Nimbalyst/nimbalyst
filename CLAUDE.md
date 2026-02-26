@@ -2,6 +2,19 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## CRITICAL: No Dynamic Imports in Electron Main Process
+
+**NEVER convert static imports to dynamic `await import()` unless absolutely necessary** (confirmed circular reference) AND the user has approved it.
+
+Dynamic imports in the Electron main process cause `__ELECTRON_LOG__` double-registration crashes and other side-effect timing issues. All MCP servers and services in `index.ts` use **static top-level imports** - follow this pattern.
+
+- `httpServer`, `SessionNamingService`, `sessionContextServer` - all use static top-level imports
+- Dynamic `await import('./mcp/sessionContextServer')` caused server startup failure - fixed by switching to static import
+
+## CRITICAL: CollabV3 Data Isolation -- DOs for Customer Data, D1 for Entity Management Only
+
+**Never store customer, org, or team-sensitive data in the D1 shared database.** D1 is a multi-tenant SQL database where every Worker request can query any row. Customer data (team metadata, member roles, key envelopes, tracker items, documents, sessions) must live in Durable Objects where each entity gets its own isolated SQLite instance. D1 is only for cross-entity management lookups (e.g., git remote hash -> org ID mapping). See `packages/collabv3/CLAUDE.md` for the full policy.
+
 ## CRITICAL: Database Access Rules
 
 **NEVER directly open or query the PGLite database files using Node.js or command-line tools.**
@@ -22,7 +35,7 @@ The MCP tool safely queries the database through the running Nimbalyst process, 
 
 Nimbalyst is an extensible, AI-native workspace that supports multiple editor types through a unified extension system. While it originated as a Lexical-based markdown editor, the architecture is evolving toward a fully pluggable model where **all editors** - including the core Lexical editor, Monaco code editor, spreadsheets, diagrams, and custom visual editors - are provided through extensions.
 
-This is a monorepo containing multiple packages including the Electron desktop app, the core editor (Rexical), runtime services, extension SDK, native iOS app, and mobile support via Capacitor (for Android).
+This is a monorepo containing multiple packages including the Electron desktop app, runtime services (including the Lexical-based editor), extension SDK, native iOS app, and mobile support via Capacitor (for Android).
 
 ## Extension Architecture
 
@@ -41,10 +54,8 @@ See [EXTENSION_ARCHITECTURE.md](./docs/EXTENSION_ARCHITECTURE.md) for the Editor
 ```
 packages/
   electron/       # Desktop app (Electron)
-  rexical/        # Lexical-based editor
-  runtime/        # Cross-platform runtime services (AI, sync)
+  runtime/        # Cross-platform runtime services (AI, sync, Lexical editor)
   ios/            # Native iOS app (SwiftUI)
-  capacitor/      # Mobile web app (Capacitor, for Android) - NOT in active development
   core/           # Shared utilities
   collabv3/       # Collaboration server
   extension-sdk/  # Extension development kit
@@ -60,10 +71,8 @@ packages/
 ### Package-Specific Documentation
 For detailed information about specific packages, see their CLAUDE.md files:
 - `/packages/electron/CLAUDE.md` - Electron desktop app specifics
-- `/packages/runtime/CLAUDE.md` - AI providers and runtime services
-- `/packages/rexical/CLAUDE.md` - Lexical editor architecture
+- `/packages/runtime/CLAUDE.md` - AI providers, runtime services, and Lexical editor
 - `/packages/ios/CLAUDE.md` - Native iOS app (SwiftUI)
-- `/packages/capacitor/CLAUDE.md` - Capacitor mobile app (Android) - not in active development
 - `/packages/collabv3/CLAUDE.md` - Sync server (Cloudflare Workers)
 
 ## Development Commands
@@ -79,9 +88,33 @@ For detailed information about specific packages, see their CLAUDE.md files:
 - **Test UI**: `npm run test:unit:ui`
 - **E2E tests**: See [E2E_TESTING.md](./docs/E2E_TESTING.md) for comprehensive documentation
 
+### Marketing Screenshots & Videos
+- **Capture all**: `cd packages/electron && npm run marketing:screenshots`
+- **Capture by category**: `cd packages/electron && npm run marketing:screenshots:grep -- "hero-"` (also: `editor-`, `ai-`, `settings-`, `feature-`, `video-`)
+- **Requires dev server running** on port 5273 (`cd packages/electron && npm run dev`)
+- **Output**: `packages/electron/marketing/screenshots/{dark,light}/` (1440x900 PNG) and `packages/electron/marketing/videos/{dark,light}/` (WebM)
+- **Post-process videos**: `bash packages/electron/marketing/process-videos.sh` (converts WebM to MP4/GIF via ffmpeg)
+- See [MARKETING_SCREENSHOTS.md](./docs/MARKETING_SCREENSHOTS.md) for architecture, output inventory, and how to add new screenshots
+
+### Running Multiple Dev Instances
+
+For testing collaborative features (teams, sync, etc.), you can run multiple isolated Electron instances simultaneously. Each instance needs its own **userData directory** (settings, database, credentials) and **Vite port** to avoid conflicts.
+
+**Second instance on same checkout:**
+```bash
+cd packages/electron && npm run dev:user2
+```
+This uses `NIMBALYST_USER_DATA_DIR` for an isolated userData dir, `VITE_PORT=5274`, and `--outDir=out2` to prevent electron-vite file watcher cross-talk between instances.
+
+**Worktree instance** (via `crystal-run.sh`):
+Worktrees already have separate source/build trees, so no `--outDir` is needed. When `WORKTREE_MODE=true`, `crystal-run.sh` automatically derives a per-worktree userData dir (`electron-wt-<name>`).
+
+**Why separate outDir matters:** Without it, two `electron-vite dev` processes sharing the same `out/main/index.js` cause the file watcher on one instance to restart the other on rebuild. Module-level singletons (like the `electron-store` instances) from one process bleed into the other, cross-pollinating settings, theme, and workspace state.
+
+**Path resolution:** `getPreloadPath()` and `getPackageRoot()` in `src/main/utils/appPaths.ts` correctly resolve preload scripts and worker bundles regardless of which outDir is in use. All window files use these helpers -- do not inline path resolution logic.
+
 ### Other Packages
 - **iOS (native)**: `npm run ios:test:swift`, `npm run ios:build:transcript`
-- **Capacitor (Android)** *(not in active development - focused on native iOS app)*: `npm run cap:dev`, `npm run cap:android`
 - **Collaboration server**: `npm run collabv2:dev`, `npm run collabv2:deploy`
 
 ## Releases

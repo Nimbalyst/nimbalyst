@@ -2,17 +2,20 @@
 planStatus:
   planId: plan-automations-extension-system
   title: Automations Extension System
-  status: draft
+  status: in-progress
   planType: feature
   priority: medium
   owner: ghinkle
   stakeholders: []
-  tags: [extensions, automation, scheduling, ai]
+  tags:
+    - extensions
+    - automation
+    - scheduling
+    - ai
   created: "2026-02-20"
-  updated: "2026-02-20T00:00:00.000Z"
-  progress: 0
+  updated: "2026-02-21T00:00:00.000Z"
+  progress: 80
 ---
-
 # Automations Extension System
 
 ## Overview
@@ -60,7 +63,7 @@ Summarize in a brief, conversational format suitable for a standup meeting.
 ### Schedule Types
 
 | Type | Fields | Description |
-|------|--------|-------------|
+| --- | --- | --- |
 | `interval` | `intervalMinutes` | Run every N minutes while Nimbalyst is open |
 | `daily` | `time` | Run once daily at the specified time |
 | `weekly` | `days`, `time` | Run on specific days at the specified time |
@@ -68,7 +71,7 @@ Summarize in a brief, conversational format suitable for a standup meeting.
 ### Output Modes
 
 | Mode | Behavior |
-|------|----------|
+| --- | --- |
 | `new-file` | Creates a new file for each run using `fileNameTemplate` |
 | `append` | Appends to a single output file (with date headers) |
 | `replace` | Overwrites a single output file each run |
@@ -117,7 +120,7 @@ packages/extensions/automations/
 ### How Extension Capabilities Map to Requirements
 
 | Requirement | Extension Capability |
-|-------------|---------------------|
+| --- | --- |
 | Document header UI | `contributions.documentHeaders` + exported component |
 | Schedule management | `activate()` hook sets up `setTimeout` chains |
 | File discovery | `services.filesystem.findFiles('nimbalyst-local/automations/*.md')` |
@@ -213,50 +216,24 @@ export async function activate(context: ExtensionContext) {
 }
 ```
 
-**`AutomationScheduler`:**
+**`AutomationScheduler`****:**
 - On `initialize()`: calls `services.filesystem.findFiles('nimbalyst-local/automations/*.md')`, parses frontmatter, sets up `setTimeout` for each enabled automation
 - Uses `setTimeout` chains (not `setInterval`) - after each run, calculates next run time
 - On `rescan()`: re-reads automation files, adds/removes/updates timers for changed schedules
 - On timer fire: reads the automation file, extracts the markdown body, triggers execution
 
-### 3. AI Session Execution
+### 3. AI Session Execution -- IMPLEMENTED
 
-**This is the gap in the current extension SDK.** Extensions can register AI tools (Claude calls the extension), but cannot currently *create* AI sessions (the extension calls the AI). We need one of these approaches:
+**Implemented via Option A: \****`services.ai.sendPrompt()`**\*\* API.**
 
-**Option A: New `services.ai.sendPrompt()` API (recommended)**
+The extension SDK now provides `services.ai.sendPrompt()` for extensions with `permissions.ai: true`. The call chain:
 
-Add a new method to `ExtensionAIService`:
+1. Extension calls `context.services.ai.sendPrompt({ prompt, sessionName, provider, model })`
+2. ExtensionLoader calls `electronAPI.invoke('extensions:ai-send-prompt', options)`
+3. Main process handler in `AIService.ts` creates a session via `sessionManager.createSession()`, sets the title, notifies the renderer to refresh the session list, then calls `sendMessageHandler()` to execute the prompt
+4. Returns `{ sessionId, response }` when the session completes
 
-```typescript
-interface ExtensionAIService {
-  // Existing
-  registerTool(tool: ExtensionAITool): Disposable;
-  registerContextProvider(provider: ExtensionContextProvider): Disposable;
-
-  // NEW: Create and send a prompt to an AI session
-  sendPrompt(options: {
-    prompt: string;
-    sessionName?: string;
-    sessionType?: string;       // 'automation'
-    provider?: 'claude-code' | 'claude';
-  }): Promise<{
-    sessionId: string;
-    response: string;
-  }>;
-}
-```
-
-This would be backed by an IPC handler that calls `AIService.processQueuedPrompt()` in the main process. The extension SDK surface stays clean, and the extension doesn't need to know about the internal session/queued-prompt machinery.
-
-**Option B: Use Claude Plugin commands**
-
-The extension's `claudePlugin` contribution provides `/automation` as a Claude Code command. When an automation fires, the scheduler could use `services.ai.sendPrompt()` (same as Option A) but with the prompt wrapped in the context of the automation command. This provides the AI with structured instructions about output format and location.
-
-**Option C: IPC passthrough**
-
-Add a generic `services.ipc.invoke(channel, ...args)` to the extension SDK. More flexible but less safe - would need allowlisting of channels.
-
-**Recommendation: Option A.** It's the smallest, most purposeful API addition. The implementation on the main process side can use the existing `processQueuedPrompt()` pattern.
+The handler resolves the workspace path via `BrowserWindow.fromWebContents(event.sender)` -> `getWindowId()` -> `windowStates.get()`, which is the correct lookup pattern (not `event.sender.id` directly).
 
 ### 4. Document Header: `AutomationDocumentHeader`
 
@@ -289,38 +266,50 @@ Option 2+3 are the most ergonomic. The `newFileMenu` entry is still useful as a 
 
 ## Implementation Plan
 
-### Phase 1: Extension Scaffold + Document Header
+### Phase 1: Extension Scaffold + Document Header -- DONE
 
 1. **Scaffold the extension** - `manifest.json`, `src/index.ts`, build config
-2. **Define types** - `AutomationStatus`, `AutomationSchedule`, `AutomationOutput` in `src/frontmatter/types.ts`
+2. **~~Define types~~**~~ - \~~~~`AutomationStatus`~~\~\~, \~~~~`AutomationSchedule`~~\~\~, \~~~~`AutomationOutput`~~\~\~ in \~~~~`src/frontmatter/types.ts`~~
 3. **Build frontmatter parser** - Parse `automationStatus` from markdown, update it back
-4. **Build `AutomationDocumentHeader`** - React component with schedule controls, toggle, status display
+4. **Build \****`AutomationDocumentHeader`** - React component with schedule controls, toggle, status display
 5. **Register via manifest** - `documentHeaders` contribution with `filePatterns`
 6. **Build and install** - Verify the header renders when opening an automation file
 
-### Phase 2: Scheduler
+### Phase 2: Scheduler -- DONE
 
-7. **Build `AutomationScheduler`** - Discovery, timer management, rescan
-8. **Implement `scheduleUtils.ts`** - Next-run calculation for interval/daily/weekly
-9. **Wire up `activate()`** - Initialize scheduler on extension load
+7. **Build \****`AutomationScheduler`** - Discovery, timer management, rescan
+8. **Implement \****`scheduleUtils.ts`** - Next-run calculation for interval/daily/weekly
+9. **Wire up \****`activate()`** - Initialize scheduler on extension load
 10. **Add "Run Now" from header** - Connect header button to scheduler
 
-### Phase 3: Execution + New SDK Capability
+### Phase 3: Execution + New SDK Capability -- DONE
 
-11. **Add `services.ai.sendPrompt()` to extension SDK** - Type definitions
-12. **Implement IPC handler** - `automation:send-prompt` backed by `AIService.processQueuedPrompt()`
-13. **Wire into ExtensionLoader** - Provide the new API to extensions that have `permissions.ai`
-14. **Build `OutputWriter`** - new-file, append, replace modes using `services.filesystem.writeFile`
+11. **\~\~Add \~\~****~~`services.ai.sendPrompt()`~~****~~ to extension SDK~~**~~ - Type definitions in \~~~~`extension-sdk`~~\~\~ and \~~~~`runtime`~~\~\~ packages~~
+12. **~~Implement IPC handler~~**~~ - \~~~~`extensions:ai-send-prompt`~~\~\~ in \~~~~`AIService.ts`~~\~\~, uses \~~~~`sessionManager.createSession()`~~\~\~ + \~~~~`sendMessageHandler()`~~
+13. **~~Wire into ExtensionLoader~~**~~ - \~~~~`services.ai.sendPrompt()`~~\~\~ calls \~~~~`electronAPI.invoke('extensions:ai-send-prompt')`~~
+14. **Build \****`OutputWriter`** - new-file, append, replace modes using `services.filesystem.writeFile`
 15. **Connect scheduler to AI** - On timer fire, read prompt, call `sendPrompt()`, write output
-16. **Update frontmatter after run** - `lastRun`, `nextRun`, `runCount`, `lastRunStatus`
+16. **~~Update frontmatter after run~~**~~ - \~~~~`lastRun`~~\~\~, \~~~~`nextRun`~~\~\~, \~~~~`runCount`~~\~\~, \~~~~`lastRunStatus`~~
 
-### Phase 4: AI Tools + Commands
+**Bugs fixed during implementation:**
+- `extensions:ai-send-prompt` handler used `windowStates.get(event.sender.id)` which is a webContents ID, not a window ID. Fixed to use `BrowserWindow.fromWebContents()` -> `getWindowId()` -> `windowStates.get()`.
+- `ExtensionLoader.findFiles()` searched the extensions directory instead of the workspace directory. Fixed to resolve workspace path via `electronAPI.getInitialState()`.
+- All extension filesystem methods (`readFile`, `writeFile`, `fileExists`) now resolve relative paths against the workspace directory.
+- Added `sessions:refresh-list` notification after session creation so automation sessions appear in session history.
+- Extension used `material-symbols-rounded` CSS class but host only loads `material-symbols-outlined`. Fixed.
+
+### Phase 4: AI Tools + Commands -- DONE (partial)
 
 17. **Build AI tools** - `automations.list`, `automations.run`, `automations.create`
 18. **Build Claude plugin** - `/automation` command for creating/managing automations
-19. **Build settings panel** - Global automation settings (missed run policy, default provider)
+19. **Build settings panel** - Global automation settings (missed run policy, default provider) -- NOT YET
 
-### Phase 5: Polish
+### Phase 4.5: Document Header Enhancements -- DONE
+
+- **~~Outputs dropdown~~**~~ - Dropdown button in header listing output files, click to open~~
+- **~~Model selector~~**~~ - Dropdown to choose AI provider/model per automation~~
+
+### Phase 5: Polish -- NOT YET
 
 20. **Run notifications** - Toast when automations complete via `services.ui.showInfo()`
 21. **Run history** - Track last N runs in extension storage
@@ -365,9 +354,14 @@ The `ExtensionDocumentHeaderBridge` currently matches by **file path pattern** (
 
 An alternative would be enhancing the bridge to support content-based matching (like the built-in `TrackerDocumentHeader` does), but the path-based approach is simpler and sufficient for now since automations have a dedicated directory.
 
-## New SDK Capability: `services.ai.sendPrompt()`
+## New SDK Capability: `services.ai.sendPrompt()` -- IMPLEMENTED
 
 ### Extension SDK Side
+
+Implemented in:
+- `packages/extension-sdk/src/types/extension.ts` - Type definitions
+- `packages/runtime/src/extensions/types.ts` - Type definitions
+- `packages/runtime/src/extensions/ExtensionLoader.ts` - Renderer-side wiring
 
 ```typescript
 // In ExtensionAIService
@@ -376,47 +370,24 @@ interface ExtensionAIService {
   registerContextProvider(provider: ExtensionContextProvider): Disposable;
 
   /** Create an AI session and send a prompt. Returns when the session completes. */
-  sendPrompt(options: SendPromptOptions): Promise<SendPromptResult>;
-}
-
-interface SendPromptOptions {
-  /** The prompt text to send */
-  prompt: string;
-  /** Session display name (default: "Extension: {extensionName}") */
-  sessionName?: string;
-  /** Provider to use (default: 'claude-code') */
-  provider?: 'claude-code' | 'claude';
-  /** Custom session metadata */
-  metadata?: Record<string, string>;
-}
-
-interface SendPromptResult {
-  /** The session ID that was created */
-  sessionId: string;
-  /** The AI's response text */
-  response: string;
-  /** Whether the session completed successfully */
-  success: boolean;
-  /** Error message if success is false */
-  error?: string;
+  sendPrompt(options: {
+    prompt: string;
+    sessionName?: string;
+    provider?: 'claude-code' | 'claude' | 'openai';
+    model?: string;
+  }): Promise<{ sessionId: string; response: string }>;
 }
 ```
 
 ### Main Process Side
 
-Implementation in `ExtensionHandlers.ts` or a new `ExtensionAIBridge.ts`:
-
-```typescript
-safeHandle('extension:send-prompt', async (_event, extensionId: string, options: SendPromptOptions) => {
-  // Validate extension has ai permission
-  // Create session via AIService
-  // Insert queued prompt
-  // Process and await completion
-  // Return response text
-});
-```
-
-This reuses the existing `AIService.processQueuedPrompt()` infrastructure. The extension never directly touches PGLite or `AIService` - it goes through the SDK.
+Implemented in `AIService.ts` as `safeHandle('extensions:ai-send-prompt', ...)`:
+- Resolves workspace path via `BrowserWindow.fromWebContents()` + `getWindowId()`
+- Validates provider is enabled and has credentials
+- Creates session via `sessionManager.createSession()`
+- Sets session title and notifies renderer via `sessions:refresh-list`
+- Calls `sendMessageHandler()` to execute the prompt
+- Returns `{ sessionId, response }`
 
 ## Frontmatter Schema (TypeScript)
 
@@ -463,4 +434,4 @@ The document header would look something like this when editing an automation fi
 2. **Concurrent runs**: What if an automation is still running when its next scheduled time arrives? Skip the new run? Queue it?
 3. **Cross-workspace**: Should automations be workspace-scoped or global? Current design is workspace-scoped (files live in the workspace).
 4. **Mobile sync**: Should automation definitions sync to mobile (read-only view of outputs)?
-5. **`sendPrompt` scope**: Should the new `services.ai.sendPrompt()` API be available to all extensions with `ai` permission, or gated behind a new `automation` permission?
+5. **`sendPrompt`**** scope**: Should the new `services.ai.sendPrompt()` API be available to all extensions with `ai` permission, or gated behind a new `automation` permission?

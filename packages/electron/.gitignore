@@ -1,4 +1,4 @@
-.restart-requested
+.restart-requested*
 
 # Claude helper binary (built during release, ~75MB)
 resources/claude-helper-bin/

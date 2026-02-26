@@ -3,14 +3,15 @@
  * Shows bugs, tasks, plans, and ideas across all documents in workspace
  */
 
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { useAtomValue } from 'jotai';
 import type {
   TrackerItem,
-  TrackerItemChangeEvent,
   TrackerItemType,
   TrackerItemStatus,
   TrackerItemPriority
 } from '../../../core/DocumentService';
+import { trackerItemsByTypeAtom, trackerDataLoadedAtom } from '../trackerDataAtoms';
 import { globalRegistry, parseDate } from '../models';
 import {usePostHog} from "posthog-js/react";
 
@@ -26,6 +27,10 @@ interface TrackerTableProps {
   onSwitchToFilesMode?: () => void;
   /** Callback when user wants to create a new tracker item of the current type */
   onNewItem?: (type: TrackerItemType) => void;
+  /** Callback when user clicks a row to select an item (opens detail panel) */
+  onItemSelect?: (itemId: string) => void;
+  /** Currently selected item ID for row highlighting */
+  selectedItemId?: string | null;
 }
 
 /**
@@ -352,9 +357,45 @@ export function TrackerTable({
   hideTypeTabs = false,
   onSwitchToFilesMode,
   onNewItem,
+  onItemSelect,
+  selectedItemId,
 }: TrackerTableProps): JSX.Element {
-  const [items, setItems] = useState<TrackerItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Type filter: use prop filterType when hideTypeTabs is true, otherwise use internal state
+  const [internalTypeFilter, setInternalTypeFilter] = useState<TrackerItemType | 'all'>('all');
+  const activeTypeFilter = hideTypeTabs ? filterType : internalTypeFilter;
+
+  // Read tracker items from cross-platform atoms (populated by host adapter)
+  const atomItems = useAtomValue(trackerItemsByTypeAtom(activeTypeFilter));
+  const dataLoaded = useAtomValue(trackerDataLoadedAtom);
+
+  // Full-document items from frontmatter (loaded locally, not in atoms yet)
+  const [frontmatterItems, setFrontmatterItems] = useState<TrackerItem[]>([]);
+
+  // Merge atom items + frontmatter items into final items list
+  const items = useMemo(() => {
+    // Normalize PGLite items: use updated/created for lastIndexed
+    const normalizedAtomItems = atomItems.map((item: TrackerItem) => {
+      const dateSource = item.updated || item.created;
+      let actualDate: Date | null = null;
+      if (dateSource) {
+        if (typeof dateSource === 'number') {
+          actualDate = new Date(dateSource);
+        } else if (typeof dateSource === 'string') {
+          const parsed = new Date(dateSource);
+          if (!isNaN(parsed.getTime())) {
+            actualDate = parsed;
+          }
+        }
+      }
+      return {
+        ...item,
+        lastIndexed: actualDate || new Date(0),
+      };
+    });
+    return [...normalizedAtomItems, ...frontmatterItems];
+  }, [atomItems, frontmatterItems]);
+
+  const loading = !dataLoaded && items.length === 0;
   const [error, setError] = useState<string | null>(null);
   const [currentSortBy, setCurrentSortBy] = useState<SortColumn>(sortBy);
   const [currentSortDirection, setCurrentSortDirection] = useState<SortDirection>(sortDirection);
@@ -362,12 +403,43 @@ export function TrackerTable({
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
   const [customFieldFilters, setCustomFieldFilters] = useState<Record<string, Set<string>>>({});
-  // Only use internal type filter state when tabs are shown (not hidden by parent)
-  const [internalTypeFilter, setInternalTypeFilter] = useState<TrackerItemType | 'all'>('all');
   const posthog = usePostHog();
 
-  // Use prop filterType when hideTypeTabs is true, otherwise use internal state
-  const activeTypeFilter = hideTypeTabs ? filterType : internalTypeFilter;
+  // Inline editing state
+  const [editingCell, setEditingCell] = useState<{ itemId: string; field: 'status' | 'priority' | 'title' } | null>(null);
+  const [editingTitle, setEditingTitle] = useState('');
+  const titleInputRef = useRef<HTMLInputElement>(null);
+
+  // Focus title input when editing starts
+  useEffect(() => {
+    if (editingCell?.field === 'title' && titleInputRef.current) {
+      titleInputRef.current.focus();
+      titleInputRef.current.select();
+    }
+  }, [editingCell]);
+
+  const handleFieldUpdate = useCallback(async (item: TrackerItem, field: string, value: string) => {
+    // Only database-created items (no module) can be edited inline
+    if (item.module) return;
+
+    try {
+      const electronAPI = (window as any).electronAPI;
+      if (!electronAPI?.documentService?.updateTrackerItem) return;
+
+      // Get sync mode from tracker type definition
+      const tracker = globalRegistry.get(item.type);
+      const syncMode = tracker?.sync?.mode || 'local';
+
+      await electronAPI.documentService.updateTrackerItem({
+        itemId: item.id,
+        updates: { [field]: value },
+        syncMode,
+      });
+    } catch (err) {
+      console.error('[TrackerTable] Failed to update item:', err);
+    }
+    setEditingCell(null);
+  }, []);
 
   // Reset filters when tracker type changes (different types have different fields/statuses)
   useEffect(() => {
@@ -375,157 +447,49 @@ export function TrackerTable({
     setCustomFieldFilters({});
   }, [activeTypeFilter]);
 
+  // Load full-document tracker items from frontmatter (not stored in PGLite atoms)
   useEffect(() => {
-    let unsubscribeTracker: (() => void) | null = null;
-    let unsubscribeMetadata: (() => void) | null = null;
-    let isSubscribed = true;
+    let cancelled = false;
 
-    let retryTimeout: ReturnType<typeof setTimeout> | null = null;
+    async function loadFrontmatterItems() {
+      const documentService = (window as any).documentService;
+      if (!documentService?.listDocumentMetadata) return;
 
-    async function loadItems() {
       try {
-        // console.log('[TrackerTable] loadItems called, typeFilter:', typeFilter);
-        const documentService = (window as any).documentService;
+        const metadata = await documentService.listDocumentMetadata();
+        const trackerTypes = globalRegistry.getAll();
+        const fullDocumentTrackers = trackerTypes.filter(t => t.modes.fullDocument);
 
-        if (!documentService) {
-          console.log('[TrackerTable] Document service not available yet, retrying...');
-          // Retry after a short delay - don't set loading to false
-          if (isSubscribed) {
-            retryTimeout = setTimeout(loadItems, 500);
-          }
-          return;
-        }
-
-        if (!documentService.listTrackerItems) {
-          console.log('[TrackerTable] listTrackerItems not available, retrying...');
-          // Retry after a short delay - don't set loading to false
-          if (isSubscribed) {
-            retryTimeout = setTimeout(loadItems, 500);
-          }
-          return;
-        }
-
-        // Load tracker items
-        // console.log('[TrackerTable] Loading tracker items...');
-        const trackerItems = activeTypeFilter !== 'all' && documentService.getTrackerItemsByType
-          ? await documentService.getTrackerItemsByType(activeTypeFilter)
-          : await documentService.listTrackerItems();
-
-        // console.log('[TrackerTable] Loaded tracker items:', trackerItems?.length || 0);
-
-        // Convert to proper date format - use updated/created, NOT lastIndexed (that's indexing time)
-        let allItems = (trackerItems || []).map((item: TrackerItem) => {
-          // Use updated field first (when user last modified), then created
-          // DO NOT use lastIndexed - that's when the indexer last ran, not when user modified
-          const dateSource = item.updated || item.created;
-          let actualDate: Date | null = null;
-
-          if (dateSource) {
-            if (typeof dateSource === 'number') {
-              actualDate = new Date(dateSource);
-            } else if (typeof dateSource === 'string') {
-              const parsed = new Date(dateSource);
-              if (!isNaN(parsed.getTime())) {
-                actualDate = parsed;
-              }
-            }
-          }
-
-          return {
-            ...item,
-            lastIndexed: actualDate || new Date(0) // Use epoch for invalid dates so they sort to bottom
-          };
-        });
-
-        // Load full-document tracker items from frontmatter
-        if (documentService.listDocumentMetadata) {
-          const metadata = await documentService.listDocumentMetadata();
-
-          // Get all tracker types that support fullDocument mode
-          const trackerTypes = globalRegistry.getAll();
-          const fullDocumentTrackers = trackerTypes.filter(t => t.modes.fullDocument);
-
-          // console.log('[TrackerTable] Found full-document trackers:', fullDocumentTrackers.map(t => t.type));
-
-          // Load items for each full-document tracker type
-          for (const tracker of fullDocumentTrackers) {
-            // Only load if we're showing all types or this specific type
-            if (activeTypeFilter === 'all' || activeTypeFilter === tracker.type) {
-              const items = convertFullDocumentToTrackerItems(metadata || [], tracker.type as TrackerItemType);
-              // console.log(`[TrackerTable] Loaded ${items.length} ${tracker.type} items from frontmatter`);
-              allItems = [...allItems, ...items];
-            }
+        let fmItems: TrackerItem[] = [];
+        for (const tracker of fullDocumentTrackers) {
+          if (activeTypeFilter === 'all' || activeTypeFilter === tracker.type) {
+            const converted = convertFullDocumentToTrackerItems(metadata || [], tracker.type as TrackerItemType);
+            fmItems = [...fmItems, ...converted];
           }
         }
 
-        // console.log('[TrackerTable] Total items to display:', allItems.length);
-        if (isSubscribed) {
-          setItems(allItems);
-          setLoading(false);
-          // console.log('[TrackerTable] State updated with', allItems.length, 'items');
+        if (!cancelled) {
+          setFrontmatterItems(fmItems);
         }
       } catch (err) {
-        console.error('[TrackerTable] Failed to load tracker items:', err);
-        if (isSubscribed) {
-          setError('Failed to load tracker items');
-          setLoading(false);
-        }
+        console.error('[TrackerTable] Failed to load frontmatter items:', err);
       }
     }
 
-    async function setupWatchers() {
-      const documentService = (window as any).documentService;
-      if (!documentService) {
-        console.log('[TrackerTable] Cannot setup watchers - no document service');
-        return;
-      }
+    loadFrontmatterItems();
 
-      // Subscribe to tracker item changes
-      if (documentService.watchTrackerItems) {
-        // console.log('[TrackerTable] Setting up tracker items watcher');
-        unsubscribeTracker = documentService.watchTrackerItems((change: TrackerItemChangeEvent) => {
-          console.log('[TrackerTable] Tracker items changed event received:', {
-            added: change.added?.length || 0,
-            updated: change.updated?.length || 0,
-            removed: change.removed?.length || 0
-          });
-          // Only reload items, don't re-register watchers
-          loadItems();
-        });
-      }
-
-      // Subscribe to metadata changes (for full-document tracker types)
-      // Need to watch metadata if we're showing all types or any type that supports fullDocument mode
-      const trackerTypes = globalRegistry.getAll();
-      const fullDocumentTrackers = trackerTypes.filter(t => t.modes.fullDocument);
-      const needsMetadataWatcher = activeTypeFilter === 'all' || fullDocumentTrackers.some(t => t.type === activeTypeFilter);
-
-      if (documentService.watchDocumentMetadata && needsMetadataWatcher) {
-        // console.log('[TrackerTable] Setting up metadata watcher');
-        unsubscribeMetadata = documentService.watchDocumentMetadata(() => {
-          console.log('[TrackerTable] Metadata changed event received');
-          // Only reload items, don't re-register watchers
-          loadItems();
-        });
-      }
+    // Watch for metadata changes to reload frontmatter items
+    const documentService = (window as any).documentService;
+    let unsubscribe: (() => void) | null = null;
+    if (documentService?.watchDocumentMetadata) {
+      unsubscribe = documentService.watchDocumentMetadata(() => {
+        loadFrontmatterItems();
+      });
     }
-
-    // Initial load
-    loadItems();
-    // Setup watchers once
-    setupWatchers();
 
     return () => {
-      isSubscribed = false;
-      if (retryTimeout) {
-        clearTimeout(retryTimeout);
-      }
-      if (unsubscribeTracker) {
-        unsubscribeTracker();
-      }
-      if (unsubscribeMetadata) {
-        unsubscribeMetadata();
-      }
+      cancelled = true;
+      if (unsubscribe) unsubscribe();
     };
   }, [activeTypeFilter]);
 
@@ -637,6 +601,19 @@ export function TrackerTable({
         itemStatus: item.status,
         isInline: item.lineNumber !== undefined && item.lineNumber !== 0,
       });
+    }
+
+    // If onItemSelect is provided (Tracker Mode), open detail panel instead
+    if (onItemSelect && item.id) {
+      onItemSelect(item.id);
+      return;
+    }
+
+    // Database-created items (no module) - start editing title inline
+    if (!item.module) {
+      setEditingTitle(item.title);
+      setEditingCell({ itemId: item.id, field: 'title' });
+      return;
     }
 
     // Switch to files mode first if we're in agent mode
@@ -808,7 +785,7 @@ export function TrackerTable({
   ];
 
   return (
-    <div className="tracker-table-wrapper flex flex-col h-full w-full bg-[var(--nim-bg)]">
+    <div className="tracker-table-wrapper flex flex-col h-full w-full bg-[var(--nim-bg)]" data-testid="tracker-table">
       {/* Type filter tabs */}
       {!hideTypeTabs && (
         <div className="tracker-type-tabs flex gap-1 py-3 px-4 bg-[var(--nim-bg)] border-b border-[var(--nim-border)]">
@@ -1072,7 +1049,12 @@ export function TrackerTable({
             sortedItems.map((item, index) => (
               <tr
                 key={index}
-                className="tracker-table-row border-b border-[var(--nim-border)] cursor-pointer transition-colors duration-100 hover:bg-[var(--nim-bg-secondary)]"
+                className={`tracker-table-row border-b border-[var(--nim-border)] cursor-pointer transition-colors duration-100 hover:bg-[var(--nim-bg-secondary)] ${
+                  selectedItemId && item.id === selectedItemId ? 'bg-[var(--nim-bg-secondary)]' : ''
+                }`}
+                data-testid="tracker-table-row"
+                data-item-id={item.id}
+                data-item-title={item.title}
                 onClick={() => handleRowClick(item)}
               >
                 <td className="tracker-table-cell type pl-2 pr-1 py-1 text-[var(--nim-text)] align-middle w-[28px]">
@@ -1088,35 +1070,108 @@ export function TrackerTable({
                 </td>
                 <td className="tracker-table-cell title pl-1 pr-2 py-1 text-[var(--nim-text)] align-middle min-w-[200px]">
                   <div className="title-info flex flex-col gap-0.5">
-                    <div className="title-text font-medium text-[var(--nim-text)]">{item.title}</div>
-                    {/*{item.tags && item.tags.length > 0 && (*/}
-                    {/*  <div className="tags flex gap-1 flex-wrap">*/}
-                    {/*    {item.tags.map((tag, i) => (*/}
-                    {/*      <span key={i} className="tag py-0.5 px-1.5 bg-[var(--nim-bg-tertiary)] rounded-[3px] text-[11px] text-[var(--nim-text-muted)]">{tag}</span>*/}
-                    {/*    ))}*/}
-                    {/*  </div>*/}
-                    {/*)}*/}
+                    {editingCell !== null && editingCell.itemId === item.id && editingCell.field === 'title' ? (
+                      <input
+                        ref={titleInputRef}
+                        type="text"
+                        value={editingTitle}
+                        onChange={(e) => setEditingTitle(e.target.value)}
+                        onBlur={() => {
+                          if (editingTitle.trim() && editingTitle !== item.title) {
+                            handleFieldUpdate(item, 'title', editingTitle.trim());
+                          } else {
+                            setEditingCell(null);
+                          }
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            if (editingTitle.trim() && editingTitle !== item.title) {
+                              handleFieldUpdate(item, 'title', editingTitle.trim());
+                            } else {
+                              setEditingCell(null);
+                            }
+                          } else if (e.key === 'Escape') {
+                            setEditingCell(null);
+                          }
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-full bg-[var(--nim-bg-secondary)] border border-[var(--nim-primary)] rounded px-1 py-0.5 text-[var(--nim-text)] font-medium outline-none"
+                      />
+                    ) : (
+                      <div className="title-text font-medium text-[var(--nim-text)]">{item.title}</div>
+                    )}
                   </div>
                 </td>
                 <td className="tracker-table-cell status p-[5px] text-[var(--nim-text)] align-middle w-[120px]">
-                  <span
-                    className="status-badge inline-block py-0.5 px-2 rounded-[10px] text-[11px] font-medium border"
-                    style={{
-                      backgroundColor: `${getStatusColor(item.status, item.type)}20`,
-                      color: getStatusColor(item.status, item.type),
-                      borderColor: getStatusColor(item.status, item.type)
-                    }}
-                  >
-                    {item.status.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
-                  </span>
+                  {!item.module && editingCell !== null && editingCell.itemId === item.id && editingCell.field === 'status' ? (
+                    <select
+                      autoFocus
+                      value={item.status}
+                      onChange={(e) => {
+                        handleFieldUpdate(item, 'status', e.target.value);
+                      }}
+                      onBlur={() => setEditingCell(null)}
+                      onClick={(e) => e.stopPropagation()}
+                      className="bg-[var(--nim-bg-secondary)] border border-[var(--nim-primary)] rounded text-[11px] text-[var(--nim-text)] px-1 py-0.5 outline-none"
+                    >
+                      {(() => {
+                        const tracker = globalRegistry.get(item.type);
+                        const statusField = tracker?.fields.find(f => f.name === 'status');
+                        const rawOptions = statusField?.options || ['to-do', 'in-progress', 'done', 'blocked'];
+                        return rawOptions.map(opt => {
+                          const val = typeof opt === 'string' ? opt : opt.value;
+                          const label = typeof opt === 'string' ? opt.split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') : opt.label;
+                          return <option key={val} value={val}>{label}</option>;
+                        });
+                      })()}
+                    </select>
+                  ) : (
+                    <span
+                      className={`status-badge inline-block py-0.5 px-2 rounded-[10px] text-[11px] font-medium border ${!item.module ? 'cursor-pointer hover:opacity-80' : ''}`}
+                      style={{
+                        backgroundColor: `${getStatusColor(item.status, item.type)}20`,
+                        color: getStatusColor(item.status, item.type),
+                        borderColor: getStatusColor(item.status, item.type)
+                      }}
+                      onClick={(e) => {
+                        if (!item.module) {
+                          e.stopPropagation();
+                          setEditingCell({ itemId: item.id, field: 'status' });
+                        }
+                      }}
+                    >
+                      {item.status.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
+                    </span>
+                  )}
                 </td>
                 <td className="tracker-table-cell priority p-[5px] text-[var(--nim-text)] align-middle w-[100px]">
-                  {item.priority && (
-                    <span
-                      className="priority-badge font-semibold text-xs"
-                      style={{ color: getPriorityColor(item.priority) }}
+                  {!item.module && editingCell !== null && editingCell.itemId === item.id && editingCell.field === 'priority' ? (
+                    <select
+                      autoFocus
+                      value={item.priority || 'medium'}
+                      onChange={(e) => {
+                        handleFieldUpdate(item, 'priority', e.target.value);
+                      }}
+                      onBlur={() => setEditingCell(null)}
+                      onClick={(e) => e.stopPropagation()}
+                      className="bg-[var(--nim-bg-secondary)] border border-[var(--nim-primary)] rounded text-xs text-[var(--nim-text)] px-1 py-0.5 outline-none"
                     >
-                      {item.priority.charAt(0).toUpperCase() + item.priority.slice(1)}
+                      {['low', 'medium', 'high', 'critical'].map(p => (
+                        <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span
+                      className={`priority-badge font-semibold text-xs ${!item.module ? 'cursor-pointer hover:opacity-80' : ''}`}
+                      style={{ color: getPriorityColor(item.priority || 'medium') }}
+                      onClick={(e) => {
+                        if (!item.module) {
+                          e.stopPropagation();
+                          setEditingCell({ itemId: item.id, field: 'priority' });
+                        }
+                      }}
+                    >
+                      {(item.priority || 'medium').charAt(0).toUpperCase() + (item.priority || 'medium').slice(1)}
                     </span>
                   )}
                 </td>
@@ -1149,7 +1204,7 @@ export function TrackerTable({
                   );
                 })}
                 <td className="tracker-table-cell module p-[5px] text-[var(--nim-text)] align-middle min-w-[150px] max-w-[250px]">
-                  <span className="module-text text-[var(--nim-text-muted)] text-xs font-mono whitespace-nowrap overflow-hidden text-ellipsis block">{item.module}</span>
+                  <span className="module-text text-[var(--nim-text-muted)] text-xs font-mono whitespace-nowrap overflow-hidden text-ellipsis block">{item.module || '\u2014'}</span>
                 </td>
                 <td className="tracker-table-cell updated p-[5px] text-[var(--nim-text)] align-middle w-[120px]">
                   <span className="updated-text text-[var(--nim-text-faint)] text-xs">{formatDate(item.lastIndexed)}</span>

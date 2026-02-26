@@ -230,6 +230,25 @@ Clients should connect to `wss://sync.nimbalyst.com/sync/{roomId}`.
 
 ## Security
 
+### Data Isolation Principle: DOs for Customer Data, D1 for Entity Management Only
+
+**CRITICAL: Never store customer, org, or team-sensitive data in D1.**
+
+D1 is a shared multi-tenant database -- every Worker request can query any row. Customer data must live in Durable Objects where each org/user/entity gets its own isolated SQLite instance. A bug in one handler cannot leak another org's data because the data physically does not exist in the same store.
+
+**D1 is only for cross-entity management lookups:**
+- `org_discovery` -- maps git remote hashes to org IDs (no sensitive data)
+- `shared_sessions` -- public share metadata (intentionally public)
+
+**Durable Objects hold all customer/team data:**
+- TeamRoom (per org) -- team metadata, member roles, key envelopes, identity keys, document index
+- SessionRoom (per session) -- encrypted AI messages
+- IndexRoom (per user) -- personal session index, device presence
+- DocumentRoom (per document) -- encrypted Yjs CRDT state
+- TrackerRoom (per project) -- encrypted tracker items
+
+If you're tempted to add a D1 table with org-scoped or user-scoped data, stop. Put it in the appropriate Durable Object instead.
+
 ### Authentication
 
 All requests are authenticated using Stytch JWTs:

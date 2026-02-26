@@ -1,3 +1,5 @@
+// Editor (Lexical-based rich text editor)
+export * from './editor';
 export * from './core/types';
 export * from './core/DocumentService';
 export * from './core/FileSystemService';
@@ -55,6 +57,15 @@ export {
   ModelLoader,
   globalRegistry,
   parseTrackerYAML,
+  // Tracker data atoms (cross-platform reactive state)
+  trackerItemsMapAtom,
+  trackerDataLoadedAtom,
+  trackerItemsArrayAtom,
+  trackerItemsByTypeAtom,
+  trackerItemCountByTypeAtom,
+  upsertTrackerItemAtom,
+  removeTrackerItemAtom,
+  replaceAllTrackerItemsAtom,
 } from './plugins/TrackerPlugin';
 export type {
   TrackerItemData,
@@ -63,6 +74,8 @@ export type {
   TrackerItemPriority,
   TrackerPluginProps,
   TrackerDataModel,
+  TrackerSyncPolicy,
+  TrackerSyncMode,
   FieldDefinition,
   DocumentHeaderProvider,
   DocumentHeaderComponentProps,
@@ -94,6 +107,7 @@ export * from './ui/icons/ProviderIcons';
 export * from './ui/icons/MaterialSymbol';
 export * from './ui/icons/fileIcons';
 // Utils
+export * from './utils/clipboard';
 export * from './utils/dateUtils';
 export * from './utils/fuzzyMatch';
 export * from './utils/documentDiff';

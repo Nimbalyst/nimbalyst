@@ -51,7 +51,7 @@ interface FloatingEditorButtonProps {
 
 /**
  * A floating action button for custom editors.
- * Consistent with rexical's FloatingDocumentActionsPlugin styling.
+ * Consistent with the editor's FloatingDocumentActionsPlugin styling.
  */
 export const FloatingEditorButton: React.FC<FloatingEditorButtonProps> = ({
   icon,

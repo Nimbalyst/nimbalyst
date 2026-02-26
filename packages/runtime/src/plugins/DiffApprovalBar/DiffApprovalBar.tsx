@@ -13,7 +13,7 @@ import {
   type DiffChangeGroup,
   $getDiffState,
   $hasDiffNodes
-} from 'rexical';
+} from '../../editor';
 import { usePostHog } from 'posthog-js/react';
 // Only contains global highlight styles for dynamically applied classes
 import './DiffApprovalBar.css';

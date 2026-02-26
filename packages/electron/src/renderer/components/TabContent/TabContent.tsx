@@ -14,12 +14,15 @@
 import React, { useCallback, useEffect, useRef } from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { Provider as JotaiProvider } from 'jotai';
-import type { TextReplacement } from 'rexical';
+import type { TextReplacement } from '@nimbalyst/runtime';
 import type { Tab } from '../TabManager/TabManager';
 import { TabEditor } from '../TabEditor/TabEditor';
+import { CollaborativeTabEditor } from '../TabEditor/CollaborativeTabEditor';
 import { TabEditorErrorBoundary } from '../TabEditorErrorBoundary';
 import { logger } from '../../utils/logger';
 import { useTabsActions, type TabData, notifyDirtyStateChange } from '../../contexts/TabsContext';
+import { isCollabUri } from '../../utils/collabUri';
+import { getCollabConfig, removeCollabConfig } from '../../utils/collabDocumentOpener';
 import { store, editorDirtyAtom, editorHasUnacceptedChangesAtom, makeEditorKey } from '@nimbalyst/runtime/store';
 import { clearMockupAnnotationsForFile, getMockupFilePath } from '../UnifiedAI/MockupAnnotationIndicator';
 
@@ -111,6 +114,11 @@ const TabContentComponent: React.FC<TabContentProps> = ({
 
   // Load content for a file
   const loadContent = useCallback(async (filePath: string): Promise<string> => {
+    // Collaborative documents don't load from disk -- content comes via Y.Doc
+    if (isCollabUri(filePath)) {
+      return '';
+    }
+
     if (filePath.startsWith('virtual://')) {
       if (!window.electronAPI?.documentService) {
         return '';
@@ -239,6 +247,21 @@ const TabContentComponent: React.FC<TabContentProps> = ({
 
     // Wrap in JotaiProvider so TabEditor can subscribe to theme atom
     // (separate React roots need their own provider to access the shared store)
+    const isCollab = isCollabUri(tab.filePath);
+    const collabConfig = isCollab ? getCollabConfig(tab.filePath) : undefined;
+
+    // Guard: collab tabs without config can't connect (e.g., restored from
+    // workspace state after restart/HMR when the in-memory registry is empty).
+    // Close the tab instead of rendering a broken TabEditor.
+    if (isCollab && !collabConfig) {
+      console.warn('[TabContent] Closing collab tab without config:', tab.filePath);
+      element.remove();
+      root.unmount();
+      // Schedule tab close on next tick to avoid mutating during syncTabs
+      setTimeout(() => propsRef.current.onTabClose?.(tab.id), 0);
+      return;
+    }
+
     root.render(
       <JotaiProvider store={store}>
         <TabEditorErrorBoundary
@@ -253,22 +276,34 @@ const TabContentComponent: React.FC<TabContentProps> = ({
             propsRef.current.onTabClose?.(tab.id);
           }}
         >
-          <TabEditor
-            filePath={tab.filePath}
-            fileName={tab.fileName}
-            initialContent={content}
-            isActive={true}  // Always true - wrapper controls visibility
-            textReplacements={isActiveTab ? propsRef.current.textReplacements : undefined}
-            onDirtyChange={handleDirtyChange}
-            onSaveComplete={propsRef.current.onSaveComplete}
-            onManualSaveReady={handleManualSaveReady}
-            onGetContentReady={handleGetContentReady}
-            onViewHistory={propsRef.current.onViewHistory}
-            onRenameDocument={propsRef.current.onRenameDocument}
-            onSwitchToAgentMode={propsRef.current.onSwitchToAgentMode}
-            onOpenSessionInChat={propsRef.current.onOpenSessionInChat}
-            workspaceId={propsRef.current.workspaceId}
-          />
+          {collabConfig ? (
+            <CollaborativeTabEditor
+              filePath={tab.filePath}
+              fileName={tab.fileName}
+              isActive={true}
+              collabConfig={collabConfig}
+              onDirtyChange={handleDirtyChange}
+              onGetContentReady={handleGetContentReady}
+              onManualSaveReady={handleManualSaveReady}
+            />
+          ) : (
+            <TabEditor
+              filePath={tab.filePath}
+              fileName={tab.fileName}
+              initialContent={content}
+              isActive={true}  // Always true - wrapper controls visibility
+              textReplacements={isActiveTab ? propsRef.current.textReplacements : undefined}
+              onDirtyChange={handleDirtyChange}
+              onSaveComplete={propsRef.current.onSaveComplete}
+              onManualSaveReady={handleManualSaveReady}
+              onGetContentReady={handleGetContentReady}
+              onViewHistory={propsRef.current.onViewHistory}
+              onRenameDocument={propsRef.current.onRenameDocument}
+              onSwitchToAgentMode={propsRef.current.onSwitchToAgentMode}
+              onOpenSessionInChat={propsRef.current.onOpenSessionInChat}
+              workspaceId={propsRef.current.workspaceId}
+            />
+          )}
         </TabEditorErrorBoundary>
       </JotaiProvider>
     );
@@ -285,6 +320,11 @@ const TabContentComponent: React.FC<TabContentProps> = ({
     const editorKey = makeEditorKey(instance.tabData.filePath);
     editorDirtyAtom.remove(editorKey);
     editorHasUnacceptedChangesAtom.remove(editorKey);
+
+    // Clean up collab config registry for collaborative tabs
+    if (isCollabUri(instance.tabData.filePath)) {
+      removeCollabConfig(instance.tabData.filePath);
+    }
 
     instance.root.unmount();
     instance.element.remove();

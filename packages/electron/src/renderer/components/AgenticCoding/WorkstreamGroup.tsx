@@ -37,7 +37,8 @@ const WorkstreamGroupStatusIndicator: React.FC<{ sessionIds: string[] }> = memo(
   const { hasPendingInteractivePrompt, hasProcessing, hasPendingPrompt, hasUnread } = useAtomValue(groupSessionStatusAtom(sessionIdsKey));
 
   // Priority: interactive prompt > processing > pending prompt > unread
-  if (hasPendingInteractivePrompt) {
+  // Only show "waiting" if something is also processing (safety net for stale atom state)
+  if (hasPendingInteractivePrompt && hasProcessing) {
     return (
       <div className="workstream-group-status-indicator waiting-for-input flex items-center justify-center text-[var(--nim-warning)] animate-pulse" title="Waiting for your response">
         <MaterialSymbol icon="contact_support" size={12} />
@@ -208,11 +209,17 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
     e.stopPropagation();
     setIsValidDropTarget(false);
 
+    // Only workstream groups accept drops, not worktree groups
+    if (type !== 'workstream') return;
+
     const dataStr = e.dataTransfer.getData('application/x-nimbalyst-session');
     if (!dataStr || !projectPath) return;
 
     try {
-      const { sessionId, parentId, workspacePath } = JSON.parse(dataStr);
+      const { sessionId, parentId, workspacePath, isWorktreeSession: draggedIsWorktree } = JSON.parse(dataStr);
+
+      // Worktree sessions cannot be moved
+      if (draggedIsWorktree) return;
 
       if (workspacePath !== projectPath) return;
       if (sessionId === id) return;
@@ -240,7 +247,7 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
     } catch (error) {
       console.error('[WorkstreamGroup] Failed to handle drop:', error);
     }
-  }, [projectPath, id, reparentSession, refreshSessionList]);
+  }, [type, projectPath, id, reparentSession, refreshSessionList]);
 
   // Worktree rename state
   const [isRenamingWorktree, setIsRenamingWorktree] = useState(false);
@@ -686,6 +693,17 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
               onPinToggle={onSessionPinToggle ? (pinned) => onSessionPinToggle(session.id, pinned) : undefined}
               onRename={onSessionRename ? (newName) => onSessionRename(session.id, newName) : undefined}
               onBranch={onSessionBranch ? () => onSessionBranch(session.id) : undefined}
+              onRemoveFromWorkstream={type === 'workstream' && projectPath ? async () => {
+                const success = await reparentSession({
+                  sessionId: session.id,
+                  oldParentId: id,
+                  newParentId: null,
+                  workspacePath: projectPath,
+                });
+                if (success) {
+                  await refreshSessionList();
+                }
+              } : undefined}
             />
           ))}
         </div>
@@ -901,7 +919,8 @@ const WorkstreamSessionStatusIndicator = memo<{ sessionId: string; uncommittedCo
   const hasUnread = useAtomValue(sessionUnreadAtom(sessionId));
 
   // Priority: interactive prompt > processing > pending prompt > unread > uncommitted count
-  if (hasPendingInteractivePrompt) {
+  // Only show "waiting" if session is also processing (safety net for stale atom state)
+  if (hasPendingInteractivePrompt && isProcessing) {
     return (
       <div className="workstream-session-item-status waiting-for-input flex items-center justify-center text-[var(--nim-warning)] animate-pulse" title="Waiting for your response">
         <MaterialSymbol icon="contact_support" size={12} />
@@ -958,6 +977,7 @@ interface WorkstreamSessionItemProps {
   onPinToggle?: (isPinned: boolean) => void;
   onRename?: (newName: string) => void;
   onBranch?: () => void;
+  onRemoveFromWorkstream?: () => void;
 }
 
 const WorkstreamSessionItem: React.FC<WorkstreamSessionItemProps> = ({
@@ -970,6 +990,7 @@ const WorkstreamSessionItem: React.FC<WorkstreamSessionItemProps> = ({
   onPinToggle,
   onRename,
   onBranch,
+  onRemoveFromWorkstream,
 }) => {
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
@@ -1019,6 +1040,12 @@ const WorkstreamSessionItem: React.FC<WorkstreamSessionItemProps> = ({
     e.stopPropagation();
     setShowContextMenu(false);
     onBranch?.();
+  };
+
+  const handleRemoveFromWorkstream = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowContextMenu(false);
+    onRemoveFromWorkstream?.();
   };
 
   const handleRenameClick = (e: React.MouseEvent) => {
@@ -1203,6 +1230,15 @@ const WorkstreamSessionItem: React.FC<WorkstreamSessionItemProps> = ({
             >
               <MaterialSymbol icon="fork_right" size={14} />
               Branch conversation
+            </button>
+          )}
+          {onRemoveFromWorkstream && (
+            <button
+              className="workstream-group-context-menu-item flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
+              onClick={handleRemoveFromWorkstream}
+            >
+              <MaterialSymbol icon="drive_file_move_rtl" size={14} />
+              Remove from workstream
             </button>
           )}
           <button

@@ -617,16 +617,13 @@ async function fetchSessionsForWorkspace(workspace: string): Promise<SessionData
       const session = await AISessionsRepository.get(item.id);
       if (!session) return null;
 
-      // Fetch raw agent messages from the database
-      const agentMessages = await AgentMessagesRepository.list(item.id);
-
-      // Transform raw messages into UI format
-      const uiMessages = transformAgentMessagesToUI(agentMessages);
-
-      // Create session with transformed messages
+      // Return session without loading messages - they will be loaded
+      // on-demand via loadSession() when a specific session is opened.
+      // Previously this loaded ALL messages for ALL sessions via N+1 queries,
+      // causing ~170+ slow database queries at startup.
       const normalized: ChatSession = {
         ...session,
-        messages: uiMessages,
+        messages: [],
       };
 
       return sessionDataFromChatSession(normalized, workspace);
@@ -937,10 +934,10 @@ export class SessionManager {
 
     // Fallback: If no tokenUsage in metadata, try parsing from /context responses
     // This provides backwards compatibility for sessions created before tokenUsage was stored in metadata
+    // Uses already-loaded agentMessages instead of re-querying the database
     if (!sessionData.tokenUsage) {
-      const allMessages = await AgentMessagesRepository.list(sessionId, { includeHidden: true });
-      for (let i = allMessages.length - 1; i >= 0; i--) {
-        const msg = allMessages[i];
+      for (let i = agentMessages.length - 1; i >= 0; i--) {
+        const msg = agentMessages[i];
         if (msg.direction === 'output' && msg.content?.includes('## Context Usage')) {
           const parsedUsage = parseContextUsageMessage(msg.content);
           if (parsedUsage) {

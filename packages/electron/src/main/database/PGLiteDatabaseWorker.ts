@@ -6,6 +6,7 @@
 import { Worker } from 'worker_threads';
 import { app, dialog } from 'electron';
 import path from 'path';
+import { getPackageRoot } from '../utils/appPaths';
 import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
@@ -149,20 +150,12 @@ export class PGLiteDatabaseWorker {
    */
   private createWorker(): void {
     // Create worker thread - use the bundled worker
-    // app.getAppPath() returns different values depending on context:
-    // - Packaged app: use resourcesPath
-    // - Built but not packaged (Playwright): returns out/main, need ../worker.bundle.js
-    // - Dev mode (npm run dev): returns package root, need out/worker.bundle.js
-    const appPath = app.getAppPath();
     let workerPath: string;
     if (app.isPackaged) {
       workerPath = path.join(process.resourcesPath, 'worker.bundle.js');
-    } else if (appPath.includes('/out/main') || appPath.includes('\\out\\main')) {
-      // Running from built output (e.g., Playwright tests)
-      workerPath = path.join(appPath, '..', 'worker.bundle.js');
     } else {
-      // Dev mode - running from source
-      workerPath = path.join(appPath, 'out', 'worker.bundle.js');
+      // The worker bundle is always built to the primary out/ directory under the package root.
+      workerPath = path.join(getPackageRoot(), 'out', 'worker.bundle.js');
     }
 
     // Use test-specific userData path to avoid touching production database

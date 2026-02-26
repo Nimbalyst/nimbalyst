@@ -159,11 +159,19 @@ public final class SyncManager: ObservableObject {
     }
 
     /// Request the full index (projects + sessions) from the server.
-    private func requestIndexSync() {
+    private func requestIndexSync(attempt: Int = 0) {
         let request = IndexSyncRequest(projectId: nil)
-        if let data = try? JSONEncoder().encode(request),
-           let json = String(data: data, encoding: .utf8) {
-            indexClient.sendRaw(json)
+        guard let data = try? JSONEncoder().encode(request),
+              let json = String(data: data, encoding: .utf8) else { return }
+
+        indexClient.sendRaw(json) { [weak self] error in
+            guard let self = self, error != nil else { return }
+            guard attempt < 3 else { return }
+
+            self.logger.info("Index sync request failed, retrying (attempt \(attempt + 1))")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                self?.requestIndexSync(attempt: attempt + 1)
+            }
         }
     }
 
@@ -635,7 +643,7 @@ public final class SyncManager: ObservableObject {
         }
     }
 
-    private func requestSessionSync() {
+    private func requestSessionSync(attempt: Int = 0) {
         guard let sessionId = activeSessionId else { return }
 
         // Check if we have a sync watermark for this session
@@ -647,9 +655,23 @@ public final class SyncManager: ObservableObject {
         }
 
         let request = SessionSyncRequest(sinceSeq: sinceSeq)
-        if let data = try? JSONEncoder().encode(request),
-           let json = String(data: data, encoding: .utf8) {
-            sessionClient.sendRaw(json)
+        guard let data = try? JSONEncoder().encode(request),
+              let json = String(data: data, encoding: .utf8) else { return }
+
+        // Use completion-based send to detect failures and retry.
+        // The WebSocket connection may not be fully established yet when this
+        // is called (onConnectionStateChanged fires before the handshake completes).
+        // Without a successful syncRequest, the server won't mark this connection
+        // as synced and won't include it in message broadcasts.
+        sessionClient.sendRaw(json) { [weak self] error in
+            guard let self = self, error != nil else { return }
+            guard attempt < 3, self.activeSessionId == sessionId else { return }
+
+            self.logger.info("Session sync request failed, retrying (attempt \(attempt + 1))")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                guard let self = self, self.activeSessionId == sessionId else { return }
+                self.requestSessionSync(attempt: attempt + 1)
+            }
         }
     }
 

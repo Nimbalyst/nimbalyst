@@ -65,7 +65,9 @@ exports.default = async function(context) {
   // The SDK vendors ripgrep binaries for all 6 platform/arch combos (~61MB total).
   // We only need the one matching the build target.
   const arch = packager.arch ? require('builder-util').Arch[packager.arch] : process.arch;
-  const platformName = packager.platform.name === 'mac' ? 'darwin' : packager.platform.name;
+  // Map electron-builder platform names to Node.js/ripgrep platform names
+  const platformMap = { mac: 'darwin', windows: 'win32', linux: 'linux' };
+  const platformName = platformMap[packager.platform.name] || packager.platform.name;
   const keepDir = `${arch}-${platformName}`;
 
   // Find the ripgrep vendor dir - path varies by platform

@@ -15,15 +15,38 @@ declare const COLLABV3_VERSION: string;
 import type { Env } from './types';
 import { SessionRoom } from './SessionRoom';
 import { IndexRoom } from './IndexRoom';
+import { DocumentRoom } from './DocumentRoom';
+import { TrackerRoom } from './TrackerRoom';
+import { TeamRoom } from './TeamRoom';
 import { parseAuth as parseAuthJWT, type AuthConfig, type AuthResult } from './auth';
 import { handleShareUpload, handleShareView, handleShareContent, handleShareList, handleShareDelete } from './share';
 import { handleAccountDeletion } from './accountDeletion';
+import {
+  handleCreateTeam,
+  handleListTeams,
+  handleListMembers,
+  handleInviteMember,
+  handleRemoveMember,
+  handleUpdateMemberRole,
+  handleDeleteTeam,
+  handleOrgSwitch,
+  handleSetProjectIdentity,
+  handleClearProjectIdentity,
+} from './teams';
+import {
+  handleUploadKeyEnvelope,
+  handleGetOwnKeyEnvelope,
+  handleListKeyEnvelopes,
+  handleDeleteKeyEnvelope,
+  handleDeleteAllKeyEnvelopes,
+} from './teamKeyEnvelopes';
+import { teamRoomPost, teamRoomGet } from './teamRoomHelpers';
 import { setLogEnvironment, createLogger } from './logger';
 
 const log = createLogger('sync');
 
 // Re-export Durable Object classes
-export { SessionRoom, IndexRoom };
+export { SessionRoom, IndexRoom, DocumentRoom, TrackerRoom, TeamRoom };
 
 // ============================================================================
 // CORS Configuration
@@ -112,7 +135,7 @@ function getCorsHeaders(request: Request, env: Env): Record<string, string> {
   if (isOriginAllowed(origin, env)) {
     return {
       'Access-Control-Allow-Origin': origin!,
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       'Access-Control-Allow-Credentials': 'true',
     };
@@ -121,17 +144,19 @@ function getCorsHeaders(request: Request, env: Env): Record<string, string> {
   // Origin not allowed - return empty CORS headers (browser will block)
   // We still include the methods/headers for preflight, but no Allow-Origin
   return {
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
   };
 }
 
-// Room ID parsing: org:{orgId}:user:{userId}:{suffix}
+// Room ID parsing: org:{orgId}:user:{userId}:{suffix} or org:{orgId}:doc:{documentId} or org:{orgId}:tracker:{projectId} or org:{orgId}:team
 interface ParsedRoomId {
-  type: 'session' | 'index' | 'projects';
+  type: 'session' | 'index' | 'projects' | 'document' | 'tracker' | 'team';
   userId: string;
   orgId: string;
   sessionId?: string;
+  documentId?: string;
+  projectId?: string;
 }
 
 function parseRoomId(roomId: string): ParsedRoomId | null {
@@ -148,6 +173,24 @@ function parseRoomId(roomId: string): ParsedRoomId | null {
   const projectsMatch = roomId.match(/^org:([^:]+):user:([^:]+):projects$/);
   if (projectsMatch) {
     return { type: 'projects', orgId: projectsMatch[1], userId: projectsMatch[2] };
+  }
+
+  // Document rooms are org-scoped (not user-scoped) - multiple users share a document room
+  const documentMatch = roomId.match(/^org:([^:]+):doc:([^:]+)$/);
+  if (documentMatch) {
+    return { type: 'document', orgId: documentMatch[1], userId: '', documentId: documentMatch[2] };
+  }
+
+  // Tracker rooms are org-scoped (not user-scoped) - whole team shares a tracker room per project
+  const trackerMatch = roomId.match(/^org:([^:]+):tracker:([^:]+)$/);
+  if (trackerMatch) {
+    return { type: 'tracker', orgId: trackerMatch[1], userId: '', projectId: trackerMatch[2] };
+  }
+
+  // Team rooms are org-scoped - one per org for consolidated team state
+  const teamMatch = roomId.match(/^org:([^:]+):team$/);
+  if (teamMatch) {
+    return { type: 'team', orgId: teamMatch[1], userId: '' };
   }
 
   return null;
@@ -176,32 +219,61 @@ export default {
       });
     }
 
-    // WebSocket route: /sync/{roomId}
+    // WebSocket route: /sync/{roomId} (may have trailing path for internal DO endpoints)
     if (url.pathname.startsWith('/sync/')) {
-      const roomId = url.pathname.slice(6); // Remove '/sync/'
+      const fullPath = url.pathname.slice(6); // Remove '/sync/'
 
-      if (!roomId) {
+      if (!fullPath) {
         return new Response('Missing room ID', { status: 400 });
       }
+
+      // Extract roomId (everything before /internal/, /status, /delete-account, /delete)
+      const subPathMatch = fullPath.match(/^(.+?)(\/(?:internal|status|delete-account|delete).*)$/);
+      const roomId = subPathMatch ? subPathMatch[1] : fullPath;
 
       const parsed = parseRoomId(roomId);
       if (!parsed) {
         return new Response(`Invalid room ID format: ${roomId}`, { status: 400 });
       }
 
-      // Validate auth matches room user (supports both simple and JWT auth)
-      const authConfig = getAuthConfig(env);
-      const auth = await parseAuthJWT(request, authConfig);
-      log.debug('Auth result:', auth, 'Room userId:', parsed.userId);
-      if (!auth || auth.userId !== parsed.userId) {
-        log.warn('Auth failed. auth:', auth, 'parsed.userId:', parsed.userId);
-        return new Response('Unauthorized', { status: 401 });
+      // Validate auth
+      let auth: AuthResult | null = null;
+
+      // Dev-only: bypass JWT auth for integration testing
+      if (env.TEST_AUTH_BYPASS === 'true' && env.ENVIRONMENT === 'development') {
+        const testUserId = url.searchParams.get('test_user_id');
+        const testOrgId = url.searchParams.get('test_org_id');
+        if (testUserId && testOrgId) {
+          auth = { userId: testUserId, orgId: testOrgId };
+          log.debug('TEST_AUTH_BYPASS: using test auth', testUserId, testOrgId);
+        }
       }
 
-      // Validate the org in the room matches the JWT
-      if (auth.orgId !== parsed.orgId) {
-        log.warn('Org mismatch. Room orgId:', parsed.orgId, 'JWT orgId:', auth.orgId);
-        return new Response('Unauthorized: org mismatch', { status: 401 });
+      if (!auth) {
+        const authConfig = getAuthConfig(env);
+        auth = await parseAuthJWT(request, authConfig);
+      }
+
+      // Document, tracker, and team rooms are org-scoped (no userId in room ID), other rooms are user-scoped
+      if (parsed.type === 'document' || parsed.type === 'tracker' || parsed.type === 'team') {
+        if (!auth) {
+          log.warn('Auth failed for document room');
+          return new Response('Unauthorized', { status: 401 });
+        }
+        if (auth.orgId !== parsed.orgId) {
+          log.warn('Org mismatch. Room orgId:', parsed.orgId, 'JWT orgId:', auth.orgId);
+          return new Response('Unauthorized: org mismatch', { status: 401 });
+        }
+      } else {
+        log.debug('Auth result:', auth, 'Room userId:', parsed.userId);
+        if (!auth || auth.userId !== parsed.userId) {
+          log.warn('Auth failed. auth:', auth, 'parsed.userId:', parsed.userId);
+          return new Response('Unauthorized', { status: 401 });
+        }
+        if (auth.orgId !== parsed.orgId) {
+          log.warn('Org mismatch. Room orgId:', parsed.orgId, 'JWT orgId:', auth.orgId);
+          return new Response('Unauthorized: org mismatch', { status: 401 });
+        }
       }
       log.debug('Auth passed, forwarding to DO');
 
@@ -216,6 +288,18 @@ export default {
         // Use user ID as DO ID (one index per user)
         const id = env.INDEX_ROOM.idFromName(`user:${parsed.userId}:index`);
         stub = env.INDEX_ROOM.get(id);
+      } else if (parsed.type === 'document' && parsed.documentId) {
+        // Use full room ID as DO ID (one DO per document)
+        const id = env.DOCUMENT_ROOM.idFromName(roomId);
+        stub = env.DOCUMENT_ROOM.get(id);
+      } else if (parsed.type === 'tracker' && parsed.projectId) {
+        // Use full room ID as DO ID (one DO per project tracker)
+        const id = env.TRACKER_ROOM.idFromName(roomId);
+        stub = env.TRACKER_ROOM.get(id);
+      } else if (parsed.type === 'team') {
+        // Use full room ID as DO ID (one DO per org)
+        const id = env.TEAM_ROOM.idFromName(roomId);
+        stub = env.TEAM_ROOM.get(id);
       } else {
         return new Response('Invalid room type', { status: 400 });
       }
@@ -272,9 +356,24 @@ async function handleApiRequest(
   }
 
   // All other API routes require authentication
-  const authConfig = getAuthConfig(env);
-  const auth = await parseAuthJWT(request, authConfig);
+  let auth: AuthResult | null = null;
+
+  // Dev-only: bypass JWT auth for integration testing (same pattern as WebSocket routes)
+  if (env.TEST_AUTH_BYPASS === 'true' && env.ENVIRONMENT === 'development') {
+    const testUserId = url.searchParams.get('test_user_id');
+    const testOrgId = url.searchParams.get('test_org_id');
+    if (testUserId && testOrgId) {
+      auth = { userId: testUserId, orgId: testOrgId };
+    }
+  }
+
   if (!auth) {
+    const authConfig = getAuthConfig(env);
+    auth = await parseAuthJWT(request, authConfig);
+  }
+
+  if (!auth) {
+    log.warn('API auth failed for:', url.pathname, request.method);
     return new Response('Unauthorized', { status: 401, headers: corsHeaders });
   }
 
@@ -319,9 +418,117 @@ async function handleApiRequest(
     }
   }
 
+  // PUT /api/identity-key - Upload your ECDH public key
+  if (url.pathname === '/api/identity-key' && request.method === 'PUT') {
+    return handleIdentityKeyUpload(request, auth, env, corsHeaders);
+  }
+
+  // GET /api/identity-key/{userId} - Fetch a user's public key (same org only)
+  if (url.pathname.startsWith('/api/identity-key/') && request.method === 'GET') {
+    const targetUserId = url.pathname.slice('/api/identity-key/'.length);
+    if (!targetUserId) {
+      return new Response('Missing user ID', { status: 400, headers: corsHeaders });
+    }
+    return handleIdentityKeyFetch(targetUserId, auth, env, corsHeaders);
+  }
+
   // POST /api/account/delete - Delete user account and all data
   if (url.pathname === '/api/account/delete' && request.method === 'POST') {
     return handleAccountDeletion(auth, env, corsHeaders);
+  }
+
+  // ========================================================================
+  // Team Management Routes
+  // ========================================================================
+
+  // POST /api/teams - Create a new team
+  if (url.pathname === '/api/teams' && request.method === 'POST') {
+    return handleCreateTeam(request, auth, env, corsHeaders);
+  }
+
+  // GET /api/teams - List teams the caller belongs to
+  if (url.pathname === '/api/teams' && request.method === 'GET') {
+    return handleListTeams(request, auth, env, corsHeaders);
+  }
+
+  // Routes under /api/teams/{orgId}/...
+  const teamsMatch = url.pathname.match(/^\/api\/teams\/([^/]+)(\/.*)?$/);
+  if (teamsMatch) {
+    const teamOrgId = teamsMatch[1];
+    const subPath = teamsMatch[2] || '';
+
+    // DELETE /api/teams/{orgId} - Delete team (admin only)
+    if (!subPath && request.method === 'DELETE') {
+      return handleDeleteTeam(teamOrgId, auth, env, corsHeaders);
+    }
+
+    // GET /api/teams/{orgId}/members - List members
+    if (subPath === '/members' && request.method === 'GET') {
+      return handleListMembers(teamOrgId, auth, env, corsHeaders);
+    }
+
+    // POST /api/teams/{orgId}/invite - Invite member
+    if (subPath === '/invite' && request.method === 'POST') {
+      return handleInviteMember(teamOrgId, request, auth, env, corsHeaders);
+    }
+
+    // POST /api/teams/{orgId}/switch - Switch org session
+    if (subPath === '/switch' && request.method === 'POST') {
+      return handleOrgSwitch(teamOrgId, request, auth, env, corsHeaders);
+    }
+
+    // PUT /api/teams/{orgId}/project-identity - Set git remote hash
+    if (subPath === '/project-identity' && request.method === 'PUT') {
+      return handleSetProjectIdentity(teamOrgId, request, auth, env, corsHeaders);
+    }
+
+    // DELETE /api/teams/{orgId}/project-identity - Clear project identity
+    if (subPath === '/project-identity' && request.method === 'DELETE') {
+      return handleClearProjectIdentity(teamOrgId, auth, env, corsHeaders);
+    }
+
+    // Key Envelope Routes
+    // GET /api/teams/{orgId}/key-envelope - Get caller's own envelope
+    if (subPath === '/key-envelope' && request.method === 'GET') {
+      return handleGetOwnKeyEnvelope(teamOrgId, auth, env, corsHeaders);
+    }
+
+    // POST /api/teams/{orgId}/key-envelopes - Upload envelope for a member
+    if (subPath === '/key-envelopes' && request.method === 'POST') {
+      return handleUploadKeyEnvelope(teamOrgId, request, auth, env, corsHeaders);
+    }
+
+    // GET /api/teams/{orgId}/key-envelopes - List all envelopes (admin)
+    if (subPath === '/key-envelopes' && request.method === 'GET') {
+      return handleListKeyEnvelopes(teamOrgId, auth, env, corsHeaders);
+    }
+
+    // DELETE /api/teams/{orgId}/key-envelopes - Delete ALL envelopes (admin, rotation)
+    if (subPath === '/key-envelopes' && request.method === 'DELETE') {
+      return handleDeleteAllKeyEnvelopes(teamOrgId, auth, env, corsHeaders);
+    }
+
+    // DELETE /api/teams/{orgId}/key-envelopes/{userId} - Delete specific envelope
+    const envelopeMatch = subPath.match(/^\/key-envelopes\/([^/]+)$/);
+    if (envelopeMatch && request.method === 'DELETE') {
+      return handleDeleteKeyEnvelope(teamOrgId, envelopeMatch[1], auth, env, corsHeaders);
+    }
+
+    // Routes under /api/teams/{orgId}/members/{memberId}
+    const memberMatch = subPath.match(/^\/members\/([^/]+)$/);
+    if (memberMatch) {
+      const memberId = memberMatch[1];
+
+      // DELETE /api/teams/{orgId}/members/{memberId} - Remove member
+      if (request.method === 'DELETE') {
+        return handleRemoveMember(teamOrgId, memberId, auth, env, corsHeaders);
+      }
+
+      // PUT /api/teams/{orgId}/members/{memberId} - Update role
+      if (request.method === 'PUT') {
+        return handleUpdateMemberRole(teamOrgId, memberId, request, auth, env, corsHeaders);
+      }
+    }
   }
 
   return new Response('Not Found', { status: 404, headers: corsHeaders });
@@ -496,6 +703,104 @@ async function handleMagicLinkRequest(
       JSON.stringify({ error: 'Internal server error' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
+  }
+}
+
+/**
+ * Handle identity key upload (PUT /api/identity-key).
+ * Stores the user's ECDH P-256 public key in the TeamRoom DO.
+ */
+async function handleIdentityKeyUpload(
+  request: Request,
+  auth: AuthResult,
+  env: Env,
+  corsHeaders: Record<string, string>
+): Promise<Response> {
+  try {
+    const body = await request.json() as { publicKeyJwk: string };
+
+    if (!body.publicKeyJwk) {
+      return new Response(JSON.stringify({ error: 'publicKeyJwk is required' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Validate that the JWK is a valid ECDH P-256 public key
+    try {
+      const jwk = JSON.parse(body.publicKeyJwk);
+      if (jwk.kty !== 'EC' || jwk.crv !== 'P-256') {
+        return new Response(JSON.stringify({ error: 'Key must be ECDH P-256 (kty: EC, crv: P-256)' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      // Ensure it's a public key (no private component)
+      if (jwk.d) {
+        return new Response(JSON.stringify({ error: 'Must be a public key (no private component)' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    } catch {
+      return new Response(JSON.stringify({ error: 'publicKeyJwk must be valid JSON' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Upload to TeamRoom DO
+    await teamRoomPost(auth.orgId, 'upload-identity-key', {
+      userId: auth.userId,
+      publicKeyJwk: body.publicKeyJwk,
+    }, env);
+
+    return new Response(JSON.stringify({ success: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  } catch (err) {
+    log.error('Identity key upload error:', err);
+    return new Response(JSON.stringify({ error: 'Internal server error' }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+}
+
+/**
+ * Handle identity key fetch (GET /api/identity-key/{userId}).
+ * Only returns keys for users in the same org as the requester.
+ * Fetches from the TeamRoom DO (org-scoped, per-org key isolation).
+ */
+async function handleIdentityKeyFetch(
+  targetUserId: string,
+  auth: AuthResult,
+  env: Env,
+  corsHeaders: Record<string, string>
+): Promise<Response> {
+  try {
+    const resp = await teamRoomGet(auth.orgId, 'get-identity-key', env, { userId: targetUserId });
+
+    if (!resp.ok) {
+      return new Response(JSON.stringify({ error: 'Public key not found' }), {
+        status: 404,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const data = await resp.json() as { userId: string; publicKeyJwk: string; updatedAt: number };
+
+    return new Response(JSON.stringify(data), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  } catch (err) {
+    log.error('Identity key fetch error:', err);
+    return new Response(JSON.stringify({ error: 'Internal server error' }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
   }
 }
 
@@ -709,6 +1014,48 @@ async function authenticateB2BToken(
   // Step 1: Authenticate via B2B discovery
   let discoveryEndpoint: string;
   let discoveryBody: Record<string, string>;
+  // Multi-tenant magic links (team invites) authenticate directly into an org,
+  // bypassing the discovery flow entirely.
+  if (tokenType === 'multi_tenant_magic_links') {
+    log.info('Authenticating multi-tenant magic link (team invite)');
+    const authResponse = await fetch(`${b2bApiBase}/magic_links/authenticate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': b2bAuth,
+      },
+      body: JSON.stringify({
+        magic_links_token: token,
+        session_duration_minutes: 60 * 24 * 7, // 1 week
+      }),
+    });
+
+    if (!authResponse.ok) {
+      const errData = await authResponse.json().catch(() => ({})) as { error_message?: string };
+      log.error('Multi-tenant magic link auth failed:', errData.error_message);
+      return failResult(errData.error_message || 'Magic link authentication failed');
+    }
+
+    const authData = await authResponse.json() as {
+      member?: { member_id: string; email_address?: string };
+      member_session?: { expires_at: string };
+      organization?: { organization_id: string };
+      session_token?: string;
+      session_jwt?: string;
+    };
+
+    return {
+      ok: true,
+      error: '',
+      sessionToken: authData.session_token || '',
+      sessionJwt: authData.session_jwt || '',
+      userId: authData.member?.member_id || '',
+      email: authData.member?.email_address || '',
+      expiresAt: authData.member_session?.expires_at || '',
+      orgId: authData.organization?.organization_id || '',
+    };
+  }
+
   if (tokenType === 'discovery_oauth' || tokenType === 'oauth') {
     discoveryEndpoint = `${b2bApiBase}/oauth/discovery/authenticate`;
     discoveryBody = { discovery_oauth_token: token };

@@ -2,7 +2,7 @@
  * Register the unified TrackerPlugin with the plugin registry
  */
 
-import { pluginRegistry } from 'rexical';
+import { pluginRegistry } from '@nimbalyst/runtime';
 import { trackerPluginPackage, loadBuiltinTrackers, globalRegistry, parseTrackerYAML } from '@nimbalyst/runtime';
 import { getDocumentService } from '../services/RendererDocumentService';
 import * as path from 'path';
@@ -57,8 +57,7 @@ export async function registerTrackerPlugin(workspacePath?: string | null): Prom
   // Register the unified tracker plugin
   pluginRegistry.register(trackerPluginPackage);
 
-  // Expose globalRegistry on window so rexical package can access it
-  // (rexical cannot import from @nimbalyst/runtime)
+  // Expose globalRegistry on window for cross-component access
   (window as any).__trackerRegistry = globalRegistry;
 
   // Expose document service on window for TrackerBottomPanel and other components

@@ -72,6 +72,12 @@ interface AgentTranscriptPanelProps {
     toolCallItemId: string,
     toolCallTimestamp?: number
   ) => Promise<ToolCallDiffResult[] | null>;
+  /** Current session phase for the kanban board */
+  currentPhase?: string | null;
+  /** Available phase columns for the kanban board picker */
+  phaseColumns?: Array<{ value: string; label: string; color: string }>;
+  /** Callback when phase is changed */
+  onSetPhase?: (phase: string | null) => void;
   // Note: Interactive widgets read their host from interactiveWidgetHostAtom(sessionId)
 }
 
@@ -106,6 +112,9 @@ const AgentTranscriptPanelComponent = React.forwardRef<
   promptAdditions,
   appStartTime,
   getToolCallDiffs,
+  currentPhase,
+  phaseColumns,
+  onSetPhase,
 }, ref) => {
   // Show floating actions if explicitly enabled, otherwise default to showing when sidebar is visible
   const shouldShowFloatingActions = showFloatingActions ?? !hideSidebar;
@@ -340,6 +349,9 @@ const AgentTranscriptPanelComponent = React.forwardRef<
             isSidebarCollapsed={hideSidebar || isSidebarCollapsed}
             onToggleSidebar={hideSidebar ? undefined : () => setIsSidebarCollapsed(!isSidebarCollapsed)}
             onNavigateToPrompt={handleNavigateToPrompt}
+            currentPhase={currentPhase}
+            phaseColumns={phaseColumns}
+            onSetPhase={onSetPhase}
           />
         )}
 
@@ -494,6 +506,9 @@ export const AgentTranscriptPanel = React.memo(
 
     // App start time changed - must re-render (restart indicator)
     if (prevProps.appStartTime !== nextProps.appStartTime) return false;
+
+    // Phase changed - must re-render (floating actions phase picker)
+    if (prevProps.currentPhase !== nextProps.currentPhase) return false;
 
     // All checks passed - skip re-render
     return true;

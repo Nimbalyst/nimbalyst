@@ -24,8 +24,9 @@ import {
   getCurrentTrackerTypeFromMarkdown,
   removeTrackerTypeFromMarkdown,
   type TrackerTypeInfo,
-} from 'rexical';
+} from '@nimbalyst/runtime';
 import { $generateHtmlFromNodes } from '@lexical/html';
+import { copyToClipboard } from '@nimbalyst/runtime';
 import { revealFolderAtom, revealFileAtom, openFileRequestAtom, setWindowModeAtom } from '../../store';
 import { getDocumentService } from '../../services/RendererDocumentService';
 import { isWorktreePath } from '../../../shared/pathUtils';
@@ -360,13 +361,11 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
         const transformers = getEditorTransformers();
         const markdown = $convertToEnhancedMarkdownString(transformers);
 
-        if (navigator.clipboard) {
-          navigator.clipboard.writeText(markdown).then(() => {
-            console.log('[UnifiedHeaderBar] Markdown copied to clipboard');
-          }).catch((err) => {
-            console.error('[UnifiedHeaderBar] Failed to copy markdown:', err);
-          });
-        }
+        copyToClipboard(markdown).then(() => {
+          console.log('[UnifiedHeaderBar] Markdown copied to clipboard');
+        }).catch((err) => {
+          console.error('[UnifiedHeaderBar] Failed to copy markdown:', err);
+        });
       });
     } catch (error) {
       console.error('[UnifiedHeaderBar] Failed to convert to markdown:', error);

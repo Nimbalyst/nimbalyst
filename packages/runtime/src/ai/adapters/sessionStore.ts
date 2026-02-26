@@ -26,6 +26,9 @@ export interface SessionMeta {
   isArchived: boolean;
   isPinned: boolean;
   hasUnread?: boolean;
+  // Kanban board phase and tags (from metadata JSONB)
+  phase?: string;
+  tags?: string[];
   // Branch tracking - SEPARATE from hierarchical parentSessionId
   branchedFromSessionId?: string;
   branchPointMessageId?: number;

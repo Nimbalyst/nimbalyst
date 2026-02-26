@@ -65,6 +65,19 @@ export interface TableViewConfig {
   exportable: boolean;
 }
 
+/**
+ * Sync policy for a tracker type.
+ * Controls whether tracked items of this type participate in collaborative sync.
+ */
+export type TrackerSyncMode = 'local' | 'shared' | 'hybrid';
+
+export interface TrackerSyncPolicy {
+  /** How items sync: local (never), shared (always), hybrid (per-item choice) */
+  mode: TrackerSyncMode;
+  /** Scope of sync: project (git remote) or workspace (local path) */
+  scope: 'project' | 'workspace';
+}
+
 export interface TrackerDataModel {
   type: string;
   displayName: string;
@@ -78,6 +91,8 @@ export interface TrackerDataModel {
   statusBarLayout?: StatusBarLayoutRow[];
   inlineTemplate?: string;
   tableView?: TableViewConfig;
+  /** Sync policy for collaborative tracking. Defaults to local if omitted. */
+  sync?: TrackerSyncPolicy;
 }
 
 /**

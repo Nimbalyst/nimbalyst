@@ -21,7 +21,6 @@ export default defineConfig({
         '**/*.jsx',
         '**/*.js',
         '../runtime/**/*.{tsx,ts,jsx,js}',
-        '../rexical/**/*.{tsx,ts,jsx,js}',
       ],
     }),
     // Fix script tags for file:// loading in WKWebView:
@@ -39,7 +38,6 @@ export default defineConfig({
   resolve: {
     alias: {
       '@nimbalyst/runtime': fileURLToPath(new URL('../runtime/src', import.meta.url)),
-      'rexical': fileURLToPath(new URL('../rexical/src', import.meta.url)),
     },
   },
   base: './',

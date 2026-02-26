@@ -10,7 +10,7 @@ import {
 import { $createDocumentReferenceNode } from './DocumentLinkNode';
 import { DocumentService } from '../../core/DocumentService';
 import documentLinkStyles from './DocumentLinkPlugin.css?inline';
-import { TypeaheadMenuOption } from "rexical";
+import { TypeaheadMenuOption } from "../../editor";
 import { fuzzyFilterDocuments } from '../../utils/fuzzyMatch';
 import { MaterialSymbol } from "../../ui";
 

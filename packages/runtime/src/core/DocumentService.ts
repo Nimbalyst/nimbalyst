@@ -46,9 +46,10 @@ export interface MetadataChangeEvent {
 /**
  * Tracker item types
  */
-export type TrackerItemType = 'bug' | 'task' | 'plan' | 'idea' | 'decision';
+export type TrackerItemType = 'bug' | 'task' | 'plan' | 'idea' | 'decision' | (string & {});
 export type TrackerItemStatus = 'to-do' | 'in-progress' | 'in-review' | 'done' | 'blocked' | 'proposed' | 'in-discussion' | 'decided' | 'implemented' | 'rejected' | 'superseded' | (string & {});
 export type TrackerItemPriority = 'low' | 'medium' | 'high' | 'critical';
+export type TrackerItemSyncStatus = 'local' | 'synced' | 'pending';
 
 /**
  * Tracker item entry in the database cache
@@ -72,6 +73,22 @@ export interface TrackerItem {
   lastIndexed: Date;
   /** Extra fields from frontmatter defined by the tracker model */
   customFields?: Record<string, any>;
+
+  // Collaborative fields (populated when item is synced via TrackerRoom)
+  /** Assignee org member ID */
+  assigneeId?: string;
+  /** Reporter org member ID */
+  reporterId?: string;
+  /** Labels for categorization */
+  labels?: string[];
+  /** Linked AI session IDs */
+  linkedSessions?: string[];
+  /** Linked git commit SHA */
+  linkedCommitSha?: string;
+  /** DocumentRoom ID for rich collaborative content */
+  documentId?: string;
+  /** Sync status: local (never synced), synced (up to date), pending (queued for sync) */
+  syncStatus?: TrackerItemSyncStatus;
 }
 
 /**

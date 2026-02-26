@@ -1,0 +1,112 @@
+/**
+ * Tracker Data Host Adapter (Electron)
+ *
+ * Centralized IPC listener that populates the cross-platform tracker data atoms
+ * defined in @nimbalyst/runtime. This is the Electron-specific adapter that bridges
+ * IPC events to reactive Jotai atoms.
+ *
+ * Follows IPC_LISTENERS.md:
+ * - Components NEVER subscribe to IPC events directly
+ * - This listener subscribes ONCE at startup
+ * - Updates atoms; components read from atoms
+ *
+ * Data flow:
+ *   Main process (PGLite / TrackerSyncManager)
+ *     -> IPC events (document-service:tracker-items-changed, tracker-sync:*)
+ *     -> This listener
+ *     -> store.set(trackerDataAtoms)
+ *     -> TrackerTable reads via useAtomValue
+ *
+ * Call initTrackerSyncListeners() once in App.tsx on mount.
+ */
+
+import { store } from '@nimbalyst/runtime/store';
+import {
+  replaceAllTrackerItemsAtom,
+  upsertTrackerItemAtom,
+  removeTrackerItemAtom,
+  trackerDataLoadedAtom,
+} from '@nimbalyst/runtime';
+import type { TrackerItem, TrackerItemChangeEvent } from '@nimbalyst/runtime';
+
+/**
+ * Fetch all tracker items from PGLite via IPC and load into atoms.
+ */
+async function loadAllTrackerItems(): Promise<void> {
+  try {
+    const items: TrackerItem[] = await window.electronAPI.invoke(
+      'document-service:tracker-items-list'
+    );
+    console.log('[trackerSyncListeners] Initial load:', items?.length || 0, 'items');
+    store.set(replaceAllTrackerItemsAtom, items || []);
+  } catch (err) {
+    console.error('[trackerSyncListeners] Failed to load tracker items:', err);
+    // Mark as loaded even on error so UI doesn't stay in loading state
+    store.set(trackerDataLoadedAtom, true);
+  }
+}
+
+/**
+ * Initialize tracker data listeners.
+ * Performs initial data load and subscribes to change events.
+ *
+ * @returns Cleanup function to remove listeners
+ */
+export function initTrackerSyncListeners(): () => void {
+  const cleanups: Array<() => void> = [];
+
+  console.log('[trackerSyncListeners] Initializing tracker data listeners');
+
+  // Initial load from PGLite
+  loadAllTrackerItems();
+
+  // Subscribe to tracker item changes from ElectronDocumentService (local indexer changes)
+  // This is the subscription-based IPC: we send a 'watch' message, then receive events.
+  window.electronAPI.send('document-service:tracker-items-watch');
+
+  // Handle change events with granular atom updates
+  cleanups.push(
+    window.electronAPI.on(
+      'document-service:tracker-items-changed',
+      (change: TrackerItemChangeEvent) => {
+        console.log('[trackerSyncListeners] Received tracker-items-changed:', {
+          added: change.added?.length || 0,
+          updated: change.updated?.length || 0,
+          removed: change.removed?.length || 0,
+        });
+        // Apply granular updates to the atom map
+        if (change.added?.length) {
+          for (const item of change.added) {
+            store.set(upsertTrackerItemAtom, item);
+          }
+        }
+        if (change.updated?.length) {
+          for (const item of change.updated) {
+            store.set(upsertTrackerItemAtom, item);
+          }
+        }
+        if (change.removed?.length) {
+          for (const id of change.removed) {
+            store.set(removeTrackerItemAtom, id);
+          }
+        }
+      }
+    )
+  );
+
+  // Also subscribe to metadata changes (for full-document trackers like plans/decisions)
+  window.electronAPI.send('document-service:metadata-watch');
+
+  cleanups.push(
+    window.electronAPI.on('document-service:metadata-changed', () => {
+      // Full-document tracker items come from frontmatter metadata.
+      // The simplest approach: re-fetch all items when metadata changes.
+      // This handles plans/decisions that use frontmatter-based tracking.
+      loadAllTrackerItems();
+    })
+  );
+
+  return () => {
+    cleanups.forEach((cleanup) => cleanup());
+  };
+}

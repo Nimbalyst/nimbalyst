@@ -13,18 +13,14 @@
     "types": [],
     "paths": {
       "@nimbalyst/runtime": ["./packages/runtime/src/index.ts"],
-      "@nimbalyst/runtime/*": ["./packages/runtime/src/*"],
-      "rexical": ["./packages/rexical/src/index.ts"],
-      "rexical/*": ["./packages/rexical/src/*"]
+      "@nimbalyst/runtime/*": ["./packages/runtime/src/*"]
     }
   },
   "exclude": [
     "**/node_modules",
     "**/dist",
     "**/e2e/**",
-    "packages/capacitor",
-    "packages/tauri",
-    "packages/playground",
+    "packages/electron/marketing/fixtures",
     "packages/collabv3",
     "packages/electron/release",
     "packages/extension-sdk-docs/examples",

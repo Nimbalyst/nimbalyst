@@ -21,7 +21,9 @@ import { createPGLiteQueuedPromptsStore, type QueuedPromptsStore } from './PGLit
 import { database } from '../database/PGLiteDatabaseWorker';
 import { logger } from '../utils/logger';
 import { initializeSync, shutdownSync, isSyncEnabled, reinitializeSync } from './SyncManager';
+import { shutdownTrackerSync, initializeTrackerSync } from './TrackerSyncManager';
 import { onAuthStateChange } from './StytchAuthService';
+import { windowStates } from '../window/WindowManager';
 
 class RepositoryManager {
   private sessionStore: SessionStore | null = null;
@@ -264,6 +266,16 @@ class RepositoryManager {
     AgentMessagesRepository.setStore(this.agentMessagesStore);
 
     logger.main.info('[RepositoryManager] Sync reinitialization complete, sync enabled:', isSyncEnabled());
+
+    // Also reinitialize tracker sync for all open workspaces
+    // Tracker sync requires a workspace path (for project identity via git remote)
+    for (const state of windowStates.values()) {
+      if (state.workspacePath) {
+        initializeTrackerSync(state.workspacePath).catch(err => {
+          logger.main.error('[RepositoryManager] Failed to initialize tracker sync for workspace:', err);
+        });
+      }
+    }
   }
 
   /**
@@ -277,6 +289,7 @@ class RepositoryManager {
     }
 
     // Shutdown sync first
+    shutdownTrackerSync();
     shutdownSync();
 
     if (this.sessionStore) {

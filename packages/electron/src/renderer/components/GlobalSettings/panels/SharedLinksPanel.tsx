@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { MaterialSymbol } from '@nimbalyst/runtime';
+import { MaterialSymbol, copyToClipboard } from '@nimbalyst/runtime';
 import { buildShareUrl } from '../../../store/atoms/sessionShares';
 
 interface SharedLink {
@@ -73,7 +73,7 @@ export const SharedLinksPanel: React.FC = () => {
   const handleCopyLink = (share: SharedLink) => {
     const key = shareKeys[share.sessionId];
     const url = buildShareUrl(share.shareId, key);
-    navigator.clipboard.writeText(url);
+    copyToClipboard(url);
     setCopiedId(share.shareId);
     setTimeout(() => setCopiedId(null), 2000);
   };

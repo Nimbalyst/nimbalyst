@@ -198,6 +198,72 @@ export async function getSessionMessagesForSync(
   }));
 }
 
+/**
+ * Batch-fetch messages for multiple sessions, each with its own sinceTimestamp.
+ * Replaces the N+1 pattern of calling getSessionMessagesForSync() per session.
+ * Returns a Map from sessionId -> messages.
+ */
+export async function getSessionMessagesForSyncBatch(
+  requests: Array<{ sessionId: string; sinceTimestamp: number }>
+): Promise<Map<string, SyncedMessage[]>> {
+  const result = new Map<string, SyncedMessage[]>();
+  if (requests.length === 0) return result;
+
+  if (!moduleDb) {
+    throw new Error('Session store not initialized');
+  }
+  if (moduleEnsureReady) {
+    await moduleEnsureReady();
+  }
+
+  // Use the earliest sinceTimestamp across all requests as a lower bound,
+  // then filter per-session in JS. This avoids building a complex SQL query
+  // with per-session timestamps, while still doing only ONE database query.
+  const earliestSince = Math.min(...requests.map(r => r.sinceTimestamp));
+  const sinceDate = new Date(earliestSince);
+
+  const sessionIds = requests.map(r => r.sessionId);
+  const placeholders = sessionIds.map((_, i) => `$${i + 2}`).join(', ');
+
+  const { rows: msgRows } = await moduleDb.query<any>(
+    `SELECT id, session_id, created_at, source, direction, content, metadata, hidden
+     FROM ai_agent_messages
+     WHERE session_id IN (${placeholders}) AND created_at > $1
+     ORDER BY created_at ASC`,
+    [sinceDate, ...sessionIds]
+  );
+
+  // Build a per-session sinceTimestamp lookup for JS-side filtering
+  const sinceMap = new Map<string, number>();
+  for (const req of requests) {
+    sinceMap.set(req.sessionId, req.sinceTimestamp);
+    result.set(req.sessionId, []);
+  }
+
+  for (const m of msgRows) {
+    const sessionSince = sinceMap.get(m.session_id) ?? 0;
+    const createdAt = m.created_at instanceof Date ? m.created_at : new Date(toMillis(m.created_at));
+    // Filter: only include messages newer than this session's sinceTimestamp
+    if (createdAt.getTime() > sessionSince) {
+      const arr = result.get(m.session_id);
+      if (arr) {
+        arr.push({
+          id: m.id,
+          sessionId: m.session_id,
+          createdAt,
+          source: m.source,
+          direction: m.direction,
+          content: m.content,
+          metadata: m.metadata,
+          hidden: m.hidden ?? false,
+        });
+      }
+    }
+  }
+
+  return result;
+}
+
 export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureReadyFn): SessionStore {
   // Store db reference for module-level functions
   moduleDb = db;
@@ -463,10 +529,11 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
         `SELECT s.id, s.provider, s.model, s.session_type, s.mode, s.title, s.workspace_id,
                 s.worktree_id, s.parent_session_id, s.created_at, s.updated_at, s.is_archived, s.is_pinned,
                 s.branched_from_session_id, s.branch_point_message_id, s.branched_at, s.metadata,
-                (SELECT COUNT(*) FROM ai_sessions c WHERE c.parent_session_id = s.id) as child_count
+                (SELECT COUNT(*) FROM ai_sessions c WHERE c.parent_session_id = s.id) as child_count,
+                GREATEST(s.updated_at, COALESCE((SELECT MAX(c.updated_at) FROM ai_sessions c WHERE c.parent_session_id = s.id), s.updated_at)) as effective_updated_at
          FROM ai_sessions s
          WHERE s.workspace_id=$1 ${archiveFilter}
-         ORDER BY s.updated_at DESC`,
+         ORDER BY effective_updated_at DESC`,
         [workspaceId]
       );
       const queryTime = performance.now() - queryStart;
@@ -474,7 +541,8 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
       // console.log(`[PGLiteSessionStore] list() - ensureReady: ${ensureTime.toFixed(1)}ms, query: ${queryTime.toFixed(1)}ms, total: ${totalTime.toFixed(1)}ms, rows: ${rows.length}`);
       return rows.map(row => {
         const createdAt = toMillis(row.created_at);
-        const updatedAt = toMillis(row.updated_at);
+        // For workstream parents, use the effective timestamp that includes child activity
+        const updatedAt = toMillis(row.effective_updated_at ?? row.updated_at);
         const branchedAt = row.branched_at ? toMillis(row.branched_at) : undefined;
         const childCount = parseInt(row.child_count) || 0;
         const metadata = row.metadata ?? {};
@@ -502,7 +570,10 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
           hasUnread: metadata.metadata?.hasUnread ?? metadata.hasUnread ?? false,
           // Check if session has a pending AskUserQuestion (for sidebar indicator persistence)
           hasPendingQuestion: !!(metadata.pendingAskUserQuestion),
-        } satisfies SessionMeta & { hasPendingQuestion?: boolean };
+          // Kanban board phase and tags from metadata JSONB
+          phase: metadata.phase ?? undefined,
+          tags: Array.isArray(metadata.tags) ? metadata.tags : undefined,
+        } satisfies SessionMeta & { hasPendingQuestion?: boolean; phase?: string; tags?: string[] };
       });
     },
 

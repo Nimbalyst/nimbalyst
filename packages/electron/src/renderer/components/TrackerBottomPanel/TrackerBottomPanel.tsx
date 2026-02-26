@@ -1,9 +1,10 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
-import { TrackerTable, SortColumn as TrackerSortColumn, SortDirection as TrackerSortDirection } from '@nimbalyst/runtime/plugins/TrackerPlugin';
+import { TrackerTable, SortColumn as TrackerSortColumn, SortDirection as TrackerSortDirection, trackerItemCountByTypeAtom } from '@nimbalyst/runtime/plugins/TrackerPlugin';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import { globalRegistry, loadBuiltinTrackers } from '@nimbalyst/runtime/plugins/TrackerPlugin/models';
 import { usePostHog } from 'posthog-js/react';
+import type { TrackerItemType } from '@nimbalyst/runtime';
 import {
   activeTrackerTypeAtom,
   trackerPanelHeightAtom,
@@ -28,8 +29,10 @@ interface BottomPanelProps {
   workspacePath?: string;
 }
 
-interface ItemCounts {
-  [key: string]: number;
+/** Small component so each tab badge subscribes to its own atom */
+function TrackerTabCount({ type }: { type: TrackerItemType }) {
+  const count = useAtomValue(trackerItemCountByTypeAtom(type));
+  return <>{count}</>;
 }
 
 export const TrackerBottomPanel: React.FC<BottomPanelProps> = ({
@@ -61,136 +64,13 @@ export const TrackerBottomPanel: React.FC<BottomPanelProps> = ({
     return globalRegistry.getAll();
   }, [registryVersion]);
 
-  // Initialize counts for all tracker types
-  const [itemCounts, setItemCounts] = useState<ItemCounts>(() => {
-    const counts: ItemCounts = {};
-    trackerTypes.forEach(tracker => {
-      counts[tracker.type] = 0;
-    });
-    return counts;
-  });
-
-  // Refresh key to force TrackerTable to reload when data changes
-  const [refreshKey, setRefreshKey] = useState(0);
-
-  // Load item counts
-  useEffect(() => {
-    let mounted = true;
-    let retryTimer: NodeJS.Timeout | null = null;
-
-    async function loadCounts() {
-      const documentService = (window as any).documentService;
-
-      if (!documentService) {
-        if (mounted) {
-          retryTimer = setTimeout(() => loadCounts(), 500);
-        }
-        return;
-      }
-
-      if (!documentService.listTrackerItems) {
-        if (mounted) {
-          retryTimer = setTimeout(() => loadCounts(), 500);
-        }
-        return;
-      }
-
-      try {
-        if (documentService.refreshWorkspaceData) {
-          await documentService.refreshWorkspaceData();
-        }
-
-        const items = await documentService.listTrackerItems();
-        if (!mounted) return;
-
-        const counts: ItemCounts = {};
-        trackerTypes.forEach(tracker => {
-          const inlineCount = items.filter((i: any) => {
-            if (i.type !== tracker.type) return false;
-            const status = (i.status || '').toLowerCase();
-            return status !== 'done' && status !== 'completed';
-          }).length;
-
-          counts[tracker.type] = inlineCount;
-        });
-
-        if (documentService.listDocumentMetadata) {
-          const metadata = await documentService.listDocumentMetadata();
-
-          trackerTypes.forEach(tracker => {
-            if (!tracker.modes?.fullDocument) return;
-
-            const fullDocCount = metadata.filter((doc: any) => {
-              if (!doc.frontmatter) return false;
-
-              // Check type-specific key (e.g. 'planStatus') or generic 'trackerStatus' with matching type
-              const specificKey = `${tracker.type}Status`;
-              let isMatch = false;
-              if (doc.frontmatter[specificKey] && typeof doc.frontmatter[specificKey] === 'object') {
-                isMatch = true;
-              } else if (doc.frontmatter.trackerStatus && typeof doc.frontmatter.trackerStatus === 'object' && doc.frontmatter.trackerStatus.type === tracker.type) {
-                isMatch = true;
-              }
-              if (!isMatch) return false;
-
-              const pathLower = doc.path.toLowerCase();
-              const isAgentFile = pathLower.includes('/agents/') || pathLower.includes('\\agents\\');
-              if (isAgentFile) return false;
-
-              // Status can be top-level (canonical) or embedded in trackerStatus (backward compat)
-              const trackerBlock = doc.frontmatter.trackerStatus || doc.frontmatter[specificKey] || {};
-              const status = (doc.frontmatter.status || trackerBlock.status || '').toLowerCase();
-              return status !== 'completed' && status !== 'done';
-            }).length;
-
-            counts[tracker.type] = (counts[tracker.type] || 0) + fullDocCount;
-          });
-        }
-
-        setItemCounts(counts);
-      } catch (error) {
-        console.error('[TrackerBottomPanel] Failed to load item counts:', error);
-      }
-    }
-
-    loadCounts();
-
-    const documentService = (window as any).documentService;
-    let unsubscribeTracker: (() => void) | undefined;
-    let unsubscribeMetadata: (() => void) | undefined;
-
-    if (documentService && documentService.watchTrackerItems) {
-      unsubscribeTracker = documentService.watchTrackerItems(() => {
-        if (mounted) {
-          loadCounts();
-          setRefreshKey(prev => prev + 1);
-        }
-      });
-    }
-
-    if (documentService && documentService.watchDocumentMetadata) {
-      unsubscribeMetadata = documentService.watchDocumentMetadata(() => {
-        if (mounted) {
-          loadCounts();
-          setRefreshKey(prev => prev + 1);
-        }
-      });
-    }
-
-    return () => {
-      mounted = false;
-      if (retryTimer) clearTimeout(retryTimer);
-      if (unsubscribeTracker) unsubscribeTracker();
-      if (unsubscribeMetadata) unsubscribeMetadata();
-    };
-  }, [trackerTypes]);
+  // Item counts are derived from atoms via TrackerTabCount component (per-tab subscription)
 
   // Track analytics when panel is opened or switched
   useEffect(() => {
     if (activePanel && posthog) {
       posthog.capture('tracker_tab_opened', {
         trackerType: activePanel,
-        itemCount: itemCounts[activePanel] || 0,
       });
     }
   }, [activePanel, posthog]);
@@ -259,46 +139,28 @@ export const TrackerBottomPanel: React.FC<BottomPanelProps> = ({
     if (!workspacePath || !quickAddType) return;
 
     try {
-      const timestamp = Date.now().toString(36);
-      const random = Math.random().toString(36).substring(2, 8);
       const tracker = trackerTypes.find(t => t.type === quickAddType);
       const prefix = tracker?.idPrefix || quickAddType.substring(0, 3);
+      const timestamp = Date.now().toString(36);
+      const random = Math.random().toString(36).substring(2, 8);
       const id = `${prefix}_${timestamp}${random}`;
 
-      const today = new Date().toISOString().split('T')[0];
-      const itemLine = `- ${title} #${quickAddType}[id:${id} status:to-do priority:${priority} created:${today}]\n`;
+      const statusField = tracker?.fields.find(f => f.name === 'status');
+      const defaultStatus = (statusField?.default as string) || 'to-do';
+      const syncMode = tracker?.sync?.mode || 'local';
 
-      const relativeTrackerPath = `nimbalyst-local/tracker/${quickAddType}s.md`;
-      const absoluteTrackerPath = `${workspacePath}/${relativeTrackerPath}`;
+      const result = await window.electronAPI.documentService.createTrackerItem({
+        id,
+        type: quickAddType,
+        title,
+        status: defaultStatus,
+        priority,
+        workspace: workspacePath,
+        syncMode,
+      });
 
-      let existingContent = '';
-      try {
-        const result = await window.electronAPI.readFileContent(absoluteTrackerPath);
-        if (result && result.success && 'content' in result) {
-          existingContent = result.content;
-        }
-      } catch {
-        // File doesn't exist
-      }
-
-      let newContent: string;
-      if (!existingContent.trim()) {
-        const trackerName = tracker?.displayNamePlural || `${quickAddType}s`;
-        newContent = `# ${trackerName.charAt(0).toUpperCase() + trackerName.slice(1)}\n\n${itemLine}`;
-      } else {
-        newContent = existingContent.endsWith('\n')
-          ? existingContent + itemLine
-          : existingContent + '\n' + itemLine;
-      }
-
-      const result = await window.electronAPI.invoke('create-document', relativeTrackerPath, newContent, true);
       if (!result.success) {
-        throw new Error(result.error || 'Failed to write tracker file');
-      }
-
-      const documentService = (window as any).documentService;
-      if (documentService?.refreshWorkspaceData) {
-        await documentService.refreshWorkspaceData();
+        throw new Error(result.error || 'Failed to create tracker item');
       }
 
       posthog?.capture('tracker_item_created', {
@@ -307,7 +169,6 @@ export const TrackerBottomPanel: React.FC<BottomPanelProps> = ({
         source: 'quick_add_panel'
       });
 
-      setRefreshKey(prev => prev + 1);
       setQuickAddType(null);
     } catch (error) {
       console.error('[TrackerBottomPanel] Failed to create tracker item:', error);
@@ -349,7 +210,7 @@ export const TrackerBottomPanel: React.FC<BottomPanelProps> = ({
                           : 'bg-[var(--nim-bg-tertiary)] text-[var(--nim-text-muted)]'
                       }`}
                     >
-                      {itemCounts[tracker.type] || 0}
+                      <TrackerTabCount type={tracker.type as TrackerItemType} />
                     </span>
                   </button>
                 ))}
@@ -385,7 +246,6 @@ export const TrackerBottomPanel: React.FC<BottomPanelProps> = ({
                 />
               ) : activePanel ? (
                 <TrackerTable
-                  key={refreshKey}
                   filterType={activePanel as 'all' | 'bug' | 'task' | 'plan' | 'idea' | 'decision'}
                   sortBy={trackerSortBy}
                   sortDirection={trackerSortDirection}

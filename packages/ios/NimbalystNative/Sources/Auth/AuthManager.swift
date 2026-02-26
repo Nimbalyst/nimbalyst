@@ -98,8 +98,6 @@ public final class AuthManager: ObservableObject {
         }
 
         // Present the auth session
-        // Use ephemeral session to avoid stale cookies from previous auth projects
-        authSession?.prefersEphemeralWebBrowserSession = true
         authSession?.presentationContextProvider = ASWebAuthPresentationContext.shared
         authSession?.start()
     }

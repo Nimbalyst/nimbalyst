@@ -11,10 +11,8 @@ const config: Config = {
   ...baseConfig,
   content: [
     './src/renderer/**/*.{ts,tsx,js,jsx}',
-    // Include runtime AI components
+    // Include runtime components (AI, editor, etc.)
     '../runtime/src/**/*.{ts,tsx,js,jsx}',
-    // Include rexical editor components
-    '../rexical/src/**/*.{ts,tsx,js,jsx}',
   ],
 };
 

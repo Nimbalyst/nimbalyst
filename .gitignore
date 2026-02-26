@@ -10,6 +10,7 @@ dist/
 esm/build/
 split/build/
 out/
+out2/
 release/
 packages/electron/release/
 

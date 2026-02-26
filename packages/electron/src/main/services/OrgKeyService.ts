@@ -1,0 +1,662 @@
+/**
+ * OrgKeyService - Manages ECDH identity key pairs and per-org encryption keys.
+ *
+ * Architecture:
+ * - One ECDH P-256 identity key pair per device (stored in safeStorage)
+ * - One AES-256-GCM org encryption key per team (stored in safeStorage)
+ * - Identity public key uploaded to server per-org for key exchange
+ * - Org keys wrapped/unwrapped via ECDH between admin and members
+ * - Never touches global auth state (uses per-org JWTs from TeamService)
+ *
+ * Storage:
+ * - ecdh-identity-keypair.enc: Serialized ECDH P-256 key pair (JWK)
+ * - org-encryption-keys.enc: Map<orgId, base64 raw AES-256 key bytes>
+ * - trust-verifications.enc: Map<orgId:memberId, TrustRecord> for local trust decisions
+ */
+
+import { safeStorage, app, net } from 'electron';
+import * as fs from 'fs';
+import * as path from 'path';
+import { createHash } from 'crypto';
+import { ECDHKeyManager, type SerializedECDHKeyPair, type KeyEnvelope } from '@nimbalyst/runtime/sync';
+import { logger } from '../utils/logger';
+import { getSessionSyncConfig } from '../utils/store';
+import { getSessionJwt, isAuthenticated } from './StytchAuthService';
+import { getOrgScopedJwt } from './TeamService';
+import { safeHandle } from '../utils/ipcRegistry';
+
+// ============================================================================
+// Server URL Helper
+// ============================================================================
+
+const PRODUCTION_COLLAB_URL = 'https://sync.nimbalyst.com';
+const DEVELOPMENT_COLLAB_URL = 'http://localhost:8790';
+
+/**
+ * Derive the collab server HTTP URL from environment.
+ * Does NOT require sync to be enabled -- only needs environment context.
+ */
+function getCollabServerUrl(): string {
+  const config = getSessionSyncConfig();
+  const isDev = process.env.NODE_ENV !== 'production';
+  const env = isDev ? config?.environment : undefined;
+  return env === 'development' ? DEVELOPMENT_COLLAB_URL : PRODUCTION_COLLAB_URL;
+}
+
+// ============================================================================
+// Storage Constants
+// ============================================================================
+
+const IDENTITY_KEYPAIR_FILE = 'ecdh-identity-keypair.enc';
+const ORG_KEYS_FILE = 'org-encryption-keys.enc';
+const TRUST_VERIFICATIONS_FILE = 'trust-verifications.enc';
+
+// ============================================================================
+// Module State
+// ============================================================================
+
+let keyManager: ECDHKeyManager | null = null;
+let orgKeysCache: Map<string, string> = new Map(); // orgId -> base64 raw key bytes
+let orgKeysCacheLoaded = false;
+
+// Trust verification state (local, per-device)
+interface TrustRecord {
+  fingerprint: string;  // Fingerprint at time of verification
+  verifiedAt: string;   // ISO timestamp
+}
+
+let trustCache: Map<string, TrustRecord> = new Map(); // `${orgId}:${memberId}` -> TrustRecord
+let trustCacheLoaded = false;
+
+// ============================================================================
+// SafeStorage Helpers (same pattern as CredentialService)
+// ============================================================================
+
+function getStoragePath(filename: string): string {
+  return path.join(app.getPath('userData'), filename);
+}
+
+function isSafeStorageAvailable(): boolean {
+  try {
+    return safeStorage.isEncryptionAvailable();
+  } catch {
+    return false;
+  }
+}
+
+function saveEncrypted(filename: string, data: string): void {
+  const filePath = getStoragePath(filename);
+  if (isSafeStorageAvailable()) {
+    fs.writeFileSync(filePath, safeStorage.encryptString(data));
+  } else {
+    logger.main.warn(`[OrgKeyService] safeStorage unavailable, saving ${filename} unencrypted`);
+    fs.writeFileSync(filePath, data, 'utf8');
+  }
+}
+
+function loadEncrypted(filename: string): string | null {
+  const filePath = getStoragePath(filename);
+  if (!fs.existsSync(filePath)) return null;
+  try {
+    const fileData = fs.readFileSync(filePath);
+    if (isSafeStorageAvailable()) {
+      return safeStorage.decryptString(fileData);
+    }
+    return fileData.toString('utf8');
+  } catch (err) {
+    logger.main.error(`[OrgKeyService] Failed to load ${filename}:`, err);
+    return null;
+  }
+}
+
+// ============================================================================
+// Identity Key Pair Management
+// ============================================================================
+
+/**
+ * Get or create the device's ECDH P-256 identity key pair.
+ * Generated once, persisted in safeStorage.
+ */
+export async function getOrCreateIdentityKeyPair(): Promise<ECDHKeyManager> {
+  if (keyManager?.getKeyPair()) return keyManager;
+
+  keyManager = new ECDHKeyManager();
+
+  // Try to load existing key pair
+  const saved = loadEncrypted(IDENTITY_KEYPAIR_FILE);
+  if (saved) {
+    try {
+      const serialized: SerializedECDHKeyPair = JSON.parse(saved);
+      await keyManager.deserializeKeyPair(serialized);
+      logger.main.info('[OrgKeyService] Loaded existing identity key pair');
+      return keyManager;
+    } catch (err) {
+      logger.main.error('[OrgKeyService] Failed to deserialize identity key pair, generating new:', err);
+    }
+  }
+
+  // Generate new key pair
+  await keyManager.generateKeyPair();
+  const serialized = await keyManager.serializeKeyPair();
+  saveEncrypted(IDENTITY_KEYPAIR_FILE, JSON.stringify(serialized));
+  logger.main.info('[OrgKeyService] Generated and saved new identity key pair');
+
+  return keyManager;
+}
+
+/**
+ * Export the public key as a JWK string.
+ */
+export async function exportPublicKeyJwk(): Promise<string> {
+  const km = await getOrCreateIdentityKeyPair();
+  return km.exportPublicKeyJwk();
+}
+
+// ============================================================================
+// Key Fingerprint Generation
+// ============================================================================
+
+/**
+ * Compute a human-readable fingerprint from a public key JWK string.
+ * SHA-256 hash formatted as colon-separated uppercase hex pairs.
+ * Example: "A3:B7:C2:D8:E1:F0:94:2A:..."
+ */
+export function computeKeyFingerprint(publicKeyJwk: string): string {
+  const hash = createHash('sha256').update(publicKeyJwk).digest();
+  return Array.from(hash)
+    .map(b => b.toString(16).padStart(2, '0').toUpperCase())
+    .join(':');
+}
+
+// ============================================================================
+// Org Encryption Key Storage
+// ============================================================================
+
+function loadOrgKeysFromDisk(): void {
+  if (orgKeysCacheLoaded) return;
+  orgKeysCacheLoaded = true;
+
+  const saved = loadEncrypted(ORG_KEYS_FILE);
+  if (saved) {
+    try {
+      const entries: Array<[string, string]> = JSON.parse(saved);
+      orgKeysCache = new Map(entries);
+      logger.main.info(`[OrgKeyService] Loaded ${orgKeysCache.size} org encryption keys`);
+    } catch {
+      orgKeysCache = new Map();
+    }
+  }
+}
+
+function saveOrgKeysToDisk(): void {
+  const entries = Array.from(orgKeysCache.entries());
+  saveEncrypted(ORG_KEYS_FILE, JSON.stringify(entries));
+}
+
+/**
+ * Store an org encryption key locally (raw AES-256 key as base64).
+ */
+function storeOrgKeyRaw(orgId: string, rawKeyBase64: string): void {
+  loadOrgKeysFromDisk();
+  orgKeysCache.set(orgId, rawKeyBase64);
+  saveOrgKeysToDisk();
+}
+
+/**
+ * Get an org encryption key as a CryptoKey, or null if not stored.
+ */
+export async function getOrgKey(orgId: string): Promise<CryptoKey | null> {
+  loadOrgKeysFromDisk();
+  const raw = orgKeysCache.get(orgId);
+  if (!raw) return null;
+
+  const keyBytes = base64ToUint8Array(raw);
+  return crypto.subtle.importKey(
+    'raw',
+    keyBytes,
+    { name: 'AES-GCM', length: 256 },
+    true, // extractable for wrapping
+    ['encrypt', 'decrypt']
+  );
+}
+
+/**
+ * Check if we have an org key stored locally.
+ */
+export function hasOrgKey(orgId: string): boolean {
+  loadOrgKeysFromDisk();
+  return orgKeysCache.has(orgId);
+}
+
+// ============================================================================
+// Trust Verification Persistence (Local, Per-Device)
+// ============================================================================
+
+function loadTrustFromDisk(): void {
+  if (trustCacheLoaded) return;
+  trustCacheLoaded = true;
+
+  const saved = loadEncrypted(TRUST_VERIFICATIONS_FILE);
+  if (saved) {
+    try {
+      const entries: Array<[string, TrustRecord]> = JSON.parse(saved);
+      trustCache = new Map(entries);
+      logger.main.info(`[OrgKeyService] Loaded ${trustCache.size} trust verifications`);
+    } catch {
+      trustCache = new Map();
+    }
+  }
+}
+
+function saveTrustToDisk(): void {
+  const entries = Array.from(trustCache.entries());
+  saveEncrypted(TRUST_VERIFICATIONS_FILE, JSON.stringify(entries));
+}
+
+function trustKey(orgId: string, memberId: string): string {
+  return `${orgId}:${memberId}`;
+}
+
+/**
+ * Mark a member as verified locally. Stores the fingerprint at time of verification.
+ */
+export function markMemberVerified(orgId: string, memberId: string, fingerprint: string): void {
+  loadTrustFromDisk();
+  trustCache.set(trustKey(orgId, memberId), {
+    fingerprint,
+    verifiedAt: new Date().toISOString(),
+  });
+  saveTrustToDisk();
+  logger.main.info('[OrgKeyService] Marked member as verified:', memberId, 'in org:', orgId);
+}
+
+/**
+ * Revoke local trust for a member.
+ */
+export function revokeMemberTrust(orgId: string, memberId: string): void {
+  loadTrustFromDisk();
+  trustCache.delete(trustKey(orgId, memberId));
+  saveTrustToDisk();
+  logger.main.info('[OrgKeyService] Revoked trust for member:', memberId, 'in org:', orgId);
+}
+
+/**
+ * Get the local trust status for a member.
+ * - 'verified': fingerprint matches stored record
+ * - 'fingerprint-changed': stored fingerprint doesn't match current (key was rotated)
+ * - 'unverified': no stored record
+ */
+export function getMemberTrustStatus(
+  orgId: string,
+  memberId: string,
+  currentFingerprint: string
+): 'verified' | 'fingerprint-changed' | 'unverified' {
+  loadTrustFromDisk();
+  const record = trustCache.get(trustKey(orgId, memberId));
+  if (!record) return 'unverified';
+  if (record.fingerprint === currentFingerprint) return 'verified';
+  return 'fingerprint-changed';
+}
+
+/**
+ * Get all trust records for an org (for batch UI display).
+ */
+export function getAllTrustRecords(orgId: string): Map<string, TrustRecord> {
+  loadTrustFromDisk();
+  const result = new Map<string, TrustRecord>();
+  const prefix = `${orgId}:`;
+  for (const [key, record] of trustCache) {
+    if (key.startsWith(prefix)) {
+      const memberId = key.slice(prefix.length);
+      result.set(memberId, record);
+    }
+  }
+  return result;
+}
+
+// ============================================================================
+// Org Key Generation
+// ============================================================================
+
+/**
+ * Generate a new AES-256-GCM org encryption key and store it locally.
+ */
+export async function generateAndStoreOrgKey(orgId: string): Promise<CryptoKey> {
+  const key = await ECDHKeyManager.generateDocumentKey();
+  const rawBytes = await crypto.subtle.exportKey('raw', key);
+  storeOrgKeyRaw(orgId, uint8ArrayToBase64(new Uint8Array(rawBytes)));
+  logger.main.info('[OrgKeyService] Generated and stored new org key for:', orgId);
+  return key;
+}
+
+// ============================================================================
+// Key Wrapping / Unwrapping
+// ============================================================================
+
+/**
+ * Wrap the org key for a target member using ECDH.
+ */
+export async function wrapOrgKeyForMember(
+  orgId: string,
+  recipientPublicKeyJwk: string
+): Promise<KeyEnvelope> {
+  const km = await getOrCreateIdentityKeyPair();
+  const orgKey = await getOrgKey(orgId);
+  if (!orgKey) throw new Error(`No org key stored for ${orgId}`);
+  return km.wrapDocumentKey(orgKey, recipientPublicKeyJwk);
+}
+
+/**
+ * Unwrap an org key from a key envelope and store it locally.
+ *
+ * @param orgId - The org this key belongs to
+ * @param envelope - The key envelope containing the wrapped key
+ * @param expectedSenderPublicKeyJwk - If provided, verifies the envelope's senderPublicKey
+ *   matches this expected key (fetched from the sender's registered identity key on the server).
+ *   This prevents key envelope poisoning attacks (Finding 2 in security review).
+ */
+export async function unwrapAndStoreOrgKey(
+  orgId: string,
+  envelope: KeyEnvelope,
+  expectedSenderPublicKeyJwk?: string
+): Promise<CryptoKey> {
+  const km = await getOrCreateIdentityKeyPair();
+  let orgKey: CryptoKey;
+  if (expectedSenderPublicKeyJwk) {
+    orgKey = await km.unwrapDocumentKeyVerified(envelope, expectedSenderPublicKeyJwk);
+  } else {
+    orgKey = await km.unwrapDocumentKey(envelope);
+  }
+  const rawBytes = await crypto.subtle.exportKey('raw', orgKey);
+  storeOrgKeyRaw(orgId, uint8ArrayToBase64(new Uint8Array(rawBytes)));
+  logger.main.info('[OrgKeyService] Unwrapped and stored org key for:', orgId);
+  return orgKey;
+}
+
+// ============================================================================
+// Server Communication (Key Envelopes)
+// ============================================================================
+
+/**
+ * Make an authenticated call to the collabv3 API.
+ * Uses org-scoped JWT when available, falls back to personal JWT.
+ */
+async function fetchApi(apiPath: string, method: string, body?: unknown, orgScopedJwt?: string): Promise<any> {
+  const jwt = orgScopedJwt || getSessionJwt();
+  if (!jwt) throw new Error('Not authenticated');
+
+  const httpUrl = getCollabServerUrl();
+
+  const headers: Record<string, string> = { 'Authorization': `Bearer ${jwt}` };
+  if (body !== undefined) headers['Content-Type'] = 'application/json';
+
+  const response = await net.fetch(`${httpUrl}${apiPath}`, {
+    method,
+    headers,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({ error: `HTTP ${response.status}` })) as { error?: string };
+    throw new Error(errData.error || `API error: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Upload the device's public key to the server for a given org.
+ * Requires an org-scoped JWT so the key is stored under the correct org.
+ */
+export async function uploadIdentityKeyToOrg(orgScopedJwt: string): Promise<void> {
+  const publicKeyJwk = await exportPublicKeyJwk();
+  await fetchApi('/api/identity-key', 'PUT', { publicKeyJwk }, orgScopedJwt);
+  logger.main.info('[OrgKeyService] Uploaded identity public key to org');
+}
+
+/**
+ * Fetch a member's public key from the server (same org).
+ */
+export async function fetchMemberPublicKey(userId: string, orgScopedJwt: string): Promise<string> {
+  const data = await fetchApi(`/api/identity-key/${userId}`, 'GET', undefined, orgScopedJwt) as {
+    publicKeyJwk: string;
+  };
+  return data.publicKeyJwk;
+}
+
+/**
+ * Upload a key envelope to the server.
+ */
+export async function uploadEnvelope(
+  orgId: string,
+  targetUserId: string,
+  envelope: KeyEnvelope,
+  orgScopedJwt: string
+): Promise<void> {
+  await fetchApi(`/api/teams/${orgId}/key-envelopes`, 'POST', {
+    targetUserId,
+    wrappedKey: envelope.wrappedKey,
+    iv: envelope.iv,
+    senderPublicKey: envelope.senderPublicKey,
+  }, orgScopedJwt);
+}
+
+/**
+ * Fetch the caller's own key envelope from the server.
+ * Returns a KeyEnvelope extended with senderUserId for verification.
+ */
+export async function fetchOwnEnvelope(orgId: string, orgScopedJwt: string): Promise<(KeyEnvelope & { senderUserId?: string }) | null> {
+  try {
+    const data = await fetchApi(`/api/teams/${orgId}/key-envelope`, 'GET', undefined, orgScopedJwt) as {
+      wrappedKey: string;
+      iv: string;
+      senderPublicKey: string;
+      senderUserId?: string;
+    };
+    return {
+      wrappedKey: data.wrappedKey,
+      iv: data.iv,
+      senderPublicKey: data.senderPublicKey,
+      senderUserId: data.senderUserId,
+    };
+  } catch (err) {
+    // 404 = no envelope yet
+    if (err instanceof Error && err.message.includes('No key envelope found')) {
+      return null;
+    }
+    throw err;
+  }
+}
+
+/**
+ * Fetch all envelopes for an org (admin only, for listing who has keys).
+ */
+export async function fetchAllEnvelopes(orgId: string, orgScopedJwt: string): Promise<Array<{ targetUserId: string; createdAt: string }>> {
+  const data = await fetchApi(`/api/teams/${orgId}/key-envelopes`, 'GET', undefined, orgScopedJwt) as {
+    envelopes: Array<{ targetUserId: string; createdAt: string }>;
+  };
+  return data.envelopes;
+}
+
+/**
+ * Delete a user's key envelope from the server (admin only).
+ */
+export async function deleteEnvelope(orgId: string, targetUserId: string, orgScopedJwt: string): Promise<void> {
+  await fetchApi(`/api/teams/${orgId}/key-envelopes/${targetUserId}`, 'DELETE', undefined, orgScopedJwt);
+}
+
+/**
+ * Delete ALL key envelopes for an org (admin only, for key rotation).
+ */
+export async function deleteAllEnvelopes(orgId: string, orgScopedJwt: string): Promise<void> {
+  await fetchApi(`/api/teams/${orgId}/key-envelopes`, 'DELETE', undefined, orgScopedJwt);
+}
+
+/**
+ * Fetch and unwrap the org key (for non-admin members joining a team).
+ * Verifies the sender's public key against their registered identity key.
+ */
+export async function fetchAndUnwrapOrgKey(orgId: string, orgScopedJwt: string): Promise<CryptoKey | null> {
+  const envelope = await fetchOwnEnvelope(orgId, orgScopedJwt);
+  if (!envelope) return null;
+
+  // Verify sender's public key if we know the sender
+  let expectedSenderKey: string | undefined;
+  if ((envelope as { senderUserId?: string }).senderUserId) {
+    try {
+      expectedSenderKey = await fetchMemberPublicKey(
+        (envelope as { senderUserId?: string }).senderUserId!,
+        orgScopedJwt
+      );
+    } catch (err) {
+      logger.main.warn('[OrgKeyService] Could not fetch sender identity key for verification:', err);
+      // Continue without verification -- sender may have rotated their key
+    }
+  }
+
+  return unwrapAndStoreOrgKey(orgId, envelope, expectedSenderKey);
+}
+
+// ============================================================================
+// IPC Handler Registration
+// ============================================================================
+
+export function registerOrgKeyHandlers(): void {
+  safeHandle('team:ensure-org-key', async (_event, orgId: string) => {
+    if (!isAuthenticated()) return { success: false, error: 'Not authenticated' };
+
+    try {
+      // Check if we already have it
+      if (hasOrgKey(orgId)) {
+        return { success: true, hasKey: true };
+      }
+
+      // Use org-scoped JWT for envelope fetch
+      const orgJwt = await getOrgScopedJwt(orgId);
+
+      // Ensure identity key pair exists and is uploaded
+      await getOrCreateIdentityKeyPair();
+      await uploadIdentityKeyToOrg(orgJwt);
+
+      const key = await fetchAndUnwrapOrgKey(orgId, orgJwt);
+      return { success: true, hasKey: key !== null };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+
+  safeHandle('team:get-org-key-status', async (_event, orgId: string) => {
+    try {
+      return { success: true, hasKey: hasOrgKey(orgId) };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+
+  safeHandle('team:list-key-envelopes', async (_event, orgId: string) => {
+    if (!isAuthenticated()) return { success: false, error: 'Not authenticated' };
+
+    try {
+      const orgJwt = await getOrgScopedJwt(orgId);
+      const envelopes = await fetchAllEnvelopes(orgId, orgJwt);
+      return { success: true, envelopes };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+
+  // ---- Trust Verification Handlers ----
+
+  safeHandle('team:get-member-fingerprint', async (_event, orgId: string, memberId: string) => {
+    if (!isAuthenticated()) return { success: false, error: 'Not authenticated' };
+
+    try {
+      const orgJwt = await getOrgScopedJwt(orgId);
+      const publicKeyJwk = await fetchMemberPublicKey(memberId, orgJwt);
+      const fingerprint = computeKeyFingerprint(publicKeyJwk);
+      const trustStatus = getMemberTrustStatus(orgId, memberId, fingerprint);
+      return { success: true, fingerprint, trustStatus };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+
+  safeHandle('team:get-my-fingerprint', async (_event, orgId: string) => {
+    if (!isAuthenticated()) return { success: false, error: 'Not authenticated' };
+
+    try {
+      const publicKeyJwk = await exportPublicKeyJwk();
+      const fingerprint = computeKeyFingerprint(publicKeyJwk);
+      return { success: true, fingerprint };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+
+  safeHandle('team:verify-member', async (_event, orgId: string, memberId: string, fingerprint: string) => {
+    try {
+      markMemberVerified(orgId, memberId, fingerprint);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+
+  safeHandle('team:revoke-member-trust', async (_event, orgId: string, memberId: string) => {
+    try {
+      revokeMemberTrust(orgId, memberId);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+
+  /**
+   * Refresh own identity key for a team: upload current public key
+   * and try to fetch/unwrap the org key envelope. Used when identity
+   * key pair was regenerated (new device, corrupted safeStorage).
+   */
+  safeHandle('team:refresh-my-key', async (_event, orgId: string) => {
+    if (!isAuthenticated()) return { success: false, error: 'Not authenticated' };
+
+    try {
+      const orgJwt = await getOrgScopedJwt(orgId);
+
+      // Ensure identity key pair exists and upload current public key
+      await getOrCreateIdentityKeyPair();
+      await uploadIdentityKeyToOrg(orgJwt);
+
+      // Try to fetch and unwrap existing envelope (admin may have already re-shared)
+      const key = await fetchAndUnwrapOrgKey(orgId, orgJwt);
+      return { success: true, hasKey: key !== null };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+}
+
+// ============================================================================
+// Base64 Utilities
+// ============================================================================
+
+function uint8ArrayToBase64(bytes: Uint8Array): string {
+  if (bytes.length < 1024) {
+    return btoa(String.fromCharCode(...bytes));
+  }
+  let result = '';
+  const CHUNK = 8192;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    const chunk = bytes.subarray(i, Math.min(i + CHUNK, bytes.length));
+    result += String.fromCharCode(...chunk);
+  }
+  return btoa(result);
+}
+
+function base64ToUint8Array(base64: string): Uint8Array {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}

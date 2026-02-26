@@ -15,6 +15,7 @@
 
 import type { SessionStore } from '@nimbalyst/runtime';
 import type { DeviceInfo } from '@nimbalyst/runtime/sync';
+import * as syncModule from '@nimbalyst/runtime/sync';
 import { getSessionSyncConfig, type SessionSyncConfig } from '../utils/store';
 import { logger } from '../utils/logger';
 import { getCredentials } from './CredentialService';
@@ -22,13 +23,7 @@ import { getStytchUserId, isAuthenticated, getOrgId } from './StytchAuthService'
 import { app } from 'electron';
 import * as os from 'os';
 
-// Lazy import to avoid loading sync code if not needed
-let syncModule: typeof import('@nimbalyst/runtime/sync') | null = null;
-
-async function loadSyncModule() {
-  if (!syncModule) {
-    syncModule = await import('@nimbalyst/runtime/sync');
-  }
+function loadSyncModule() {
   return syncModule;
 }
 
@@ -338,7 +333,7 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
       createCollabV3Sync,
       createSyncedSessionStore,
       createMessageSyncHandler,
-    } = await loadSyncModule();
+    } = loadSyncModule();
 
     // CollabV3 uses the encryption key seed from CredentialService for E2E encryption
     // Note: We use stytchUserId for salt to ensure same encryption key across devices
@@ -531,20 +526,24 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
           logger.main.info('[SyncManager] All sessions up to date, no sync needed');
         } else {
           // For sessions needing message sync, load ONLY the messages the server doesn't have (delta sync)
+          // Uses a single batch query instead of N+1 individual queries
           if (sessionsNeedingMessageSync.length > 0) {
-            const { getSessionMessagesForSync } = await import('./PGLiteSessionStore');
+            const { getSessionMessagesForSyncBatch } = await import('./PGLiteSessionStore');
+
+            // Build batch request with per-session sinceTimestamp
+            const batchRequests = sessionsNeedingIndexUpdate
+              .filter(s => sessionsNeedingMessageSync.includes(s.id))
+              .map(session => {
+                const serverSession = serverSessionMap.get(session.id);
+                return { sessionId: session.id, sinceTimestamp: serverSession?.lastMessageAt || 0 };
+              });
+
+            const messagesBySession = await getSessionMessagesForSyncBatch(batchRequests);
 
             for (const session of sessionsNeedingIndexUpdate) {
-              if (sessionsNeedingMessageSync.includes(session.id)) {
-                // Get the server's lastMessageAt timestamp - only fetch messages after that
-                const serverSession = serverSessionMap.get(session.id);
-                const sinceTimestamp = serverSession?.lastMessageAt || 0;
-
-                // Only load messages newer than server's last message
-                const newMessages = await getSessionMessagesForSync(session.id, sinceTimestamp);
-                session.messages = newMessages;
-
-                // logger.main.info(`[SyncManager] Session ${session.id}: syncing ${newMessages.length} new messages (since ${new Date(sinceTimestamp).toISOString()})`);
+              const msgs = messagesBySession.get(session.id);
+              if (msgs) {
+                session.messages = msgs;
               }
             }
           }
@@ -830,15 +829,23 @@ export async function triggerIncrementalSync(): Promise<void> {
       logger.main.info('[SyncManager] Triggered sync: all sessions up to date');
     } else {
       if (sessionsNeedingMessageSync.length > 0) {
-        const { getSessionMessagesForSync } = await import('./PGLiteSessionStore');
+        const { getSessionMessagesForSyncBatch } = await import('./PGLiteSessionStore');
+
+        // Build batch request with per-session sinceTimestamp
+        const batchRequests = sessionsNeedingIndexUpdate
+          .filter(s => sessionsNeedingMessageSync.includes(s.id))
+          .map(session => {
+            const serverSession = serverSessionMap.get(session.id);
+            return { sessionId: session.id, sinceTimestamp: serverSession?.lastMessageAt || 0 };
+          });
+
+        const messagesBySession = await getSessionMessagesForSyncBatch(batchRequests);
 
         for (const session of sessionsNeedingIndexUpdate) {
-          if (sessionsNeedingMessageSync.includes(session.id)) {
-            const serverSession = serverSessionMap.get(session.id);
-            const sinceTimestamp = serverSession?.lastMessageAt || 0;
-            const newMessages = await getSessionMessagesForSync(session.id, sinceTimestamp);
-            session.messages = newMessages;
-            logger.main.info(`[SyncManager] Session ${session.id}: syncing ${newMessages.length} new messages (since ${new Date(sinceTimestamp).toISOString()})`);
+          const msgs = messagesBySession.get(session.id);
+          if (msgs) {
+            session.messages = msgs;
+            logger.main.info(`[SyncManager] Session ${session.id}: syncing ${msgs.length} new messages`);
           }
         }
       }

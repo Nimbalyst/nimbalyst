@@ -2,10 +2,10 @@ import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react'
 import { useAtomValue, useSetAtom } from 'jotai';
 import { usePostHog } from 'posthog-js/react';
 import { logger } from './utils/logger';
-import type { LexicalCommand } from 'rexical';
+import type { LexicalCommand } from '@nimbalyst/runtime';
 // aiChatBridge has been replaced by editorRegistry
-// Import styles - handled by vite plugin for both dev and prod
-import 'rexical/styles';
+// Import editor styles (CSS side-effect)
+import '../../../runtime/src/editor/index.css';
 // Import refactored hooks and utilities
 import { useIPCHandlers } from './hooks/useIPCHandlers';
 import { useWindowLifecycle } from './hooks/useWindowLifecycle';
@@ -64,10 +64,16 @@ import {
   setSessionDraftInputAtom,
   // File navigation
   openFileRequestAtom,
+  // Session list refresh (used in test helpers)
+  refreshSessionListAtom,
+  sessionRegistryAtom,
 } from './store';
 import { initClaudeUsageListeners } from './store/listeners/claudeUsageListeners';
 import { initCodexUsageListeners } from './store/listeners/codexUsageListeners';
+import { initTrackerSyncListeners } from './store/listeners/trackerSyncListeners';
 import { TrackerBottomPanel } from './components/TrackerBottomPanel/TrackerBottomPanel.tsx';
+import { TrackerMode } from './components/TrackerMode';
+import { CollabMode } from './components/CollabMode';
 import { TerminalBottomPanel } from './components/TerminalBottomPanel';
 import { registerDocumentLinkPlugin } from './plugins/registerDocumentLinkPlugin';
 import { registerAIChatPlugin } from './plugins/registerAIChatPlugin';
@@ -108,6 +114,7 @@ import {
   toggleTrackerPanelAtom,
   closeTrackerPanelAtom,
   initTrackerPanelLayout,
+  trackerModeLayoutAtom,
 } from './store/atoms/trackers';
 import {
   terminalPanelVisibleAtom,
@@ -201,13 +208,15 @@ export default function App() {
     registerCustomEditors();
   }, []);
 
-  // Initialize Claude and Codex usage listeners once at app startup
+  // Initialize centralized IPC listeners once at app startup
   useEffect(() => {
     const cleanupClaude = initClaudeUsageListeners();
     const cleanupCodex = initCodexUsageListeners();
+    const cleanupTrackerSync = initTrackerSyncListeners();
     return () => {
       cleanupClaude?.();
       cleanupCodex?.();
+      cleanupTrackerSync?.();
     };
   }, []);
 
@@ -374,6 +383,16 @@ export default function App() {
         ...(window as any).__testHelpers,
         setActiveMode: (mode: any) => setActiveMode(mode),
         getActiveMode: () => activeMode,
+        // Session list refresh (for E2E tests that create sessions via IPC)
+        refreshSessions: () => store.set(refreshSessionListAtom),
+        // Inject sessions directly into registry (for E2E tests)
+        injectSessions: (sessions: any[]) => {
+          const registry = new Map(store.get(sessionRegistryAtom));
+          for (const s of sessions) {
+            registry.set(s.id, s);
+          }
+          store.set(sessionRegistryAtom, registry);
+        },
         // Settings deep link helpers
         openAgentPermissions: () => {
           setSettingsInitialCategory('agent-permissions');
@@ -777,6 +796,14 @@ export default function App() {
         if (agentModeRef.current) {
           agentModeRef.current.openSessionInTab(state.workstreamId);
         }
+      },
+      restoreTracker: (state) => {
+        // Restore tracker mode view state
+        store.set(trackerModeLayoutAtom, (current) => ({
+          ...current,
+          selectedType: state.selectedType,
+          viewMode: state.viewMode,
+        }));
       },
       restoreSettings: (state) => {
         // Switch to settings mode and select the category
@@ -1589,6 +1616,39 @@ export default function App() {
                     <p className="mt-2 text-sm">Open a workspace to use agent features</p>
                   </div>
                 </div>
+              )}
+            </div>
+
+            {/* Tracker Mode - always mounted, visibility controlled by display */}
+            <div
+              data-layout="tracker-mode-wrapper"
+              className={`flex-1 flex-col overflow-hidden min-h-0 ${
+                activeMode === 'tracker' && !isFullscreenPanelActive ? 'flex' : 'hidden'
+              }`}
+            >
+              {workspacePath && (
+                <TrackerMode
+                  workspacePath={workspacePath}
+                  isActive={activeMode === 'tracker'}
+                  onSwitchToFilesMode={() => setActiveMode('files')}
+                  onOpenSession={handleSessionQuickOpenSelect}
+                />
+              )}
+            </div>
+
+            {/* Collab Mode - always mounted, visibility controlled by display */}
+            <div
+              data-layout="collab-mode-wrapper"
+              className={`flex-1 flex-col overflow-hidden min-h-0 ${
+                activeMode === 'collab' && !isFullscreenPanelActive ? 'flex' : 'hidden'
+              }`}
+            >
+              {workspacePath && (
+                <CollabMode
+                  workspacePath={workspacePath}
+                  isActive={activeMode === 'collab'}
+                  onFileOpen={handleWorkspaceFileSelect}
+                />
               )}
             </div>
 

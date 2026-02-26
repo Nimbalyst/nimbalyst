@@ -2,7 +2,7 @@
   "name": "@nimbalyst/runtime",
   "version": "0.1.0",
   "private": true,
-  "description": "Shared Nimbalyst runtime: sessions, collab, AI hooks, plugins",
+  "description": "Shared Nimbalyst runtime: sessions, collab, AI hooks, plugins, and Lexical-based editor",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -11,6 +11,15 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./styles": "./dist/style.css",
+    "./editor": {
+      "import": "./dist/editor/index.js",
+      "types": "./dist/editor/index.d.ts"
+    },
+    "./plugins/DiffPlugin": {
+      "import": "./dist/editor/plugins/DiffPlugin/core/exports.js",
+      "types": "./dist/editor/plugins/DiffPlugin/core/exports.d.ts"
     },
     "./ai/EditorRegistry": {
       "import": "./dist/ai/EditorRegistry.js",
@@ -136,20 +145,29 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",
-    "@excalidraw/excalidraw": "0.17.6",
+    "@lexical/dragon": "^0.34.0",
+    "@lexical/history": "^0.34.0",
     "@monaco-editor/react": "^4.7.0",
     "@openai/codex-sdk": "^0.104.0",
+    "@types/js-yaml": "^4.0.9",
     "@types/react-syntax-highlighter": "^15.5.13",
     "@types/shell-quote": "^1.7.5",
+    "ajv-draft-04": "^1.0.0",
+    "diff": "^8.0.2",
     "esbuild": "0.25.10",
+    "front-matter": "^4.0.2",
     "jotai": "^2.16.1",
+    "js-yaml": "^4.1.0",
+    "lodash-es": "^4.17.21",
+    "mermaid": "^11.12.0",
     "monaco-editor": "^0.55.1",
     "openai": "^4.104.0",
     "posthog-js": "^1.280.1",
+    "prettier": "^2.8.8",
+    "react-error-boundary": "^3.1.4",
     "react-markdown": "^10.1.0",
     "react-syntax-highlighter": "^15.5.0",
     "remark-gfm": "^4.0.1",
-    "rexical": "file:../rexical",
     "shell-quote": "^1.8.3",
     "vite": "^7.1.12",
     "y-websocket": "^1.5.4",
@@ -157,9 +175,35 @@
     "yjs": ">=13.5.42"
   },
   "peerDependencies": {
-    "react": "^18.0.0"
+    "@lexical/clipboard": "^0.34.0",
+    "@lexical/code": "^0.34.0",
+    "@lexical/code-shiki": "^0.34.0",
+    "@lexical/file": "^0.34.0",
+    "@lexical/hashtag": "^0.34.0",
+    "@lexical/link": "^0.34.0",
+    "@lexical/list": "^0.34.0",
+    "@lexical/mark": "^0.34.0",
+    "@lexical/markdown": "^0.34.0",
+    "@lexical/overflow": "^0.34.0",
+    "@lexical/plain-text": "^0.34.0",
+    "@lexical/react": "^0.34.0",
+    "@lexical/rich-text": "^0.34.0",
+    "@lexical/selection": "^0.34.0",
+    "@lexical/table": "^0.34.0",
+    "@lexical/text": "^0.34.0",
+    "@lexical/utils": "^0.34.0",
+    "@lexical/yjs": "^0.34.0",
+    "lexical": "^0.34.0",
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0"
   },
   "devDependencies": {
-    "typescript": "^5.5.0"
+    "@lexical/headless": "^0.34.0",
+    "@types/diff": "^7.0.2",
+    "@types/lodash-es": "^4.14.182",
+    "jsdom": "^26.1.0",
+    "typescript": "^5.5.0",
+    "vite-plugin-dts": "^4.5.4",
+    "vite-plugin-static-copy": "^3.1.4"
   }
 }

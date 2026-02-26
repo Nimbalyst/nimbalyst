@@ -553,6 +553,13 @@ export class ToolPermissionService {
 
       return response;
     } catch (error) {
+      // Emit resolved event on error path so the "waiting for input" indicator is cleared
+      this.emit('toolPermission:resolved', {
+        requestId,
+        sessionId,
+        response: { decision: 'deny', scope: 'once' },
+        timestamp: Date.now(),
+      });
       this.securityLogger('[ToolPermissionService] Permission request failed', {
         requestId,
         toolName,

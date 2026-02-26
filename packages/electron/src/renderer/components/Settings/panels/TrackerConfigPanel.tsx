@@ -1,0 +1,401 @@
+import React, { useState, useEffect } from 'react';
+import {
+  MaterialSymbol,
+  globalRegistry,
+  type TrackerDataModel,
+  type TrackerSyncMode,
+} from '@nimbalyst/runtime';
+
+// ============================================================================
+// Types
+// ============================================================================
+
+interface TrackerConfigPanelProps {
+  workspacePath?: string;
+}
+
+interface TrackerTypeConfig {
+  model: TrackerDataModel;
+  syncMode: TrackerSyncMode;
+  itemCount: number;
+}
+
+// ============================================================================
+// Mock Data (to be replaced with real IPC/atom reads)
+// ============================================================================
+
+// Mock item counts per tracker type
+const MOCK_ITEM_COUNTS: Record<string, number> = {
+  bug: 14,
+  task: 23,
+  plan: 8,
+  decision: 5,
+  idea: 12,
+};
+
+// ============================================================================
+// Sub-components
+// ============================================================================
+
+function SyncModeToggle({ mode, onChange }: {
+  mode: TrackerSyncMode;
+  onChange: (mode: TrackerSyncMode) => void;
+}) {
+  const options: { value: TrackerSyncMode; label: string }[] = [
+    { value: 'local', label: 'Local' },
+    { value: 'shared', label: 'Shared' },
+    { value: 'hybrid', label: 'Hybrid' },
+  ];
+
+  return (
+    <div className="flex bg-[var(--nim-bg)] border border-[var(--nim-bg-tertiary)] rounded-md overflow-hidden">
+      {options.map((opt) => {
+        const isActive = mode === opt.value;
+        let activeClass = '';
+        if (isActive) {
+          if (opt.value === 'local') activeClass = 'bg-[var(--nim-bg-tertiary)] text-[var(--nim-text-muted)]';
+          else if (opt.value === 'shared') activeClass = 'bg-[rgba(96,165,250,0.2)] text-[var(--nim-primary)]';
+          else activeClass = 'bg-[rgba(167,139,250,0.2)] text-[#a78bfa]';
+        }
+
+        return (
+          <button
+            key={opt.value}
+            onClick={() => onChange(opt.value)}
+            className={`px-2.5 py-1 text-[11px] font-medium cursor-pointer border-none whitespace-nowrap transition-all duration-150 ${
+              isActive
+                ? activeClass
+                : 'bg-transparent text-[var(--nim-text-disabled)]'
+            }`}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function SyncBadge({ mode }: { mode: TrackerSyncMode }) {
+  if (mode === 'shared') {
+    return (
+      <span className="inline-flex items-center gap-1 px-[7px] py-[2px] rounded-[10px] text-[10px] font-semibold bg-[rgba(96,165,250,0.15)] text-[var(--nim-primary)]">
+        <MaterialSymbol icon="share" size={8} />
+        Shared
+      </span>
+    );
+  }
+  if (mode === 'hybrid') {
+    return (
+      <span className="inline-flex items-center gap-1 px-[7px] py-[2px] rounded-[10px] text-[10px] font-semibold bg-[rgba(167,139,250,0.15)] text-[#a78bfa]">
+        Hybrid
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 px-[7px] py-[2px] rounded-[10px] text-[10px] font-semibold bg-[rgba(180,180,180,0.1)] text-[var(--nim-text-faint)]">
+      Local
+    </span>
+  );
+}
+
+function TrackerIcon({ color, icon }: { color: string; icon: string }) {
+  return (
+    <div
+      className="w-7 h-7 rounded-md flex items-center justify-center shrink-0"
+      style={{ background: `${color}20` }}
+    >
+      <MaterialSymbol icon={icon} size={16} style={{ color }} fill />
+    </div>
+  );
+}
+
+function getSyncMetaText(mode: TrackerSyncMode): string {
+  switch (mode) {
+    case 'shared': return 'Visible to all team members';
+    case 'local': return 'Only visible to you';
+    case 'hybrid': return 'Per-item sharing choice';
+  }
+}
+
+// ============================================================================
+// Admin View
+// ============================================================================
+
+function AdminView({ trackers, onSyncModeChange }: {
+  trackers: TrackerTypeConfig[];
+  onSyncModeChange: (type: string, mode: TrackerSyncMode) => void;
+}) {
+  return (
+    <>
+      {/* Team Sync Policy Section */}
+      <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
+        <h4 className="provider-panel-section-title text-[15px] font-semibold mb-2 text-[var(--nim-text)] flex items-center gap-2">
+          Team Sync Policy
+          <span className="px-[7px] py-[2px] rounded-[10px] text-[10px] font-semibold bg-[rgba(96,165,250,0.15)] text-[var(--nim-primary)]">
+            Admin
+          </span>
+        </h4>
+        <p className="text-[13px] leading-relaxed text-[var(--nim-text-muted)] mb-3">
+          Control how each tracker type syncs with the team. Changes apply to all members.
+        </p>
+
+        {/* Info Banner */}
+        <div className="flex items-start gap-2.5 p-3 bg-[rgba(96,165,250,0.08)] border border-[rgba(96,165,250,0.2)] rounded-lg mb-3">
+          <MaterialSymbol icon="info" size={14} className="text-[var(--nim-primary)] shrink-0 mt-0.5" />
+          <div className="text-[12px] text-[var(--nim-text-muted)] leading-relaxed">
+            <strong className="text-[var(--nim-primary)] font-semibold">Shared</strong> items sync to all team members in real time.{' '}
+            <strong className="text-[var(--nim-text-muted)] font-semibold">Local</strong> items stay on your machine only.{' '}
+            <strong className="text-[#a78bfa] font-semibold">Hybrid</strong> lets each item be shared or local individually.
+          </div>
+        </div>
+
+        {/* Tracker Type List */}
+        <div className="bg-[var(--nim-bg-secondary)] rounded-lg overflow-hidden">
+          {trackers.map((tracker) => (
+            <div
+              key={tracker.model.type}
+              className="flex items-center gap-2.5 px-3.5 py-2.5 border-b border-[var(--nim-bg)] last:border-b-0"
+            >
+              <TrackerIcon color={tracker.model.color} icon={tracker.model.icon} />
+              <div className="flex-1 min-w-0">
+                <div className="text-[13px] font-medium text-[var(--nim-text)] flex items-center gap-1.5">
+                  {tracker.model.displayNamePlural}
+                  <span className="px-1.5 py-[1px] rounded bg-[var(--nim-bg-tertiary)] text-[var(--nim-text-muted)] text-[10px] font-semibold">
+                    {tracker.itemCount}
+                  </span>
+                </div>
+                <div className="text-[11px] text-[var(--nim-text-faint)]">
+                  {getSyncMetaText(tracker.syncMode)}
+                </div>
+              </div>
+              <div className="shrink-0">
+                <SyncModeToggle
+                  mode={tracker.syncMode}
+                  onChange={(mode) => onSyncModeChange(tracker.model.type, mode)}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Inline Note */}
+      <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
+        <div className="flex items-start gap-1.5 p-2.5 bg-[var(--nim-bg-secondary)] rounded-md text-[11px] text-[var(--nim-text-faint)] leading-relaxed">
+          <MaterialSymbol icon="info" size={14} className="shrink-0 mt-0.5" />
+          <span>
+            Inline trackers (<code className="text-[11px] text-[var(--nim-code-text)] bg-[var(--nim-code-bg)] px-1 py-[1px] rounded">#bug[...]</code>) are always local, regardless of sync policy. Only tracked items created from the panel participate in sync.
+          </span>
+        </div>
+      </div>
+
+      {/* Promote Banner */}
+      <div className="provider-panel-section py-4">
+        <div className="flex items-center gap-2 p-3 bg-[rgba(167,139,250,0.08)] border border-[rgba(167,139,250,0.15)] rounded-lg">
+          <MaterialSymbol icon="arrow_upward" size={16} className="text-[#a78bfa] shrink-0" />
+          <div className="flex-1 text-[12px] text-[var(--nim-text-muted)] leading-snug">
+            <strong className="text-[#a78bfa]">Promote inline items</strong> to tracked items to share them with the team. Right-click any inline tracker and select "Promote to Tracked Item."
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ============================================================================
+// Member View
+// ============================================================================
+
+function MemberView({ trackers }: { trackers: TrackerTypeConfig[] }) {
+  const sharedTrackers = trackers.filter((t) => t.syncMode !== 'local');
+  const localTrackers = trackers.filter((t) => t.syncMode === 'local');
+
+  return (
+    <>
+      {/* Team Trackers (read-only) */}
+      <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
+        <h4 className="provider-panel-section-title text-[15px] font-semibold mb-2 text-[var(--nim-text)] flex items-center gap-2">
+          Team Trackers
+          <span className="text-[11px] font-normal text-[var(--nim-text-faint)]">Managed by admin</span>
+        </h4>
+        <p className="text-[13px] leading-relaxed text-[var(--nim-text-muted)] mb-3">
+          These tracker types are configured by your team admin. Shared items sync in real time.
+        </p>
+
+        <div className="bg-[var(--nim-bg-secondary)] rounded-lg overflow-hidden">
+          {sharedTrackers.map((tracker) => (
+            <div
+              key={tracker.model.type}
+              className="flex items-center gap-2.5 px-3.5 py-2.5 border-b border-[var(--nim-bg)] last:border-b-0"
+            >
+              <TrackerIcon color={tracker.model.color} icon={tracker.model.icon} />
+              <div className="flex-1 min-w-0">
+                <div className="text-[13px] font-medium text-[var(--nim-text)]">
+                  {tracker.model.displayNamePlural}
+                </div>
+                <div className="text-[11px] text-[var(--nim-text-faint)]">
+                  {tracker.itemCount} items synced with team
+                </div>
+              </div>
+              <div className="shrink-0">
+                <SyncBadge mode={tracker.syncMode} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Local Trackers */}
+      {localTrackers.length > 0 && (
+        <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
+          <h4 className="provider-panel-section-title text-[15px] font-semibold mb-2 text-[var(--nim-text)] flex items-center gap-2">
+            Your Local Trackers
+            <span className="text-[11px] font-normal text-[var(--nim-text-faint)]">Only on this machine</span>
+          </h4>
+          <p className="text-[13px] leading-relaxed text-[var(--nim-text-muted)] mb-3">
+            These tracker types are local to your workspace. They never sync and are not visible to your team.
+          </p>
+
+          <div className="bg-[var(--nim-bg-secondary)] rounded-lg overflow-hidden">
+            {localTrackers.map((tracker) => (
+              <div
+                key={tracker.model.type}
+                className="flex items-center gap-2.5 px-3.5 py-2.5 border-b border-[var(--nim-bg)] last:border-b-0"
+              >
+                <TrackerIcon color={tracker.model.color} icon={tracker.model.icon} />
+                <div className="flex-1 min-w-0">
+                  <div className="text-[13px] font-medium text-[var(--nim-text)]">
+                    {tracker.model.displayNamePlural}
+                  </div>
+                  <div className="text-[11px] text-[var(--nim-text-faint)]">
+                    {tracker.itemCount} items, local only
+                  </div>
+                </div>
+                <div className="shrink-0">
+                  <SyncBadge mode="local" />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-3">
+            <button className="inline-flex items-center gap-1 px-2.5 py-1 bg-transparent border border-[var(--nim-border)] rounded text-[var(--nim-text-muted)] text-[11px] cursor-pointer hover:bg-[var(--nim-bg-hover)]">
+              <MaterialSymbol icon="add" size={12} />
+              Add Custom Tracker
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Inline Note */}
+      <div className="provider-panel-section py-4">
+        <div className="flex items-start gap-1.5 p-2.5 bg-[var(--nim-bg-secondary)] rounded-md text-[11px] text-[var(--nim-text-faint)] leading-relaxed">
+          <MaterialSymbol icon="info" size={14} className="shrink-0 mt-0.5" />
+          <span>
+            Inline trackers (<code className="text-[11px] text-[var(--nim-code-text)] bg-[var(--nim-code-bg)] px-1 py-[1px] rounded">#bug[...]</code>) in your documents are always local. Promote them to tracked items to share with the team.
+          </span>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ============================================================================
+// TrackerConfigPanel
+// ============================================================================
+
+export function TrackerConfigPanel({ workspacePath }: TrackerConfigPanelProps) {
+  const [trackers, setTrackers] = useState<TrackerTypeConfig[]>([]);
+  const [isAdmin, setIsAdmin] = useState(true);
+
+  useEffect(() => {
+    // Load saved sync policies from workspace state, then merge with registry
+    const loadPolicies = async () => {
+      let savedPolicies: Record<string, TrackerSyncMode> = {};
+      if (workspacePath) {
+        try {
+          const state = await (window as any).electronAPI.invoke('workspace:get-state', workspacePath);
+          savedPolicies = state?.trackerSyncPolicies ?? {};
+        } catch {
+          // Workspace state not available
+        }
+
+        // Check team role (per-workspace lookup)
+        try {
+          const teamResult = await (window as any).electronAPI.team.findForWorkspace(workspacePath);
+          if (teamResult.success && teamResult.team) {
+            setIsAdmin(teamResult.team.role === 'admin');
+          }
+        } catch {
+          // No team or error
+        }
+      }
+
+      const models = globalRegistry.getAll();
+      const configs: TrackerTypeConfig[] = models.map((model) => ({
+        model,
+        syncMode: savedPolicies[model.type] ?? model.sync?.mode ?? 'local',
+        itemCount: MOCK_ITEM_COUNTS[model.type] ?? 0,
+      }));
+      setTrackers(configs);
+    };
+
+    loadPolicies();
+
+    // Subscribe to registry changes (e.g., custom trackers loaded later)
+    const unsubscribe = globalRegistry.onChange(() => {
+      const updatedModels = globalRegistry.getAll();
+      setTrackers((prev) => {
+        const existingModes = new Map(prev.map((t) => [t.model.type, t.syncMode]));
+        return updatedModels.map((model) => ({
+          model,
+          syncMode: existingModes.get(model.type) ?? model.sync?.mode ?? 'local',
+          itemCount: MOCK_ITEM_COUNTS[model.type] ?? 0,
+        }));
+      });
+    });
+
+    return unsubscribe;
+  }, [workspacePath]);
+
+  const handleSyncModeChange = (type: string, mode: TrackerSyncMode) => {
+    setTrackers((prev) =>
+      prev.map((t) =>
+        t.model.type === type ? { ...t, syncMode: mode } : t
+      )
+    );
+
+    // Persist to workspace state
+    if (workspacePath) {
+      (window as any).electronAPI.invoke('workspace:update-state', workspacePath, {
+        trackerSyncPolicies: { [type]: mode },
+      });
+    }
+  };
+
+  return (
+    <div className="provider-panel flex flex-col">
+      {/* Header */}
+      <div className="provider-panel-header mb-5 pb-4 border-b border-[var(--nim-border)]">
+        <h3 className="provider-panel-title text-xl font-semibold leading-tight mb-1.5 text-[var(--nim-text)]">
+          Trackers
+        </h3>
+        <p className="provider-panel-description text-[13px] leading-relaxed text-[var(--nim-text-muted)]">
+          {isAdmin
+            ? 'Configure which tracker types are shared with the team and manage local-only trackers.'
+            : 'View team-shared tracker types and manage your local trackers.'}
+        </p>
+      </div>
+
+      {isAdmin ? (
+        <AdminView
+          trackers={trackers}
+          onSyncModeChange={handleSyncModeChange}
+        />
+      ) : (
+        <MemberView trackers={trackers} />
+      )}
+    </div>
+  );
+}

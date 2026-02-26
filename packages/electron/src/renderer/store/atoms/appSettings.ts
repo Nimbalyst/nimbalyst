@@ -17,6 +17,7 @@
 
 import { atom, type Atom } from 'jotai';
 import posthog from 'posthog-js';
+import { copyToClipboard } from '@nimbalyst/runtime';
 import { type EffortLevel, DEFAULT_EFFORT_LEVEL, parseEffortLevel } from '@nimbalyst/runtime/ai/server/effortLevels';
 import { AlphaFeatureTag } from '../../../shared/alphaFeatures';
 import { BetaFeatureTag } from '../../../shared/betaFeatures';
@@ -1923,7 +1924,7 @@ export const copyFilePathAtom = atom(
   null,
   async (_get, _set, filePath: string) => {
     try {
-      await navigator.clipboard.writeText(filePath);
+      await copyToClipboard(filePath);
     } catch (error) {
       console.error('[appSettings] Failed to copy path to clipboard:', error);
     }

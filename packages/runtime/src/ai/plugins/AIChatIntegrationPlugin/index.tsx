@@ -8,11 +8,11 @@
 
 import { useEffect, useRef } from 'react';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
-import { $setDiffState, APPLY_MARKDOWN_REPLACE_COMMAND, type TextReplacement, $hasDiffNodes } from 'rexical';
+import { $setDiffState, APPLY_MARKDOWN_REPLACE_COMMAND, type TextReplacement, $hasDiffNodes } from '../../../editor';
 import { $getSelection, $isRangeSelection, $getRoot, $isElementNode, LexicalNode } from 'lexical';
-import { MarkdownStreamProcessor, getEditorTransformers } from 'rexical';
+import { MarkdownStreamProcessor, getEditorTransformers } from '../../../editor';
 import { $isHeadingNode } from '@lexical/rich-text';
-import { $convertToEnhancedMarkdownString, $convertNodeToEnhancedMarkdownString } from 'rexical';
+import { $convertToEnhancedMarkdownString, $convertNodeToEnhancedMarkdownString } from '../../../editor';
 import { editorRegistry } from '../../EditorRegistry';
 
 /**

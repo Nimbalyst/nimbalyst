@@ -219,6 +219,23 @@ export const PLAYWRIGHT_TEST_SELECTORS = {
   gitOperationsCommitButton: '[data-testid="git-operations-commit-button"]',
   gitOperationsCommitMessage: '[data-testid="git-operations-commit-message"]',
 
+  // Tracker Mode
+  trackerSidebar: '[data-testid="tracker-sidebar"]',
+  trackerTable: '[data-testid="tracker-table"]',
+  trackerTableRow: '[data-testid="tracker-table-row"]',
+  trackerTypeButton: '[data-testid="tracker-type-button"]',
+
+  // Session Kanban Board
+  sessionKanbanBoard: '[data-testid="session-kanban-board"]',
+  kanbanColumn: '[data-testid="session-kanban-column"]',
+  kanbanCard: '[data-testid="session-kanban-card"]',
+  kanbanToolbar: '[data-testid="kanban-toolbar"]',
+  kanbanSearch: '[data-testid="kanban-search"]',
+  kanbanToggleComplete: '[data-testid="kanban-toggle-complete"]',
+  kanbanEmptyState: '[data-testid="kanban-empty-state"]',
+  trackerViewSessions: '[data-testid="tracker-view-sessions"]',
+  trackerModeButton: '[data-testid="tracker-mode-button"]',
+
   // Document Header / Tracker
   documentHeaderContainer: '.document-header-container',
   statusBar: '.status-bar',

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { StravuEditor, pluginRegistry } from 'rexical';
+import { StravuEditor, pluginRegistry } from '@nimbalyst/runtime';
 import {
   APPLY_MARKDOWN_REPLACE_COMMAND,
   groupDiffChanges,
@@ -7,7 +7,7 @@ import {
   $getDiffState,
   $hasDiffNodes,
   type DiffChangeGroup
-} from 'rexical';
+} from '@nimbalyst/runtime';
 import type { LexicalEditor } from 'lexical';
 
 const HIGHLIGHT_CLASS_REMOVED = 'diff-group-highlight-removed';

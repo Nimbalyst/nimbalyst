@@ -56,3 +56,64 @@ export {
   createMessageSyncHandler,
   type SyncedSessionStoreOptions,
 } from './SyncedSessionStore';
+
+export {
+  DocumentSyncProvider,
+  createDocumentSyncProvider,
+} from './DocumentSync';
+
+export {
+  CollabLexicalProvider,
+} from './CollabLexicalProvider';
+
+export type {
+  DocumentSyncConfig,
+  DocumentSyncStatus,
+  AwarenessState,
+  SerializedRelativePosition,
+  ReviewGateState,
+  DocClientMessage,
+  DocServerMessage,
+} from './documentSyncTypes';
+
+export {
+  ECDHKeyManager,
+  createECDHKeyManager,
+} from './ECDHKeyManager';
+
+export type {
+  ECDHKeyPair,
+  SerializedECDHKeyPair,
+  KeyEnvelope,
+} from './ECDHKeyManager';
+
+export {
+  TrackerSyncProvider,
+  mergeTrackerItems,
+} from './TrackerSync';
+
+export {
+  trackerItemToPayload,
+  payloadToTrackerItem,
+} from './trackerSyncTypes';
+
+export type {
+  TrackerSyncConfig,
+  TrackerSyncStatus,
+  TrackerItemPayload,
+  TrackerSyncResult,
+  TrackerComment,
+} from './trackerSyncTypes';
+
+export {
+  TeamSyncProvider,
+} from './TeamSync';
+
+export type {
+  TeamSyncConfig,
+  TeamSyncStatus,
+  TeamState,
+  MemberInfo as TeamMemberInfo,
+  KeyEnvelopeData,
+  DocIndexEntry as TeamDocIndexEntry,
+} from './teamSyncTypes';

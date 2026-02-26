@@ -18,7 +18,6 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
-  isInitializeRequest,
   ErrorCode,
   McpError,
 } from "@modelcontextprotocol/sdk/types.js";
@@ -31,6 +30,7 @@ import * as fs from "fs";
 import { ExtensionLogService } from "../services/ExtensionLogService";
 import { database } from "../database/initialize";
 import { findWindowByWorkspace } from "../window/WindowManager";
+import { getRestartSignalPath } from "../utils/appPaths";
 
 // ============================================================================
 // File Utilities
@@ -1363,8 +1363,7 @@ function createExtensionDevMcpServer(
           // In dev mode, write a restart signal file and quit.
           // The outer dev-loop.sh script watches for this file and restarts npm run dev.
           // This avoids complex process killing and ensures clean restarts.
-          const workingDir = app.getAppPath();
-          const restartSignalPath = path.join(workingDir, ".restart-requested");
+          const restartSignalPath = getRestartSignalPath();
 
           console.log(
             `[Extension Dev MCP] Dev mode restart: writing signal to ${restartSignalPath}`
@@ -2013,14 +2012,18 @@ async function readJsonBody(
     return undefined;
   }
 }
+function isInitializeMessage(value: unknown): boolean {
+  return typeof value === 'object' && value !== null && 'method' in value && (value as Record<string, unknown>).method === 'initialize';
+}
+
 function isInitializePayload(payload: unknown): boolean {
   if (!payload) {
     return false;
   }
   if (Array.isArray(payload)) {
-    return payload.some((entry) => isInitializeRequest(entry));
+    return payload.some((entry) => isInitializeMessage(entry));
   }
-  return isInitializeRequest(payload);
+  return isInitializeMessage(payload);
 }
 async function tryCreateExtensionDevServer(port: number): Promise<any> {
   return new Promise((resolve, reject) => {

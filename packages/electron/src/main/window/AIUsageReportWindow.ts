@@ -1,5 +1,6 @@
 import { app, BrowserWindow } from 'electron';
 import { join } from 'path';
+import { getPreloadPath } from '../utils/appPaths';
 import { is } from '@electron-toolkit/utils';
 
 let usageReportWindow: BrowserWindow | null = null;
@@ -19,13 +20,7 @@ export function createAIUsageReportWindow(): BrowserWindow {
     autoHideMenuBar: true,
     title: 'AI Usage Report',
     webPreferences: {
-      // Due to code splitting, __dirname is out/main/chunks/, not out/main/
-      preload: (() => {
-        const appPath = app.getAppPath();
-        if (app.isPackaged) return join(appPath, 'out/preload/index.js');
-        if (appPath.includes('/out/main') || appPath.includes('\\out\\main')) return join(appPath, '../preload/index.js');
-        return join(appPath, 'out/preload/index.js');
-      })(),
+      preload: getPreloadPath(),
       sandbox: false,
       contextIsolation: true,
     },

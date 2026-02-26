@@ -23,6 +23,8 @@ import { ProjectPermissionsPanel } from './panels/ProjectPermissionsPanel';
 import { ProviderOverrideWrapper } from './panels/ProviderOverrideWrapper';
 import { InstalledExtensionsPanel } from './panels/InstalledExtensionsPanel';
 import { ThemesPanel } from './panels/ThemesPanel';
+import { TeamPanel } from './panels/TeamPanel';
+import { TrackerConfigPanel } from './panels/TrackerConfigPanel';
 import { walkthroughs } from '../../walkthroughs';
 import {
   aiProviderSettingsAtom,
@@ -124,7 +126,7 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
   const [workspaceMcpServerCount, setWorkspaceMcpServerCount] = useState(0);
 
   // Valid categories for each scope
-  const projectCategories: SettingsCategory[] = ['agent-permissions', 'installed-extensions', 'claude-plugins', 'mcp-servers', 'claude-code', 'claude', 'openai', 'openai-codex', 'lmstudio'];
+  const projectCategories: SettingsCategory[] = ['agent-permissions', 'team', 'tracker-config', 'installed-extensions', 'claude-plugins', 'mcp-servers', 'claude-code', 'claude', 'openai', 'openai-codex', 'lmstudio'];
   const userCategories: SettingsCategory[] = ['claude-code', 'claude', 'openai', 'openai-codex', 'lmstudio', 'sync', 'notifications', 'voice-mode', 'advanced', 'installed-extensions', 'claude-plugins', 'mcp-servers'];
 
   // When initialCategory/initialScope props change, update state (for deep linking)
@@ -448,7 +450,10 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
         await window.electronAPI.aiSaveSettings(settings);
 
         try {
-          const result = await window.electronAPI.aiTestConnection(selectedCategory);
+          const result = await window.electronAPI.aiTestConnection(
+            selectedCategory,
+            scope === 'project' ? (workspacePath ?? undefined) : undefined
+          );
 
           setProviders(prev => ({
             ...prev,
@@ -569,13 +574,17 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
             workspacePath={workspacePath ?? undefined}
           />
         );
+      case 'team':
+        return <TeamPanel workspacePath={workspacePath ?? undefined} />;
+      case 'tracker-config':
+        return <TrackerConfigPanel workspacePath={workspacePath ?? undefined} />;
       default:
         return null;
     }
   };
 
   // Categories that are only available in project scope
-  const projectOnlyCategories: SettingsCategory[] = ['agent-permissions'];
+  const projectOnlyCategories: SettingsCategory[] = ['agent-permissions', 'team', 'tracker-config'];
 
   // Handle scope changes - preserve selected category when possible
   const handleScopeChange = (newScope: SettingsScope) => {

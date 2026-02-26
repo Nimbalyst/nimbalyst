@@ -28,6 +28,12 @@ import Store from 'electron-store';
 
 // Global uncaught exception handler - must be registered early
 // This catches errors that bubble up from async SDK operations
+// Throttling: suppress duplicate errors and cap dialog frequency to prevent dialog floods
+const _recentErrors = new Map<string, number>(); // error key -> timestamp
+const _ERROR_THROTTLE_MS = 5000; // suppress duplicate errors within this window
+const _MAX_DIALOGS_PER_MINUTE = 3;
+let _dialogTimestamps: number[] = [];
+
 process.on('uncaughtException', (error: Error & { code?: string }) => {
   // Check if this is the known Claude Agent SDK stream error
   // This happens when the SDK tries to write to a process stdin after it has terminated
@@ -38,8 +44,34 @@ process.on('uncaughtException', (error: Error & { code?: string }) => {
     return;
   }
 
-  // For other uncaught exceptions, show the native dialog
+  // Always log the error
   console.error('[Bootstrap] Uncaught exception:', error);
+
+  // Throttle dialogs to prevent flood from rapid-fire errors
+  const now = Date.now();
+  const errorKey = `${error.name}:${error.message}`;
+
+  // Suppress duplicate errors within the throttle window
+  const lastSeen = _recentErrors.get(errorKey);
+  if (lastSeen && (now - lastSeen) < _ERROR_THROTTLE_MS) {
+    console.warn('[Bootstrap] Suppressed duplicate error dialog:', errorKey);
+    return;
+  }
+  _recentErrors.set(errorKey, now);
+
+  // Clean up old entries
+  for (const [key, ts] of _recentErrors) {
+    if ((now - ts) > _ERROR_THROTTLE_MS) _recentErrors.delete(key);
+  }
+
+  // Cap total dialogs per minute
+  _dialogTimestamps = _dialogTimestamps.filter(ts => (now - ts) < 60_000);
+  if (_dialogTimestamps.length >= _MAX_DIALOGS_PER_MINUTE) {
+    console.warn('[Bootstrap] Too many error dialogs, suppressing. Error:', errorKey);
+    return;
+  }
+  _dialogTimestamps.push(now);
+
   dialog.showErrorBox('Nimbalyst - Uncaught Exception', `${error.name}: ${error.message}\n\n${error.stack || ''}`);
 });
 

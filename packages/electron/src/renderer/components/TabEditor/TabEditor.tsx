@@ -13,7 +13,7 @@
 
 import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { usePostHog } from 'posthog-js/react';
-import type { ConfigTheme } from 'rexical';
+import type { ConfigTheme } from '@nimbalyst/runtime';
 import { DocumentPathProvider, MarkdownEditor, MonacoEditor, MonacoCodeEditor } from '@nimbalyst/runtime';
 import { useTheme } from '../../hooks/useTheme';
 import {
@@ -27,7 +27,7 @@ import {
   CLEAR_DIFF_TAG_COMMAND,
   INCREMENTAL_APPROVAL_COMMAND,
   $hasDiffNodes
-} from 'rexical';
+} from '@nimbalyst/runtime';
 import { $getRoot, $getSelection, $isRangeSelection, SKIP_SCROLL_INTO_VIEW_TAG, COMMAND_PRIORITY_LOW } from 'lexical';
 import { DocumentHeaderContainer } from '@nimbalyst/runtime/plugins/TrackerPlugin/documentHeader';
 // Side-effect import: registers GenericFrontmatterHeader with DocumentHeaderRegistry
@@ -735,7 +735,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             const diskContent = result.diskContent;
             if (editorRef.current) {
               try {
-                // Import Lexical functions from 'lexical' and rexical functions from 'rexical'
+                // Import Lexical functions from 'lexical' and editor functions from '@nimbalyst/runtime'
                 const transformers = getEditorTransformers();
 
                 editorRef.current.update(() => {
@@ -1537,7 +1537,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     const editor = editorRef.current;
 
     // NOTE: handleApprove and handleReject have been removed.
-    // APPROVE_DIFF_COMMAND and REJECT_DIFF_COMMAND are now handled solely by DiffPlugin in rexical.
+    // APPROVE_DIFF_COMMAND and REJECT_DIFF_COMMAND are now handled solely by DiffPlugin.
     // TabEditor only handles CLEAR_DIFF_TAG_COMMAND which is dispatched by DiffPlugin after all diffs are processed.
 
     // Handle incremental approval - create tag for partial accept/reject
@@ -1673,7 +1673,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     }
 
     // Register command listeners
-    // NOTE: APPROVE_DIFF_COMMAND and REJECT_DIFF_COMMAND are handled by DiffPlugin in rexical.
+    // NOTE: APPROVE_DIFF_COMMAND and REJECT_DIFF_COMMAND are handled by DiffPlugin.
     // DiffPlugin dispatches CLEAR_DIFF_TAG_COMMAND when all diffs are processed.
     // handleClearDiffTag then saves the content to disk and clears the pending tag.
     // DO NOT clear pendingAIEditTagRef in these handlers - handleClearDiffTag needs it.

@@ -7,6 +7,7 @@ import { MarkdownRenderer } from './MarkdownRenderer';
 import { ProviderIcon } from '../../icons/ProviderIcons';
 import { MaterialSymbol } from '../../icons/MaterialSymbol';
 import { formatMessageTime, formatDuration } from '../../../utils/dateUtils';
+import { copyToClipboard } from '../../../utils/clipboard';
 import { JSONViewer } from './JSONViewer';
 import { formatToolArguments, extractFilePathFromArgs } from '../utils/pathResolver';
 import { EditToolResultCard } from './EditToolResultCard';
@@ -885,7 +886,7 @@ export const RichTranscriptView = React.forwardRef<
 
   const copyMessageContent = async (message: Message, index: number) => {
     try {
-      await navigator.clipboard.writeText(message.content);
+      await copyToClipboard(message.content);
       setCopiedMessageIndex(index);
       setTimeout(() => setCopiedMessageIndex(null), 2000);
     } catch (err) {

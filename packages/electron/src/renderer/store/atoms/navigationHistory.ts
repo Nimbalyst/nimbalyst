@@ -47,6 +47,14 @@ export interface AgentNavigationState {
 }
 
 /**
+ * Tracker mode navigation state.
+ */
+export interface TrackerNavigationState {
+  selectedType: string;
+  viewMode: 'table' | 'kanban';
+}
+
+/**
  * Settings mode navigation state for unified history.
  */
 export interface SettingsHistoryState {
@@ -65,6 +73,7 @@ export interface NavigationEntry {
   // Mode-specific state (only one will be populated based on mode)
   files?: FilesNavigationState;
   agent?: AgentNavigationState;
+  tracker?: TrackerNavigationState;
   settings?: SettingsHistoryState;
 }
 
@@ -170,6 +179,11 @@ function entriesEqual(a: NavigationEntry, b: NavigationEntry): boolean {
         a.agent?.workstreamId === b.agent?.workstreamId &&
         a.agent?.childSessionId === b.agent?.childSessionId
       );
+    case 'tracker':
+      return (
+        a.tracker?.selectedType === b.tracker?.selectedType &&
+        a.tracker?.viewMode === b.tracker?.viewMode
+      );
     case 'settings':
       return (
         a.settings?.category === b.settings?.category &&
@@ -252,6 +266,7 @@ export const pushNavigationEntryAtom = atom(
 interface NavigationRestoreCallbacks {
   restoreFiles?: (state: FilesNavigationState) => void;
   restoreAgent?: (state: AgentNavigationState) => void;
+  restoreTracker?: (state: TrackerNavigationState) => void;
   restoreSettings?: (state: SettingsHistoryState) => void;
   setMode?: (mode: ContentMode) => void;
 }
@@ -286,6 +301,12 @@ function restoreEntry(entry: NavigationEntry): boolean {
     case 'agent':
       if (entry.agent && restoreCallbacks.restoreAgent) {
         restoreCallbacks.restoreAgent(entry.agent);
+        return true;
+      }
+      break;
+    case 'tracker':
+      if (entry.tracker && restoreCallbacks.restoreTracker) {
+        restoreCallbacks.restoreTracker(entry.tracker);
         return true;
       }
       break;

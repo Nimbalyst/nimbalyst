@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import type { LexicalCommand, TextReplacement } from 'rexical';
+import type { LexicalCommand, TextReplacement } from '@nimbalyst/runtime';
 import {
   APPROVE_DIFF_COMMAND,
   REJECT_DIFF_COMMAND,
@@ -7,7 +7,7 @@ import {
   parseFrontmatter,
   serializeWithFrontmatter,
   type FrontmatterData,
-} from 'rexical';
+} from '@nimbalyst/runtime';
 import { editorRegistry } from '@nimbalyst/runtime/ai/EditorRegistry';
 import { SearchReplaceStateManager } from '@nimbalyst/runtime';
 import { store } from '@nimbalyst/runtime/store';
@@ -403,7 +403,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     }));
 
     cleanupFns.push(window.electronAPI.onFileDeleted((data) => {
-      console.log('[FILE_DELETED] File deleted event received:', data.filePath);
+      // console.log('[FILE_DELETED] File deleted event received:', data.filePath);
       // console.log('[FILE_DELETED] Tabs object:', editorModeRef.current?.tabs);
 
       // Find and close the tab for this file

@@ -1,4 +1,4 @@
-import { BrowserWindow, app, shell } from 'electron';
+import { BrowserWindow, app, shell, clipboard } from 'electron';
 import { readFileSync, readdirSync, statSync, existsSync, promises as fsPromises } from 'fs';
 import * as fs from 'fs';
 import { join, basename, dirname, extname } from 'path';
@@ -903,6 +903,11 @@ export function registerWorkspaceHandlers() {
         }
     });
 
+
+    safeHandle('copy-to-clipboard', async (_event, text: string) => {
+        clipboard.writeText(text);
+        return { success: true };
+    });
 
     safeHandle('show-in-finder', async (event, filePath: string) => {
 

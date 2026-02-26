@@ -134,6 +134,7 @@ interface ElectronAPI {
   showInFinder: (filePath: string) => Promise<{ success: boolean; error?: string }>;
   moveFile: (sourcePath: string, targetPath: string) => Promise<{ success: boolean; newPath?: string; error?: string }>;
   copyFile: (sourcePath: string, targetPath: string) => Promise<{ success: boolean; newPath?: string; error?: string }>;
+  copyToClipboard: (text: string) => Promise<{ success: boolean }>;
 
   // Settings operations
   getSidebarWidth: (workspacePath: string) => Promise<number>;
@@ -214,7 +215,7 @@ interface ElectronAPI {
   getAIModels: () => Promise<{ success: boolean; models: any[]; grouped: Record<string, any[]> }>;
   aiGetSettings: () => Promise<any>;
   aiSaveSettings: (settings: any) => Promise<void>;
-  aiTestConnection: (provider: string) => Promise<any>;
+  aiTestConnection: (provider: string, workspacePath?: string) => Promise<any>;
   aiGetModels: () => Promise<{ success: boolean; models: any[]; grouped: Record<string, any[]> }>;
   aiGetAllModels: () => Promise<any>;
   aiIsStandaloneBinaryAvailable: () => Promise<boolean>;
@@ -288,6 +289,8 @@ interface ElectronAPI {
     // Full-text search index management
     getFtsIndexStatus: (workspaceId: string) => Promise<{ indexExists: boolean; messageCount: number; error?: string }>;
     buildFtsIndex: () => Promise<{ success: boolean; error?: string }>;
+    // Transcript peek (lazy-loaded tail messages for preview)
+    getTailMessages: (sessionId: string, count?: number) => Promise<any[]>;
   };
 
   // Workspace Manager operations
@@ -317,6 +320,24 @@ interface ElectronAPI {
     watch: () => void;
     onDocumentsChanged: (callback: (documents: any[]) => void) => () => void;
     loadVirtual: (virtualPath: string) => Promise<any>;
+    createTrackerItem: (item: {
+      id: string;
+      type: string;
+      title: string;
+      status: string;
+      priority: string;
+      workspace: string;
+      description?: string;
+      owner?: string;
+      tags?: string[];
+      customFields?: Record<string, any>;
+      syncMode?: string;
+    }) => Promise<{ success: boolean; item?: any; error?: string }>;
+    updateTrackerItem: (payload: {
+      itemId: string;
+      updates: Record<string, any>;
+      syncMode?: string;
+    }) => Promise<{ success: boolean; item?: any; error?: string }>;
   };
 
   // analytics
@@ -524,6 +545,53 @@ interface ElectronAPI {
     createSession: (workspacePath: string, options?: { cwd?: string; worktreeId?: string; worktreePath?: string }) => Promise<{ success: boolean; sessionId: string; error?: string }>;
   };
 
+  // Document Sync (collaborative editing)
+  documentSync: {
+    open: (workspacePath: string, documentId: string, title?: string) => Promise<{
+      success: boolean;
+      config?: {
+        orgId: string;
+        documentId: string;
+        title: string;
+        orgKeyBase64: string;
+        serverUrl: string;
+        userId: string;
+        userName?: string;
+        userEmail?: string;
+      };
+      error?: string;
+    }>;
+    getJwt: (orgId: string) => Promise<{
+      success: boolean;
+      jwt?: string;
+      error?: string;
+    }>;
+    resolveIndexConfig: (workspacePath: string) => Promise<{
+      success: boolean;
+      config?: {
+        orgId: string;
+        orgKeyBase64: string;
+        serverUrl: string;
+        userId: string;
+        userName?: string;
+        userEmail?: string;
+      };
+      error?: string;
+    }>;
+    // WebSocket proxy (Cloudflare blocks browser WS upgrades; proxy through main process)
+    wsConnect: (url: string) => Promise<{ success: boolean; wsId?: string; error?: string }>;
+    wsSend: (wsId: string, data: string) => Promise<{ success: boolean; error?: string }>;
+    wsClose: (wsId: string) => Promise<{ success: boolean }>;
+    onWsEvent: (callback: (data: {
+      wsId: string;
+      type: 'open' | 'message' | 'close' | 'error';
+      data?: string;
+      code?: number;
+      reason?: string;
+      error?: string;
+    }) => void) => () => void;
+  };
+
   // Worktree operations
   worktreeCreate: (workspacePath: string, name?: string) => Promise<{
     success: boolean;
@@ -663,4 +731,5 @@ interface Window {
   PLAYWRIGHT?: boolean;
   IS_OFFICIAL_BUILD?: boolean;
   IS_DEV_MODE?: boolean;
+  DEV_MODE_LABEL?: string;
 }

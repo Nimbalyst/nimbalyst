@@ -1,8 +1,10 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo, memo } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
-import { MaterialSymbol, ProviderIcon } from '@nimbalyst/runtime';
+import { MaterialSymbol, ProviderIcon, copyToClipboard } from '@nimbalyst/runtime';
 import { getRelativeTimeString } from '../../utils/dateFormatting';
-import { sessionOrChildProcessingAtom, sessionUnreadAtom, sessionPendingPromptAtom, sessionHasPendingInteractivePromptAtom, reparentSessionAtom, refreshSessionListAtom, sessionShareAtom, removeSessionShareAtom, shareKeysAtom, buildShareUrl } from '../../store';
+import { sessionOrChildProcessingAtom, sessionUnreadAtom, sessionPendingPromptAtom, sessionHasPendingInteractivePromptAtom, reparentSessionAtom, refreshSessionListAtom, sessionShareAtom, addSessionShareAtom, removeSessionShareAtom, shareKeysAtom, buildShareUrl } from '../../store';
+import { convertToWorkstreamAtom } from '../../store/atoms/sessions';
+import { setSessionPhaseAtom, SESSION_PHASE_COLUMNS, type SessionPhase } from '../../store/atoms/sessionKanban';
 import type { ShareInfo } from '../../store';
 import { errorNotificationService } from '../../services/ErrorNotificationService';
 import { dialogRef, DIALOG_IDS } from '../../dialogs';
@@ -22,7 +24,9 @@ const SessionStatusIndicator = memo<{ sessionId: string; messageCount?: number }
 
   // Priority: waiting for input > processing > pending prompt > unread > message count
   // All interactive prompts (AskUserQuestion, ExitPlanMode, ToolPermission, etc.) show same indicator
-  if (hasPendingInteractivePrompt) {
+  // Only show "waiting" if session is also processing - a completed session with a stale
+  // pending prompt flag should not show as waiting (safety net for missed resolved events)
+  if (hasPendingInteractivePrompt && isProcessing) {
     return (
       <div className="session-list-item-status waiting-for-input flex items-center justify-center w-5 h-5 text-[var(--nim-warning)] animate-pulse" title="Waiting for your response">
         <MaterialSymbol icon="contact_support" size={14} />
@@ -95,6 +99,7 @@ interface SessionListItemProps {
   projectPath?: string; // Workspace path for drag-drop validation
   uncommittedCount?: number; // Number of uncommitted files in this session
   branchedAt?: number; // Timestamp when this session was branched (branch tracking)
+  phase?: string; // Kanban board phase (backlog, planning, implementing, validating, complete)
 }
 
 export const SessionListItem = memo<SessionListItemProps>(({
@@ -128,9 +133,11 @@ export const SessionListItem = memo<SessionListItemProps>(({
   projectPath,
   uncommittedCount,
   branchedAt,
+  phase,
 }) => {
   const [isHovering, setIsHovering] = useState(false);
   const [showContextMenu, setShowContextMenu] = useState(false);
+  const [showPhaseSubmenu, setShowPhaseSubmenu] = useState(false);
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
   const [adjustedContextMenuPosition, setAdjustedContextMenuPosition] = useState<{ x: number; y: number } | null>(null);
   const [isRenaming, setIsRenaming] = useState(false);
@@ -142,7 +149,9 @@ export const SessionListItem = memo<SessionListItemProps>(({
 
   // Atom setters for drag-drop
   const reparentSession = useSetAtom(reparentSessionAtom);
+  const convertToWorkstream = useSetAtom(convertToWorkstreamAtom);
   const refreshSessionList = useSetAtom(refreshSessionListAtom);
+  const setSessionPhase = useSetAtom(setSessionPhaseAtom);
 
   // Share state
   const shareInfo = useAtomValue(sessionShareAtom(id));
@@ -151,11 +160,13 @@ export const SessionListItem = memo<SessionListItemProps>(({
 
   // Determine if this session can be dragged
   // Can drag if: (1) Has a parent (is a child session), OR (2) Is an orphan (no parent, no children)
-  const isDraggable = parentSessionId !== null || !isWorkstream;
+  // Worktree sessions cannot be dragged - they are tied to their git worktree
+  const isDraggable = !isWorktreeSession && (parentSessionId !== null || !isWorkstream);
 
   // Determine if this session can accept drops
   // Workstreams and standalone root sessions can be drop targets (dropping creates a workstream)
-  const isDropTarget = isWorkstream || parentSessionId === null;
+  // Worktree sessions/workstreams cannot accept drops - they are tied to their git worktree
+  const isDropTarget = !isWorktreeSession && (isWorkstream || parentSessionId === null);
 
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -191,10 +202,27 @@ export const SessionListItem = memo<SessionListItemProps>(({
     }
   };
 
+  const handleRemoveFromWorkstream = useCallback(async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowContextMenu(false);
+    if (!parentSessionId || !projectPath) return;
+
+    const success = await reparentSession({
+      sessionId: id,
+      oldParentId: parentSessionId,
+      newParentId: null,
+      workspacePath: projectPath,
+    });
+
+    if (success) {
+      await refreshSessionList();
+    }
+  }, [id, parentSessionId, projectPath, reparentSession, refreshSessionList]);
+
   const handleCopySessionId = (e: React.MouseEvent) => {
     e.stopPropagation();
     setShowContextMenu(false);
-    navigator.clipboard.writeText(id);
+    copyToClipboard(id);
   };
 
   const handleExportHtml = (e: React.MouseEvent) => {
@@ -224,7 +252,7 @@ export const SessionListItem = memo<SessionListItemProps>(({
     setShowContextMenu(false);
     if (shareInfo) {
       const url = buildShareUrl(shareInfo.shareId, shareKeys.get(id));
-      navigator.clipboard.writeText(url);
+      copyToClipboard(url);
       errorNotificationService.showInfo('Share link copied', 'The share link has been copied to your clipboard.', { duration: 3000 });
     }
   };
@@ -296,12 +324,13 @@ export const SessionListItem = memo<SessionListItemProps>(({
       sessionId: id,
       parentId: parentSessionId,
       workspacePath: projectPath,
+      isWorktreeSession,
     };
 
     e.dataTransfer.setData('application/x-nimbalyst-session', JSON.stringify(dragData));
     e.dataTransfer.effectAllowed = 'move';
     setIsDragging(true);
-  }, [isDraggable, id, parentSessionId, projectPath]);
+  }, [isDraggable, id, parentSessionId, projectPath, isWorktreeSession]);
 
   const handleDragEnd = useCallback((e: React.DragEvent) => {
     setIsDragging(false);
@@ -337,7 +366,13 @@ export const SessionListItem = memo<SessionListItemProps>(({
     if (!dataStr || !projectPath) return;
 
     try {
-      const { sessionId, parentId, workspacePath } = JSON.parse(dataStr);
+      const { sessionId, parentId, workspacePath, isWorktreeSession: draggedIsWorktree } = JSON.parse(dataStr);
+
+      // Validate worktree sessions cannot be moved
+      if (draggedIsWorktree) {
+        console.error('[SessionListItem] Cannot move worktree sessions');
+        return;
+      }
 
       // Validate same workspace
       if (workspacePath !== projectPath) {
@@ -357,12 +392,34 @@ export const SessionListItem = memo<SessionListItemProps>(({
         return;
       }
 
-      // Execute reparent
-      console.log(`[SessionListItem] Reparenting session ${sessionId} from ${parentId} to ${id}`);
+      let targetParentId = id;
+
+      if (!isWorkstream) {
+        // Drop target is a standalone session, not a workstream.
+        // Convert it to a workstream first (without creating a sibling - the dragged session fills that role),
+        // then reparent the dragged session into the new workstream parent.
+        console.log(`[SessionListItem] Converting session ${id} to workstream before reparenting`);
+        const result = await convertToWorkstream({
+          sessionId: id,
+          workspacePath: projectPath,
+          skipSiblingCreation: true,
+        });
+
+        if (!result) {
+          console.error('[SessionListItem] Failed to convert drop target to workstream');
+          return;
+        }
+
+        // The dragged session should be reparented under the new workstream parent
+        targetParentId = result.parentId;
+      }
+
+      // Execute reparent into the (possibly new) workstream parent
+      console.log(`[SessionListItem] Reparenting session ${sessionId} from ${parentId} to ${targetParentId}`);
       const success = await reparentSession({
         sessionId,
         oldParentId: parentId,
-        newParentId: id,
+        newParentId: targetParentId,
         workspacePath: projectPath,
       });
 
@@ -376,6 +433,7 @@ export const SessionListItem = memo<SessionListItemProps>(({
             event: 'session_reparented',
             properties: {
               had_previous_parent: parentId !== null,
+              created_workstream: !isWorkstream,
               workspace_path: projectPath,
             },
           });
@@ -384,7 +442,7 @@ export const SessionListItem = memo<SessionListItemProps>(({
     } catch (error) {
       console.error('[SessionListItem] Failed to handle drop:', error);
     }
-  }, [projectPath, id, reparentSession, refreshSessionList]);
+  }, [projectPath, id, isWorkstream, reparentSession, convertToWorkstream, refreshSessionList]);
 
   // Auto-focus and select text when rename input appears
   useEffect(() => {
@@ -613,6 +671,15 @@ export const SessionListItem = memo<SessionListItemProps>(({
               Branch conversation
             </button>
           )}
+          {parentSessionId && !isWorktreeSession && (
+            <button
+              className="session-list-item-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
+              onClick={handleRemoveFromWorkstream}
+            >
+              <MaterialSymbol icon="drive_file_move_rtl" size={14} />
+              Remove from workstream
+            </button>
+          )}
           <button
             className="session-list-item-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
             onClick={handleCopySessionId}
@@ -660,6 +727,62 @@ export const SessionListItem = memo<SessionListItemProps>(({
             <MaterialSymbol icon="assignment" size={14} />
             Copy transcript
           </button>
+          {/* Set Phase submenu */}
+          <div
+            className="relative"
+            onMouseEnter={() => setShowPhaseSubmenu(true)}
+            onMouseLeave={() => setShowPhaseSubmenu(false)}
+          >
+            <button
+              className="session-list-item-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
+              onClick={(e) => { e.stopPropagation(); setShowPhaseSubmenu(!showPhaseSubmenu); }}
+            >
+              <MaterialSymbol icon="view_kanban" size={14} />
+              <span className="flex-1">Set Phase</span>
+              {phase && (
+                <span className="text-[10px] text-[var(--nim-text-faint)] ml-1">{phase}</span>
+              )}
+              <MaterialSymbol icon="chevron_right" size={12} />
+            </button>
+            {showPhaseSubmenu && (
+              <div className="absolute left-full top-0 ml-0.5 min-w-[140px] p-1 bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-md shadow-[0_4px_12px_rgba(0,0,0,0.15)] z-[1001]">
+                {SESSION_PHASE_COLUMNS.map((col) => (
+                  <button
+                    key={col.value}
+                    className={`session-list-item-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0 ${phase === col.value ? 'text-[var(--nim-primary)]' : 'text-[var(--nim-text)]'}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowContextMenu(false);
+                      setShowPhaseSubmenu(false);
+                      setSessionPhase({ sessionId: id, phase: col.value });
+                    }}
+                  >
+                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: col.color }} />
+                    {col.label}
+                    {phase === col.value && <MaterialSymbol icon="check" size={14} className="ml-auto" />}
+                  </button>
+                ))}
+                {phase && (
+                  <>
+                    <div className="h-px bg-[var(--nim-border)] my-1" />
+                    <button
+                      className="session-list-item-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text-faint)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowContextMenu(false);
+                        setShowPhaseSubmenu(false);
+                        // Remove from board by setting phase to null via IPC
+                        window.electronAPI.invoke('sessions:update-session-metadata', id, { phase: null });
+                      }}
+                    >
+                      <MaterialSymbol icon="close" size={14} />
+                      Remove from board
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
           <button
             className="session-list-item-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
             onClick={handleArchiveToggle}
@@ -710,6 +833,7 @@ export const SessionListItem = memo<SessionListItemProps>(({
     prev.parentSessionId === next.parentSessionId &&
     prev.projectPath === next.projectPath &&
     prev.uncommittedCount === next.uncommittedCount &&
-    prev.branchedAt === next.branchedAt
+    prev.branchedAt === next.branchedAt &&
+    prev.phase === next.phase
   );
 });

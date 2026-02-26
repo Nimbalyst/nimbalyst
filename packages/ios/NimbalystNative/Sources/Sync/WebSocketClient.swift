@@ -186,14 +186,21 @@ final class WebSocketClient: @unchecked Sendable {
 
     /// Send raw JSON string.
     func sendRaw(_ json: String) {
+        sendRaw(json, completion: nil)
+    }
+
+    /// Send raw JSON string with completion handler to detect send failures.
+    func sendRaw(_ json: String, completion: ((Error?) -> Void)?) {
         guard let task = task else {
             logger.warning("Cannot send raw: not connected")
+            completion?(NSError(domain: "WebSocketClient", code: -1, userInfo: [NSLocalizedDescriptionKey: "Not connected"]))
             return
         }
         task.send(.string(json)) { [weak self] error in
             if let error = error {
                 self?.logger.error("Send raw error: \(error.localizedDescription)")
             }
+            completion?(error)
         }
     }
 

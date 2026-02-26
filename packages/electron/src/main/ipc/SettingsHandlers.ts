@@ -13,6 +13,7 @@ import type { OnboardingState } from '../utils/store';
 import { getCredentials, resetCredentials, generateQRPairingPayload, isUsingSecureStorage } from '../services/CredentialService';
 import { onSyncStatusChange } from '../services/SyncManager';
 import * as StytchAuth from '../services/StytchAuthService';
+import { getRestartSignalPath } from '../utils/appPaths';
 import { STYTCH_CONFIG } from '@nimbalyst/runtime';
 import { type EffortLevel, parseEffortLevel } from '@nimbalyst/runtime/ai/server/effortLevels';
 
@@ -481,8 +482,7 @@ export function registerSettingsHandlers() {
         if (isDev) {
             // In dev mode, write a restart signal file and quit.
             // The outer dev-loop.sh script watches for this file and restarts npm run dev.
-            const workingDir = app.getAppPath();
-            const restartSignalPath = path.join(workingDir, '.restart-requested');
+            const restartSignalPath = getRestartSignalPath();
 
             logger.store.info(`[app:restart] Dev mode restart: writing signal to ${restartSignalPath}`);
 
@@ -697,9 +697,11 @@ export function registerSettingsHandlers() {
             throw new Error('workspacePath is required for sync:toggle-project');
         }
 
-        const config = getSessionSyncConfig();
+        // Bootstrap config if it doesn't exist yet (e.g., user just authenticated
+        // but hasn't explicitly configured sync settings)
+        let config = getSessionSyncConfig();
         if (!config) {
-            throw new Error('Sync is not configured');
+            config = { enabled: false, serverUrl: '', enabledProjects: [] };
         }
 
         let enabledProjects = config.enabledProjects || [];

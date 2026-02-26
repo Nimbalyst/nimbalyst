@@ -11,4 +11,4 @@
  * - agent: Agentic coding panel
  * - settings: Settings view
  */
-export type ContentMode = 'files' | 'agent' | 'settings';
+export type ContentMode = 'files' | 'agent' | 'tracker' | 'collab' | 'settings';

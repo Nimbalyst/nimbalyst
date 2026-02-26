@@ -8,7 +8,7 @@
  */
 
 import { store } from '../index';
-import { refreshSessionListAtom, sessionListWorkspaceAtom } from '../atoms/sessions';
+import { refreshSessionListAtom, sessionListWorkspaceAtom, sessionRegistryAtom } from '../atoms/sessions';
 
 // Track pending refresh to debounce rapid-fire events
 let pendingRefreshTimer: NodeJS.Timeout | null = null;
@@ -47,6 +47,28 @@ export function initSessionListListeners(): () => void {
 
   cleanups.push(
     window.electronAPI.on('sessions:refresh-list', handleRefreshRequest)
+  );
+
+  // Handle targeted session metadata updates (e.g., phase/tags from MCP tools)
+  // Updates the registry entry directly without a full refresh
+  const handleSessionUpdated = (sessionId: string, updates: Record<string, unknown>) => {
+    const registry = new Map(store.get(sessionRegistryAtom));
+    const meta = registry.get(sessionId);
+    if (meta) {
+      registry.set(sessionId, {
+        ...meta,
+        ...(updates.phase !== undefined && { phase: updates.phase as string }),
+        ...(updates.tags !== undefined && { tags: updates.tags as string[] }),
+        ...(updates.title !== undefined && { title: updates.title as string }),
+        ...(updates.isArchived !== undefined && { isArchived: updates.isArchived as boolean }),
+        ...(updates.isPinned !== undefined && { isPinned: updates.isPinned as boolean }),
+      });
+      store.set(sessionRegistryAtom, registry);
+    }
+  };
+
+  cleanups.push(
+    window.electronAPI.on('sessions:session-updated', handleSessionUpdated)
   );
 
   // Cleanup function

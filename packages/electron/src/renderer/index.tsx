@@ -139,6 +139,8 @@ const isOfficialBuild = process.env.OFFICIAL_BUILD === 'true';
 // Add dev mode indicator to body for styling (only for npm run dev, not packaged builds or Playwright)
 if (isDevMode && !(window as any).PLAYWRIGHT) {
   document.body.setAttribute('data-dev-mode', 'true');
+  const devLabel = window.DEV_MODE_LABEL ?? 'DEV MODE';
+  document.body.style.setProperty('--dev-mode-label', `'${devLabel}'`);
 }
 
 const posthogClient = posthog.init(

@@ -1,39 +1,27 @@
 import { BrowserWindow } from 'electron';
 import { windowStates } from '../window/WindowManager';
 import { getFolderContents } from '../utils/FileTree';
-import { chokidarFileWatcher } from './FileWatcher';
 import { checkFileForChanges } from './FileWatcher';
+import * as workspaceEventBus from './WorkspaceEventBus';
 import { basename } from 'path';
 
 // Get global file watcher statistics
 export function getGlobalFileWatcherStats() {
-    const fileStats = chokidarFileWatcher.getStats();
+    const busStats = workspaceEventBus.getStats();
 
     const lines: string[] = [];
-    lines.push('=== File Watcher Statistics (Chokidar) ===');
-    lines.push(`Type: ${fileStats.type}`);
-    lines.push(`Total active watchers: ${fileStats.activeWatchers}`);
+    lines.push('=== File Watcher Statistics (WorkspaceEventBus) ===');
+    lines.push(`Type: ${busStats.type}`);
+    lines.push(`Active workspaces: ${busStats.activeWorkspaces}`);
 
-    if (fileStats.watchers.length > 0) {
-        lines.push('\nWatched files:');
-
-        // Group by window
-        const byWindow = new Map<number, string[]>();
-        for (const watcher of fileStats.watchers) {
-            if (!byWindow.has(watcher.windowId)) {
-                byWindow.set(watcher.windowId, []);
-            }
-            byWindow.get(watcher.windowId)!.push(watcher.filePath);
-        }
-
-        for (const [windowId, files] of byWindow) {
-            lines.push(`\n  Window ${windowId} (${files.length} files):`);
-            for (const filePath of files) {
-                lines.push(`    - ${basename(filePath)}`);
-            }
+    if (busStats.workspaces.length > 0) {
+        lines.push('\nWatched workspaces:');
+        for (const ws of busStats.workspaces) {
+            lines.push(`\n  ${ws.workspacePath}`);
+            lines.push(`    Subscribers (${ws.subscriberCount}): ${ws.subscriberIds.join(', ')}`);
         }
     } else {
-        lines.push('\nNo active file watchers');
+        lines.push('\nNo active workspace watchers');
     }
 
     // Add performance metrics
@@ -64,22 +52,14 @@ export function getFileWatcherStatus(windowId: number): string {
         lines.push('No window state found');
     }
 
-    // Get file watcher info for this window using ChokidarFileWatcher
-    const fileStats = chokidarFileWatcher.getStats();
-    const windowWatchers = fileStats.watchers.filter(w => w.windowId === windowId);
+    const busStats = workspaceEventBus.getStats();
+    lines.push('\n=== Workspace Event Bus ===');
+    lines.push(`Type: ${busStats.type}`);
+    lines.push(`Active workspaces: ${busStats.activeWorkspaces}`);
 
-    lines.push('\n=== File Watchers (Chokidar) ===');
-    lines.push(`Type: ${fileStats.type}`);
-    lines.push(`Active watchers for this window: ${windowWatchers.length}`);
-
-    if (windowWatchers.length > 0) {
-        lines.push('\nWatching files:');
-        for (const watcher of windowWatchers) {
-            lines.push(`  - ${basename(watcher.filePath)}`);
-            lines.push(`    Full path: ${watcher.filePath}`);
-        }
-    } else {
-        lines.push('No active file watchers for this window');
+    for (const ws of busStats.workspaces) {
+        lines.push(`\n  ${ws.workspacePath}`);
+        lines.push(`    Subscribers: ${ws.subscriberIds.join(', ')}`);
     }
 
     lines.push('\n=== System Info ===');

@@ -5,8 +5,8 @@
  * Individual packages can extend this configuration as needed.
  *
  * Theme colors use CSS variables (--nim-*) which are defined in:
- * - /packages/rexical/src/themes/NimbalystTheme.css (new unified theme)
- * - /packages/rexical/src/themes/PlaygroundEditorTheme.css (legacy, mapped via NimbalystTheme.css)
+ * - /packages/runtime/src/editor/themes/NimbalystTheme.css (unified theme)
+ * - /packages/runtime/src/editor/themes/PlaygroundEditorTheme.css (legacy, mapped via NimbalystTheme.css)
  */
 
 import type { Config } from 'tailwindcss';

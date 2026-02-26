@@ -94,7 +94,7 @@ docker exec -w /workspaces/nimbalyst-code "${CONTAINER_NAME}" bash .devcontainer
 
 This takes several minutes as it:
 - Installs all npm dependencies
-- Builds rexical, extension-sdk, and extensions
+- Builds runtime, extension-sdk, and extensions
 - Builds the Electron main/preload
 - Installs Playwright browsers
 

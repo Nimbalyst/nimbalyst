@@ -1,5 +1,6 @@
 import { BrowserWindow, dialog, app } from 'electron';
 import { join, basename } from 'path';
+import { getPreloadPath } from '../utils/appPaths';
 import { existsSync, mkdirSync, statSync, readdirSync } from 'fs';
 import { getRecentItems, addToRecentItems, store, getWorkspaceWindowState, getTheme } from '../utils/store';
 import { createWindow, findWindowByWorkspace } from './WindowManager';
@@ -8,6 +9,8 @@ import { getBackgroundColor } from '../theme/ThemeManager';
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
 import { GitStatusService } from '../services/GitStatusService';
 import { getMcpConfigService } from '../index';
+import { autoMatchTeamForWorkspace } from '../services/TeamService';
+import { initializeTrackerSync } from '../services/TrackerSyncManager';
 
 let workspaceManagerWindow: BrowserWindow | null = null;
 
@@ -85,13 +88,7 @@ export function createWorkspaceManagerWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      // Due to code splitting, __dirname is out/main/chunks/, not out/main/
-      preload: (() => {
-        const appPath = app.getAppPath();
-        if (app.isPackaged) return join(appPath, 'out/preload/index.js');
-        if (appPath.includes('/out/main') || appPath.includes('\\out\\main')) return join(appPath, '../preload/index.js');
-        return join(appPath, 'out/preload/index.js');
-      })(),
+      preload: getPreloadPath(),
       webviewTag: false
     },
     show: false,
@@ -395,6 +392,12 @@ export function setupWorkspaceManagerHandlers() {
       // Log error but don't throw - workspace opening must continue
       console.error('[MCP] Failed to start watching workspace config:', error);
     }
+
+    // Auto-match workspace to a team (fire-and-forget, never blocks opening)
+    autoMatchTeamForWorkspace(workspacePath).catch(() => {});
+
+    // Initialize tracker sync for this workspace (fire-and-forget)
+    initializeTrackerSync(workspacePath).catch(() => {});
 
     // Restore dev tools if they were open
     if (savedState?.devToolsOpen) {

@@ -2,7 +2,7 @@
  * CommonFileActions - Shared menu items for file operations.
  *
  * Renders the common file action items (Open in Default App, Open in External Editor,
- * Show in Finder, Copy Path, Share Link) used across multiple context menus:
+ * Show in Finder, Copy Path, Share Link, Share to Team) used across multiple context menus:
  * - FileContextMenu (file tree right-click)
  * - TabBar context menu (tab right-click)
  * - UnifiedEditorHeaderBar (header actions dropdown)
@@ -10,9 +10,12 @@
  * Each consumer provides CSS classes to match their own styling.
  */
 
-import React from 'react';
+import React, { useCallback } from 'react';
 import { MaterialSymbol } from '@nimbalyst/runtime';
+import { store } from '@nimbalyst/runtime/store';
 import { useFileActions } from '../hooks/useFileActions';
+import { registerDocumentInIndex, pendingCollabDocumentAtom } from '../store/atoms/collabDocuments';
+import { setWindowModeAtom } from '../store/atoms/windowMode';
 
 interface CommonFileActionsProps {
   filePath: string;
@@ -41,6 +44,27 @@ export function CommonFileActions({
   useButtons = false,
 }: CommonFileActionsProps) {
   const actions = useFileActions(filePath, fileName);
+  const handleShareToTeam = useCallback(() => {
+    // Register in the doc index (optimistic local update is synchronous,
+    // server registration happens in background)
+    registerDocumentInIndex(fileName, fileName, 'markdown').catch(error => {
+      console.error('Failed to register document in index:', error);
+    });
+
+    // Set the pending document so CollabMode auto-opens it
+    store.set(pendingCollabDocumentAtom, fileName);
+
+    // Switch to collab mode immediately
+    store.set(setWindowModeAtom, 'collab');
+
+    import('../services/ErrorNotificationService').then(({ errorNotificationService }) => {
+      errorNotificationService.showInfo(
+        'Shared to team',
+        `"${fileName}" is now a collaborative document.`,
+        { duration: 4000 }
+      );
+    });
+  }, [fileName]);
 
   const Item = useButtons ? 'button' : 'div';
 
@@ -92,6 +116,17 @@ export function CommonFileActions({
         >
           {showIcons && <MaterialSymbol icon="share" size={iconSize} />}
           <span>Share Link</span>
+        </Item>
+      )}
+
+      {/* Share to Team (collaborative editing - conditional on file type) */}
+      {actions.isShareable && (
+        <Item
+          className={menuItemClass}
+          onClick={() => { handleShareToTeam(); onClose(); }}
+        >
+          {showIcons && <MaterialSymbol icon="group" size={iconSize} />}
+          <span>Share to Team</span>
         </Item>
       )}
     </>

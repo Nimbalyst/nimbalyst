@@ -3,7 +3,7 @@
  */
 
 import yaml from 'js-yaml';
-import type { TrackerDataModel, FieldDefinition, FieldOption } from './TrackerDataModel';
+import type { TrackerDataModel, FieldDefinition, FieldOption, TrackerSyncPolicy, TrackerSyncMode } from './TrackerDataModel';
 
 /**
  * Parse a YAML string into a TrackerDataModel
@@ -112,6 +112,15 @@ export function parseTrackerYAML(yamlString: string): TrackerDataModel {
       filterable: data.tableView.filterable !== false,
       exportable: data.tableView.exportable !== false,
     };
+  }
+
+  // Parse sync policy
+  if (data.sync) {
+    const validModes: TrackerSyncMode[] = ['local', 'shared', 'hybrid'];
+    const mode = validModes.includes(data.sync.mode) ? data.sync.mode : 'local';
+    const validScopes: TrackerSyncPolicy['scope'][] = ['project', 'workspace'];
+    const scope = validScopes.includes(data.sync.scope) ? data.sync.scope : 'project';
+    model.sync = { mode, scope };
   }
 
   return model;

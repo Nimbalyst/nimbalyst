@@ -510,10 +510,14 @@ export async function registerSessionHandlers() {
                     uncommittedCount,  // Number of uncommitted files
                     hasUnread: (entry as any).hasUnread || false,  // Unread state from metadata
                     hasPendingQuestion: (entry as any).hasPendingQuestion || false,  // Pending AskUserQuestion state from metadata
+                    hasPendingInteractivePrompt: (entry as any).hasPendingQuestion || false,
                     // Branch tracking - SEPARATE from hierarchical parentSessionId
                     branchedFromSessionId: (entry as any).branchedFromSessionId,
                     branchPointMessageId: entry.branchPointMessageId,
                     branchedAt: entry.branchedAt,
+                    // Kanban board phase and tags
+                    phase: (entry as any).phase || undefined,
+                    tags: (entry as any).tags || undefined,
                     metadata: {}
                 };
             });
@@ -1181,6 +1185,59 @@ export async function registerSessionHandlers() {
         } catch (error) {
             console.error('[SessionHandlers] Failed to list user prompts:', error);
             return { success: false, error: String(error), prompts: [] };
+        }
+    });
+
+    // Get the last N messages for a session (for transcript peek/preview)
+    // Returns lightweight UI messages suitable for a popover preview
+    safeHandle('sessions:get-tail-messages', async (event, sessionId: string, count: number = 10) => {
+        try {
+            const { database } = await import('../database/PGLiteDatabaseWorker');
+
+            // Get the total count first, then fetch the tail
+            const countResult = await database.query<{ count: string }>(
+                `SELECT COUNT(*) as count FROM ai_agent_messages WHERE session_id = $1 AND hidden = FALSE`,
+                [sessionId]
+            );
+            const total = parseInt(countResult.rows[0]?.count || '0', 10);
+            if (total === 0) return [];
+
+            const offset = Math.max(0, total - count);
+
+            const { rows } = await database.query<{
+                id: string;
+                session_id: string;
+                source: string;
+                direction: string;
+                content: string;
+                created_at: Date;
+                metadata: any;
+            }>(
+                `SELECT id, session_id, source, direction, content, created_at, metadata
+                 FROM ai_agent_messages
+                 WHERE session_id = $1 AND hidden = FALSE
+                 ORDER BY id ASC
+                 LIMIT $2 OFFSET $3`,
+                [sessionId, count, offset]
+            );
+
+            // Transform to lightweight UI messages
+            const { transformAgentMessagesToUI } = await import('@nimbalyst/runtime/ai/server/SessionManager');
+            const agentMessages = rows.map(row => ({
+                id: Number(row.id),
+                sessionId: row.session_id,
+                source: row.source,
+                direction: row.direction as 'input' | 'output',
+                content: row.content,
+                createdAt: row.created_at ? new Date(row.created_at) : undefined,
+                metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata,
+                hidden: false,
+            }));
+
+            return transformAgentMessagesToUI(agentMessages);
+        } catch (error) {
+            console.error('[SessionHandlers] Error getting tail messages:', error);
+            return [];
         }
     });
 

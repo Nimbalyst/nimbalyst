@@ -35,8 +35,8 @@ import { $isListItemNode, $createListNode, $createListItemNode } from '@lexical/
 import { useEffect as useReactEffect } from 'react';
 import { $createTrackerItemNode, $getTrackerItemNode, $isTrackerItemNode, TrackerItemData, TrackerItemType, TrackerItemNode, TrackerItemStatus, TrackerItemPriority } from './TrackerItemNode';
 import { TRACKER_ITEM_TRANSFORMERS } from './TrackerItemTransformer';
-import type { PluginPackage } from 'rexical';
-import { TypeaheadMenuPlugin, type TypeaheadMenuOption } from 'rexical';
+import type { PluginPackage } from '../../editor';
+import { TypeaheadMenuPlugin, type TypeaheadMenuOption, $convertToEnhancedMarkdownString, getEditorTransformers } from '../../editor';
 import { globalRegistry } from './models';
 import { DocumentHeaderRegistry } from './documentHeader/DocumentHeaderRegistry';
 import { TrackerDocumentHeader, shouldRenderTrackerHeader } from './documentHeader/TrackerDocumentHeader';
@@ -206,8 +206,7 @@ async function convertToPlan(editor: LexicalEditor, onContentChange?: (content: 
   };
 
   // Get current content as markdown (proper export)
-  const { $convertToEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
-
+  
   editor.getEditorState().read(() => {
     try {
       const transformers = getEditorTransformers();
@@ -252,8 +251,7 @@ async function convertToDecision(editor: LexicalEditor, onContentChange?: (conte
   };
 
   // Get current content as markdown (proper export)
-  const { $convertToEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
-
+  
   editor.getEditorState().read(() => {
     try {
       const transformers = getEditorTransformers();
@@ -953,7 +951,7 @@ export { TrackerDocumentHeader, shouldRenderTrackerHeader } from './documentHead
 
 // Export data models
 export { ModelLoader, loadBuiltinTrackers } from './models/ModelLoader';
-export type { TrackerDataModel, FieldDefinition } from './models/TrackerDataModel';
+export type { TrackerDataModel, FieldDefinition, TrackerSyncPolicy, TrackerSyncMode } from './models/TrackerDataModel';
 export { parseTrackerYAML } from './models/YAMLParser';
 export { globalRegistry } from './models/TrackerDataModel';
 
@@ -961,6 +959,20 @@ export { globalRegistry } from './models/TrackerDataModel';
 export { StatusBar } from './components/StatusBar';
 export { TrackerTable } from './components/TrackerTable';
 export type { SortColumn, SortDirection } from './components/TrackerTable';
+export { TrackerFieldEditor } from './components/TrackerFieldEditor';
+export type { TrackerFieldEditorProps } from './components/TrackerFieldEditor';
+
+// Export tracker data atoms (cross-platform reactive state)
+export {
+  trackerItemsMapAtom,
+  trackerDataLoadedAtom,
+  trackerItemsArrayAtom,
+  trackerItemsByTypeAtom,
+  trackerItemCountByTypeAtom,
+  upsertTrackerItemAtom,
+  removeTrackerItemAtom,
+  replaceAllTrackerItemsAtom,
+} from './trackerDataAtoms';
 
 // Export tracker node and types
 export { TrackerItemNode, $createTrackerItemNode, $getTrackerItemNode, $isTrackerItemNode } from './TrackerItemNode';

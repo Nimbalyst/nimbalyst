@@ -34,7 +34,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './packages/rexical/src'),
+      '@': path.resolve(__dirname, './packages/runtime/src/editor'),
       'lexical': path.resolve(__dirname, './node_modules/lexical'),
       '@lexical': path.resolve(__dirname, './node_modules/@lexical')
     }

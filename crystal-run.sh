@@ -234,44 +234,15 @@ fi
 # In worktree mode, we can skip building if:
 #   1. Package has no changes compared to main repo, AND
 #   2. Main repo has the dist folder built (we'll copy it)
-build_rexical=false
 build_runtime=false
 build_extension_sdk=false
 build_extensions=false
-build_rexical_reason=""
 build_runtime_reason=""
 build_extension_sdk_reason=""
 build_extensions_reason=""
-copy_rexical_from_main=false
 copy_runtime_from_main=false
 copy_extension_sdk_from_main=false
 copy_extensions_from_main=false
-
-# Check rexical
-if [ "$WORKTREE_MODE" = "true" ]; then
-  if package_has_worktree_changes "packages/rexical"; then
-    # Has local changes, need to check if rebuild required
-    if needs_rebuild "packages/rexical"; then
-      build_rexical=true
-      build_rexical_reason=" (local changes)"
-    fi
-  elif main_repo_has_dist "packages/rexical"; then
-    # No local changes and main repo has dist - copy it
-    if [ ! -d "packages/rexical/dist" ]; then
-      copy_rexical_from_main=true
-    fi
-  else
-    # No local changes but main repo doesn't have dist - need to build
-    if needs_rebuild "packages/rexical"; then
-      build_rexical=true
-    fi
-  fi
-else
-  # Not in worktree, use standard rebuild check
-  if needs_rebuild "packages/rexical"; then
-    build_rexical=true
-  fi
-fi
 
 # Check runtime
 if [ "$WORKTREE_MODE" = "true" ]; then
@@ -280,34 +251,22 @@ if [ "$WORKTREE_MODE" = "true" ]; then
     if needs_rebuild "packages/runtime"; then
       build_runtime=true
       build_runtime_reason=" (local changes)"
-    elif [ "$build_rexical" = true ]; then
-      build_runtime=true
-      build_runtime_reason=" (rexical changed)"
     fi
   elif main_repo_has_dist "packages/runtime"; then
-    # No local changes and main repo has dist - copy it (unless rexical changed)
-    if [ "$build_rexical" = true ]; then
-      build_runtime=true
-      build_runtime_reason=" (rexical changed)"
-    elif [ ! -d "packages/runtime/dist" ]; then
+    # No local changes and main repo has dist - copy it
+    if [ ! -d "packages/runtime/dist" ]; then
       copy_runtime_from_main=true
     fi
   else
     # No local changes but main repo doesn't have dist - need to build
     if needs_rebuild "packages/runtime"; then
       build_runtime=true
-    elif [ "$build_rexical" = true ]; then
-      build_runtime=true
-      build_runtime_reason=" (rexical changed)"
     fi
   fi
 else
   # Not in worktree, use standard rebuild check
   if needs_rebuild "packages/runtime"; then
     build_runtime=true
-  elif [ "$build_rexical" = true ]; then
-    build_runtime=true
-    build_runtime_reason=" (rexical changed)"
   fi
 fi
 
@@ -375,13 +334,6 @@ done
 # Print build plan
 echo ""
 echo "Build plan:"
-if [ "$copy_rexical_from_main" = true ]; then
-  echo "  rexical: COPY from main repo (no local changes)"
-elif [ "$build_rexical" = true ]; then
-  echo "  rexical: BUILD$build_rexical_reason"
-else
-  echo "  rexical: skip (up-to-date)"
-fi
 if [ "$copy_runtime_from_main" = true ]; then
   echo "  runtime: COPY from main repo (no local changes)"
 elif [ "$build_runtime" = true ]; then
@@ -409,17 +361,6 @@ echo ""
 if [ "$needs_npm_install" = true ]; then
   echo "Installing dependencies..."
   npm install
-fi
-
-# Handle rexical
-if [ "$copy_rexical_from_main" = true ]; then
-  copy_dist_from_main_repo "packages/rexical"
-elif [ "$build_rexical" = true ]; then
-  echo "Building rexical package..."
-  cd packages/rexical
-  npm run build
-  cd ../..
-  save_build_hash "packages/rexical"
 fi
 
 # Handle runtime
@@ -480,11 +421,25 @@ fi
 # Navigate to the electron package directory
 cd packages/electron
 
+# Derive a unique userData directory name when in worktree mode
+# Without this, all worktree instances share Nimbalyst-Dev and cross-pollinate settings (theme, etc.)
+if [ "$WORKTREE_MODE" = "true" ]; then
+  WORKTREE_NAME=$(basename "$(pwd)")
+  NIMBALYST_USER_DATA="$HOME/Library/Application Support/@nimbalyst/electron-wt-${WORKTREE_NAME}"
+else
+  NIMBALYST_USER_DATA=""
+fi
+
 # Run the dev app with custom port
 if [ "$USE_PRODUCTION_DB" = true ]; then
   echo "Starting Nimbalyst on port $DEV_PORT with PRODUCTION database..."
   echo "WARNING: Changes will affect your real data!"
   VITE_PORT=$DEV_PORT npm run dev:loop
+elif [ -n "$NIMBALYST_USER_DATA" ]; then
+  echo "Starting Nimbalyst on port $DEV_PORT with worktree-isolated user data..."
+  echo "  userData: $NIMBALYST_USER_DATA"
+  echo "Use /restart in AI chat to restart the app."
+  NIMBALYST_USER_DATA_DIR="$NIMBALYST_USER_DATA" VITE_PORT=$DEV_PORT npm run dev:loop
 else
   echo "Starting Nimbalyst on port $DEV_PORT with isolated user data..."
   echo "Use /restart in AI chat to restart the app."

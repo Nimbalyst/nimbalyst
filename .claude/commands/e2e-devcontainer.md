@@ -103,7 +103,7 @@ When running tests, you can specify:
 
 Every fresh container runs the full setup (`.devcontainer/post-create.sh`):
 1. `npm ci` - Install dependencies
-2. Build rexical, extension-sdk, extensions
+2. Build runtime, extension-sdk, extensions
 3. Build Electron app
 4. Install Playwright browsers
 

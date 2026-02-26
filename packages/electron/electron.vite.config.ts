@@ -6,7 +6,6 @@ import { viteStaticCopy } from 'vite-plugin-static-copy'
 import { nodePolyfills } from 'vite-plugin-node-polyfills'
 import fs from 'fs'
 
-// Custom plugin to exclude Excalidraw locales and optimize imports (copied from rexical)
 // Plugin to optimize Shiki language imports
 const optimizeShikiPlugin = () => {
   return {
@@ -89,7 +88,6 @@ const isOfficialBuild = process.env.OFFICIAL_BUILD === 'true';
 const isDevMode = isDev;
 const runtimeSrcDir = resolve(__dirname, '../runtime/src');
 const runtimeDistDir = resolve(__dirname, '../runtime/dist');
-const rexicalDistDir = resolve(__dirname, '../rexical/dist');
 
 // Plugin to resolve workspace package subpaths correctly in production
 const resolveWorkspaceSubpaths = () => {
@@ -126,8 +124,7 @@ export default defineConfig({
         '@stravu-editor/runtime': '@nimbalyst/runtime',
         '@stravu/runtime': '@nimbalyst/runtime',
         // Always use src for bundling - simpler than dealing with ESM/CJS issues
-        '@nimbalyst/runtime': runtimeSrcDir,
-        'rexical': resolve(__dirname, '../rexical/src')
+        '@nimbalyst/runtime': runtimeSrcDir
       }
     },
     build: {
@@ -163,8 +160,7 @@ export default defineConfig({
       alias: {
         '@stravu-editor/runtime': '@nimbalyst/runtime',
         '@stravu/runtime': '@nimbalyst/runtime',
-        '@nimbalyst/runtime': runtimeSrcDir,
-        'rexical': resolve(__dirname, '../rexical/src')
+        '@nimbalyst/runtime': runtimeSrcDir
       }
     },
     build: {
@@ -244,8 +240,8 @@ export default defineConfig({
       port: process.env.VITE_PORT ? parseInt(process.env.VITE_PORT, 10) : 5273,
       strictPort: true,
       watch: {
-        // Force watching rexical and runtime source files in dev mode
-        ignored: ['!**/rexical/src/**', '!**/runtime/src/**']
+        // Force watching runtime source files in dev mode
+        ignored: ['!**/runtime/src/**']
       },
       fs: {
         // Allow serving files from parent directories and node_modules
@@ -264,14 +260,10 @@ export default defineConfig({
     },
     resolve: {
       alias: {
-        // Block mermaid imports to prevent large bundle
-        '@excalidraw/mermaid-to-excalidraw': resolve(__dirname, '../rexical/src/mocks/mermaid-mock.ts'),
         // Ensure renderer also points runtime imports at source
         '@stravu-editor/runtime': '@nimbalyst/runtime',
         '@stravu/runtime': '@nimbalyst/runtime',
-        '@nimbalyst/runtime': runtimeSrcDir,
-        'rexical/styles': resolve(__dirname, '../rexical/src/themes/NimbalystEditorTheme.css'),
-        'rexical': resolve(__dirname, '../rexical/src')
+        '@nimbalyst/runtime': runtimeSrcDir
       },
       dedupe: [
         'react',
@@ -363,7 +355,7 @@ export default defineConfig({
         '@lexical/react/LexicalTypeaheadMenuPlugin',
         '@lexical/react/useLexicalEditable',
         '@lexical/react/useLexicalNodeSelection',
-        // Additional Lexical packages used by rexical
+        // Additional Lexical packages used by the editor
         '@lexical/headless',
         '@lexical/yjs',
         'yjs',
@@ -398,7 +390,6 @@ export default defineConfig({
       exclude: [
         '@shikijs/langs',
         'prettier',
-        'rexical',
         '@nimbalyst/runtime',
         '@stravu/runtime',
         '@stravu-editor/runtime'

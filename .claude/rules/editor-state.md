@@ -2,8 +2,8 @@
 globs:
   - packages/runtime/src/editors/**/*.ts
   - packages/runtime/src/editors/**/*.tsx
-  - packages/rexical/src/**/*.tsx
-  - packages/rexical/src/**/*.ts
+  - packages/runtime/src/editor/**/*.tsx
+  - packages/runtime/src/editor/**/*.ts
   - packages/electron/src/renderer/components/TabEditor/**/*
   - packages/runtime/src/extensions/editorHost.ts
   - packages/runtime/src/extensions/useEditorHost.ts

@@ -3,10 +3,6 @@ import { useSetAtom } from 'jotai';
 import type { ContentMode } from '../types/WindowModeTypes';
 import type { AgentModeRef } from '../components/AgentMode';
 import {
-  toggleTrackerPanelAtom,
-  closeTrackerPanelAtom,
-} from '../store/atoms/trackers';
-import {
   toggleTerminalPanelAtom,
   closeTerminalPanelAtom,
 } from '../store/atoms/terminals';
@@ -42,7 +38,7 @@ interface KeyboardShortcutsOptions {
  * - Cmd+E: Switch to Files mode (or toggle sidebar if already in Files mode)
  * - Cmd+K: Switch to Agent mode (or toggle session history if already in Agent mode)
  * - Cmd+Y: Open history dialog (Files mode only)
- * - Cmd+T: Toggle Tracker panel (remembers last active type)
+ * - Cmd+T: Switch to Tracker mode
  * - Cmd+Alt+W: Create new worktree session
  * - Ctrl+`: Toggle Terminal panel
  */
@@ -57,10 +53,6 @@ export function useKeyboardShortcuts({
   agentModeRef,
   toggleAgentCollapsed,
 }: KeyboardShortcutsOptions): void {
-  // Tracker panel atoms
-  const toggleTrackerPanel = useSetAtom(toggleTrackerPanelAtom);
-  const closeTrackerPanel = useSetAtom(closeTrackerPanelAtom);
-
   // Terminal panel atoms
   const toggleTerminalPanel = useSetAtom(toggleTerminalPanelAtom);
   const closeTerminalPanel = useSetAtom(closeTerminalPanelAtom);
@@ -119,11 +111,10 @@ export function useKeyboardShortcuts({
         }
       }
 
-      // Cmd+T to toggle tracker panel (remembers last active type)
+      // Cmd+T to switch to Tracker mode
       if (workspaceMode && isAppModifier && !e.shiftKey && !e.altKey && e.key === 't') {
         e.preventDefault();
-        toggleTrackerPanel();
-        closeTerminalPanel();
+        setActiveMode('tracker');
       }
       // Ctrl+` for Terminal panel (Ctrl on all platforms, matching VS Code)
       if (workspaceMode && e.code === 'Backquote' && !e.shiftKey && !e.altKey &&
@@ -131,7 +122,6 @@ export function useKeyboardShortcuts({
         e.preventDefault();
         e.stopPropagation();
         toggleTerminalPanel();
-        closeTrackerPanel(); // Close tracker when opening terminal
       }
 
       // Cmd+Alt+W (Mac) or Ctrl+Alt+W (Windows) to create new worktree session
@@ -162,8 +152,6 @@ export function useKeyboardShortcuts({
     editorModeRef,
     agentModeRef,
     toggleAgentCollapsed,
-    toggleTrackerPanel,
-    closeTrackerPanel,
     toggleTerminalPanel,
     closeTerminalPanel,
   ]);

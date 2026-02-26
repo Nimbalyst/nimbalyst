@@ -756,6 +756,14 @@ export class AgentToolHooks {
       try {
         const response = await responsePromise;
 
+        // Emit resolved event so the renderer clears the "waiting for input" indicator
+        this.emit('toolPermission:resolved', {
+          requestId,
+          sessionId: this.sessionId,
+          response,
+          timestamp: Date.now()
+        });
+
         if (response.decision === 'deny') {
           this.logSecurity(`[PreToolUse] Sub-command denied:`, { subCommand: subCommand.slice(0, 50) });
           return {
@@ -782,6 +790,13 @@ export class AgentToolHooks {
           }
         }
       } catch (error) {
+        // Emit resolved event on error path too, so the indicator is cleared
+        this.emit('toolPermission:resolved', {
+          requestId,
+          sessionId: this.sessionId,
+          response: { decision: 'deny', scope: 'once' },
+          timestamp: Date.now()
+        });
         this.logSecurity(`[PreToolUse] Sub-command permission failed:`, { error });
         return {
           hookSpecificOutput: {
