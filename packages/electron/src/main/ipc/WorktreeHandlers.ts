@@ -47,6 +47,207 @@ function emitTerminalListChanged(workspacePath: string): void {
 }
 
 /**
+ * Archive a single worktree and its sessions.
+ *
+ * Extracted from the worktree:archive IPC handler so it can be reused
+ * by blitz:archive to properly clean up child worktrees (kill terminals,
+ * stop watchers, delete from disk).
+ *
+ * Returns immediately after queuing disk cleanup - doesn't wait for it.
+ */
+export async function archiveWorktree(worktreeId: string, workspacePath: string): Promise<{ success: boolean; error?: string }> {
+  const archiveLogger = log.scope('archiveWorktree');
+
+  try {
+    if (!worktreeId) {
+      throw new Error('worktreeId is required');
+    }
+
+    if (!workspacePath) {
+      throw new Error('workspacePath is required');
+    }
+
+    archiveLogger.info('Archiving worktree', { worktreeId, workspacePath });
+
+    // Get worktree from database
+    const db = getDatabase();
+    if (!db) {
+      throw new Error('Database not initialized');
+    }
+
+    const worktreeStore = createWorktreeStore(db);
+    const worktree = await worktreeStore.get(worktreeId);
+
+    if (!worktree) {
+      throw new Error(`Worktree not found: ${worktreeId}`);
+    }
+
+    // Security: Verify that the worktree belongs to the specified workspace
+    if (worktree.projectPath !== workspacePath) {
+      throw new Error(
+        `Security violation: Worktree project path (${worktree.projectPath}) does not match workspace path (${workspacePath})`
+      );
+    }
+
+    // Already archived - skip
+    if (worktree.isArchived) {
+      archiveLogger.info('Worktree already archived, skipping', { worktreeId });
+      return { success: true };
+    }
+
+    const gitWorktreeService = new GitWorktreeService();
+
+    // Step 1: Get all sessions for this worktree
+    const sessionIds = await worktreeStore.getWorktreeSessions(worktreeId);
+    archiveLogger.info('Found sessions for worktree', { worktreeId, sessionCount: sessionIds.length });
+
+    // Get worktree git status for analytics (before archiving)
+    let hasUncommittedChanges = false;
+    let hasUnmergedChanges = false;
+    try {
+      const gitStatus = await gitWorktreeService.getWorktreeStatus(worktree.path, worktree.baseBranch);
+      hasUncommittedChanges = gitStatus.hasUncommittedChanges;
+      hasUnmergedChanges = !gitStatus.isMerged;
+    } catch (statusError) {
+      archiveLogger.warn('Failed to get worktree status for analytics', { worktreeId, error: statusError });
+    }
+
+    // Step 2: Kill any running terminal processes for these sessions
+    const terminalManager = getTerminalSessionManager();
+    await terminalManager.destroyTerminalsForSessions(sessionIds);
+    archiveLogger.info('Destroyed terminal processes for worktree sessions', { worktreeId });
+
+    // Stop the git ref watcher for this worktree (it's being archived/deleted)
+    await gitRefWatcher.stop(worktree.path);
+
+    // Step 2b: Delete terminals associated with this worktree
+    // Terminals have a worktreeId field that links them to the worktree.
+    // When the worktree is archived, these terminals become orphaned and will
+    // fail to start (cwd doesn't exist), so we clean them up here.
+    const worktreeTerminalIds = getTerminalsByWorktreeId(workspacePath, worktreeId);
+    if (worktreeTerminalIds.length > 0) {
+      archiveLogger.info('Deleting terminals associated with worktree', { worktreeId, terminalCount: worktreeTerminalIds.length });
+      for (const terminalId of worktreeTerminalIds) {
+        try {
+          // Kill the terminal process if it's running
+          await terminalManager.destroyTerminal(terminalId);
+          // Delete from the terminal store
+          deleteTerminalInstance(workspacePath, terminalId);
+        } catch (err) {
+          archiveLogger.warn('Failed to delete worktree terminal', { terminalId, worktreeId, error: err });
+        }
+      }
+      archiveLogger.info('Deleted terminals for worktree', { worktreeId, deletedCount: worktreeTerminalIds.length });
+
+      // Notify renderer to refresh terminal list
+      emitTerminalListChanged(workspacePath);
+    }
+
+    // Step 3: Archive all sessions for this worktree immediately (fast feedback)
+    archiveLogger.info('Archiving sessions for worktree', { worktreeId, sessionCount: sessionIds.length });
+
+    let failedSessions = 0;
+    for (const sessionId of sessionIds) {
+      try {
+        await AISessionsRepository.updateMetadata(sessionId, { isArchived: true });
+      } catch (err) {
+        failedSessions++;
+        archiveLogger.error('Failed to archive session', { sessionId, worktreeId, error: err });
+        // Continue archiving remaining sessions
+      }
+    }
+
+    if (failedSessions > 0) {
+      archiveLogger.warn('Some sessions failed to archive', { worktreeId, failedCount: failedSessions, totalCount: sessionIds.length });
+    }
+
+    // NOTE: We do NOT mark the worktree as archived here.
+    // The worktree is only marked as archived AFTER the disk deletion succeeds.
+    // This ensures we never have a worktree marked as archived that still exists on disk.
+
+    // Calculate worktree age for analytics
+    const worktreeAgeDays = Math.floor((Date.now() - worktree.createdAt) / (1000 * 60 * 60 * 24));
+    const archiveStartTime = Date.now();
+
+    // Track archive initiation
+    const analyticsService = AnalyticsService.getInstance();
+    analyticsService.sendEvent('worktree_archived', {
+      session_count: sessionIds.length,
+      worktree_age_days: worktreeAgeDays,
+      failed_sessions: failedSessions,
+      has_uncommitted_changes: hasUncommittedChanges,
+      has_unmerged_changes: hasUnmergedChanges,
+    });
+
+    // Step 4: Queue the slow cleanup work
+    const cleanupCallback = async () => {
+      try {
+        // Update status to show we're removing the worktree
+        archiveProgressManager.updateTaskStatus(worktreeId, 'removing-worktree');
+
+        // Remove the git worktree from disk (throws if directory still exists after cleanup)
+        await gitWorktreeService.deleteWorktree(worktree.path, workspacePath);
+
+        archiveLogger.info('Worktree cleanup completed, now marking as archived in database', { worktreeId });
+
+        // Only mark as archived AFTER disk deletion is confirmed
+        await worktreeStore.updateArchived(worktreeId, true);
+
+        archiveLogger.info('Worktree marked as archived in database', { worktreeId });
+
+        // Track successful completion
+        const durationMs = Date.now() - archiveStartTime;
+        analyticsService.sendEvent('worktree_archive_completed', {
+          session_count: sessionIds.length,
+          duration_ms: durationMs,
+        });
+      } catch (error) {
+        // Unarchive the sessions since the cleanup failed
+        archiveLogger.warn('Cleanup failed, unarchiving sessions', { worktreeId, error });
+        for (const sessionId of sessionIds) {
+          try {
+            await AISessionsRepository.updateMetadata(sessionId, { isArchived: false });
+          } catch (unarchiveErr) {
+            archiveLogger.error('Failed to unarchive session after cleanup failure', { sessionId, worktreeId, error: unarchiveErr });
+          }
+        }
+
+        // Track failure
+        analyticsService.sendEvent('worktree_archive_failed', {
+          error_type: error instanceof Error ? error.constructor.name : 'Unknown',
+          stage: 'removing-worktree',
+        });
+        throw error;
+      }
+    };
+
+    archiveProgressManager.addTask(
+      worktreeId,
+      worktree.displayName || worktree.name,
+      cleanupCallback
+    );
+
+    archiveLogger.info('Worktree archive initiated', { worktreeId });
+
+    return { success: true };
+  } catch (error) {
+    archiveLogger.error('Failed to archive worktree:', error);
+
+    // Track failure during setup/session archiving
+    const analyticsService = AnalyticsService.getInstance();
+    analyticsService.sendEvent('worktree_archive_failed', {
+      error_type: error instanceof Error ? error.constructor.name : 'Unknown',
+      stage: 'archiving-sessions',
+    });
+
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to archive worktree',
+    };
+  }
+}
+
+/**
  * Register worktree IPC handlers
  */
 export function registerWorktreeHandlers(): void {
@@ -964,187 +1165,7 @@ export function registerWorktreeHandlers(): void {
    * @returns Success status (for immediate database operations)
    */
   ipcMain.handle('worktree:archive', async (_event, worktreeId: string, workspacePath: string) => {
-    try {
-      if (!worktreeId) {
-        throw new Error('worktreeId is required');
-      }
-
-      if (!workspacePath) {
-        throw new Error('workspacePath is required');
-      }
-
-      logger.info('Archiving worktree', { worktreeId, workspacePath });
-
-      // Get worktree from database
-      const db = getDatabase();
-      if (!db) {
-        throw new Error('Database not initialized');
-      }
-
-      const worktreeStore = createWorktreeStore(db);
-      const worktree = await worktreeStore.get(worktreeId);
-
-      if (!worktree) {
-        throw new Error(`Worktree not found: ${worktreeId}`);
-      }
-
-      // Security: Verify that the worktree belongs to the specified workspace
-      if (worktree.projectPath !== workspacePath) {
-        throw new Error(
-          `Security violation: Worktree project path (${worktree.projectPath}) does not match workspace path (${workspacePath})`
-        );
-      }
-
-      // Step 1: Get all sessions for this worktree
-      const sessionIds = await worktreeStore.getWorktreeSessions(worktreeId);
-      logger.info('Found sessions for worktree', { worktreeId, sessionCount: sessionIds.length });
-
-      // Get worktree git status for analytics (before archiving)
-      let hasUncommittedChanges = false;
-      let hasUnmergedChanges = false;
-      try {
-        const gitStatus = await gitWorktreeService.getWorktreeStatus(worktree.path, worktree.baseBranch);
-        hasUncommittedChanges = gitStatus.hasUncommittedChanges;
-        hasUnmergedChanges = !gitStatus.isMerged;
-      } catch (statusError) {
-        logger.warn('Failed to get worktree status for analytics', { worktreeId, error: statusError });
-      }
-
-      // Step 2: Kill any running terminal processes for these sessions
-      const terminalManager = getTerminalSessionManager();
-      await terminalManager.destroyTerminalsForSessions(sessionIds);
-      logger.info('Destroyed terminal processes for worktree sessions', { worktreeId });
-
-      // Stop the git ref watcher for this worktree (it's being archived/deleted)
-      await gitRefWatcher.stop(worktree.path);
-
-      // Step 2b: Delete terminals associated with this worktree
-      // Terminals have a worktreeId field that links them to the worktree.
-      // When the worktree is archived, these terminals become orphaned and will
-      // fail to start (cwd doesn't exist), so we clean them up here.
-      const worktreeTerminalIds = getTerminalsByWorktreeId(workspacePath, worktreeId);
-      if (worktreeTerminalIds.length > 0) {
-        logger.info('Deleting terminals associated with worktree', { worktreeId, terminalCount: worktreeTerminalIds.length });
-        for (const terminalId of worktreeTerminalIds) {
-          try {
-            // Kill the terminal process if it's running
-            await terminalManager.destroyTerminal(terminalId);
-            // Delete from the terminal store
-            deleteTerminalInstance(workspacePath, terminalId);
-          } catch (err) {
-            logger.warn('Failed to delete worktree terminal', { terminalId, worktreeId, error: err });
-          }
-        }
-        logger.info('Deleted terminals for worktree', { worktreeId, deletedCount: worktreeTerminalIds.length });
-
-        // Notify renderer to refresh terminal list
-        emitTerminalListChanged(workspacePath);
-      }
-
-      // Step 3: Archive all sessions for this worktree immediately (fast feedback)
-      logger.info('Archiving sessions for worktree', { worktreeId, sessionCount: sessionIds.length });
-
-      let failedSessions = 0;
-      for (const sessionId of sessionIds) {
-        try {
-          await AISessionsRepository.updateMetadata(sessionId, { isArchived: true });
-        } catch (err) {
-          failedSessions++;
-          logger.error('Failed to archive session', { sessionId, worktreeId, error: err });
-          // Continue archiving remaining sessions
-        }
-      }
-
-      if (failedSessions > 0) {
-        logger.warn('Some sessions failed to archive', { worktreeId, failedCount: failedSessions, totalCount: sessionIds.length });
-      }
-
-      // NOTE: We do NOT mark the worktree as archived here.
-      // The worktree is only marked as archived AFTER the disk deletion succeeds.
-      // This ensures we never have a worktree marked as archived that still exists on disk.
-
-      // Calculate worktree age for analytics
-      const worktreeAgeDays = Math.floor((Date.now() - worktree.createdAt) / (1000 * 60 * 60 * 24));
-      const archiveStartTime = Date.now();
-
-      // Track archive initiation
-      const analyticsService = AnalyticsService.getInstance();
-      analyticsService.sendEvent('worktree_archived', {
-        session_count: sessionIds.length,
-        worktree_age_days: worktreeAgeDays,
-        failed_sessions: failedSessions,
-        has_uncommitted_changes: hasUncommittedChanges,
-        has_unmerged_changes: hasUnmergedChanges,
-      });
-
-      // Step 4: Queue the slow cleanup work
-      const cleanupCallback = async () => {
-        try {
-          // Update status to show we're removing the worktree
-          archiveProgressManager.updateTaskStatus(worktreeId, 'removing-worktree');
-
-          // Remove the git worktree from disk (throws if directory still exists after cleanup)
-          await gitWorktreeService.deleteWorktree(worktree.path, workspacePath);
-
-          logger.info('Worktree cleanup completed, now marking as archived in database', { worktreeId });
-
-          // Only mark as archived AFTER disk deletion is confirmed
-          await worktreeStore.updateArchived(worktreeId, true);
-
-          logger.info('Worktree marked as archived in database', { worktreeId });
-
-          // Track successful completion
-          const durationMs = Date.now() - archiveStartTime;
-          analyticsService.sendEvent('worktree_archive_completed', {
-            session_count: sessionIds.length,
-            duration_ms: durationMs,
-          });
-        } catch (error) {
-          // Unarchive the sessions since the cleanup failed
-          logger.warn('Cleanup failed, unarchiving sessions', { worktreeId, error });
-          for (const sessionId of sessionIds) {
-            try {
-              await AISessionsRepository.updateMetadata(sessionId, { isArchived: false });
-            } catch (unarchiveErr) {
-              logger.error('Failed to unarchive session after cleanup failure', { sessionId, worktreeId, error: unarchiveErr });
-            }
-          }
-
-          // Track failure
-          analyticsService.sendEvent('worktree_archive_failed', {
-            error_type: error instanceof Error ? error.constructor.name : 'Unknown',
-            stage: 'removing-worktree',
-          });
-          throw error;
-        }
-      };
-
-      archiveProgressManager.addTask(
-        worktreeId,
-        worktree.displayName || worktree.name,
-        cleanupCallback
-      );
-
-      logger.info('Worktree archive initiated', { worktreeId });
-
-      return {
-        success: true,
-      };
-    } catch (error) {
-      logger.error('Failed to archive worktree:', error);
-
-      // Track failure during setup/session archiving
-      const analyticsService = AnalyticsService.getInstance();
-      analyticsService.sendEvent('worktree_archive_failed', {
-        error_type: error instanceof Error ? error.constructor.name : 'Unknown',
-        stage: 'archiving-sessions',
-      });
-
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Failed to archive worktree',
-      };
-    }
+    return archiveWorktree(worktreeId, workspacePath);
   });
 
   /**

@@ -18,6 +18,7 @@ import { getQueuedPromptsStore } from '../services/RepositoryManager';
 import { AISessionsRepository } from '@nimbalyst/runtime/storage/repositories/AISessionsRepository';
 import { ModelIdentifier, type AIProviderType } from '@nimbalyst/runtime/ai/server/types';
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
+import { archiveWorktree } from './WorktreeHandlers';
 import type { BlitzCreateResult, WorktreeCreateResult } from '../../shared/ipc/types';
 
 const logger = log.scope('BlitzHandlers');
@@ -369,14 +370,17 @@ export function registerBlitzHandlers(): void {
   });
 
   /**
-   * Archive a blitz and all its child worktree sessions
+   * Archive a blitz and all its child worktrees.
+   *
+   * Delegates to archiveWorktree() for each child so worktrees get the full
+   * cleanup: kill terminals, stop git watchers, delete from disk, etc.
    */
-  ipcMain.handle('blitz:archive', async (_event, blitzId: string, _workspacePath: string) => {
+  ipcMain.handle('blitz:archive', async (_event, blitzId: string, workspacePath: string) => {
     try {
+      if (!workspacePath) throw new Error('workspacePath is required');
+
       const db = getDatabase();
       if (!db) throw new Error('Database not initialized');
-
-      const worktreeStore = createWorktreeStore(db);
 
       // Find all child sessions and their worktrees
       const { rows: childSessions } = await db.query<{ id: string; worktree_id: string }>(
@@ -384,24 +388,28 @@ export function registerBlitzHandlers(): void {
         [blitzId]
       );
 
-      // Archive child worktrees
+      // Archive each child worktree via the full archive flow
+      // (kills terminals, stops watchers, queues disk deletion)
       const archivedWorktreeIds = new Set<string>();
+      const errors: string[] = [];
       for (const child of childSessions) {
         if (child.worktree_id && !archivedWorktreeIds.has(child.worktree_id)) {
-          await worktreeStore.updateArchived(child.worktree_id, true);
           archivedWorktreeIds.add(child.worktree_id);
+          const result = await archiveWorktree(child.worktree_id, workspacePath);
+          if (!result.success) {
+            errors.push(`Failed to archive worktree ${child.worktree_id}: ${result.error}`);
+          }
         }
-      }
-
-      // Archive child sessions
-      for (const child of childSessions) {
-        await AISessionsRepository.updateMetadata(child.id, { isArchived: true });
       }
 
       // Archive the blitz session itself
       await AISessionsRepository.updateMetadata(blitzId, { isArchived: true });
 
-      logger.info('Blitz archived', { blitzId, childCount: childSessions.length });
+      if (errors.length > 0) {
+        logger.warn('Blitz archived with some worktree failures', { blitzId, errors });
+      }
+
+      logger.info('Blitz archived', { blitzId, worktreeCount: archivedWorktreeIds.size });
       return { success: true };
     } catch (error) {
       logger.error('Failed to archive blitz:', error);

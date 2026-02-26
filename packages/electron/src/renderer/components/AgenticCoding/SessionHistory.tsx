@@ -1067,7 +1067,62 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   // Archive a blitz and all its worktrees
   const handleBlitzArchive = useCallback(async (blitzId: string) => {
     try {
+      // Find all worktrees and sessions belonging to this blitz
+      const blitzWorktreeIds = new Set<string>();
+      const blitzSessions: typeof allSessions = [];
+      for (const session of allSessions) {
+        if (session.parentSessionId === blitzId) {
+          blitzSessions.push(session);
+          if (session.worktreeId) {
+            blitzWorktreeIds.add(session.worktreeId);
+          }
+        }
+      }
+
       await window.electronAPI.invoke('blitz:archive', blitzId, workspacePath);
+
+      // Also find sessions that live on blitz worktrees but aren't direct blitz children
+      // (e.g., sessions manually added to a blitz worktree later)
+      const allBlitzWorktreeSessions = allSessions.filter(
+        s => s.worktreeId && blitzWorktreeIds.has(s.worktreeId)
+      );
+
+      // Optimistic UI updates - remove all sessions on blitz worktrees from atom state
+      allBlitzWorktreeSessions.forEach(session => {
+        removeSessionFromAtom(session.id);
+      });
+      // Also remove the blitz session itself from the atom
+      removeSessionFromAtom(blitzId);
+      // Remove from filtered list
+      setSessions(prev => prev.filter(s =>
+        s.parentSessionId !== blitzId && !(s.worktreeId && blitzWorktreeIds.has(s.worktreeId))
+      ));
+
+      // Notify parent to close tabs for archived sessions
+      allBlitzWorktreeSessions.forEach(session => {
+        if (onSessionArchive) {
+          onSessionArchive(session.id);
+        }
+      });
+
+      // Remove worktrees from cache
+      setWorktreeCache(prev => {
+        const newCache = new Map(prev);
+        for (const worktreeId of blitzWorktreeIds) {
+          newCache.delete(worktreeId);
+        }
+        return newCache;
+      });
+
+      // Clean up any super loops tied to these worktrees
+      for (const worktreeId of blitzWorktreeIds) {
+        const superLoop = superLoops.find(loop => loop.worktreeId === worktreeId);
+        if (superLoop) {
+          removeSuperLoop(superLoop.id);
+        }
+      }
+
+      // Update blitz cache
       setBlitzCache(prev => {
         const updated = new Map(prev);
         const blitz = updated.get(blitzId);
@@ -1079,7 +1134,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     } catch (error) {
       console.error('[SessionHistory] Failed to archive blitz:', error);
     }
-  }, [workspacePath]);
+  }, [workspacePath, allSessions, removeSessionFromAtom, onSessionArchive, superLoops, removeSuperLoop]);
 
   // Archive all worktrees in a blitz except the one to keep
   const handleArchiveOtherBlitzWorktrees = useCallback(async (blitzId: string, keepWorktreeId: string) => {
@@ -1545,9 +1600,11 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
       });
     }
 
-    // Add blitz groups
+    // Add blitz groups (skip archived blitzes when not showing archived)
     for (const [blitzId, worktrees] of blitzWorktrees) {
       const blitzData = blitzCache.get(blitzId);
+      if (!showArchived && blitzData?.isArchived) continue;
+
       // Use the most recent session timestamp for the blitz group
       const allSessions = worktrees.flatMap(w => w.sessions);
       let timestamp = Math.max(...allSessions.map(s =>
@@ -1649,7 +1706,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     }
 
     return result as Record<TimeGroupKey | 'Pinned', UnifiedListItem[]>;
-  }, [sessions, worktreeGroupsData, sortBy, worktreeCache, workstreamChildrenCache, blitzCache, superLoops]);
+  }, [sessions, worktreeGroupsData, sortBy, worktreeCache, workstreamChildrenCache, blitzCache, superLoops, showArchived]);
 
   const groupKeys = Object.keys(groupedItems) as (TimeGroupKey | 'Pinned')[];
 
