@@ -20,6 +20,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.54.18] - 2026-02-25
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- Fixed Bash edits on gitignored files showing the entire file as green instead of just the changed lines
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.54.17] - 2026-02-25
 
 
