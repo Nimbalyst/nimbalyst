@@ -14,6 +14,8 @@ import { ConfirmDialog } from '../components/ConfirmDialog/ConfirmDialog';
 import { SessionImportDialog } from '../components/AgenticCoding/SessionImportDialog';
 import { BlitzDialog } from '../components/BlitzDialog/BlitzDialog';
 import { DIALOG_IDS } from './registry';
+import { store } from '@nimbalyst/runtime/store';
+import { refreshSessionListAtom } from '../store/atoms/sessions';
 
 // Type definitions for dialog data
 
@@ -139,6 +141,8 @@ function SessionImportWrapper({
       console.error('[SessionImportDialog] Import failed:', result?.error);
       throw new Error(result?.error || 'Import failed');
     }
+    // Refresh the session list so imported sessions appear immediately
+    store.set(refreshSessionListAtom);
   };
 
   return (
