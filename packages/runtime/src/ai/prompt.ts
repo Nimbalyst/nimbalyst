@@ -124,9 +124,16 @@ IMPORTANT: You are working in a git worktree at ${worktreePath}. This is an isol
 - Make sure to stay in this worktree directory
 - Do not modify files in the main branch unless explicitly asked by the user
 - All changes you make will be on the worktree's branch, not the main branch
-- The worktree allows you to work on this task without affecting the main codebase`;
+- The worktree allows you to work on this task without affecting the main codebase
+- Multiple sessions may be working in the same worktree simultaneously. Be mindful of changes made by other sessions and avoid overwriting their work`;
   }
 
+  // Always add git commit tool guidance
+  prompt += `
+
+## Git Commits
+
+When asked to commit your work, use the \`mcp__nimbalyst-mcp__developer_git_commit_proposal\` tool instead of using git commit from the command line. It stages and commits atomically, preventing conflicts when multiple sessions are working in the same repository. You may do other git operations from the command line as usual.`;
 
   // Add session naming if available
   if (hasSessionNaming) {
