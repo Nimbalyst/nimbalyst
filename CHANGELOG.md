@@ -20,6 +20,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.54.17] - 2026-02-25
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+- Consolidated file watchers into single WorkspaceEventBus per workspace, halving file descriptor usage
+- Added .gitignore-aware filtering and circuit breaker protection against event flooding
+
+### Fixed
+- Fixed Bash diff baseline advancing per tracked change
+- Fixed Nimbalyst hanging when workspace has thousands of dirty files
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.54.16] - 2026-02-25
 
 
