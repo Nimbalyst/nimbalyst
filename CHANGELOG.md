@@ -20,6 +20,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.54.20] - 2026-02-26
+
+
+### Added
+- Agent prompt now includes multi-session awareness and commit tool guidance
+- App update restart is deferred until all active AI sessions finish
+
+### Fixed
+- Blitz archive now recursively archives child worktrees
+- Built-in terminal now has same PATH as Claude Code sessions
+
 ## [0.54.19] - 2026-02-25
 
 
