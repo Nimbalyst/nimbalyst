@@ -5029,13 +5029,6 @@ export class AIService {
         // File does not exist - proceed (it may be a new file)
       }
 
-      const pendingTags = await historyManager.getPendingTags(filePath);
-      if (pendingTags && pendingTags.some(t => t.sessionId === session.id)) {
-        continue;
-      }
-
-      let beforeContent: string | null = null;
-
       const currentContentResult = await readFileContentOrNull(filePath);
       if (currentContentResult === null) {
         logger.main.warn('[AIService] Failed to read current Bash content:', {
@@ -5045,6 +5038,14 @@ export class AIService {
         continue;
       }
       const currentContent = currentContentResult;
+
+      const pendingTags = await historyManager.getPendingTags(filePath);
+      if (pendingTags && pendingTags.some(t => t.sessionId === session.id)) {
+        watcherEntry?.cache.updateSnapshot(filePath, currentContent);
+        continue;
+      }
+
+      let beforeContent: string | null = null;
 
       // Prefer the same cache/history baseline strategy as file_change tracking.
       // This avoids whole-file green diffs for gitignored/untracked bash edits.
@@ -5084,6 +5085,7 @@ export class AIService {
 
       // If baseline equals current content, command did not materially change this file.
       if (resolvedBeforeContent === currentContent) {
+        watcherEntry?.cache.updateSnapshot(filePath, currentContent);
         continue;
       }
 
@@ -5111,6 +5113,7 @@ export class AIService {
           bashCommand: command.slice(0, 500),
         },
       });
+      watcherEntry?.cache.updateSnapshot(filePath, currentContent);
       trackedAny = true;
     }
 
