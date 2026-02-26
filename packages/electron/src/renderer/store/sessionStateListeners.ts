@@ -37,6 +37,7 @@ import {
   sessionStoreAtom,
 } from './atoms/sessions';
 import { workstreamActiveChildAtom, workstreamStateAtom } from './atoms/workstreamState';
+import { setWindowModeAtom } from './atoms/windowMode';
 import { triggerWorktreeRefreshAtom } from './atoms/gitOperations';
 
 // Per-session debounce timers for reloadSessionDataAtom.
@@ -45,6 +46,15 @@ import { triggerWorktreeRefreshAtom } from './atoms/gitOperations';
 // these into one reload per RELOAD_DEBOUNCE_MS window per session.
 const reloadDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const RELOAD_DEBOUNCE_MS = 1000;
+
+// Per-session verification reload timers.
+// After session:completed fires the immediate reload, a second "verification" reload
+// runs after a short delay. This catches race conditions where:
+// - The immediate reload raced with DB writes and got stale data
+// - The reload was aborted by version tracking due to concurrent reloads
+// - The IPC call failed silently
+const verificationReloadTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const VERIFICATION_RELOAD_DELAY_MS = 2000;
 
 // Per-session debounce timers for syncing lastReadAt to other devices.
 // When the user is actively viewing a session that's streaming, we need to
@@ -119,7 +129,25 @@ export function initSessionStateListeners(): () => void {
             }
           }
           if (workspacePath) {
+            // Immediate reload
             store.set(reloadSessionDataAtom, { sessionId, workspacePath });
+
+            // Schedule a verification reload after a short delay.
+            // This is a safety net that catches multiple failure modes:
+            // 1. The immediate reload raced with final DB writes and got stale data
+            // 2. The reload was aborted by version tracking (concurrent reload events)
+            // 3. The IPC call failed silently
+            // 4. Non-blocking writes hadn't flushed despite the provider's flush call
+            // The cost is one extra DB read per session completion - negligible.
+            const verificationWorkspacePath = workspacePath;
+            const existingVerification = verificationReloadTimers.get(sessionId);
+            if (existingVerification) {
+              clearTimeout(existingVerification);
+            }
+            verificationReloadTimers.set(sessionId, setTimeout(() => {
+              verificationReloadTimers.delete(sessionId);
+              store.set(reloadSessionDataAtom, { sessionId, workspacePath: verificationWorkspacePath });
+            }, VERIFICATION_RELOAD_DELAY_MS));
           }
         }
 
@@ -182,7 +210,18 @@ export function initSessionStateListeners(): () => void {
    */
   const handleMessageLogged = (data: { sessionId: string; direction: string }) => {
     const { sessionId, direction } = data;
-    const workspacePath = store.get(sessionListWorkspaceAtom);
+    let workspacePath = store.get(sessionListWorkspaceAtom);
+
+    // Fallback: get workspace path from session registry if the global atom is null
+    // This can happen after HMR re-evaluates the sessions module, or during
+    // a race between listener init and session list init.
+    if (!workspacePath) {
+      const registry = store.get(sessionRegistryAtom);
+      const sessionMeta = registry.get(sessionId);
+      if (sessionMeta?.workspaceId) {
+        workspacePath = sessionMeta.workspaceId;
+      }
+    }
 
     if (!workspacePath || !sessionId) {
       return;
@@ -369,6 +408,9 @@ export function initSessionStateListeners(): () => void {
       return;
     }
 
+    // Switch to agent mode so the session is visible
+    store.set(setWindowModeAtom, 'agent');
+
     // Check if this is a child session - if so, select the parent workstream
     const registry = store.get(sessionRegistryAtom);
     const sessionMeta = registry.get(sessionId);
@@ -477,6 +519,11 @@ export function initSessionStateListeners(): () => void {
       clearTimeout(timer);
     }
     reloadDebounceTimers.clear();
+
+    for (const timer of verificationReloadTimers.values()) {
+      clearTimeout(timer);
+    }
+    verificationReloadTimers.clear();
 
     for (const timer of readStateSyncTimers.values()) {
       clearTimeout(timer);
