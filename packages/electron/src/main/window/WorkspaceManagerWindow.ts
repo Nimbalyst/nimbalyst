@@ -9,6 +9,8 @@ import { getBackgroundColor } from '../theme/ThemeManager';
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
 import { GitStatusService } from '../services/GitStatusService';
 import { getMcpConfigService } from '../index';
+import { autoMatchTeamForWorkspace } from '../services/TeamService';
+import { initializeTrackerSync } from '../services/TrackerSyncManager';
 
 let workspaceManagerWindow: BrowserWindow | null = null;
 
@@ -390,6 +392,12 @@ export function setupWorkspaceManagerHandlers() {
       // Log error but don't throw - workspace opening must continue
       console.error('[MCP] Failed to start watching workspace config:', error);
     }
+
+    // Auto-match workspace to a team (fire-and-forget, never blocks opening)
+    autoMatchTeamForWorkspace(workspacePath).catch(() => {});
+
+    // Initialize tracker sync for this workspace (fire-and-forget)
+    initializeTrackerSync(workspacePath).catch(() => {});
 
     // Restore dev tools if they were open
     if (savedState?.devToolsOpen) {

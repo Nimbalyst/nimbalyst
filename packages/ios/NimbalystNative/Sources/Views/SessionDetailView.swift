@@ -80,6 +80,9 @@ public struct SessionDetailView: View {
     /// Whether the transcript web view has loaded and rendered its first data.
     @State private var isTranscriptReady = false
 
+    /// Whether the web view JS bridge signalled ready (may fire before messages arrive).
+    @State private var isWebViewReady = false
+
     /// Error state for diagnosing load failures.
     @State private var loadError: SessionLoadError?
 
@@ -112,11 +115,18 @@ public struct SessionDetailView: View {
                     onInteractiveResponse: handleInteractiveResponse,
                     controller: transcriptController,
                     onReady: {
-                        withAnimation(.easeOut(duration: 0.2)) {
-                            isTranscriptReady = true
-                            loadError = nil
+                        isWebViewReady = true
+                        // For sessions that have synced messages before,
+                        // keep the loading overlay until messages arrive
+                        // to avoid flashing the empty capabilities list.
+                        let hasHistory = session.lastSyncedSeq > 0
+                        if !hasHistory || !messages.isEmpty {
+                            withAnimation(.easeOut(duration: 0.2)) {
+                                isTranscriptReady = true
+                                loadError = nil
+                            }
+                            timeoutWorkItem?.cancel()
                         }
-                        timeoutWorkItem?.cancel()
                     },
                     onError: { errorMessage in
                         if loadError == nil {
@@ -200,6 +210,14 @@ public struct SessionDetailView: View {
             appState.syncManager?.leaveSessionRoom()
         }
         .onChange(of: messages.count) { _ in
+            // Web view was ready but waiting for initial messages — reveal now
+            if isWebViewReady && !isTranscriptReady {
+                withAnimation(.easeOut(duration: 0.2)) {
+                    isTranscriptReady = true
+                    loadError = nil
+                }
+                timeoutWorkItem?.cancel()
+            }
             refreshPromptList()
         }
     }
@@ -445,6 +463,7 @@ public struct SessionDetailView: View {
     private func retryLoad() {
         loadError = nil
         isTranscriptReady = false
+        isWebViewReady = false
         lastDiagnostic = nil
         startLoadTimeout()
         appState.syncManager?.leaveSessionRoom()

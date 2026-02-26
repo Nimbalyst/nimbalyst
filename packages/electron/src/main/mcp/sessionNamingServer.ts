@@ -35,6 +35,18 @@ let updateSessionTitleFn:
   | ((sessionId: string, title: string) => Promise<void>)
   | null = null;
 
+let updateSessionMetadataFn:
+  | ((sessionId: string, metadata: Record<string, unknown>) => Promise<void>)
+  | null = null;
+
+let getWorkspaceTagsFn:
+  | ((sessionId: string) => Promise<{ name: string; count: number }[]>)
+  | null = null;
+
+let getSessionTagsFn:
+  | ((sessionId: string) => Promise<string[]>)
+  | null = null;
+
 /**
  * Set the update function for session titles (called once at startup)
  */
@@ -42,6 +54,33 @@ export function setUpdateSessionTitleFn(
   updateTitleFn: (sessionId: string, title: string) => Promise<void>
 ) {
   updateSessionTitleFn = updateTitleFn;
+}
+
+/**
+ * Set the update function for session metadata (called once at startup)
+ */
+export function setUpdateSessionMetadataFn(
+  updateMetadataFn: (sessionId: string, metadata: Record<string, unknown>) => Promise<void>
+) {
+  updateSessionMetadataFn = updateMetadataFn;
+}
+
+/**
+ * Set the function to get workspace tags (called once at startup)
+ */
+export function setGetWorkspaceTagsFn(
+  getTagsFn: (sessionId: string) => Promise<{ name: string; count: number }[]>
+) {
+  getWorkspaceTagsFn = getTagsFn;
+}
+
+/**
+ * Set the function to get current tags for a session (called once at startup)
+ */
+export function setGetSessionTagsFn(
+  getTagsFn: (sessionId: string) => Promise<string[]>
+) {
+  getSessionTagsFn = getTagsFn;
 }
 
 export function cleanupSessionNamingServer() {
@@ -207,12 +246,26 @@ function createSessionNamingMcpServer(aiSessionId: string): Server {
 
   // Register tool handlers with aiSessionId captured in closure
   server.setRequestHandler(ListToolsRequestSchema, async () => {
+    // Build dynamic tag description with existing workspace tags
+    let tagDescription = 'Tags describing this work. Use for type of work (bug-fix, feature, refactor), area/module (electron, runtime, ios), status, or any relevant category.';
+    if (getWorkspaceTagsFn) {
+      try {
+        const existingTags = await getWorkspaceTagsFn(aiSessionId);
+        if (existingTags.length > 0) {
+          const tagList = existingTags.slice(0, 20).map(t => `${t.name} (${t.count})`).join(', ');
+          tagDescription += ` Existing tags in this workspace: ${tagList}. Use existing tags for consistency, or create new ones as needed.`;
+        }
+      } catch {
+        // Ignore - just use default description
+      }
+    }
+
     return {
       tools: [
         {
           name: "name_session",
           description:
-            "Set a concise, descriptive name for the current AI chat session. This should be called ONCE at the start of the conversation after understanding the user's task. The name should be 2-5 words with the descriptive part FIRST and action word LAST (noun-phrase style for easier scanning).",
+            "Set a concise, descriptive name and optional tags for the current AI chat session. This should be called ONCE at the start of the conversation after understanding the user's task. The name should be 2-5 words with the descriptive part FIRST and action word LAST (noun-phrase style for easier scanning).",
           inputSchema: {
             type: "object",
             properties: {
@@ -221,8 +274,45 @@ function createSessionNamingMcpServer(aiSessionId: string): Server {
                 description:
                   'A concise session name (2-5 words) with descriptive part first. Examples: "Authentication bug fix", "Dark mode implementation", "Database layer refactor", "Crash report analysis"',
               },
+              tags: {
+                type: "array",
+                items: { type: "string" },
+                description: tagDescription,
+              },
+              phase: {
+                type: "string",
+                enum: ["backlog", "planning", "implementing", "validating", "complete"],
+                description:
+                  'The current phase of work. Controls which kanban column the session appears in. Use "planning" for exploration/design, "implementing" for coding, "validating" for testing, "complete" when done.',
+              },
             },
             required: ["name"],
+          },
+        },
+        {
+          name: "update_tags",
+          description:
+            "Update tags on this AI session. Use to change status (e.g., planning -> implementing -> complete) or add/remove tags as context changes during the session.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              add: {
+                type: "array",
+                items: { type: "string" },
+                description: "Tags to add to the session",
+              },
+              remove: {
+                type: "array",
+                items: { type: "string" },
+                description: "Tags to remove from the session",
+              },
+              phase: {
+                type: "string",
+                enum: ["backlog", "planning", "implementing", "validating", "complete"],
+                description:
+                  'Update the session phase. Controls which kanban column the session appears in.',
+              },
+            },
           },
         },
       ],
@@ -238,6 +328,8 @@ function createSessionNamingMcpServer(aiSessionId: string): Server {
 
     if (toolName === "name_session") {
       const sessionName = args?.name;
+      const tags = args?.tags as string[] | undefined;
+      const phase = args?.phase as string | undefined;
 
       // Validate session name
       if (!sessionName || typeof sessionName !== "string") {
@@ -265,17 +357,50 @@ function createSessionNamingMcpServer(aiSessionId: string): Server {
         };
       }
 
+      // Validate tags if provided
+      if (tags !== undefined && !Array.isArray(tags)) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: 'Error: "tags" must be an array of strings.',
+            },
+          ],
+          isError: true,
+        };
+      }
+
       try {
         // Use the aiSessionId captured in the closure
         // The updateSessionTitleFn performs an atomic check-and-set at the database level
         await updateSessionTitleFn!(aiSessionId, sessionName);
 
+        // Set tags and/or phase if provided
+        const metadataUpdate: Record<string, unknown> = {};
+        if (tags && tags.length > 0) metadataUpdate.tags = tags;
+        if (phase) metadataUpdate.phase = phase;
+
+        if (Object.keys(metadataUpdate).length > 0 && updateSessionMetadataFn) {
+          try {
+            await updateSessionMetadataFn(aiSessionId, metadataUpdate);
+          } catch (metadataError) {
+            console.error("[Session Naming MCP] Failed to set metadata (title was set successfully):", metadataError);
+          }
+        }
+
+        const parts = [`Successfully named session: "${sessionName}"`];
+        if (tags && tags.length > 0) {
+          parts.push(`Tags: ${tags.map(t => `#${t}`).join(', ')}`);
+        }
+        if (phase) {
+          parts.push(`Phase: ${phase}`);
+        }
 
         return {
           content: [
             {
               type: "text",
-              text: `Successfully named session: "${sessionName}"`,
+              text: parts.join(". "),
             },
           ],
           isError: false,
@@ -306,6 +431,93 @@ function createSessionNamingMcpServer(aiSessionId: string): Server {
             {
               type: "text",
               text: `Error updating session title: ${errorMessage}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    } else if (toolName === "update_tags") {
+      const addTags = args?.add as string[] | undefined;
+      const removeTags = args?.remove as string[] | undefined;
+      const phase = args?.phase as string | undefined;
+
+      if (!addTags?.length && !removeTags?.length && !phase) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: 'Error: At least one of "add", "remove", or "phase" must be provided.',
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      if (!updateSessionMetadataFn) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "Error: Session metadata update not available.",
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      try {
+        // Get current tags from session via injected function (no dynamic imports!)
+        const currentTags: string[] = getSessionTagsFn
+          ? await getSessionTagsFn(aiSessionId)
+          : [];
+
+        // Apply add/remove
+        let newTags = [...currentTags];
+        if (removeTags?.length) {
+          const removeSet = new Set(removeTags);
+          newTags = newTags.filter(t => !removeSet.has(t));
+        }
+        if (addTags?.length) {
+          for (const tag of addTags) {
+            if (!newTags.includes(tag)) {
+              newTags.push(tag);
+            }
+          }
+        }
+
+        const metadataUpdate: Record<string, unknown> = { tags: newTags };
+        if (phase) metadataUpdate.phase = phase;
+
+        await updateSessionMetadataFn(aiSessionId, metadataUpdate);
+
+        const parts: string[] = [];
+        if (addTags?.length) {
+          parts.push(`Added: ${addTags.map(t => `#${t}`).join(', ')}`);
+        }
+        if (removeTags?.length) {
+          parts.push(`Removed: ${removeTags.map(t => `#${t}`).join(', ')}`);
+        }
+        parts.push(`Current tags: ${newTags.length > 0 ? newTags.map(t => `#${t}`).join(', ') : '(none)'}`);
+        if (phase) {
+          parts.push(`Phase: ${phase}`);
+        }
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: parts.join(". "),
+            },
+          ],
+          isError: false,
+        };
+      } catch (error) {
+        console.error("[Session Naming MCP] Failed to update tags:", error);
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Error updating tags: ${error instanceof Error ? error.message : "Unknown error"}`,
             },
           ],
           isError: true,

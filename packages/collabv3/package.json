@@ -1,6 +1,6 @@
 {
   "name": "@nimbalyst/collabv3",
-  "version": "0.1.13",
+  "version": "0.1.18",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,6 +9,7 @@
     "deploy:production": "./scripts/deploy.sh patch --env production",
     "deploy:staging": "./scripts/deploy.sh patch --env staging",
     "test": "vitest run",
+    "test:integration": "vitest run test/documentRoom.integration.test.ts",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"
   },

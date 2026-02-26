@@ -163,7 +163,7 @@ async function validateJWT(
     const CLOCK_SKEW_SECONDS = 30;
 
     if (payload.exp && payload.exp < now - CLOCK_SKEW_SECONDS) {
-      log.warn('JWT expired');
+      log.warn('JWT expired. exp:', payload.exp, 'now:', now, 'expired', now - payload.exp, 'seconds ago, sub:', payload.sub);
       return null;
     }
 

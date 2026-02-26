@@ -46,6 +46,9 @@ export const DIALOG_IDS = {
 
   // Creation group
   BLITZ_CREATE: 'blitz-create',
+
+  // Collaboration group
+  CREATE_TEAM: 'create-team',
 } as const;
 
 export type DialogId = (typeof DIALOG_IDS)[keyof typeof DIALOG_IDS];

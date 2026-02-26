@@ -951,7 +951,7 @@ export { TrackerDocumentHeader, shouldRenderTrackerHeader } from './documentHead
 
 // Export data models
 export { ModelLoader, loadBuiltinTrackers } from './models/ModelLoader';
-export type { TrackerDataModel, FieldDefinition } from './models/TrackerDataModel';
+export type { TrackerDataModel, FieldDefinition, TrackerSyncPolicy, TrackerSyncMode } from './models/TrackerDataModel';
 export { parseTrackerYAML } from './models/YAMLParser';
 export { globalRegistry } from './models/TrackerDataModel';
 
@@ -959,6 +959,20 @@ export { globalRegistry } from './models/TrackerDataModel';
 export { StatusBar } from './components/StatusBar';
 export { TrackerTable } from './components/TrackerTable';
 export type { SortColumn, SortDirection } from './components/TrackerTable';
+export { TrackerFieldEditor } from './components/TrackerFieldEditor';
+export type { TrackerFieldEditorProps } from './components/TrackerFieldEditor';
+
+// Export tracker data atoms (cross-platform reactive state)
+export {
+  trackerItemsMapAtom,
+  trackerDataLoadedAtom,
+  trackerItemsArrayAtom,
+  trackerItemsByTypeAtom,
+  trackerItemCountByTypeAtom,
+  upsertTrackerItemAtom,
+  removeTrackerItemAtom,
+  replaceAllTrackerItemsAtom,
+} from './trackerDataAtoms';
 
 // Export tracker node and types
 export { TrackerItemNode, $createTrackerItemNode, $getTrackerItemNode, $isTrackerItemNode } from './TrackerItemNode';

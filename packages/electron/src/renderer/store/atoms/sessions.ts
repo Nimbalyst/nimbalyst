@@ -1786,6 +1786,9 @@ export const refreshSessionListAtom = atom(
             worktreeId: s.worktreeId || null,
             childCount: s.childCount || 0,
             uncommittedCount: s.uncommittedCount || 0,
+            // Kanban board phase and tags from metadata JSONB
+            ...(s.phase && { phase: s.phase }),
+            ...(s.tags && { tags: s.tags }),
           });
 
           // Initialize unread state from database metadata (for cross-device sync)
@@ -1921,6 +1924,8 @@ export const updateSessionFullAtom = atom(
         ...(update.messageCount !== undefined && { messageCount: update.messageCount }),
         ...(update.provider !== undefined && { provider: update.provider }),
         ...(update.sessionType !== undefined && { sessionType: update.sessionType }),
+        ...(update.phase !== undefined && { phase: update.phase }),
+        ...(update.tags !== undefined && { tags: update.tags }),
       });
       set(sessionRegistryAtom, registry);
     }

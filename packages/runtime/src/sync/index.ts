@@ -62,6 +62,10 @@ export {
   createDocumentSyncProvider,
 } from './DocumentSync';
 
+export {
+  CollabLexicalProvider,
+} from './CollabLexicalProvider';
+
 export type {
   DocumentSyncConfig,
   DocumentSyncStatus,
@@ -82,3 +86,34 @@ export type {
   SerializedECDHKeyPair,
   KeyEnvelope,
 } from './ECDHKeyManager';
+
+export {
+  TrackerSyncProvider,
+  mergeTrackerItems,
+} from './TrackerSync';
+
+export {
+  trackerItemToPayload,
+  payloadToTrackerItem,
+} from './trackerSyncTypes';
+
+export type {
+  TrackerSyncConfig,
+  TrackerSyncStatus,
+  TrackerItemPayload,
+  TrackerSyncResult,
+  TrackerComment,
+} from './trackerSyncTypes';
+
+export {
+  TeamSyncProvider,
+} from './TeamSync';
+
+export type {
+  TeamSyncConfig,
+  TeamSyncStatus,
+  TeamState,
+  MemberInfo as TeamMemberInfo,
+  KeyEnvelopeData,
+  DocIndexEntry as TeamDocIndexEntry,
+} from './teamSyncTypes';

@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Color constants matching the Nimbalyst dark theme.
-/// Source: packages/rexical/src/themes/registry.ts -> darkThemeColors
+/// Source: packages/runtime/src/editor/themes/registry.ts -> darkThemeColors
 public enum NimbalystColors {
     // MARK: - Backgrounds
     public static let background = Color(hex: 0x2D2D2D)

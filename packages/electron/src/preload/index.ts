@@ -758,6 +758,35 @@ contextBridge.exposeInMainWorld('electronAPI', {
         };
         error?: string;
       }>,
+    // WebSocket proxy: create WebSocket connections in main process (Node.js)
+    // to work around Cloudflare blocking browser WebSocket upgrades
+    wsConnect: (url: string) =>
+      ipcRenderer.invoke('document-sync:ws-connect', { url }) as Promise<{
+        success: boolean;
+        wsId?: string;
+        error?: string;
+      }>,
+    wsSend: (wsId: string, data: string) =>
+      ipcRenderer.invoke('document-sync:ws-send', { wsId, data }) as Promise<{
+        success: boolean;
+        error?: string;
+      }>,
+    wsClose: (wsId: string) =>
+      ipcRenderer.invoke('document-sync:ws-close', { wsId }) as Promise<{
+        success: boolean;
+      }>,
+    onWsEvent: (callback: (data: {
+      wsId: string;
+      type: 'open' | 'message' | 'close' | 'error';
+      data?: string;
+      code?: number;
+      reason?: string;
+      error?: string;
+    }) => void) => {
+      const handler = (_event: any, data: any) => callback(data);
+      ipcRenderer.on('document-sync:ws-event', handler);
+      return () => ipcRenderer.removeListener('document-sync:ws-event', handler);
+    },
   },
 
   // Worktree operations

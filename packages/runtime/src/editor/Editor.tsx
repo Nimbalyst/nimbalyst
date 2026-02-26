@@ -75,6 +75,7 @@ import { KanbanBoardPlugin } from './plugins/KanbanBoardPlugin';
 import CommentPlugin from "./plugins/CommentPlugin";
 // FloatingDocumentActionsPlugin removed - functionality moved to UnifiedEditorHeaderBar in TabEditor
 import AutoLinkPlugin from './plugins/AutoLinkPlugin';
+import { CollaborationPlugin } from '@lexical/react/LexicalCollaborationPlugin';
 
 
 interface EditorProps {
@@ -262,16 +263,18 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
         {/*/>*/}
         {isRichText ? (
           <>
-            {/* Collaboration disabled for now */}
-            {/* {isCollab ? (
+            {config.collaboration ? (
               <CollaborationPlugin
                 id="main"
-                providerFactory={createWebsocketProvider}
-                shouldBootstrap={!skipCollaborationInit}
+                providerFactory={config.collaboration.providerFactory}
+                shouldBootstrap={config.collaboration.shouldBootstrap}
+                username={config.collaboration.username}
+                cursorColor={config.collaboration.cursorColor}
+                initialEditorState={config.collaboration.initialEditorState}
               />
-            ) : ( */}
+            ) : (
               <HistoryPlugin externalHistoryState={historyState} />
-            {/* )} */}
+            )}
             {/* FloatingDocumentActionsPlugin removed - unified header bar now provides these features */}
             <RichTextPlugin
               contentEditable={

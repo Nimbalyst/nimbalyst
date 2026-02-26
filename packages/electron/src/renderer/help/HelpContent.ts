@@ -271,10 +271,10 @@ export const HelpContent: Record<string, HelpEntry> = {
     body: 'Toggle the terminal panel for running commands.',
     shortcut: KeyboardShortcuts.view.toggleTerminalPanel,
   },
-  'tracker-panel-button': {
+  'tracker-mode-button': {
     title: 'Trackers',
-    body: 'Open the tracker panel to capture tasks, ideas, and notes.',
-    shortcut: KeyboardShortcuts.view.toggleTrackerPanel,
+    body: 'Switch to Tracker mode for a full project management view with table and kanban layouts.',
+    shortcut: KeyboardShortcuts.view.trackerMode,
   },
 
   // ============================================================================

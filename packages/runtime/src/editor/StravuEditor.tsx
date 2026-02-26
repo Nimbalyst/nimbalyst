@@ -53,7 +53,12 @@ function StravuEditor({config}: StravuEditorProps): JSX.Element {
 
     const initialConfig = {
         // Set initial editor state based on whether we have initial content
+        // In collaboration mode, CollaborationPlugin hydrates from Y.Doc -- skip markdown parsing
         editorState: (() => {
+            if (mergedConfig.collaboration) {
+                // CollaborationPlugin will set the initial state from Y.Doc
+                return null;
+            }
             if (mergedConfig.initialContent) {
                 // Load markdown content properly through the initialConfig
                 return () => {

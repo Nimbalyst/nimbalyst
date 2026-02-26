@@ -15,8 +15,9 @@
  */
 
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { StravuEditor, type EditorConfig, type ConfigTheme } from '../editor';
+import { StravuEditor, type EditorConfig, type ConfigTheme, $convertFromEnhancedMarkdownString, getEditorTransformers } from '../editor';
 import type { EditorHost } from '../extensions/editorHost';
+import { $getRoot } from 'lexical';
 
 export interface MarkdownEditorConfig {
   /**
@@ -68,6 +69,21 @@ export interface MarkdownEditorProps {
 
   /** Callback when getContent function is available (for mode switching) */
   onGetContent?: (getContentFn: () => string) => void;
+
+  /**
+   * When set, the editor operates in collaborative mode:
+   * - Content comes from Y.Doc instead of host.loadContent()
+   * - CollaborationPlugin replaces HistoryPlugin
+   * - Save/file-change subscriptions are skipped
+   */
+  collaborationConfig?: {
+    providerFactory: (id: string, yjsDocMap: Map<string, import('yjs').Doc>) => import('@lexical/yjs').Provider;
+    shouldBootstrap: boolean;
+    username?: string;
+    cursorColor?: string;
+    /** Markdown content to seed the Y.Doc with when shouldBootstrap is true */
+    initialContent?: string;
+  };
 }
 
 /**
@@ -85,9 +101,13 @@ export function MarkdownEditor({
   config = {},
   onEditorReady,
   onGetContent: onGetContentProp,
+  collaborationConfig,
 }: MarkdownEditorProps): React.ReactElement {
+  const isCollabMode = !!collaborationConfig;
+
   // Loading state - we load content via host.loadContent()
-  const [isLoading, setIsLoading] = useState(true);
+  // In collab mode, content comes from Y.Doc, so we skip loading
+  const [isLoading, setIsLoading] = useState(!isCollabMode);
   const [loadError, setLoadError] = useState<Error | null>(null);
   const [initialContent, setInitialContent] = useState<string>('');
 
@@ -97,8 +117,10 @@ export function MarkdownEditor({
   // Function to get current content from editor
   const getContentFnRef = useRef<(() => string) | null>(null);
 
-  // Load initial content on mount
+  // Load initial content on mount (skip in collaboration mode)
   useEffect(() => {
+    if (isCollabMode) return; // CollaborationPlugin hydrates from Y.Doc
+
     let mounted = true;
 
     const loadContent = async () => {
@@ -125,7 +147,10 @@ export function MarkdownEditor({
   }, [host]);
 
   // Subscribe to save requests from host (autosave timer, manual Cmd+S)
+  // In collaboration mode, saves go through the sync layer, not EditorHost
   useEffect(() => {
+    if (isCollabMode) return; // No disk saves in collaboration mode
+
     const handleSaveRequest = async () => {
       if (!getContentFnRef.current) {
         console.warn('[MarkdownEditor] No getContent function available for save');
@@ -142,10 +167,13 @@ export function MarkdownEditor({
 
     const unsubscribe = host.onSaveRequested(handleSaveRequest);
     return unsubscribe;
-  }, [host]);
+  }, [host, isCollabMode]);
 
   // Subscribe to file changes (external edits)
+  // In collaboration mode, changes come through Y.Doc, not file watcher
   useEffect(() => {
+    if (isCollabMode) return; // No file watcher in collaboration mode
+
     const handleFileChanged = (newContent: string) => {
       // If we have an editor, update it with new content
       // The editor will decide whether to reload based on its internal state
@@ -158,7 +186,7 @@ export function MarkdownEditor({
 
     const unsubscribe = host.onFileChanged(handleFileChanged);
     return unsubscribe;
-  }, [host]);
+  }, [host, isCollabMode]);
 
   // NOTE: We intentionally do NOT subscribe to diff requests here.
   // Markdown diff handling is fully implemented in TabEditor.tsx using Lexical's
@@ -220,10 +248,35 @@ export function MarkdownEditor({
       workspaceId: host.workspaceId,
 
       // Content callbacks - using new pattern
-      initialContent,
+      initialContent: isCollabMode ? undefined : initialContent,
       onDirtyChange: handleDirtyChange,
       onGetContent: handleGetContent,
       onEditorReady: handleEditorReady,
+
+      // Collaboration mode -- passed through to Editor.tsx
+      collaboration: collaborationConfig ? (() => {
+        const hasInitial = collaborationConfig.shouldBootstrap && collaborationConfig.initialContent;
+        console.log('[MarkdownEditor] Building collab config, shouldBootstrap:', collaborationConfig.shouldBootstrap,
+          'hasInitialContent:', !!collaborationConfig.initialContent,
+          'will provide initialEditorState:', !!hasInitial);
+        return {
+          providerFactory: collaborationConfig.providerFactory,
+          shouldBootstrap: collaborationConfig.shouldBootstrap,
+          username: collaborationConfig.username,
+          cursorColor: collaborationConfig.cursorColor,
+          // When bootstrapping with initial content, provide a function that
+          // parses the markdown into the editor. CollaborationPlugin calls this
+          // inside editor.update() when the Y.Doc is empty after initial sync.
+          initialEditorState: hasInitial
+            ? () => {
+                console.log('[MarkdownEditor] initialEditorState called! Parsing markdown content, length:', collaborationConfig.initialContent!.length);
+                const root = $getRoot();
+                root.clear();
+                $convertFromEnhancedMarkdownString(collaborationConfig.initialContent!, getEditorTransformers());
+              }
+            : undefined,
+        };
+      })() : undefined,
     }),
     [
       config.theme,
@@ -239,11 +292,13 @@ export function MarkdownEditor({
       config.onToggleMarkdownMode,
       host.filePath,
       host.workspaceId,
+      isCollabMode,
       initialContent,
       handleDirtyChange,
       handleGetContent,
       handleEditorReady,
       handleViewHistory,
+      collaborationConfig,
     ]
   );
 

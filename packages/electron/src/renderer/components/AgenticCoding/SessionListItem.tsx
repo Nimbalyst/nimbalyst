@@ -4,6 +4,7 @@ import { MaterialSymbol, ProviderIcon, copyToClipboard } from '@nimbalyst/runtim
 import { getRelativeTimeString } from '../../utils/dateFormatting';
 import { sessionOrChildProcessingAtom, sessionUnreadAtom, sessionPendingPromptAtom, sessionHasPendingInteractivePromptAtom, reparentSessionAtom, refreshSessionListAtom, sessionShareAtom, addSessionShareAtom, removeSessionShareAtom, shareKeysAtom, buildShareUrl } from '../../store';
 import { convertToWorkstreamAtom } from '../../store/atoms/sessions';
+import { setSessionPhaseAtom, SESSION_PHASE_COLUMNS, type SessionPhase } from '../../store/atoms/sessionKanban';
 import type { ShareInfo } from '../../store';
 import { errorNotificationService } from '../../services/ErrorNotificationService';
 
@@ -21,7 +22,9 @@ const SessionStatusIndicator = memo<{ sessionId: string; messageCount?: number }
 
   // Priority: waiting for input > processing > pending prompt > unread > message count
   // All interactive prompts (AskUserQuestion, ExitPlanMode, ToolPermission, etc.) show same indicator
-  if (hasPendingInteractivePrompt) {
+  // Only show "waiting" if session is also processing - a completed session with a stale
+  // pending prompt flag should not show as waiting (safety net for missed resolved events)
+  if (hasPendingInteractivePrompt && isProcessing) {
     return (
       <div className="session-list-item-status waiting-for-input flex items-center justify-center w-5 h-5 text-[var(--nim-warning)] animate-pulse" title="Waiting for your response">
         <MaterialSymbol icon="contact_support" size={14} />
@@ -94,6 +97,7 @@ interface SessionListItemProps {
   projectPath?: string; // Workspace path for drag-drop validation
   uncommittedCount?: number; // Number of uncommitted files in this session
   branchedAt?: number; // Timestamp when this session was branched (branch tracking)
+  phase?: string; // Kanban board phase (backlog, planning, implementing, validating, complete)
 }
 
 export const SessionListItem = memo<SessionListItemProps>(({
@@ -127,9 +131,11 @@ export const SessionListItem = memo<SessionListItemProps>(({
   projectPath,
   uncommittedCount,
   branchedAt,
+  phase,
 }) => {
   const [isHovering, setIsHovering] = useState(false);
   const [showContextMenu, setShowContextMenu] = useState(false);
+  const [showPhaseSubmenu, setShowPhaseSubmenu] = useState(false);
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
   const [adjustedContextMenuPosition, setAdjustedContextMenuPosition] = useState<{ x: number; y: number } | null>(null);
   const [isRenaming, setIsRenaming] = useState(false);
@@ -143,6 +149,7 @@ export const SessionListItem = memo<SessionListItemProps>(({
   const reparentSession = useSetAtom(reparentSessionAtom);
   const convertToWorkstream = useSetAtom(convertToWorkstreamAtom);
   const refreshSessionList = useSetAtom(refreshSessionListAtom);
+  const setSessionPhase = useSetAtom(setSessionPhaseAtom);
 
   // Share state
   const shareInfo = useAtomValue(sessionShareAtom(id));
@@ -746,6 +753,62 @@ export const SessionListItem = memo<SessionListItemProps>(({
             <MaterialSymbol icon="assignment" size={14} />
             Copy transcript
           </button>
+          {/* Set Phase submenu */}
+          <div
+            className="relative"
+            onMouseEnter={() => setShowPhaseSubmenu(true)}
+            onMouseLeave={() => setShowPhaseSubmenu(false)}
+          >
+            <button
+              className="session-list-item-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
+              onClick={(e) => { e.stopPropagation(); setShowPhaseSubmenu(!showPhaseSubmenu); }}
+            >
+              <MaterialSymbol icon="view_kanban" size={14} />
+              <span className="flex-1">Set Phase</span>
+              {phase && (
+                <span className="text-[10px] text-[var(--nim-text-faint)] ml-1">{phase}</span>
+              )}
+              <MaterialSymbol icon="chevron_right" size={12} />
+            </button>
+            {showPhaseSubmenu && (
+              <div className="absolute left-full top-0 ml-0.5 min-w-[140px] p-1 bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-md shadow-[0_4px_12px_rgba(0,0,0,0.15)] z-[1001]">
+                {SESSION_PHASE_COLUMNS.map((col) => (
+                  <button
+                    key={col.value}
+                    className={`session-list-item-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0 ${phase === col.value ? 'text-[var(--nim-primary)]' : 'text-[var(--nim-text)]'}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowContextMenu(false);
+                      setShowPhaseSubmenu(false);
+                      setSessionPhase({ sessionId: id, phase: col.value });
+                    }}
+                  >
+                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: col.color }} />
+                    {col.label}
+                    {phase === col.value && <MaterialSymbol icon="check" size={14} className="ml-auto" />}
+                  </button>
+                ))}
+                {phase && (
+                  <>
+                    <div className="h-px bg-[var(--nim-border)] my-1" />
+                    <button
+                      className="session-list-item-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text-faint)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowContextMenu(false);
+                        setShowPhaseSubmenu(false);
+                        // Remove from board by setting phase to null via IPC
+                        window.electronAPI.invoke('sessions:update-session-metadata', id, { phase: null });
+                      }}
+                    >
+                      <MaterialSymbol icon="close" size={14} />
+                      Remove from board
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
           <button
             className="session-list-item-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
             onClick={handleArchiveToggle}
@@ -796,6 +859,7 @@ export const SessionListItem = memo<SessionListItemProps>(({
     prev.parentSessionId === next.parentSessionId &&
     prev.projectPath === next.projectPath &&
     prev.uncommittedCount === next.uncommittedCount &&
-    prev.branchedAt === next.branchedAt
+    prev.branchedAt === next.branchedAt &&
+    prev.phase === next.phase
   );
 });

@@ -1,6 +1,8 @@
 import type { Transformer } from '@lexical/markdown';
 import type { ReactNode } from 'react';
 import type { NodeKey } from 'lexical';
+import type { Provider } from '@lexical/yjs';
+import type { Doc } from 'yjs';
 
 /**
  * Configuration interface for the Stravu Editor component.
@@ -125,6 +127,30 @@ export interface EditorConfig {
 
   // Document header - renders at the top of the editor scroll pane
   documentHeader?: ReactNode;
+
+  // Collaboration mode
+  /**
+   * When set, the editor operates in collaborative mode:
+   * - CollaborationPlugin replaces HistoryPlugin
+   * - Content comes from Y.Doc instead of initialContent
+   * - The providerFactory creates a Provider wrapping our DocumentSyncProvider
+   */
+  collaboration?: {
+    /** Factory that returns a @lexical/yjs Provider for a given doc ID */
+    providerFactory: (id: string, yjsDocMap: Map<string, Doc>) => Provider;
+    /** Whether this is the first user to join (bootstraps empty doc) */
+    shouldBootstrap: boolean;
+    /** Display name for cursor labels */
+    username?: string;
+    /** Color for this user's cursor */
+    cursorColor?: string;
+    /**
+     * Initial editor state to bootstrap when Y.Doc is empty.
+     * Can be a function (called with editor), a serialized EditorState string,
+     * or an EditorState object. Only used when shouldBootstrap is true.
+     */
+    initialEditorState?: (() => void) | string;
+  };
 }
 
 export const DEFAULT_EDITOR_CONFIG: EditorConfig = {

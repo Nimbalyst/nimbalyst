@@ -72,6 +72,8 @@ import { supportsEffortLevel, parseEffortLevel, type EffortLevel } from '../../u
 import { buildPlanModeInstructions, PLAN_MODE_DEACTIVATION } from '@nimbalyst/runtime/ai/services/planModePrompts';
 import { resolvePlanFilePath } from '../../utils/pathUtils';
 import { autoCommitEnabledAtom, setAutoCommitEnabledAtom } from '../../store/atoms/autoCommitAtoms';
+import { SESSION_PHASE_COLUMNS, setSessionPhaseAtom, type SessionPhase } from '../../store/atoms/sessionKanban';
+import { sessionRegistryAtom } from '../../store';
 
 interface Todo {
   status: 'pending' | 'in_progress' | 'completed';
@@ -345,6 +347,14 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   // Auto-commit setting
   const autoCommitEnabled = useAtomValue(autoCommitEnabledAtom);
   const setAutoCommitEnabled = useSetAtom(setAutoCommitEnabledAtom);
+
+  // Session phase for kanban board
+  const sessionRegistry = useAtomValue(sessionRegistryAtom);
+  const currentPhase = sessionRegistry.get(sessionId)?.phase ?? null;
+  const setSessionPhase = useSetAtom(setSessionPhaseAtom);
+  const handleSetPhase = useCallback((phase: string | null) => {
+    setSessionPhase({ sessionId, phase: phase as SessionPhase | null });
+  }, [sessionId, setSessionPhase]);
 
   const setGroupByDirectory = useCallback((value: boolean) => {
     if (workspacePath) {
@@ -1530,6 +1540,9 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
             promptAdditions={showPromptAdditions ? promptAdditions : null}
             appStartTime={appStartTime ?? undefined}
             getToolCallDiffs={getToolCallDiffs}
+            currentPhase={currentPhase}
+            phaseColumns={SESSION_PHASE_COLUMNS}
+            onSetPhase={handleSetPhase}
           />
         </div>
       )}

@@ -5,5 +5,8 @@ export default defineConfig({
     environment: 'node',
     include: ['test/**/*.test.ts'],
     globals: true,
+    globalSetup: ['test/globalSetup.ts'],
+    // Run integration test files sequentially (they share the wrangler instance)
+    fileParallelism: false,
   },
 });

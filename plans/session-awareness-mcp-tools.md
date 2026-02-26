@@ -2,7 +2,7 @@
 planStatus:
   planId: plan-session-awareness-mcp-tools
   title: Session Awareness MCP Tools
-  status: draft
+  status: done
   planType: feature
   priority: high
   owner: ghinkle
@@ -13,8 +13,8 @@ planStatus:
     - workstream
     - agent-tools
   created: "2026-02-20"
-  updated: "2026-02-20T00:00:00.000Z"
-  progress: 0
+  updated: "2026-02-21T03:30:00.000Z"
+  progress: 100
 ---
 # Session Awareness MCP Tools
 
@@ -251,9 +251,20 @@ Total: 3 unique files across 2 sessions
 
 ### Phase 3: System prompt integration
 
-8. **Update CLAUDE.md addendum** (the system prompt in Nimbalyst):
-  - Document the new tools so the agent knows when to use them
-  - Add guidance: "When a user references a previous session or asks about past work, use list_recent_sessions or get_session_summary to find the relevant context"
+8. **Update "Commit with AI" prompt** to be workstream/worktree-aware:
+  - GitOperationsPanel.tsx handleSmartCommit now checks workstream context (childSessionIds) and worktree context (worktreeId)
+  - When in a workstream, instructs agent to use get_workstream_overview and get_workstream_edited_files for cross-session commits
+  - When in a worktree, instructs agent to consider full branch changes
+
+## Implementation Notes
+
+**Commits:**
+- `a634dbb2` - Initial implementation: sessionContextServer.ts, McpConfigService wiring, provider ports, auto-allow, index.ts startup/shutdown
+- `4d7762df` - Fixes: static import for server startup, messageCount bug in list_recent_sessions, workstream-aware commit prompt, CLAUDE.md dynamic import rule
+
+**Key fix:** The server initially failed to start because it was imported dynamically (`await import('./mcp/sessionContextServer')`), which caused `__ELECTRON_LOG__` double-registration. Switched to static top-level import, matching the pattern used by httpServer and SessionNamingService.
+
+**messageCount fix:** `AISessionsRepository.list()` and `.search()` hardcode `messageCount: 0` for performance. `list_recent_sessions` now fetches actual counts via `AgentMessagesRepository.getMessageCounts()`.
 
 ## Key Data Sources
 
@@ -316,7 +327,11 @@ Agent messages in `ai_agent_messages` table:
 
 | File | Action | Description |
 | --- | --- | --- |
-| `packages/electron/src/main/mcp/sessionContextServer.ts` | Create | New MCP server with 4 tools |
-| `packages/runtime/src/ai/server/services/McpConfigService.ts` | Edit | Add sessionContextServerPort dep + config entry |
-| `packages/electron/src/main/index.ts` | Edit | Start server, inject port |
-| `packages/runtime/src/ai/server/providers/ClaudeCodeProvider.ts` | Edit | Auto-allow new tools in canUseTool |
+| `packages/electron/src/main/mcp/sessionContextServer.ts` | Created | New MCP server with 4 tools (~600 lines) |
+| `packages/runtime/src/ai/server/services/McpConfigService.ts` | Modified | Added sessionContextServerPort dep + config entry |
+| `packages/runtime/src/ai/server/providers/ClaudeCodeProvider.ts` | Modified | Added static port field, setter, auto-allow 4 tools |
+| `packages/runtime/src/ai/server/providers/OpenAICodexProvider.ts` | Modified | Added static port field, setter (mirrors ClaudeCodeProvider) |
+| `packages/runtime/src/ai/server/services/__tests__/McpConfigService.test.ts` | Modified | Added sessionContextServerPort to mock deps |
+| `packages/electron/src/main/index.ts` | Modified | Static import, startup, shutdown handler |
+| `packages/electron/src/renderer/components/AgentMode/GitOperationsPanel.tsx` | Modified | Workstream/worktree-aware "Commit with AI" prompt |
+| `CLAUDE.md` | Modified | Added "No Dynamic Imports" critical rule |

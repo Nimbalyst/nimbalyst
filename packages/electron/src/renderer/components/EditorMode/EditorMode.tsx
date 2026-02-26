@@ -266,6 +266,28 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
     (window as any).__workspacePath = workspacePath;
   }, [currentFilePath, workspacePath]);
 
+  // Dev helper: open a collaborative document from the console
+  // Usage: window.__openCollabDoc('my-doc-id', 'My Document Title')
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    (window as any).__openCollabDoc = async (documentId: string, title?: string) => {
+      if (!workspacePath) {
+        console.error('[openCollabDoc] No workspace path');
+        return;
+      }
+      const { openCollabDocumentViaIPC } = await import('../../utils/collabDocumentOpener');
+      const tabId = await openCollabDocumentViaIPC({
+        workspacePath,
+        documentId,
+        title,
+        addTab: tabsActions.addTab,
+      });
+      console.log('[openCollabDoc] Opened tab:', tabId);
+      return tabId;
+    };
+    return () => { delete (window as any).__openCollabDoc; };
+  }, [workspacePath, tabsActions]);
+
   // Update MCP document state for custom editors (non-markdown files)
   // Markdown files update MCP state via useIPCHandlers when content changes,
   // but custom editors need to update when they become active

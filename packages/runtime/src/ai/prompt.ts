@@ -7,11 +7,17 @@ import type { DocumentContext } from './types';
 function buildSessionNamingSection(): string {
   return `
 
-## Session Naming
+## Session Naming and Tagging
 
-You have access to a special tool called \`mcp__nimbalyst-session-naming__name_session\` that allows you to name this conversation session.
+You have access to two tools for session organization:
+
+### \`mcp__nimbalyst-session-naming__name_session\` - Name and tag the session
 
 CRITICAL: You MUST call this tool ONCE per conversation, during your first turn. If you see a successful call to this tool earlier in the chat history, do NOT call it again.
+
+Parameters:
+- \`name\` (required): A concise session name (2-5 words)
+- \`tags\` (optional): Array of tags describing this work
 
 Requirements for the session name:
 - 2-5 words long
@@ -31,9 +37,38 @@ Bad examples:
 - "Update code" (too vague)
 - "Working on feature" (not descriptive)
 
+Requirements for tags:
+- Always include tags when naming a session
+- Use lowercase, hyphen-separated words (e.g., "bug-fix", "feature", "refactor")
+- Include tags for: type of work (bug-fix, feature, refactor, research, design) and area/module if relevant (electron, runtime, ios, collabv3, mcp)
+- Reuse existing workspace tags shown in the tool description for consistency
+- Create new tags when no existing tag fits
+- Do NOT include status tags like "planning" or "implementing" in tags -- use the \`phase\` parameter instead
+
+Requirements for phase:
+- Always set the phase when naming a session
+- Phase controls which kanban column the session appears in
+- Valid phases: "backlog", "planning", "implementing", "validating", "complete"
+- Choose based on the current state of work: use "planning" if you're exploring/designing, "implementing" if writing code, etc.
+
 Call this tool as soon as you understand what the user wants to accomplish. Usually this means you will call it right away, but for example if the user asks you to 'implement plan.md' you would want to look at plan.md to understand before giving the session a name. You **MUST** call this before the end of your first turn. After it has been called once successfully in a conversation, subsequent calls will return an error. If you see a successful call anywhere in your chat history, you should not call it again.
 
-**IMPORTANT: You must name the session before ending your first turn.** This is a hard requirement - do not finish your first response without calling \`mcp__nimbalyst-session-naming__name_session\`.`;
+**IMPORTANT: You must name the session before ending your first turn.** This is a hard requirement - do not finish your first response without calling \`mcp__nimbalyst-session-naming__name_session\`.
+
+### \`mcp__nimbalyst-session-naming__update_tags\` - Update tags and phase during the session
+
+Use this to update tags or phase as the session progresses:
+- When transitioning from planning to implementation: \`{ add: ["implementing"], remove: ["planning"] }\` -- but prefer updating the phase instead
+- When work is complete: \`{ add: ["complete"], remove: ["implementing"] }\`
+- When you discover the task is different than expected: update tags accordingly
+- You can also update the session phase: \`{ phase: "implementing" }\`
+
+**Commit tracking with #committed tag:**
+- When the user creates a git commit during a session, add the \`committed\` tag: \`{ add: ["committed"] }\`
+- If the user makes further code changes after committing, remove it: \`{ remove: ["committed"] }\`
+- This lets the user see at a glance which sessions have uncommitted work
+
+You do NOT need to call this on every message - only when the nature of the work changes.`;
 }
 
 /**

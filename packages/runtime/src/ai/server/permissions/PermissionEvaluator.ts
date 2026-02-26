@@ -161,6 +161,7 @@ export class PermissionEvaluator {
   isInternalMcpTool(toolName: string): boolean {
     const internalMcpTools = [
       'mcp__nimbalyst-session-naming__name_session',
+      'mcp__nimbalyst-session-naming__update_tags',
       'mcp__nimbalyst-mcp__capture_editor_screenshot',
       'mcp__nimbalyst-mcp__display_to_user',
       'mcp__nimbalyst-mcp__voice_agent_speak',

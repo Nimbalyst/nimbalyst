@@ -2306,7 +2306,7 @@ export class AIService {
           try {
             await this.ensureCodexSessionWatcher(session.id, effectiveWorkspacePath, event);
           } catch (watcherError) {
-            logger.main.error('[AIService] Failed to start Codex file watcher:', watcherError);
+            logger.main.error('[AIService] Failed to start Codex file cache:', watcherError);
           }
         }
 
@@ -3407,7 +3407,16 @@ export class AIService {
     // Load a session
     // trackAsResume: only pass true when user intentionally opens a session from history
     // (not for tab restoration, lazy loading, or session reloading)
+    // Deduplicate: if a load is already in-flight for the same sessionId, reuse the promise
+    // to avoid queuing redundant heavy DB queries in PGLite's single-threaded worker
+    const loadSessionInFlight = new Map<string, Promise<any>>();
     safeHandle('ai:loadSession', async (event, sessionId: string, workspacePath?: string, trackAsResume?: boolean) => {
+      const existing = loadSessionInFlight.get(sessionId);
+      if (existing && !trackAsResume) {
+        return existing;
+      }
+
+      const loadPromise = (async () => {
       const loadStart = performance.now();
       const session = await this.sessionManager.loadSession(sessionId, workspacePath);
       const loadTime = performance.now() - loadStart;
@@ -3440,6 +3449,14 @@ export class AIService {
       // it creates a WebSocket connection per session, causing performance issues.
 
       return session;
+      })();
+
+      loadSessionInFlight.set(sessionId, loadPromise);
+      try {
+        return await loadPromise;
+      } finally {
+        loadSessionInFlight.delete(sessionId);
+      }
     });
 
     // Clear session
@@ -4146,7 +4163,7 @@ export class AIService {
     });
 
     // Test connection
-    safeHandle('ai:testConnection', async (event, provider: string) => {
+    safeHandle('ai:testConnection', async (event, provider: string, workspacePath?: string) => {
       const apiKeys = this.getSettingsStore().get('apiKeys', {}) as Record<string, string>;
 
       // Get the appropriate API key based on provider
@@ -4195,7 +4212,8 @@ export class AIService {
           const defaultModel = await ModelRegistry.getDefaultModel('openai-codex');
           const testProvider = new OpenAICodexProvider();
           const windowState = windowStates.get(event.sender.id);
-          const workspacePath = windowState?.workspacePath || process.cwd();
+          const effectiveWorkspacePath =
+            workspacePath || windowState?.workspacePath || process.cwd();
 
           await testProvider.initialize({
             apiKey,
@@ -4209,7 +4227,7 @@ export class AIService {
             undefined,
             undefined,
             [],
-            workspacePath
+            effectiveWorkspacePath
           );
 
           for await (const chunk of response) {
@@ -4989,7 +5007,7 @@ export class AIService {
     const entry = this.codexSessionWatchers.get(sessionId);
     if (entry) {
       try {
-        await entry.watcher.stop();
+        await entry.watcher?.stop();
         entry.cache.stopSession();
         this.codexSessionWatchers.delete(sessionId);
         logger.main.info('[AIService] Stopped Codex file watcher for session:', sessionId);
@@ -5012,7 +5030,7 @@ export class AIService {
     // Stop all Codex file watchers
     for (const [sessionId, entry] of this.codexSessionWatchers) {
       try {
-        entry.watcher.stop();
+        entry.watcher?.stop();
         entry.cache.stopSession();
       } catch (error) {
         console.error(`[AIService] Error stopping Codex watcher for ${sessionId}:`, error);

@@ -11,6 +11,10 @@ Dynamic imports in the Electron main process cause `__ELECTRON_LOG__` double-reg
 - `httpServer`, `SessionNamingService`, `sessionContextServer` - all use static top-level imports
 - Dynamic `await import('./mcp/sessionContextServer')` caused server startup failure - fixed by switching to static import
 
+## CRITICAL: CollabV3 Data Isolation -- DOs for Customer Data, D1 for Entity Management Only
+
+**Never store customer, org, or team-sensitive data in the D1 shared database.** D1 is a multi-tenant SQL database where every Worker request can query any row. Customer data (team metadata, member roles, key envelopes, tracker items, documents, sessions) must live in Durable Objects where each entity gets its own isolated SQLite instance. D1 is only for cross-entity management lookups (e.g., git remote hash -> org ID mapping). See `packages/collabv3/CLAUDE.md` for the full policy.
+
 ## CRITICAL: Database Access Rules
 
 **NEVER directly open or query the PGLite database files using Node.js or command-line tools.**

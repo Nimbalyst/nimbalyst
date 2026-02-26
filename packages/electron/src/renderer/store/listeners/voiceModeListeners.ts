@@ -67,10 +67,12 @@ function clearListenWindowTimer(): void {
 function startListenWindowTimer(): void {
   clearListenWindowTimer();
   const ms = getListenWindowMs();
+  console.log(`[voiceModeListeners] startListenWindowTimer: ${ms}ms from now`);
   _listenWindowTimer = setTimeout(() => {
     _listenWindowTimer = null;
     // Only sleep if still in listening state
     if (store.get(voiceListenStateAtom) === 'listening') {
+      console.log('[voiceModeListeners] Listen window expired -> sleeping');
       sleepVoiceListening();
     }
   }, ms);
@@ -99,6 +101,7 @@ export function wakeVoiceListening(): void {
  */
 export function sleepVoiceListening(): void {
   if (store.get(voiceListenStateAtom) !== 'listening') return;
+  console.log('[voiceModeListeners] sleepVoiceListening: transitioning to sleeping');
   clearListenWindowTimer();
   store.set(voiceListenStateAtom, 'sleeping');
   // Tell main process to suspend the inactivity disconnect timer
@@ -112,8 +115,9 @@ export function sleepVoiceListening(): void {
 /**
  * Reset the listen window timer (user is actively speaking).
  */
-function resetListenWindowTimer(): void {
+function resetListenWindowTimer(source?: string): void {
   if (store.get(voiceListenStateAtom) === 'listening') {
+    console.log(`[voiceModeListeners] resetListenWindowTimer (source: ${source || 'unknown'})`);
     startListenWindowTimer();
   }
 }
@@ -209,6 +213,24 @@ export function initVoiceModeListeners(): () => void {
   const isVoiceActive = () => store.get(voiceActiveSessionIdAtom) !== null;
 
   // =========================================================================
+  // Speech Started (VAD detected voice -- resets idle timer immediately)
+  // =========================================================================
+  // The interrupt event fires the instant the server VAD detects speech.
+  // Transcript delta/complete events only arrive AFTER speech ends (Whisper
+  // transcription), so without this the listen window timer can fire while
+  // the user is still actively talking.
+  cleanups.push(
+    window.electronAPI.on('voice-mode:interrupt', (_payload: {
+      sessionId: string;
+    }) => {
+      if (!isVoiceActive()) return;
+
+      // User started speaking -- reset listen window timer immediately
+      resetListenWindowTimer('interrupt/speech_started');
+    })
+  );
+
+  // =========================================================================
   // Transcript Complete (user finished speaking)
   // =========================================================================
   cleanups.push(
@@ -220,7 +242,7 @@ export function initVoiceModeListeners(): () => void {
       if (!payload.transcript || payload.transcript.trim() === '') return;
 
       // User spoke -- reset listen window timer
-      resetListenWindowTimer();
+      resetListenWindowTimer('transcript-complete');
 
       // Clear partial text
       store.set(voiceCurrentUserTextAtom, '');
@@ -252,7 +274,7 @@ export function initVoiceModeListeners(): () => void {
       if (!isVoiceActive()) return;
 
       // User is speaking -- reset listen window timer
-      resetListenWindowTimer();
+      resetListenWindowTimer('transcript-delta');
 
       store.set(voiceCurrentUserTextAtom, payload.delta);
     })
@@ -278,6 +300,11 @@ export function initVoiceModeListeners(): () => void {
       // Assistant is responding -- wake up if sleeping so user can reply
       if (store.get(voiceListenStateAtom) === 'sleeping') {
         wakeVoiceListening();
+      } else if (store.get(voiceListenStateAtom) === 'listening') {
+        // Keep the listen window alive while the assistant is speaking.
+        // Without this, the timer counts from the user's last speech and
+        // could fire mid-response if the assistant talks for a while.
+        resetListenWindowTimer('text-received');
       }
 
       const entries = store.get(voiceTranscriptEntriesAtom);
@@ -329,6 +356,12 @@ export function initVoiceModeListeners(): () => void {
         writeTranscriptEntry(pendingAssistantEntry);
         pendingAssistantEntry = null;
       }
+
+      // Reset the listen window timer so the idle countdown starts from when
+      // the assistant finishes speaking, not from the user's last speech.
+      // Without this, the timer fires based on when the user last spoke,
+      // ignoring the time the assistant spent responding.
+      resetListenWindowTimer('token-usage/response-done');
     })
   );
 

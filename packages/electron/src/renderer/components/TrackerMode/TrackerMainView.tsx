@@ -1,0 +1,331 @@
+import React, { useState, useCallback, useMemo } from 'react';
+import { useAtomValue, useSetAtom } from 'jotai';
+import { MaterialSymbol } from '@nimbalyst/runtime';
+import type { TrackerItem } from '@nimbalyst/runtime';
+import {
+  TrackerTable,
+  SortColumn as TrackerSortColumn,
+  SortDirection as TrackerSortDirection,
+  type TrackerItemType,
+} from '@nimbalyst/runtime/plugins/TrackerPlugin';
+import { trackerItemsByTypeAtom } from '@nimbalyst/runtime/plugins/TrackerPlugin';
+import type { TrackerDataModel } from '@nimbalyst/runtime/plugins/TrackerPlugin/models';
+import { KanbanBoard } from './KanbanBoard';
+import { TrackerItemDetail } from './TrackerItemDetail';
+import {
+  trackerModeLayoutAtom,
+  setTrackerModeLayoutAtom,
+} from '../../store/atoms/trackers';
+
+export type ViewMode = 'table' | 'kanban';
+
+interface TrackerMainViewProps {
+  filterType: TrackerItemType | 'all';
+  viewMode: ViewMode;
+  onViewModeChange: (mode: ViewMode) => void;
+  onSwitchToFilesMode?: () => void;
+  workspacePath?: string;
+  trackerTypes: TrackerDataModel[];
+}
+
+export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
+  filterType,
+  viewMode,
+  onViewModeChange,
+  onSwitchToFilesMode,
+  workspacePath,
+  trackerTypes,
+}) => {
+  const [sortBy, setSortBy] = useState<TrackerSortColumn>('lastIndexed');
+  const [sortDirection, setSortDirection] = useState<TrackerSortDirection>('desc');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [quickAddType, setQuickAddType] = useState<string | null>(null);
+
+  // Selected item for detail panel
+  const modeLayout = useAtomValue(trackerModeLayoutAtom);
+  const setModeLayout = useSetAtom(setTrackerModeLayoutAtom);
+  const selectedItemId = modeLayout.selectedItemId;
+
+  // Get all items for the current filter type to look up selected item
+  const atomItems = useAtomValue(trackerItemsByTypeAtom(filterType));
+
+  // Find the selected item from atoms
+  const selectedItem: TrackerItem | null = useMemo(() => {
+    if (!selectedItemId) return null;
+    return atomItems.find((item: TrackerItem) => item.id === selectedItemId) || null;
+  }, [selectedItemId, atomItems]);
+
+  const handleItemSelect = useCallback((itemId: string) => {
+    setModeLayout({ selectedItemId: itemId });
+  }, [setModeLayout]);
+
+  const handleCloseDetail = useCallback(() => {
+    setModeLayout({ selectedItemId: null });
+  }, [setModeLayout]);
+
+  const handleNewItem = useCallback((type: string) => {
+    setQuickAddType(type);
+  }, []);
+
+  const handleQuickAddClose = useCallback(() => {
+    setQuickAddType(null);
+  }, []);
+
+  const handleQuickAddSubmit = useCallback(async (title: string, priority: string) => {
+    if (!workspacePath || !quickAddType) return;
+
+    try {
+      const tracker = trackerTypes.find(t => t.type === quickAddType);
+      const prefix = tracker?.idPrefix || quickAddType.substring(0, 3);
+      const timestamp = Date.now().toString(36);
+      const random = Math.random().toString(36).substring(2, 8);
+      const id = `${prefix}_${timestamp}${random}`;
+
+      // Get default status from tracker model
+      const statusField = tracker?.fields.find(f => f.name === 'status');
+      const defaultStatus = (statusField?.default as string) || 'to-do';
+
+      // Get sync mode from tracker model
+      const syncMode = tracker?.sync?.mode || 'local';
+
+      const result = await window.electronAPI.documentService.createTrackerItem({
+        id,
+        type: quickAddType,
+        title,
+        status: defaultStatus,
+        priority,
+        workspace: workspacePath,
+        syncMode,
+      });
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to create tracker item');
+      }
+
+      setQuickAddType(null);
+    } catch (error) {
+      console.error('[TrackerMainView] Failed to create tracker item:', error);
+    }
+  }, [workspacePath, quickAddType, trackerTypes]);
+
+  // Get display name for the current filter
+  const activeTracker = filterType !== 'all'
+    ? trackerTypes.find(t => t.type === filterType)
+    : null;
+  const title = activeTracker ? activeTracker.displayNamePlural : 'All Items';
+
+  return (
+    <div className="tracker-main-view flex-1 flex flex-col overflow-hidden min-h-0">
+      {/* Toolbar */}
+      <div className="tracker-toolbar flex items-center gap-2 px-3 py-2 border-b border-nim bg-nim shrink-0">
+        {/* Title */}
+        <span className="text-sm font-semibold text-nim mr-2">{title}</span>
+
+        {/* Search */}
+        <div className="relative flex-1 max-w-[300px]">
+          <MaterialSymbol
+            icon="search"
+            size={16}
+            className="absolute left-2 top-1/2 -translate-y-1/2 text-nim-faint pointer-events-none"
+          />
+          <input
+            type="text"
+            placeholder="Search items..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-7 pr-2 py-1 text-xs bg-nim-secondary border border-nim rounded text-nim placeholder:text-nim-faint focus:outline-none focus:border-[var(--nim-primary)]"
+          />
+          {searchQuery && (
+            <button
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 text-nim-faint hover:text-nim"
+              onClick={() => setSearchQuery('')}
+            >
+              <MaterialSymbol icon="close" size={14} />
+            </button>
+          )}
+        </div>
+
+        <div className="flex-1" />
+
+        {/* View mode toggle */}
+        <div className="flex items-center rounded border border-nim overflow-hidden">
+          <button
+            className={`flex items-center justify-center w-7 h-6 transition-colors ${
+              viewMode === 'table'
+                ? 'bg-nim-active text-nim'
+                : 'bg-nim-secondary text-nim-muted hover:text-nim'
+            }`}
+            onClick={() => onViewModeChange('table')}
+            title="Table view"
+          >
+            <MaterialSymbol icon="table_rows" size={16} />
+          </button>
+          <button
+            className={`flex items-center justify-center w-7 h-6 border-l border-nim transition-colors ${
+              viewMode === 'kanban'
+                ? 'bg-nim-active text-nim'
+                : 'bg-nim-secondary text-nim-muted hover:text-nim'
+            }`}
+            onClick={() => onViewModeChange('kanban')}
+            title="Kanban view"
+          >
+            <MaterialSymbol icon="view_kanban" size={16} />
+          </button>
+        </div>
+
+        {/* New item button */}
+        <button
+          className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-white bg-[var(--nim-primary)] rounded hover:opacity-90 transition-opacity"
+          onClick={() => handleNewItem(filterType !== 'all' ? filterType : 'task')}
+        >
+          <MaterialSymbol icon="add" size={14} />
+          New
+        </button>
+      </div>
+
+      {/* Content area: table/kanban + optional detail panel */}
+      <div className="flex-1 flex flex-row overflow-hidden min-h-0">
+        {/* Table/Kanban (flex-1, shrinks when detail is open) */}
+        <div className="flex-1 overflow-hidden min-h-0 min-w-0 relative">
+          {viewMode === 'table' ? (
+            <TrackerTable
+              filterType={filterType}
+              sortBy={sortBy}
+              sortDirection={sortDirection}
+              hideTypeTabs={true}
+              onSortChange={(column, direction) => {
+                setSortBy(column);
+                setSortDirection(direction);
+              }}
+              onSwitchToFilesMode={onSwitchToFilesMode}
+              onNewItem={handleNewItem}
+              onItemSelect={handleItemSelect}
+              selectedItemId={selectedItemId}
+            />
+          ) : (
+            <KanbanBoard
+              filterType={filterType}
+              searchQuery={searchQuery}
+              onSwitchToFilesMode={onSwitchToFilesMode}
+              onItemSelect={handleItemSelect}
+              selectedItemId={selectedItemId}
+            />
+          )}
+
+          {/* Quick Add overlay */}
+          {quickAddType && (
+            <QuickAddOverlay
+              type={quickAddType}
+              tracker={trackerTypes.find(t => t.type === quickAddType)}
+              onSubmit={handleQuickAddSubmit}
+              onClose={handleQuickAddClose}
+            />
+          )}
+        </div>
+
+        {/* Detail panel (right side, shown when item selected) */}
+        {selectedItem && (
+          <div className="w-[400px] min-w-[360px] border-l border-nim shrink-0 overflow-hidden">
+            <TrackerItemDetail
+              item={selectedItem}
+              onClose={handleCloseDetail}
+              onSwitchToFilesMode={onSwitchToFilesMode}
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+/**
+ * Quick Add overlay (same pattern as TrackerBottomPanel's QuickAddInline)
+ */
+interface QuickAddOverlayProps {
+  type: string;
+  tracker?: TrackerDataModel;
+  onSubmit: (title: string, priority: string) => void;
+  onClose: () => void;
+}
+
+const QuickAddOverlay: React.FC<QuickAddOverlayProps> = ({ type, tracker, onSubmit, onClose }) => {
+  const [title, setTitle] = React.useState('');
+  const [priority, setPriority] = React.useState('medium');
+  const inputRef = React.useRef<HTMLInputElement>(null);
+
+  React.useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (title.trim()) {
+      onSubmit(title.trim(), priority);
+    }
+  };
+
+  const color = tracker?.color || '#6b7280';
+  const displayName = tracker?.displayName || type.charAt(0).toUpperCase() + type.slice(1);
+  const icon = tracker?.icon || 'label';
+
+  return (
+    <div className="absolute top-0 left-0 right-0 bg-nim-secondary border-b border-nim shadow-sm z-20">
+      <form onSubmit={handleSubmit} className="flex items-center gap-3 px-4 py-2">
+        <span className="material-symbols-outlined text-lg shrink-0" style={{ color }}>
+          {icon}
+        </span>
+
+        <input
+          ref={inputRef}
+          type="text"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onKeyDown={(e) => {
+            // Prevent global keyboard shortcuts from intercepting while typing
+            e.stopPropagation();
+          }}
+          placeholder={`New ${displayName.toLowerCase()}...`}
+          className="flex-1 min-w-0 px-3 py-1.5 bg-nim border border-nim rounded text-sm text-nim placeholder:text-nim-faint focus:outline-none focus:border-[var(--nim-primary)]"
+          data-testid="tracker-quick-add-input"
+        />
+
+        <select
+          value={priority}
+          onChange={(e) => setPriority(e.target.value)}
+          className="px-2 py-1.5 bg-nim border border-nim rounded text-sm text-nim focus:outline-none focus:border-[var(--nim-primary)] shrink-0"
+        >
+          <option value="low">Low</option>
+          <option value="medium">Medium</option>
+          <option value="high">High</option>
+          <option value="critical">Critical</option>
+        </select>
+
+        <button
+          type="submit"
+          disabled={!title.trim()}
+          className="px-3 py-1.5 rounded text-sm font-medium text-white border-none cursor-pointer transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 shrink-0"
+          style={{ backgroundColor: color }}
+        >
+          Add
+        </button>
+
+        <button
+          type="button"
+          onClick={onClose}
+          className="p-1 rounded hover:bg-nim-tertiary text-nim-muted shrink-0"
+          title="Cancel (Esc)"
+        >
+          <MaterialSymbol icon="close" size={18} />
+        </button>
+      </form>
+    </div>
+  );
+};

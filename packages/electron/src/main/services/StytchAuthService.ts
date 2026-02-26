@@ -24,7 +24,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { logger } from '../utils/logger';
 import { STYTCH_CONFIG } from '@nimbalyst/runtime';
-import { getSessionSyncConfig } from '../utils/store';
+import { getSessionSyncConfig, setSessionSyncConfig } from '../utils/store';
 import { AnalyticsService } from './analytics/AnalyticsService';
 
 // Stytch types
@@ -316,6 +316,18 @@ export async function handleAuthCallback(params: {
     orgId,
   });
 
+  // Bootstrap sync config if it doesn't exist yet.
+  // Teams and sync operations need this config to exist, even if sync isn't enabled.
+  const existingConfig = getSessionSyncConfig();
+  if (!existingConfig) {
+    setSessionSyncConfig({
+      enabled: false,
+      serverUrl: '',
+      enabledProjects: [],
+    });
+    logger.main.info('[StytchAuthService] Created default sync config after auth');
+  }
+
   // Track auth callback completion (authoritative sign-in event from deep link)
   AnalyticsService.getInstance().sendEvent('sync_auth_callback_completed');
 
@@ -574,12 +586,8 @@ export async function refreshSession(serverUrl?: string): Promise<boolean> {
     return false;
   }
 
-  // Determine server URL
+  // Determine server URL - always resolves to a valid URL
   const syncServerUrl = serverUrl || getSyncServerUrl();
-  if (!syncServerUrl) {
-    logger.main.warn('[StytchAuthService] Cannot refresh - no server URL configured');
-    return false;
-  }
 
   // Convert ws:// to http:// for API calls
   const httpUrl = syncServerUrl
@@ -588,7 +596,7 @@ export async function refreshSession(serverUrl?: string): Promise<boolean> {
     .replace(/\/$/, '');
 
   try {
-    // logger.main.info('[StytchAuthService] Refreshing session...');
+    logger.main.info('[StytchAuthService] Refreshing session...');
 
     const response = await net.fetch(`${httpUrl}/auth/refresh`, {
       method: 'POST',
@@ -659,7 +667,7 @@ export async function refreshSession(serverUrl?: string): Promise<boolean> {
       orgId: refreshedOrgId || undefined,
     });
 
-    // logger.main.info('[StytchAuthService] Session refreshed successfully');
+    logger.main.info('[StytchAuthService] Session refreshed successfully');
     return true;
   } catch (error) {
     logger.main.error('[StytchAuthService] Session refresh error:', error);
@@ -667,16 +675,18 @@ export async function refreshSession(serverUrl?: string): Promise<boolean> {
   }
 }
 
+const PRODUCTION_SYNC_URL = 'https://sync.nimbalyst.com';
+const DEVELOPMENT_SYNC_URL = 'http://localhost:8790';
+
 /**
- * Get the sync server URL from settings.
+ * Get the sync server URL. Always returns a valid URL - defaults to production.
  */
-function getSyncServerUrl(): string | null {
-  try {
-    const config = getSessionSyncConfig();
-    return config?.serverUrl || null;
-  } catch {
-    return null;
-  }
+function getSyncServerUrl(): string {
+  const config = getSessionSyncConfig();
+  if (config?.serverUrl) return config.serverUrl;
+  const isDev = process.env.NODE_ENV !== 'production';
+  const env = isDev ? config?.environment : undefined;
+  return env === 'development' ? DEVELOPMENT_SYNC_URL : PRODUCTION_SYNC_URL;
 }
 
 /**

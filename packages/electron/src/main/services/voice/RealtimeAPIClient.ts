@@ -330,6 +330,7 @@ export class RealtimeAPIClient {
         break;
 
       case 'input_audio_buffer.speech_started':
+        console.log('[RealtimeAPIClient] speech_started (VAD detected voice)');
         this.updateActivity();
         this.cancelCurrentResponse();
         if (this.onInterruptionCallback) {
@@ -338,6 +339,7 @@ export class RealtimeAPIClient {
         break;
 
       case 'input_audio_buffer.speech_stopped':
+        console.log('[RealtimeAPIClient] speech_stopped (VAD detected silence)');
         this.updateActivity();
         break;
 

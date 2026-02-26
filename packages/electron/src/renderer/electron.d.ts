@@ -554,6 +554,8 @@ interface ElectronAPI {
         orgKeyBase64: string;
         serverUrl: string;
         userId: string;
+        userName?: string;
+        userEmail?: string;
       };
       error?: string;
     }>;
@@ -569,9 +571,23 @@ interface ElectronAPI {
         orgKeyBase64: string;
         serverUrl: string;
         userId: string;
+        userName?: string;
+        userEmail?: string;
       };
       error?: string;
     }>;
+    // WebSocket proxy (Cloudflare blocks browser WS upgrades; proxy through main process)
+    wsConnect: (url: string) => Promise<{ success: boolean; wsId?: string; error?: string }>;
+    wsSend: (wsId: string, data: string) => Promise<{ success: boolean; error?: string }>;
+    wsClose: (wsId: string) => Promise<{ success: boolean }>;
+    onWsEvent: (callback: (data: {
+      wsId: string;
+      type: 'open' | 'message' | 'close' | 'error';
+      data?: string;
+      code?: number;
+      reason?: string;
+      error?: string;
+    }) => void) => () => void;
   };
 
   // Worktree operations

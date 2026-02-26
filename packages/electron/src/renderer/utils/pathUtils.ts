@@ -7,11 +7,17 @@ import { basename, dirname, join, relative, normalize } from 'pathe';
 
 /**
  * Extract the filename from a path (cross-platform)
- * @param filePath - Full file path
- * @returns Just the filename
+ * @param filePath - Full file path or collab:// URI
+ * @returns Just the filename (or document ID for collab URIs)
  */
 export function getFileName(filePath: string): string {
   if (!filePath) return '';
+  // collab://org:{orgId}:doc:{documentId} -> show document ID as the tab name
+  // The title from CollabDocumentConfig is used by CollaborativeTabEditor status bar
+  if (filePath.startsWith('collab://')) {
+    const docMatch = filePath.match(/:doc:(.+)$/);
+    return docMatch ? docMatch[1] : filePath;
+  }
   return basename(filePath);
 }
 

@@ -403,7 +403,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     }));
 
     cleanupFns.push(window.electronAPI.onFileDeleted((data) => {
-      console.log('[FILE_DELETED] File deleted event received:', data.filePath);
+      // console.log('[FILE_DELETED] File deleted event received:', data.filePath);
       // console.log('[FILE_DELETED] Tabs object:', editorModeRef.current?.tabs);
 
       // Find and close the tab for this file

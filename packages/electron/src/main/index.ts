@@ -13,6 +13,7 @@ import { loadFileIntoWindow } from './file/FileOperations';
 import { createApplicationMenu } from './menu/ApplicationMenu';
 import { updateNativeTheme, updateWindowTitleBars } from './theme/ThemeManager';
 import { restoreSessionState, saveSessionState } from './session/SessionState';
+import { getRestartSignalPath } from './utils/appPaths';
 import { createWorkspaceManagerWindow, setupWorkspaceManagerHandlers, wasWorkspaceManagerManuallyClosed } from './window/WorkspaceManagerWindow.ts';
 import { showSplashScreen, closeSplashScreen } from './window/SplashScreen';
 import { registerFileHandlers } from './ipc/FileHandlers';
@@ -96,6 +97,10 @@ import { HandledError } from './database/PGLiteDatabaseWorker';
 import { AnalyticsService } from "./services/analytics/AnalyticsService.ts";
 import { registerAnalyticsHandlers } from "./ipc/AnalyticsHandlers.ts";
 import { shutdownStytchAuth, handleAuthCallback } from './services/StytchAuthService';
+import { registerTrackerSyncHandlers, initializeTrackerSync } from './services/TrackerSyncManager';
+import { registerTeamHandlers, autoMatchTeamForWorkspace } from './services/TeamService';
+import { registerOrgKeyHandlers } from './services/OrgKeyService';
+import { registerDocumentSyncHandlers } from './ipc/DocumentSyncHandlers';
 import { getPermissionService } from './services/PermissionService';
 import { ClaudeSettingsManager } from './services/ClaudeSettingsManager';
 import { pathToFileURL } from 'url';
@@ -771,6 +776,10 @@ app.whenReady().then(async () => {
     registerTerminalHandlers();
     registerExportHandlers();
     registerShareHandlers();
+    registerTrackerSyncHandlers();
+    registerTeamHandlers();
+    registerOrgKeyHandlers();
+    registerDocumentSyncHandlers();
     markEnd('ipc-handlers');
 
     // Inject MCP config loader into ClaudeCodeProvider
@@ -1228,6 +1237,13 @@ app.whenReady().then(async () => {
         }
 
         const window = createWindow(false, true, workspacePath);
+
+        // Auto-match workspace to team (fire-and-forget)
+        autoMatchTeamForWorkspace(workspacePath).catch(() => {});
+
+        // Initialize tracker sync for this workspace (fire-and-forget)
+        initializeTrackerSync(workspacePath).catch(() => {});
+
         window.once('ready-to-show', () => {
             window.show();
             // Notify renderer to ensure workspace UI syncs with the selected path
@@ -1416,7 +1432,7 @@ app.on('before-quit', async (event) => {
     }
 
     // Check if this is a programmatic restart request (from MCP restart_nimbalyst tool)
-    const restartSignalPath = path.join(app.getAppPath(), '.restart-requested');
+    const restartSignalPath = getRestartSignalPath();
     if (fs.existsSync(restartSignalPath)) {
         console.log('[QUIT] Restart signal detected, saving session state before restart');
         // Mark as restarting BEFORE saving to prevent window close handlers from overwriting

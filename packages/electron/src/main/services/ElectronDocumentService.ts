@@ -19,6 +19,7 @@ import { VIRTUAL_DOCS, isVirtualPath } from '@nimbalyst/runtime';
 import { database } from '../database/PGLiteDatabaseWorker';
 import { shouldExcludeDir } from '../utils/fileFilters';
 import { isPathInWorkspace, getRelativeWorkspacePath } from '../utils/workspaceDetection';
+import { syncTrackerItem, isTrackerSyncActive } from './TrackerSyncManager';
 
 export class ElectronDocumentService implements DocumentService {
   private workspacePath: string;
@@ -843,8 +844,145 @@ export class ElectronDocumentService implements DocumentService {
       created: data.created || row.created || undefined,
       updated: data.updated || row.updated || undefined,
       dueDate: data.dueDate || undefined,
-      lastIndexed: new Date(row.last_indexed)
+      lastIndexed: new Date(row.last_indexed),
+      // Collaborative fields from JSONB data
+      assigneeId: data.assigneeId || undefined,
+      reporterId: data.reporterId || undefined,
+      labels: data.labels || undefined,
+      linkedSessions: data.linkedSessions || undefined,
+      linkedCommitSha: data.linkedCommitSha || undefined,
+      documentId: data.documentId || undefined,
+      syncStatus: row.sync_status || 'local',
     };
+  }
+
+  /**
+   * Update the sync_status of a tracker item.
+   */
+  async updateTrackerItemSyncStatus(itemId: string, syncStatus: string): Promise<void> {
+    await database.query(
+      `UPDATE tracker_items SET sync_status = $1 WHERE id = $2`,
+      [syncStatus, itemId]
+    );
+    // Notify watchers
+    const result = await database.query<any>(
+      `SELECT * FROM tracker_items WHERE id = $1`,
+      [itemId]
+    );
+    if (result.rows.length > 0) {
+      const item = this.rowToTrackerItem(result.rows[0]);
+      const changeEvent: TrackerItemChangeEvent = {
+        added: [],
+        updated: [item],
+        removed: [],
+        timestamp: new Date(),
+      };
+      this.trackerItemWatchers.forEach(callback => callback(changeEvent));
+    }
+  }
+
+  /**
+   * Update fields on a tracker item in PGLite.
+   * Merges provided fields into the existing JSONB data column.
+   */
+  async updateTrackerItem(itemId: string, updates: Record<string, any>): Promise<TrackerItem> {
+    // Read existing item
+    const existing = await database.query<any>(
+      `SELECT * FROM tracker_items WHERE id = $1`,
+      [itemId]
+    );
+    if (existing.rows.length === 0) {
+      throw new Error(`Tracker item not found: ${itemId}`);
+    }
+
+    const row = existing.rows[0];
+    const data = typeof row.data === 'string' ? JSON.parse(row.data) : (row.data || {});
+
+    // Merge updates into data
+    for (const [key, value] of Object.entries(updates)) {
+      data[key] = value;
+    }
+
+    await database.query(
+      `UPDATE tracker_items SET data = $1, updated = NOW() WHERE id = $2`,
+      [JSON.stringify(data), itemId]
+    );
+
+    const result = await database.query<any>(
+      `SELECT * FROM tracker_items WHERE id = $1`,
+      [itemId]
+    );
+    const updated = this.rowToTrackerItem(result.rows[0]);
+
+    const changeEvent: TrackerItemChangeEvent = {
+      added: [],
+      updated: [updated],
+      removed: [],
+      timestamp: new Date(),
+    };
+    this.trackerItemWatchers.forEach(callback => callback(changeEvent));
+
+    return updated;
+  }
+
+  /**
+   * Create a tracker item directly in PGLite (not from markdown parsing).
+   * Used for proper collaborative tracked items created from the UI.
+   * These items have empty document_path and don't correspond to any file.
+   */
+  async createTrackerItem(payload: {
+    id: string;
+    type: string;
+    title: string;
+    status: string;
+    priority: string;
+    workspace: string;
+    description?: string;
+    owner?: string;
+    tags?: string[];
+    customFields?: Record<string, any>;
+  }): Promise<TrackerItem> {
+    const data: Record<string, any> = {
+      title: payload.title,
+      status: payload.status,
+      priority: payload.priority,
+      created: new Date().toISOString().split('T')[0],
+    };
+    if (payload.description) data.description = payload.description;
+    if (payload.owner) data.owner = payload.owner;
+    if (payload.tags && payload.tags.length > 0) data.tags = payload.tags;
+    if (payload.customFields) {
+      Object.assign(data, payload.customFields);
+    }
+
+    await database.query(
+      `INSERT INTO tracker_items (
+        id, type, data, workspace, document_path, line_number,
+        created, updated, last_indexed, sync_status
+      ) VALUES ($1, $2, $3, $4, '', NULL, NOW(), NOW(), NOW(), 'pending')`,
+      [payload.id, payload.type, JSON.stringify(data), payload.workspace]
+    );
+
+    const result = await database.query<any>(
+      `SELECT * FROM tracker_items WHERE id = $1`,
+      [payload.id]
+    );
+    if (result.rows.length === 0) {
+      throw new Error(`Failed to create tracker item ${payload.id}`);
+    }
+
+    const created = this.rowToTrackerItem(result.rows[0]);
+
+    // Notify watchers
+    const changeEvent: TrackerItemChangeEvent = {
+      added: [created],
+      updated: [],
+      removed: [],
+      timestamp: new Date(),
+    };
+    this.trackerItemWatchers.forEach(callback => callback(changeEvent));
+
+    return created;
   }
 
   /**
@@ -858,7 +996,8 @@ export class ElectronDocumentService implements DocumentService {
       const lines = content.split('\n');
 
       // Regex to match: text #type[id:... status:...]
-      const trackerRegex = /(.+?)\s+#(bug|task|plan|idea|decision)\[(.+?)\]/;
+      // Accept any alphanumeric type with hyphens (e.g. bug, task, devblog-post, feature-request)
+      const trackerRegex = /(.+?)\s+#([\w-]+)\[(.+?)\]/;
 
       // Track whether we're inside a code block
       let inCodeBlock = false;
@@ -1338,7 +1477,14 @@ export function setupDocumentServiceHandlers(resolver: DocumentServiceResolver) 
   });
 
   // Handle metadata watch subscriptions
+  // Track per-sender metadata watch subscriptions to prevent stacking on HMR
+  const metadataWatchBySender = new WeakMap<Electron.WebContents, () => void>();
+
   safeOn('document-service:metadata-watch', (event) => {
+    // Unsubscribe previous watcher for this sender (prevents stacking on HMR)
+    const prevUnsub = metadataWatchBySender.get(event.sender);
+    if (prevUnsub) prevUnsub();
+
     let unsubscribe: (() => void) | undefined;
     try {
       const service = requireDocumentService(event);
@@ -1350,8 +1496,11 @@ export function setupDocumentServiceHandlers(resolver: DocumentServiceResolver) 
     }
 
     if (unsubscribe) {
-      // Clean up when renderer is destroyed
-      event.sender.once('destroyed', unsubscribe);
+      metadataWatchBySender.set(event.sender, unsubscribe);
+      event.sender.once('destroyed', () => {
+        unsubscribe!();
+        metadataWatchBySender.delete(event.sender);
+      });
     }
   });
 
@@ -1404,28 +1553,117 @@ export function setupDocumentServiceHandlers(resolver: DocumentServiceResolver) 
     }
   });
 
-  // Handle tracker item watch subscriptions
+  // Track per-sender tracker item watch subscriptions to prevent stacking on HMR
+  const trackerWatchBySender = new WeakMap<Electron.WebContents, () => void>();
+
   safeOn('document-service:tracker-items-watch', (event) => {
-    // console.log('[DocumentService IPC] tracker-items-watch subscription requested');
+    // Unsubscribe previous watcher for this sender (prevents stacking on HMR)
+    const prevUnsub = trackerWatchBySender.get(event.sender);
+    if (prevUnsub) prevUnsub();
+
     let unsubscribe: (() => void) | undefined;
     try {
       const service = requireDocumentService(event);
       unsubscribe = service.watchTrackerItems((change: TrackerItemChangeEvent) => {
-        // console.log('[DocumentService IPC] Sending tracker-items-changed event to renderer:', {
-        //   added: change.added?.length || 0,
-        //   updated: change.updated?.length || 0,
-        //   removed: change.removed?.length || 0
-        // });
         event.sender.send('document-service:tracker-items-changed', change);
       });
-      // console.log('[DocumentService IPC] tracker-items-watch subscription successful');
     } catch (error) {
       console.error('[DocumentService] tracker-items-watch failed to start:', error);
     }
 
     if (unsubscribe) {
-      // Clean up when renderer is destroyed
-      event.sender.once('destroyed', unsubscribe);
+      trackerWatchBySender.set(event.sender, unsubscribe);
+      event.sender.once('destroyed', () => {
+        unsubscribe!();
+        trackerWatchBySender.delete(event.sender);
+      });
+    }
+  });
+
+  // Tracker item sync status update
+  safeHandle('document-service:tracker-item-update-sync-status', async (event, payload: { itemId: string; syncStatus: string }) => {
+    try {
+      const { itemId, syncStatus } = payload;
+      await requireDocumentService(event).updateTrackerItemSyncStatus(itemId, syncStatus);
+      return { success: true };
+    } catch (error) {
+      console.error('[DocumentService] tracker-item-update-sync-status failed:', error);
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+
+  // Create tracker item directly in PGLite (bypassing markdown files)
+  safeHandle('document-service:create-tracker-item', async (event, payload: {
+    id: string;
+    type: string;
+    title: string;
+    status: string;
+    priority: string;
+    workspace: string;
+    description?: string;
+    owner?: string;
+    tags?: string[];
+    customFields?: Record<string, any>;
+    syncMode?: string;
+  }) => {
+    try {
+      console.log('[DocumentService] create-tracker-item called:', { id: payload.id, type: payload.type, syncMode: payload.syncMode, workspace: payload.workspace });
+      const item = await requireDocumentService(event).createTrackerItem(payload);
+      console.log('[DocumentService] create-tracker-item created locally:', item.id);
+
+      // If sync policy says shared, push to TrackerRoom
+      if (payload.syncMode === 'shared' || payload.syncMode === 'hybrid') {
+        const active = isTrackerSyncActive(payload.workspace);
+        console.log('[DocumentService] create-tracker-item sync check:', { syncMode: payload.syncMode, active });
+        if (active) {
+          try {
+            await syncTrackerItem(item);
+            console.log('[DocumentService] create-tracker-item synced to TrackerRoom:', item.id);
+          } catch (syncErr) {
+            console.error('[DocumentService] create-tracker-item sync failed (item still created locally):', syncErr);
+          }
+        }
+      }
+
+      return { success: true, item };
+    } catch (error) {
+      console.error('[DocumentService] create-tracker-item failed:', error);
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+
+  // Update tracker item fields
+  safeHandle('document-service:update-tracker-item', async (event, payload: {
+    itemId: string;
+    updates: Record<string, any>;
+    syncMode?: string;
+  }) => {
+    try {
+      console.log('[DocumentService] update-tracker-item:', { itemId: payload.itemId, syncMode: payload.syncMode, updateKeys: Object.keys(payload.updates) });
+      const item = await requireDocumentService(event).updateTrackerItem(payload.itemId, payload.updates);
+
+      // If sync policy says shared, push updated item to TrackerRoom
+      if (payload.syncMode === 'shared' || payload.syncMode === 'hybrid') {
+        const syncActive = isTrackerSyncActive(item.workspace);
+        console.log('[DocumentService] update-tracker-item sync gate:', { syncMode: payload.syncMode, workspace: item.workspace, syncActive });
+        try {
+          if (syncActive) {
+            await syncTrackerItem(item);
+            console.log('[DocumentService] update-tracker-item synced:', item.id);
+          } else {
+            console.log('[DocumentService] update-tracker-item skipped: sync not active for workspace');
+          }
+        } catch (syncErr) {
+          console.error('[DocumentService] update-tracker-item sync failed:', syncErr);
+        }
+      } else {
+        console.log('[DocumentService] update-tracker-item no sync: syncMode =', payload.syncMode);
+      }
+
+      return { success: true, item };
+    } catch (error) {
+      console.error('[DocumentService] update-tracker-item failed:', error);
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
     }
   });
 

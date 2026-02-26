@@ -3504,6 +3504,13 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
           };
         }
       } catch (error) {
+        // Emit resolved event on error path so the "waiting for input" indicator is cleared
+        this.emit('toolPermission:resolved', {
+          requestId,
+          sessionId,
+          response: { decision: 'deny', scope: 'once' },
+          timestamp: Date.now()
+        });
         this.logSecurity('[canUseTool] Permission request failed (fallback):', {
           toolName,
           error: error instanceof Error ? error.message : 'Unknown error',

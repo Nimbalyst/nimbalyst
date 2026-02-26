@@ -17,10 +17,34 @@ class_name = "SessionRoom"
 name = "INDEX_ROOM"
 class_name = "IndexRoom"
 
+[[durable_objects.bindings]]
+name = "DOCUMENT_ROOM"
+class_name = "DocumentRoom"
+
+[[durable_objects.bindings]]
+name = "TRACKER_ROOM"
+class_name = "TrackerRoom"
+
+[[durable_objects.bindings]]
+name = "TEAM_ROOM"
+class_name = "TeamRoom"
+
 # DO migrations - enable SQLite storage
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["SessionRoom", "IndexRoom"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["DocumentRoom"]
+
+[[migrations]]
+tag = "v3"
+new_sqlite_classes = ["TrackerRoom"]
+
+[[migrations]]
+tag = "v4"
+new_sqlite_classes = ["TeamRoom"]
 
 # D1 Database (for global user index only)
 [[d1_databases]]
@@ -45,6 +69,7 @@ COLLABV3_VERSION = '"0.0.0-dev"'
 # Environment variables
 [vars]
 ENVIRONMENT = "development"
+TEST_AUTH_BYPASS = "true"
 
 # Staging environment
 [env.staging]
@@ -71,6 +96,18 @@ class_name = "SessionRoom"
 name = "INDEX_ROOM"
 class_name = "IndexRoom"
 
+[[env.production.durable_objects.bindings]]
+name = "DOCUMENT_ROOM"
+class_name = "DocumentRoom"
+
+[[env.production.durable_objects.bindings]]
+name = "TRACKER_ROOM"
+class_name = "TrackerRoom"
+
+[[env.production.durable_objects.bindings]]
+name = "TEAM_ROOM"
+class_name = "TeamRoom"
+
 # Production R2 for session shares
 [[env.production.r2_buckets]]
 binding = "SESSION_SHARES"
@@ -87,10 +124,23 @@ database_id = "c3b3979d-e20c-4547-a103-91c1a0b32388"
 tag = "v1"
 new_sqlite_classes = ["SessionRoom", "IndexRoom"]
 
+[[env.production.migrations]]
+tag = "v2"
+new_sqlite_classes = ["DocumentRoom"]
+
+[[env.production.migrations]]
+tag = "v3"
+new_sqlite_classes = ["TrackerRoom"]
+
+[[env.production.migrations]]
+tag = "v4"
+new_sqlite_classes = ["TeamRoom"]
+
 [env.production.define]
 COLLABV3_VERSION = '"0.0.0-dev"'
 [env.production.vars]
 ENVIRONMENT = "production"
+TEST_AUTH_BYPASS = "false"
 STYTCH_PROJECT_ID = "project-live-70b810e0-b201-4cf4-b8e8-2b694fd4515f"
 ALLOWED_ORIGINS = "https://app.nimbalyst.com,https://nimbalyst.com,capacitor://localhost"
 STYTCH_PUBLIC_TOKEN = "public-token-live-db5dfb0e-6423-4166-8366-164f4138e0ff"

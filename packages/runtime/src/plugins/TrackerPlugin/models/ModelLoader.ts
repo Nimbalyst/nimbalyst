@@ -14,6 +14,7 @@ const builtinTrackers: TrackerDataModel[] = [
     icon: 'flag',
     color: '#3b82f6',
     modes: { inline: true, fullDocument: true },
+    sync: { mode: 'hybrid', scope: 'project' },
     idPrefix: 'pln',
     idFormat: 'ulid',
     fields: [
@@ -92,6 +93,7 @@ const builtinTrackers: TrackerDataModel[] = [
     icon: 'gavel',
     color: '#8b5cf6',
     modes: { inline: true, fullDocument: true },
+    sync: { mode: 'shared', scope: 'project' },
     idPrefix: 'dec',
     idFormat: 'ulid',
     fields: [
@@ -144,6 +146,7 @@ const builtinTrackers: TrackerDataModel[] = [
     icon: 'bug_report',
     color: '#dc2626',
     modes: { inline: true, fullDocument: false },
+    sync: { mode: 'shared', scope: 'project' },
     idPrefix: 'bug',
     idFormat: 'ulid',
     fields: [
@@ -180,6 +183,7 @@ const builtinTrackers: TrackerDataModel[] = [
     icon: 'task_alt',
     color: '#2563eb',
     modes: { inline: true, fullDocument: false },
+    sync: { mode: 'shared', scope: 'project' },
     idPrefix: 'tsk',
     idFormat: 'ulid',
     fields: [
@@ -216,6 +220,7 @@ const builtinTrackers: TrackerDataModel[] = [
     icon: 'lightbulb',
     color: '#ca8a04',
     modes: { inline: true, fullDocument: false },
+    sync: { mode: 'local', scope: 'project' },
     idPrefix: 'id',
     idFormat: 'ulid',
     fields: [
