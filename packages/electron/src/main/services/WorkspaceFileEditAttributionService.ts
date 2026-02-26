@@ -255,24 +255,25 @@ class WorkspaceFileEditAttributionServiceImpl {
 
       counters.attributedEdits++;
 
-      const beforeContent = event.beforeContent ?? '';
-      if (!event.beforeContent) {
-        logger.main.warn('[WorkspaceFileEditAttributionService] Creating tag with empty beforeContent (cache miss):', {
+      if (event.beforeContent == null) {
+        // Don't create a tag with empty baseline - the proactive file_change handler
+        // or trackBashFileEditsFromCommand will create one with correct content shortly.
+        logger.main.info('[WorkspaceFileEditAttributionService] Skipping tag creation - no baseline available (cache miss):', {
           filePath: event.filePath,
           sessionId: winner.sessionId,
           toolUseId,
         });
+      } else {
+        const tagId = `ai-edit-pending-${winner.sessionId}-${toolUseId}`;
+        await historyManager.createTag(
+          event.filePath,
+          tagId,
+          event.beforeContent,
+          winner.sessionId,
+          toolUseId,
+        );
+        counters.tagsCreated++;
       }
-
-      const tagId = `ai-edit-pending-${winner.sessionId}-${toolUseId}`;
-      await historyManager.createTag(
-        event.filePath,
-        tagId,
-        beforeContent,
-        winner.sessionId,
-        toolUseId,
-      );
-      counters.tagsCreated++;
 
       logger.main.info('[WorkspaceFileEditAttributionService] Attributed file edit:', {
         workspacePath: event.workspacePath,

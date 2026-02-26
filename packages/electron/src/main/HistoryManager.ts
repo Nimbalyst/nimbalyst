@@ -449,6 +449,14 @@ export class HistoryManager {
             newContentLength: content.length,
           });
           await this.updateTagContent(filePath, existingTagId, content);
+
+          // Re-notify renderer so it re-reads the now-correct baseline
+          const windows = BrowserWindow.getAllWindows();
+          for (const window of windows) {
+            if (!window.isDestroyed()) {
+              window.webContents.send('file-changed-on-disk', { path: filePath });
+            }
+          }
           return;
         }
 
@@ -898,6 +906,57 @@ export class HistoryManager {
     } catch (error) {
       logger.main.error('[HistoryManager] Failed to get pending files for session:', error);
       return [];
+    }
+  }
+
+  /**
+   * Get all files that have any tags (pending-review or reviewed) for a session.
+   * Used to seed the FileSnapshotCache with gitignored files that have prior history.
+   */
+  async getTaggedFilesForSession(workspacePath: string, sessionId: string): Promise<string[]> {
+    try {
+      if (!database.isInitialized()) {
+        await database.initialize();
+      }
+
+      const result = await database.query<{ file_path: string }>(`
+        SELECT DISTINCT file_path
+        FROM document_history
+        WHERE file_path LIKE $1
+          AND metadata->>'sessionId' = $2
+          AND metadata->>'type' IN ('pre-edit', 'incremental-approval')
+      `, [workspacePath + '%', sessionId]);
+
+      return result.rows.map((row: { file_path: string }) => row.file_path);
+    } catch (error) {
+      logger.main.error('[HistoryManager] Failed to get tagged files for session:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get the timestamp of the most recently reviewed tag for a file.
+   * Returns null if no reviewed tags exist.
+   */
+  async getLastReviewedTimestamp(filePath: string): Promise<number | null> {
+    try {
+      if (!database.isInitialized()) {
+        await database.initialize();
+      }
+
+      const result = await database.query<{ last_reviewed_at: string }>(`
+        SELECT MAX(CAST(metadata->>'updatedAt' AS bigint)) as last_reviewed_at
+        FROM document_history
+        WHERE file_path = $1
+          AND metadata->>'status' = 'reviewed'
+          AND metadata->>'type' = 'pre-edit'
+      `, [filePath]);
+
+      const val = result.rows[0]?.last_reviewed_at;
+      return val ? parseInt(val, 10) : null;
+    } catch (error) {
+      logger.main.error('[HistoryManager] Failed to get last reviewed timestamp:', error);
+      return null;
     }
   }
 

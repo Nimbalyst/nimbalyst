@@ -94,6 +94,11 @@ async function recoverBaselineFromHistory(
       return null;
     }
 
+    // If there's a reviewed tag for this file, skip any snapshot older than
+    // the review timestamp. This prevents returning stale pre-edit baselines
+    // from before previously-accepted changes (tag resurrection bug).
+    const lastReviewedAt = await historyManager.getLastReviewedTimestamp(filePath);
+
     const nonTagSnapshots = snapshots.filter((snapshot) => {
       const type = String(snapshot.metadata?.type ?? snapshot.type ?? '').toLowerCase();
       return type !== 'pre-edit' && type !== 'incremental-approval';
@@ -107,6 +112,17 @@ async function recoverBaselineFromHistory(
       if (seenTimestamps.has(snapshot.timestamp)) continue;
       seenTimestamps.add(snapshot.timestamp);
       checked++;
+
+      // Skip snapshots from before the last review — they represent
+      // pre-acceptance state and would cause baseline drift.
+      if (lastReviewedAt !== null) {
+        const snapshotTs = typeof snapshot.timestamp === 'string'
+          ? parseInt(snapshot.timestamp, 10)
+          : snapshot.timestamp;
+        if (snapshotTs < lastReviewedAt) {
+          continue;
+        }
+      }
 
       const candidateContent = await historyManager.loadSnapshot(filePath, snapshot.timestamp);
       if (currentContent !== null && candidateContent === currentContent) {
@@ -542,6 +558,9 @@ export class AIService {
   // Stopped when sessions complete, error, or are deleted. Multiple sessions on the
   // same workspace share a single chokidar instance (ref-counted inside SessionFileWatcher).
   private codexSessionWatchers = new Map<string, { cache: FileSnapshotCache; watcher: SessionFileWatcher; workspacePath: string }>();
+  // Pending delayed-stop timers for codex session watchers (keyed by sessionId).
+  // Used to cancel the stop if a new turn starts before the timer fires.
+  private codexStopTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   // Debounced tool call matching during active sessions.
   // After each tool execution is tracked, we schedule matchSession with a short delay
@@ -3168,11 +3187,15 @@ export class AIService {
               } else {
                 await stateManager.endSession(session.id);
                 // Stop file watcher after a brief delay to let pending
-                // watcher events drain through WorkspaceFileEditAttributionService
+                // watcher events drain through WorkspaceFileEditAttributionService.
+                // Store the timer handle so ensureCodexSessionWatcher can cancel it
+                // if a new turn starts before the timer fires.
                 const sessionIdForCleanup = session.id;
-                setTimeout(() => {
+                const stopTimer = setTimeout(() => {
+                  this.codexStopTimers.delete(sessionIdForCleanup);
                   this.stopCodexSessionWatcher(sessionIdForCleanup);
                 }, 500);
+                this.codexStopTimers.set(sessionIdForCleanup, stopTimer);
 
                 // Play completion sound if enabled
                 const soundService = SoundNotificationService.getInstance();
@@ -4776,6 +4799,11 @@ export class AIService {
 
       return { sessionId: session.id, response };
     });
+
+    // Advance the FileSnapshotCache baseline after diff acceptance/rejection
+    safeHandle('ai:advance-diff-baseline', async (_event, sessionId: string, filePath: string, content: string) => {
+      this.advanceDiffBaseline(sessionId, filePath, content);
+    });
   }
 
   private createToolHandler(webContents: Electron.WebContents, documentContext?: DocumentContext, sessionId?: string, workspaceId?: string): ToolHandler {
@@ -4904,6 +4932,14 @@ export class AIService {
     workspacePath: string,
     event: Electron.IpcMainInvokeEvent
   ): Promise<void> {
+    // Cancel any pending delayed-stop timer so it doesn't destroy the watcher
+    // we're about to reuse (race: new turn starts within the 500ms drain delay).
+    const pendingTimer = this.codexStopTimers.get(sessionId);
+    if (pendingTimer) {
+      clearTimeout(pendingTimer);
+      this.codexStopTimers.delete(sessionId);
+    }
+
     const existing = this.codexSessionWatchers.get(sessionId);
     if (existing && existing.workspacePath === workspacePath) {
       return;
@@ -4922,6 +4958,32 @@ export class AIService {
     const cache = new FileSnapshotCache();
     const watcher = new SessionFileWatcher();
     await cache.startSession(workspacePath, sessionId);
+
+    // Seed the cache with current disk content for files that have prior tags
+    // from this session but aren't in the cache (e.g., gitignored files).
+    // Without this, the proactive file_change handler would fall through to
+    // recoverBaselineFromHistory and potentially use a stale pre-edit baseline.
+    try {
+      const taggedFiles = await historyManager.getTaggedFilesForSession(workspacePath, sessionId);
+      const MAX_SEED_FILES = 50;
+      let seeded = 0;
+      for (const filePath of taggedFiles) {
+        if (seeded >= MAX_SEED_FILES) break;
+        const existing = await cache.getBeforeState(filePath);
+        if (existing !== null) continue; // already in cache (e.g., dirty tracked file)
+        const content = await readFileContentOrNull(filePath);
+        if (content !== null) {
+          cache.updateSnapshot(filePath, content);
+          seeded++;
+        }
+      }
+      if (seeded > 0) {
+        logger.main.info('[AIService] Seeded cache with historical files:', { sessionId, seeded, total: taggedFiles.length });
+      }
+    } catch (seedError) {
+      logger.main.warn('[AIService] Failed to seed cache with historical files:', seedError);
+    }
+
     await watcher.start(
       workspacePath,
       sessionId,
@@ -4938,6 +5000,21 @@ export class AIService {
     );
     this.codexSessionWatchers.set(sessionId, { cache, watcher, workspacePath });
     logger.main.info('[AIService] Started Codex file watcher for session:', sessionId, { workspacePath });
+  }
+
+  /**
+   * Advance the FileSnapshotCache baseline for a file after a diff is accepted/rejected.
+   * This ensures subsequent AI edits use the post-review content as the diff baseline,
+   * preventing "baseline drift" where already-accepted changes reappear in future diffs.
+   */
+  advanceDiffBaseline(sessionId: string, filePath: string, content: string): void {
+    const entry = this.codexSessionWatchers.get(sessionId);
+    if (!entry) {
+      // Watcher may have been stopped between turns — not an error
+      return;
+    }
+    entry.cache.updateSnapshot(filePath, content);
+    logger.main.debug('[AIService] Advanced diff baseline:', { sessionId, filePath, contentLength: content.length });
   }
 
   private async adoptWorktreeForSession(
@@ -5040,7 +5117,9 @@ export class AIService {
       const currentContent = currentContentResult;
 
       const pendingTags = await historyManager.getPendingTags(filePath);
-      if (pendingTags && pendingTags.some(t => t.sessionId === session.id)) {
+      const existingTag = pendingTags?.find(t => t.sessionId === session.id);
+      if (existingTag && existingTag.content.length > 0) {
+        // Tag already exists with real content - nothing to do
         watcherEntry?.cache.updateSnapshot(filePath, currentContent);
         continue;
       }
@@ -5089,6 +5168,23 @@ export class AIService {
         continue;
       }
 
+      // If an existing tag with empty content was found earlier, upgrade it
+      // instead of creating a new tag (defense-in-depth for Fix 2)
+      if (existingTag && existingTag.content.length === 0 && resolvedBeforeContent.length > 0) {
+        await historyManager.createTag(
+          filePath,
+          existingTag.id,
+          resolvedBeforeContent,
+          session.id,
+          existingTag.toolUseId,
+        );
+        logger.main.info('[AIService] Upgraded empty bash tag with baseline:', {
+          sessionId: session.id, filePath, tagId: existingTag.id,
+        });
+        watcherEntry?.cache.updateSnapshot(filePath, currentContent);
+        continue;
+      }
+
       const toolUseId = commandItemId || `codex-bash-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const tagId = `ai-edit-pending-${session.id}-${toolUseId}`;
 
@@ -5121,6 +5217,13 @@ export class AIService {
   }
 
   private async stopCodexSessionWatcher(sessionId: string): Promise<void> {
+    // Clear any pending delayed-stop timer (belt-and-suspenders)
+    const pendingTimer = this.codexStopTimers.get(sessionId);
+    if (pendingTimer) {
+      clearTimeout(pendingTimer);
+      this.codexStopTimers.delete(sessionId);
+    }
+
     const entry = this.codexSessionWatchers.get(sessionId);
     if (entry) {
       try {
@@ -5143,6 +5246,12 @@ export class AIService {
       console.error('[AIService] Error destroying providers:', error);
       // Continue destruction even if providers fail
     }
+
+    // Cancel all pending delayed-stop timers
+    for (const timer of this.codexStopTimers.values()) {
+      clearTimeout(timer);
+    }
+    this.codexStopTimers.clear();
 
     // Stop all Codex file watchers
     for (const [sessionId, entry] of this.codexSessionWatchers) {

@@ -1578,6 +1578,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
           logger.ui.info(`[TabEditor] Created incremental-approval tag for session: ${sessionId}, tagId: ${newTagId}`);
 
+          // Advance the Codex cache so subsequent edits use the approved state as baseline
+          window.electronAPI.invoke('ai:advance-diff-baseline', sessionId, filePath, approvedContent);
+
           // CRITICAL: Update pendingAIEditTagRef to point to the NEW incremental-approval tag
           // This ensures that when CLEAR_DIFF_TAG_COMMAND is dispatched later, it marks the correct tag as reviewed
           setPendingAIEditTag({
@@ -1603,7 +1606,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           return;
         }
 
-        const { tagId, filePath } = pendingAIEditTagRef.current;
+        const { tagId, sessionId: clearSessionId, filePath } = pendingAIEditTagRef.current;
         logger.ui.info('[TabEditor] handleClearDiffTag START:', { tagId, filePath });
 
         // CRITICAL: Mark tag as reviewed BEFORE saving to disk
@@ -1630,6 +1633,11 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             // Create history snapshot for this incremental save
             // This ensures history accurately reflects what's on disk after user's decisions
             await window.electronAPI.invoke('history:create-snapshot', filePath, currentContent, 'manual', 'Incremental diff acceptance');
+
+            // Advance the Codex cache so subsequent AI edits diff against post-review state
+            if (clearSessionId) {
+              window.electronAPI.invoke('ai:advance-diff-baseline', clearSessionId, filePath, currentContent);
+            }
 
             // Update our state
             contentRef.current = currentContent;
@@ -1802,6 +1810,16 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         console.warn('[TabEditor] No history API available');
       }
 
+      // Create a history snapshot of the accepted content so future baseline
+      // recovery (recoverBaselineFromHistory) finds it instead of older states.
+      // Also advance the Codex FileSnapshotCache so subsequent AI edits diff
+      // against the accepted state, not the pre-first-edit state.
+      await window.electronAPI.invoke('history:create-snapshot', filePath, newContent, 'manual', 'Diff accepted');
+      const acceptedSessionId = pendingAIEditTagRef.current?.sessionId;
+      if (acceptedSessionId) {
+        window.electronAPI.invoke('ai:advance-diff-baseline', acceptedSessionId, filePath, newContent);
+      }
+
       // Exit diff mode
       console.log('[TabEditor] ABOUT TO EXIT DIFF MODE');
       editorRef.current.exitDiffMode();
@@ -1857,6 +1875,14 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           'reviewed',
           workspaceId
         );
+      }
+
+      // Create a history snapshot of the rejected-to (original) content and advance
+      // the Codex cache so subsequent AI edits diff against the post-rejection state.
+      await window.electronAPI.invoke('history:create-snapshot', filePath, oldContent, 'manual', 'Diff rejected');
+      const rejectedSessionId = pendingAIEditTagRef.current?.sessionId;
+      if (rejectedSessionId) {
+        window.electronAPI.invoke('ai:advance-diff-baseline', rejectedSessionId, filePath, oldContent);
       }
 
       // Exit diff mode
@@ -1915,6 +1941,16 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         );
       }
 
+      // Read current disk content to snapshot and advance cache baseline
+      const currentResult = await window.electronAPI.readFileContent(filePath);
+      if (currentResult?.success && currentResult.content) {
+        await window.electronAPI.invoke('history:create-snapshot', filePath, currentResult.content, 'manual', 'Diff accepted');
+        const acceptedSessionId = pendingAIEditTagRef.current?.sessionId;
+        if (acceptedSessionId) {
+          window.electronAPI.invoke('ai:advance-diff-baseline', acceptedSessionId, filePath, currentResult.content);
+        }
+      }
+
       // Clear pending tag ref
       setPendingAIEditTag(null);
 
@@ -1959,6 +1995,13 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           'reviewed',
           workspaceId
         );
+      }
+
+      // Snapshot the restored content and advance the Codex cache baseline
+      await window.electronAPI.invoke('history:create-snapshot', filePath, baseline.content, 'manual', 'Diff rejected');
+      const rejectedSessionId = pendingAIEditTagRef.current?.sessionId;
+      if (rejectedSessionId) {
+        window.electronAPI.invoke('ai:advance-diff-baseline', rejectedSessionId, filePath, baseline.content);
       }
 
       // Clear pending tag ref
