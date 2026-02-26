@@ -4,6 +4,7 @@ import { logger } from '../utils/logger';
 import { getWindowId, windowStates } from '../window/WindowManager';
 import { optimizedWorkspaceWatcher } from './OptimizedWorkspaceWatcher';
 import { gitRefWatcher } from './GitRefWatcher';
+import * as workspaceEventBus from './WorkspaceEventBus';
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
 import { readdirSync } from 'fs';
 import path from "path";
@@ -128,6 +129,7 @@ export async function stopAllWorkspaceWatchers() {
         await Promise.all([
             optimizedWorkspaceWatcher.stopAll(),
             gitRefWatcher.stopAll(),
+            workspaceEventBus.stopAll(),
         ]);
         console.log('[WorkspaceWatcher] stopAll completed');
     } catch (error) {

@@ -32,6 +32,7 @@ const IGNORED_DIRS = new Set([
 const MAX_FILE_SIZE = 1_000_000; // 1MB
 const MAX_CACHE_BYTES = 100_000_000; // 100MB memory cap
 const MAX_DIRTY_FILES = 200; // Cap upfront file reads to avoid I/O storms from large dirty sets
+const MAX_FULL_SCAN_FILES = 500; // Higher cap for non-git repos (no git fallback available)
 
 export class FileSnapshotCache {
   private cache = new Map<string, string>();
@@ -234,7 +235,7 @@ export class FileSnapshotCache {
         await this.walkAndCache(fullPath, rootPath);
       } else if (entry.isFile()) {
         if (this.isBinaryPath(fullPath)) continue;
-        if (this.cache.size >= MAX_DIRTY_FILES || this.totalBytes >= MAX_CACHE_BYTES) break;
+        if (this.cache.size >= MAX_FULL_SCAN_FILES || this.totalBytes >= MAX_CACHE_BYTES) break;
 
         const content = await this.readFileIfEligible(fullPath);
         if (content !== null) {

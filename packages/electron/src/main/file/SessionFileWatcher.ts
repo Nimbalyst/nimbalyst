@@ -1,20 +1,9 @@
-import chokidar, { FSWatcher as ChokidarFSWatcher } from 'chokidar';
 import * as fs from 'fs/promises';
-import * as fsSync from 'fs';
 import * as path from 'path';
-import ignore, { Ignore } from 'ignore';
 import { BrowserWindow } from 'electron';
 import { logger } from '../utils/logger';
 import type { FileSnapshotCache } from './FileSnapshotCache';
-
-/**
- * Whether the platform supports `fs.watch(dir, { recursive: true })`.
- *
- * macOS uses FSEvents (1 FD for the entire tree).
- * Windows uses ReadDirectoryChangesW (1 handle for the entire tree).
- * Linux does NOT support recursive: true and throws ERR_FEATURE_UNAVAILABLE_ON_PLATFORM.
- */
-const supportsRecursiveWatch = process.platform === 'darwin' || process.platform === 'win32';
+import * as workspaceEventBus from './WorkspaceEventBus';
 
 const BINARY_EXTENSIONS = new Set([
   '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.webp', '.svg',
@@ -32,245 +21,31 @@ const EDITOR_SAVE_TTL_MS = 2000;
 const FILE_CHANGED_NOTIFY_DEDUPE_MS = 250;
 
 // ---------------------------------------------------------------------------
-// SharedFSWatcher – one watcher per workspace path, ref-counted
-//
-// On macOS/Windows: uses fs.watch(recursive:true) — 1 FD per workspace tree.
-// On Linux: uses chokidar (recursive fs.watch is not supported).
+// Re-exports from WorkspaceEventBus for backward compatibility
 // ---------------------------------------------------------------------------
 
-interface SharedWatcherEntry {
-  watcher: fsSync.FSWatcher | ChokidarFSWatcher;
-  /** Session IDs currently using this watcher */
-  refCount: number;
-  /** Callbacks to invoke for each fs event, keyed by session ID */
-  listeners: Map<string, SharedWatcherListener>;
-}
-
-interface SharedWatcherListener {
-  onChange: (filePath: string) => void;
-  onAdd: (filePath: string) => void;
-  onUnlink: (filePath: string) => void;
-}
-
-/** Global registry of shared watchers, keyed by normalized workspace path. */
-const sharedWatchers = new Map<string, SharedWatcherEntry>();
-
-/** Fallback patterns used when no .gitignore exists (e.g. non-git projects). */
-const FALLBACK_IGNORE_PATTERNS = [
-  'node_modules/',
-  '.DS_Store',
-  'Thumbs.db',
-  'dist/',
-  'build/',
-  'out/',
-  'coverage/',
-  '.next/',
-  '.nuxt/',
-  '.cache/',
-  '.turbo/',
-  '.svelte-kit/',
-];
-
-async function loadGitignoreFilter(workspacePath: string): Promise<Ignore> {
-  const gitignorePath = path.join(workspacePath, '.gitignore');
-  try {
-    const content = await fs.readFile(gitignorePath, 'utf-8');
-    return ignore().add(content);
-  } catch {
-    return ignore().add(FALLBACK_IGNORE_PATTERNS);
-  }
-}
-
-async function acquireSharedWatcher(
-  workspacePath: string,
-  sessionId: string,
-  listener: SharedWatcherListener,
-): Promise<void> {
-  const key = path.resolve(workspacePath);
-  const existing = sharedWatchers.get(key);
-
-  if (existing) {
-    existing.refCount++;
-    existing.listeners.set(sessionId, listener);
-    logger.main.info('[SessionFileWatcher] Reusing shared watcher for workspace:', {
-      workspacePath: key,
-      sessionId,
-      refCount: existing.refCount,
-    });
-    return;
-  }
-
-  const ig = await loadGitignoreFilter(workspacePath);
-
-  if (supportsRecursiveWatch) {
-    // macOS / Windows: single recursive fs.watch — 1 FD for the entire tree
-    const entry: SharedWatcherEntry = {
-      watcher: null!, // set immediately below
-      refCount: 1,
-      listeners: new Map([[sessionId, listener]]),
-    };
-
-    const watcher = fsSync.watch(workspacePath, { recursive: true }, (eventType: string, filename: string | null) => {
-      if (!filename) return;
-
-      const relativePath = filename.split(path.sep).join('/');
-
-      // Filter .git directory
-      if (relativePath === '.git' || relativePath.startsWith('.git/')) return;
-
-      // Filter gitignored paths
-      if (ig.ignores(relativePath) || ig.ignores(relativePath + '/')) return;
-
-      const absolutePath = path.join(workspacePath, filename);
-
-      if (eventType === 'change') {
-        for (const l of entry.listeners.values()) l.onChange(absolutePath);
-      } else {
-        // 'rename' — could be add or delete. Use fs.access to determine.
-        fs.access(absolutePath).then(
-          () => {
-            // File exists — treat as add
-            for (const l of entry.listeners.values()) l.onAdd(absolutePath);
-          },
-          () => {
-            // File does not exist — treat as unlink
-            for (const l of entry.listeners.values()) l.onUnlink(absolutePath);
-          },
-        );
-      }
-    });
-
-    entry.watcher = watcher;
-
-    watcher.on('error', (error: NodeJS.ErrnoException) => {
-      const code = error.code;
-      if (code === 'EPERM' || code === 'EACCES' || code === 'UNKNOWN') {
-        logger.main.debug('[SessionFileWatcher] Skipping unwatchable path:', error);
-      } else {
-        logger.main.error('[SessionFileWatcher] Watcher error:', error);
-      }
-    });
-
-    sharedWatchers.set(key, entry);
-
-    logger.main.info('[SessionFileWatcher] Created shared watcher (fs.watch recursive) for workspace:', {
-      workspacePath: key,
-      sessionId,
-    });
-  } else {
-    // Linux: use chokidar (recursive fs.watch is not supported)
-    const watcher = chokidar.watch(workspacePath, {
-      ignored: (filePath: string) => {
-        const relativePath = path.relative(workspacePath, filePath);
-        if (!relativePath) return false;
-
-        if (relativePath === '.git' || relativePath.startsWith('.git' + path.sep)) {
-          return true;
-        }
-
-        // Test both as file and as directory (trailing slash) so that
-        // directory-only patterns like "node_modules/" match the directory
-        // itself, preventing chokidar from recursing into it.
-        return ig.ignores(relativePath) || ig.ignores(relativePath + '/');
-      },
-      ignoreInitial: true,
-      followSymlinks: false,
-      usePolling: false,
-      atomic: true,
-      awaitWriteFinish: {
-        stabilityThreshold: 50,
-        pollInterval: 20,
-      },
-      alwaysStat: false,
-    });
-
-    const entry: SharedWatcherEntry = {
-      watcher,
-      refCount: 1,
-      listeners: new Map([[sessionId, listener]]),
-    };
-    sharedWatchers.set(key, entry);
-
-    watcher
-      .on('change', (filePath: string) => {
-        for (const l of entry.listeners.values()) l.onChange(filePath);
-      })
-      .on('add', (filePath: string) => {
-        for (const l of entry.listeners.values()) l.onAdd(filePath);
-      })
-      .on('unlink', (filePath: string) => {
-        for (const l of entry.listeners.values()) l.onUnlink(filePath);
-      })
-      .on('error', (error: unknown) => {
-        const code = error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined;
-        if (code === 'EPERM' || code === 'EACCES' || code === 'UNKNOWN') {
-          logger.main.debug('[SessionFileWatcher] Skipping unwatchable path:', error);
-        } else {
-          logger.main.error('[SessionFileWatcher] Watcher error:', error);
-        }
-      });
-
-    logger.main.info('[SessionFileWatcher] Created shared watcher (chokidar) for workspace:', {
-      workspacePath: key,
-      sessionId,
-    });
-  }
-}
-
-async function releaseSharedWatcher(workspacePath: string, sessionId: string): Promise<void> {
-  const key = path.resolve(workspacePath);
-  const entry = sharedWatchers.get(key);
-  if (!entry) return;
-
-  entry.listeners.delete(sessionId);
-  entry.refCount--;
-
-  if (entry.refCount <= 0) {
-    sharedWatchers.delete(key);
-    if (supportsRecursiveWatch) {
-      // Native fs.FSWatcher — close() is synchronous
-      (entry.watcher as fsSync.FSWatcher).close();
-    } else {
-      // chokidar FSWatcher — close() returns a Promise
-      await (entry.watcher as ChokidarFSWatcher).close();
-    }
-    logger.main.info('[SessionFileWatcher] Closed shared watcher for workspace:', {
-      workspacePath: key,
-      lastSessionId: sessionId,
-    });
-  } else {
-    logger.main.info('[SessionFileWatcher] Released shared watcher ref:', {
-      workspacePath: key,
-      sessionId,
-      remainingRefCount: entry.refCount,
-    });
-  }
+/** Active session IDs currently attached to the shared watcher for a workspace. */
+export function getSharedWatcherSessionIds(workspacePath: string): string[] {
+  return workspaceEventBus.getSubscriberIds(workspacePath);
 }
 
 /** Visible for testing / diagnostics. */
 export function getSharedWatcherCount(): number {
-  return sharedWatchers.size;
+  return workspaceEventBus.getBusEntryCount();
 }
 
 /** Visible for testing. */
 export function getSharedWatcherRefCount(workspacePath: string): number {
-  return sharedWatchers.get(path.resolve(workspacePath))?.refCount ?? 0;
-}
-
-/** Active session IDs currently attached to the shared watcher for a workspace. */
-export function getSharedWatcherSessionIds(workspacePath: string): string[] {
-  const entry = sharedWatchers.get(path.resolve(workspacePath));
-  if (!entry) return [];
-  return [...entry.listeners.keys()];
+  return workspaceEventBus.getRefCount(workspacePath);
 }
 
 /** Reset shared watcher state. Only for tests. */
 export function resetSharedWatchers(): void {
-  sharedWatchers.clear();
+  workspaceEventBus.resetBus();
 }
 
 // ---------------------------------------------------------------------------
-// SessionFileWatcher – per-session wrapper that ref-counts into SharedFSWatcher
+// SessionFileWatcher -- per-session wrapper that subscribes to WorkspaceEventBus
 // ---------------------------------------------------------------------------
 
 export interface SessionFileWatcherEditEvent {
@@ -328,7 +103,7 @@ export class SessionFileWatcher {
     this.active = true;
     this.onFileChanged = onFileChanged ?? null;
 
-    await acquireSharedWatcher(workspacePath, sessionId, {
+    await workspaceEventBus.subscribe(workspacePath, sessionId, {
       onChange: (filePath: string) => this.handleChange(filePath),
       onAdd: (filePath: string) => this.handleAdd(filePath),
       onUnlink: (filePath: string) => this.handleUnlink(filePath),
@@ -339,7 +114,7 @@ export class SessionFileWatcher {
 
   async stop(): Promise<void> {
     if (this.workspacePath && this.sessionId) {
-      await releaseSharedWatcher(this.workspacePath, this.sessionId);
+      workspaceEventBus.unsubscribe(this.workspacePath, this.sessionId);
     }
     this.cache = null;
     this.sessionId = null;
@@ -468,14 +243,13 @@ export class SessionFileWatcher {
       });
 
       // Update cache with current content AFTER firing the event
-      // (matches handleChange pattern - keeps cache at "before" state during event processing)
       this.cache.updateSnapshot(filePath, currentContent);
     } catch (error) {
       logger.main.error('[SessionFileWatcher] Error handling file add:', error);
     }
   }
 
-  private handleUnlink(filePath: string): void {
+  private handleUnlink(_filePath: string): void {
     // Intentionally do NOT remove from cache on unlink.
     // Atomic writes (write-to-temp, rename) trigger unlink+add in quick succession.
     // Removing the cache entry here would lose the "before" state needed by handleAdd

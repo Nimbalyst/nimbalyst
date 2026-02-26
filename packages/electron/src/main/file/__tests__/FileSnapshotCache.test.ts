@@ -348,7 +348,7 @@ describe('FileSnapshotCache', () => {
       );
     });
 
-    it('should cap walkAndCache files at MAX_DIRTY_FILES for non-git repos', async () => {
+    it('should cap walkAndCache files at MAX_FULL_SCAN_FILES (500) for non-git repos', async () => {
       // Non-git repo
       mockExecFile.mockImplementation(
         (cmd: string, args: string[], opts: any, callback: Function) => {
@@ -356,8 +356,8 @@ describe('FileSnapshotCache', () => {
         }
       );
 
-      // Generate 300 files in a flat directory
-      const fileEntries = Array.from({ length: 300 }, (_, i) => ({
+      // Generate 600 files in a flat directory
+      const fileEntries = Array.from({ length: 600 }, (_, i) => ({
         name: `file${i}.ts`,
         isDirectory: () => false,
         isFile: () => true,
@@ -375,7 +375,7 @@ describe('FileSnapshotCache', () => {
       await cache.startSession(workspacePath, 'session-1');
 
       const stats = cache.getStats();
-      expect(stats.fileCount).toBe(200);
+      expect(stats.fileCount).toBe(500);
     });
   });
 });
