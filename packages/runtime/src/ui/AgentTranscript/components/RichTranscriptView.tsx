@@ -406,6 +406,80 @@ const isEditToolName = (name?: string): boolean => {
   return false;
 };
 
+const WRITE_TOOL_NAMES = new Set(['write', 'notebookedit']);
+
+const isFileModifyingTool = (name?: string): boolean => {
+  if (!name) return false;
+  const normalized = name.toLowerCase();
+  if (EDIT_TOOL_NAMES.has(normalized)) return true;
+  if (WRITE_TOOL_NAMES.has(normalized)) return true;
+  if (normalized.endsWith('__edit')) return true;
+  if (normalized.endsWith(':edit')) return true;
+  if (normalized.endsWith('__write')) return true;
+  if (normalized.endsWith(':write')) return true;
+  return false;
+};
+
+const countLines = (s: string | undefined | null): number => {
+  if (!s) return 0;
+  const lines = s.split('\n');
+  // Don't count trailing empty line from final newline
+  if (lines.length > 0 && lines[lines.length - 1] === '') return lines.length - 1;
+  return lines.length;
+};
+
+/**
+ * Compute file modification stats for a turn by scanning tool messages.
+ * Returns null if no file modifications were detected.
+ */
+const computeTurnFileStats = (
+  messages: Message[],
+  turnStartIdx: number,
+  turnEndIdx: number
+): { filesModified: number; linesAdded: number; linesRemoved: number } | null => {
+  const modifiedFiles = new Set<string>();
+  let totalAdded = 0;
+  let totalRemoved = 0;
+
+  for (let i = turnStartIdx + 1; i <= turnEndIdx; i++) {
+    const msg = messages[i];
+    if (msg.role !== 'tool' || !msg.toolCall) continue;
+
+    const toolName = msg.toolCall.name;
+    if (!isFileModifyingTool(toolName)) continue;
+    if (msg.isError) continue;
+
+    const args = msg.toolCall.arguments;
+    if (!args) continue;
+
+    const filePath = args.file_path || args.filePath || args.notebook_path || args.path;
+    if (typeof filePath === 'string') {
+      modifiedFiles.add(filePath);
+    }
+
+    const normalized = (toolName || '').toLowerCase();
+    const isEdit = EDIT_TOOL_NAMES.has(normalized) || normalized.endsWith('__edit') || normalized.endsWith(':edit');
+
+    if (isEdit) {
+      const oldStr = args.old_string as string | undefined;
+      const newStr = args.new_string as string | undefined;
+      if (oldStr != null || newStr != null) {
+        totalRemoved += countLines(oldStr);
+        totalAdded += countLines(newStr);
+      }
+    } else {
+      // Write / NotebookEdit - new content
+      const content = args.content as string | undefined;
+      if (content) {
+        totalAdded += countLines(content);
+      }
+    }
+  }
+
+  if (modifiedFiles.size === 0 && totalAdded === 0 && totalRemoved === 0) return null;
+  return { filesModified: modifiedFiles.size, linesAdded: totalAdded, linesRemoved: totalRemoved };
+};
+
 const safeParseJson = (value: string): any | null => {
   try {
     return JSON.parse(value);
@@ -1484,9 +1558,17 @@ export const RichTranscriptView = React.forwardRef<
                             const endTimestamp = codexEvents[codexEvents.length - 1].timestamp;
                             const duration = formatDuration(startTimestamp, endTimestamp);
                             if (!duration || duration === '0ms') return null;
+                            const fileStats = computeTurnFileStats(messages, startIdx, index + codexEvents.length - 1);
                             return (
                               <div className="rich-transcript-turn-elapsed text-xs text-[var(--nim-text-faint)] mt-2 ml-6">
                                 Finished in {duration}
+                                {fileStats && (
+                                  <span>
+                                    {' · '}{fileStats.filesModified} file{fileStats.filesModified !== 1 ? 's' : ''}
+                                    {fileStats.linesAdded > 0 && <span className="text-[var(--nim-success)]"> +{fileStats.linesAdded}</span>}
+                                    {fileStats.linesRemoved > 0 && <span className="text-[var(--nim-error)]"> -{fileStats.linesRemoved}</span>}
+                                  </span>
+                                )}
                               </div>
                             );
                           })()}
@@ -1744,9 +1826,17 @@ export const RichTranscriptView = React.forwardRef<
                           const endTimestamp = message.timestamp;
                           const duration = formatDuration(startTimestamp, endTimestamp);
                           if (!duration || duration === '0ms') return null;
+                          const fileStats = computeTurnFileStats(messages, startIdx, index);
                           return (
                             <div className="rich-transcript-turn-elapsed text-xs text-[var(--nim-text-faint)] mt-2 ml-6">
                               Finished in {duration}
+                              {fileStats && (
+                                <span>
+                                  {' · '}{fileStats.filesModified} file{fileStats.filesModified !== 1 ? 's' : ''}
+                                  {fileStats.linesAdded > 0 && <span className="text-[var(--nim-success)]"> +{fileStats.linesAdded}</span>}
+                                  {fileStats.linesRemoved > 0 && <span className="text-[var(--nim-error)]"> -{fileStats.linesRemoved}</span>}
+                                </span>
+                              )}
                             </div>
                           );
                         })()}
