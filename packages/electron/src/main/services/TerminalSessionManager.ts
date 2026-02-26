@@ -38,6 +38,7 @@ const pty = loadNodePty();
 import { promises as fs, existsSync } from 'fs';
 import os from 'os';
 import { ShellDetector, type ShellInfo } from './ShellDetector';
+import { getEnhancedPath } from './CLIManager';
 import {
   getTerminalInstance,
   updateTerminalInstance,
@@ -644,6 +645,7 @@ export class TerminalSessionManager {
     const spawnArgs = bootstrapConfig?.args || shell.args;
     const spawnEnv: NodeJS.ProcessEnv = {
       ...process.env,
+      PATH: getEnhancedPath(),
       TERM: 'xterm-256color',
       COLORTERM: 'truecolor',
       LANG: process.env.LANG || 'en_US.UTF-8',
