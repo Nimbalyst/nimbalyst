@@ -1,6 +1,20 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import * as path from 'path';
 import type { FileSnapshotCache } from '../FileSnapshotCache';
+import type { WorkspaceEventListener } from '../WorkspaceEventBus';
+
+// ---------------------------------------------------------------------------
+// Hoisted shared state for mocks (vi.hoisted runs before vi.mock factories)
+// ---------------------------------------------------------------------------
+
+const {
+  capturedListeners,
+  subscriberCountRef,
+  mockReadFile,
+} = vi.hoisted(() => ({
+  capturedListeners: new Map<string, WorkspaceEventListener>(),
+  subscriberCountRef: { value: 0 },
+  mockReadFile: vi.fn(),
+}));
 
 // Mock electron
 vi.mock('electron', () => ({
@@ -21,30 +35,35 @@ vi.mock('../../utils/logger', () => ({
   },
 }));
 
-// Mock chokidar - shared watcher means chokidar.watch is called once per workspace
-const mockWatcherHandlers: Record<string, Function[]> = {};
-const mockWatcher = {
-  on: vi.fn((event: string, handler: Function) => {
-    if (!mockWatcherHandlers[event]) {
-      mockWatcherHandlers[event] = [];
-    }
-    mockWatcherHandlers[event].push(handler);
-    return mockWatcher;
-  }),
-  close: vi.fn(() => Promise.resolve()),
-};
+// ---------------------------------------------------------------------------
+// Mock WorkspaceEventBus — capture the listener passed to subscribe() so we
+// can invoke it directly in tests, exactly like the old chokidar mock did.
+// ---------------------------------------------------------------------------
 
-vi.mock('chokidar', () => ({
-  default: {
-    watch: vi.fn(() => mockWatcher),
-  },
+vi.mock('../WorkspaceEventBus', () => ({
+  subscribe: vi.fn(async (_wp: string, id: string, listener: WorkspaceEventListener) => {
+    capturedListeners.set(id, listener);
+    subscriberCountRef.value++;
+  }),
+  unsubscribe: vi.fn((_wp: string, id: string) => {
+    capturedListeners.delete(id);
+    subscriberCountRef.value--;
+  }),
+  getSubscriberIds: vi.fn(() => [...capturedListeners.keys()]),
+  getBusEntryCount: vi.fn(() => (capturedListeners.size > 0 ? 1 : 0)),
+  getRefCount: vi.fn(() => subscriberCountRef.value),
+  resetBus: vi.fn(() => {
+    capturedListeners.clear();
+    subscriberCountRef.value = 0;
+  }),
 }));
 
 // Mock fs/promises
-const mockReadFile = vi.fn();
 vi.mock('fs/promises', () => ({
   readFile: (...args: any[]) => mockReadFile(...args),
 }));
+
+import * as bus from '../WorkspaceEventBus';
 
 import {
   SessionFileWatcher,
@@ -55,13 +74,6 @@ import {
 
 function flush(): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, 0));
-}
-
-async function getChokidarIgnoredFn(): Promise<(filePath: string) => boolean> {
-  const chokidar = (await import('chokidar')).default;
-  const watchSpy = chokidar.watch as any;
-  const lastCall = watchSpy.mock.calls[watchSpy.mock.calls.length - 1];
-  return lastCall[1].ignored;
 }
 
 function createMockCache(): FileSnapshotCache {
@@ -82,8 +94,23 @@ function setMockFileContent(filePath: string, content: string | Error): void {
   mockFileContents[filePath] = content;
 }
 
-function setMockGitignore(workspacePath: string, content: string): void {
-  mockFileContents[path.join(workspacePath, '.gitignore')] = content;
+/** Helper to fire a change event for all captured listeners */
+function fireChange(filePath: string): void {
+  for (const listener of capturedListeners.values()) {
+    listener.onChange(filePath);
+  }
+}
+
+function fireAdd(filePath: string): void {
+  for (const listener of capturedListeners.values()) {
+    listener.onAdd(filePath);
+  }
+}
+
+function fireUnlink(filePath: string): void {
+  for (const listener of capturedListeners.values()) {
+    listener.onUnlink(filePath);
+  }
 }
 
 describe('SessionFileWatcher', () => {
@@ -92,10 +119,8 @@ describe('SessionFileWatcher', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    for (const key of Object.keys(mockWatcherHandlers)) {
-      delete mockWatcherHandlers[key];
-    }
-    resetSharedWatchers();
+    capturedListeners.clear();
+    subscriberCountRef.value = 0;
 
     mockFileContents = {};
     mockReadFile.mockImplementation((filePath: string) => {
@@ -131,28 +156,22 @@ describe('SessionFileWatcher', () => {
   });
 
   describe('shared watcher behavior', () => {
-    it('shares one chokidar watcher across sessions for the same workspace', async () => {
-      const chokidar = (await import('chokidar')).default;
-      const watchSpy = chokidar.watch as any;
-      watchSpy.mockClear();
-
+    it('shares one bus entry across sessions for the same workspace', async () => {
       const watcher1 = new SessionFileWatcher();
       const watcher2 = new SessionFileWatcher();
 
       await watcher1.start(workspacePath, 'session-1', createMockCache());
       await watcher2.start(workspacePath, 'session-2', createMockCache());
 
-      expect(watchSpy).toHaveBeenCalledTimes(1);
+      expect(bus.subscribe).toHaveBeenCalledTimes(2);
       expect(getSharedWatcherRefCount(workspacePath)).toBe(2);
       expect(getSharedWatcherSessionIds(workspacePath).sort()).toEqual(['session-1', 'session-2']);
 
       await watcher1.stop();
-      expect(getSharedWatcherRefCount(workspacePath)).toBe(1);
-      expect(mockWatcher.close).not.toHaveBeenCalled();
+      expect(bus.unsubscribe).toHaveBeenCalledTimes(1);
 
       await watcher2.stop();
-      expect(getSharedWatcherRefCount(workspacePath)).toBe(0);
-      expect(mockWatcher.close).toHaveBeenCalledTimes(1);
+      expect(bus.unsubscribe).toHaveBeenCalledTimes(2);
     });
 
     it('dispatches change events to all session listeners', async () => {
@@ -171,9 +190,8 @@ describe('SessionFileWatcher', () => {
       await watcher1.start(workspacePath, 'session-1', cache1, cb1);
       await watcher2.start(workspacePath, 'session-2', cache2, cb2);
 
-      const changeHandler = mockWatcherHandlers.change?.[0];
-      expect(changeHandler).toBeDefined();
-      changeHandler('/test/workspace/src/file.ts');
+      // Fire change through the bus listener directly
+      fireChange('/test/workspace/src/file.ts');
       await flush();
 
       expect(cb1).toHaveBeenCalled();
@@ -194,9 +212,7 @@ describe('SessionFileWatcher', () => {
       const watcher = new SessionFileWatcher();
       await watcher.start(workspacePath, sessionId, cache, callback);
 
-      const changeHandler = mockWatcherHandlers.change?.[0];
-      expect(changeHandler).toBeDefined();
-      changeHandler('/test/workspace/src/file.ts');
+      fireChange('/test/workspace/src/file.ts');
       await flush();
 
       expect(callback).toHaveBeenCalledWith(
@@ -221,8 +237,7 @@ describe('SessionFileWatcher', () => {
       const watcher = new SessionFileWatcher();
       await watcher.start(workspacePath, sessionId, cache, callback);
 
-      const changeHandler = mockWatcherHandlers.change?.[0];
-      changeHandler('/test/workspace/src/file.ts');
+      fireChange('/test/workspace/src/file.ts');
       await flush();
 
       expect(callback).not.toHaveBeenCalled();
@@ -240,8 +255,7 @@ describe('SessionFileWatcher', () => {
       const watcher = new SessionFileWatcher();
       await watcher.start(workspacePath, sessionId, cache);
 
-      const changeHandler = mockWatcherHandlers.change?.[0];
-      changeHandler('/test/workspace/src/file.ts');
+      fireChange('/test/workspace/src/file.ts');
       await flush();
 
       expect(logger.main.debug).toHaveBeenCalledWith(
@@ -264,8 +278,7 @@ describe('SessionFileWatcher', () => {
 
       await watcher.start(workspacePath, sessionId, cache, callback);
 
-      const changeHandler = mockWatcherHandlers.change?.[0];
-      await changeHandler('/test/workspace/image.png');
+      fireChange('/test/workspace/image.png');
 
       expect(cache.getBeforeState).not.toHaveBeenCalled();
       expect(callback).not.toHaveBeenCalled();
@@ -284,9 +297,7 @@ describe('SessionFileWatcher', () => {
       const watcher = new SessionFileWatcher();
       await watcher.start(workspacePath, sessionId, cache, callback);
 
-      const addHandler = mockWatcherHandlers.add?.[0];
-      expect(addHandler).toBeDefined();
-      addHandler('/test/workspace/src/new-file.ts');
+      fireAdd('/test/workspace/src/new-file.ts');
       await flush();
 
       expect(cache.getBeforeState).toHaveBeenCalledWith('/test/workspace/src/new-file.ts');
@@ -312,9 +323,7 @@ describe('SessionFileWatcher', () => {
       const watcher = new SessionFileWatcher();
       await watcher.start(workspacePath, sessionId, cache, callback);
 
-      const addHandler = mockWatcherHandlers.add?.[0];
-      expect(addHandler).toBeDefined();
-      addHandler('/test/workspace/src/file.ts');
+      fireAdd('/test/workspace/src/file.ts');
       await flush();
 
       expect(callback).toHaveBeenCalledWith(
@@ -339,8 +348,7 @@ describe('SessionFileWatcher', () => {
       const watcher = new SessionFileWatcher();
       await watcher.start(workspacePath, sessionId, cache, callback);
 
-      const addHandler = mockWatcherHandlers.add?.[0];
-      addHandler('/test/workspace/src/file.ts');
+      fireAdd('/test/workspace/src/file.ts');
       await flush();
 
       expect(callback).not.toHaveBeenCalled();
@@ -355,8 +363,7 @@ describe('SessionFileWatcher', () => {
 
       await watcher.start(workspacePath, sessionId, cache, callback);
 
-      const addHandler = mockWatcherHandlers.add?.[0];
-      await addHandler('/test/workspace/file.jpg');
+      fireAdd('/test/workspace/file.jpg');
 
       expect(callback).not.toHaveBeenCalled();
 
@@ -371,9 +378,7 @@ describe('SessionFileWatcher', () => {
 
       await watcher.start(workspacePath, sessionId, cache);
 
-      const unlinkHandler = mockWatcherHandlers.unlink?.[0];
-      expect(unlinkHandler).toBeDefined();
-      unlinkHandler('/test/workspace/src/deleted.ts');
+      fireUnlink('/test/workspace/src/deleted.ts');
 
       // Cache entry is intentionally preserved so that subsequent
       // atomic write add events can provide correct before-content
@@ -390,58 +395,20 @@ describe('SessionFileWatcher', () => {
       const watcher = new SessionFileWatcher();
 
       await watcher.start(workspacePath, sessionId, cache, callback);
-      const changeHandler = mockWatcherHandlers.change?.[0];
-      const addHandler = mockWatcherHandlers.add?.[0];
+
+      // Capture the listener before stop removes it from the bus
+      const listener = capturedListeners.get(sessionId);
 
       await watcher.stop();
 
-      if (changeHandler) changeHandler('/test/workspace/src/file.ts');
-      if (addHandler) addHandler('/test/workspace/src/new.ts');
+      // Events fired after stop should be ignored by the watcher
+      if (listener) {
+        listener.onChange('/test/workspace/src/file.ts');
+        listener.onAdd('/test/workspace/src/new.ts');
+      }
       await flush();
 
       expect(callback).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('gitignore filtering', () => {
-    it('always ignores .git directory', async () => {
-      const watcher = new SessionFileWatcher();
-      await watcher.start(workspacePath, sessionId, createMockCache());
-
-      const ignoredFn = await getChokidarIgnoredFn();
-      expect(ignoredFn(path.join(workspacePath, '.git'))).toBe(true);
-      expect(ignoredFn(path.join(workspacePath, '.git', 'objects', 'abc'))).toBe(true);
-      expect(ignoredFn(path.join(workspacePath, 'src', 'file.ts'))).toBe(false);
-
-      await watcher.stop();
-    });
-
-    it('uses .gitignore patterns when present', async () => {
-      setMockGitignore(workspacePath, 'node_modules/\ndist/\n*.log\n');
-
-      const watcher = new SessionFileWatcher();
-      await watcher.start(workspacePath, sessionId, createMockCache());
-
-      const ignoredFn = await getChokidarIgnoredFn();
-      expect(ignoredFn(path.join(workspacePath, 'node_modules'))).toBe(true);
-      expect(ignoredFn(path.join(workspacePath, 'dist', 'bundle.js'))).toBe(true);
-      expect(ignoredFn(path.join(workspacePath, 'debug.log'))).toBe(true);
-      expect(ignoredFn(path.join(workspacePath, 'src', 'file.ts'))).toBe(false);
-
-      await watcher.stop();
-    });
-
-    it('uses fallback patterns when .gitignore is missing', async () => {
-      const watcher = new SessionFileWatcher();
-      await watcher.start(workspacePath, sessionId, createMockCache());
-
-      const ignoredFn = await getChokidarIgnoredFn();
-      expect(ignoredFn(path.join(workspacePath, 'node_modules'))).toBe(true);
-      expect(ignoredFn(path.join(workspacePath, 'dist', 'bundle.js'))).toBe(true);
-      expect(ignoredFn(path.join(workspacePath, '.git'))).toBe(true);
-      expect(ignoredFn(path.join(workspacePath, 'src', 'file.ts'))).toBe(false);
-
-      await watcher.stop();
     });
   });
 });

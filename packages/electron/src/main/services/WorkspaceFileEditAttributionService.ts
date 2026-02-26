@@ -3,7 +3,7 @@ import { createHash } from 'crypto';
 import { BrowserWindow } from 'electron';
 import { SessionFilesRepository } from '@nimbalyst/runtime';
 import { historyManager } from '../HistoryManager';
-import { getSharedWatcherSessionIds } from '../file/SessionFileWatcher';
+import { getSubscriberIds } from '../file/WorkspaceEventBus';
 import { logger } from '../utils/logger';
 import { toolCallMatcher } from './ToolCallMatcher';
 
@@ -188,7 +188,7 @@ class WorkspaceFileEditAttributionServiceImpl {
 
   private async processEvent(event: WorkspaceFileEditEvent, state: WorkspaceQueueState): Promise<void> {
     try {
-      const candidateSessionIds = getSharedWatcherSessionIds(event.workspacePath);
+      const candidateSessionIds = getSubscriberIds(event.workspacePath);
       if (candidateSessionIds.length === 0) {
         logger.main.debug('[WorkspaceFileEditAttributionService] No active sessions for event:', {
           workspacePath: event.workspacePath,

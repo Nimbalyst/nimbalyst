@@ -5,7 +5,7 @@ import { basename, join, dirname, extname } from 'path';
 import { windowStates, savingWindows, recentlyDeletedFiles, findWindowByFilePath, createWindow, getWindowId, windows, documentServices } from '../window/WindowManager';
 import { loadFileIntoWindow, saveFile } from '../file/FileOperations';
 import { openFileWithDialog, openFile } from '../file/FileOpener';
-import { startFileWatcher, stopFileWatcher, chokidarFileWatcher } from '../file/FileWatcher';
+import { startFileWatcher, stopFileWatcher } from '../file/FileWatcher';
 import { AUTOSAVE_DELAY } from '../utils/constants';
 import { addWorkspaceRecentFile } from '../utils/store';
 import { logger } from '../utils/logger';
@@ -601,9 +601,7 @@ export function registerFileHandlers() {
             return { success: false };
         }
 
-        // console.log('[STOP_WATCH] Stopping file watcher for:', filePath);
-        // Use the ChokidarFileWatcher's stopFile method to stop watching a specific file
-        chokidarFileWatcher.stopFile(windowId, filePath);
+        // No-op: WorkspaceEventBus watches the entire tree, no per-file cleanup needed
         return { success: true };
     });
 }
