@@ -718,7 +718,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
   }
 
   // Queue for operations that need to wait for index connection
-  type PendingOperation = { type: 'sessions'; data: SessionIndexData[]; options?: { syncMessages?: boolean } } | { type: 'projects'; data: ProjectIndexEntry[] };
+  type PendingOperation = { type: 'sessions'; data: SessionIndexData[]; options?: { syncMessages?: boolean; messageSyncRequests?: Array<{ sessionId: string; sinceTimestamp: number }>; getMessagesForSync?: (requests: Array<{ sessionId: string; sinceTimestamp: number }>) => Promise<Map<string, any[]>> } } | { type: 'projects'; data: ProjectIndexEntry[] };
   const pendingOperations: PendingOperation[] = [];
 
   // Queue for partial metadata updates waiting for the session to be cached
@@ -1784,20 +1784,61 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
     });
   }
 
-  // Batch sync session messages with delay to prevent server overload (internal function)
-  async function doBatchSyncSessionMessages(sessionsData: SessionIndexData[]): Promise<void> {
-    const sessionsWithMessages = sessionsData.filter(s => s.messages && s.messages.length > 0);
+  // Batch sync session messages with delay to prevent server overload (internal function).
+  // When messageSyncRequests + getMessagesForSync are provided, messages are loaded lazily
+  // per batch instead of pre-loaded, so PGLite isn't blocked for 30+ seconds on bulk syncs.
+  async function doBatchSyncSessionMessages(
+    sessionsData: SessionIndexData[],
+    messageSyncRequests?: Array<{ sessionId: string; sinceTimestamp: number }>,
+    getMessagesForSync?: (requests: Array<{ sessionId: string; sinceTimestamp: number }>) => Promise<Map<string, any[]>>,
+  ): Promise<void> {
     const batchSize = 3;
     const delayMs = 1000;
 
-    // console.log('[CollabV3] Batch syncing', sessionsWithMessages.length, 'sessions in batches of', batchSize);
+    // Lazy loading path: load messages per batch from the database
+    if (messageSyncRequests && getMessagesForSync) {
+      const requestMap = new Map(messageSyncRequests.map(r => [r.sessionId, r]));
+      const sessionMap = new Map(sessionsData.map(s => [s.id, s]));
+      const sessionIds = messageSyncRequests.map(r => r.sessionId);
+
+      console.log('[CollabV3] Lazy batch syncing messages for', sessionIds.length, 'sessions in batches of', batchSize);
+
+      for (let i = 0; i < sessionIds.length; i += batchSize) {
+        const batchIds = sessionIds.slice(i, i + batchSize);
+        const batchRequests = batchIds.map(id => requestMap.get(id)!);
+
+        // Load messages for just this batch
+        const messagesBySession = await getMessagesForSync(batchRequests);
+
+        // Sync each session's messages
+        await Promise.all(batchIds.map(sessionId => {
+          const msgs = messagesBySession.get(sessionId);
+          const session = sessionMap.get(sessionId);
+          if (!msgs || msgs.length === 0 || !session) return Promise.resolve();
+          return syncSessionMessages(sessionId, msgs, {
+            title: session.title,
+            provider: session.provider,
+            model: session.model,
+            mode: session.mode,
+          });
+        }));
+
+        // Delay before next batch
+        if (i + batchSize < sessionIds.length) {
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+        }
+      }
+
+      console.log('[CollabV3] Lazy batch sync complete');
+      return;
+    }
+
+    // Legacy path: messages already pre-loaded on session objects
+    const sessionsWithMessages = sessionsData.filter(s => s.messages && s.messages.length > 0);
 
     for (let i = 0; i < sessionsWithMessages.length; i += batchSize) {
       const batch = sessionsWithMessages.slice(i, i + batchSize);
 
-      // console.log(`[CollabV3] Syncing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(sessionsWithMessages.length / batchSize)} (${batch.length} sessions)`);
-
-      // Sync batch in parallel
       await Promise.all(batch.map(session =>
         syncSessionMessages(session.id, session.messages!, {
           title: session.title,
@@ -1807,17 +1848,18 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
         })
       ));
 
-      // Delay before next batch
       if (i + batchSize < sessionsWithMessages.length) {
         await new Promise(resolve => setTimeout(resolve, delayMs));
       }
     }
-
-    // console.log('[CollabV3] Batch sync complete');
   }
 
   // Helper function to actually sync sessions to index (requires connection)
-  async function doSyncSessionsToIndex(sessionsData: SessionIndexData[], options?: { syncMessages?: boolean }): Promise<void> {
+  async function doSyncSessionsToIndex(sessionsData: SessionIndexData[], options?: {
+    syncMessages?: boolean;
+    messageSyncRequests?: Array<{ sessionId: string; sinceTimestamp: number }>;
+    getMessagesForSync?: (requests: Array<{ sessionId: string; sinceTimestamp: number }>) => Promise<Map<string, any[]>>;
+  }): Promise<void> {
     if (!indexWs || !indexConnected) {
       console.error('[CollabV3] doSyncSessionsToIndex called but not connected!');
       return;
@@ -1917,8 +1959,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
 
     // Sync messages if requested
     if (options?.syncMessages === true) {
-      // console.log('[CollabV3] Batching message sync for', sessionsData.length, 'sessions');
-      doBatchSyncSessionMessages(sessionsData);
+      doBatchSyncSessionMessages(sessionsData, options.messageSyncRequests, options.getMessagesForSync);
     }
   }
 
@@ -2327,7 +2368,11 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       }
     },
 
-    syncSessionsToIndex(sessionsData: SessionIndexData[], options?: { syncMessages?: boolean }): void {
+    syncSessionsToIndex(sessionsData: SessionIndexData[], options?: {
+      syncMessages?: boolean;
+      messageSyncRequests?: Array<{ sessionId: string; sinceTimestamp: number }>;
+      getMessagesForSync?: (requests: Array<{ sessionId: string; sinceTimestamp: number }>) => Promise<Map<string, any[]>>;
+    }): void {
       if (!indexWs || !indexConnected) {
         // Queue the operation to run when connection is established
         console.log('[CollabV3] Index not connected yet, queueing sync of', sessionsData.length, 'sessions');

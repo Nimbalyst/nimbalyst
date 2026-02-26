@@ -270,10 +270,10 @@ export default {
           log.warn('Auth failed. auth:', auth, 'parsed.userId:', parsed.userId);
           return new Response('Unauthorized', { status: 401 });
         }
-        if (auth.orgId !== parsed.orgId) {
-          log.warn('Org mismatch. Room orgId:', parsed.orgId, 'JWT orgId:', auth.orgId);
-          return new Response('Unauthorized: org mismatch', { status: 401 });
-        }
+        // User-scoped rooms (session, index, projects) do NOT enforce orgId match.
+        // The userId check above is sufficient -- these rooms hold the user's own data.
+        // This allows session sync to always use the personal org's room IDs even when
+        // the JWT is scoped to a team org (e.g., after a Stytch session exchange).
       }
       log.debug('Auth passed, forwarding to DO');
 

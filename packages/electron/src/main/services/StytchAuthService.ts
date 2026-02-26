@@ -62,8 +62,11 @@ interface StytchAuthState {
   session: StytchSession | null;
   sessionToken: string | null;
   sessionJwt: string | null;
-  /** Organization ID from B2B auth. */
+  /** Organization ID from B2B auth (may change on session exchange). */
   orgId: string | null;
+  /** Personal org ID -- set once on initial auth, never overwritten by session exchanges.
+   *  Used for session sync room IDs so they stay stable across org switches. */
+  personalOrgId: string | null;
 }
 
 interface StoredStytchCredentials {
@@ -72,8 +75,10 @@ interface StoredStytchCredentials {
   userId: string;
   email?: string;
   expiresAt: number;
-  /** Organization ID from B2B auth */
+  /** Organization ID from B2B auth (may change on session exchange) */
   orgId?: string;
+  /** Personal org ID -- set once on initial auth, stable across session exchanges */
+  personalOrgId?: string;
 }
 
 
@@ -95,6 +100,7 @@ let authState: StytchAuthState = {
   sessionToken: null,
   sessionJwt: null,
   orgId: null,
+  personalOrgId: null,
 };
 
 let stytchConfig: StytchConfig | null = null;
@@ -235,10 +241,21 @@ export function initializeStytchAuth(config: StytchConfig): void {
       sessionToken: savedCredentials.sessionToken,
       sessionJwt: hasValidJwt ? savedCredentials.sessionJwt : null,
       orgId: savedCredentials.orgId,
+      personalOrgId: savedCredentials.personalOrgId || null,
     });
+    // One-time migration: if personalOrgId is missing (pre-existing creds from before
+    // this field was added), persist the current orgId as personalOrgId.
+    // At the time those creds were saved, the orgId WAS the personal org.
+    if (!savedCredentials.personalOrgId && savedCredentials.orgId) {
+      savedCredentials.personalOrgId = savedCredentials.orgId;
+      authState.personalOrgId = savedCredentials.orgId;
+      saveStytchCredentials(savedCredentials);
+      logger.main.info('[StytchAuthService] Migrated orgId to personalOrgId:', savedCredentials.orgId);
+    }
     logger.main.info('[StytchAuthService] Restored session for user:', savedCredentials.userId, savedCredentials.email, {
       hasValidJwt,
       orgId: savedCredentials.orgId,
+      personalOrgId: authState.personalOrgId,
     });
 
     // If JWT is missing or invalid, try to refresh the session
@@ -291,6 +308,10 @@ export async function handleAuthCallback(params: {
     logger.main.warn('[StytchAuthService] Auth callback received invalid JWT format');
   }
 
+  // On initial auth, the orgId is the user's personal org.
+  // Preserve any existing personalOrgId (in case of re-auth within same session).
+  const personalOrgId = authState.personalOrgId || orgId || null;
+
   // Update auth state
   updateAuthState({
     isAuthenticated: true,
@@ -304,6 +325,7 @@ export async function handleAuthCallback(params: {
     sessionToken,
     sessionJwt: validatedJwt,
     orgId: orgId || null,
+    personalOrgId,
   });
 
   // Save credentials for persistence
@@ -314,6 +336,7 @@ export async function handleAuthCallback(params: {
     email: email || '',
     expiresAt: expiresAtMs,
     orgId,
+    personalOrgId: personalOrgId || undefined,
   });
 
   // Bootstrap sync config if it doesn't exist yet.
@@ -378,10 +401,20 @@ export function getUserEmail(): string | null {
 }
 
 /**
- * Get the current organization ID.
+ * Get the current organization ID (may change on session exchange to team orgs).
  */
 export function getOrgId(): string | null {
   return authState.orgId;
+}
+
+/**
+ * Get the personal organization ID (stable across session exchanges).
+ * Set once during initial auth, never overwritten by team session exchanges.
+ * Used for session sync room IDs so they stay stable regardless of which org
+ * the JWT is currently scoped to.
+ */
+export function getPersonalOrgId(): string | null {
+  return authState.personalOrgId;
 }
 
 /**
@@ -530,6 +563,7 @@ export async function signOut(): Promise<void> {
     sessionToken: null,
     sessionJwt: null,
     orgId: null,
+    personalOrgId: null,
   });
 
   logger.main.info('[StytchAuthService] User signed out');
@@ -660,6 +694,9 @@ export async function refreshSession(serverUrl?: string): Promise<boolean> {
     }
 
     const refreshedOrgId = data.org_id || null;
+    // personalOrgId is NEVER overwritten by refresh -- it's the stable personal org
+    // set during initial auth or migrated on restore.
+    const personalOrgId = authState.personalOrgId;
     updateAuthState({
       isAuthenticated: true,
       user: data.user_id ? {
@@ -671,6 +708,7 @@ export async function refreshSession(serverUrl?: string): Promise<boolean> {
       sessionToken: data.session_token,
       sessionJwt: data.session_jwt,
       orgId: refreshedOrgId,
+      personalOrgId,
     });
 
     // Save updated credentials
@@ -681,6 +719,7 @@ export async function refreshSession(serverUrl?: string): Promise<boolean> {
       email: data.email || creds.email,
       expiresAt: expiresAtMs,
       orgId: refreshedOrgId || undefined,
+      personalOrgId: personalOrgId || undefined,
     });
 
     logger.main.info('[StytchAuthService] Session refreshed successfully');

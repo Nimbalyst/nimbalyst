@@ -43,11 +43,24 @@ CollabV3 provides:
 
 ### Room ID Format
 
-- Session rooms: `user:{userId}:session:{sessionId}` - Routes to SessionRoom DO
-- Index rooms: `user:{userId}:index` - Routes to IndexRoom DO
-- Projects rooms: `user:{userId}:projects` - Also routes to IndexRoom DO (alias)
+All room IDs are prefixed with `org:{orgId}:` for namespace isolation.
+
+**User-scoped rooms** (use `personalOrgId` -- stable across team session exchanges):
+- Session rooms: `org:{orgId}:user:{userId}:session:{sessionId}` - Routes to SessionRoom DO
+- Index rooms: `org:{orgId}:user:{userId}:index` - Routes to IndexRoom DO
+- Projects rooms: `org:{orgId}:user:{userId}:projects` - Also routes to IndexRoom DO (alias)
+
+**Org-scoped rooms** (use current team `orgId` from JWT):
+- Document rooms: `org:{orgId}:doc:{documentId}` - Routes to DocumentRoom DO
+- Tracker rooms: `org:{orgId}:tracker:{projectId}` - Routes to TrackerRoom DO
+- Team rooms: `org:{orgId}:team` - Routes to TeamRoom DO
 
 Note: The "projects" room ID is an alias that routes to the same IndexRoom instance as the "index" room. The IndexRoom manages both the session index and project data.
+
+### Authorization Model
+
+- **User-scoped rooms**: Server validates `auth.userId === parsed.userId` only. The orgId in the room ID is for namespacing, not authorization. This allows session sync to use the personal org's room IDs even when the JWT is scoped to a team org.
+- **Org-scoped rooms**: Server validates both `auth.userId` membership and `auth.orgId === parsed.orgId`. The JWT must be scoped to the same org as the room.
 
 ## Development
 

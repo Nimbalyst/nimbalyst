@@ -100,7 +100,15 @@ export interface SyncProvider {
   pushChange(sessionId: string, change: SessionChange): void;
 
   /** Bulk update the sessions index with existing sessions */
-  syncSessionsToIndex?(sessions: SessionIndexData[], options?: { syncMessages?: boolean }): void;
+  syncSessionsToIndex?(sessions: SessionIndexData[], options?: {
+    syncMessages?: boolean;
+    /** Per-session sinceTimestamp for lazy message loading. Provider loads messages
+     *  in small batches using getMessagesForSync instead of pre-loading all at once. */
+    messageSyncRequests?: Array<{ sessionId: string; sinceTimestamp: number }>;
+    /** Callback to load messages for a batch of sessions. Called lazily by the provider
+     *  so PGLite isn't blocked loading all messages upfront. */
+    getMessagesForSync?: (requests: Array<{ sessionId: string; sinceTimestamp: number }>) => Promise<Map<string, any[]>>;
+  }): void;
 
   /** Sync projects to the ProjectsIndex (tells mobile which projects exist and are enabled) */
   syncProjectsToIndex?(projects: ProjectIndexEntry[]): void;

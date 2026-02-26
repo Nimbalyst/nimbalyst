@@ -19,7 +19,7 @@ import * as syncModule from '@nimbalyst/runtime/sync';
 import { getSessionSyncConfig, type SessionSyncConfig } from '../utils/store';
 import { logger } from '../utils/logger';
 import { getCredentials } from './CredentialService';
-import { getStytchUserId, isAuthenticated, getOrgId } from './StytchAuthService';
+import { getStytchUserId, isAuthenticated, getPersonalOrgId } from './StytchAuthService';
 import { app } from 'electron';
 import * as os from 'os';
 
@@ -358,9 +358,18 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
     let lastRefreshTime = 0;
     const MIN_REFRESH_INTERVAL = 60000; // 1 minute
 
+    // Use personalOrgId for session sync room IDs -- this stays stable even when
+    // the JWT is scoped to a team org (after a Stytch session exchange).
+    // The server relaxes the orgId check for user-scoped rooms (session/index).
+    const personalOrgId = getPersonalOrgId();
+    if (!personalOrgId) {
+      logger.main.warn('[SyncManager] No personal org ID available - cannot initialize sync');
+      return baseStore;
+    }
+
     const provider = createCollabV3Sync({
       serverUrl,
-      orgId: getOrgId() || '',
+      orgId: personalOrgId,
       getJwt: async () => {
         const { refreshSession: doRefresh, getSessionJwt: getJwt } = await import('./StytchAuthService');
 
@@ -525,32 +534,25 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
         if (sessionsNeedingIndexUpdate.length === 0 && sessionsNeedingMessageSync.length === 0) {
           logger.main.info('[SyncManager] All sessions up to date, no sync needed');
         } else {
-          // For sessions needing message sync, load ONLY the messages the server doesn't have (delta sync)
-          // Uses a single batch query instead of N+1 individual queries
-          if (sessionsNeedingMessageSync.length > 0) {
-            const { getSessionMessagesForSyncBatch } = await import('./PGLiteSessionStore');
+          // Build per-session sinceTimestamp requests for lazy message loading.
+          // Messages are NOT loaded here -- the provider loads them in small batches
+          // to avoid blocking PGLite's single-threaded worker for 30+ seconds.
+          const messageSyncRequests = sessionsNeedingMessageSync.length > 0
+            ? sessionsNeedingIndexUpdate
+                .filter(s => sessionsNeedingMessageSync.includes(s.id))
+                .map(session => {
+                  const serverSession = serverSessionMap.get(session.id);
+                  return { sessionId: session.id, sinceTimestamp: serverSession?.lastMessageAt || 0 };
+                })
+            : undefined;
 
-            // Build batch request with per-session sinceTimestamp
-            const batchRequests = sessionsNeedingIndexUpdate
-              .filter(s => sessionsNeedingMessageSync.includes(s.id))
-              .map(session => {
-                const serverSession = serverSessionMap.get(session.id);
-                return { sessionId: session.id, sinceTimestamp: serverSession?.lastMessageAt || 0 };
-              });
+          const { getSessionMessagesForSyncBatch } = await import('./PGLiteSessionStore');
 
-            const messagesBySession = await getSessionMessagesForSyncBatch(batchRequests);
-
-            for (const session of sessionsNeedingIndexUpdate) {
-              const msgs = messagesBySession.get(session.id);
-              if (msgs) {
-                session.messages = msgs;
-              }
-            }
-          }
-
-          // logger.main.info(`[SyncManager] Syncing ${sessionsNeedingIndexUpdate.length} sessions (${sessionsNeedingMessageSync.length} with messages)`);
+          logger.main.info(`[SyncManager] Syncing ${sessionsNeedingIndexUpdate.length} sessions (${sessionsNeedingMessageSync.length} need message sync, messages will load lazily)`);
           provider.syncSessionsToIndex(sessionsNeedingIndexUpdate, {
             syncMessages: sessionsNeedingMessageSync.length > 0,
+            messageSyncRequests,
+            getMessagesForSync: getSessionMessagesForSyncBatch,
           });
         }
         // Clear stale isExecuting flags: on startup, no sessions are running yet.
@@ -828,31 +830,22 @@ export async function triggerIncrementalSync(): Promise<void> {
     if (sessionsNeedingIndexUpdate.length === 0 && sessionsNeedingMessageSync.length === 0) {
       logger.main.info('[SyncManager] Triggered sync: all sessions up to date');
     } else {
-      if (sessionsNeedingMessageSync.length > 0) {
-        const { getSessionMessagesForSyncBatch } = await import('./PGLiteSessionStore');
+      const messageSyncRequests = sessionsNeedingMessageSync.length > 0
+        ? sessionsNeedingIndexUpdate
+            .filter(s => sessionsNeedingMessageSync.includes(s.id))
+            .map(session => {
+              const serverSession = serverSessionMap.get(session.id);
+              return { sessionId: session.id, sinceTimestamp: serverSession?.lastMessageAt || 0 };
+            })
+        : undefined;
 
-        // Build batch request with per-session sinceTimestamp
-        const batchRequests = sessionsNeedingIndexUpdate
-          .filter(s => sessionsNeedingMessageSync.includes(s.id))
-          .map(session => {
-            const serverSession = serverSessionMap.get(session.id);
-            return { sessionId: session.id, sinceTimestamp: serverSession?.lastMessageAt || 0 };
-          });
+      const { getSessionMessagesForSyncBatch } = await import('./PGLiteSessionStore');
 
-        const messagesBySession = await getSessionMessagesForSyncBatch(batchRequests);
-
-        for (const session of sessionsNeedingIndexUpdate) {
-          const msgs = messagesBySession.get(session.id);
-          if (msgs) {
-            session.messages = msgs;
-            logger.main.info(`[SyncManager] Session ${session.id}: syncing ${msgs.length} new messages`);
-          }
-        }
-      }
-
-      logger.main.info(`[SyncManager] Syncing ${sessionsNeedingIndexUpdate.length} sessions`);
+      logger.main.info(`[SyncManager] Syncing ${sessionsNeedingIndexUpdate.length} sessions (${sessionsNeedingMessageSync.length} need message sync, messages will load lazily)`);
       provider.syncSessionsToIndex(sessionsNeedingIndexUpdate, {
         syncMessages: sessionsNeedingMessageSync.length > 0,
+        messageSyncRequests,
+        getMessagesForSync: getSessionMessagesForSyncBatch,
       });
     }
 
