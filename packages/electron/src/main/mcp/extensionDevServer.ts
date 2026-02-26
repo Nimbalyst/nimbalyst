@@ -30,6 +30,7 @@ import * as fs from "fs";
 import { ExtensionLogService } from "../services/ExtensionLogService";
 import { database } from "../database/initialize";
 import { findWindowByWorkspace } from "../window/WindowManager";
+import { getRestartSignalPath } from "../utils/appPaths";
 
 // ============================================================================
 // File Utilities
@@ -1362,8 +1363,7 @@ function createExtensionDevMcpServer(
           // In dev mode, write a restart signal file and quit.
           // The outer dev-loop.sh script watches for this file and restarts npm run dev.
           // This avoids complex process killing and ensures clean restarts.
-          const workingDir = app.getAppPath();
-          const restartSignalPath = path.join(workingDir, ".restart-requested");
+          const restartSignalPath = getRestartSignalPath();
 
           console.log(
             `[Extension Dev MCP] Dev mode restart: writing signal to ${restartSignalPath}`

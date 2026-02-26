@@ -45,3 +45,18 @@ export function getPreloadPath(): string {
   // appPath is inside an outDir (e.g. out2/main) -- preload is a sibling of main
   return join(appPath, '../preload/index.js');
 }
+
+/**
+ * Get the path for the restart signal file used by dev-loop.sh.
+ * Uses a per-instance suffix when NIMBALYST_USER_DATA_DIR is set
+ * so multiple dev-loop instances don't cross-talk.
+ */
+export function getRestartSignalPath(): string {
+  const root = getPackageRoot();
+  const customDir = process.env.NIMBALYST_USER_DATA_DIR;
+  if (customDir) {
+    const suffix = customDir.split(/[/\\]/).pop() || '';
+    return join(root, `.restart-requested-${suffix}`);
+  }
+  return join(root, '.restart-requested');
+}
