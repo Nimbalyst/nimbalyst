@@ -571,6 +571,18 @@ function parseCommandLineArgs() {
 app.whenReady().then(async () => {
     checkpoint('app-ready');
 
+    // Raise the file descriptor soft limit from the macOS default of 256.
+    // Nimbalyst uses recursive fs.watch, chokidar per open tab, terminal PTYs,
+    // and database connections — 256 FDs is far too low and causes silent
+    // watcher failures (EMFILE) on machines that haven't manually raised it.
+    if (process.platform === 'darwin' || process.platform === 'linux') {
+        try {
+            process.setFdLimit(10240);
+        } catch {
+            // setFdLimit may fail if the hard limit is lower — not fatal
+        }
+    }
+
     // Show splash screen immediately so the user sees something while we initialize
     // Skip splash in Playwright tests - the splash window would be returned by firstWindow()
     // instead of the actual workspace window, causing tests to fail
