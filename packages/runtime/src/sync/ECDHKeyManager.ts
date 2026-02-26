@@ -242,6 +242,30 @@ export class ECDHKeyManager {
   }
 
   /**
+   * Unwrap a document key, verifying the sender's public key matches an expected key.
+   *
+   * This cross-checks the senderPublicKey in the envelope against the sender's
+   * registered identity key fetched from the server. If they don't match, the
+   * envelope may have been tampered with (Finding 2 in security review).
+   *
+   * @param envelope - The KeyEnvelope received from the server
+   * @param expectedSenderPublicKeyJwk - The sender's registered public key (from GET /api/identity-key)
+   * @returns The unwrapped AES-256-GCM document key
+   * @throws If the sender key in the envelope doesn't match the expected sender key
+   */
+  async unwrapDocumentKeyVerified(
+    envelope: KeyEnvelope,
+    expectedSenderPublicKeyJwk: string
+  ): Promise<CryptoKey> {
+    if (envelope.senderPublicKey !== expectedSenderPublicKeyJwk) {
+      throw new Error(
+        'Sender public key mismatch: envelope sender key does not match registered identity key'
+      );
+    }
+    return this.unwrapDocumentKey(envelope);
+  }
+
+  /**
    * Generate a new random AES-256-GCM document key.
    */
   static async generateDocumentKey(): Promise<CryptoKey> {

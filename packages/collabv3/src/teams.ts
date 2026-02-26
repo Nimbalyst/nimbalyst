@@ -16,7 +16,7 @@
 
 import type { Env } from './types';
 import type { AuthResult } from './auth';
-import { teamRoomPost, teamRoomGet, requireAdminViaTeamRoom } from './teamRoomHelpers';
+import { teamRoomPost, teamRoomGet, requireAdminViaTeamRoom, getTeamRoomStub } from './teamRoomHelpers';
 import { createLogger } from './logger';
 
 const log = createLogger('teams');
@@ -645,6 +645,61 @@ export async function handleClearProjectIdentity(
     return jsonResponse({ success: true }, 200, corsHeaders);
   } catch (err) {
     log.error('Clear project identity error:', err);
+    return errorResponse('Internal server error', 500, corsHeaders);
+  }
+}
+
+// ============================================================================
+// DELETE /api/teams/{orgId} - Delete a team (admin only)
+// ============================================================================
+
+export async function handleDeleteTeam(
+  orgId: string,
+  auth: AuthResult,
+  env: Env,
+  corsHeaders: Record<string, string>
+): Promise<Response> {
+  if (!env.STYTCH_PROJECT_ID || !env.STYTCH_SECRET_KEY) {
+    return errorResponse('Stytch not configured', 500, corsHeaders);
+  }
+
+  try {
+    // Check caller is admin via TeamRoom
+    const adminErr = await requireAdminViaTeamRoom(orgId, auth.userId, env);
+    if (adminErr) return errorResponse(adminErr, 403, corsHeaders);
+
+    const apiBase = getStytchApiBase(env);
+    const stytchAuth = getStytchAuth(env);
+
+    // Step 1: Delete the Stytch organization
+    const deleteOrgResponse = await fetch(`${apiBase}/organizations/${orgId}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': stytchAuth },
+    });
+
+    if (!deleteOrgResponse.ok) {
+      const errData = await deleteOrgResponse.json().catch(() => ({})) as { error_message?: string };
+      log.error('Stytch org deletion failed:', errData.error_message);
+      return errorResponse(errData.error_message || 'Failed to delete team from Stytch', deleteOrgResponse.status, corsHeaders);
+    }
+
+    // Step 2: Clear D1 org_discovery row
+    await env.DB.prepare(
+      `DELETE FROM org_discovery WHERE org_id = ?`
+    ).bind(orgId).run();
+
+    // Step 3: Nuke the TeamRoom DO state (reuse the delete-account path)
+    const stub = getTeamRoomStub(orgId, env);
+    const roomId = `org:${orgId}:team`;
+    await stub.fetch(new Request(`http://internal/sync/${roomId}/delete-account`, {
+      method: 'DELETE',
+    }));
+
+    log.info('Team deleted:', orgId, 'by:', auth.userId);
+
+    return jsonResponse({ success: true }, 200, corsHeaders);
+  } catch (err) {
+    log.error('Delete team error:', err);
     return errorResponse('Internal server error', 500, corsHeaders);
   }
 }

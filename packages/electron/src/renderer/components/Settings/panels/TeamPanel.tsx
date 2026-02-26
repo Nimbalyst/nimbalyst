@@ -306,10 +306,11 @@ function NoTeamState({ gitRemote, onCreateTeam, loading }: {
 // Team Exists State
 // ============================================================================
 
-function TeamExistsState({ team, onInvite, onRemoveMember, onLinkProject, onUnlinkProject, isAdmin, localGitRemote, fingerprints, myFingerprint, onVerifyMember, onRevokeTrust, onReshareKey }: {
+function TeamExistsState({ team, onInvite, onRemoveMember, onDeleteTeam, onLinkProject, onUnlinkProject, isAdmin, localGitRemote, fingerprints, myFingerprint, onVerifyMember, onRevokeTrust, onReshareKey }: {
   team: TeamData;
   onInvite: (email: string) => void;
   onRemoveMember: (memberId: string) => void;
+  onDeleteTeam: () => void;
   onLinkProject: () => void;
   onUnlinkProject: () => void;
   isAdmin: boolean;
@@ -540,14 +541,19 @@ function TeamExistsState({ team, onInvite, onRemoveMember, onLinkProject, onUnli
       </div>
 
       {/* Danger Zone */}
-      <div className="provider-panel-section py-4">
-        <h4 className="provider-panel-section-title text-[13px] font-semibold mb-2 text-[var(--nim-text-muted)]">
-          Danger Zone
-        </h4>
-        <button className="px-3.5 py-1.5 text-[12px] bg-transparent border border-[rgba(239,68,68,0.4)] rounded-md text-[var(--nim-error)] cursor-pointer hover:bg-[rgba(239,68,68,0.1)]">
-          Leave Team
-        </button>
-      </div>
+      {isAdmin && (
+        <div className="provider-panel-section py-4">
+          <h4 className="provider-panel-section-title text-[13px] font-semibold mb-2 text-[var(--nim-text-muted)]">
+            Danger Zone
+          </h4>
+          <button
+            onClick={onDeleteTeam}
+            className="px-3.5 py-1.5 text-[12px] bg-transparent border border-[rgba(239,68,68,0.4)] rounded-md text-[var(--nim-error)] cursor-pointer hover:bg-[rgba(239,68,68,0.1)]"
+          >
+            Delete Team
+          </button>
+        </div>
+      )}
     </>
   );
 }
@@ -987,6 +993,25 @@ export function TeamPanel({ workspacePath }: TeamPanelProps) {
     }
   };
 
+  const handleDeleteTeam = async () => {
+    if (!team) return;
+    const confirmed = window.confirm(
+      `Permanently delete team "${team.name}"? This will remove all members, shared documents, and encryption keys. This action cannot be undone.`
+    );
+    if (!confirmed) return;
+    setError(null);
+    try {
+      const result = await (window as any).electronAPI.team.deleteTeam(team.orgId);
+      if (result.success) {
+        setTeam(null);
+      } else {
+        setError(result.error || 'Failed to delete team');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete team');
+    }
+  };
+
   if (initialLoading) {
     return (
       <div className="provider-panel flex flex-col items-center justify-center py-12">
@@ -1052,6 +1077,7 @@ export function TeamPanel({ workspacePath }: TeamPanelProps) {
           team={team}
           onInvite={handleInvite}
           onRemoveMember={handleRemoveMember}
+          onDeleteTeam={handleDeleteTeam}
           onLinkProject={handleLinkProject}
           onUnlinkProject={handleUnlinkProject}
           isAdmin={team.callerRole === 'admin'}

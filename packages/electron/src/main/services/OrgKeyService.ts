@@ -348,10 +348,25 @@ export async function wrapOrgKeyForMember(
 
 /**
  * Unwrap an org key from a key envelope and store it locally.
+ *
+ * @param orgId - The org this key belongs to
+ * @param envelope - The key envelope containing the wrapped key
+ * @param expectedSenderPublicKeyJwk - If provided, verifies the envelope's senderPublicKey
+ *   matches this expected key (fetched from the sender's registered identity key on the server).
+ *   This prevents key envelope poisoning attacks (Finding 2 in security review).
  */
-export async function unwrapAndStoreOrgKey(orgId: string, envelope: KeyEnvelope): Promise<CryptoKey> {
+export async function unwrapAndStoreOrgKey(
+  orgId: string,
+  envelope: KeyEnvelope,
+  expectedSenderPublicKeyJwk?: string
+): Promise<CryptoKey> {
   const km = await getOrCreateIdentityKeyPair();
-  const orgKey = await km.unwrapDocumentKey(envelope);
+  let orgKey: CryptoKey;
+  if (expectedSenderPublicKeyJwk) {
+    orgKey = await km.unwrapDocumentKeyVerified(envelope, expectedSenderPublicKeyJwk);
+  } else {
+    orgKey = await km.unwrapDocumentKey(envelope);
+  }
   const rawBytes = await crypto.subtle.exportKey('raw', orgKey);
   storeOrgKeyRaw(orgId, uint8ArrayToBase64(new Uint8Array(rawBytes)));
   logger.main.info('[OrgKeyService] Unwrapped and stored org key for:', orgId);
@@ -428,18 +443,21 @@ export async function uploadEnvelope(
 
 /**
  * Fetch the caller's own key envelope from the server.
+ * Returns a KeyEnvelope extended with senderUserId for verification.
  */
-export async function fetchOwnEnvelope(orgId: string, orgScopedJwt: string): Promise<KeyEnvelope | null> {
+export async function fetchOwnEnvelope(orgId: string, orgScopedJwt: string): Promise<(KeyEnvelope & { senderUserId?: string }) | null> {
   try {
     const data = await fetchApi(`/api/teams/${orgId}/key-envelope`, 'GET', undefined, orgScopedJwt) as {
       wrappedKey: string;
       iv: string;
       senderPublicKey: string;
+      senderUserId?: string;
     };
     return {
       wrappedKey: data.wrappedKey,
       iv: data.iv,
       senderPublicKey: data.senderPublicKey,
+      senderUserId: data.senderUserId,
     };
   } catch (err) {
     // 404 = no envelope yet
@@ -476,11 +494,27 @@ export async function deleteAllEnvelopes(orgId: string, orgScopedJwt: string): P
 
 /**
  * Fetch and unwrap the org key (for non-admin members joining a team).
+ * Verifies the sender's public key against their registered identity key.
  */
 export async function fetchAndUnwrapOrgKey(orgId: string, orgScopedJwt: string): Promise<CryptoKey | null> {
   const envelope = await fetchOwnEnvelope(orgId, orgScopedJwt);
   if (!envelope) return null;
-  return unwrapAndStoreOrgKey(orgId, envelope);
+
+  // Verify sender's public key if we know the sender
+  let expectedSenderKey: string | undefined;
+  if ((envelope as { senderUserId?: string }).senderUserId) {
+    try {
+      expectedSenderKey = await fetchMemberPublicKey(
+        (envelope as { senderUserId?: string }).senderUserId!,
+        orgScopedJwt
+      );
+    } catch (err) {
+      logger.main.warn('[OrgKeyService] Could not fetch sender identity key for verification:', err);
+      // Continue without verification -- sender may have rotated their key
+    }
+  }
+
+  return unwrapAndStoreOrgKey(orgId, envelope, expectedSenderKey);
 }
 
 // ============================================================================

@@ -15,6 +15,7 @@ import type { Env } from './types';
 import type { AuthResult } from './auth';
 import { teamRoomPost, teamRoomGet, requireAdminViaTeamRoom, requireMemberViaTeamRoom } from './teamRoomHelpers';
 import { createLogger } from './logger';
+import { validateP256PublicKey } from './validatePublicKey';
 
 const log = createLogger('teamKeyEnvelopes');
 
@@ -60,9 +61,16 @@ export async function handleUploadKeyEnvelope(
       return errorResponse('targetUserId, wrappedKey, iv, and senderPublicKey are required', 400, corsHeaders);
     }
 
+    // Validate senderPublicKey is a well-formed P-256 public key
+    const keyError = validateP256PublicKey(body.senderPublicKey);
+    if (keyError) {
+      return errorResponse(`Invalid senderPublicKey: ${keyError}`, 400, corsHeaders);
+    }
+
     // Upload to TeamRoom (also pushes notification to target user if connected)
     await teamRoomPost(orgId, 'upload-envelope', {
       targetUserId: body.targetUserId,
+      senderUserId: auth.userId,
       wrappedKey: body.wrappedKey,
       iv: body.iv,
       senderPublicKey: body.senderPublicKey,

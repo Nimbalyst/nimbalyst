@@ -31,6 +31,7 @@ import {
   isAuthenticated,
   refreshSession,
   onAuthStateChange,
+  updateSessionToken,
 } from './StytchAuthService';
 import {
   getOrCreateIdentityKeyPair,
@@ -173,6 +174,13 @@ export async function getOrgScopedJwt(orgId: string): Promise<string> {
     throw new Error('Session exchange returned no JWT');
   }
 
+  // Stytch session exchange replaces the session token -- the old one is now
+  // invalid. We MUST persist the new token so that refreshSession() and
+  // getSessionToken() continue to work.
+  if (data.sessionToken) {
+    updateSessionToken(data.sessionToken);
+  }
+
   // Derive cache TTL from the actual JWT exp claim (with 60s buffer).
   // Fall back to 5 minutes if we can't parse it.
   const exp = getJwtExp(data.sessionJwt);
@@ -180,7 +188,8 @@ export async function getOrgScopedJwt(orgId: string): Promise<string> {
     ? (exp * 1000) - JWT_REFRESH_BUFFER_MS
     : Date.now() + 5 * 60 * 1000;
 
-  // Cache it (do NOT update global auth state)
+  // Cache the org-scoped JWT (do NOT update global auth state -- the global
+  // session JWT stays personal-org-scoped, only the token is shared)
   orgJwtCache.set(orgId, {
     jwt: data.sessionJwt,
     expiresAt,
@@ -386,11 +395,14 @@ export async function findTeamForWorkspace(workspacePath: string): Promise<TeamD
 
   try {
     const teams = await listTeams();
-    const match = teams.find(t => t.gitRemoteHash === remoteHash) || null;
+    // Only match teams where the user is an active member -- never auto-join
+    // invited or pending teams without explicit user consent.
+    const activeTeams = teams.filter(t => !t.membershipType || t.membershipType === 'active_member');
+    const match = activeTeams.find(t => t.gitRemoteHash === remoteHash) || null;
     if (match) {
       logger.main.info('[TeamService] findTeamForWorkspace: matched team:', match.name, 'orgId:', match.orgId, 'for workspace:', workspacePath);
     } else if (teams.length > 0) {
-      logger.main.info('[TeamService] findTeamForWorkspace: no hash match. workspace hash:', remoteHash, 'team hashes:', teams.map(t => ({ orgId: t.orgId, name: t.name, hash: t.gitRemoteHash })));
+      logger.main.info('[TeamService] findTeamForWorkspace: no hash match. workspace hash:', remoteHash, 'team hashes:', activeTeams.map(t => ({ orgId: t.orgId, name: t.name, hash: t.gitRemoteHash })));
     }
     return match;
   } catch (err) {
@@ -540,6 +552,17 @@ async function removeMember(orgId: string, memberId: string): Promise<void> {
   } catch (err) {
     logger.main.error('[TeamService] Key rotation failed after member removal:', err);
   }
+}
+
+/**
+ * Delete a team entirely. Admin only.
+ * Deletes Stytch org, D1 metadata, and TeamRoom DO state.
+ */
+async function deleteTeam(orgId: string): Promise<void> {
+  await fetchTeamApi(`/api/teams/${orgId}`, 'DELETE', undefined, orgId);
+  // Clear cached org JWT since the org no longer exists
+  orgJwtCache.delete(orgId);
+  logger.main.info('[TeamService] Team deleted:', orgId);
 }
 
 /**
@@ -827,6 +850,15 @@ export function registerTeamHandlers(): void {
   safeHandle('team:remove-member', async (_event, orgId: string, memberId: string) => {
     try {
       await removeMember(orgId, memberId);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+
+  safeHandle('team:delete', async (_event, orgId: string) => {
+    try {
+      await deleteTeam(orgId);
       return { success: true };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : String(error) };

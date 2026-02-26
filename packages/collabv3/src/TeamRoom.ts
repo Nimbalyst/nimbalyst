@@ -26,6 +26,7 @@ import type {
   AuthContext,
 } from './types';
 import { createLogger } from './logger';
+import { validateP256PublicKey } from './validatePublicKey';
 
 const log = createLogger('TeamRoom');
 
@@ -111,6 +112,7 @@ export class TeamRoom implements DurableObject {
 
       CREATE TABLE IF NOT EXISTS key_envelopes (
         target_user_id TEXT PRIMARY KEY,
+        sender_user_id TEXT NOT NULL DEFAULT '',
         wrapped_key TEXT NOT NULL,
         iv TEXT NOT NULL,
         sender_public_key TEXT NOT NULL,
@@ -303,8 +305,8 @@ export class TeamRoom implements DurableObject {
 
     // Caller's own key envelope
     const envelopeRow = sql.exec<{
-      wrapped_key: string; iv: string; sender_public_key: string;
-    }>(`SELECT wrapped_key, iv, sender_public_key FROM key_envelopes WHERE target_user_id = ?`,
+      wrapped_key: string; iv: string; sender_public_key: string; sender_user_id: string;
+    }>(`SELECT wrapped_key, iv, sender_public_key, sender_user_id FROM key_envelopes WHERE target_user_id = ?`,
       connState.auth.userId
     ).toArray()[0];
 
@@ -338,6 +340,7 @@ export class TeamRoom implements DurableObject {
         wrappedKey: envelopeRow.wrapped_key,
         iv: envelopeRow.iv,
         senderPublicKey: envelopeRow.sender_public_key,
+        senderUserId: envelopeRow.sender_user_id || undefined,
       } : null,
     };
 
@@ -392,9 +395,9 @@ export class TeamRoom implements DurableObject {
   private handleRequestKeyEnvelope(ws: WebSocket, connState: ConnectionState): void {
     const sql = this.state.storage.sql;
     const row = sql.exec<{
-      wrapped_key: string; iv: string; sender_public_key: string;
+      wrapped_key: string; iv: string; sender_public_key: string; sender_user_id: string;
     }>(
-      `SELECT wrapped_key, iv, sender_public_key FROM key_envelopes WHERE target_user_id = ?`,
+      `SELECT wrapped_key, iv, sender_public_key, sender_user_id FROM key_envelopes WHERE target_user_id = ?`,
       connState.auth.userId
     ).toArray()[0];
 
@@ -408,6 +411,7 @@ export class TeamRoom implements DurableObject {
       wrappedKey: row.wrapped_key,
       iv: row.iv,
       senderPublicKey: row.sender_public_key,
+      senderUserId: row.sender_user_id,
     };
     ws.send(JSON.stringify(response));
   }
@@ -609,22 +613,29 @@ export class TeamRoom implements DurableObject {
       }
 
       if (path.endsWith('/internal/upload-envelope')) {
-        const { targetUserId, wrappedKey, iv, senderPublicKey } = body as {
-          targetUserId: string; wrappedKey: string; iv: string; senderPublicKey: string;
+        const { targetUserId, wrappedKey, iv, senderPublicKey, senderUserId } = body as {
+          targetUserId: string; wrappedKey: string; iv: string; senderPublicKey: string; senderUserId?: string;
         };
         if (!targetUserId || !wrappedKey || !iv || !senderPublicKey) {
           return this.jsonError('targetUserId, wrappedKey, iv, senderPublicKey required', 400);
         }
 
+        // Validate senderPublicKey is a well-formed P-256 public key
+        const keyError = validateP256PublicKey(senderPublicKey);
+        if (keyError) {
+          return this.jsonError(`Invalid senderPublicKey: ${keyError}`, 400);
+        }
+
         sql.exec(
-          `INSERT INTO key_envelopes (target_user_id, wrapped_key, iv, sender_public_key, created_at)
-           VALUES (?, ?, ?, ?, ?)
+          `INSERT INTO key_envelopes (target_user_id, sender_user_id, wrapped_key, iv, sender_public_key, created_at)
+           VALUES (?, ?, ?, ?, ?, ?)
            ON CONFLICT (target_user_id) DO UPDATE SET
+             sender_user_id = excluded.sender_user_id,
              wrapped_key = excluded.wrapped_key,
              iv = excluded.iv,
              sender_public_key = excluded.sender_public_key,
              created_at = excluded.created_at`,
-          targetUserId, wrappedKey, iv, senderPublicKey, now
+          targetUserId, senderUserId ?? '', wrappedKey, iv, senderPublicKey, now
         );
 
         // Push notification to target user if connected
@@ -739,9 +750,9 @@ export class TeamRoom implements DurableObject {
         if (!userId) return this.jsonError('userId query param required', 400);
 
         const row = sql.exec<{
-          wrapped_key: string; iv: string; sender_public_key: string; created_at: number;
+          wrapped_key: string; iv: string; sender_public_key: string; sender_user_id: string; created_at: number;
         }>(
-          `SELECT wrapped_key, iv, sender_public_key, created_at
+          `SELECT wrapped_key, iv, sender_public_key, sender_user_id, created_at
            FROM key_envelopes WHERE target_user_id = ?`, userId
         ).toArray()[0];
 
@@ -752,6 +763,7 @@ export class TeamRoom implements DurableObject {
           wrappedKey: row.wrapped_key,
           iv: row.iv,
           senderPublicKey: row.sender_public_key,
+          senderUserId: row.sender_user_id,
           createdAt: row.created_at,
         });
       }

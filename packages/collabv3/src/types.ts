@@ -547,6 +547,8 @@ export interface KeyEnvelopeMessage {
   wrappedKey: string;
   iv: string;
   senderPublicKey: string;
+  /** User ID of the user who created this envelope */
+  senderUserId: string;
 }
 
 /** DocumentRoom error response */
@@ -786,6 +788,8 @@ export interface TeamKeyEnvelopeMessage {
   wrappedKey: string;
   iv: string;
   senderPublicKey: string;
+  /** User ID of the user who created this envelope */
+  senderUserId: string;
 }
 
 /** Response with a peer's public key */
@@ -851,6 +855,7 @@ export interface TeamState {
     wrappedKey: string;
     iv: string;
     senderPublicKey: string;
+    senderUserId?: string;
   } | null;
 }
 

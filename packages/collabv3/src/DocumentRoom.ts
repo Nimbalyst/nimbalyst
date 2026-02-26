@@ -17,6 +17,7 @@ import type {
   AuthContext,
 } from './types';
 import { createLogger } from './logger';
+import { validateP256PublicKey } from './validatePublicKey';
 
 const log = createLogger('DocumentRoom');
 
@@ -96,6 +97,7 @@ export class DocumentRoom implements DurableObject {
 
       CREATE TABLE IF NOT EXISTS key_envelopes (
         target_user_id TEXT NOT NULL,
+        sender_user_id TEXT NOT NULL DEFAULT '',
         wrapped_key TEXT NOT NULL,
         iv TEXT NOT NULL,
         sender_public_key TEXT NOT NULL,
@@ -445,6 +447,9 @@ export class DocumentRoom implements DurableObject {
   /**
    * Handle adding a key envelope for a target user.
    * Used in ECDH key exchange when sharing a document.
+   *
+   * Authorization: if an envelope already exists for the target user,
+   * only the original sender can overwrite it (prevents impersonation).
    */
   private async handleAddKeyEnvelope(
     ws: WebSocket,
@@ -454,19 +459,41 @@ export class DocumentRoom implements DurableObject {
     iv: string,
     senderPublicKey: string
   ): Promise<void> {
+    // Validate senderPublicKey is a well-formed P-256 public key
+    const keyError = validateP256PublicKey(senderPublicKey);
+    if (keyError) {
+      this.sendError(ws, 'invalid_sender_key', keyError);
+      return;
+    }
+
     const sql = this.state.storage.sql;
+    const senderId = connState.auth.userId;
+
+    // Check if an envelope already exists from a different sender
+    const existing = sql.exec<{ sender_user_id: string }>(
+      `SELECT sender_user_id FROM key_envelopes WHERE target_user_id = ?`,
+      targetUserId
+    ).toArray()[0];
+
+    if (existing && existing.sender_user_id && existing.sender_user_id !== senderId) {
+      this.sendError(ws, 'envelope_sender_mismatch',
+        'Cannot overwrite envelope created by a different user');
+      return;
+    }
 
     sql.exec(
-      `INSERT OR REPLACE INTO key_envelopes (target_user_id, wrapped_key, iv, sender_public_key, created_at)
-       VALUES (?, ?, ?, ?, ?)`,
+      `INSERT OR REPLACE INTO key_envelopes
+       (target_user_id, sender_user_id, wrapped_key, iv, sender_public_key, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
       targetUserId,
+      senderId,
       wrappedKey,
       iv,
       senderPublicKey,
       Date.now()
     );
 
-    log.info(`Key envelope stored for user ${targetUserId}`);
+    log.info(`Key envelope stored for user ${targetUserId} by sender ${senderId}`);
   }
 
   /**
@@ -482,8 +509,9 @@ export class DocumentRoom implements DurableObject {
       wrapped_key: string;
       iv: string;
       sender_public_key: string;
+      sender_user_id: string;
     }>(
-      `SELECT wrapped_key, iv, sender_public_key FROM key_envelopes WHERE target_user_id = ?`,
+      `SELECT wrapped_key, iv, sender_public_key, sender_user_id FROM key_envelopes WHERE target_user_id = ?`,
       connState.auth.userId
     ).toArray()[0];
 
@@ -493,6 +521,7 @@ export class DocumentRoom implements DurableObject {
         wrappedKey: row.wrapped_key,
         iv: row.iv,
         senderPublicKey: row.sender_public_key,
+        senderUserId: row.sender_user_id,
       };
       ws.send(JSON.stringify(response));
     } else {

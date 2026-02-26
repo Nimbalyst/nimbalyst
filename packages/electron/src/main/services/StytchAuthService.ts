@@ -399,6 +399,22 @@ export function getSessionToken(): string | null {
 }
 
 /**
+ * Update the persisted session token after a Stytch session exchange.
+ * Session exchanges (e.g., org switch) replace the session token -- the old
+ * one becomes invalid. This function saves the new token so that future
+ * refreshSession() calls use the valid token.
+ */
+export function updateSessionToken(newSessionToken: string): void {
+  authState = { ...authState, sessionToken: newSessionToken };
+  // Persist to disk so the token survives app restarts
+  const creds = loadStytchCredentials();
+  if (creds) {
+    saveStytchCredentials({ ...creds, sessionToken: newSessionToken });
+  }
+  logger.main.info('[StytchAuthService] Session token updated after exchange');
+}
+
+/**
  * Start Google OAuth sign-in flow.
  * Opens the collabv3 server's Google OAuth URL in the browser.
  * The server handles the callback and redirects to nimbalyst://auth/callback

@@ -889,6 +889,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     listMembers: (orgId: string) => ipcRenderer.invoke('team:list-members', orgId),
     invite: (orgId: string, email: string) => ipcRenderer.invoke('team:invite', orgId, email),
     removeMember: (orgId: string, memberId: string) => ipcRenderer.invoke('team:remove-member', orgId, memberId),
+    deleteTeam: (orgId: string) => ipcRenderer.invoke('team:delete', orgId),
     updateRole: (orgId: string, memberId: string, role: string) => ipcRenderer.invoke('team:update-role', orgId, memberId, role),
     getGitRemote: (workspacePath: string) => ipcRenderer.invoke('team:get-git-remote', workspacePath),
     ensureOrgKey: (orgId: string) => ipcRenderer.invoke('team:ensure-org-key', orgId),

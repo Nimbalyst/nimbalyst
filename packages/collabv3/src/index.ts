@@ -28,6 +28,7 @@ import {
   handleInviteMember,
   handleRemoveMember,
   handleUpdateMemberRole,
+  handleDeleteTeam,
   handleOrgSwitch,
   handleSetProjectIdentity,
   handleClearProjectIdentity,
@@ -455,6 +456,11 @@ async function handleApiRequest(
   if (teamsMatch) {
     const teamOrgId = teamsMatch[1];
     const subPath = teamsMatch[2] || '';
+
+    // DELETE /api/teams/{orgId} - Delete team (admin only)
+    if (!subPath && request.method === 'DELETE') {
+      return handleDeleteTeam(teamOrgId, auth, env, corsHeaders);
+    }
 
     // GET /api/teams/{orgId}/members - List members
     if (subPath === '/members' && request.method === 'GET') {
