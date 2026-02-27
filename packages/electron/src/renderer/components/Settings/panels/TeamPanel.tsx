@@ -720,32 +720,40 @@ export function TeamPanel({ workspacePath }: TeamPanelProps) {
     }
 
     try {
-      // First try: find team by workspace git remote (per-project lookup)
+      // Find team by workspace git remote (per-project lookup).
+      // This returns active teams OR pending invites that match this workspace.
       const findResult = await (window as any).electronAPI.team.findForWorkspace(workspacePath);
       console.log('[TeamPanel] findForWorkspace result:', findResult);
       if (findResult.success && findResult.team) {
-        setPendingInvite(null);
-        await loadTeamDetails(findResult.team.orgId, findResult.team.name, findResult.team.gitRemoteHash);
-        return;
-      }
+        const matchedTeam = findResult.team;
+        const isPending = matchedTeam.membershipType && matchedTeam.membershipType !== 'active_member';
 
-      // Fallback: list all teams the user belongs to
-      const listResult = await (window as any).electronAPI.team.list();
-      console.log('[TeamPanel] team.list result:', listResult);
-      if (listResult.success && listResult.teams && listResult.teams.length > 0) {
-        // Separate active teams from pending invites
-        const activeTeams = listResult.teams.filter((t: any) => !t.membershipType || t.membershipType === 'active_member');
-        const pendingTeams = listResult.teams.filter((t: any) => t.membershipType && t.membershipType !== 'active_member');
-
-        // Show the first active team if one exists
-        if (activeTeams.length > 0) {
-          setPendingInvite(null);
-          const firstTeam = activeTeams[0];
-          await loadTeamDetails(firstTeam.orgId, firstTeam.name, firstTeam.gitRemoteHash);
+        if (isPending) {
+          // Matched a pending invite for this workspace -- show join prompt
+          setPendingInvite({
+            orgId: matchedTeam.orgId,
+            name: matchedTeam.name,
+            membershipType: matchedTeam.membershipType,
+          });
+          setTeam(null);
           return;
         }
 
-        // No active team -- show pending invite if available
+        // Active team match
+        setPendingInvite(null);
+        await loadTeamDetails(matchedTeam.orgId, matchedTeam.name, matchedTeam.gitRemoteHash);
+        return;
+      }
+
+      // No git remote match -- check if user has any pending invites at all.
+      // Only show pending invites (not unrelated active teams) since
+      // showing an unrelated team is confusing.
+      const listResult = await (window as any).electronAPI.team.list();
+      console.log('[TeamPanel] team.list result:', listResult);
+      if (listResult.success && listResult.teams && listResult.teams.length > 0) {
+        const pendingTeams = listResult.teams.filter((t: any) => t.membershipType && t.membershipType !== 'active_member');
+
+        // Show a pending invite if one exists (user may need to join before project identity is linked)
         if (pendingTeams.length > 0) {
           const invite = pendingTeams[0];
           setPendingInvite({
@@ -758,7 +766,7 @@ export function TeamPanel({ workspacePath }: TeamPanelProps) {
         }
       }
 
-      console.log('[TeamPanel] No teams found, showing create UI');
+      console.log('[TeamPanel] No matching team for this workspace, showing create UI');
       setPendingInvite(null);
       setTeam(null);
     } catch (err) {
