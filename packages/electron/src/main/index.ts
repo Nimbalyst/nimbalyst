@@ -292,8 +292,46 @@ if (process.env.RUN_ONE_DEV_MODE === 'true') {
     console.log(`Dev mode enabled: Using isolated userData path: ${devUserData}`);
 }
 
-// Debug log rotation constants
+// Log rotation constants
 const MAX_DEBUG_LOG_SESSIONS = 5; // Keep current + 4 previous sessions
+const MAX_MAIN_LOG_SESSIONS = 3; // Keep current + 2 previous sessions
+
+/**
+ * Rotate main process log on app startup.
+ * Files: main.log (current), main.1.log (previous), main.2.log (oldest)
+ */
+function rotateMainLog() {
+    const logsDir = join(app.getPath('userData'), 'logs');
+    const baseName = 'main';
+    const ext = '.log';
+
+    try {
+        // Delete oldest log if it exists
+        const oldestPath = join(logsDir, `${baseName}.${MAX_MAIN_LOG_SESSIONS - 1}${ext}`);
+        if (existsSync(oldestPath)) {
+            unlinkSync(oldestPath);
+        }
+
+        // Shift existing logs: N-1 -> N, ..., 1 -> 2
+        for (let i = MAX_MAIN_LOG_SESSIONS - 2; i >= 1; i--) {
+            const currentPath = join(logsDir, `${baseName}.${i}${ext}`);
+            const nextPath = join(logsDir, `${baseName}.${i + 1}${ext}`);
+            if (existsSync(currentPath)) {
+                renameSync(currentPath, nextPath);
+            }
+        }
+
+        // Move current log to .1
+        const currentLogPath = join(logsDir, `${baseName}${ext}`);
+        const firstBackupPath = join(logsDir, `${baseName}.1${ext}`);
+        if (existsSync(currentLogPath)) {
+            renameSync(currentLogPath, firstBackupPath);
+        }
+    } catch (error) {
+        // Log rotation is best-effort, don't fail startup
+        console.error('Failed to rotate main log:', error);
+    }
+}
 
 /**
  * Rotate debug logs on app startup.
@@ -341,7 +379,10 @@ function initializeLogging() {
     // Always capture error logs for debugging
     const debugLogPath = join(app.getPath('userData'), 'nimbalyst-debug.log');
 
-    // Rotate logs on startup (development mode only - preserves previous session logs)
+    // Rotate main log on every startup (keeps 2 previous sessions)
+    rotateMainLog();
+
+    // Rotate debug logs on startup (development mode only - preserves previous session logs)
     if (process.env.NODE_ENV !== 'production') {
         rotateDebugLogs();
     }

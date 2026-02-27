@@ -1125,6 +1125,101 @@ export async function createApplicationMenu() {
                     }
                 },
                 {
+                    label: 'Rotate Logs',
+                    click: async () => {
+                        const userData = app.getPath('userData');
+                        const results: string[] = [];
+
+                        // Rotate debug logs (shift numbered backups, move current to .1)
+                        try {
+                            const baseName = 'nimbalyst-debug';
+                            const ext = '.log';
+                            const maxSessions = 5;
+
+                            // Delete oldest
+                            const oldestPath = path.join(userData, `${baseName}.${maxSessions - 1}${ext}`);
+                            if (fs.existsSync(oldestPath)) {
+                                fs.unlinkSync(oldestPath);
+                            }
+
+                            // Shift existing: N-1 -> N, ..., 1 -> 2
+                            for (let i = maxSessions - 2; i >= 1; i--) {
+                                const currentPath = path.join(userData, `${baseName}.${i}${ext}`);
+                                const nextPath = path.join(userData, `${baseName}.${i + 1}${ext}`);
+                                if (fs.existsSync(currentPath)) {
+                                    fs.renameSync(currentPath, nextPath);
+                                }
+                            }
+
+                            // Move current to .1
+                            const currentLogPath = path.join(userData, `${baseName}${ext}`);
+                            const firstBackupPath = path.join(userData, `${baseName}.1${ext}`);
+                            if (fs.existsSync(currentLogPath)) {
+                                fs.renameSync(currentLogPath, firstBackupPath);
+                                results.push('Debug log rotated');
+                            } else {
+                                results.push('Debug log: no file to rotate');
+                            }
+
+                            // Start fresh debug log
+                            const timestamp = new Date().toISOString();
+                            fs.writeFileSync(currentLogPath, `=== Debug Log Started ${timestamp} (manual rotation) ===\n`);
+                        } catch (error) {
+                            results.push(`Debug log rotation failed: ${error}`);
+                        }
+
+                        // Rotate main log (shift numbered backups, same as startup)
+                        try {
+                            const logsDir = path.join(userData, 'logs');
+                            const mainBase = 'main';
+                            const mainExt = '.log';
+                            const maxMainSessions = 3;
+
+                            const mainLogPath = path.join(logsDir, `${mainBase}${mainExt}`);
+                            let sizeMB = '0';
+                            if (fs.existsSync(mainLogPath)) {
+                                sizeMB = (fs.statSync(mainLogPath).size / (1024 * 1024)).toFixed(1);
+                            }
+
+                            // Delete oldest
+                            const oldestMain = path.join(logsDir, `${mainBase}.${maxMainSessions - 1}${mainExt}`);
+                            if (fs.existsSync(oldestMain)) {
+                                fs.unlinkSync(oldestMain);
+                            }
+
+                            // Shift existing: N-1 -> N, ..., 1 -> 2
+                            for (let i = maxMainSessions - 2; i >= 1; i--) {
+                                const cur = path.join(logsDir, `${mainBase}.${i}${mainExt}`);
+                                const nxt = path.join(logsDir, `${mainBase}.${i + 1}${mainExt}`);
+                                if (fs.existsSync(cur)) {
+                                    fs.renameSync(cur, nxt);
+                                }
+                            }
+
+                            // Move current to .1 (electron-log will create a fresh main.log on next write)
+                            if (fs.existsSync(mainLogPath)) {
+                                fs.renameSync(mainLogPath, path.join(logsDir, `${mainBase}.1${mainExt}`));
+                                results.push(`Main log rotated (was ${sizeMB} MB)`);
+                            } else {
+                                results.push('Main log: no file to rotate');
+                            }
+                        } catch (error) {
+                            results.push(`Main log rotation failed: ${error}`);
+                        }
+
+                        const focused = getFocusedWindow();
+                        if (focused) {
+                            dialog.showMessageBox(focused, {
+                                type: 'info',
+                                title: 'Log Rotation',
+                                message: 'Logs Rotated',
+                                detail: results.join('\n'),
+                                buttons: ['OK']
+                            });
+                        }
+                    }
+                },
+                {
                     label: 'Open User Data Directory',
                     click: async () => {
                         const userDataPath = app.getPath('userData');
