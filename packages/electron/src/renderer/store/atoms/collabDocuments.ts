@@ -39,11 +39,16 @@ export const sharedDocumentsAtom = atom<SharedDocument[]>([]);
 export const teamSyncStatusAtom = atom<'disconnected' | 'connecting' | 'syncing' | 'connected' | 'error'>('disconnected');
 
 /**
- * Pending document ID to auto-open in CollabMode after switching modes.
+ * Pending document to auto-open in CollabMode after switching modes.
  * Set by "Share to Team" action, consumed by CollabMode on activation.
- * Cleared after consumption.
+ * Cleared after consumption. Carries initialContent for first-time shares
+ * so the collaborative document can be seeded with file content.
  */
-export const pendingCollabDocumentAtom = atom<string | null>(null);
+export interface PendingCollabDocument {
+  documentId: string;
+  initialContent?: string;
+}
+export const pendingCollabDocumentAtom = atom<PendingCollabDocument | null>(null);
 
 // ============================================================
 // Provider Instance (module-level singleton per workspace)

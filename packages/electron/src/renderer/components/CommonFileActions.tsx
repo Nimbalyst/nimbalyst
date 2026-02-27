@@ -44,15 +44,28 @@ export function CommonFileActions({
   useButtons = false,
 }: CommonFileActionsProps) {
   const actions = useFileActions(filePath, fileName);
-  const handleShareToTeam = useCallback(() => {
+  const handleShareToTeam = useCallback(async () => {
+    // Read file content to seed the collaborative document on first share
+    let initialContent: string | undefined;
+    try {
+      if (window.electronAPI?.invoke) {
+        const result = await window.electronAPI.invoke('read-file-content', filePath);
+        if (result?.success && result?.content) {
+          initialContent = result.content;
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to read file content for share:', err);
+    }
+
     // Register in the doc index (optimistic local update is synchronous,
     // server registration happens in background)
     registerDocumentInIndex(fileName, fileName, 'markdown').catch(error => {
       console.error('Failed to register document in index:', error);
     });
 
-    // Set the pending document so CollabMode auto-opens it
-    store.set(pendingCollabDocumentAtom, fileName);
+    // Set the pending document so CollabMode auto-opens it (with content for seeding)
+    store.set(pendingCollabDocumentAtom, { documentId: fileName, initialContent });
 
     // Switch to collab mode immediately
     store.set(setWindowModeAtom, 'collab');
@@ -64,7 +77,7 @@ export function CommonFileActions({
         { duration: 4000 }
       );
     });
-  }, [fileName]);
+  }, [filePath, fileName]);
 
   const Item = useButtons ? 'button' : 'div';
 

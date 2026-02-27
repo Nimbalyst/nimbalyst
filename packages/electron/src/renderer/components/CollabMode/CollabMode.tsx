@@ -18,6 +18,7 @@ import { TabContent } from '../TabContent/TabContent';
 import { ChatSidebar } from '../ChatSidebar';
 import { openCollabDocumentViaIPC } from '../../utils/collabDocumentOpener';
 import { initSharedDocuments, destroyTeamSync, pendingCollabDocumentAtom, sharedDocumentsAtom, type SharedDocument } from '../../store/atoms/collabDocuments';
+import { isCollabUri, parseCollabUri } from '../../utils/collabUri';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 
 interface CollabModeProps {
@@ -31,13 +32,21 @@ export const CollabMode: React.FC<CollabModeProps> = ({
   isActive,
   onFileOpen,
 }) => {
-  // Initialize shared documents sync from TeamRoom
+  // Initialize shared documents sync from TeamRoom.
+  // Retry when user activates collab mode, in case the initial attempt
+  // failed (e.g., encryption key not yet available, admin hadn't shared keys).
   useEffect(() => {
     initSharedDocuments(workspacePath);
     return () => {
       destroyTeamSync();
     };
   }, [workspacePath]);
+
+  useEffect(() => {
+    if (isActive) {
+      initSharedDocuments(workspacePath);
+    }
+  }, [isActive, workspacePath]);
 
   return (
     <TabsProvider workspacePath={workspacePath} disablePersistence>
@@ -50,6 +59,31 @@ export const CollabMode: React.FC<CollabModeProps> = ({
   );
 };
 
+// ---------------------------------------------------------------------------
+// Persist open collab document IDs in workspace state so they survive refresh.
+// ---------------------------------------------------------------------------
+
+/** Save the list of open collab document IDs to workspace state. */
+async function persistOpenCollabDocs(workspacePath: string, documentIds: string[]): Promise<void> {
+  try {
+    await window.electronAPI?.invoke?.('workspace:update-state', workspacePath, {
+      openCollabDocumentIds: documentIds,
+    });
+  } catch (err) {
+    console.warn('[CollabMode] Failed to persist open collab docs:', err);
+  }
+}
+
+/** Load the list of open collab document IDs from workspace state. */
+async function loadOpenCollabDocs(workspacePath: string): Promise<string[]> {
+  try {
+    const state = await window.electronAPI?.invoke?.('workspace:get-state', workspacePath);
+    return state?.openCollabDocumentIds ?? [];
+  } catch {
+    return [];
+  }
+}
+
 /**
  * Inner component that has access to TabsProvider context.
  */
@@ -61,9 +95,10 @@ const CollabModeInner: React.FC<CollabModeProps> = ({
   const tabsActions = useTabsActions();
   const { tabs, activeTabId } = useTabs();
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
-  const pendingDocId = useAtomValue(pendingCollabDocumentAtom);
+  const pendingDoc = useAtomValue(pendingCollabDocumentAtom);
+  const [restored, setRestored] = useState(false);
 
-  const handleDocumentSelect = useCallback(async (doc: SharedDocument) => {
+  const handleDocumentSelect = useCallback(async (doc: SharedDocument, initialContent?: string) => {
     setSelectedDocId(doc.documentId);
 
     // Check if already open as a tab
@@ -80,23 +115,69 @@ const CollabModeInner: React.FC<CollabModeProps> = ({
       workspacePath,
       documentId: doc.documentId,
       title: doc.title,
+      initialContent,
       addTab: tabsActions.addTab,
     });
   }, [workspacePath, tabs, tabsActions]);
 
+  // Persist open document IDs whenever tabs change
+  useEffect(() => {
+    if (!restored) return; // Don't persist until we've finished restoring
+    const docIds = tabs
+      .filter(t => isCollabUri(t.filePath))
+      .map(t => {
+        try { return parseCollabUri(t.filePath).documentId; }
+        catch { return null; }
+      })
+      .filter((id): id is string => id !== null);
+    persistOpenCollabDocs(workspacePath, docIds);
+  }, [tabs, workspacePath, restored]);
+
+  // Restore previously open collab documents on mount
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const savedDocIds = await loadOpenCollabDocs(workspacePath);
+      if (cancelled || savedDocIds.length === 0) {
+        setRestored(true);
+        return;
+      }
+
+      // Open each saved document. We don't need to wait for sharedDocumentsAtom
+      // because openCollabDocumentViaIPC resolves auth/keys via IPC directly.
+      // Use the documentId as both documentId and title (title is only for display).
+      for (const docId of savedDocIds) {
+        if (cancelled) break;
+        try {
+          await openCollabDocumentViaIPC({
+            workspacePath,
+            documentId: docId,
+            title: docId,
+            addTab: tabsActions.addTab,
+          });
+        } catch (err) {
+          console.warn('[CollabMode] Failed to restore collab document:', docId, err);
+        }
+      }
+      setRestored(true);
+    })();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspacePath]); // Only run on mount (tabsActions is stable ref-based)
+
   // Auto-open a pending document (set by "Share to Team" action)
   useEffect(() => {
-    if (!pendingDocId || !isActive) return;
+    if (!pendingDoc || !isActive) return;
 
     // Find the document in the shared documents atom
     const docs = store.get(sharedDocumentsAtom);
-    const doc = docs.find(d => d.documentId === pendingDocId);
+    const doc = docs.find(d => d.documentId === pendingDoc.documentId);
     if (doc) {
       // Clear the pending flag before opening to avoid re-triggering
       store.set(pendingCollabDocumentAtom, null);
-      handleDocumentSelect(doc);
+      handleDocumentSelect(doc, pendingDoc.initialContent);
     }
-  }, [pendingDocId, isActive, handleDocumentSelect]);
+  }, [pendingDoc, isActive, handleDocumentSelect]);
 
   const handleTabClose = useCallback((tabId: string) => {
     tabsActions.removeTab(tabId);

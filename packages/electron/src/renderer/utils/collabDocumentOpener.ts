@@ -277,6 +277,75 @@ function createProxiedWebSocket(url: string): WebSocket {
 }
 
 /**
+ * Resolve a collab config from the main process and populate the registry.
+ * Used to restore collab tabs after refresh/HMR when the in-memory registry
+ * is empty but the tab URI is still persisted.
+ *
+ * Returns the config on success, or null if resolution fails.
+ */
+export async function resolveCollabConfigForUri(
+  workspacePath: string,
+  uri: string,
+  documentId: string,
+  title?: string,
+): Promise<CollabDocumentConfig | null> {
+  if (!window.electronAPI?.documentSync) return null;
+
+  // Already resolved
+  const existing = collabConfigRegistry.get(uri);
+  if (existing) return existing;
+
+  try {
+    const result = await window.electronAPI.documentSync.open(
+      workspacePath,
+      documentId,
+      title,
+    );
+
+    if (!result.success || !result.config) {
+      logger.ui.warn('[collabDocumentOpener] Failed to resolve config for:', uri, result.error);
+      return null;
+    }
+
+    const { orgId, title: resolvedTitle, orgKeyBase64, serverUrl, userId, userName, userEmail } = result.config;
+    const documentKey = await importOrgKeyFromBase64(orgKeyBase64);
+    const hasWsProxy = !!window.electronAPI?.documentSync?.wsConnect;
+
+    const config: CollabDocumentConfig = {
+      orgId,
+      documentId,
+      title: resolvedTitle,
+      documentKey,
+      serverUrl,
+      userId,
+      userName,
+      userEmail,
+      createWebSocket: hasWsProxy ? createProxiedWebSocket : undefined,
+      getJwt: async () => {
+        const jwtResult = await window.electronAPI.documentSync.getJwt(orgId);
+        if (!jwtResult.success || !jwtResult.jwt) {
+          throw new Error(`Failed to get JWT: ${jwtResult.error}`);
+        }
+        return jwtResult.jwt;
+      },
+    };
+
+    // The URI in the tab may use the real orgId already, but double-check
+    const realUri = buildCollabUri(orgId, documentId);
+    collabConfigRegistry.set(realUri, config);
+    // Also set with the passed-in URI in case it differs
+    if (uri !== realUri) {
+      collabConfigRegistry.set(uri, config);
+    }
+
+    return config;
+  } catch (err) {
+    logger.ui.error('[collabDocumentOpener] Failed to resolve collab config:', err);
+    return null;
+  }
+}
+
+/**
  * Open a collaborative document by calling the main process IPC to resolve
  * auth/encryption, then opening the tab.
  *

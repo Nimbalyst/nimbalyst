@@ -556,6 +556,12 @@ export class DocumentSyncProvider {
         this.reviewedStateVector = Y.encodeStateVector(this.ydoc);
       }
       this.setStatus('connected');
+
+      // After initial sync, push any local state the server is missing.
+      // This handles the case where content was bootstrapped into the Y.Doc
+      // locally (e.g., initial share) but the WebSocket was not yet open or
+      // a previous connection failed before the update could be sent.
+      this.pushLocalState(msg);
     }
   }
 
@@ -654,6 +660,39 @@ export class DocumentSyncProvider {
     if (this.status === status) return;
     this.status = status;
     this.config.onStatusChange?.(status);
+  }
+
+  /**
+   * After initial sync, check if the local Y.Doc has content that the
+   * server doesn't know about. This happens when content was bootstrapped
+   * locally (e.g., initial share seeding) before the WebSocket connected,
+   * or when a previous connection failed after bootstrap but before the
+   * update could be sent.
+   *
+   * We compute the diff between what the server sent us and our local state
+   * and send it as an update.
+   */
+  private async pushLocalState(syncMsg: DocSyncResponseMessage): Promise<void> {
+    // Build the server state vector from what we received.
+    // If the server sent no updates and no snapshot, it has an empty state.
+    const serverHasNoState = syncMsg.updates.length === 0 && !syncMsg.snapshot;
+    if (!serverHasNoState) return; // Server already has content, nothing to push
+
+    // Check if our local Y.Doc has any content worth sending
+    const localSv = Y.encodeStateVector(this.ydoc);
+    const diff = Y.encodeStateAsUpdate(this.ydoc);
+
+    // A minimal empty Y.Doc encodes to a very small update (~2 bytes).
+    // Only send if there's meaningful content.
+    if (diff.length <= 2) return;
+
+    console.log('[DocumentSync] Pushing local state to server after sync, update size:', diff.length);
+    try {
+      const { encrypted, iv } = await encryptBinary(diff, this.config.documentKey);
+      this.send({ type: 'docUpdate', encryptedUpdate: encrypted, iv });
+    } catch (err) {
+      console.error('[DocumentSync] Failed to push local state:', err);
+    }
   }
 
   private handleDisconnect(): void {

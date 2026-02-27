@@ -136,6 +136,14 @@ export class TeamRoom implements DurableObject {
       );
     `);
 
+    // Migration: add sender_user_id to key_envelopes for DOs created before this column existed.
+    // CREATE TABLE IF NOT EXISTS won't add columns to an existing table.
+    try {
+      sql.exec(`ALTER TABLE key_envelopes ADD COLUMN sender_user_id TEXT NOT NULL DEFAULT ''`);
+    } catch {
+      // Column already exists -- expected for newly-created DOs
+    }
+
     // Bootstrap TTL alarm
     const existingAlarm = await this.state.storage.getAlarm();
     if (!existingAlarm) {
