@@ -142,7 +142,9 @@ function registerVoiceCallbacks() {
   // Agent task complete (notify main process voice agent)
   registerVoiceAgentTaskCompleteCallback((data) => {
     if (activeVoiceSessionId === null) return;
-    const summary = data.content || 'Task completed';
+    // Prefer lastTextSection (text after last tool call = agent's summary)
+    // over content (full accumulated text which is often empty or huge)
+    const summary = data.lastTextSection || data.content || 'Task completed';
     window.electronAPI.send('voice-mode:agent-task-complete', {
       sessionId: data.sessionId,
       summary,

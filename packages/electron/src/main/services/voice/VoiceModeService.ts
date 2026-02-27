@@ -300,7 +300,29 @@ export function initVoiceModeService() {
                 }
                 return tc.name?.toLowerCase() || 'used a tool';
               }).join(', ');
-              contextParts.push(`Recent: ${toolSummary}`);
+              contextParts.push(`Recent tools: ${toolSummary}`);
+            }
+
+            // Include the tail of the actual conversation so the voice agent
+            // knows what has been discussed. Extract the last few user prompts
+            // and assistant text responses (skip tool messages).
+            const conversationTail = (session.messages || [])
+              .filter((m: any) => m.role === 'user' || m.role === 'assistant')
+              .slice(-6)
+              .map((m: any) => {
+                const role = m.role === 'user' ? 'User' : 'Agent';
+                const text = typeof m.content === 'string' ? m.content : '';
+                if (!text.trim()) return null;
+                // Truncate each message to keep total size manageable
+                const truncated = text.length > 500
+                  ? text.substring(0, 500) + '...'
+                  : text;
+                return `${role}: ${truncated}`;
+              })
+              .filter(Boolean);
+
+            if (conversationTail.length > 0) {
+              contextParts.push(`\nRecent conversation:\n${conversationTail.join('\n')}`);
             }
           }
 
@@ -580,6 +602,13 @@ export function initVoiceModeService() {
       // IMPORTANT: Skip this when ask_coding_agent is in-flight because
       // that path returns the response via the function call result instead.
       const completionListener = (_event: any, data: { sessionId: string; summary?: string }) => {
+        console.log('[VoiceModeService] agent-task-complete received:', {
+          sessionId: data.sessionId,
+          summaryLength: data.summary?.length ?? 0,
+          summaryPreview: data.summary?.substring(0, 200) ?? '(empty)',
+          askCodingAgentInFlight,
+        });
+
         if (data.sessionId === currentSessionId()) {
           // Don't send [INTERNAL] notification when ask_coding_agent is handling
           // this response -- the answer goes back via the function call result.
@@ -587,22 +616,22 @@ export function initVoiceModeService() {
             return;
           }
 
-          // Build a concise completion notification from the coding agent's response
+          // Build a completion notification from the coding agent's response.
+          // Include enough of the summary for the voice agent to relay what
+          // happened, but truncate to stay within gpt-realtime's limits.
           let completionMessage: string;
 
-          if (data.summary) {
-            const summaryLines = data.summary.split('\n').filter(line => line.trim());
-            const firstLine = summaryLines[0] || '';
-
-            if (firstLine.length < 200 && firstLine.length > 0) {
-              completionMessage = `[INTERNAL: Task complete. Result: ${firstLine}]`;
-            } else {
-              completionMessage = '[INTERNAL: Task complete.]';
-            }
+          if (data.summary && data.summary.trim().length > 0) {
+            const trimmed = data.summary.trim();
+            const truncated = trimmed.length > 1500
+              ? trimmed.substring(0, 1500) + '... (truncated)'
+              : trimmed;
+            completionMessage = `[INTERNAL: Task complete. Result: ${truncated}]`;
           } else {
-            completionMessage = '[INTERNAL: Task complete.]';
+            completionMessage = '[INTERNAL: Task complete. The coding agent finished but did not produce a text summary.]';
           }
 
+          console.log('[VoiceModeService] Sending completion to voice agent:', completionMessage.substring(0, 300));
           poc.sendUserMessage(completionMessage);
         }
       };

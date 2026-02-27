@@ -121,6 +121,7 @@ export class RealtimeAPIClient {
       interruptible: true,
     };
     this.voice = voice || 'alloy';
+    console.log(`[RealtimeAPIClient] Created with voice=${this.voice}`);
   }
 
   /**
@@ -280,6 +281,7 @@ export class RealtimeAPIClient {
         break;
 
       case 'session.updated':
+        console.log(`[RealtimeAPIClient] session.updated: voice=${(event as any).session?.voice || 'unknown'}`);
         break;
 
       case 'response.created':
@@ -412,12 +414,13 @@ Tools:
 
 Guidelines:
 - Be terse. One short sentence per response. Never say filler like "I'll let you know when it's ready" or "Got it, I'll take care of that for you." Just state what you did.
-- For coding tasks: use submit_agent_prompt, say what you did in ~5 words (e.g. "I've requested a commit proposal"), then stop talking. Do NOT narrate what will happen next.
+- For coding tasks: use submit_agent_prompt, say what you did in ~5 words (e.g. "Submitted."), then STOP. Do NOT say anything about waiting, timing out, or checking back. The microphone will go dormant automatically. You will be woken up with an "[INTERNAL: Task complete...]" message when the coding agent finishes. There is NO timeout -- tasks can take minutes. You do NOT need to monitor, wait, or follow up.
 - For questions about this project: use ask_coding_agent. The answer will come back as the tool result. Summarize it conversationally for the user. This is critical -- you MUST speak the answer when the tool result arrives.
 - Only answer directly for truly general knowledge questions unrelated to this project.
-- For "[INTERNAL: Task complete. Result: ...]" messages: these are completion notifications from a previously submitted coding task. Briefly relay the result. Do NOT say "I finished that task" -- just state the result.
+- For "[INTERNAL: Task complete. Result: ...]" messages: these are completion notifications from a previously submitted coding task. Briefly relay the result to the user. Do NOT say "I finished that task" -- just state the result.
 - For "[INTERNAL: User is now viewing ...]" messages: the user switched to a different file. Do NOT announce this. Just silently note which file the user is looking at so you can reference it if they ask about "this file" or "what I'm looking at".
 - When summarizing coding agent responses: be concise, paraphrase for speech. Never read code or file paths verbatim.
+- NEVER say the coding agent "didn't respond", "timed out", or "isn't responding". Tasks take as long as they take. You will always get a completion notification.
 
 CRITICAL - Passing through user requests:
 When the user says "ask the coding agent..." or "tell the coding agent..." or similar, you MUST pass their request VERBATIM to the coding agent. Do NOT rephrase, interpret, or add your own context. Examples:
@@ -525,6 +528,7 @@ Your job is to be a voice relay, not to interpret or improve the user's requests
       session: config,
     };
 
+    console.log(`[RealtimeAPIClient] session.update: voice=${config.voice}`);
     this.ws.send(JSON.stringify(event));
   }
 
@@ -829,6 +833,7 @@ Your job is to be a voice relay, not to interpret or improve the user's requests
       },
     };
 
+    console.log(`[RealtimeAPIClient] response.create: voice=${this.voice}`);
     this.ws.send(JSON.stringify(event));
   }
 

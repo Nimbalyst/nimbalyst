@@ -3164,6 +3164,7 @@ export class AIService {
               safeSend(event, 'ai:streamResponse', {
                 sessionId: session.id,
                 content: fullResponse,
+                lastTextSection: lastTextSection.trim(),
                 isComplete: true,
                 autoContextPending: session.provider === 'claude-code'
               });
