@@ -2089,6 +2089,19 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
             if (chunk.output && chunk.output.length > 0) {
               console.log('[CLAUDE-CODE] Auth status output:', chunk.output.join('\n'));
             }
+          } else if (chunk.type === 'rate_limit_event') {
+            // Handle rate limit events from the Claude Code SDK
+            const info = chunk.rate_limit_info;
+            if (info && info.status !== 'allowed') {
+              // Actually rate-limited - show a widget in the transcript
+              const resetsAt = info.resetsAt ? new Date(info.resetsAt * 1000).toISOString() : null;
+              const limitType = info.rateLimitType === 'five_hour' ? '5-hour session' : info.rateLimitType || 'unknown';
+              yield {
+                type: 'error',
+                error: `Rate limited (${limitType} limit). Resets at: ${resetsAt || 'unknown'}. [RATE_LIMIT]`
+              };
+            }
+            // When status === 'allowed', silently consume - the usage indicator handles display
           } else {
             // Unknown chunk type - display it anyway so nothing is lost
 

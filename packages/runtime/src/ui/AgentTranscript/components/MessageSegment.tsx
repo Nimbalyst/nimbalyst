@@ -6,6 +6,7 @@ import { DiffViewer } from './DiffViewer';
 import { LoginRequiredWidget } from './LoginRequiredWidget';
 import { OpenAIAuthWidget } from './OpenAIAuthWidget';
 import { ContextLimitWidget } from './ContextLimitWidget';
+import { RateLimitWidget } from './RateLimitWidget';
 import { FullscreenModal } from './FullscreenModal';
 import { MaterialSymbol } from '../../icons/MaterialSymbol';
 import { formatToolDisplayName } from '../utils/toolNameFormatter';
@@ -127,6 +128,11 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
       lowerText.includes('exceeds maximum context') ||
       lowerText.includes('maximum context length')
     );
+  };
+
+  // Helper function to check if content is a rate limit event
+  const isRateLimitError = (text: string): boolean => {
+    return text.includes('[RATE_LIMIT]');
   };
 
   // Helper function to strip all <NIMBALYST_SYSTEM_MESSAGE> blocks from content
@@ -300,6 +306,11 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
     // Check if this is a context limit error
     if (isContextLimitError(errorMessage)) {
       return <ContextLimitWidget sessionId={sessionId} isLastMessage={isLastMessage} onCompact={onCompact} />;
+    }
+
+    // Check if this is a rate limit event
+    if (isRateLimitError(errorMessage)) {
+      return <RateLimitWidget errorMessage={errorMessage} />;
     }
 
     // Otherwise, render the generic error UI
