@@ -167,7 +167,7 @@ All events include `$session_id` property automatically. Dev users are marked wi
 | --- | --- | --- | --- | --- | --- |
 | `beta_feature_toggled` | `BetaFeaturesPanel.tsx` | User toggles a beta feature or "Enable All" | `feature_tag` (e.g., blitz/codex or 'all')<br/>`enabled` (boolean) | (pending release as of c28302ea) |  |
 | `alpha_feature_toggled` | `AdvancedPanel.tsx` | User toggles an alpha feature, "Enable All", or switches release channel | `feature_tag` (e.g., sync/voice-mode/super-loops or 'all')<br/>`enabled` (boolean)<br/>`source` (toggle/channel_switch) | (pending release as of c28302ea) |  |
-| `auto_commit_toggled` | `ClaudeCodePanel.tsx` | User toggles auto-approve commits setting | `enabled` (boolean) | (pending release as of c28302ea) |  |
+| `auto_commit_toggled` | `AdvancedPanel.tsx` | User toggles auto-approve commits setting | `enabled` (boolean) | (pending release as of c28302ea) |  |
 
 ### MCP Server Configuration
 

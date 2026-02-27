@@ -41,6 +41,10 @@ import {
   codexUsageIndicatorEnabledAtom,
   initCodexUsageIndicatorSetting,
 } from './store/atoms/codexUsageAtoms';
+import {
+  autoCommitEnabledAtom,
+  initAutoCommitSetting,
+} from './store/atoms/autoCommitAtoms';
 
 // console.log('[RENDERER] Imports complete at', new Date().toISOString());
 
@@ -118,6 +122,9 @@ await Promise.all([
   }),
   initCodexUsageIndicatorSetting().then((enabled) => {
     store.set(codexUsageIndicatorEnabledAtom, enabled);
+  }),
+  initAutoCommitSetting().then((enabled) => {
+    store.set(autoCommitEnabledAtom, enabled);
   }),
 ]).catch(() => {
   // Ignore errors - settings will use defaults

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useAtom, useAtomValue } from 'jotai';
+import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { usePostHog } from 'posthog-js/react';
 import {
   advancedSettingsAtom,
@@ -21,6 +21,10 @@ import {
   type ExternalEditorType,
 } from '../../../store/atoms/appSettings';
 import { ALPHA_FEATURES, areAllAlphaFeaturesEnabled, enableAllAlphaFeatures as enableAllAlphaFeaturesUtil, disableAllAlphaFeatures } from '../../../../shared/alphaFeatures';
+import {
+  autoCommitEnabledAtom,
+  setAutoCommitEnabledAtom,
+} from '../../../store/atoms/autoCommitAtoms';
 
 /**
  * AdvancedPanel - Self-contained settings panel for advanced options.
@@ -48,6 +52,10 @@ export function AdvancedPanel() {
   const [developerSettings] = useAtom(developerFeatureSettingsAtom);
   const [, updateDeveloperSettings] = useAtom(setDeveloperFeatureSettingsAtom);
   const { developerMode, developerFeatures } = developerSettings;
+
+  // Auto-commit setting
+  const autoCommitEnabled = useAtomValue(autoCommitEnabledAtom);
+  const setAutoCommitEnabled = useSetAtom(setAutoCommitEnabledAtom);
 
   // External editor settings from Jotai atoms
   const [externalEditorSettings] = useAtom(externalEditorSettingsAtom);
@@ -508,6 +516,35 @@ export function AdvancedPanel() {
               <span className="setting-name text-sm font-medium text-[var(--nim-text)]">Send Anonymous Usage Data</span>
               <span className="setting-description text-xs leading-relaxed text-[var(--nim-text-muted)]">
                 Help improve Nimbalyst by sending anonymous usage data. No prompts, content, or personal information is ever collected.
+              </span>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
+        <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">Agent Behavior</h4>
+        <p className="text-sm leading-relaxed text-[var(--nim-text-muted)] mb-4">
+          Control how AI agents handle certain actions.
+        </p>
+
+        <div className="setting-item py-3">
+          <label className="setting-label flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={autoCommitEnabled}
+              onChange={(e) => {
+                setAutoCommitEnabled(e.target.checked);
+                posthog?.capture('auto_commit_toggled', {
+                  enabled: e.target.checked,
+                });
+              }}
+              className="setting-checkbox w-4 h-4 mt-0.5 cursor-pointer shrink-0 accent-[var(--nim-primary)]"
+            />
+            <div className="setting-text flex flex-col gap-0.5">
+              <span className="setting-name text-sm font-medium text-[var(--nim-text)]">Auto-approve Commits</span>
+              <span className="setting-description text-xs leading-relaxed text-[var(--nim-text-muted)]">
+                Automatically approve when Claude proposes git commits, without requiring manual confirmation.
               </span>
             </div>
           </label>
