@@ -1267,9 +1267,14 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
               console.log(`[CollabV3] Received indexSyncResponse: ${message.sessions.length} sessions (server total: ${totalCount ?? 'unknown'})`);
             }
             if (pendingIndexFetch) {
+              // Track sessions that fail decryption so we can delete them from the
+              // server index. The next sync cycle will re-push them from the local
+              // PGLite database with the correct encryption key.
+              const decryptionFailedSessionIds: string[] = [];
+
               // Decrypt sensitive fields before returning
-              const decryptedSessions: DecryptedSessionIndexEntry[] = await Promise.all(
-                message.sessions.map(async (entry): Promise<DecryptedSessionIndexEntry> => {
+              const decryptedSessions: DecryptedSessionIndexEntry[] = (await Promise.all(
+                message.sessions.map(async (entry): Promise<DecryptedSessionIndexEntry | null> => {
                   // Start with base fields that don't need transformation
                   let title: string;
                   let projectId: string;
@@ -1280,8 +1285,9 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
                     try {
                       projectId = await decryptProjectId(entry.encryptedProjectId, entry.projectIdIv, config.encryptionKey);
                     } catch (err) {
-                      console.error('[CollabV3] Failed to decrypt session projectId:', err);
-                      projectId = 'unknown';
+                      console.warn(`[CollabV3] Cannot decrypt session ${entry.sessionId} (wrong encryption key, likely from before userId migration). Deleting from server index so it re-syncs with correct key.`);
+                      decryptionFailedSessionIds.push(entry.sessionId);
+                      return null;
                     }
                   } else {
                     // No encrypted projectId - use placeholder
@@ -1293,8 +1299,9 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
                     try {
                       title = await decryptTitle(entry.encryptedTitle, entry.titleIv, config.encryptionKey);
                     } catch (err) {
-                      console.error('[CollabV3] Failed to decrypt session title:', err);
-                      title = 'Untitled';
+                      console.warn(`[CollabV3] Cannot decrypt session ${entry.sessionId} title (wrong encryption key). Deleting from server index so it re-syncs with correct key.`);
+                      decryptionFailedSessionIds.push(entry.sessionId);
+                      return null;
                     }
                   } else {
                     // No encrypted title - show as untitled until resynced
@@ -1306,7 +1313,8 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
                     try {
                       queuedPrompts = await decryptQueuedPrompts(entry.encryptedQueuedPrompts, config.encryptionKey);
                     } catch (err) {
-                      console.error('[CollabV3] Failed to decrypt queued prompts:', err);
+                      // Non-fatal: queued prompts are transient, just skip
+                      console.warn(`[CollabV3] Failed to decrypt queued prompts for session ${entry.sessionId}, skipping`);
                     }
                   }
 
@@ -1319,7 +1327,8 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
                       currentContext = clientMeta.currentContext;
                       hasPendingPrompt = clientMeta.hasPendingPrompt;
                     } catch (err) {
-                      console.error('[CollabV3] Failed to decrypt client metadata:', err);
+                      // Non-fatal: metadata is supplementary, just skip
+                      console.warn(`[CollabV3] Failed to decrypt client metadata for session ${entry.sessionId}, skipping`);
                     }
                   }
 
@@ -1367,7 +1376,20 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
 
                   return decrypted;
                 })
-              );
+              )).filter((s): s is DecryptedSessionIndexEntry => s !== null);
+
+              // Delete server-side index entries that couldn't be decrypted.
+              // They were encrypted with a different key (e.g., before userId migration).
+              // The next sync cycle will re-push them from the local PGLite database
+              // with the correct encryption key.
+              if (decryptionFailedSessionIds.length > 0 && indexWs && indexWs.readyState === WebSocket.OPEN) {
+                console.log(`[CollabV3] Deleting ${decryptionFailedSessionIds.length} undecryptable index entries from server (will re-sync with correct key)`);
+                for (const badSessionId of decryptionFailedSessionIds) {
+                  sessionIndexCache.delete(badSessionId);
+                  const deleteMsg: ClientMessage = { type: 'indexDelete', sessionId: badSessionId };
+                  indexWs.send(JSON.stringify(deleteMsg));
+                }
+              }
 
               // Decrypt project entries
               const decryptedProjects = await Promise.all(
