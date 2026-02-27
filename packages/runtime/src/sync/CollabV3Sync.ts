@@ -1185,9 +1185,21 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
 
   // Connect to index for session list updates
   async function connectToIndex(): Promise<void> {
-    if (indexWs) {
-      // console.log('[CollabV3] connectToIndex() - already connected');
+    if (indexWs && indexConnected) {
+      // Already connected and healthy, nothing to do
       return;
+    }
+
+    // Clean up zombie WebSocket: created but never connected (or connection dropped
+    // silently). Without this, we'd return early and never establish a fresh connection.
+    if (indexWs && !indexConnected) {
+      console.log('[CollabV3] connectToIndex() - closing zombie WebSocket (readyState:', indexWs.readyState, ')');
+      try {
+        indexWs.onclose = null; // Prevent onclose from triggering reconnect loop
+        indexWs.onerror = null;
+        indexWs.close();
+      } catch (_) { /* ignore close errors */ }
+      indexWs = null;
     }
 
     // console.log('[CollabV3] connectToIndex() - CREATING INDEX WebSocket');
