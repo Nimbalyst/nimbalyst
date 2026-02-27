@@ -39,8 +39,8 @@ export interface ChatSidebarProps {
   width?: number;
   /** Callback when width changes (during resize) */
   onWidthChange?: (width: number) => void;
-  /** Callback to switch to agent mode (for "All Sessions") */
-  onSwitchToAgentMode?: () => void;
+  /** Callback to switch to agent mode, optionally opening a specific session */
+  onSwitchToAgentMode?: (sessionId?: string) => void;
 }
 
 export const ChatSidebar = forwardRef<ChatSidebarRef, ChatSidebarProps>(({
@@ -316,14 +316,25 @@ export const ChatSidebar = forwardRef<ChatSidebarRef, ChatSidebarProps>(({
           onRenameSession={handleRenameSession}
           onOpenSessionManager={onSwitchToAgentMode}
         />
-        <button
-          className="chat-sidebar-new-button flex items-center gap-1 px-3 py-1.5 rounded-md text-[0.8125rem] font-medium bg-nim-primary text-white border-none cursor-pointer transition-opacity duration-150 hover:opacity-90"
-          onClick={handleNewSession}
-          title="Start new conversation"
-        >
-          <MaterialSymbol icon="add" size={16} />
-          New
-        </button>
+        <div className="flex items-center gap-1">
+          {onSwitchToAgentMode && (
+            <button
+              className="chat-sidebar-maximize-button flex items-center justify-center w-7 h-7 rounded-md text-nim-muted border-none cursor-pointer transition-colors duration-150 hover:bg-nim-bg-active hover:text-nim bg-transparent"
+              onClick={() => onSwitchToAgentMode(sessionId ?? undefined)}
+              title="Open in agent mode"
+            >
+              <MaterialSymbol icon="zoom_out_map" size={16} />
+            </button>
+          )}
+          <button
+            className="chat-sidebar-new-button flex items-center gap-1 px-3 py-1.5 rounded-md text-[0.8125rem] font-medium bg-nim-primary text-white border-none cursor-pointer transition-opacity duration-150 hover:opacity-90"
+            onClick={handleNewSession}
+            title="Start new conversation"
+          >
+            <MaterialSymbol icon="add" size={16} />
+            New
+          </button>
+        </div>
       </div>
 
       <SessionTranscript

@@ -1034,7 +1034,7 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
             onWidthChange={setAIChatWidth}
             getDocumentContext={getDocumentContext}
             onFileOpen={handleWorkspaceFileSelect}
-            onSwitchToAgentMode={onSwitchToAgentMode ? () => onSwitchToAgentMode() : undefined}
+            onSwitchToAgentMode={onSwitchToAgentMode ? (sid?: string) => onSwitchToAgentMode(undefined, sid) : undefined}
           />
         )}
       </div>
