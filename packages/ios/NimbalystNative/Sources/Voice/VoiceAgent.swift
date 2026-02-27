@@ -238,7 +238,7 @@ public final class VoiceAgent: ObservableObject {
         }
 
         client.onAudioDone = { [weak self] in
-            // Playback completion handled by audioPipeline.onPlaybackFinished
+            self?.audioPipeline.markEndOfPlayback()
         }
 
         audioPipeline.onAudioCaptured = { [weak self] base64Audio in
