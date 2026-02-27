@@ -2091,17 +2091,27 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
             }
           } else if (chunk.type === 'rate_limit_event') {
             // Handle rate limit events from the Claude Code SDK
+            // Statuses: "allowed" (ok), "allowed_warning" (approaching limit), blocked/rate_limited (hit limit)
             const info = chunk.rate_limit_info;
-            if (info && info.status !== 'allowed') {
-              // Actually rate-limited - show a widget in the transcript
-              const resetsAt = info.resetsAt ? new Date(info.resetsAt * 1000).toISOString() : null;
+            if (!info) {
+              // No info, silently skip
+            } else if (info.status === 'allowed') {
+              // All good, silently consume - the sidebar usage indicator handles display
+            } else {
+              // Either a warning (allowed_warning) or an actual block - show in transcript
+              // Pass resetsAt as Unix timestamp (seconds) to avoid timezone issues with ISO string parsing
+              const resetsAtUnix = info.resetsAt || null;
               const limitType = info.rateLimitType === 'five_hour' ? '5-hour session' : info.rateLimitType || 'unknown';
+              const utilization = info.utilization != null ? Math.round(info.utilization * 100) : null;
+              const isWarning = info.status === 'allowed_warning';
+              const marker = isWarning ? '[RATE_LIMIT_WARNING]' : '[RATE_LIMIT]';
+              const utilizationStr = utilization != null ? ` usage=${utilization}` : '';
+              // Yield as text (not error) so it doesn't interrupt the stream or trigger error handling
               yield {
-                type: 'error',
-                error: `Rate limited (${limitType} limit). Resets at: ${resetsAt || 'unknown'}. [RATE_LIMIT]`
+                type: 'text',
+                content: `\n\n<!-- ${marker} limitType=${limitType} resetsAtUnix=${resetsAtUnix || 'unknown'}${utilizationStr} -->\n\n`
               };
             }
-            // When status === 'allowed', silently consume - the usage indicator handles display
           } else {
             // Unknown chunk type - display it anyway so nothing is lost
 

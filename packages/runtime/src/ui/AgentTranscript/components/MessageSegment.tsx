@@ -130,9 +130,9 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
     );
   };
 
-  // Helper function to check if content is a rate limit event
-  const isRateLimitError = (text: string): boolean => {
-    return text.includes('[RATE_LIMIT]');
+  // Helper function to check if content contains a rate limit marker
+  const isRateLimitContent = (text: string): boolean => {
+    return text.includes('[RATE_LIMIT_WARNING]') || text.includes('[RATE_LIMIT]');
   };
 
   // Helper function to strip all <NIMBALYST_SYSTEM_MESSAGE> blocks from content
@@ -151,6 +151,11 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
     // Skip if this is an error message - renderError() will handle it
     // This prevents duplicate LoginRequiredWidget rendering
     if (message.isError) return null;
+
+    // Check if this is a rate limit event embedded in text content
+    if (!isUser && isRateLimitContent(message.content)) {
+      return <RateLimitWidget content={message.content} />;
+    }
 
     // Check if this is an OpenAI auth error in the message content
     if (!isUser && isOpenAIAuthError(message.content)) {
@@ -309,8 +314,8 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
     }
 
     // Check if this is a rate limit event
-    if (isRateLimitError(errorMessage)) {
-      return <RateLimitWidget errorMessage={errorMessage} />;
+    if (isRateLimitContent(errorMessage)) {
+      return <RateLimitWidget content={errorMessage} />;
     }
 
     // Otherwise, render the generic error UI

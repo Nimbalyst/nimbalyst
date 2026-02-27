@@ -12,67 +12,84 @@ const injectRateLimitStyles = () => {
       background-color: color-mix(in srgb, var(--nim-warning) 8%, transparent);
       border: 1px solid color-mix(in srgb, var(--nim-warning) 25%, transparent);
     }
+    .rate-limit-widget-blocked {
+      background-color: color-mix(in srgb, var(--nim-error) 8%, transparent);
+      border: 1px solid color-mix(in srgb, var(--nim-error) 25%, transparent);
+    }
   `;
   document.head.appendChild(style);
 };
 
 interface RateLimitWidgetProps {
-  errorMessage: string;
+  content: string;
 }
 
 /**
- * Parses reset time from the error message format:
- * "Rate limited (5-hour session limit). Resets at: 2026-02-27T23:00:00.000Z. [RATE_LIMIT]"
+ * Parses rate limit info from the HTML comment marker format:
+ * <!-- [RATE_LIMIT_WARNING] limitType=5-hour session resetsAtUnix=1772233200 usage=91 -->
+ * <!-- [RATE_LIMIT] limitType=5-hour session resetsAtUnix=1772233200 -->
  */
-function parseResetTime(errorMessage: string): string | null {
-  const match = errorMessage.match(/Resets at: (.+?)\./);
-  if (!match || match[1] === 'unknown') return null;
-  return match[1];
+function parseRateLimitInfo(content: string): {
+  isWarning: boolean;
+  limitType: string;
+  resetsAtMs: number | null;
+  utilization: number | null;
+} {
+  const isWarning = content.includes('[RATE_LIMIT_WARNING]');
+  const limitTypeMatch = content.match(/limitType=([^\s]+(?:\s+[^\s=]+)*?)(?:\s+resetsAtUnix=|\s+usage=|\s*-->)/);
+  const resetsAtMatch = content.match(/resetsAtUnix=(\d+)/);
+  const utilizationMatch = content.match(/usage=(\d+)/);
+
+  return {
+    isWarning,
+    limitType: limitTypeMatch ? limitTypeMatch[1] : 'usage',
+    // Convert Unix seconds to milliseconds for Date math
+    resetsAtMs: resetsAtMatch ? parseInt(resetsAtMatch[1], 10) * 1000 : null,
+    utilization: utilizationMatch ? parseInt(utilizationMatch[1], 10) : null,
+  };
 }
 
-function formatResetTime(isoString: string): string {
-  try {
-    const resetDate = new Date(isoString);
-    const now = new Date();
-    const diffMs = resetDate.getTime() - now.getTime();
+function formatResetTime(resetsAtMs: number): string {
+  const diffMs = resetsAtMs - Date.now();
 
-    if (diffMs <= 0) return 'any moment now';
+  if (diffMs <= 0) return 'any moment now';
 
-    const diffMinutes = Math.floor(diffMs / (1000 * 60));
-    const diffHours = Math.floor(diffMinutes / 60);
-    const remainingMinutes = diffMinutes % 60;
+  const diffMinutes = Math.floor(diffMs / (1000 * 60));
+  const diffHours = Math.floor(diffMinutes / 60);
+  const remainingMinutes = diffMinutes % 60;
 
-    if (diffHours > 0) {
-      return `${diffHours}h ${remainingMinutes}m`;
-    }
-    return `${diffMinutes}m`;
-  } catch {
-    return isoString;
+  if (diffHours > 0) {
+    return `${diffHours}h ${remainingMinutes}m`;
   }
+  return `${diffMinutes}m`;
 }
 
-function parseLimitType(errorMessage: string): string {
-  const match = errorMessage.match(/Rate limited \((.+?) limit\)/);
-  return match ? match[1] : 'usage';
-}
-
-export const RateLimitWidget: React.FC<RateLimitWidgetProps> = ({ errorMessage }) => {
+export const RateLimitWidget: React.FC<RateLimitWidgetProps> = ({ content }) => {
   useEffect(() => {
     injectRateLimitStyles();
   }, []);
 
-  const resetTime = parseResetTime(errorMessage);
-  const limitType = parseLimitType(errorMessage);
+  const { isWarning, limitType, resetsAtMs, utilization } = parseRateLimitInfo(content);
+  const accentVar = isWarning ? '--nim-warning' : '--nim-error';
 
   return (
-    <div className="rate-limit-widget my-4 p-4 rounded-lg flex flex-col gap-2">
+    <div className={isWarning ? 'rate-limit-widget my-4 p-4 rounded-lg flex flex-col gap-2' : 'rate-limit-widget-blocked my-4 p-4 rounded-lg flex flex-col gap-2'}>
       <div className="flex items-center gap-2">
-        <span className="flex items-center justify-center w-5 h-5 rounded-full bg-[var(--nim-warning)] text-white text-xs font-bold">!</span>
-        <span className="text-[var(--nim-warning)] text-sm font-semibold">Rate limit reached</span>
+        <span
+          className="flex items-center justify-center w-5 h-5 rounded-full text-white text-xs font-bold"
+          style={{ backgroundColor: `var(${accentVar})` }}
+        >
+          !
+        </span>
+        <span className="text-sm font-semibold" style={{ color: `var(${accentVar})` }}>
+          {isWarning ? 'Approaching rate limit' : 'Rate limit reached'}
+        </span>
       </div>
       <div className="text-[var(--nim-text-muted)] text-[0.85rem] leading-relaxed">
-        You've hit your {limitType} rate limit.
-        {resetTime && ` Resets in ${formatResetTime(resetTime)}.`}
+        {isWarning
+          ? `You're at ${utilization != null ? `${utilization}%` : 'near'} of your ${limitType} limit.`
+          : `You've hit your ${limitType} rate limit.`}
+        {resetsAtMs && ` Resets in ${formatResetTime(resetsAtMs)}.`}
       </div>
     </div>
   );
