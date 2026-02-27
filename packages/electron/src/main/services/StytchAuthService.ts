@@ -72,6 +72,10 @@ interface StytchAuthState {
    *  the JWT sub claim changes to the team org member ID. This field preserves the
    *  personal org member ID so sync room IDs and encryption keys stay stable. */
   personalUserId: string | null;
+  /** Personal-org-scoped JWT -- separate from sessionJwt which may be team-scoped.
+   *  Used exclusively for session sync (IndexRoom, session rooms) where the server
+   *  validates JWT sub === room userId. */
+  personalSessionJwt: string | null;
 }
 
 interface StoredStytchCredentials {
@@ -109,6 +113,7 @@ let authState: StytchAuthState = {
   orgId: null,
   personalOrgId: null,
   personalUserId: null,
+  personalSessionJwt: null,
 };
 
 let stytchConfig: StytchConfig | null = null;
@@ -236,6 +241,13 @@ export function initializeStytchAuth(config: StytchConfig): void {
     // Validate JWT format (must be 3 parts separated by dots)
     const hasValidJwt = savedCredentials.sessionJwt && savedCredentials.sessionJwt.split('.').length === 3;
 
+    // On restore, personalSessionJwt is only valid if we're still in the personal org.
+    // If a team exchange happened, personalSessionJwt will be set when SyncManager calls
+    // resolvePersonalUserId() or refreshPersonalSession().
+    const isInPersonalOrg = !savedCredentials.orgId || !savedCredentials.personalOrgId
+      || savedCredentials.orgId === savedCredentials.personalOrgId;
+    const restoredJwt = hasValidJwt ? savedCredentials.sessionJwt : null;
+
     // Use updateAuthState to notify listeners (like RepositoryManager) of the restored session
     updateAuthState({
       isAuthenticated: true,
@@ -247,10 +259,11 @@ export function initializeStytchAuth(config: StytchConfig): void {
       } : null,
       session: null,
       sessionToken: savedCredentials.sessionToken,
-      sessionJwt: hasValidJwt ? savedCredentials.sessionJwt : null,
+      sessionJwt: restoredJwt,
       orgId: savedCredentials.orgId,
       personalOrgId: savedCredentials.personalOrgId || null,
       personalUserId: savedCredentials.personalUserId || null,
+      personalSessionJwt: isInPersonalOrg ? restoredJwt : null,
     });
     // One-time migration: if personalOrgId is missing (pre-existing creds from before
     // this field was added), persist the current orgId as personalOrgId.
@@ -344,6 +357,7 @@ export async function handleAuthCallback(params: {
   const personalUserId = authState.personalUserId || userId || null;
 
   // Update auth state
+  // On initial auth, we're in the personal org, so sessionJwt is the personal JWT too.
   updateAuthState({
     isAuthenticated: true,
     user: userId ? {
@@ -358,6 +372,7 @@ export async function handleAuthCallback(params: {
     orgId: orgId || null,
     personalOrgId,
     personalUserId,
+    personalSessionJwt: validatedJwt,
   });
 
   // Save credentials for persistence
@@ -536,8 +551,8 @@ export async function resolvePersonalUserId(serverUrl: string): Promise<string |
       return null;
     }
 
-    // Persist the resolved personal member ID
-    authState = { ...authState, personalUserId };
+    // Persist the resolved personal member ID and personal JWT
+    authState = { ...authState, personalUserId, personalSessionJwt: data.sessionJwt };
     const creds = loadStytchCredentials();
     if (creds) {
       saveStytchCredentials({ ...creds, personalUserId });
@@ -550,7 +565,7 @@ export async function resolvePersonalUserId(serverUrl: string): Promise<string |
       updateSessionToken(data.sessionToken);
     }
 
-    logger.main.info('[StytchAuthService] Resolved personalUserId:', personalUserId);
+    logger.main.info('[StytchAuthService] Resolved personalUserId:', personalUserId, 'and stored personal JWT');
     return personalUserId;
   } catch (error) {
     logger.main.error('[StytchAuthService] Error resolving personalUserId:', error);
@@ -560,9 +575,91 @@ export async function resolvePersonalUserId(serverUrl: string): Promise<string |
 
 /**
  * Get the current session JWT for server authentication.
+ * After a team session exchange, this may be a team-org-scoped JWT.
  */
 export function getSessionJwt(): string | null {
   return authState.sessionJwt;
+}
+
+/**
+ * Get the personal-org-scoped JWT for session sync.
+ * This JWT's sub claim matches personalUserId, which the server uses
+ * for session/index room routing. Falls back to sessionJwt if we
+ * haven't done a team session exchange (personal org is the default).
+ */
+export function getPersonalSessionJwt(): string | null {
+  return authState.personalSessionJwt || authState.sessionJwt;
+}
+
+/**
+ * Refresh the personal-org-scoped JWT via session exchange.
+ * Called by SyncManager to keep the personal JWT fresh for session sync.
+ */
+export async function refreshPersonalSession(serverUrl: string): Promise<boolean> {
+  const personalOrgId = authState.personalOrgId;
+  if (!personalOrgId) {
+    logger.main.warn('[StytchAuthService] Cannot refresh personal session: no personalOrgId');
+    return false;
+  }
+
+  const sessionToken = authState.sessionToken;
+  if (!sessionToken) {
+    logger.main.warn('[StytchAuthService] Cannot refresh personal session: no session token');
+    return false;
+  }
+
+  // If we're already in the personal org (no team exchange happened),
+  // just do a normal refresh
+  if (!authState.orgId || authState.orgId === personalOrgId) {
+    const result = await refreshSession(serverUrl);
+    if (result) {
+      authState = { ...authState, personalSessionJwt: authState.sessionJwt };
+    }
+    return result;
+  }
+
+  // We're in a team org -- do a session exchange to personal org for a fresh JWT
+  try {
+    const httpUrl = serverUrl.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:');
+    const jwt = authState.sessionJwt;
+    if (!jwt) return false;
+
+    const response = await net.fetch(`${httpUrl}/api/teams/${personalOrgId}/switch`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${jwt}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ sessionToken }),
+    });
+
+    if (!response.ok) {
+      logger.main.warn('[StytchAuthService] Personal session refresh failed:', response.status);
+      return false;
+    }
+
+    const data = await response.json() as {
+      sessionJwt: string;
+      sessionToken: string;
+    };
+
+    if (!data.sessionJwt || data.sessionJwt.split('.').length !== 3) {
+      logger.main.error('[StytchAuthService] Personal session refresh returned invalid JWT');
+      return false;
+    }
+
+    authState = { ...authState, personalSessionJwt: data.sessionJwt };
+
+    // Update the session token (shared across orgs)
+    if (data.sessionToken) {
+      updateSessionToken(data.sessionToken);
+    }
+
+    return true;
+  } catch (error) {
+    logger.main.error('[StytchAuthService] Error refreshing personal session:', error);
+    return false;
+  }
 }
 
 /**

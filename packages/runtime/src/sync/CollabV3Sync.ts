@@ -636,12 +636,11 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
   let currentUserId: string | null = null;
 
   // Helper to get fresh JWT and extract user ID.
-  // If config.userId is provided (stable personal org member ID), use that
-  // instead of extracting from JWT. After a team session exchange, the JWT sub
-  // claim changes to the team org member ID which would break room routing.
+  // Always extract userId from JWT sub claim -- the server validates that
+  // the JWT sub matches the userId in the room URL path.
   async function ensureFreshJwt(): Promise<{ jwt: string; userId: string }> {
     const jwt = await config.getJwt();
-    const userId = config.userId || extractUserIdFromJwt(jwt);
+    const userId = extractUserIdFromJwt(jwt);
     currentJwt = jwt;
     currentUserId = userId;
     return { jwt, userId };

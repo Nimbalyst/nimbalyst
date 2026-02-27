@@ -19,7 +19,7 @@ import * as syncModule from '@nimbalyst/runtime/sync';
 import { getSessionSyncConfig, type SessionSyncConfig } from '../utils/store';
 import { logger } from '../utils/logger';
 import { getCredentials } from './CredentialService';
-import { getStytchUserId, isAuthenticated, getPersonalOrgId, getPersonalUserId, resolvePersonalUserId } from './StytchAuthService';
+import { getStytchUserId, isAuthenticated, getPersonalOrgId, getPersonalUserId, resolvePersonalUserId, getPersonalSessionJwt, refreshPersonalSession } from './StytchAuthService';
 import { app } from 'electron';
 import * as os from 'os';
 
@@ -394,29 +394,19 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
       orgId: personalOrgId,
       userId: personalUserId,
       getJwt: async () => {
-        const { refreshSession: doRefresh, getSessionJwt: getJwt } = await import('./StytchAuthService');
-
-        // Only refresh if enough time has passed since last refresh
+        // Session sync uses the PERSONAL JWT -- its sub claim matches personalUserId
+        // which the server validates against the room URL path. The team-scoped JWT
+        // (from getSessionJwt) has a different sub and would fail auth.
         const now = Date.now();
         if (now - lastRefreshTime > MIN_REFRESH_INTERVAL) {
-          // logger.main.info('[SyncManager] Refreshing JWT...');
-          const refreshResult = await doRefresh(serverUrl);
-          // logger.main.info('[SyncManager] Refresh result:', refreshResult);
+          await refreshPersonalSession(serverUrl);
           lastRefreshTime = now;
         }
 
-        const freshJwt = getJwt();
+        const freshJwt = getPersonalSessionJwt();
         if (!freshJwt || freshJwt.split('.').length !== 3) {
-          throw new Error('Failed to get valid JWT after refresh');
+          throw new Error('Failed to get valid personal JWT for session sync');
         }
-
-        // Log JWT expiry for debugging (verbose - uncomment if needed)
-        // try {
-        //   const payload = JSON.parse(atob(freshJwt.split('.')[1]));
-        //   logger.main.info('[SyncManager] JWT exp:', payload.exp, 'now:', Math.floor(Date.now() / 1000));
-        // } catch {
-        //   // ignore
-        // }
 
         return freshJwt;
       },
