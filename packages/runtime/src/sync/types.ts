@@ -15,12 +15,20 @@ export interface SyncConfig {
    * Function to get a fresh JWT for authentication.
    * Called before each WebSocket connection to ensure the JWT isn't expired.
    * JWTs typically expire in ~5 minutes, so this must return a fresh one.
-   * The user ID is extracted from the JWT 'sub' claim.
    */
   getJwt: () => Promise<string>;
 
   /** B2B organization ID for org-scoped room IDs. */
   orgId: string;
+
+  /**
+   * Stable user ID for room ID construction.
+   * In Stytch B2B, the JWT 'sub' claim is the member ID which differs per org.
+   * After a team session exchange, the JWT sub becomes the team org member ID,
+   * but sync room IDs must use the personal org member ID to stay consistent
+   * across devices. If provided, this takes precedence over extracting from JWT.
+   */
+  userId?: string;
 
   /** Optional encryption key for E2E encryption */
   encryptionKey?: CryptoKey;

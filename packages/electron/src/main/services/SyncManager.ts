@@ -19,7 +19,7 @@ import * as syncModule from '@nimbalyst/runtime/sync';
 import { getSessionSyncConfig, type SessionSyncConfig } from '../utils/store';
 import { logger } from '../utils/logger';
 import { getCredentials } from './CredentialService';
-import { getStytchUserId, isAuthenticated, getPersonalOrgId } from './StytchAuthService';
+import { getStytchUserId, isAuthenticated, getPersonalOrgId, getPersonalUserId, resolvePersonalUserId } from './StytchAuthService';
 import { app } from 'electron';
 import * as os from 'os';
 
@@ -324,9 +324,30 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
   const credentials = getCredentials();
 
   try {
+    // Use personalUserId for stable identity across team session exchanges.
+    // In Stytch B2B, each org has its own member record. After joining a team,
+    // the session gets exchanged to the team org and the JWT sub / user_id changes
+    // to the team org member ID. We must use the personal org member ID for:
+    // 1. Encryption key salt (must match iOS which always uses personal member ID)
+    // 2. Sync room IDs (must be same room as iOS to see each other's data)
+    let personalUserId = getPersonalUserId();
+    if (!personalUserId) {
+      // Migration: personalUserId not yet stored. Try to resolve by exchanging
+      // the session to the personal org and extracting the member ID from the JWT.
+      logger.main.info('[SyncManager] personalUserId not set, attempting to resolve via session exchange...');
+      personalUserId = await resolvePersonalUserId(serverUrl);
+    }
+    if (!personalUserId) {
+      // Last resort fallback: use whatever userId we have (may be team member ID).
+      // This is wrong for multi-org users but better than not syncing at all.
+      logger.main.warn('[SyncManager] Could not resolve personalUserId, falling back to stytchUserId:', stytchUserId);
+      personalUserId = stytchUserId;
+    }
+
     logger.main.info('[SyncManager] Initializing session sync...', {
       serverUrl,
       userId: stytchUserId,
+      personalUserId,
     });
 
     const {
@@ -336,8 +357,8 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
     } = loadSyncModule();
 
     // CollabV3 uses the encryption key seed from CredentialService for E2E encryption
-    // Note: We use stytchUserId for salt to ensure same encryption key across devices
-    const encryptionKey = await deriveEncryptionKey(credentials.encryptionKeySeed, `nimbalyst:${stytchUserId}`);
+    // Use personalUserId for salt to ensure same encryption key across devices
+    const encryptionKey = await deriveEncryptionKey(credentials.encryptionKeySeed, `nimbalyst:${personalUserId}`);
     state.encryptionKey = encryptionKey;
 
     // Cache user ID for dynamic device info callback
@@ -358,18 +379,20 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
     let lastRefreshTime = 0;
     const MIN_REFRESH_INTERVAL = 60000; // 1 minute
 
-    // Use personalOrgId for session sync room IDs -- this stays stable even when
-    // the JWT is scoped to a team org (after a Stytch session exchange).
+    // Use personalOrgId and personalUserId for session sync room IDs -- these stay
+    // stable even when the JWT is scoped to a team org (after a Stytch session exchange).
     // The server relaxes the orgId check for user-scoped rooms (session/index).
     const personalOrgId = getPersonalOrgId();
     if (!personalOrgId) {
       logger.main.warn('[SyncManager] No personal org ID available - cannot initialize sync');
       return baseStore;
     }
+    logger.main.info(`[SyncManager] Using personalOrgId=${personalOrgId} personalUserId=${personalUserId} for sync room IDs`);
 
     const provider = createCollabV3Sync({
       serverUrl,
       orgId: personalOrgId,
+      userId: personalUserId,
       getJwt: async () => {
         const { refreshSession: doRefresh, getSessionJwt: getJwt } = await import('./StytchAuthService');
 
