@@ -335,7 +335,7 @@ export class GitWorktreeService {
       throw new Error('worktreePath is required');
     }
 
-    logger.info('Getting worktree status', { worktreePath, baseBranchOverride });
+    // logger.info('Getting worktree status', { worktreePath, baseBranchOverride });
 
     const git: SimpleGit = simpleGit(worktreePath);
 
@@ -558,7 +558,7 @@ export class GitWorktreeService {
       throw new Error('workspacePath is required');
     }
 
-    logger.info('Listing worktrees', { workspacePath });
+    // logger.info('Listing worktrees', { workspacePath });
 
     const git: SimpleGit = simpleGit(workspacePath);
 
@@ -594,7 +594,7 @@ export class GitWorktreeService {
         }
       }
 
-      logger.info('Found worktrees', { count: worktrees.length });
+      // logger.info('Found worktrees', { count: worktrees.length });
       return worktrees;
     } catch (error) {
       logger.error('Failed to list worktrees', { error, workspacePath });
@@ -693,7 +693,7 @@ export class GitWorktreeService {
       throw new Error('workspacePath is required');
     }
 
-    logger.info('Getting all branch names', { workspacePath });
+    // logger.info('Getting all branch names', { workspacePath });
 
     const git: SimpleGit = simpleGit(workspacePath);
 
@@ -711,7 +711,7 @@ export class GitWorktreeService {
         }
       }
 
-      logger.info('Found branch names', { count: branchNames.size });
+      // logger.info('Found branch names', { count: branchNames.size });
       return branchNames;
     } catch (error) {
       logger.error('Failed to get branch names', { error, workspacePath });
@@ -834,7 +834,7 @@ export class GitWorktreeService {
       throw new Error('repoPath is required');
     }
 
-    logger.info('Checking git state', { repoPath });
+    // logger.info('Checking git state', { repoPath });
 
     const gitDir = path.join(repoPath, '.git');
     const git: SimpleGit = simpleGit(repoPath);
@@ -864,7 +864,7 @@ export class GitWorktreeService {
         conflictedFiles,
       };
 
-      logger.info('Git state check complete', { state });
+      // logger.info('Git state check complete', { state });
       return state;
     } catch (error) {
       logger.error('Failed to check git state', { error, repoPath });
