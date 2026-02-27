@@ -20,6 +20,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.55.1] - 2026-02-27
+
+
+### Added
+- Voice mode: interactive prompt support (answer AskUserQuestion, ExitPlanMode, GitCommitProposal verbally)
+- Voice mode: OpenAI API key input directly on Voice Mode settings panel
+- Maximize button in chat sidebar to open current session in agent mode
+- File count and +/- line stats in agent turn summary ("Finished in 6m 57s · 3 files +45 -12")
+- Session kanban board: keyboard navigation (arrows, Enter, Space), Cmd+arrows to move cards between phases, collapsible columns
+
+### Changed
+- Updated claude-agent-sdk 0.2.45 -> 0.2.62, mcp-sdk 1.26.0 -> 1.27.1, codex-sdk 0.104.0 -> 0.106.0
+- Auto-commit toggle moved from Claude Agent settings to Advanced panel
+- Reduced log noise for worktree operations
+
+### Fixed
+- Mobile sync broken after team session exchange (personal JWT now preserved across org switches)
+- Team panel showing wrong project when multiple teams exist
+- Team key envelope distribution: new members now receive shared documents via broadcast + polling
+- Voice mode: idle timer running during assistant speech, wake-from-sleep, voice drift, echo cancellation
+- Voice agent now receives coding agent results and recent conversation context
+- Auto-commit toggle not persisting across app restarts (atom never hydrated from store)
+- Zombie WebSocket preventing mobile session sync after network changes
+- CI TypeScript check failure for collabv3 test files
+
 ## [0.55.0] - 2026-02-26
 
 
