@@ -1,6 +1,6 @@
 {
   "name": "@nimbalyst/electron",
-  "version": "0.54.20",
+  "version": "0.55.0",
   "private": true,
   "description": "Electron app for Nimbalyst",
   "main": "out/main/index.js",
@@ -10,7 +10,7 @@
   "scripts": {
     "start": "electron-vite preview",
     "dev": "./scripts/dev.sh",
-     "dev:user2": "NIMBALYST_USER_DATA_DIR=\"$HOME/Library/Application Support/@nimbalyst/electron-user2\" VITE_PORT=5274 ./scripts/dev.sh",
+    "dev:user2": "NIMBALYST_USER_DATA_DIR=\"$HOME/Library/Application Support/@nimbalyst/electron-user2\" VITE_PORT=5274 ./scripts/dev.sh",
     "dev:user2:loop": "NIMBALYST_USER_DATA_DIR=\"$HOME/Library/Application Support/@nimbalyst/electron-user2\" VITE_PORT=5274 ./scripts/dev-loop.sh",
     "dev:loop": "./scripts/dev-loop.sh",
     "build": "cross-env NODE_OPTIONS='--max-old-space-size=8192' electron-vite build && npm run build:worker",

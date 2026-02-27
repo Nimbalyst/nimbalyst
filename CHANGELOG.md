@@ -20,6 +20,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.55.0] - 2026-02-26
+
+
+### Added
+- E2E encrypted collaborative document editing via Lexical + yJS through Cloudflare Workers
+- E2E encrypted tracker sync with team-scoped Durable Objects
+- Team trust model with ECDH key exchange, key envelopes, and Stytch B2B org discovery
+- CollabMode for real-time document collaboration with team members
+- TrackerMode with kanban board, item detail panel, and sidebar
+- Team setup UI: TeamPanel, TrackerConfigPanel, team invite/join dialogs
+- Session kanban board atoms and E2E tests
+- "Remove from workstream" context menu for child sessions
+- WebSocket proxy (IPC-bridged) for document sync to bypass Cloudflare browser blocks
+- Lazy batch message loading for session sync (3 sessions at a time)
+
+### Changed
+- Consolidated file watchers into single ref-counted WorkspaceEventBus per workspace
+- Merged rexical package into runtime (all editor code now in packages/runtime/src/editor/)
+- Project rename uses atomic fs.rename() instead of copy+delete to prevent data loss
+- Project move no longer auto-deletes original directory; user verifies before deleting
+- Session drag-drop onto standalone session now creates proper workstream parent
+- Worktree sessions blocked from drag-drop in both directions
+- Throttle uncaught exception dialogs (dedup within 5s, max 3/min)
+- Multiple dev instances now fully isolated with per-instance outDir and userData
+
+### Fixed
+- Shared document list and document sync failures (migration, reconnect, cross-mode handoff)
+- Session list not refreshing after importing Claude Code sessions
+- Session sync instability across org switches (personalOrgId for consistent room IDs)
+- Team collaboration security: sender_user_id tracking, P-256 key validation, JWKS cache-miss refresh
+- Session invalidation on team deletion and auth token persistence after session exchange
+- OS notification click now switches to agent mode to show the session
+- Flush pending DB writes before session completion to prevent stale transcript after /compact
+- Clipboard copy silently failing in Electron renderer
+- Session context MCP server startup and workstream-aware commit prompts
+- All TypeScript compilation errors resolved (38 -> 0)
+- Session drag-drop creating broken parent-child relationships
+
+### Removed
+- Capacitor package (will build native Android app instead)
+- Playground package (no longer needed after rexical merge)
+- ChokidarFileWatcher, SimpleFileWatcher, SimpleWorkspaceWatcher (replaced by WorkspaceEventBus)
+
 ## [0.54.20] - 2026-02-26
 
 
