@@ -34,7 +34,7 @@ import {
   type VoiceTokenUsage,
 } from '../atoms/voiceModeState';
 import { voiceModeSettingsAtom, type VoiceModeSettings } from '../atoms/appSettings';
-import { activeSessionIdAtom, sessionRegistryAtom } from '../atoms/sessions';
+import { activeSessionIdAtom, sessionRegistryAtom, sessionHasPendingInteractivePromptAtom, sessionPendingPromptsAtom, respondToPromptAtom } from '../atoms/sessions';
 import { windowModeAtom } from '../atoms/windowMode';
 
 /**
@@ -206,6 +206,32 @@ function resetVoiceAtoms(): void {
 }
 
 /**
+ * Format a PendingPrompt into a voice-friendly description for the voice agent.
+ */
+function formatPromptForVoice(prompt: { promptType: string; promptId: string; data: any }): string {
+  if (prompt.promptType === 'ask_user_question_request') {
+    const questions = prompt.data?.questions || [];
+    const parts: string[] = [];
+    for (const q of questions) {
+      const options = (q.options || []).map((o: any) => o.label).join(', ');
+      parts.push(`Question: ${q.question}\nOptions: ${options}`);
+    }
+    return parts.join('\n\n') || 'The coding agent has a question for you.';
+  }
+
+  if (prompt.promptType === 'exit_plan_mode_request') {
+    return 'The coding agent has finished planning and wants your approval to proceed with implementation. Say "approve" to proceed or "reject" to revise.';
+  }
+
+  if (prompt.promptType === 'git_commit_proposal_request') {
+    const message = prompt.data?.commitMessage || '';
+    return `The coding agent wants to commit changes. Commit message: "${message}". Say "approve" to commit or "reject" to cancel.`;
+  }
+
+  return 'The coding agent needs your input.';
+}
+
+/**
  * Initialize voice mode IPC listeners.
  * Should be called once at app startup.
  *
@@ -239,9 +265,12 @@ export function initVoiceModeListeners(): () => void {
 
       // Wake from sleeping when assistant starts speaking so the mic
       // is open for the user to interrupt or respond.
+      // Clear the timer -- it should only start AFTER the assistant finishes
+      // (via token-usage), not while audio is still playing.
       if (store.get(voiceListenStateAtom) === 'sleeping') {
         wakeVoiceListening(false);
       }
+      clearListenWindowTimer();
 
       const cb = getVoiceAudioCallback();
       if (cb) cb(payload.audioBase64);
@@ -382,17 +411,14 @@ export function initVoiceModeListeners(): () => void {
     }) => {
       if (!isVoiceActive()) return;
 
-      // Assistant is responding -- wake up if sleeping so user can reply.
-      // Don't start the timer on wake -- let token-usage start it when
-      // the assistant finishes, so the full 10s countdown runs from the
-      // end of the response, not from the first text delta.
-      // Reset the timer on every delta so the idle countdown always measures
-      // from the last time ANYONE spoke (user or assistant).
+      // Assistant is responding -- wake up if sleeping so user can reply,
+      // and CLEAR the timer while speaking. The timer should only start
+      // when the assistant FINISHES (via token-usage), not during speech.
+      // This prevents the mic from timing out while the assistant talks.
       if (store.get(voiceListenStateAtom) === 'sleeping') {
         wakeVoiceListening(false);
-      } else if (store.get(voiceListenStateAtom) === 'listening') {
-        startListenWindowTimer();
       }
+      clearListenWindowTimer();
 
       const entries = store.get(voiceTranscriptEntriesAtom);
       const lastEntry = entries[entries.length - 1];
@@ -513,6 +539,32 @@ export function initVoiceModeListeners(): () => void {
   );
 
   // =========================================================================
+  // Respond to Interactive Prompt (voice agent answered a question)
+  // =========================================================================
+  // The voice agent called respond_to_interactive_prompt, and the main process
+  // forwarded the response here. Use respondToPromptAtom to submit the answer.
+  cleanups.push(
+    window.electronAPI.on('voice-mode:respond-to-prompt', (payload: {
+      sessionId: string;
+      promptId: string;
+      promptType: string;
+      response: any;
+    }) => {
+      if (!isVoiceActive()) return;
+
+      console.log('[voiceModeListeners] Responding to interactive prompt via voice:', payload.promptId);
+
+      // Use the respondToPromptAtom to persist and resolve the prompt
+      store.set(respondToPromptAtom, {
+        sessionId: payload.sessionId,
+        promptId: payload.promptId,
+        promptType: payload.promptType as any,
+        response: payload.response,
+      });
+    })
+  );
+
+  // =========================================================================
   // Editor Context Tracking (active file -> voice agent)
   // =========================================================================
   // When voice is active, track which file the user is viewing and notify
@@ -597,6 +649,54 @@ export function initVoiceModeListeners(): () => void {
     writeDiagnosticEntry(`Switched linked session to "${sessionName}"`);
   }
   cleanups.push(store.sub(activeSessionIdAtom, syncLinkedSession));
+
+  // =========================================================================
+  // Interactive Prompt Wake (AskUserQuestion, GitCommitProposal, etc.)
+  // =========================================================================
+  // When the coding agent presents an interactive prompt that needs user input,
+  // wake voice from sleeping so the user can respond verbally.
+  let promptUnsub: (() => void) | null = null;
+  function updatePromptSubscription(): void {
+    if (promptUnsub) {
+      promptUnsub();
+      promptUnsub = null;
+    }
+    const voiceSessionId = store.get(voiceActiveSessionIdAtom);
+    if (!voiceSessionId) return;
+
+    promptUnsub = store.sub(sessionHasPendingInteractivePromptAtom(voiceSessionId), () => {
+      const hasPending = store.get(sessionHasPendingInteractivePromptAtom(voiceSessionId));
+      if (!hasPending) return;
+
+      // Wake voice from sleeping so user can respond
+      if (store.get(voiceListenStateAtom) === 'sleeping') {
+        console.log('[voiceModeListeners] Interactive prompt detected -> waking voice');
+        wakeVoiceListening(true);
+      }
+
+      // Forward the prompt content to the voice agent so it can speak it
+      const pendingPrompts = store.get(sessionPendingPromptsAtom(voiceSessionId));
+      const latestPrompt = pendingPrompts[pendingPrompts.length - 1];
+      if (latestPrompt) {
+        const description = formatPromptForVoice(latestPrompt);
+        window.electronAPI.send('voice-mode:interactive-prompt', {
+          sessionId: voiceSessionId,
+          promptId: latestPrompt.promptId,
+          promptType: latestPrompt.promptType,
+          description,
+        });
+      }
+    });
+  }
+  // Re-subscribe when the linked session changes
+  cleanups.push(store.sub(voiceActiveSessionIdAtom, updatePromptSubscription));
+  updatePromptSubscription();
+  cleanups.push(() => {
+    if (promptUnsub) {
+      promptUnsub();
+      promptUnsub = null;
+    }
+  });
 
   cleanups.push(store.sub(activeTabIdAtom('main'), checkAndReportFileChange));
   cleanups.push(store.sub(activeSessionIdAtom, checkAndReportFileChange));

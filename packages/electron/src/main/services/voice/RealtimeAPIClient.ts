@@ -73,6 +73,7 @@ export class RealtimeAPIClient {
   private onAskCodingAgentCallback: ((question: string) => Promise<{ success: boolean; answer?: string; error?: string }>) | null = null;
   private onPauseListeningCallback: (() => void) | null = null;
   private onSpeechStoppedCallback: (() => void) | null = null;
+  private onRespondToPromptCallback: ((params: { sessionId: string; promptId: string; promptType: string; answer: string }) => Promise<{ success: boolean; error?: string }>) | null = null;
   private claudeCodeSessionId: string;
   private workspacePath: string | null;
   private window: Electron.BrowserWindow;
@@ -220,6 +221,13 @@ export class RealtimeAPIClient {
    */
   setOnPauseListening(callback: () => void): void {
     this.onPauseListeningCallback = callback;
+  }
+
+  /**
+   * Set callback for responding to an interactive prompt (AskUserQuestion, etc.)
+   */
+  setOnRespondToPrompt(callback: (params: { sessionId: string; promptId: string; promptType: string; answer: string }) => Promise<{ success: boolean; error?: string }>): void {
+    this.onRespondToPromptCallback = callback;
   }
 
   /**
@@ -407,20 +415,24 @@ Session: ${this.sessionContext}
 IMPORTANT: Your knowledge of this codebase is limited to the session context above. You do NOT have current knowledge of this project's code, files, implementation details, or recent changes. Do not assume you know how features work. When in doubt, ask the coding agent.
 
 Tools:
-- submit_agent_prompt: Send a coding task to the coding agent. Use for any task that requires writing code, making changes, or doing technical work.
-- ask_coding_agent: Ask the coding agent a question. Use when you need information about the project, codebase, files, or anything you don't know. The coding agent can search files, read code, and look up information.
-- stop_voice_session: End the voice conversation when the user says goodbye or wants to stop.
-- get_session_summary: Get a summary of what's been discussed in this session.
+- submit_agent_prompt: Send a coding task to the coding agent.
+- ask_coding_agent: Ask the coding agent a question about the project.
+- respond_to_interactive_prompt: Answer a pending interactive prompt from the coding agent.
+- pause_listening: Put the microphone to sleep.
+- stop_voice_session: End the voice session entirely.
+- get_session_summary: Get a summary of what's been discussed.
 
 Guidelines:
-- Be terse. One short sentence per response. Never say filler like "I'll let you know when it's ready" or "Got it, I'll take care of that for you." Just state what you did.
+- Be terse. One short sentence per response. No filler phrases.
+- When the user says "shut up", "stop talking", "be quiet", "stop listening", "shh", or anything similar: IMMEDIATELY call pause_listening. Say NOTHING -- not even "ok". Just call the tool silently.
 - For coding tasks: use submit_agent_prompt, say what you did in ~5 words (e.g. "Submitted."), then STOP. Do NOT say anything about waiting, timing out, or checking back. The microphone will go dormant automatically. You will be woken up with an "[INTERNAL: Task complete...]" message when the coding agent finishes. There is NO timeout -- tasks can take minutes. You do NOT need to monitor, wait, or follow up.
-- For questions about this project: use ask_coding_agent. The answer will come back as the tool result. Summarize it conversationally for the user. This is critical -- you MUST speak the answer when the tool result arrives.
+- For questions about this project: use ask_coding_agent. The answer will come back as the tool result. Summarize it conversationally for the user.
 - Only answer directly for truly general knowledge questions unrelated to this project.
-- For "[INTERNAL: Task complete. Result: ...]" messages: these are completion notifications from a previously submitted coding task. Briefly relay the result to the user. Do NOT say "I finished that task" -- just state the result.
-- For "[INTERNAL: User is now viewing ...]" messages: the user switched to a different file. Do NOT announce this. Just silently note which file the user is looking at so you can reference it if they ask about "this file" or "what I'm looking at".
+- For "[INTERNAL: Task complete. Result: ...]" messages: briefly relay the result to the user. Do NOT say "I finished that task" -- just state the result.
+- For "[INTERNAL: User is now viewing ...]" messages: do NOT announce this. Silently note it for context.
+- For "[INTERACTIVE PROMPT: ...]" messages: the coding agent needs user input. Read the question and option labels aloud conversationally. After the user responds, call respond_to_interactive_prompt with their answer and the promptId/promptType from the message.
 - When summarizing coding agent responses: be concise, paraphrase for speech. Never read code or file paths verbatim.
-- NEVER say the coding agent "didn't respond", "timed out", or "isn't responding". Tasks take as long as they take. You will always get a completion notification.
+- NEVER say the coding agent "didn't respond", "timed out", or "isn't responding". Tasks take as long as they take.
 
 CRITICAL - Passing through user requests:
 When the user says "ask the coding agent..." or "tell the coding agent..." or similar, you MUST pass their request VERBATIM to the coding agent. Do NOT rephrase, interpret, or add your own context. Examples:
@@ -518,6 +530,29 @@ Your job is to be a voice relay, not to interpret or improve the user's requests
             type: 'object',
             properties: {},
             required: [],
+          },
+        },
+        {
+          type: 'function',
+          name: 'respond_to_interactive_prompt',
+          description: 'Respond to an interactive prompt from the coding agent (e.g. AskUserQuestion, ExitPlanMode, GitCommitProposal). When you receive an "[INTERACTIVE PROMPT: ...]" message, read the question and options to the user, listen for their answer, then call this tool with their response. For AskUserQuestion: set answer to the option label the user chose (or their free-text answer). For ExitPlanMode: set answer to "approve" or "reject". For GitCommitProposal: set answer to "approve" or "reject".',
+          parameters: {
+            type: 'object',
+            properties: {
+              promptId: {
+                type: 'string',
+                description: 'The promptId from the interactive prompt message.',
+              },
+              promptType: {
+                type: 'string',
+                description: 'The type of prompt: "ask_user_question_request", "exit_plan_mode_request", or "git_commit_proposal_request".',
+              },
+              answer: {
+                type: 'string',
+                description: 'The user\'s answer. For AskUserQuestion: the selected option label or free-text. For ExitPlanMode/GitCommitProposal: "approve" or "reject".',
+              },
+            },
+            required: ['promptId', 'promptType', 'answer'],
           },
         },
       ],
@@ -776,6 +811,43 @@ Your job is to be a voice relay, not to interpret or improve the user's requests
           });
         } catch (error) {
           console.error('[RealtimeAPIClient] Failed to pause listening:', error);
+          this.sendFunctionCallResult(callId, {
+            success: false,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+        break;
+      }
+
+      case 'respond_to_interactive_prompt': {
+        try {
+          const args = JSON.parse(argsJson);
+          const { promptId, promptType, answer } = args;
+
+          if (!promptId || !promptType || !answer) {
+            this.sendFunctionCallResult(callId, {
+              success: false,
+              error: 'promptId, promptType, and answer are all required',
+            });
+            break;
+          }
+
+          if (this.onRespondToPromptCallback) {
+            const result = await this.onRespondToPromptCallback({
+              sessionId: this.sessionId || '',
+              promptId,
+              promptType,
+              answer,
+            });
+            this.sendFunctionCallResult(callId, result);
+          } else {
+            this.sendFunctionCallResult(callId, {
+              success: false,
+              error: 'Respond to prompt callback not registered',
+            });
+          }
+        } catch (error) {
+          console.error('[RealtimeAPIClient] Failed to respond to prompt:', error);
           this.sendFunctionCallResult(callId, {
             success: false,
             error: error instanceof Error ? error.message : String(error),

@@ -498,6 +498,47 @@ export function initVoiceModeService() {
         };
       });
 
+      // Respond to interactive prompts (AskUserQuestion, ExitPlanMode, etc.)
+      poc.setOnRespondToPrompt(async (params) => {
+        try {
+          const targetSessionId = currentSessionId();
+          console.log('[VoiceModeService] respond_to_interactive_prompt:', {
+            promptId: params.promptId,
+            promptType: params.promptType,
+            answer: params.answer,
+          });
+
+          // Build the response object based on prompt type
+          let response: any;
+          if (params.promptType === 'ask_user_question_request') {
+            // AskUserQuestion expects { answers: { questionText: answerText } }
+            // We don't have the question text, but the resolver just needs the answers object
+            response = { answers: { _voice: params.answer } };
+          } else if (params.promptType === 'exit_plan_mode_request') {
+            response = { approved: params.answer.toLowerCase() === 'approve' };
+          } else if (params.promptType === 'git_commit_proposal_request') {
+            response = { approved: params.answer.toLowerCase() === 'approve' };
+          } else {
+            response = { answer: params.answer };
+          }
+
+          // Send the response through the renderer (which has access to the atoms and IPC)
+          if (window && !window.isDestroyed()) {
+            window.webContents.send('voice-mode:respond-to-prompt', {
+              sessionId: targetSessionId,
+              promptId: params.promptId,
+              promptType: params.promptType,
+              response,
+            });
+          }
+
+          return { success: true };
+        } catch (error) {
+          console.error('[VoiceModeService] Failed to respond to prompt:', error);
+          return { success: false, error: error instanceof Error ? error.message : String(error) };
+        }
+      });
+
       // Track whether an ask_coding_agent call is in-flight so the
       // completion listener doesn't also fire an [INTERNAL] notification
       // for the same response (which would cause the voice agent to say
@@ -1178,6 +1219,33 @@ Generate the summary now:`;
         `[INTERNAL: User is now viewing ${fileName}]`
       );
     }
+  });
+
+  /**
+   * Interactive prompt notification from the renderer.
+   * When a pending prompt appears (AskUserQuestion, ExitPlanMode, etc.),
+   * the renderer forwards it here so we can inject it into the voice agent's
+   * conversation and let the user respond verbally.
+   */
+  ipcMain.on('voice-mode:interactive-prompt', (_event, data: {
+    sessionId: string;
+    promptId: string;
+    promptType: string;
+    description: string;
+  }) => {
+    if (!activeVoiceSession) return;
+    if (!activeVoiceSession.poc.isConnected()) return;
+
+    console.log('[VoiceModeService] Forwarding interactive prompt to voice agent:', {
+      promptId: data.promptId,
+      promptType: data.promptType,
+      descriptionLength: data.description.length,
+    });
+
+    // Send the prompt as a user message so the voice agent speaks it and responds
+    activeVoiceSession.poc.sendUserMessage(
+      `[INTERACTIVE PROMPT: promptId="${data.promptId}" promptType="${data.promptType}"]\n${data.description}`
+    );
   });
 
   console.log('[VoiceModeService] Test handlers initialized');
