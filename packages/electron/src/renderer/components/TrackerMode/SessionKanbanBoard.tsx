@@ -1097,6 +1097,15 @@ export const SessionKanbanBoard: React.FC<SessionKanbanBoardProps> = ({ onSessio
     setPeekCardId(prev => prev === sessionId ? null : sessionId);
   }, []);
 
+  // Move focus (and peek if peek is open) to a new card
+  const moveFocusTo = useCallback((nextId: string) => {
+    setFocusedCardId(nextId);
+    // If peek is open, move it to the new card
+    if (peekCardId) {
+      setPeekCardId(nextId);
+    }
+  }, [peekCardId]);
+
   // Keyboard handler
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     // Don't handle if the search input is focused
@@ -1122,7 +1131,7 @@ export const SessionKanbanBoard: React.FC<SessionKanbanBoardProps> = ({ onSessio
       if (key === 'ArrowDown' || key === 'ArrowUp' || key === 'ArrowLeft' || key === 'ArrowRight') {
         e.preventDefault();
         const firstCard = getSessionAtPosition(0, 0);
-        if (firstCard) setFocusedCardId(firstCard);
+        if (firstCard) moveFocusTo(firstCard);
       }
       return;
     }
@@ -1137,14 +1146,14 @@ export const SessionKanbanBoard: React.FC<SessionKanbanBoardProps> = ({ onSessio
     if (key === 'ArrowDown') {
       e.preventDefault();
       const next = getSessionAtPosition(colIdx, pos.cardIndex + 1);
-      if (next) setFocusedCardId(next);
+      if (next) moveFocusTo(next);
       return;
     }
     if (key === 'ArrowUp') {
       e.preventDefault();
       if (pos.cardIndex > 0) {
         const prev = getSessionAtPosition(colIdx, pos.cardIndex - 1);
-        if (prev) setFocusedCardId(prev);
+        if (prev) moveFocusTo(prev);
       }
       return;
     }
@@ -1154,7 +1163,7 @@ export const SessionKanbanBoard: React.FC<SessionKanbanBoardProps> = ({ onSessio
       for (let i = colIdx + 1; i < navigationGrid.length; i++) {
         const next = getSessionAtPosition(i, pos.cardIndex);
         if (next) {
-          setFocusedCardId(next);
+          moveFocusTo(next);
           break;
         }
       }
@@ -1165,7 +1174,7 @@ export const SessionKanbanBoard: React.FC<SessionKanbanBoardProps> = ({ onSessio
       for (let i = colIdx - 1; i >= 0; i--) {
         const prev = getSessionAtPosition(i, pos.cardIndex);
         if (prev) {
-          setFocusedCardId(prev);
+          moveFocusTo(prev);
           break;
         }
       }
@@ -1211,7 +1220,7 @@ export const SessionKanbanBoard: React.FC<SessionKanbanBoardProps> = ({ onSessio
       }
       return;
     }
-  }, [focusedCardId, peekCardId, findPosition, findColumnIndex, getSessionAtPosition, navigationGrid, handleSelect, handlePeekToggle, setPhase]);
+  }, [focusedCardId, peekCardId, findPosition, findColumnIndex, getSessionAtPosition, navigationGrid, handleSelect, handlePeekToggle, setPhase, moveFocusTo]);
 
   // Clear focus/peek when grouped data changes and the focused card is gone
   useEffect(() => {
