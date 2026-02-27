@@ -41,6 +41,7 @@ import {
   codexUsageIndicatorEnabledAtom,
   initCodexUsageIndicatorSetting,
 } from './store/atoms/codexUsageAtoms';
+import { initVoiceModeListeners } from './store/listeners/voiceModeListeners';
 import {
   autoCommitEnabledAtom,
   initAutoCommitSetting,
@@ -130,6 +131,8 @@ await Promise.all([
   // Ignore errors - settings will use defaults
 });
 
+// Initialize centralized voice mode IPC listeners (must be after settings are loaded)
+initVoiceModeListeners();
 
 const rootElement = document.getElementById('root') as HTMLElement;
 // console.log('[RENDERER] Root element:', rootElement, 'at', new Date().toISOString());

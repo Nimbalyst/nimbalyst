@@ -72,6 +72,7 @@ export class RealtimeAPIClient {
   private onGetSessionSummaryCallback: (() => Promise<{ success: boolean; summary?: string; error?: string }>) | null = null;
   private onAskCodingAgentCallback: ((question: string) => Promise<{ success: boolean; answer?: string; error?: string }>) | null = null;
   private onPauseListeningCallback: (() => void) | null = null;
+  private onSpeechStoppedCallback: (() => void) | null = null;
   private claudeCodeSessionId: string;
   private workspacePath: string | null;
   private window: Electron.BrowserWindow;
@@ -169,6 +170,13 @@ export class RealtimeAPIClient {
    */
   setOnInterruption(callback: () => void): void {
     this.onInterruptionCallback = callback;
+  }
+
+  /**
+   * Set callback for when user stops speaking (VAD detected silence)
+   */
+  setOnSpeechStopped(callback: () => void): void {
+    this.onSpeechStoppedCallback = callback;
   }
 
   /**
@@ -341,6 +349,9 @@ export class RealtimeAPIClient {
       case 'input_audio_buffer.speech_stopped':
         console.log('[RealtimeAPIClient] speech_stopped (VAD detected silence)');
         this.updateActivity();
+        if (this.onSpeechStoppedCallback) {
+          this.onSpeechStoppedCallback();
+        }
         break;
 
       case 'conversation.item.input_audio_transcription.delta':

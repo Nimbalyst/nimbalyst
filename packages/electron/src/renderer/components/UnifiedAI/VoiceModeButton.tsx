@@ -13,7 +13,7 @@ import { AudioCapture } from '../../utils/audioCapture';
 import { AudioPlayback } from '../../utils/audioPlayback';
 import { voiceModeEnabledAtom } from '../../store/atoms/appSettings';
 import { activeSessionIdAtom } from '../../store/atoms/sessions';
-import { voiceTokenUsageAtom, voiceListenStateAtom } from '../../store/atoms/voiceModeState';
+import { voiceTokenUsageAtom, voiceListenStateAtom, voiceErrorAtom, registerVoiceAudioCallback, registerVoiceInterruptCallback, registerVoiceSubmitPromptCallback, registerVoiceAgentTaskCompleteCallback, registerVoiceStoppedCallback } from '../../store/atoms/voiceModeState';
 import { setVoiceActiveSession, clearVoiceActiveSession, persistAndClearVoiceSession, onLinkedSessionChanged, wakeVoiceListening } from '../../store/listeners/voiceModeListeners';
 import { HelpTooltip } from '../../help';
 import { store } from '@nimbalyst/runtime/store';
@@ -28,22 +28,6 @@ onLinkedSessionChanged((newSessionId) => {
 let globalAudioCapture: AudioCapture | null = null;
 let globalAudioPlayback: AudioPlayback | null = null;
 
-// Register global IPC listeners ONCE (not per button click!)
-// Use a window property to survive HMR reloads and prevent duplicate listeners
-const VOICE_LISTENERS_KEY = '__voiceModeListenersCleanup';
-
-// Clean up any existing listeners from previous HMR loads
-// This runs on module load, before any components mount
-if ((window as any)[VOICE_LISTENERS_KEY]) {
-  const oldCleanups = (window as any)[VOICE_LISTENERS_KEY] as (() => void)[];
-  oldCleanups.forEach(cleanup => cleanup?.());
-  delete (window as any)[VOICE_LISTENERS_KEY];
-}
-
-// Callback for error notifications - set by component
-let globalErrorCallback: ((error: { type: string; message: string }) => void) | null = null;
-// Callback for programmatic stop notifications - set by component
-let globalStoppedCallback: (() => void) | null = null;
 // Map of sessionId -> setter for pending voice commands
 // Each AIInput registers its setter with its sessionId
 const pendingVoiceCommandSetters = new Map<string, (command: {
@@ -85,173 +69,102 @@ export function registerPendingVoiceCommandSetter(
   };
 }
 
-function ensureGlobalListenersRegistered() {
-  // Check if listeners are already registered (survives HMR)
-  if ((window as any)[VOICE_LISTENERS_KEY]) {
-    return;
-  }
+/**
+ * Register callbacks with the centralized voice mode listeners.
+ * These callbacks are invoked by voiceModeListeners.ts when IPC events arrive.
+ * NO IPC listeners are registered here -- all IPC goes through the centralized listeners.
+ */
+function registerVoiceCallbacks() {
+  // Audio playback
+  registerVoiceAudioCallback((audioBase64) => {
+    if (activeVoiceSessionId !== null && globalAudioPlayback) {
+      globalAudioPlayback.play(audioBase64);
+    }
+  });
 
-  // Mark as registered immediately to prevent race conditions
-  const cleanupFunctions: (() => void)[] = [];
-  (window as any)[VOICE_LISTENERS_KEY] = cleanupFunctions;
+  // Interrupt (stop audio playback when user starts speaking)
+  registerVoiceInterruptCallback(() => {
+    if (activeVoiceSessionId !== null && globalAudioPlayback) {
+      globalAudioPlayback.stop();
+    }
+  });
 
-  // These listeners are GLOBAL and permanent - voice is a singleton so we just
-  // check that any voice session is active rather than comparing session IDs
-  cleanupFunctions.push(
-    window.electronAPI.on('voice-mode:audio-received', (payload: { sessionId: string; audioBase64: string }) => {
-      if (activeVoiceSessionId !== null && globalAudioPlayback) {
-        globalAudioPlayback.play(payload.audioBase64);
+  // Submit prompt (handle pending command UI and queuing)
+  registerVoiceSubmitPromptCallback(async (payload) => {
+    try {
+      if (activeVoiceSessionId === null) return;
+
+      // Deduplication check
+      const now = Date.now();
+      if (lastProcessedPrompt &&
+          lastProcessedPrompt.prompt === payload.prompt &&
+          now - lastProcessedPrompt.timestamp < DEDUP_WINDOW_MS) {
+        return;
       }
-    })
-  );
+      lastProcessedPrompt = { prompt: payload.prompt, timestamp: now };
 
-  // voice-mode:text-received is handled by centralized voiceModeListeners.ts
+      // Get the submit delay setting
+      const settings = await window.electronAPI.invoke('voice-mode:get-settings') as {
+        submitDelayMs?: number;
+      };
+      const delayMs = settings.submitDelayMs ?? 3000;
 
-  cleanupFunctions.push(
-    window.electronAPI.on('voice-mode:submit-prompt', async (payload: {
-      sessionId: string;
-      workspacePath: string | null;
-      prompt: string;
-      codingAgentPrompt?: { prepend?: string; append?: string };
-    }) => {
-      console.log('[VoiceModeButton] Received submit-prompt event', {
-        payloadSessionId: payload.sessionId,
-        activeVoiceSessionId,
-        prompt: payload.prompt.substring(0, 50),
-      });
+      // Get the setter for this specific session
+      const setter = pendingVoiceCommandSetters.get(payload.sessionId);
 
-      try {
-        // Only process if voice is active
-        if (activeVoiceSessionId === null) {
-          console.log('[VoiceModeButton] Ignoring - no active voice session');
-          return;
-        }
-
-        // Deduplication check: ignore if we just processed the same prompt
-        const now = Date.now();
-        if (lastProcessedPrompt &&
-            lastProcessedPrompt.prompt === payload.prompt &&
-            now - lastProcessedPrompt.timestamp < DEDUP_WINDOW_MS) {
-          console.log('[VoiceModeButton] Ignoring duplicate submit-prompt event');
-          return;
-        }
-        lastProcessedPrompt = { prompt: payload.prompt, timestamp: now };
-        console.log('[VoiceModeButton] Processing submit-prompt, delayMs check next');
-
-        // Get the submit delay setting
-        const settings = await window.electronAPI.invoke('voice-mode:get-settings') as {
-          submitDelayMs?: number;
-        };
-        const delayMs = settings.submitDelayMs ?? 3000;
-
-        // Get the setter for this specific session
-        const setter = pendingVoiceCommandSetters.get(payload.sessionId);
-
-        if (delayMs === 0 || !setter) {
-          // Immediate submission (no delay configured or no setter registered for this session)
-          // Queue the prompt using the existing queue system
-          // This ensures prompts are processed sequentially, not concurrently
-          // Pass isVoiceMode in documentContext so the system prompt includes voice mode instructions
-          // Also pass custom coding agent prompt settings if configured
-          await window.electronAPI.invoke(
-            'ai:createQueuedPrompt',
-            payload.sessionId,
-            payload.prompt,
-            undefined, // attachments
-            {
-              isVoiceMode: true,
-              voiceModeCodingAgentPrompt: payload.codingAgentPrompt,
-            }
-          );
-        } else {
-          // Set pending command for countdown UI - only for the matching session
-          setter({
-            id: crypto.randomUUID(),
-            prompt: payload.prompt,
-            sessionId: payload.sessionId,
-            createdAt: Date.now(),
-            delayMs,
-            workspacePath: payload.workspacePath || '',
-            codingAgentPrompt: payload.codingAgentPrompt,
-          });
-        }
-      } catch (error) {
-        console.error('[VoiceModeButton] Failed to queue prompt:', error);
-      }
-    })
-  );
-
-  // Listen for agent task completion (ai:streamResponse with isComplete=true)
-  // and notify the main process so it can tell the voice assistant.
-  // Use the actual data.sessionId from the event (not activeVoiceSessionId)
-  // so the main process can match it even after a session switch.
-  cleanupFunctions.push(
-    window.electronAPI.onAIStreamResponse((data: any) => {
-      if (data.isComplete && activeVoiceSessionId !== null) {
-        // Extract summary from the agent's final response
-        const summary = data.content || 'Task completed';
-
-        console.log('[VoiceModeButton] Agent task complete, sending to main:', {
-          sessionId: data.sessionId,
-          contentLength: data.content?.length,
-          contentPreview: data.content?.substring(0, 500),
-        });
-
-        // Notify main process that the agent finished, including the summary
-        window.electronAPI.send('voice-mode:agent-task-complete', {
-          sessionId: data.sessionId,
-          summary: summary
+      if (delayMs === 0 || !setter) {
+        await window.electronAPI.invoke(
+          'ai:createQueuedPrompt',
+          payload.sessionId,
+          payload.prompt,
+          undefined,
+          {
+            isVoiceMode: true,
+            voiceModeCodingAgentPrompt: payload.codingAgentPrompt,
+          }
+        );
+      } else {
+        setter({
+          id: crypto.randomUUID(),
+          prompt: payload.prompt,
+          sessionId: payload.sessionId,
+          createdAt: Date.now(),
+          delayMs,
+          workspacePath: payload.workspacePath || '',
+          codingAgentPrompt: payload.codingAgentPrompt,
         });
       }
-    })
-  );
+    } catch (error) {
+      console.error('[VoiceModeButton] Failed to queue prompt:', error);
+    }
+  });
 
-  // Listen for interruption events (user started speaking while assistant was talking)
-  cleanupFunctions.push(
-    window.electronAPI.on('voice-mode:interrupt', (payload: { sessionId: string }) => {
-      if (activeVoiceSessionId !== null && globalAudioPlayback) {
-        globalAudioPlayback.stop();
-      }
-    })
-  );
+  // Agent task complete (notify main process voice agent)
+  registerVoiceAgentTaskCompleteCallback((data) => {
+    if (activeVoiceSessionId === null) return;
+    const summary = data.content || 'Task completed';
+    window.electronAPI.send('voice-mode:agent-task-complete', {
+      sessionId: data.sessionId,
+      summary,
+    });
+  });
 
-  // Listen for error events (quota exceeded, rate limits, etc.)
-  cleanupFunctions.push(
-    window.electronAPI.on('voice-mode:error', (payload: { sessionId: string; error: { type: string; message: string } }) => {
-      if (activeVoiceSessionId !== null && globalErrorCallback) {
-        globalErrorCallback(payload.error);
-      }
-    })
-  );
-
-  // Listen for programmatic stop events (e.g., AI assistant stopped the session)
-  cleanupFunctions.push(
-    window.electronAPI.on('voice-mode:stopped', async (payload: {
-      sessionId: string;
-      tokenUsage?: { inputAudio: number; outputAudio: number; text: number; total: number };
-    }) => {
-      if (activeVoiceSessionId !== null) {
-        // Clean up audio resources
-        if (globalAudioCapture) {
-          globalAudioCapture.stop();
-          globalAudioCapture = null;
-        }
-        if (globalAudioPlayback) {
-          globalAudioPlayback.destroy();
-          globalAudioPlayback = null;
-        }
-
-        // Transcript and token usage persistence handled by voiceModeListeners.ts
-
-        activeVoiceSessionId = null;
-        // Trigger UI update via the stopped callback if registered
-        if (globalStoppedCallback) {
-          globalStoppedCallback();
-        }
-      }
-    })
-  );
+  // Programmatic stop (clean up audio resources)
+  registerVoiceStoppedCallback(() => {
+    if (globalAudioCapture) {
+      globalAudioCapture.stop();
+      globalAudioCapture = null;
+    }
+    if (globalAudioPlayback) {
+      globalAudioPlayback.destroy();
+      globalAudioPlayback = null;
+    }
+    activeVoiceSessionId = null;
+  });
 }
+
+// Register callbacks immediately on module load
+registerVoiceCallbacks();
 
 interface VoiceModeButtonProps {
   workspacePath?: string | null;
@@ -267,40 +180,35 @@ export function VoiceModeButton({ workspacePath }: VoiceModeButtonProps) {
   const [error, setError] = useState<{ type: string; message: string } | null>(null);
   const isSleeping = listenState === 'sleeping';
 
-  // Ensure global IPC listeners are registered once
-  useEffect(() => {
-    ensureGlobalListenersRegistered();
-  }, []);
+  // Read error from centralized atom (set by voiceModeListeners.ts)
+  const voiceError = useAtomValue(voiceErrorAtom);
 
-  // Set up error and stopped callbacks
+  // Sync error atom -> local error state and handle auto-disconnect
   useEffect(() => {
-    if (isVoiceActive && activeVoiceSessionId !== null) {
-      globalErrorCallback = (err) => {
-        setError(err);
-        // Auto-disconnect on error
-        if (globalAudioCapture) {
-          globalAudioCapture.stop();
-          globalAudioCapture = null;
-        }
-        if (globalAudioPlayback) {
-          globalAudioPlayback.destroy();
-          globalAudioPlayback = null;
-        }
-        window.electronAPI.invoke('voice-mode:test-disconnect', workspacePath || null, activeVoiceSessionId || '');
-        activeVoiceSessionId = null;
-        clearVoiceActiveSession();
-        setIsVoiceActive(false);
-      };
-
-      globalStoppedCallback = () => {
-        setIsVoiceActive(false);
-      };
+    if (voiceError && isVoiceActive) {
+      setError(voiceError);
+      // Auto-disconnect on error
+      if (globalAudioCapture) {
+        globalAudioCapture.stop();
+        globalAudioCapture = null;
+      }
+      if (globalAudioPlayback) {
+        globalAudioPlayback.destroy();
+        globalAudioPlayback = null;
+      }
+      window.electronAPI.invoke('voice-mode:test-disconnect', workspacePath || null, activeVoiceSessionId || '');
+      activeVoiceSessionId = null;
+      clearVoiceActiveSession();
+      setIsVoiceActive(false);
     }
-    return () => {
-      globalErrorCallback = null;
-      globalStoppedCallback = null;
-    };
-  }, [isVoiceActive, workspacePath]);
+  }, [voiceError]);
+
+  // Sync listenState -> local isVoiceActive when voice is programmatically stopped
+  useEffect(() => {
+    if (listenState === 'off' && isVoiceActive) {
+      setIsVoiceActive(false);
+    }
+  }, [listenState]);
 
   const handleToggleVoice = async () => {
     setError(null);

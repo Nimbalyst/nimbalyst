@@ -9,7 +9,7 @@
  * - Each transcript entry written to ai_agent_messages as it arrives
  * - Final metadata (token usage, duration) updated when voice stops
  *
- * Call initVoiceModeListeners() once in AgentMode.tsx on mount.
+ * Call initVoiceModeListeners() once in index.tsx at startup.
  */
 
 import { store, activeTabIdAtom, getFilePathFromKey, makeEditorContext } from '@nimbalyst/runtime/store';
@@ -23,6 +23,13 @@ import {
   voiceDbSessionIdAtom,
   voiceLastReportedFileAtom,
   voiceListenStateAtom,
+  voiceErrorAtom,
+  getVoiceAudioCallback,
+  getVoiceInterruptCallback,
+  getVoiceSubmitPromptCallback,
+  getVoiceAgentTaskCompleteCallback,
+  getVoiceStoppedCallback,
+  getVoiceResponseDoneCallback,
   type VoiceTranscriptEntry,
   type VoiceTokenUsage,
 } from '../atoms/voiceModeState';
@@ -112,15 +119,6 @@ export function sleepVoiceListening(): void {
   writeDiagnosticEntry('Listen window: sleeping');
 }
 
-/**
- * Reset the listen window timer (user is actively speaking).
- */
-function resetListenWindowTimer(source?: string): void {
-  if (store.get(voiceListenStateAtom) === 'listening') {
-    console.log(`[voiceModeListeners] resetListenWindowTimer (source: ${source || 'unknown'})`);
-    startListenWindowTimer();
-  }
-}
 
 /**
  * Write a single transcript entry to the database.
@@ -197,6 +195,7 @@ function resetVoiceAtoms(): void {
   store.set(voiceWorkspacePathAtom, null);
   store.set(voiceDbSessionIdAtom, null);
   store.set(voiceLastReportedFileAtom, null);
+  store.set(voiceErrorAtom, null);
 }
 
 /**
@@ -213,20 +212,85 @@ export function initVoiceModeListeners(): () => void {
   const isVoiceActive = () => store.get(voiceActiveSessionIdAtom) !== null;
 
   // =========================================================================
-  // Speech Started (VAD detected voice -- resets idle timer immediately)
+  // Audio Received (play audio from voice agent)
   // =========================================================================
-  // The interrupt event fires the instant the server VAD detects speech.
-  // Transcript delta/complete events only arrive AFTER speech ends (Whisper
-  // transcription), so without this the listen window timer can fire while
-  // the user is still actively talking.
+  cleanups.push(
+    window.electronAPI.on('voice-mode:audio-received', (payload: {
+      sessionId: string;
+      audioBase64: string;
+    }) => {
+      if (!isVoiceActive()) return;
+      const cb = getVoiceAudioCallback();
+      if (cb) cb(payload.audioBase64);
+    })
+  );
+
+  // =========================================================================
+  // Interrupt / Speech Started (VAD detected voice)
+  // =========================================================================
+  // PAUSES the idle timer (user is actively speaking) AND stops audio playback.
   cleanups.push(
     window.electronAPI.on('voice-mode:interrupt', (_payload: {
       sessionId: string;
     }) => {
       if (!isVoiceActive()) return;
 
-      // User started speaking -- reset listen window timer immediately
-      resetListenWindowTimer('interrupt/speech_started');
+      // User started speaking -- PAUSE the timer entirely.
+      // speech_started fires once at the beginning of an utterance.
+      // We don't get any more events until speech_stopped, so a simple
+      // reset would still expire mid-speech. Clear it instead.
+      console.log('[voiceModeListeners] speech_started -> pausing listen window timer');
+      clearListenWindowTimer();
+
+      // Stop audio playback (user is interrupting the assistant)
+      const cb = getVoiceInterruptCallback();
+      if (cb) cb();
+    })
+  );
+
+  // =========================================================================
+  // Speech Stopped (VAD detected silence after speech)
+  // =========================================================================
+  // User stopped speaking -- NOW start the idle countdown.
+  cleanups.push(
+    window.electronAPI.on('voice-mode:speech-stopped', (_payload: {
+      sessionId: string;
+    }) => {
+      if (!isVoiceActive()) return;
+
+      // User stopped speaking. Start the idle timer from NOW.
+      // If the assistant responds, text-received will pause it again.
+      console.log('[voiceModeListeners] speech_stopped -> starting listen window timer');
+      startListenWindowTimer();
+    })
+  );
+
+  // =========================================================================
+  // Submit Prompt (voice agent wants to send a coding task)
+  // =========================================================================
+  cleanups.push(
+    window.electronAPI.on('voice-mode:submit-prompt', (payload: {
+      sessionId: string;
+      workspacePath: string | null;
+      prompt: string;
+      codingAgentPrompt?: { prepend?: string; append?: string };
+    }) => {
+      if (!isVoiceActive()) return;
+      const cb = getVoiceSubmitPromptCallback();
+      if (cb) cb(payload);
+    })
+  );
+
+  // =========================================================================
+  // Error (quota exceeded, rate limits, etc.)
+  // =========================================================================
+  cleanups.push(
+    window.electronAPI.on('voice-mode:error', (payload: {
+      sessionId: string;
+      error: { type: string; message: string };
+    }) => {
+      if (!isVoiceActive()) return;
+      store.set(voiceErrorAtom, payload.error);
     })
   );
 
@@ -241,8 +305,10 @@ export function initVoiceModeListeners(): () => void {
       if (!isVoiceActive()) return;
       if (!payload.transcript || payload.transcript.trim() === '') return;
 
-      // User spoke -- reset listen window timer
-      resetListenWindowTimer('transcript-complete');
+      // Transcript arrived = speech is definitely done. Start the idle timer
+      // in case speech_stopped was missed or never fired.
+      console.log('[voiceModeListeners] transcript-complete -> starting listen window timer');
+      startListenWindowTimer();
 
       // Clear partial text
       store.set(voiceCurrentUserTextAtom, '');
@@ -272,10 +338,6 @@ export function initVoiceModeListeners(): () => void {
       itemId: string;
     }) => {
       if (!isVoiceActive()) return;
-
-      // User is speaking -- reset listen window timer
-      resetListenWindowTimer('transcript-delta');
-
       store.set(voiceCurrentUserTextAtom, payload.delta);
     })
   );
@@ -297,14 +359,13 @@ export function initVoiceModeListeners(): () => void {
     }) => {
       if (!isVoiceActive()) return;
 
-      // Assistant is responding -- wake up if sleeping so user can reply
+      // Assistant is responding -- wake up if sleeping so user can reply.
+      // Reset the timer on every delta so the idle countdown always measures
+      // from the last time ANYONE spoke (user or assistant).
       if (store.get(voiceListenStateAtom) === 'sleeping') {
         wakeVoiceListening();
       } else if (store.get(voiceListenStateAtom) === 'listening') {
-        // Keep the listen window alive while the assistant is speaking.
-        // Without this, the timer counts from the user's last speech and
-        // could fire mid-response if the assistant talks for a while.
-        resetListenWindowTimer('text-received');
+        startListenWindowTimer();
       }
 
       const entries = store.get(voiceTranscriptEntriesAtom);
@@ -357,11 +418,26 @@ export function initVoiceModeListeners(): () => void {
         pendingAssistantEntry = null;
       }
 
-      // Reset the listen window timer so the idle countdown starts from when
-      // the assistant finishes speaking, not from the user's last speech.
-      // Without this, the timer fires based on when the user last spoke,
-      // ignoring the time the assistant spent responding.
-      resetListenWindowTimer('token-usage/response-done');
+      // Assistant finished responding. Start the idle countdown from NOW.
+      console.log('[voiceModeListeners] token-usage -> starting listen window timer');
+      startListenWindowTimer();
+
+      // Notify VoiceModeButton to unmute mic (assistant done speaking)
+      const responseDoneCb = getVoiceResponseDoneCallback();
+      if (responseDoneCb) responseDoneCb();
+    })
+  );
+
+  // =========================================================================
+  // Agent Task Complete (forward coding agent completion to voice agent)
+  // =========================================================================
+  cleanups.push(
+    window.electronAPI.onAIStreamResponse((data: any) => {
+      if (!isVoiceActive()) return;
+      if (!data.isComplete) return;
+
+      const cb = getVoiceAgentTaskCompleteCallback();
+      if (cb) cb(data);
     })
   );
 
@@ -388,6 +464,10 @@ export function initVoiceModeListeners(): () => void {
 
       // Update final metadata
       await updateSessionMetadata(payload.tokenUsage);
+
+      // Notify component for audio cleanup
+      const stoppedCb = getVoiceStoppedCallback();
+      if (stoppedCb) stoppedCb();
 
       // Reset atoms
       resetVoiceAtoms();

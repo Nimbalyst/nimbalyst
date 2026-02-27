@@ -1,13 +1,21 @@
 /**
  * Audio playback utility for Voice Mode
  *
- * Plays back PCM16 audio received from OpenAI Realtime API
+ * Plays back PCM16 audio received from OpenAI Realtime API.
+ *
+ * Audio is routed through a MediaStreamDestination -> <audio> element
+ * so the browser's echo cancellation (AEC) can correlate the output
+ * with getUserMedia input and cancel echo from speakers. Without this,
+ * raw AudioContext.destination playback is invisible to AEC and the
+ * assistant's voice gets picked up by the mic, causing self-interruption.
  */
 
 let instanceCounter = 0;
 
 export class AudioPlayback {
   private audioContext: AudioContext | null = null;
+  private streamDestination: MediaStreamAudioDestinationNode | null = null;
+  private audioElement: HTMLAudioElement | null = null;
   private audioQueue: AudioBuffer[] = [];
   private isPlaying: boolean = false;
   private scheduledSources: AudioBufferSourceNode[] = [];
@@ -18,6 +26,17 @@ export class AudioPlayback {
     this.instanceId = ++instanceCounter;
     // Create audio context with 24kHz sample rate to match input
     this.audioContext = new AudioContext({ sampleRate: 24000 });
+
+    // Create a MediaStream destination so audio is visible to echo cancellation.
+    // AudioBufferSourceNodes connect to this instead of audioContext.destination.
+    this.streamDestination = this.audioContext.createMediaStreamDestination();
+
+    // Create an <audio> element to play the stream. The browser's AEC
+    // processes audio played through <audio> elements, allowing it to
+    // subtract the output from the microphone input.
+    this.audioElement = new Audio();
+    this.audioElement.srcObject = this.streamDestination.stream;
+    this.audioElement.autoplay = true;
   }
 
   /**
@@ -25,7 +44,7 @@ export class AudioPlayback {
    * @param pcm16Base64 Base64-encoded PCM16 audio data
    */
   async play(pcm16Base64: string): Promise<void> {
-    if (!this.audioContext) {
+    if (!this.audioContext || !this.streamDestination) {
       throw new Error('Audio context not initialized');
     }
 
@@ -64,7 +83,7 @@ export class AudioPlayback {
    * Play queued audio buffers
    */
   private playQueue(): void {
-    if (this.audioQueue.length === 0 || !this.audioContext) {
+    if (this.audioQueue.length === 0 || !this.audioContext || !this.streamDestination) {
       return;
     }
 
@@ -82,7 +101,9 @@ export class AudioPlayback {
       // Create source node
       const source = this.audioContext.createBufferSource();
       source.buffer = audioBuffer;
-      source.connect(this.audioContext.destination);
+      // Connect to stream destination (routed through <audio> for AEC)
+      // instead of audioContext.destination directly
+      source.connect(this.streamDestination);
 
       // Schedule playback
       source.start(this.nextStartTime);
@@ -161,6 +182,16 @@ export class AudioPlayback {
    */
   destroy(): void {
     this.stop();
+
+    if (this.audioElement) {
+      this.audioElement.srcObject = null;
+      this.audioElement = null;
+    }
+
+    if (this.streamDestination) {
+      this.streamDestination.disconnect();
+      this.streamDestination = null;
+    }
 
     if (this.audioContext) {
       this.audioContext.close();

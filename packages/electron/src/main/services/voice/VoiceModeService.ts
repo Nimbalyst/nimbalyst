@@ -443,6 +443,12 @@ export function initVoiceModeService() {
         }
       });
 
+      poc.setOnSpeechStopped(() => {
+        if (window && !window.isDestroyed()) {
+          window.webContents.send('voice-mode:speech-stopped', { sessionId: currentSessionId() });
+        }
+      });
+
       poc.setOnError((error) => {
         console.error('[VoiceModeService] Error from OpenAI:', error.type, error.message);
         if (window && !window.isDestroyed()) {

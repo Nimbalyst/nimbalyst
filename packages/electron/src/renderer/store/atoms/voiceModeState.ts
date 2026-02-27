@@ -138,3 +138,70 @@ export const voiceDbSessionIdAtom = atom<string | null>(null);
  * Reset to null when voice session ends.
  */
 export const voiceLastReportedFileAtom = atom<string | null>(null);
+
+// =========================================================================
+// Voice Error State
+// =========================================================================
+
+/**
+ * Current voice mode error, if any. Set by centralized listeners on
+ * voice-mode:error events. Cleared when voice session starts or ends.
+ */
+export const voiceErrorAtom = atom<{ type: string; message: string } | null>(null);
+
+// =========================================================================
+// Voice Callbacks (registered by components, invoked by centralized listeners)
+// =========================================================================
+// These allow the centralized listeners to trigger component-specific side
+// effects (audio playback, pending command UI) without the component subscribing
+// to IPC directly.
+
+/** Callback for playing received audio. Set by VoiceModeButton on mount. */
+let _onAudioReceived: ((audioBase64: string) => void) | null = null;
+/** Callback for stopping audio playback (interruption). Set by VoiceModeButton. */
+let _onInterruptAudio: (() => void) | null = null;
+/** Callback for handling submit-prompt events. Set by VoiceModeButton. */
+let _onSubmitPrompt: ((payload: {
+  sessionId: string;
+  workspacePath: string | null;
+  prompt: string;
+  codingAgentPrompt?: { prepend?: string; append?: string };
+}) => void) | null = null;
+/** Callback for handling agent task completion. Set by VoiceModeButton. */
+let _onAgentTaskComplete: ((data: { sessionId: string; isComplete: boolean; content?: string }) => void) | null = null;
+/** Callback when voice session is programmatically stopped. Set by VoiceModeButton. */
+let _onVoiceStopped: (() => void) | null = null;
+/** Callback when voice agent response is done (token-usage received). Set by VoiceModeButton. */
+let _onResponseDone: (() => void) | null = null;
+
+export function registerVoiceAudioCallback(cb: ((audioBase64: string) => void) | null): void {
+  _onAudioReceived = cb;
+}
+export function registerVoiceInterruptCallback(cb: (() => void) | null): void {
+  _onInterruptAudio = cb;
+}
+export function registerVoiceSubmitPromptCallback(cb: ((payload: {
+  sessionId: string;
+  workspacePath: string | null;
+  prompt: string;
+  codingAgentPrompt?: { prepend?: string; append?: string };
+}) => void) | null): void {
+  _onSubmitPrompt = cb;
+}
+export function registerVoiceAgentTaskCompleteCallback(cb: ((data: { sessionId: string; isComplete: boolean; content?: string }) => void) | null): void {
+  _onAgentTaskComplete = cb;
+}
+export function registerVoiceStoppedCallback(cb: (() => void) | null): void {
+  _onVoiceStopped = cb;
+}
+export function registerVoiceResponseDoneCallback(cb: (() => void) | null): void {
+  _onResponseDone = cb;
+}
+
+// Getters for centralized listeners to invoke
+export function getVoiceAudioCallback() { return _onAudioReceived; }
+export function getVoiceInterruptCallback() { return _onInterruptAudio; }
+export function getVoiceSubmitPromptCallback() { return _onSubmitPrompt; }
+export function getVoiceAgentTaskCompleteCallback() { return _onAgentTaskComplete; }
+export function getVoiceStoppedCallback() { return _onVoiceStopped; }
+export function getVoiceResponseDoneCallback() { return _onResponseDone; }
