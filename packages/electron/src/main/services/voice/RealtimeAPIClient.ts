@@ -812,7 +812,8 @@ Your job is to be a voice relay, not to interpret or improve the user's requests
   }
 
   /**
-   * Request the assistant to generate a response
+   * Request the assistant to generate a response.
+   * Explicitly includes voice to prevent voice drift after tool calls.
    */
   private createResponse(): void {
     if (!this.ws || !this.connected) {
@@ -822,6 +823,10 @@ Your job is to be a voice relay, not to interpret or improve the user's requests
 
     const event = {
       type: 'response.create',
+      response: {
+        modalities: ['text', 'audio'],
+        voice: this.voice,
+      },
     };
 
     this.ws.send(JSON.stringify(event));

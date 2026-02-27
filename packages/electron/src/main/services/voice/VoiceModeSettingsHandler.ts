@@ -2,6 +2,7 @@
  * IPC handlers for Voice Mode settings
  */
 
+import { BrowserWindow } from 'electron';
 import Store from 'electron-store';
 import { safeHandle } from '../../utils/ipcRegistry';
 
@@ -75,6 +76,14 @@ export function initVoiceModeSettingsHandler() {
   safeHandle('voice-mode:set-settings', async (_event, settings: VoiceModeSettings) => {
     try {
       settingsStore.set('voiceMode', settings);
+
+      // Broadcast to all windows so Jotai atoms stay in sync
+      BrowserWindow.getAllWindows().forEach(window => {
+        if (!window.isDestroyed()) {
+          window.webContents.send('voice-mode:settings-changed', settings);
+        }
+      });
+
       return { success: true };
     } catch (error) {
       return { success: false, error: String(error) };

@@ -33,7 +33,7 @@ import {
   type VoiceTranscriptEntry,
   type VoiceTokenUsage,
 } from '../atoms/voiceModeState';
-import { voiceModeSettingsAtom } from '../atoms/appSettings';
+import { voiceModeSettingsAtom, type VoiceModeSettings } from '../atoms/appSettings';
 import { activeSessionIdAtom, sessionRegistryAtom } from '../atoms/sessions';
 import { windowModeAtom } from '../atoms/windowMode';
 
@@ -86,14 +86,21 @@ function startListenWindowTimer(): void {
 }
 
 /**
- * Transition to listening state and start the listen window timer.
- * Call when voice should actively capture audio.
+ * Transition to listening state so the mic is open.
+ *
+ * @param startTimer If true, starts the listen window timer immediately.
+ *   Pass true for user-initiated wake (manual tap). Pass false when waking
+ *   because the assistant is about to speak -- text-received and token-usage
+ *   will manage the timer so the countdown starts from the LAST activity,
+ *   not from the moment of wake.
  */
-export function wakeVoiceListening(): void {
+export function wakeVoiceListening(startTimer = true): void {
   const current = store.get(voiceListenStateAtom);
   if (current === 'off') return; // can't wake if not active
   store.set(voiceListenStateAtom, 'listening');
-  startListenWindowTimer();
+  if (startTimer) {
+    startListenWindowTimer();
+  }
   if (current === 'sleeping') {
     // Tell main process to resume the inactivity disconnect timer
     window.electronAPI.send('voice-mode:listen-state-changed', { sleeping: false });
@@ -212,6 +219,15 @@ export function initVoiceModeListeners(): () => void {
   const isVoiceActive = () => store.get(voiceActiveSessionIdAtom) !== null;
 
   // =========================================================================
+  // Settings Changed (broadcast from main process when any window saves)
+  // =========================================================================
+  cleanups.push(
+    window.electronAPI.on('voice-mode:settings-changed', (settings: VoiceModeSettings) => {
+      store.set(voiceModeSettingsAtom, settings);
+    })
+  );
+
+  // =========================================================================
   // Audio Received (play audio from voice agent)
   // =========================================================================
   cleanups.push(
@@ -220,6 +236,13 @@ export function initVoiceModeListeners(): () => void {
       audioBase64: string;
     }) => {
       if (!isVoiceActive()) return;
+
+      // Wake from sleeping when assistant starts speaking so the mic
+      // is open for the user to interrupt or respond.
+      if (store.get(voiceListenStateAtom) === 'sleeping') {
+        wakeVoiceListening(false);
+      }
+
       const cb = getVoiceAudioCallback();
       if (cb) cb(payload.audioBase64);
     })
@@ -360,10 +383,13 @@ export function initVoiceModeListeners(): () => void {
       if (!isVoiceActive()) return;
 
       // Assistant is responding -- wake up if sleeping so user can reply.
+      // Don't start the timer on wake -- let token-usage start it when
+      // the assistant finishes, so the full 10s countdown runs from the
+      // end of the response, not from the first text delta.
       // Reset the timer on every delta so the idle countdown always measures
       // from the last time ANYONE spoke (user or assistant).
       if (store.get(voiceListenStateAtom) === 'sleeping') {
-        wakeVoiceListening();
+        wakeVoiceListening(false);
       } else if (store.get(voiceListenStateAtom) === 'listening') {
         startListenWindowTimer();
       }
