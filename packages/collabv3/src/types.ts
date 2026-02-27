@@ -746,6 +746,7 @@ export type TeamServerMessage =
   | TeamKeyEnvelopeAvailableMessage
   | TeamKeyEnvelopeMessage
   | TeamIdentityKeyResponseMessage
+  | TeamIdentityKeyUploadedMessage
   | TeamDocIndexSyncResponseMessage
   | TeamDocIndexBroadcastMessage
   | TeamDocIndexRemoveBroadcastMessage
@@ -797,6 +798,12 @@ export interface TeamIdentityKeyResponseMessage {
   type: 'identityKeyResponse';
   userId: string;
   publicKeyJwk: string;
+}
+
+/** Broadcast: a member uploaded their identity key (so others can wrap for them) */
+export interface TeamIdentityKeyUploadedMessage {
+  type: 'identityKeyUploaded';
+  userId: string;
 }
 
 /** Full document list response */

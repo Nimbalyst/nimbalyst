@@ -44,6 +44,9 @@ export interface TeamSyncConfig {
   /** Called when a key envelope is delivered */
   onKeyEnvelope?: (envelope: KeyEnvelopeData) => void;
 
+  /** Called when a member uploads their identity key (so admin can wrap for them) */
+  onIdentityKeyUploaded?: (userId: string) => void;
+
   /** Called when the full document list is loaded (from teamSync or docIndexSync) */
   onDocumentsLoaded?: (documents: DocIndexEntry[]) => void;
 
@@ -139,6 +142,7 @@ export type TeamServerMessage =
   | TeamKeyEnvelopeAvailableMessage
   | TeamKeyEnvelopeMessage
   | TeamIdentityKeyResponseMessage
+  | TeamIdentityKeyUploadedMessage
   | TeamDocIndexSyncResponseMessage
   | TeamDocIndexBroadcastMessage
   | TeamDocIndexRemoveBroadcastMessage
@@ -181,6 +185,11 @@ export interface TeamIdentityKeyResponseMessage {
   type: 'identityKeyResponse';
   userId: string;
   publicKeyJwk: string;
+}
+
+export interface TeamIdentityKeyUploadedMessage {
+  type: 'identityKeyUploaded';
+  userId: string;
 }
 
 export interface TeamDocIndexSyncResponseMessage {

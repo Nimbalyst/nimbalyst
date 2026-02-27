@@ -26,6 +26,7 @@ import type {
   TeamKeyEnvelopeAvailableMessage,
   TeamKeyEnvelopeMessage,
   TeamIdentityKeyResponseMessage,
+  TeamIdentityKeyUploadedMessage,
   TeamDocIndexSyncResponseMessage,
   TeamDocIndexBroadcastMessage,
   TeamDocIndexRemoveBroadcastMessage,
@@ -262,6 +263,9 @@ export class TeamSyncProvider {
         case 'identityKeyResponse':
           this.handleIdentityKeyResponse(message);
           break;
+        case 'identityKeyUploaded':
+          this.handleIdentityKeyUploaded(message);
+          break;
         case 'docIndexSyncResponse':
           await this.handleDocIndexSyncResponse(message);
           break;
@@ -348,6 +352,11 @@ export class TeamSyncProvider {
     // registered when requestIdentityKey was called. For now, log it.
     // The Electron layer can hook into this via a dedicated listener if needed.
     console.log('[TeamSync] Received identity key for user:', _msg.userId);
+  }
+
+  private handleIdentityKeyUploaded(msg: TeamIdentityKeyUploadedMessage): void {
+    console.log('[TeamSync] Member uploaded identity key:', msg.userId);
+    this.config.onIdentityKeyUploaded?.(msg.userId);
   }
 
   private async handleDocIndexSyncResponse(msg: TeamDocIndexSyncResponseMessage): Promise<void> {

@@ -908,6 +908,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     revokeMemberTrust: (orgId: string, memberId: string) => ipcRenderer.invoke('team:revoke-member-trust', orgId, memberId),
     reshareKey: (orgId: string, memberId: string) => ipcRenderer.invoke('team:reshare-key', orgId, memberId),
     refreshMyKey: (orgId: string) => ipcRenderer.invoke('team:refresh-my-key', orgId),
+    autoWrapNewMembers: (orgId: string) => ipcRenderer.invoke('team:auto-wrap-new-members', orgId),
   },
 
   // Extensions API

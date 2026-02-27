@@ -402,11 +402,37 @@ export async function findTeamForWorkspace(workspacePath: string): Promise<TeamD
     if (match) {
       logger.main.info('[TeamService] findTeamForWorkspace: matched team:', match.name, 'orgId:', match.orgId, 'for workspace:', workspacePath);
     } else if (teams.length > 0) {
-      logger.main.info('[TeamService] findTeamForWorkspace: no hash match. workspace hash:', remoteHash, 'team hashes:', activeTeams.map(t => ({ orgId: t.orgId, name: t.name, hash: t.gitRemoteHash })));
+      logger.main.info('[TeamService] findTeamForWorkspace: no hash match. workspace hash:', remoteHash, 'team hashes:', teams.map(t => ({ orgId: t.orgId, name: t.name, hash: t.gitRemoteHash, membership: t.membershipType })));
     }
     return match;
   } catch (err) {
     logger.main.error('[TeamService] findTeamForWorkspace error:', err);
+    return null;
+  }
+}
+
+/**
+ * Find a pending invite matching a workspace's git remote.
+ * Used by the UI to show "Join Team" for invites that match the current project.
+ */
+export async function findPendingInviteForWorkspace(workspacePath: string): Promise<TeamDetails | null> {
+  if (!isAuthenticated()) return null;
+
+  const remote = getGitRemote(workspacePath);
+  if (!remote) return null;
+
+  const remoteHash = hashGitRemote(remote);
+
+  try {
+    const teams = await listTeams();
+    const pendingTeams = teams.filter(t => t.membershipType && t.membershipType !== 'active_member');
+    const match = pendingTeams.find(t => t.gitRemoteHash === remoteHash) || null;
+    if (match) {
+      logger.main.info('[TeamService] findPendingInviteForWorkspace: matched pending invite:', match.name, 'orgId:', match.orgId, 'membershipType:', match.membershipType);
+    }
+    return match;
+  } catch (err) {
+    logger.main.error('[TeamService] findPendingInviteForWorkspace error:', err);
     return null;
   }
 }
@@ -695,6 +721,47 @@ async function ensureOrgKeyForWorkspace(workspacePath: string): Promise<{
   }
 }
 
+// Active auto-wrap polling intervals keyed by orgId
+const autoWrapIntervals = new Map<string, ReturnType<typeof setInterval>>();
+
+/**
+ * Start a background polling interval that periodically checks for unwrapped
+ * team members and wraps the org key for them. This handles the case where a
+ * new member uploads their identity key after the admin's initial startup wrap.
+ * Polls every 15s for 5 minutes, then stops.
+ */
+function startAutoWrapPolling(orgId: string): void {
+  // Don't start duplicate intervals for the same org
+  if (autoWrapIntervals.has(orgId)) return;
+
+  let attempts = 0;
+  const maxAttempts = 20; // 15s * 20 = 5 minutes
+  const intervalMs = 15_000;
+
+  const interval = setInterval(async () => {
+    attempts++;
+    if (attempts > maxAttempts) {
+      clearInterval(interval);
+      autoWrapIntervals.delete(orgId);
+      return;
+    }
+
+    try {
+      await autoWrapForNewMembers(orgId);
+    } catch (err) {
+      // Non-admin members will get "Only admins can manage key envelopes" --
+      // stop polling since this user can't wrap keys
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('Only admins') || msg.includes('403')) {
+        clearInterval(interval);
+        autoWrapIntervals.delete(orgId);
+      }
+    }
+  }, intervalMs);
+
+  autoWrapIntervals.set(orgId, interval);
+}
+
 /**
  * Auto-match a workspace to a team on open. Fire-and-forget.
  * If matched, ensures the org key is available and notifies renderer windows.
@@ -726,6 +793,8 @@ export async function autoMatchTeamForWorkspace(workspacePath: string): Promise<
         autoWrapForNewMembers(result.team.orgId).catch(err => {
           logger.main.warn('[TeamService] Auto-wrap for new members failed:', err);
         });
+        // Start background polling to catch members who upload their key later
+        startAutoWrapPolling(result.team.orgId);
       }
 
       // Notify all renderer windows about the team match
@@ -795,8 +864,17 @@ export function registerTeamHandlers(): void {
 
   safeHandle('team:find-for-workspace', async (_event, workspacePath: string) => {
     try {
+      // Try active team match first
       const team = await findTeamForWorkspace(workspacePath);
-      return { success: true, team };
+      if (team) {
+        return { success: true, team };
+      }
+      // Also check for pending invites matching this workspace
+      const pendingInvite = await findPendingInviteForWorkspace(workspacePath);
+      if (pendingInvite) {
+        return { success: true, team: pendingInvite };
+      }
+      return { success: true, team: null };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : String(error) };
     }
@@ -918,6 +996,15 @@ export function registerTeamHandlers(): void {
   safeHandle('team:reshare-key', async (_event, orgId: string, memberId: string) => {
     try {
       await reshareKeyForMember(orgId, memberId);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+
+  safeHandle('team:auto-wrap-new-members', async (_event, orgId: string) => {
+    try {
+      await autoWrapForNewMembers(orgId);
       return { success: true };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : String(error) };

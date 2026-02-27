@@ -56,6 +56,7 @@ export const pendingCollabDocumentAtom = atom<PendingCollabDocument | null>(null
 
 let activeProvider: TeamSyncProviderType | null = null;
 let activeWorkspacePath: string | null = null;
+let pendingRetryTimer: ReturnType<typeof setTimeout> | null = null;
 
 /**
  * Get the active TeamSyncProvider instance (if connected).
@@ -153,7 +154,7 @@ export function removeSharedDocument(documentId: string): void {
  * Resolves auth/keys via IPC, then creates and connects a TeamSyncProvider.
  * The TeamRoom provides both team state and document index in a single WebSocket.
  */
-export async function initSharedDocuments(workspacePath: string): Promise<void> {
+export async function initSharedDocuments(workspacePath: string, retryCount = 0): Promise<void> {
   // If already connected for this workspace, skip
   if (activeWorkspacePath === workspacePath && activeProvider) {
     return;
@@ -166,6 +167,12 @@ export async function initSharedDocuments(workspacePath: string): Promise<void> 
     activeWorkspacePath = null;
   }
 
+  // Clear any pending retry
+  if (pendingRetryTimer) {
+    clearTimeout(pendingRetryTimer);
+    pendingRetryTimer = null;
+  }
+
   // Resolve config from main process
   if (!window.electronAPI?.documentSync?.resolveIndexConfig) {
     console.log('[collabDocuments] No resolveIndexConfig API available');
@@ -176,6 +183,17 @@ export async function initSharedDocuments(workspacePath: string): Promise<void> 
     const result = await window.electronAPI.documentSync.resolveIndexConfig(workspacePath);
     if (!result.success || !result.config) {
       console.log('[collabDocuments] Could not resolve index config:', result.error);
+      // Only retry for transient errors (key not yet available), not for "no team found"
+      const isTransient = result.error && !result.error.includes('No team found');
+      const maxRetries = 5;
+      if (isTransient && retryCount < maxRetries) {
+        const delayMs = Math.min(3000 * Math.pow(2, retryCount), 30000);
+        console.log(`[collabDocuments] Will retry in ${delayMs}ms (attempt ${retryCount + 1}/${maxRetries})`);
+        pendingRetryTimer = setTimeout(() => {
+          pendingRetryTimer = null;
+          initSharedDocuments(workspacePath, retryCount + 1);
+        }, delayMs);
+      }
       return;
     }
 
@@ -250,6 +268,22 @@ export async function initSharedDocuments(workspacePath: string): Promise<void> 
         store.set(sharedDocumentsAtom, (current) =>
           current.filter(d => d.documentId !== documentId)
         );
+      },
+
+      onMemberAdded: (_member) => {
+        // A new member was added to the org -- try to wrap the org key for them
+        console.log('[collabDocuments] Member added, triggering auto-wrap for org:', orgId);
+        (window as any).electronAPI.team.autoWrapNewMembers(orgId).catch((err: unknown) => {
+          console.error('[collabDocuments] auto-wrap after memberAdded failed:', err);
+        });
+      },
+
+      onIdentityKeyUploaded: (_userId) => {
+        // A member uploaded their identity key -- now we can wrap the org key for them
+        console.log('[collabDocuments] Identity key uploaded, triggering auto-wrap for org:', orgId);
+        (window as any).electronAPI.team.autoWrapNewMembers(orgId).catch((err: unknown) => {
+          console.error('[collabDocuments] auto-wrap after identityKeyUploaded failed:', err);
+        });
       },
 
       onStatusChange: (status) => {

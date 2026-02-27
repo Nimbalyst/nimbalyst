@@ -374,7 +374,11 @@ export class TeamRoom implements DurableObject {
       connState.auth.userId, publicKeyJwk, now, now
     );
 
-    // No broadcast -- identity keys are private per-member
+    // Broadcast to other members so they can wrap the org key for this user
+    this.broadcast(
+      { type: 'identityKeyUploaded', userId: connState.auth.userId },
+      ws // exclude the uploader
+    );
   }
 
   private handleRequestIdentityKey(ws: WebSocket, targetUserId: string): void {
