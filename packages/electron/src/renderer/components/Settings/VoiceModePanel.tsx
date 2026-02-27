@@ -12,6 +12,7 @@ import {
   voiceModeSettingsAtom,
   setVoiceModeSettingsAtom,
   apiKeysAtom,
+  setApiKeyAtom,
   type VoiceModeSettings,
   type VoiceId,
   type TurnDetectionConfig,
@@ -70,6 +71,7 @@ export const VoiceModePanel: React.FC<VoiceModePanelProps> = ({
   const [voiceModeSettings] = useAtom(voiceModeSettingsAtom);
   const [, updateVoiceModeSettings] = useAtom(setVoiceModeSettingsAtom);
   const apiKeys = useAtomValue(apiKeysAtom);
+  const [, setApiKey] = useAtom(setApiKeyAtom);
 
   // Extract values from atom
   const {
@@ -242,12 +244,22 @@ export const VoiceModePanel: React.FC<VoiceModePanelProps> = ({
       <div className="provider-panel-section mb-6">
         <h4 className="provider-panel-section-title text-base font-medium mb-4 text-[var(--nim-text)]">Enable Voice Mode</h4>
 
-        {!hasOpenAIKey && (
-          <div className="provider-panel-hint text-sm text-[var(--nim-warning)] mb-3 flex items-center gap-1">
-            <MaterialSymbol icon="warning" size={16} />
-            Voice Mode requires an OpenAI API key. Please configure it in the OpenAI settings.
+        <div className="setting-item py-3 mb-3">
+          <div className="setting-text flex flex-col gap-0.5">
+            <span className="setting-name text-sm font-medium text-[var(--nim-text)]">OpenAI API Key</span>
+            <span className="setting-description text-xs text-[var(--nim-text-muted)]">
+              Required for Voice Mode. Get one from platform.openai.com.
+            </span>
           </div>
-        )}
+          <input
+            type="password"
+            value={apiKeys.openai || ''}
+            onChange={(e) => setApiKey({ keyName: 'openai', value: e.target.value })}
+            onFocus={(e) => e.target.select()}
+            placeholder="sk-..."
+            className="mt-2 w-full py-2 px-3 rounded-md bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] text-[var(--nim-text)] outline-none font-mono focus:border-[var(--nim-primary)]"
+          />
+        </div>
 
         <div className="setting-item py-3">
           <label className="setting-label flex items-start gap-3 cursor-pointer">
