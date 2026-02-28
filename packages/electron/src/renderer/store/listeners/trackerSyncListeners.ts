@@ -47,6 +47,21 @@ async function loadAllTrackerItems(): Promise<void> {
 }
 
 /**
+ * Trigger a workspace scan to populate tracker items in PGLite.
+ * The DocumentService constructor skips the initial scan for performance,
+ * so tracker items won't exist in PGLite until something triggers a scan.
+ * We do this after the initial load so the UI shows cached data immediately,
+ * then updates reactively via tracker-items-changed events as the scan indexes files.
+ */
+async function triggerWorkspaceScan(): Promise<void> {
+  try {
+    await window.electronAPI.invoke('document-service:refresh-workspace');
+  } catch (err) {
+    console.error('[trackerSyncListeners] Workspace scan failed:', err);
+  }
+}
+
+/**
  * Initialize tracker data listeners.
  * Performs initial data load and subscribes to change events.
  *
@@ -57,8 +72,14 @@ export function initTrackerSyncListeners(): () => void {
 
   console.log('[trackerSyncListeners] Initializing tracker data listeners');
 
-  // Initial load from PGLite
+  // Initial load from PGLite (shows cached data from previous session)
   loadAllTrackerItems();
+
+  // Trigger a workspace scan to index new/changed files into PGLite.
+  // The DocumentService skips scanning on startup for performance,
+  // so without this, tracker items won't appear until an @ mention or file open.
+  // Delay slightly to avoid blocking app startup.
+  setTimeout(() => triggerWorkspaceScan(), 3000);
 
   // Subscribe to tracker item changes from ElectronDocumentService (local indexer changes)
   // This is the subscription-based IPC: we send a 'watch' message, then receive events.
