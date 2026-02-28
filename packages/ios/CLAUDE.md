@@ -80,10 +80,27 @@ open NimbalystApp/NimbalystApp.xcodeproj            # Open in Xcode
 The Xcode pre-build script in `project.yml` automatically builds the transcript with Vite and copies it to `Resources/transcript-dist/`. You can also build manually:
 
 ```bash
-npx vite build --config vite.config.transcript.ts
+npm run ios:build:transcript
 ```
 
 Output: `dist-transcript/transcript.html` + `dist-transcript/assets/` (JS bundle + Material Symbols font).
+
+After building, copy the output to Xcode resources:
+```bash
+rm -f NimbalystApp/Resources/transcript-dist/assets/transcript-*.js
+cp dist-transcript/transcript.html NimbalystApp/Resources/transcript-dist/transcript.html
+cp dist-transcript/assets/* NimbalystApp/Resources/transcript-dist/assets/
+```
+
+**CRITICAL: React hooks rules in `src/transcript/main.tsx`**
+
+The transcript React app runs inside WKWebView where errors are invisible (cross-origin `window.onerror` reports "Script error." with no details). This makes hooks violations especially dangerous -- the screen goes blank with no diagnostic information.
+
+Rules for editing `TranscriptApp` in `main.tsx`:
+- **All hooks (`useState`, `useRef`, `useCallback`, `useMemo`, `useEffect`) must come BEFORE any early returns.** React requires the same hooks to run in the same order on every render. An early `return` before a hook means that hook runs on some renders but not others, crashing React with "Rendered more hooks than during the previous render."
+- **The `TranscriptErrorBoundary` wraps the app** to catch render errors and display them on screen + report to the native bridge. Do not remove it.
+- **The `postErrorToNative` helper** sends error details through `webkit.messageHandlers.bridge` so they appear in Xcode console logs with full stack traces. Use it in any new try-catch blocks.
+- **Test after any change**: Always rebuild the transcript (`npm run ios:build:transcript`), copy to Xcode resources, and rebuild in Xcode. Vite build success does NOT mean React will render correctly at runtime.
 
 ## Key Files
 

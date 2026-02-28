@@ -149,6 +149,53 @@ function createMobileBridgeHost(sessionId: string): InteractiveWidgetHost {
 }
 
 // ============================================================================
+// Error Boundary — catches React render errors and reports them to native
+// ============================================================================
+
+function postErrorToNative(label: string, error: unknown) {
+  const msg = error instanceof Error ? `${error.message}\n${error.stack}` : String(error);
+  console.error(`[TranscriptError] ${label}: ${msg}`);
+  try {
+    (window as any).webkit?.messageHandlers?.bridge?.postMessage({
+      type: 'js_error',
+      message: `[${label}] ${msg}`,
+      url: 'transcript/main.tsx',
+      line: 0,
+      col: 0,
+      stack: error instanceof Error ? error.stack || '' : '',
+    });
+  } catch {
+    // Not in WKWebView
+  }
+}
+
+class TranscriptErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { error: Error | null }
+> {
+  state: { error: Error | null } = { error: null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    postErrorToNative('ReactRenderError', new Error(`${error.message}\nComponent stack: ${info.componentStack}`));
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ padding: 20, color: '#ef4444', fontFamily: 'monospace', fontSize: 12, whiteSpace: 'pre-wrap' }}>
+          <strong>Transcript render error:</strong>{'\n'}{this.state.error.message}
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+// ============================================================================
 // Transcript App
 // ============================================================================
 
@@ -166,24 +213,35 @@ function TranscriptApp() {
   useEffect(() => {
     const nimbalyst = {
       loadSession(data: BridgeSessionData) {
-        // Clean up previous session's widget host
-        if (sessionIdRef.current) {
-          setInteractiveWidgetHost(sessionIdRef.current, null);
+        try {
+          // Clean up previous session's widget host
+          if (sessionIdRef.current) {
+            setInteractiveWidgetHost(sessionIdRef.current, null);
+          }
+          sessionIdRef.current = data.sessionId;
+
+          setSessionId(data.sessionId);
+          setRawMessages(data.messages || []);
+          rawMessagesRef.current = data.messages || [];
+          setMetadata(data.metadata || {});
+
+          // Set up interactive widget host for this session
+          const host = createMobileBridgeHost(data.sessionId);
+          setInteractiveWidgetHost(data.sessionId, host);
+        } catch (e) {
+          postErrorToNative('loadSession', e);
         }
-        sessionIdRef.current = data.sessionId;
-
-        setSessionId(data.sessionId);
-        setRawMessages(data.messages);
-        rawMessagesRef.current = data.messages;
-        setMetadata(data.metadata);
-
-        // Set up interactive widget host for this session
-        const host = createMobileBridgeHost(data.sessionId);
-        setInteractiveWidgetHost(data.sessionId, host);
       },
 
       appendMessage(message: BridgeMessage) {
         const updated = [...rawMessagesRef.current, message];
+        rawMessagesRef.current = updated;
+        setRawMessages(updated);
+      },
+
+      appendMessages(messages: BridgeMessage[]) {
+        if (messages.length === 0) return;
+        const updated = [...rawMessagesRef.current, ...messages];
         rawMessagesRef.current = updated;
         setRawMessages(updated);
       },
@@ -257,26 +315,39 @@ function TranscriptApp() {
   const sessionData: SessionData | null = React.useMemo(() => {
     if (!sessionId) return null;
 
-    const rawForTransform = rawMessages.map(bridgeMessageToRaw);
-    const transformedMessages = transformAgentMessagesToUI(rawForTransform);
+    try {
+      const rawForTransform = rawMessages.map(bridgeMessageToRaw);
+      const transformedMessages = transformAgentMessagesToUI(rawForTransform);
 
-    let sessionStatus: string | undefined;
-    if (metadata.isExecuting) {
-      sessionStatus = 'running';
+      let sessionStatus: string | undefined;
+      if (metadata.isExecuting) {
+        sessionStatus = 'running';
+      }
+
+      return {
+        id: sessionId,
+        provider: metadata.provider || 'unknown',
+        model: metadata.model,
+        mode: metadata.mode as 'planning' | 'agent' | undefined,
+        messages: transformedMessages,
+        title: metadata.title,
+        createdAt: rawMessages[0]?.createdAt || Date.now(),
+        updatedAt: rawMessages[rawMessages.length - 1]?.createdAt || Date.now(),
+        metadata: sessionStatus ? { sessionStatus } : undefined,
+      };
+    } catch (e) {
+      postErrorToNative('transformMessages', e);
+      return null;
     }
-
-    return {
-      id: sessionId,
-      provider: metadata.provider || 'unknown',
-      model: metadata.model,
-      mode: metadata.mode as 'planning' | 'agent' | undefined,
-      messages: transformedMessages,
-      title: metadata.title,
-      createdAt: rawMessages[0]?.createdAt || Date.now(),
-      updatedAt: rawMessages[rawMessages.length - 1]?.createdAt || Date.now(),
-      metadata: sessionStatus ? { sessionStatus } : undefined,
-    };
   }, [sessionId, rawMessages, metadata]);
+
+  const handleCompact = useCallback(() => {
+    try {
+      (window as any).webkit?.messageHandlers?.bridge?.postMessage({ type: 'prompt', text: '/compact' });
+    } catch (e) {
+      console.warn('Failed to send compact command to native:', e);
+    }
+  }, []);
 
   if (!sessionId || !sessionData) {
     return (
@@ -292,14 +363,6 @@ function TranscriptApp() {
       </div>
     );
   }
-
-  const handleCompact = useCallback(() => {
-    try {
-      (window as any).webkit?.messageHandlers?.bridge?.postMessage({ type: 'prompt', text: '/compact' });
-    } catch (e) {
-      console.warn('Failed to send compact command to native:', e);
-    }
-  }, []);
 
   return (
     <AgentTranscriptPanel
@@ -319,6 +382,8 @@ function TranscriptApp() {
 
 ReactDOM.createRoot(document.getElementById('transcript-root')!).render(
   <JotaiProvider store={store}>
-    <TranscriptApp />
+    <TranscriptErrorBoundary>
+      <TranscriptApp />
+    </TranscriptErrorBoundary>
   </JotaiProvider>
 );

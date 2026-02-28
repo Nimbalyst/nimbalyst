@@ -83,35 +83,7 @@ public struct TranscriptWebView: UIViewRepresentable {
             // The JS app already mounted and sent `ready` during warmup, but
             // there was no bridge handler to receive it. Probe whether the
             // bridge is live by checking for window.nimbalyst.
-            pooled.evaluateJavaScript("typeof window.nimbalyst") { result, error in
-                if let error {
-                    // Content process is likely dead (GPU idle exit killed it).
-                    // Reload the HTML to get a fresh content process.
-                    Self.logger.warning("Pre-warmed web view probe failed, reloading: \(error.localizedDescription)")
-                    context.coordinator.webViewReady = false
-                    context.coordinator.isReady = false
-                    let bundleURL = Bundle.main.bundleURL
-                    let distURL = bundleURL.appendingPathComponent("transcript-dist")
-                    let htmlURL = distURL.appendingPathComponent("transcript.html")
-                    if FileManager.default.fileExists(atPath: htmlURL.path) {
-                        pooled.loadFileURL(htmlURL, allowingReadAccessTo: distURL)
-                        context.coordinator.startReadyTimeout()
-                    } else {
-                        Self.logger.error("transcript.html not found during pool recovery at: \(htmlURL.path)")
-                        context.coordinator.onError?("transcript.html not found in app bundle")
-                    }
-                    return
-                }
-
-                if let type = result as? String, type == "object" {
-                    context.coordinator.webViewReady = true
-                    // Flush any pending session data
-                    if let (session, messages) = context.coordinator.pendingSession {
-                        context.coordinator.loadSessionIntoWebView(session: session, messages: messages)
-                        context.coordinator.pendingSession = nil
-                    }
-                }
-            }
+            context.coordinator.probePooledWebView(pooled, retryCount: 0)
 
             return pooled
         }
@@ -179,9 +151,11 @@ public struct TranscriptWebView: UIViewRepresentable {
 
         // Check if session changed
         if coordinator.currentSessionId != session.id {
+            Self.logger.info("updateUIView: session changed to \(session.id) (webViewReady=\(coordinator.webViewReady), msgs=\(messages.count))")
             coordinator.currentSessionId = session.id
             coordinator.lastMessageCount = 0
             coordinator.isReady = false
+            coordinator.isLoadingSession = false
             coordinator.pendingSession = (session, messages)
             // The web view will call loadSession when ready, or if already ready:
             if coordinator.webViewReady {
@@ -202,12 +176,10 @@ public struct TranscriptWebView: UIViewRepresentable {
             return
         }
 
-        // Check for new messages (append only)
+        // Check for new messages (append only) — batched into a single IPC call
         if messages.count > coordinator.lastMessageCount {
             let newMessages = Array(messages[coordinator.lastMessageCount...])
-            for message in newMessages {
-                coordinator.appendMessageToWebView(message: message)
-            }
+            coordinator.appendMessagesToWebView(messages: newMessages)
             coordinator.lastMessageCount = messages.count
         }
 
@@ -254,6 +226,9 @@ public struct TranscriptWebView: UIViewRepresentable {
         /// Whether we've sent the initial loadSession call.
         var isReady = false
 
+        /// Whether a loadSession call is currently in-flight (prevents duplicate calls).
+        var isLoadingSession = false
+
         /// Session + messages waiting for the web view to be ready.
         var pendingSession: (Session, [Message])?
 
@@ -294,10 +269,12 @@ public struct TranscriptWebView: UIViewRepresentable {
 
             switch type {
             case "ready":
+                logger.info("Bridge 'ready' received (webViewReady was \(self.webViewReady), pending=\(self.pendingSession != nil))")
                 webViewReady = true
                 readyTimeoutItem?.cancel()
                 // Load pending session if we have one
                 if let (session, messages) = pendingSession {
+                    logger.info("Bridge ready: loading pending session \(session.id) with \(messages.count) messages")
                     loadSessionIntoWebView(session: session, messages: messages)
                     pendingSession = nil
                 }
@@ -356,6 +333,7 @@ public struct TranscriptWebView: UIViewRepresentable {
             logger.warning("Content process terminated (count: \(self.contentProcessTerminationCount))")
             webViewReady = false
             isReady = false
+            isLoadingSession = false
             lastMessageCount = 0
 
             if currentSessionId != nil {
@@ -390,6 +368,70 @@ public struct TranscriptWebView: UIViewRepresentable {
             DispatchQueue.main.asyncAfter(deadline: .now() + 10, execute: item)
         }
 
+        // MARK: - Pool Probe
+
+        /// Maximum number of retries when probing a pooled web view for readiness.
+        private static let maxProbeRetries = 10
+
+        /// Probe a pooled web view to check if window.nimbalyst is set up.
+        /// If the React app hasn't mounted yet (slow device, web process was unresponsive),
+        /// retry with exponential backoff. Without this, the transcript deadlocks because
+        /// the JS "ready" message was sent during warmup before the bridge handler existed.
+        func probePooledWebView(_ webView: WKWebView, retryCount: Int) {
+            webView.evaluateJavaScript("typeof window.nimbalyst") { [weak self] result, error in
+                guard let self else { return }
+
+                if let error {
+                    self.logger.warning("Pool probe FAILED: \(error.localizedDescription)")
+                    self.webViewReady = false
+                    self.isReady = false
+                    self.reloadTranscriptHTML(in: webView)
+                    return
+                }
+
+                let type = result as? String ?? "nil"
+                self.logger.info("Pool probe result: '\(type)' (retry \(retryCount), pending=\(self.pendingSession != nil))")
+
+                if type == "object" {
+                    self.webViewReady = true
+                    if let (session, messages) = self.pendingSession {
+                        self.logger.info("Pool probe: flushing pending session \(session.id) with \(messages.count) messages")
+                        self.loadSessionIntoWebView(session: session, messages: messages)
+                        self.pendingSession = nil
+                    }
+                    return
+                }
+
+                // React app hasn't mounted yet. Retry with backoff.
+                if retryCount < Self.maxProbeRetries {
+                    let delay = min(0.1 * pow(1.5, Double(retryCount)), 2.0)
+                    self.logger.info("Pool probe: nimbalyst not ready, retry \(retryCount + 1) in \(String(format: "%.1f", delay))s")
+                    DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                        self?.probePooledWebView(webView, retryCount: retryCount + 1)
+                    }
+                } else {
+                    self.logger.warning("Pool probe: exhausted \(retryCount) retries, reloading HTML")
+                    self.webViewReady = false
+                    self.isReady = false
+                    self.reloadTranscriptHTML(in: webView)
+                }
+            }
+        }
+
+        /// Reload transcript HTML as a recovery mechanism.
+        private func reloadTranscriptHTML(in webView: WKWebView) {
+            let bundleURL = Bundle.main.bundleURL
+            let distURL = bundleURL.appendingPathComponent("transcript-dist")
+            let htmlURL = distURL.appendingPathComponent("transcript.html")
+            if FileManager.default.fileExists(atPath: htmlURL.path) {
+                webView.loadFileURL(htmlURL, allowingReadAccessTo: distURL)
+                startReadyTimeout()
+            } else {
+                logger.error("transcript.html not found in app bundle")
+                onError?("transcript.html not found in app bundle")
+            }
+        }
+
         // MARK: - Swift -> JS
 
         // Uses callAsyncJavaScript to pass data as arguments instead of string
@@ -408,8 +450,9 @@ public struct TranscriptWebView: UIViewRepresentable {
         }
 
         func loadSessionIntoWebView(session: Session, messages: [Message]) {
-            guard let webView = webView else { return }
+            guard let webView = webView, !isLoadingSession else { return }
 
+            isLoadingSession = true
             let bridgeMessages = messages.map { messageToBridgeJSON($0) }
 
             let metadata: [String: Any] = [
@@ -426,11 +469,15 @@ public struct TranscriptWebView: UIViewRepresentable {
                 "metadata": metadata,
             ]
 
+            logger.info("loadSession: calling JS with \(messages.count) messages for session \(session.id)")
+
             callJS("window.nimbalyst?.loadSession(data);", arguments: ["data": sessionData], in: webView) { [weak self] error in
+                self?.isLoadingSession = false
                 if let error = error {
                     self?.logger.error("loadSession JS error: \(error.localizedDescription)")
                     self?.onError?("loadSession JS failed: \(error.localizedDescription)")
                 } else {
+                    self?.logger.info("loadSession: JS completed OK, isReady=true, lastMessageCount=\(messages.count)")
                     self?.isReady = true
                     self?.lastMessageCount = messages.count
                     self?.lastIsExecuting = session.isExecuting
@@ -451,6 +498,23 @@ public struct TranscriptWebView: UIViewRepresentable {
             callJS("window.nimbalyst?.appendMessage(msg);", arguments: ["msg": bridgeMsg], in: webView) { [weak self] error in
                 if let error = error {
                     self?.logger.error("appendMessage JS error: \(error.localizedDescription)")
+                }
+            }
+        }
+
+        /// Batch-append multiple messages in a single IPC call to avoid WebKit throttling.
+        func appendMessagesToWebView(messages: [Message]) {
+            guard let webView = webView, isReady, !messages.isEmpty else { return }
+
+            if messages.count == 1 {
+                appendMessageToWebView(message: messages[0])
+                return
+            }
+
+            let bridgeMsgs = messages.map { messageToBridgeJSON($0) }
+            callJS("window.nimbalyst?.appendMessages(msgs);", arguments: ["msgs": bridgeMsgs], in: webView) { [weak self] error in
+                if let error = error {
+                    self?.logger.error("appendMessages JS error: \(error.localizedDescription)")
                 }
             }
         }

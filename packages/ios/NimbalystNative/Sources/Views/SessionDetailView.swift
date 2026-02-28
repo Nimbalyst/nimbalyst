@@ -89,6 +89,9 @@ public struct SessionDetailView: View {
     /// Timeout work item for detecting stuck loads.
     @State private var timeoutWorkItem: DispatchWorkItem?
 
+    /// Debounce work item for refreshPromptList to avoid IPC spam.
+    @State private var promptRefreshWorkItem: DispatchWorkItem?
+
     /// Diagnostic info from sync, used in debug copy.
     @State private var lastDiagnostic: SyncManager.SessionSyncDiagnostic?
 
@@ -206,6 +209,7 @@ public struct SessionDetailView: View {
             messagesCancellable?.cancel()
             projectCancellable?.cancel()
             timeoutWorkItem?.cancel()
+            promptRefreshWorkItem?.cancel()
             appState.syncManager?.onSessionSyncDiagnostic = nil
             appState.syncManager?.leaveSessionRoom()
         }
@@ -218,7 +222,11 @@ public struct SessionDetailView: View {
                 }
                 timeoutWorkItem?.cancel()
             }
-            refreshPromptList()
+            // Debounce prompt list refresh to avoid IPC spam when many messages arrive at once
+            promptRefreshWorkItem?.cancel()
+            let item = DispatchWorkItem { refreshPromptList() }
+            promptRefreshWorkItem = item
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: item)
         }
     }
 
