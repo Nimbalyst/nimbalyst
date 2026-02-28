@@ -480,6 +480,31 @@ export function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
                 toolMsg.isError = true;
               }
             }
+          } else if (parsed.type === 'git_commit_proposal_response' && parsed.proposalId) {
+            // Git commit proposal response (source=nimbalyst) - match to the tool call
+            // by proposalId (which equals the tool_use ID). This handles the case where
+            // the Claude Code SDK doesn't emit a tool_result (e.g., session ended after commit).
+            // "committed" takes priority over "cancelled" for duplicate responses.
+            const toolMsg = allToolMessages.get(parsed.proposalId);
+            if (toolMsg && toolMsg.toolCall) {
+              const existingResult = toolMsg.toolCall.result;
+              const existingIsCommitted = existingResult && typeof existingResult === 'object'
+                && (existingResult as any).action === 'committed';
+              // Only set result if no existing result, or the new one is "committed" (overrides cancelled)
+              if (!existingResult || (!existingIsCommitted && parsed.action === 'committed')) {
+                toolMsg.toolCall.result = {
+                  success: parsed.action === 'committed',
+                  result: {
+                    action: parsed.action,
+                    commitHash: parsed.commitHash,
+                    commitDate: parsed.commitDate,
+                    error: parsed.error,
+                    filesCommitted: parsed.filesCommitted,
+                    commitMessage: parsed.commitMessage,
+                  },
+                };
+              }
+            }
           } else if (parsed.type === 'user' && parsed.message) {
             // Skip messages that have parent_tool_use_id - these are sub-agent metadata, not conversation messages
             if (parsed.parent_tool_use_id) {
