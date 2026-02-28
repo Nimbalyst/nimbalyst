@@ -59,9 +59,13 @@ const SDK_NATIVE_TOOLS: readonly string[] = [
   'Glob', 'Grep', 'LS',
   'Bash',
   'WebFetch', 'WebSearch',
-  'Task', 'TaskOutput', 'TaskStop', 'ExitPlanMode', 'AskUserQuestion',
+  'Task', 'Agent',  // Agent is the renamed Task tool (SDK 0.2.x+)
+  'TaskOutput', 'TaskStop', 'ExitPlanMode', 'AskUserQuestion',
+  'EnterPlanMode', 'EnterWorktree', 'Skill',
   'NotebookRead', 'NotebookEdit',
   'TodoRead', 'TodoWrite',
+  // Task management tools (SDK-internal)
+  'TaskCreate', 'TaskGet', 'TaskUpdate', 'TaskList',
   // Agent Teams tools (SDK-internal, executed by CLI subprocess)
   'TeammateTool', 'SendMessage', 'TeamCreate', 'TeamDelete',
 ];
@@ -936,8 +940,8 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
       const DEFAULT_PLANNING_TOOLS = [
         'Read', 'Write', 'Edit', 'MultiEdit', 'Glob', 'Grep', 'LS',
         'WebFetch', 'WebSearch',
-        'TodoRead', 'Task',
-        'ExitPlanMode'
+        'TodoRead', 'Task', 'Agent',
+        'ExitPlanMode', 'EnterPlanMode'
       ];
       // In planning mode, enforce read-only toolset
       // In agent mode, we do NOT set allowedTools so that tools flow through to canUseTool

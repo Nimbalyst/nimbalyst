@@ -144,6 +144,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.63",
     "@anthropic-ai/sdk": "^0.71.2",
     "@lexical/dragon": "^0.34.0",
     "@lexical/history": "^0.34.0",

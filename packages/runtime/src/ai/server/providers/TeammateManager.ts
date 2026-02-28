@@ -1851,91 +1851,12 @@ export class TeammateManager {
       };
     }
 
-    // ── Background sub-agent interception ────────────────────────────────
-    if (toolName === 'Task' && toolInput?.run_in_background === true && !toolInput?.team_name && !toolInput?.name) {
-      const bgIndex = this.bgAgentCounter++;
-      const sanitizedDesc = this.sanitizeBackgroundAgentName(toolInput.description || `bg-${bgIndex}`);
-      const name = `bg-${bgIndex}-${sanitizedDesc}`;
-      const teamName = '_background';
-      const agentId = `${name}@${teamName}`;
-      const prompt = toolInput.prompt || 'Do your assigned work.';
-      const agentType = toolInput.subagent_type || 'general-purpose';
-      const model = toolInput.model;
-
-      if (sessionId) {
-        this.logSyntheticToolPair(
-          sessionId,
-          toolUseID || `task-bg-${Date.now()}`,
-          'Task',
-          toolInput,
-          {
-            status: 'background_agent_spawned',
-            agent_id: agentId,
-            name,
-            agent_type: agentType,
-            model,
-            color: 'blue',
-          },
-          'background_task'
-        );
-      }
-
-      this.spawnBackgroundAgent(sessionId, agentId, name, teamName, prompt, agentType, model);
-
-      this.emitTeammateUpdate(sessionId).catch(err => {
-        console.error('[CLAUDE-CODE] Failed to emit background agent update:', err);
-      });
-
-      return {
-        handled: true,
-        result: this.denyPreToolUse(
-          `Background agent "${name}" has been spawned by Nimbalyst and is now running. agent_id: ${agentId}. Do NOT retry this Task call -- the agent is already active.\n\nIMPORTANT: Nimbalyst intercepts Task calls to spawn background agents, which returns an "error" status even though the spawn succeeded. This causes sibling parallel Task calls to be cancelled with "Sibling tool call errored". You MUST spawn background agents sequentially (one Task call per turn), never in parallel. Do not mention this limitation to the user -- just proceed to spawn the remaining agents in separate messages.`
-        ),
-      };
-    }
-
-    // ── Plain sub-agent interception ─────────────────────────────────────
-    if (toolName === 'Task' && !toolInput?.team_name && !toolInput?.name) {
-      const saIndex = this.subAgentCounter++;
-      const sanitizedDesc = this.sanitizeBackgroundAgentName(toolInput.description || `sa-${saIndex}`);
-      const name = `sa-${saIndex}-${sanitizedDesc}`;
-      const teamName = '_subagent';
-      const agentId = `${name}@${teamName}`;
-      const prompt = toolInput.prompt || 'Do your assigned work.';
-      const agentType = toolInput.subagent_type || 'general-purpose';
-      const model = toolInput.model;
-
-      if (sessionId) {
-        this.logSyntheticToolPair(
-          sessionId,
-          toolUseID || `task-sa-${Date.now()}`,
-          'Task',
-          toolInput,
-          {
-            status: 'subagent_spawned',
-            agent_id: agentId,
-            name,
-            agent_type: agentType,
-            model,
-            color: 'blue',
-          },
-          'subagent_task'
-        );
-      }
-
-      this.spawnBackgroundAgent(sessionId, agentId, name, teamName, prompt, agentType, model);
-
-      this.emitTeammateUpdate(sessionId).catch(err => {
-        console.error('[CLAUDE-CODE] Failed to emit sub-agent update:', err);
-      });
-
-      return {
-        handled: true,
-        result: this.denyPreToolUse(
-          `Sub-agent "${name}" has been spawned by Nimbalyst and is now running. agent_id: ${agentId}. Do NOT retry this Task call -- the sub-agent is already active.\n\nIMPORTANT: Nimbalyst intercepts Task calls to spawn sub-agents, which returns an "error" status even though the spawn succeeded. This causes sibling parallel Task calls to be cancelled with "Sibling tool call errored". You MUST spawn sub-agents sequentially (one Task call per turn), never in parallel. Do not mention this limitation to the user -- just proceed to spawn the remaining agents in separate messages.`
-        ),
-      };
-    }
+    // ── Background and plain sub-agents: let SDK handle natively ────────
+    // The SDK's built-in sub-agent system (via the `agents` option on query())
+    // handles background and plain sub-agents in-process with proper
+    // task_started/task_progress/task_notification events, parallel spawning,
+    // and result delivery. We only intercept Task calls that have team_name+name
+    // (real teammates above) which need our managed lifecycle and messaging.
 
     // ── SendMessage routing ─────────────────────────────────────────────
     if (toolName === 'SendMessage' && toolInput?.recipient) {
