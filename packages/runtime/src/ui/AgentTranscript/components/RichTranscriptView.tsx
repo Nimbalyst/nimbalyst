@@ -1888,7 +1888,7 @@ export const RichTranscriptView = React.forwardRef<
         <div ref={scrollButtonRef} className="rich-transcript-scroll-button-container sticky bottom-3 flex justify-center opacity-0 transition-opacity">
           <button
             onClick={scrollToBottom}
-            className="rich-transcript-scroll-button p-2 bg-[var(--nim-primary)] text-white rounded-full border-none shadow-lg cursor-pointer transition-all hover:bg-[var(--nim-primary-hover)] hover:scale-110 pointer-events-auto"
+            className="rich-transcript-scroll-button w-9 h-9 flex items-center justify-center bg-[var(--nim-primary)] text-white rounded-full border-none shadow-lg cursor-pointer transition-all hover:bg-[var(--nim-primary-hover)] hover:scale-110 pointer-events-auto"
             title="Scroll to bottom"
           >
             <MaterialSymbol icon="arrow_downward" size={20} />
