@@ -119,6 +119,21 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
   // Teammate management: spawning, messaging, lifecycle, config I/O
   private teammateManager: TeammateManager;
 
+  // SDK-native sub-agent task tracking (task_started/task_progress/task_notification)
+  private activeTasks = new Map<string, {
+    taskId: string;
+    description: string;
+    taskType?: string;
+    status: 'running' | 'completed' | 'failed' | 'stopped';
+    startedAt: number;
+    toolUseId?: string;
+    toolCount: number;
+    tokenCount: number;
+    durationMs: number;
+    lastToolName?: string;
+    summary?: string;
+  }>();
+
   // Permission service for tool permission handling
   private permissionService: ToolPermissionService | null = null;
 
@@ -1791,6 +1806,7 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
             // Only errors need to be displayed from result chunks
           } else if (chunk.type === 'system') {
             // Handle system messages from Claude Code (initialization, etc.)
+            // console.log(`[CLAUDE-CODE] System chunk subtype=${chunk.subtype}${chunk.task_id ? ` task_id=${chunk.task_id}` : ''}`);
 
             // Store session_id if present
             if (chunk.session_id && sessionId) {
@@ -1799,6 +1815,30 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
 
             // System messages like 'init' are informational - don't display to user
             if (chunk.subtype === 'init') {
+              // Clean up stale "running" tasks from previous sessions/restarts.
+              // The activeTasks Map is in-memory only, so after restart any
+              // previously-running tasks in metadata are orphaned.
+              if (sessionId && this.activeTasks.size === 0) {
+                (async () => {
+                  try {
+                    const { AISessionsRepository } = await import('../../../storage/repositories/AISessionsRepository');
+                    const currentSession = await AISessionsRepository.get(sessionId);
+                    const tasks = currentSession?.metadata?.currentTasks;
+                    if (Array.isArray(tasks) && tasks.some((t: any) => t.status === 'running')) {
+                      const cleaned = tasks.map((t: any) =>
+                        t.status === 'running' ? { ...t, status: 'stopped' } : t
+                      );
+                      await AISessionsRepository.updateMetadata(sessionId, {
+                        metadata: { ...currentSession?.metadata, currentTasks: cleaned }
+                      });
+                      this.emit('message:logged', { sessionId, direction: 'output' });
+                      console.log(`[CLAUDE-CODE] Cleaned up ${tasks.filter((t: any) => t.status === 'running').length} stale running tasks`);
+                    }
+                  } catch (e) {
+                    // Non-critical cleanup, don't block init
+                  }
+                })();
+              }
               //   cwd: chunk.cwd,
               //   model: chunk.model,
               //   session_id: chunk.session_id,
@@ -1847,10 +1887,46 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
               // Warn if API key source is "none" - this means Claude Code didn't find credentials
               if (chunk.apiKeySource === 'none') {
               }
+            } else if (chunk.subtype === 'task_started') {
+              // SDK-native sub-agent started
+              const taskChunk = chunk as any;
+              this.activeTasks.set(taskChunk.task_id, {
+                taskId: taskChunk.task_id,
+                description: taskChunk.description || '',
+                taskType: taskChunk.task_type,
+                status: 'running',
+                startedAt: Date.now(),
+                toolUseId: taskChunk.tool_use_id,
+                toolCount: 0,
+                tokenCount: 0,
+                durationMs: 0,
+              });
+              this.emitTaskUpdate(sessionId).catch(() => {});
+            } else if (chunk.subtype === 'task_progress') {
+              // SDK-native sub-agent progress update
+              const taskChunk = chunk as any;
+              const existing = this.activeTasks.get(taskChunk.task_id);
+              if (existing) {
+                existing.toolCount = taskChunk.usage?.tool_uses ?? existing.toolCount;
+                existing.tokenCount = taskChunk.usage?.total_tokens ?? existing.tokenCount;
+                existing.durationMs = taskChunk.usage?.duration_ms ?? existing.durationMs;
+                existing.lastToolName = taskChunk.last_tool_name ?? existing.lastToolName;
+                this.emitTaskUpdate(sessionId).catch(() => {});
+              }
             } else if (chunk.subtype === 'task_notification') {
-              // Agent team task notification - a teammate completed/failed/stopped a task
-              // These are informational and flow through naturally as part of the team coordination
-              // Don't display as raw text - the tool call hierarchy already shows teammate activity
+              // SDK-native sub-agent completed/failed/stopped
+              const taskChunk = chunk as any;
+              const existing = this.activeTasks.get(taskChunk.task_id);
+              if (existing) {
+                existing.status = taskChunk.status || 'completed';
+                existing.summary = taskChunk.summary;
+                if (taskChunk.usage) {
+                  existing.toolCount = taskChunk.usage.tool_uses ?? existing.toolCount;
+                  existing.tokenCount = taskChunk.usage.total_tokens ?? existing.tokenCount;
+                  existing.durationMs = taskChunk.usage.duration_ms ?? existing.durationMs;
+                }
+                this.emitTaskUpdate(sessionId).catch(() => {});
+              }
             } else if (chunk.subtype === 'compact_boundary') {
               // Handle /compact command response
               //   pre_tokens: chunk.compact_metadata?.pre_tokens,
@@ -1936,6 +2012,21 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
                           old_string: args.old_string,
                           new_string: args.new_string
                         };
+                      }
+                    }
+
+                    // Check if this tool result completes a tracked sub-agent task.
+                    // Background agents deliver results as tool_results matching the Agent tool_use_id.
+                    if (toolResultId) {
+                      for (const task of this.activeTasks.values()) {
+                        if (task.toolUseId === toolResultId && task.status === 'running') {
+                          task.status = toolCall.isError ? 'failed' : 'completed';
+                          if (typeof toolResult === 'string') {
+                            task.summary = toolResult.substring(0, 200);
+                          }
+                          this.emitTaskUpdate(sessionId).catch(() => {});
+                          break;
+                        }
                       }
                     }
 
@@ -2753,6 +2844,27 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
     } catch (error) {
       console.error('[CLAUDE-CODE] Failed to update session metadata with todos:', error);
       console.error('[CLAUDE-CODE] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+    }
+  }
+
+  private async emitTaskUpdate(sessionId: string | undefined): Promise<void> {
+    if (!sessionId) return;
+
+    try {
+      const { AISessionsRepository } = await import('../../../storage/repositories/AISessionsRepository');
+      const currentSession = await AISessionsRepository.get(sessionId);
+      const currentMetadata = currentSession?.metadata || {};
+
+      await AISessionsRepository.updateMetadata(sessionId, {
+        metadata: {
+          ...currentMetadata,
+          currentTasks: Array.from(this.activeTasks.values()),
+        }
+      });
+
+      this.emit('message:logged', { sessionId, direction: 'output' });
+    } catch (error) {
+      console.error('[CLAUDE-CODE] Failed to update session metadata with tasks:', error);
     }
   }
 

@@ -1,10 +1,10 @@
 /**
- * TeammatePanel - Collapsible panel showing the agent's current teammates and sub-agents.
+ * TeammatePanel - Collapsible panel showing teammates and SDK-native sub-agent tasks.
  *
- * Displays entries from the active session's metadata (currentTeammates),
- * split into two sections:
- * - "Teammates" for team members (real team names)
- * - "Agents" for background agents (_background) and sub-agents (_subagent)
+ * Two sections:
+ * - "Teammates" for real team members (from currentTeammates metadata)
+ * - "Sub-agents" for SDK-native tasks (from currentTasks metadata, driven by
+ *   task_started/task_progress/task_notification events)
  *
  * Each section is independently collapsible. Sections only render when they have entries.
  * Collapse state is persisted at the project level.
@@ -15,7 +15,12 @@
 import React, { useCallback, useMemo, useState, useEffect } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { MaterialSymbol } from '@nimbalyst/runtime';
-import { teammatePanelCollapsedAtom, toggleTeammatePanelCollapsedAtom, agentPanelCollapsedAtom, toggleAgentPanelCollapsedAtom, sessionTeammatesAtom, scrollToTeammateAtom } from '../../store/atoms/agentMode';
+import {
+  teammatePanelCollapsedAtom, toggleTeammatePanelCollapsedAtom,
+  agentPanelCollapsedAtom, toggleAgentPanelCollapsedAtom,
+  sessionTeammatesAtom, scrollToTeammateAtom,
+  sessionTasksAtom, type TaskInfo,
+} from '../../store/atoms/agentMode';
 
 export interface TeammateInfo {
   name: string;
@@ -29,8 +34,6 @@ export interface TeammateInfo {
   toolCallCount?: number;
 }
 
-const AGENT_TEAM_NAMES = new Set(['_background', '_subagent']);
-
 interface TeammatePanelProps {
   /** The session ID to get teammates from */
   sessionId: string;
@@ -41,60 +44,49 @@ export const TeammatePanel: React.FC<TeammatePanelProps> = React.memo(({
 }) => {
   const isTeammatesCollapsed = useAtomValue(teammatePanelCollapsedAtom);
   const toggleTeammatesCollapsed = useSetAtom(toggleTeammatePanelCollapsedAtom);
-  const isAgentsCollapsed = useAtomValue(agentPanelCollapsedAtom);
-  const toggleAgentsCollapsed = useSetAtom(toggleAgentPanelCollapsedAtom);
+  const isTasksCollapsed = useAtomValue(agentPanelCollapsedAtom);
+  const toggleTasksCollapsed = useSetAtom(toggleAgentPanelCollapsedAtom);
   const allEntries = useAtomValue(sessionTeammatesAtom(sessionId));
+  const tasks = useAtomValue(sessionTasksAtom(sessionId));
   const setScrollTarget = useSetAtom(scrollToTeammateAtom);
 
   const handleToggleTeammates = useCallback(() => {
     toggleTeammatesCollapsed();
   }, [toggleTeammatesCollapsed]);
 
-  const handleToggleAgents = useCallback(() => {
-    toggleAgentsCollapsed();
-  }, [toggleAgentsCollapsed]);
+  const handleToggleTasks = useCallback(() => {
+    toggleTasksCollapsed();
+  }, [toggleTasksCollapsed]);
 
   const handleTeammateClick = useCallback((agentId: string) => {
     setScrollTarget({ sessionId, agentId });
   }, [sessionId, setScrollTarget]);
 
-  const { teammates, agents } = useMemo(() => {
-    const tm: TeammateInfo[] = [];
-    const ag: TeammateInfo[] = [];
-    for (const entry of allEntries) {
-      if (AGENT_TEAM_NAMES.has(entry.teamName)) {
-        ag.push(entry);
-      } else {
-        tm.push(entry);
-      }
-    }
-    return { teammates: tm, agents: ag };
+  // Filter out _background/_subagent entries from teammates -- those are dead
+  // after switching to SDK-native sub-agents. Only real team members remain.
+  const teammates = useMemo(() => {
+    return allEntries.filter(e => e.teamName !== '_background' && e.teamName !== '_subagent');
   }, [allEntries]);
 
-  if (allEntries.length === 0) {
+  if (teammates.length === 0 && tasks.length === 0) {
     return null;
   }
 
   return (
     <div className="teammate-panel border-t border-[var(--nim-border)] bg-[var(--nim-bg-secondary)]">
       {teammates.length > 0 && (
-        <PanelSection
-          title="Teammates"
-          icon="group"
+        <TeammateSection
           entries={teammates}
           isCollapsed={isTeammatesCollapsed}
           onToggle={handleToggleTeammates}
           onTeammateClick={handleTeammateClick}
         />
       )}
-      {agents.length > 0 && (
-        <PanelSection
-          title="Agents"
-          icon="swap_horiz"
-          entries={agents}
-          isCollapsed={isAgentsCollapsed}
-          onToggle={handleToggleAgents}
-          onTeammateClick={handleTeammateClick}
+      {tasks.length > 0 && (
+        <TaskSection
+          tasks={tasks}
+          isCollapsed={isTasksCollapsed}
+          onToggle={handleToggleTasks}
           className={teammates.length > 0 ? 'border-t border-[var(--nim-border)]' : undefined}
         />
       )}
@@ -104,30 +96,25 @@ export const TeammatePanel: React.FC<TeammatePanelProps> = React.memo(({
 
 TeammatePanel.displayName = 'TeammatePanel';
 
-interface PanelSectionProps {
-  title: string;
-  icon: string;
+// ─── Teammate Section (real team members) ─────────────────────────────────
+
+interface TeammateSectionProps {
   entries: TeammateInfo[];
   isCollapsed: boolean;
   onToggle: () => void;
   onTeammateClick: (agentId: string) => void;
-  className?: string;
 }
 
-const PanelSection: React.FC<PanelSectionProps> = React.memo(({
-  title,
-  icon,
+const TeammateSection: React.FC<TeammateSectionProps> = React.memo(({
   entries,
   isCollapsed,
   onToggle,
   onTeammateClick,
-  className,
 }) => {
   const runningCount = entries.filter(t => t.status === 'running' || t.status === 'idle').length;
-  const totalCount = entries.length;
 
   return (
-    <div className={className}>
+    <div>
       <button
         className="w-full flex items-center gap-2 px-3 py-2 bg-transparent border-none cursor-pointer text-left hover:bg-[var(--nim-bg-hover)]"
         onClick={onToggle}
@@ -137,16 +124,10 @@ const PanelSection: React.FC<PanelSectionProps> = React.memo(({
           size={16}
           className="text-[var(--nim-text-muted)] shrink-0"
         />
-        <MaterialSymbol
-          icon={icon}
-          size={16}
-          className="text-[var(--nim-text-muted)] shrink-0"
-        />
-        <span className="text-xs font-medium text-[var(--nim-text)]">
-          {title}
-        </span>
+        <MaterialSymbol icon="group" size={16} className="text-[var(--nim-text-muted)] shrink-0" />
+        <span className="text-xs font-medium text-[var(--nim-text)]">Teammates</span>
         <span className="ml-auto text-[11px] text-[var(--nim-text-muted)] font-mono">
-          {runningCount}/{totalCount}
+          {runningCount}/{entries.length}
         </span>
       </button>
 
@@ -163,7 +144,57 @@ const PanelSection: React.FC<PanelSectionProps> = React.memo(({
   );
 });
 
-PanelSection.displayName = 'PanelSection';
+TeammateSection.displayName = 'TeammateSection';
+
+// ─── Task Section (SDK-native sub-agents) ─────────────────────────────────
+
+interface TaskSectionProps {
+  tasks: TaskInfo[];
+  isCollapsed: boolean;
+  onToggle: () => void;
+  className?: string;
+}
+
+const TaskSection: React.FC<TaskSectionProps> = React.memo(({
+  tasks,
+  isCollapsed,
+  onToggle,
+  className,
+}) => {
+  const runningCount = tasks.filter(t => t.status === 'running').length;
+
+  return (
+    <div className={className}>
+      <button
+        className="w-full flex items-center gap-2 px-3 py-2 bg-transparent border-none cursor-pointer text-left hover:bg-[var(--nim-bg-hover)]"
+        onClick={onToggle}
+      >
+        <MaterialSymbol
+          icon={isCollapsed ? 'chevron_right' : 'expand_more'}
+          size={16}
+          className="text-[var(--nim-text-muted)] shrink-0"
+        />
+        <MaterialSymbol icon="swap_horiz" size={16} className="text-[var(--nim-text-muted)] shrink-0" />
+        <span className="text-xs font-medium text-[var(--nim-text)]">Sub-agents</span>
+        <span className="ml-auto text-[11px] text-[var(--nim-text-muted)] font-mono">
+          {runningCount}/{tasks.length}
+        </span>
+      </button>
+
+      {!isCollapsed && (
+        <div className="px-3 pb-2 max-h-[200px] overflow-y-auto">
+          <div className="flex flex-col gap-1">
+            {tasks.map((task) => (
+              <TaskItem key={task.taskId} task={task} />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+});
+
+TaskSection.displayName = 'TaskSection';
 
 // ─── Elapsed time formatting ──────────────────────────────────────────────
 
@@ -200,6 +231,67 @@ function useNow(enabled: boolean): number {
   }, [enabled]);
   return now;
 }
+
+// ─── TaskItem ─────────────────────────────────────────────────────────────
+
+interface TaskItemProps {
+  task: TaskInfo;
+}
+
+const TaskItem: React.FC<TaskItemProps> = React.memo(({ task }) => {
+  const isRunning = task.status === 'running';
+  const now = useNow(isRunning);
+  const isDone = task.status === 'completed' || task.status === 'failed' || task.status === 'stopped';
+
+  // Build stats line
+  const stats: string[] = [];
+  if (task.durationMs > 0) {
+    stats.push(formatElapsed(task.durationMs));
+  } else if (isRunning && task.startedAt) {
+    stats.push(formatElapsed(now - task.startedAt));
+  }
+  if (task.toolCount > 0) {
+    stats.push(`${task.toolCount} tool${task.toolCount !== 1 ? 's' : ''}`);
+  }
+  if (task.lastToolName && isRunning) {
+    stats.push(task.lastToolName);
+  }
+
+  return (
+    <div
+      className={`task-item flex items-start gap-2 py-1 px-1 rounded text-xs ${
+        isRunning ? 'bg-[var(--nim-bg-hover)]' : ''
+      } ${isDone ? 'opacity-60' : ''}`}
+      data-status={task.status}
+    >
+      <div className="shrink-0 w-4 h-4 flex items-center justify-center mt-0.5">
+        {isRunning && (
+          <span className="inline-block w-3 h-3 border-2 border-[var(--nim-bg-tertiary)] border-t-[var(--nim-primary)] rounded-full animate-spin" />
+        )}
+        {task.status === 'completed' && (
+          <span className="text-[#4ade80] text-[10px]">&#x25CF;</span>
+        )}
+        {(task.status === 'failed' || task.status === 'stopped') && (
+          <span className="text-[var(--nim-error)] text-[10px]">&#x25CF;</span>
+        )}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className={`leading-[1.4] break-words ${
+          isDone ? 'text-[var(--nim-text-muted)]' : 'text-[var(--nim-text)]'
+        }`}>
+          {task.description}
+        </div>
+        {stats.length > 0 && (
+          <div className="text-[10px] text-[var(--nim-text-faint)] truncate font-mono">
+            {stats.join(' \u00B7 ')}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+});
+
+TaskItem.displayName = 'TaskItem';
 
 // ─── TeammateItem ─────────────────────────────────────────────────────────
 

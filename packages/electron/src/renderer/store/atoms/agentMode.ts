@@ -37,7 +37,7 @@ export interface SessionHistoryLayout {
   preCollapseWidth?: number;
   collapsedGroups: string[];
   sortOrder: 'updated' | 'created';
-  viewMode: 'list' | 'card';
+  viewMode: 'list' | 'card' | 'kanban';
 }
 
 /**
@@ -158,6 +158,30 @@ export const sessionTeammatesAtom = atomFamily((sessionId: string) =>
     const session = get(sessionStoreAtom(sessionId));
     const raw = session?.metadata?.currentTeammates;
     return Array.isArray(raw) ? raw as TeammateInfo[] : [];
+  })
+);
+
+/** Task info from SDK-native sub-agents (task_started/task_progress/task_notification) */
+export interface TaskInfo {
+  taskId: string;
+  description: string;
+  taskType?: string;
+  status: 'running' | 'completed' | 'failed' | 'stopped';
+  startedAt: number;
+  toolUseId?: string;
+  toolCount: number;
+  tokenCount: number;
+  durationMs: number;
+  lastToolName?: string;
+  summary?: string;
+}
+
+/** Per-session derived atom for SDK-native sub-agent tasks from session metadata */
+export const sessionTasksAtom = atomFamily((sessionId: string) =>
+  atom((get) => {
+    const session = get(sessionStoreAtom(sessionId));
+    const raw = session?.metadata?.currentTasks;
+    return Array.isArray(raw) ? raw as TaskInfo[] : [];
   })
 );
 
@@ -294,7 +318,7 @@ export const setSortOrderAtom = atom(
  */
 export const setViewModeAtom = atom(
   null,
-  (get, set, viewMode: 'list' | 'card') => {
+  (get, set, viewMode: 'list' | 'card' | 'kanban') => {
     set(setSessionHistoryLayoutAtom, { viewMode });
   }
 );
