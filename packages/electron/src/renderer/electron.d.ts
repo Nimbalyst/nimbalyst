@@ -396,6 +396,15 @@ interface ElectronAPI {
     subscribeAuthState: () => Promise<any>;
     onAuthStateChange: (callback: (state: any) => void) => () => void;
     switchEnvironment: (environment: 'development' | 'production') => Promise<{ success: boolean; error?: string }>;
+    getAccounts: () => Promise<Array<{
+      personalOrgId: string;
+      personalUserId: string | null;
+      email: string | null;
+      userName?: string;
+      isPrimary: boolean;
+    }>>;
+    addAccount: () => Promise<{ success: boolean; error?: string }>;
+    removeAccount: (personalOrgId: string) => Promise<{ success: boolean; error?: string }>;
   };
 
   // Extensions API

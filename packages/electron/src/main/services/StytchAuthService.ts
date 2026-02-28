@@ -92,6 +92,27 @@ interface StoredStytchCredentials {
   personalUserId?: string;
 }
 
+/**
+ * Multi-account storage format (v2).
+ * Each account is keyed by personalOrgId.
+ */
+interface StoredAccountsData {
+  version: 2;
+  primaryAccountId: string; // personalOrgId of the primary account
+  accounts: StoredStytchCredentials[];
+}
+
+/**
+ * Public account info exposed to the renderer (no JWTs or tokens).
+ */
+export interface AccountInfo {
+  personalOrgId: string;
+  personalUserId: string | null;
+  email: string | null;
+  userName?: string;
+  isPrimary: boolean;
+}
+
 
 // Stytch configuration - PUBLIC TOKEN ONLY, no secret key!
 interface StytchConfig {
@@ -101,9 +122,11 @@ interface StytchConfig {
 }
 
 // File names for persistent storage
-const STYTCH_CREDENTIALS_FILE = 'stytch-credentials.enc';
+const STYTCH_CREDENTIALS_FILE = 'stytch-credentials.enc'; // v1 (single account)
+const STYTCH_ACCOUNTS_FILE = 'stytch-accounts.enc'; // v2 (multi-account)
 
-// Singleton state
+// Singleton state -- represents the primary account for backward compat.
+// All existing getters (getAuthState, getSessionJwt, etc.) read from this.
 let authState: StytchAuthState = {
   isAuthenticated: false,
   user: null,
@@ -116,6 +139,10 @@ let authState: StytchAuthState = {
   personalSessionJwt: null,
 };
 
+// Multi-account state -- all accounts keyed by personalOrgId.
+const accounts = new Map<string, StoredStytchCredentials>();
+let primaryAccountId: string | null = null;
+
 let stytchConfig: StytchConfig | null = null;
 
 // Event listeners for auth state changes
@@ -123,11 +150,19 @@ type AuthStateListener = (state: StytchAuthState) => void;
 const authStateListeners = new Set<AuthStateListener>();
 
 /**
- * Get the path to the encrypted credentials file.
+ * Get the path to the encrypted credentials file (v1 single-account).
  */
 function getCredentialsPath(): string {
   const userDataPath = app.getPath('userData');
   return path.join(userDataPath, STYTCH_CREDENTIALS_FILE);
+}
+
+/**
+ * Get the path to the multi-account credentials file (v2).
+ */
+function getAccountsPath(): string {
+  const userDataPath = app.getPath('userData');
+  return path.join(userDataPath, STYTCH_ACCOUNTS_FILE);
 }
 
 
@@ -196,6 +231,102 @@ function clearStytchCredentials(): void {
   }
 }
 
+// ============================================================================
+// Multi-Account Storage (v2)
+// ============================================================================
+
+/**
+ * Save all accounts to the multi-account file.
+ */
+function saveAllAccounts(): void {
+  if (accounts.size === 0) {
+    // No accounts -- remove the file
+    const accountsPath = getAccountsPath();
+    if (fs.existsSync(accountsPath)) {
+      fs.unlinkSync(accountsPath);
+    }
+    return;
+  }
+
+  const data: StoredAccountsData = {
+    version: 2,
+    primaryAccountId: primaryAccountId || '',
+    accounts: Array.from(accounts.values()),
+  };
+
+  const accountsPath = getAccountsPath();
+  const jsonData = JSON.stringify(data);
+
+  if (isSafeStorageAvailable()) {
+    const encrypted = safeStorage.encryptString(jsonData);
+    fs.writeFileSync(accountsPath, encrypted);
+  } else {
+    logger.main.warn('[StytchAuthService] safeStorage not available - saving accounts without encryption');
+    fs.writeFileSync(accountsPath, jsonData, 'utf8');
+  }
+}
+
+/**
+ * Load accounts from storage.
+ * Handles migration from v1 (single account) to v2 (multi-account).
+ * Returns true if any accounts were loaded.
+ */
+function loadAllAccounts(): boolean {
+  // Try v2 format first
+  const accountsPath = getAccountsPath();
+  if (fs.existsSync(accountsPath)) {
+    try {
+      const fileData = fs.readFileSync(accountsPath);
+      let jsonData: string;
+      if (isSafeStorageAvailable()) {
+        jsonData = safeStorage.decryptString(fileData);
+      } else {
+        jsonData = fileData.toString('utf8');
+      }
+      const data = JSON.parse(jsonData) as StoredAccountsData;
+      if (data.version === 2 && Array.isArray(data.accounts)) {
+        accounts.clear();
+        for (const acct of data.accounts) {
+          if (acct.personalOrgId) {
+            accounts.set(acct.personalOrgId, acct);
+          }
+        }
+        primaryAccountId = data.primaryAccountId || null;
+        logger.main.info(`[StytchAuthService] Loaded ${accounts.size} accounts (v2 format)`);
+        return accounts.size > 0;
+      }
+    } catch (error) {
+      logger.main.error('[StytchAuthService] Failed to load v2 accounts:', error);
+    }
+  }
+
+  // Migrate from v1 single-account format
+  const v1Creds = loadStytchCredentials();
+  if (v1Creds && v1Creds.personalOrgId) {
+    accounts.clear();
+    accounts.set(v1Creds.personalOrgId, v1Creds);
+    primaryAccountId = v1Creds.personalOrgId;
+
+    // Save in v2 format
+    saveAllAccounts();
+
+    logger.main.info('[StytchAuthService] Migrated v1 credentials to v2 multi-account format');
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Update a specific account's credentials in the map and persist.
+ */
+function updateAccountCredentials(personalOrgId: string, update: Partial<StoredStytchCredentials>): void {
+  const existing = accounts.get(personalOrgId);
+  if (existing) {
+    accounts.set(personalOrgId, { ...existing, ...update });
+    saveAllAccounts();
+  }
+}
 
 /**
  * Notify all listeners of auth state change.
@@ -235,8 +366,11 @@ export function initializeStytchAuth(config: StytchConfig): void {
 
   logger.main.info('[StytchAuthService] Initialized with project:', config.projectId);
 
-  // Try to restore session from saved credentials
-  const savedCredentials = loadStytchCredentials();
+  // Try to load multi-account data (v2), migrating from v1 if needed
+  loadAllAccounts();
+
+  // Restore the primary account into the singleton authState
+  const savedCredentials = primaryAccountId ? accounts.get(primaryAccountId) ?? null : loadStytchCredentials();
   if (savedCredentials && savedCredentials.expiresAt > Date.now() && savedCredentials.orgId) {
     // Validate JWT format (must be 3 parts separated by dots)
     const hasValidJwt = savedCredentials.sessionJwt && savedCredentials.sessionJwt.split('.').length === 3;
@@ -351,41 +485,69 @@ export async function handleAuthCallback(params: {
     logger.main.warn('[StytchAuthService] Auth callback received invalid JWT format');
   }
 
-  // On initial auth, the orgId is the user's personal org and userId is the
-  // personal org member ID. Preserve existing values (in case of re-auth within same session).
-  const personalOrgId = authState.personalOrgId || orgId || null;
-  const personalUserId = authState.personalUserId || userId || null;
+  // Determine the personalOrgId for this callback.
+  // On initial auth, orgId IS the personal org. On re-auth, preserve existing value.
+  const incomingPersonalOrgId = orgId || null;
+  const isSecondaryAccount = primaryAccountId !== null && incomingPersonalOrgId !== null
+    && incomingPersonalOrgId !== primaryAccountId;
 
-  // Update auth state
-  // On initial auth, we're in the personal org, so sessionJwt is the personal JWT too.
-  updateAuthState({
-    isAuthenticated: true,
-    user: userId ? {
-      user_id: userId,
-      emails: email ? [{ email_id: '', email, verified: true }] : [],
-      created_at: new Date().toISOString(),
-      status: 'active',
-    } : null,
-    session: null,
-    sessionToken,
-    sessionJwt: validatedJwt,
-    orgId: orgId || null,
-    personalOrgId,
-    personalUserId,
-    personalSessionJwt: validatedJwt,
-  });
-
-  // Save credentials for persistence
-  saveStytchCredentials({
+  // Build credentials to persist
+  const credsToSave: StoredStytchCredentials = {
     sessionToken,
     sessionJwt: validatedJwt || '',
     userId: userId || '',
     email: email || '',
     expiresAt: expiresAtMs,
     orgId,
-    personalOrgId: personalOrgId || undefined,
-    personalUserId: personalUserId || undefined,
-  });
+    personalOrgId: incomingPersonalOrgId || undefined,
+    personalUserId: userId || undefined,
+  };
+
+  if (isSecondaryAccount) {
+    // Adding a secondary account: update accounts map but DON'T touch the singleton authState.
+    // The primary account's getters (getAuthState, getSessionJwt, etc.) stay unchanged.
+    accounts.set(incomingPersonalOrgId!, credsToSave);
+    saveAllAccounts();
+    logger.main.info('[StytchAuthService] Added secondary account:', email, incomingPersonalOrgId);
+  } else {
+    // Primary account: first sign-in or re-auth of existing primary.
+    const personalOrgId = authState.personalOrgId || incomingPersonalOrgId;
+    const personalUserId = authState.personalUserId || userId || null;
+
+    // Update singleton auth state
+    updateAuthState({
+      isAuthenticated: true,
+      user: userId ? {
+        user_id: userId,
+        emails: email ? [{ email_id: '', email, verified: true }] : [],
+        created_at: new Date().toISOString(),
+        status: 'active',
+      } : null,
+      session: null,
+      sessionToken,
+      sessionJwt: validatedJwt,
+      orgId: orgId || null,
+      personalOrgId,
+      personalUserId,
+      personalSessionJwt: validatedJwt,
+    });
+
+    // Update credentials with resolved personalOrgId/userId
+    credsToSave.personalOrgId = personalOrgId || undefined;
+    credsToSave.personalUserId = personalUserId || undefined;
+
+    // Save legacy file
+    saveStytchCredentials(credsToSave);
+
+    // Update multi-account store
+    if (personalOrgId) {
+      accounts.set(personalOrgId, credsToSave);
+      if (!primaryAccountId) {
+        primaryAccountId = personalOrgId;
+      }
+      saveAllAccounts();
+    }
+  }
 
   // Bootstrap sync config if it doesn't exist yet.
   // Teams and sync operations need this config to exist, even if sync isn't enabled.
@@ -557,6 +719,10 @@ export async function resolvePersonalUserId(serverUrl: string): Promise<string |
     if (creds) {
       saveStytchCredentials({ ...creds, personalUserId });
     }
+    // Update accounts map
+    if (personalOrgId) {
+      updateAccountCredentials(personalOrgId, { personalUserId });
+    }
 
     // The session exchange also updated the session token -- persist that too
     // so future refreshes work. But do NOT update personalOrgId or personalUserId
@@ -579,6 +745,23 @@ export async function resolvePersonalUserId(serverUrl: string): Promise<string |
  */
 export function getSessionJwt(): string | null {
   return authState.sessionJwt;
+}
+
+/**
+ * Get all signed-in accounts (public info only, no JWTs or tokens).
+ * Used by the renderer to display account list.
+ */
+export function getAccounts(): AccountInfo[] {
+  const result: AccountInfo[] = [];
+  for (const [orgId, creds] of accounts) {
+    result.push({
+      personalOrgId: orgId,
+      personalUserId: creds.personalUserId || null,
+      email: creds.email || null,
+      isPrimary: orgId === primaryAccountId,
+    });
+  }
+  return result;
 }
 
 /**
@@ -681,6 +864,10 @@ export function updateSessionToken(newSessionToken: string): void {
   const creds = loadStytchCredentials();
   if (creds) {
     saveStytchCredentials({ ...creds, sessionToken: newSessionToken });
+  }
+  // Update accounts map
+  if (authState.personalOrgId) {
+    updateAccountCredentials(authState.personalOrgId, { sessionToken: newSessionToken });
   }
   logger.main.info('[StytchAuthService] Session token updated after exchange');
 }
@@ -794,6 +981,9 @@ export async function sendMagicLink(
 export async function signOut(): Promise<void> {
   // Clear local state
   clearStytchCredentials();
+  accounts.clear();
+  primaryAccountId = null;
+  saveAllAccounts();
   updateAuthState({
     isAuthenticated: false,
     user: null,
@@ -802,9 +992,75 @@ export async function signOut(): Promise<void> {
     sessionJwt: null,
     orgId: null,
     personalOrgId: null,
+    personalUserId: null,
+    personalSessionJwt: null,
   });
 
   logger.main.info('[StytchAuthService] User signed out');
+}
+
+/**
+ * Sign out a specific account by its personalOrgId.
+ * If the primary account is removed and other accounts exist,
+ * the next account becomes primary.
+ */
+export async function removeAccount(targetOrgId: string): Promise<void> {
+  accounts.delete(targetOrgId);
+
+  if (primaryAccountId === targetOrgId) {
+    // Primary was removed -- pick another or go unauthenticated
+    const remaining = Array.from(accounts.keys());
+    if (remaining.length > 0) {
+      primaryAccountId = remaining[0];
+      const newPrimary = accounts.get(primaryAccountId)!;
+      // Update singleton to the new primary
+      updateAuthState({
+        isAuthenticated: true,
+        user: newPrimary.userId ? {
+          user_id: newPrimary.userId,
+          emails: newPrimary.email ? [{ email_id: '', email: newPrimary.email, verified: true }] : [],
+          created_at: new Date().toISOString(),
+          status: 'active',
+        } : null,
+        session: null,
+        sessionToken: newPrimary.sessionToken,
+        sessionJwt: newPrimary.sessionJwt || null,
+        orgId: newPrimary.orgId || null,
+        personalOrgId: newPrimary.personalOrgId || null,
+        personalUserId: newPrimary.personalUserId || null,
+        personalSessionJwt: newPrimary.sessionJwt || null,
+      });
+      logger.main.info('[StytchAuthService] Primary account changed to:', newPrimary.email);
+    } else {
+      primaryAccountId = null;
+      updateAuthState({
+        isAuthenticated: false,
+        user: null,
+        session: null,
+        sessionToken: null,
+        sessionJwt: null,
+        orgId: null,
+        personalOrgId: null,
+        personalUserId: null,
+        personalSessionJwt: null,
+      });
+      clearStytchCredentials();
+      logger.main.info('[StytchAuthService] All accounts removed, user signed out');
+    }
+  }
+
+  saveAllAccounts();
+  logger.main.info('[StytchAuthService] Removed account:', targetOrgId);
+}
+
+/**
+ * Initiate an "Add Account" OAuth flow.
+ * Uses the same Google OAuth mechanism as sign-in, but the callback
+ * will detect this is a new personalOrgId and store it as a secondary account.
+ */
+export async function addAccount(serverUrl?: string): Promise<{ success: boolean; error?: string }> {
+  // Same as signInWithGoogle -- the differentiation happens in handleAuthCallback
+  return signInWithGoogle(serverUrl);
 }
 
 /**
@@ -954,7 +1210,7 @@ export async function refreshSession(serverUrl?: string): Promise<boolean> {
     });
 
     // Save updated credentials
-    saveStytchCredentials({
+    const refreshedCreds: StoredStytchCredentials = {
       sessionToken: data.session_token,
       sessionJwt: data.session_jwt,
       userId: data.user_id || creds.userId,
@@ -963,7 +1219,14 @@ export async function refreshSession(serverUrl?: string): Promise<boolean> {
       orgId: refreshedOrgId || undefined,
       personalOrgId: personalOrgId || undefined,
       personalUserId: personalUserId || undefined,
-    });
+    };
+    saveStytchCredentials(refreshedCreds);
+
+    // Update accounts map
+    if (personalOrgId) {
+      accounts.set(personalOrgId, refreshedCreds);
+      saveAllAccounts();
+    }
 
     logger.main.info('[StytchAuthService] Session refreshed successfully');
     return true;

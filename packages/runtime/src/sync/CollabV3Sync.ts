@@ -137,6 +137,8 @@ interface SessionIndexEntry {
   mode?: 'agent' | 'planning';
   /** Structural type: 'session' | 'workstream' | 'blitz' */
   sessionType?: string;
+  /** Parent session ID for workstream/worktree hierarchy (plaintext UUID) */
+  parentSessionId?: string;
   messageCount: number;
   lastMessageAt: number;
   createdAt: number;
@@ -181,6 +183,10 @@ interface EncryptedCreateSessionRequest {
   encryptedInitialPrompt?: string;
   /** IV for prompt decryption (base64), required if encryptedInitialPrompt present */
   initialPromptIv?: string;
+  /** Session type: "session" (default), "workstream" (parent container) */
+  sessionType?: string;
+  /** Parent session ID for creating child sessions within a workstream */
+  parentSessionId?: string;
   timestamp: number;
 }
 
@@ -436,6 +442,10 @@ interface ClientMetadata {
   };
   /** Whether there are pending interactive prompts (permissions, questions, plan approvals, git commits) */
   hasPendingPrompt?: boolean;
+  /** Kanban phase: backlog, planning, implementing, validating, complete */
+  phase?: string;
+  /** Arbitrary tags for categorization */
+  tags?: string[];
 }
 
 /**
@@ -444,13 +454,23 @@ interface ClientMetadata {
  */
 function buildClientMetadataFromRaw(metadata?: Record<string, any>): ClientMetadata | undefined {
   const tokenUsage = metadata?.tokenUsage;
-  if (!tokenUsage?.totalTokens || !tokenUsage?.contextWindow) return undefined;
-  return {
-    currentContext: {
+  const phase = metadata?.phase as string | undefined;
+  const tags = metadata?.tags as string[] | undefined;
+  const hasTokenUsage = tokenUsage?.totalTokens && tokenUsage?.contextWindow;
+  const hasPhaseOrTags = phase || (tags && tags.length > 0);
+
+  if (!hasTokenUsage && !hasPhaseOrTags) return undefined;
+
+  const result: ClientMetadata = {};
+  if (hasTokenUsage) {
+    result.currentContext = {
       tokens: tokenUsage.totalTokens,
       contextWindow: tokenUsage.contextWindow,
-    },
-  };
+    };
+  }
+  if (phase) result.phase = phase;
+  if (tags && tags.length > 0) result.tags = tags;
+  return result;
 }
 
 /**
@@ -601,6 +621,8 @@ interface CachedSessionIndex {
   mode?: 'agent' | 'planning';
   /** Structural type: 'session' | 'workstream' | 'blitz' */
   sessionType?: string;
+  /** Parent session ID for workstream/worktree hierarchy */
+  parentSessionId?: string;
   messageCount: number;
   lastMessageAt: number;
   createdAt: number;
@@ -621,6 +643,10 @@ interface CachedSessionIndex {
   };
   /** Whether there are pending interactive prompts (permissions or questions) waiting for response */
   hasPendingPrompt?: boolean;
+  /** Kanban phase: backlog, planning, implementing, validating, complete */
+  phase?: string;
+  /** Arbitrary tags for categorization */
+  tags?: string[];
   /** Unix timestamp ms when this session was last read by any device */
   lastReadAt?: number;
 }
@@ -781,6 +807,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       model: updatedCache.model,
       mode: updatedCache.mode,
       sessionType: updatedCache.sessionType,
+      parentSessionId: updatedCache.parentSessionId,
       messageCount: updatedCache.messageCount,
       lastMessageAt: updatedCache.lastMessageAt,
       createdAt: updatedCache.createdAt,
@@ -796,11 +823,13 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       indexEntry.titleIv = titleIv;
     }
 
-    // Encrypt client metadata (context usage, pending prompt state, etc.)
-    if (updatedCache.currentContext || updatedCache.hasPendingPrompt !== undefined) {
+    // Encrypt client metadata (context usage, pending prompt state, phase, tags, etc.)
+    if (updatedCache.currentContext || updatedCache.hasPendingPrompt !== undefined || updatedCache.phase || updatedCache.tags) {
       const clientMeta: ClientMetadata = {
         currentContext: updatedCache.currentContext,
         hasPendingPrompt: updatedCache.hasPendingPrompt,
+        phase: updatedCache.phase,
+        tags: updatedCache.tags,
       };
       const { encryptedClientMetadata, clientMetadataIv } = await encryptClientMetadata(clientMeta, config.encryptionKey);
       indexEntry.encryptedClientMetadata = encryptedClientMetadata;
@@ -1318,14 +1347,18 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
                     }
                   }
 
-                  // Decrypt client metadata (context usage, pending prompt state, etc.)
+                  // Decrypt client metadata (context usage, pending prompt state, phase, tags, etc.)
                   let currentContext: CachedSessionIndex['currentContext'];
                   let hasPendingPrompt: boolean | undefined;
+                  let phase: string | undefined;
+                  let tags: string[] | undefined;
                   if (entry.encryptedClientMetadata && entry.clientMetadataIv && config.encryptionKey) {
                     try {
                       const clientMeta = await decryptClientMetadata(entry.encryptedClientMetadata, entry.clientMetadataIv, config.encryptionKey);
                       currentContext = clientMeta.currentContext;
                       hasPendingPrompt = clientMeta.hasPendingPrompt;
+                      phase = clientMeta.phase;
+                      tags = clientMeta.tags;
                     } catch (err) {
                       // Non-fatal: metadata is supplementary, just skip
                       console.warn(`[CollabV3] Failed to decrypt client metadata for session ${entry.sessionId}, skipping`);
@@ -1340,6 +1373,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
                     model: entry.model,
                     mode: entry.mode,
                     sessionType: entry.sessionType,
+                    parentSessionId: entry.parentSessionId,
                     messageCount: entry.messageCount,
                     lastMessageAt: entry.lastMessageAt,
                     createdAt: entry.createdAt,
@@ -1362,6 +1396,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
                     model: decrypted.model,
                     mode: decrypted.mode,
                     sessionType: decrypted.sessionType,
+                    parentSessionId: decrypted.parentSessionId,
                     messageCount: decrypted.messageCount,
                     lastMessageAt: decrypted.lastMessageAt,
                     createdAt: decrypted.createdAt,
@@ -1370,6 +1405,8 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
                     isExecuting: decrypted.isExecuting,
                     queuedPrompts: decrypted.queuedPrompts,
                     currentContext: decrypted.currentContext,
+                    phase,
+                    tags,
                     lastReadAt: decrypted.lastReadAt,
                   };
                   sessionIndexCache.set(entry.sessionId, cacheEntry);
@@ -1602,6 +1639,8 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
               requestId: message.request.requestId,
               projectId,
               initialPrompt,
+              sessionType: message.request.sessionType,
+              parentSessionId: message.request.parentSessionId,
               timestamp: message.request.timestamp,
             };
 
@@ -1927,6 +1966,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
         model: session.model,
         mode: session.mode as SessionIndexEntry['mode'],
         sessionType: session.sessionType,
+        parentSessionId: session.parentSessionId,
         messageCount: session.messageCount,
         lastMessageAt: session.updatedAt,
         createdAt: session.createdAt,
@@ -1963,6 +2003,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
         model: session.model,
         mode: session.mode as CachedSessionIndex['mode'],
         sessionType: session.sessionType,
+        parentSessionId: session.parentSessionId,
         messageCount: session.messageCount,
         lastMessageAt: session.updatedAt,
         createdAt: session.createdAt,
@@ -1970,6 +2011,8 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
         currentContext: clientMeta?.currentContext,
         isExecuting: cachedIsExecuting,
         hasPendingPrompt: cachedHasPendingPrompt,
+        phase: clientMeta?.phase,
+        tags: clientMeta?.tags,
       };
       sessionIndexCache.set(session.id, cacheEntry);
 
@@ -2232,7 +2275,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
               metadata.encryptedQueuedPrompts = undefined;
             }
           }
-          // Encrypt client metadata (context usage, pending prompt state, etc.)
+          // Encrypt client metadata (context usage, pending prompt state, phase, tags, etc.)
           const hasClientMetaFields = ('currentContext' in change.metadata && change.metadata.currentContext) ||
             ('hasPendingPrompt' in change.metadata);
           if (hasClientMetaFields && config.encryptionKey) {
@@ -2240,6 +2283,8 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
             const clientMeta: ClientMetadata = {
               currentContext: ('currentContext' in change.metadata ? change.metadata.currentContext : cached?.currentContext) || undefined,
               hasPendingPrompt: 'hasPendingPrompt' in change.metadata ? change.metadata.hasPendingPrompt : cached?.hasPendingPrompt,
+              phase: cached?.phase,
+              tags: cached?.tags,
             };
             const encrypted = await encryptClientMetadata(clientMeta, config.encryptionKey);
             metadata.encryptedClientMetadata = encrypted.encryptedClientMetadata;
@@ -2306,6 +2351,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
               model: baseEntry.model,
               mode: baseEntry.mode,
               sessionType: baseEntry.sessionType,
+              parentSessionId: baseEntry.parentSessionId,
               messageCount: baseEntry.messageCount,
               lastMessageAt: baseEntry.lastMessageAt,
               createdAt: baseEntry.createdAt,
@@ -2323,10 +2369,12 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
             }
 
             // Encrypt client metadata for wire
-            if (baseEntry.currentContext || baseEntry.hasPendingPrompt !== undefined) {
+            if (baseEntry.currentContext || baseEntry.hasPendingPrompt !== undefined || baseEntry.phase || baseEntry.tags) {
               const clientMeta: ClientMetadata = {
                 currentContext: baseEntry.currentContext,
                 hasPendingPrompt: baseEntry.hasPendingPrompt,
+                phase: baseEntry.phase,
+                tags: baseEntry.tags,
               };
               const { encryptedClientMetadata, clientMetadataIv } = await encryptClientMetadata(clientMeta, config.encryptionKey);
               indexEntry.encryptedClientMetadata = encryptedClientMetadata;
@@ -2352,6 +2400,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
               provider: meta.provider ?? cached.provider,
               model: meta.model ?? cached.model,
               mode: (meta.mode ?? cached.mode) as CachedSessionIndex['mode'],
+              parentSessionId: 'parentSessionId' in meta ? meta.parentSessionId : cached.parentSessionId,
               lastMessageAt: updatedAt ?? cached.lastMessageAt,
               updatedAt: updatedAt ?? cached.updatedAt,
               pendingExecution: 'pendingExecution' in meta ? meta.pendingExecution : cached.pendingExecution,
@@ -2372,6 +2421,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
               model: meta.model,
               mode: meta.mode as CachedSessionIndex['mode'],
               sessionType: meta.sessionType,
+              parentSessionId: meta.parentSessionId,
               messageCount: 0,
               lastMessageAt: now,
               createdAt: now,
@@ -2616,6 +2666,8 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
         requestId: request.requestId,
         encryptedProjectId,
         projectIdIv,
+        sessionType: request.sessionType,
+        parentSessionId: request.parentSessionId,
         timestamp: request.timestamp,
       };
 

@@ -261,10 +261,9 @@ export const HelpContent: Record<string, HelpEntry> = {
     title: 'Send Feedback',
     body: 'Share feedback or report issues with the team.',
   },
-  'gutter-settings-button': {
-    title: 'Settings',
-    body: 'Open application settings. Configure AI providers, shortcuts, and preferences.',
-    shortcut: KeyboardShortcuts.window.aiModels,
+  'gutter-user-button': {
+    title: 'User Menu',
+    body: 'Open user menu to access User Settings, Project Settings, Team Settings, and account info.',
   },
   'terminal-panel-button': {
     title: 'Terminal',

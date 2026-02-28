@@ -14,6 +14,7 @@ import { getCredentials, resetCredentials, generateQRPairingPayload, isUsingSecu
 import { onSyncStatusChange } from '../services/SyncManager';
 import * as StytchAuth from '../services/StytchAuthService';
 import { getRestartSignalPath } from '../utils/appPaths';
+import { TrayManager } from '../tray/TrayManager';
 import { STYTCH_CONFIG } from '@nimbalyst/runtime';
 import { type EffortLevel, parseEffortLevel } from '@nimbalyst/runtime/ai/server/effortLevels';
 
@@ -822,6 +823,12 @@ export function registerSettingsHandlers() {
         return StytchAuth.getAuthState();
     });
 
+    // Get all signed-in accounts (public info, no JWTs)
+    safeHandle('stytch:get-accounts', () => {
+        ensureStytchInitialized();
+        return StytchAuth.getAccounts();
+    });
+
     // Check if user is authenticated with Stytch
     safeHandle('stytch:is-authenticated', () => {
         ensureStytchInitialized();
@@ -881,10 +888,34 @@ export function registerSettingsHandlers() {
         return StytchAuth.sendMagicLink(email, httpUrl);
     });
 
-    // Sign out
+    // Sign out (all accounts)
     safeHandle('stytch:sign-out', async () => {
         ensureStytchInitialized();
         await StytchAuth.signOut();
+        return { success: true };
+    });
+
+    // Add a new account (opens OAuth flow)
+    safeHandle('stytch:add-account', async () => {
+        ensureStytchInitialized();
+        const syncConfig = getSessionSyncConfig();
+        const isDev = process.env.NODE_ENV !== 'production';
+        const effectiveEnvironment = isDev ? syncConfig?.environment : undefined;
+        let serverUrl: string;
+        if (effectiveEnvironment === 'development') {
+            serverUrl = 'http://localhost:8790';
+        } else if (syncConfig?.serverUrl) {
+            serverUrl = syncConfig.serverUrl.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:');
+        } else {
+            serverUrl = 'https://sync.nimbalyst.com';
+        }
+        return StytchAuth.addAccount(serverUrl);
+    });
+
+    // Remove a specific account by personalOrgId
+    safeHandle('stytch:remove-account', async (_event, personalOrgId: string) => {
+        ensureStytchInitialized();
+        await StytchAuth.removeAccount(personalOrgId);
         return { success: true };
     });
 

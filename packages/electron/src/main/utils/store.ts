@@ -123,6 +123,8 @@ interface AppStoreSchema {
     spreadsheet?: boolean;
     datamodel?: boolean;
   };
+  // System tray icon
+  showTrayIcon?: boolean;
   // Advanced: V8 heap memory limit in MB (default: 4096 = 4GB)
   // Increase if you experience OOM crashes with large sessions
   maxHeapSizeMB?: number;
@@ -338,6 +340,10 @@ export interface WorkspaceState {
   workstreamStates?: Record<string, unknown>;
   // Agent mode file scope mode (shared across all sessions in workspace)
   agentFileScopeMode?: AgentFileScopeMode;
+  // Account identity bound to this workspace (personalOrgId).
+  // Set once when the workspace is first synced. Different workspaces can use different accounts.
+  // Defaults to the primary account if not set.
+  accountId?: string;
   lastUpdated: number;
 }
 
@@ -1026,6 +1032,15 @@ export function shouldShowCommunityPopup(): boolean {
 /** @deprecated Use shouldShowCommunityPopup instead */
 export function shouldShowDiscordInvitation(): boolean {
   return shouldShowCommunityPopup();
+}
+
+// System Tray Settings
+export function isShowTrayIcon(): boolean {
+  return getAppStore().get('showTrayIcon', true);
+}
+
+export function setShowTrayIcon(show: boolean): void {
+  getAppStore().set('showTrayIcon', show);
 }
 
 // Completion Sound Settings

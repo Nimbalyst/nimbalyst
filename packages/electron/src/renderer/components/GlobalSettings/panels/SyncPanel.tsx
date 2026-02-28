@@ -96,6 +96,15 @@ export function SyncPanel() {
     user: null,
   });
 
+  // Multi-account state
+  interface AccountInfo {
+    personalOrgId: string;
+    personalUserId: string | null;
+    email: string | null;
+    isPrimary: boolean;
+  }
+  const [allAccounts, setAllAccounts] = useState<AccountInfo[]>([]);
+
   // Account deletion state
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
@@ -120,6 +129,17 @@ export function SyncPanel() {
   // Derive whether sync is effectively active (has projects selected)
   const isSyncActive = config.enabled && enabledProjectCount > 0;
 
+  // Load accounts list
+  const loadAccounts = async () => {
+    if (!window.electronAPI?.stytch?.getAccounts) return;
+    try {
+      const accts = await window.electronAPI.stytch.getAccounts();
+      setAllAccounts(accts || []);
+    } catch (err) {
+      console.warn('Failed to load accounts:', err);
+    }
+  };
+
   // Load Stytch auth state on mount
   useEffect(() => {
     async function loadStytchAuth() {
@@ -136,6 +156,7 @@ export function SyncPanel() {
     }
 
     loadStytchAuth();
+    loadAccounts();
 
     if (!window.electronAPI?.stytch) return;
 
@@ -153,6 +174,9 @@ export function SyncPanel() {
         isAuthenticated: state.isAuthenticated,
         user: state.user,
       });
+
+      // Refresh accounts list on auth state change
+      loadAccounts();
 
       // Set email in PostHog for identity linking when user logs in via Stytch
       const userEmail = state.user?.emails?.[0]?.email;
@@ -335,6 +359,27 @@ export function SyncPanel() {
     }
   };
 
+  const handleAddAccount = async () => {
+    if (!window.electronAPI?.stytch?.addAccount) return;
+    posthog?.capture('sync_add_account');
+    try {
+      await window.electronAPI.stytch.addAccount();
+    } catch (err) {
+      console.error('Add account error:', err);
+    }
+  };
+
+  const handleRemoveAccount = async (personalOrgId: string) => {
+    if (!window.electronAPI?.stytch?.removeAccount) return;
+    posthog?.capture('sync_remove_account');
+    try {
+      await window.electronAPI.stytch.removeAccount(personalOrgId);
+      loadAccounts();
+    } catch (err) {
+      console.error('Remove account error:', err);
+    }
+  };
+
   const handleDeleteAccount = async () => {
     if (!window.electronAPI?.stytch) return;
     setDeleteLoading(true);
@@ -410,25 +455,63 @@ export function SyncPanel() {
       {/* Account Section */}
       <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
         {stytchAuth.isAuthenticated && stytchAuth.user ? (
-          <div className="flex items-center gap-3 p-2.5 bg-nim-secondary rounded-lg">
-            <div className="w-9 h-9 rounded-full bg-nim-primary flex items-center justify-center text-white font-semibold text-sm">
-              {(stytchAuth.user.name?.first_name?.[0] || stytchAuth.user.emails[0]?.email[0] || '?').toUpperCase()}
-            </div>
-            <div className="flex-1">
-              <div className="font-medium text-nim text-[13px]">
-                {stytchAuth.user.name?.first_name
-                  ? `${stytchAuth.user.name.first_name} ${stytchAuth.user.name.last_name || ''}`.trim()
-                  : stytchAuth.user.emails[0]?.email}
+          <div className="flex flex-col gap-2">
+            {/* Show all accounts if multiple, otherwise show primary */}
+            {allAccounts.length > 1 ? (
+              allAccounts.map((acct) => (
+                <div key={acct.personalOrgId} className="flex items-center gap-3 p-2.5 bg-nim-secondary rounded-lg">
+                  <div className="w-9 h-9 rounded-full bg-nim-primary flex items-center justify-center text-white font-semibold text-sm shrink-0">
+                    {(acct.email?.[0] || '?').toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-nim text-[13px] truncate">
+                      {acct.email || 'Unknown'}
+                    </div>
+                    <div className="text-[11px] text-nim-faint">
+                      {acct.isPrimary ? 'Primary account' : 'Additional account'}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleRemoveAccount(acct.personalOrgId)}
+                    className="px-3 py-1.5 text-xs bg-transparent border border-nim rounded text-nim-muted cursor-pointer hover:bg-nim-hover shrink-0"
+                  >
+                    Sign Out
+                  </button>
+                </div>
+              ))
+            ) : (
+              <div className="flex items-center gap-3 p-2.5 bg-nim-secondary rounded-lg">
+                <div className="w-9 h-9 rounded-full bg-nim-primary flex items-center justify-center text-white font-semibold text-sm">
+                  {(stytchAuth.user.name?.first_name?.[0] || stytchAuth.user.emails[0]?.email[0] || '?').toUpperCase()}
+                </div>
+                <div className="flex-1">
+                  <div className="font-medium text-nim text-[13px]">
+                    {stytchAuth.user.name?.first_name
+                      ? `${stytchAuth.user.name.first_name} ${stytchAuth.user.name.last_name || ''}`.trim()
+                      : stytchAuth.user.emails[0]?.email}
+                  </div>
+                  <div className="text-[11px] text-nim-faint">
+                    {stytchAuth.user.emails[0]?.email}
+                  </div>
+                </div>
+                <button
+                  onClick={handleSignOut}
+                  className="px-3 py-1.5 text-xs bg-transparent border border-nim rounded text-nim-muted cursor-pointer hover:bg-nim-hover"
+                >
+                  Sign Out
+                </button>
               </div>
-              <div className="text-[11px] text-nim-faint">
-                {stytchAuth.user.emails[0]?.email}
-              </div>
-            </div>
+            )}
+            {/* Add Account button */}
             <button
-              onClick={handleSignOut}
-              className="px-3 py-1.5 text-xs bg-transparent border border-nim rounded text-nim-muted cursor-pointer hover:bg-nim-hover"
+              onClick={handleAddAccount}
+              className="flex items-center gap-2 px-3 py-2 text-xs text-nim-muted bg-transparent border border-dashed border-nim rounded-lg cursor-pointer hover:bg-nim-hover hover:text-nim transition-colors"
             >
-              Sign Out
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              Add Account
             </button>
           </div>
         ) : showAuthForm ? (

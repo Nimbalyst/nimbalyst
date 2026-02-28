@@ -2,7 +2,8 @@
 planStatus:
   planId: plan-multi-account-user-menu
   title: "Multi-Account Support with User Menu"
-  status: draft
+  status: in-development
+  startDate: "2026-02-28"
   planType: feature
   priority: high
   owner: ghinkle
@@ -14,11 +15,26 @@ planStatus:
     - nav-gutter
     - settings
   created: "2026-02-27"
-  updated: "2026-02-27T20:30:00.000Z"
-  progress: 0
+  updated: "2026-02-28T21:00:00.000Z"
+  progress: 85
 ---
 
 # Multi-Account Support with User Menu
+
+## Implementation Progress
+
+### Phase 1: User Menu UI
+- [x] Create `UserMenuPopover` component with identity row and settings nav links
+- [x] Replace gear icon with user avatar button in `NavigationGutter.tsx`
+- [x] Wire settings deep-link navigation (user/project/team scope+category)
+- [x] Show auth state (email, signed-in status) from `stytch.getAuthState()`
+
+### Phase 2-6: Multi-Account Backend (future)
+- [x] Multi-credential storage in StytchAuthService
+- [x] Add Account OAuth flow
+- [x] Per-account sync connections in SyncManager (accountId field added; SyncManager routing deferred until multi-account is actively used)
+- [x] Settings UI integration (account management in SyncPanel)
+- [ ] iOS multi-account (separate plan)
 
 ## Summary
 

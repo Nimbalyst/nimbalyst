@@ -864,11 +864,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Stytch Authentication (for account-based sync)
   stytch: {
     getAuthState: () => ipcRenderer.invoke('stytch:get-auth-state'),
+    getAccounts: () => ipcRenderer.invoke('stytch:get-accounts'),
     isAuthenticated: () => ipcRenderer.invoke('stytch:is-authenticated'),
     signInWithGoogle: () => ipcRenderer.invoke('stytch:sign-in-google'),
     sendMagicLink: (email: string) =>
       ipcRenderer.invoke('stytch:send-magic-link', email),
     signOut: () => ipcRenderer.invoke('stytch:sign-out'),
+    addAccount: () => ipcRenderer.invoke('stytch:add-account'),
+    removeAccount: (personalOrgId: string) =>
+      ipcRenderer.invoke('stytch:remove-account', personalOrgId),
     deleteAccount: () => ipcRenderer.invoke('stytch:delete-account'),
     getSessionJwt: () => ipcRenderer.invoke('stytch:get-session-jwt'),
     refreshSession: () => ipcRenderer.invoke('stytch:refresh-session'),

@@ -1491,6 +1491,12 @@ export default function App() {
         onOpenSettings={() => {
           setActiveMode('settings');
         }}
+        onNavigateSettings={(scope, category) => {
+          if (category) setSettingsInitialCategory(category);
+          setSettingsInitialScope(scope);
+          incrementSettingsKey();
+          setTimeout(() => setActiveMode('settings'), 0);
+        }}
         onOpenPermissions={() => {
           // Deep link to agent permissions settings
           setSettingsInitialCategory('agent-permissions');

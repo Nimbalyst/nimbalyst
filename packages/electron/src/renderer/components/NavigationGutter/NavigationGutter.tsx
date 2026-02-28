@@ -1,8 +1,10 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import { usePostHog } from 'posthog-js/react';
 import { useAtomValue } from 'jotai';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import type { ContentMode } from '../../types/WindowModeTypes';
+import type { SettingsCategory } from '../Settings/SettingsSidebar';
+import type { SettingsScope } from '../Settings/SettingsView';
 import { KeyboardShortcuts, getShortcutDisplay } from '../../../shared/KeyboardShortcuts';
 import { ThemeToggleButton } from '../ThemeToggleButton/ThemeToggleButton';
 import { SyncStatusButton } from '../SyncStatusButton/SyncStatusButton';
@@ -14,6 +16,7 @@ import { VoiceModeButton } from '../UnifiedAI/VoiceModeButton';
 import { useExtensionGutterButtons } from '../../extensions/panels/usePanels';
 import { HelpTooltip } from '../../help';
 import { terminalFeatureAvailableAtom } from '../../store/atoms/appSettings';
+import { UserMenuPopover } from './UserMenuPopover';
 
 export type NavigationMode = 'planning' | 'coding';
 export type SidebarView = 'files' | 'settings';
@@ -33,6 +36,7 @@ interface NavigationGutterProps {
   onContentModeChange: (mode: ContentMode) => void;
   onOpenHistory?: () => void;
   onOpenSettings?: () => void;
+  onNavigateSettings?: (scope: SettingsScope, category?: SettingsCategory) => void;
   onOpenPermissions?: () => void;
   onOpenFeedback?: () => void;
   onChangeTrustMode?: () => void;
@@ -63,6 +67,7 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
   onContentModeChange,
   onOpenHistory,
   onOpenSettings,
+  onNavigateSettings,
   onOpenPermissions,
   onOpenFeedback,
   onChangeTrustMode,
@@ -75,7 +80,16 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
   onToggleAgentCollapsed,
 }) => {
   const posthog = usePostHog();
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
 
+  const handleNavigateSettings = useCallback((scope: SettingsScope, category?: SettingsCategory) => {
+    if (onNavigateSettings) {
+      onNavigateSettings(scope, category);
+    } else {
+      // Fallback: just open settings mode
+      onOpenSettings?.();
+    }
+  }, [onNavigateSettings, onOpenSettings]);
 
   // Check if terminal feature is available (developer mode + feature enabled)
   const isTerminalAvailable = useAtomValue(terminalFeatureAvailableAtom);
@@ -138,14 +152,6 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
       onClick: onToggleTerminalPanel,
     }] : []),
   ];
-
-  // Settings button - always at bottom
-  const settingsButton: NavButton = {
-    id: 'settings',
-    icon: 'settings',
-    label: 'Settings',
-    contentMode: 'settings',
-  };
 
   // Feedback button
   const feedbackButton: NavButton = {
@@ -479,19 +485,28 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
           </button>
         </HelpTooltip>
 
-        <HelpTooltip testId="gutter-settings-button">
-          <button
-            className="nav-button relative w-9 h-9 flex items-center justify-center bg-transparent border-none rounded-md text-nim-muted cursor-pointer transition-all duration-150 p-0 hover:bg-nim-tertiary hover:text-nim active:scale-95 focus-visible:outline-2 focus-visible:outline-[var(--nim-primary)] focus-visible:outline-offset-2"
-            onClick={() => handleButtonClick(settingsButton)}
-            aria-label={settingsButton.label}
-            data-testid="gutter-settings-button"
-          >
-            <MaterialSymbol
-              icon={settingsButton.icon}
-              size={20}
+        <div className="relative">
+          {userMenuOpen && (
+            <UserMenuPopover
+              onNavigateSettings={handleNavigateSettings}
+              onClose={() => setUserMenuOpen(false)}
             />
-          </button>
-        </HelpTooltip>
+          )}
+          <HelpTooltip testId="gutter-user-button">
+            <button
+              className={`nav-button relative w-9 h-9 flex items-center justify-center border-none rounded-md cursor-pointer transition-all duration-150 p-0 active:scale-95 focus-visible:outline-2 focus-visible:outline-[var(--nim-primary)] focus-visible:outline-offset-2 ${userMenuOpen ? 'bg-nim-tertiary text-nim' : 'bg-transparent text-nim-muted hover:bg-nim-tertiary hover:text-nim'}`}
+              onClick={() => setUserMenuOpen(!userMenuOpen)}
+              aria-label="User menu"
+              aria-expanded={userMenuOpen}
+              data-testid="gutter-user-button"
+            >
+              <MaterialSymbol
+                icon="person"
+                size={20}
+              />
+            </button>
+          </HelpTooltip>
+        </div>
       </div>
     </div>
   );
