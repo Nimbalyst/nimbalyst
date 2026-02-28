@@ -293,6 +293,14 @@ function TranscriptApp() {
     );
   }
 
+  const handleCompact = useCallback(() => {
+    try {
+      (window as any).webkit?.messageHandlers?.bridge?.postMessage({ type: 'prompt', text: '/compact' });
+    } catch (e) {
+      console.warn('Failed to send compact command to native:', e);
+    }
+  }, []);
+
   return (
     <AgentTranscriptPanel
       ref={transcriptRef}
@@ -300,6 +308,7 @@ function TranscriptApp() {
       sessionId={sessionId}
       sessionData={sessionData}
       hideSidebar={true}
+      onCompact={handleCompact}
     />
   );
 }
