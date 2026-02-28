@@ -95,6 +95,8 @@ export class RealtimeAPIClient {
   // Current response tracking
   private currentResponseId: string | null = null;
   private hasActiveResponse: boolean = false;
+  private hasPendingFunctionCall: boolean = false;
+  private isOutputtingAudio: boolean = false;
 
   // When true, the inactivity monitor is suspended (e.g. voice is sleeping)
   private listeningPaused: boolean = false;
@@ -316,10 +318,13 @@ export class RealtimeAPIClient {
         }
         this.currentResponseId = null;
         this.hasActiveResponse = false;
+        this.hasPendingFunctionCall = false;
+        this.isOutputtingAudio = false;
         break;
 
       case 'response.audio.delta':
         // Received audio chunk from OpenAI
+        this.isOutputtingAudio = true;
         const audioDelta = (event as any).delta as string; // base64-encoded PCM16
         this.handleAudioDelta(audioDelta);
         if (this.onAudioCallback) {
@@ -328,6 +333,7 @@ export class RealtimeAPIClient {
         break;
 
       case 'response.audio.done':
+        this.isOutputtingAudio = false;
         break;
 
       case 'response.text.delta':
@@ -338,9 +344,11 @@ export class RealtimeAPIClient {
         break;
 
       case 'response.function_call_arguments.delta':
+        this.hasPendingFunctionCall = true;
         break;
 
       case 'response.function_call_arguments.done':
+        this.hasPendingFunctionCall = false;
         const callId = (event as any).call_id as string;
         const name = (event as any).name as string;
         const args = (event as any).arguments as string;
@@ -430,7 +438,7 @@ Guidelines:
 - Only answer directly for truly general knowledge questions unrelated to this project.
 - For "[INTERNAL: Task complete. Result: ...]" messages: briefly relay the result to the user. Do NOT say "I finished that task" -- just state the result.
 - For "[INTERNAL: User is now viewing ...]" messages: do NOT announce this. Silently note it for context.
-- For "[INTERACTIVE PROMPT: ...]" messages: the coding agent needs user input. Read the question and option labels aloud conversationally. After the user responds, call respond_to_interactive_prompt with their answer and the promptId/promptType from the message.
+- For "[INTERACTIVE PROMPT: ...]" messages: the coding agent needs user input. Read the question and option labels aloud BRIEFLY -- just the question and option labels, not descriptions. Then WAIT for the user to clearly state their choice. Do NOT call respond_to_interactive_prompt until you hear a clear, deliberate answer from the user. If you hear garbled audio, silence, or unclear speech, ask "Which option?" -- do NOT guess or pick the first option. The user's microphone may pick up echo from your own speech -- ignore any "response" that arrives while you are still speaking or immediately after.
 - When summarizing coding agent responses: be concise, paraphrase for speech. Never read code or file paths verbatim.
 - NEVER say the coding agent "didn't respond", "timed out", or "isn't responding". Tasks take as long as they take.
 
@@ -916,6 +924,16 @@ Your job is to be a voice relay, not to interpret or improve the user's requests
     if (!this.ws || !this.connected || !this.hasActiveResponse) {
       return;
     }
+
+    // Don't cancel responses that are generating function call arguments.
+    // Cancelling mid-stream truncates the JSON args, causing parse failures
+    // and making the voice agent fall back to ask_coding_agent instead of
+    // using the intended tool (e.g. respond_to_interactive_prompt).
+    if (this.hasPendingFunctionCall) {
+      console.log('[RealtimeAPIClient] Skipping cancel - function call in progress');
+      return;
+    }
+
 
     const event = {
       type: 'response.cancel',

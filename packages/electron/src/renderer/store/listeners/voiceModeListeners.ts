@@ -554,12 +554,32 @@ export function initVoiceModeListeners(): () => void {
 
       console.log('[voiceModeListeners] Responding to interactive prompt via voice:', payload.promptId);
 
+      let response = payload.response;
+
+      // For AskUserQuestion: the voice agent sends { answers: { _voice: "answer" } }
+      // but the widget expects answers keyed by the actual question text.
+      // Look up the pending prompt to get the real question text and rebuild the answers.
+      if (payload.promptType === 'ask_user_question_request' && response?.answers?._voice) {
+        const pendingPrompts = store.get(sessionPendingPromptsAtom(payload.sessionId));
+        const prompt = pendingPrompts.find(p => p.promptId === payload.promptId);
+        const questions = prompt?.data?.questions;
+        if (questions && Array.isArray(questions) && questions.length > 0) {
+          const voiceAnswer = response.answers._voice;
+          const rebuiltAnswers: Record<string, string> = {};
+          // Map the voice answer to the first question (most common case)
+          // For multi-question prompts, the voice answer applies to the first unanswered question
+          rebuiltAnswers[questions[0].question] = voiceAnswer;
+          response = { ...response, answers: rebuiltAnswers };
+          console.log('[voiceModeListeners] Rebuilt voice answer with question key:', questions[0].question);
+        }
+      }
+
       // Use the respondToPromptAtom to persist and resolve the prompt
       store.set(respondToPromptAtom, {
         sessionId: payload.sessionId,
         promptId: payload.promptId,
         promptType: payload.promptType as any,
-        response: payload.response,
+        response,
       });
     })
   );
@@ -655,18 +675,32 @@ export function initVoiceModeListeners(): () => void {
   // =========================================================================
   // When the coding agent presents an interactive prompt that needs user input,
   // wake voice from sleeping so the user can respond verbally.
+  //
+  // We subscribe to sessionPendingPromptsAtom (the actual data array) rather
+  // than sessionHasPendingInteractivePromptAtom (boolean) because:
+  // 1. The boolean was set before the DB-backed prompt data was loaded,
+  //    so reading sessionPendingPromptsAtom would find it empty.
+  // 2. Setting a boolean to the same value (true->true) doesn't trigger
+  //    Jotai subscriptions, so repeated prompts wouldn't wake voice.
+  // The prompts array changes reference on each refresh, reliably firing.
   let promptUnsub: (() => void) | null = null;
+  let lastForwardedPromptId: string | null = null;
   function updatePromptSubscription(): void {
     if (promptUnsub) {
       promptUnsub();
       promptUnsub = null;
     }
+    lastForwardedPromptId = null;
     const voiceSessionId = store.get(voiceActiveSessionIdAtom);
     if (!voiceSessionId) return;
 
-    promptUnsub = store.sub(sessionHasPendingInteractivePromptAtom(voiceSessionId), () => {
-      const hasPending = store.get(sessionHasPendingInteractivePromptAtom(voiceSessionId));
-      if (!hasPending) return;
+    promptUnsub = store.sub(sessionPendingPromptsAtom(voiceSessionId), () => {
+      const pendingPrompts = store.get(sessionPendingPromptsAtom(voiceSessionId));
+      if (pendingPrompts.length === 0) return;
+
+      const latestPrompt = pendingPrompts[pendingPrompts.length - 1];
+      // Skip if we already forwarded this exact prompt
+      if (latestPrompt.promptId === lastForwardedPromptId) return;
 
       // Wake voice from sleeping so user can respond
       if (store.get(voiceListenStateAtom) === 'sleeping') {
@@ -675,17 +709,20 @@ export function initVoiceModeListeners(): () => void {
       }
 
       // Forward the prompt content to the voice agent so it can speak it
-      const pendingPrompts = store.get(sessionPendingPromptsAtom(voiceSessionId));
-      const latestPrompt = pendingPrompts[pendingPrompts.length - 1];
-      if (latestPrompt) {
-        const description = formatPromptForVoice(latestPrompt);
-        window.electronAPI.send('voice-mode:interactive-prompt', {
-          sessionId: voiceSessionId,
-          promptId: latestPrompt.promptId,
-          promptType: latestPrompt.promptType,
-          description,
-        });
-      }
+      lastForwardedPromptId = latestPrompt.promptId;
+      const description = formatPromptForVoice(latestPrompt);
+      console.log('[voiceModeListeners] Sending interactive-prompt IPC:', {
+        sessionId: voiceSessionId,
+        promptId: latestPrompt.promptId,
+        promptType: latestPrompt.promptType,
+        descriptionLength: description.length,
+      });
+      window.electronAPI.send('voice-mode:interactive-prompt', {
+        sessionId: voiceSessionId,
+        promptId: latestPrompt.promptId,
+        promptType: latestPrompt.promptType,
+        description,
+      });
     });
   }
   // Re-subscribe when the linked session changes

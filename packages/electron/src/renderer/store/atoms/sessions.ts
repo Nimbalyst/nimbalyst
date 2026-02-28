@@ -264,9 +264,17 @@ export const respondToPromptAtom = atom(
 
       // 2. Notify provider directly for immediate resolution
       if (promptType === 'ask_user_question_request') {
-        await window.electronAPI.invoke('ai:resolveAskUserQuestion', promptId, response.answers || response, sessionId);
+        await window.electronAPI.invoke('claude-code:answer-question', {
+          questionId: promptId,
+          answers: response.answers || response,
+          sessionId,
+        });
       } else if (promptType === 'permission_request') {
-        await window.electronAPI.invoke('ai:resolveToolPermission', promptId, response);
+        await window.electronAPI.invoke('claude-code:answer-tool-permission', {
+          requestId: promptId,
+          sessionId,
+          response,
+        });
       } else if (promptType === 'exit_plan_mode_request') {
         await window.electronAPI.invoke('ai:exitPlanModeConfirmResponse', promptId, sessionId, response);
       }

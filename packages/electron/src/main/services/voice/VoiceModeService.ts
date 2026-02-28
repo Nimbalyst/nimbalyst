@@ -1233,8 +1233,23 @@ Generate the summary now:`;
     promptType: string;
     description: string;
   }) => {
-    if (!activeVoiceSession) return;
-    if (!activeVoiceSession.poc.isConnected()) return;
+    console.log('[VoiceModeService] interactive-prompt IPC received:', {
+      promptId: data.promptId,
+      promptType: data.promptType,
+      hasActiveSession: !!activeVoiceSession,
+      isConnected: activeVoiceSession?.poc?.isConnected() ?? false,
+      descriptionLength: data.description?.length ?? 0,
+      description: data.description,
+    });
+
+    if (!activeVoiceSession) {
+      console.log('[VoiceModeService] interactive-prompt: no active voice session, skipping');
+      return;
+    }
+    if (!activeVoiceSession.poc.isConnected()) {
+      console.log('[VoiceModeService] interactive-prompt: voice agent not connected, skipping');
+      return;
+    }
 
     console.log('[VoiceModeService] Forwarding interactive prompt to voice agent:', {
       promptId: data.promptId,

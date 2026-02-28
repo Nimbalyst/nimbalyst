@@ -33,8 +33,10 @@ import {
   sessionUnreadAtom,
   sessionLastReadAtom,
   sessionHasPendingInteractivePromptAtom,
+  sessionPendingPromptsAtom,
   sessionRegistryAtom,
   sessionStoreAtom,
+  type PendingPrompt,
 } from './atoms/sessions';
 import { workstreamActiveChildAtom, workstreamStateAtom } from './atoms/workstreamState';
 import { setWindowModeAtom } from './atoms/windowMode';
@@ -308,21 +310,44 @@ export function initSessionStateListeners(): () => void {
   /**
    * Handle AskUserQuestion events globally.
    * Sets the pending interactive prompt indicator for the sidebar.
+   * Also pushes the prompt data directly into sessionPendingPromptsAtom
+   * so voice mode listeners can immediately read the question text/options
+   * (without waiting for a DB roundtrip that may race with persistence).
    */
-  const handleAskUserQuestion = (data: { sessionId: string; questionId: string }) => {
-    const { sessionId } = data;
+  const handleAskUserQuestion = (data: { sessionId: string; questionId: string; questions?: any[] }) => {
+    const { sessionId, questionId } = data;
     if (!sessionId) return;
     store.set(sessionHasPendingInteractivePromptAtom(sessionId), true);
+
+    // Push prompt data directly into the prompts atom so voice mode
+    // can read it immediately. The DB may not have persisted it yet.
+    const prompt: PendingPrompt = {
+      id: questionId,
+      sessionId,
+      promptType: 'ask_user_question_request',
+      promptId: questionId,
+      data: { type: 'ask_user_question_request', questionId, questions: data.questions || [] },
+      createdAt: Date.now(),
+    };
+    const current = store.get(sessionPendingPromptsAtom(sessionId));
+    store.set(sessionPendingPromptsAtom(sessionId), [...current, prompt]);
   };
 
   /**
    * Handle AskUserQuestion answered/cancelled events globally.
    * Clears the pending interactive prompt indicator.
    */
-  const handleAskUserQuestionResolved = (data: { sessionId: string }) => {
+  const handleAskUserQuestionResolved = (data: { sessionId: string; questionId?: string }) => {
     const { sessionId } = data;
     if (!sessionId) return;
     store.set(sessionHasPendingInteractivePromptAtom(sessionId), false);
+    // Remove the resolved prompt from the array
+    if (data.questionId) {
+      const current = store.get(sessionPendingPromptsAtom(sessionId));
+      store.set(sessionPendingPromptsAtom(sessionId), current.filter(p => p.promptId !== data.questionId));
+    } else {
+      store.set(sessionPendingPromptsAtom(sessionId), []);
+    }
   };
 
   /**
@@ -330,19 +355,35 @@ export function initSessionStateListeners(): () => void {
    * Sets pending interactive prompt indicator for the sidebar.
    */
   const handleExitPlanModeConfirm = (data: { sessionId: string; requestId: string }) => {
-    const { sessionId } = data;
+    const { sessionId, requestId } = data;
     if (!sessionId) return;
     store.set(sessionHasPendingInteractivePromptAtom(sessionId), true);
+    const prompt: PendingPrompt = {
+      id: requestId,
+      sessionId,
+      promptType: 'ask_user_question_request', // reuse type for voice forwarding
+      promptId: requestId,
+      data: { type: 'exit_plan_mode_request', requestId },
+      createdAt: Date.now(),
+    };
+    const current = store.get(sessionPendingPromptsAtom(sessionId));
+    store.set(sessionPendingPromptsAtom(sessionId), [...current, prompt]);
   };
 
   /**
    * Handle ExitPlanMode response events globally.
    * Clears pending indicator and updates session mode if approved.
    */
-  const handleExitPlanModeResolved = (data: { sessionId: string; approved?: boolean }) => {
+  const handleExitPlanModeResolved = (data: { sessionId: string; approved?: boolean; requestId?: string }) => {
     const { sessionId, approved } = data;
     if (!sessionId) return;
     store.set(sessionHasPendingInteractivePromptAtom(sessionId), false);
+    if (data.requestId) {
+      const current = store.get(sessionPendingPromptsAtom(sessionId));
+      store.set(sessionPendingPromptsAtom(sessionId), current.filter(p => p.promptId !== data.requestId));
+    } else {
+      store.set(sessionPendingPromptsAtom(sessionId), []);
+    }
 
     // If approved, update the session mode atom to 'agent' to sync with database
     if (approved) {
@@ -357,10 +398,20 @@ export function initSessionStateListeners(): () => void {
    * Handle ToolPermission events globally.
    * Sets pending interactive prompt indicator for the sidebar.
    */
-  const handleToolPermission = (data: { sessionId: string; requestId: string }) => {
-    const { sessionId } = data;
+  const handleToolPermission = (data: { sessionId: string; requestId: string; toolName?: string; description?: string }) => {
+    const { sessionId, requestId } = data;
     if (!sessionId) return;
     store.set(sessionHasPendingInteractivePromptAtom(sessionId), true);
+    const prompt: PendingPrompt = {
+      id: requestId,
+      sessionId,
+      promptType: 'permission_request',
+      promptId: requestId,
+      data: { type: 'permission_request', requestId, toolName: data.toolName, description: data.description },
+      createdAt: Date.now(),
+    };
+    const current = store.get(sessionPendingPromptsAtom(sessionId));
+    store.set(sessionPendingPromptsAtom(sessionId), [...current, prompt]);
   };
 
   /**
@@ -368,19 +419,31 @@ export function initSessionStateListeners(): () => void {
    * Clears pending interactive prompt indicator.
    */
   const handleToolPermissionResolved = (data: { sessionId: string; requestId: string }) => {
-    const { sessionId } = data;
+    const { sessionId, requestId } = data;
     if (!sessionId) return;
     store.set(sessionHasPendingInteractivePromptAtom(sessionId), false);
+    const current = store.get(sessionPendingPromptsAtom(sessionId));
+    store.set(sessionPendingPromptsAtom(sessionId), current.filter(p => p.promptId !== requestId));
   };
 
   /**
    * Handle GitCommitProposal events globally.
    * Sets pending interactive prompt indicator for the sidebar.
    */
-  const handleGitCommitProposal = (data: { sessionId: string; proposalId: string }) => {
-    const { sessionId } = data;
+  const handleGitCommitProposal = (data: { sessionId: string; proposalId: string; commitMessage?: string }) => {
+    const { sessionId, proposalId } = data;
     if (!sessionId) return;
     store.set(sessionHasPendingInteractivePromptAtom(sessionId), true);
+    const prompt: PendingPrompt = {
+      id: proposalId,
+      sessionId,
+      promptType: 'ask_user_question_request', // reuse type for voice forwarding
+      promptId: proposalId,
+      data: { type: 'git_commit_proposal_request', proposalId, commitMessage: data.commitMessage },
+      createdAt: Date.now(),
+    };
+    const current = store.get(sessionPendingPromptsAtom(sessionId));
+    store.set(sessionPendingPromptsAtom(sessionId), [...current, prompt]);
   };
 
   /**
@@ -388,9 +451,11 @@ export function initSessionStateListeners(): () => void {
    * Clears pending interactive prompt indicator.
    */
   const handleGitCommitProposalResolved = (data: { sessionId: string; proposalId: string }) => {
-    const { sessionId } = data;
+    const { sessionId, proposalId } = data;
     if (!sessionId) return;
     store.set(sessionHasPendingInteractivePromptAtom(sessionId), false);
+    const current = store.get(sessionPendingPromptsAtom(sessionId));
+    store.set(sessionPendingPromptsAtom(sessionId), current.filter(p => p.promptId !== proposalId));
   };
 
   /**
