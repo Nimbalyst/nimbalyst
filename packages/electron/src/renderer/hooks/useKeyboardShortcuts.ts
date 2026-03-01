@@ -6,6 +6,8 @@ import {
   toggleTerminalPanelAtom,
   closeTerminalPanelAtom,
 } from '../store/atoms/terminals';
+import { setViewModeAtom, viewModeAtom } from '../store/atoms/agentMode';
+import { store } from '@nimbalyst/runtime/store';
 
 interface KeyboardShortcutsOptions {
   // Mode state
@@ -122,6 +124,24 @@ export function useKeyboardShortcuts({
         e.preventDefault();
         e.stopPropagation();
         toggleTerminalPanel();
+      }
+
+      // Cmd+Shift+K for Kanban view (switch to agent mode + kanban, or toggle if already there)
+      if (workspaceMode && isAppModifier && e.shiftKey && e.key === 'k') {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const setViewMode = (mode: 'list' | 'card' | 'kanban') => store.set(setViewModeAtom, mode);
+        const currentViewMode = store.get(viewModeAtom);
+
+        if (activeMode === 'agent') {
+          // Toggle kanban on/off
+          setViewMode(currentViewMode === 'kanban' ? 'list' : 'kanban');
+        } else {
+          // Switch to agent mode and set kanban view
+          setViewMode('kanban');
+          setActiveMode('agent');
+        }
       }
 
       // Cmd+Alt+W (Mac) or Ctrl+Alt+W (Windows) to create new worktree session

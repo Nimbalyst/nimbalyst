@@ -78,7 +78,7 @@ export const KeyboardShortcuts = {
     sessionQuickOpen: 'Cmd+L',
     promptQuickOpen: 'Cmd+Shift+L',
     contentSearch: 'Cmd+Shift+F',
-    agenticCoding: 'Cmd+Shift+K',
+    kanbanView: 'Cmd+Shift+K',
     newWorktree: 'Cmd+Alt+W',
     aiModels: 'Cmd+,',
     minimize: 'Cmd+M'

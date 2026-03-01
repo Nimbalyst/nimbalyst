@@ -133,10 +133,29 @@ function CardTypeIcon({ type, provider }: { type: KanbanCardType; provider?: str
 }
 
 // ============================================================
-// Card Status Badge
+// Card Visual State
 // ============================================================
 
-function CardStatusBadge({ sessionId, cardType }: { sessionId: string; cardType: KanbanCardType }) {
+/** The visual state of a card, used for both background tint and status badge */
+type CardVisualState = 'running' | 'waiting' | 'unread' | 'idle';
+
+/** Background + border tints for each visual state */
+const CARD_STATE_STYLES: Record<CardVisualState, { bg: string; border: string }> = {
+  running:  { bg: 'rgba(96, 165, 250, 0.06)',  border: 'rgba(96, 165, 250, 0.25)' },
+  waiting:  { bg: 'rgba(249, 115, 22, 0.06)',  border: 'rgba(249, 115, 22, 0.25)' },
+  unread:   { bg: 'rgba(96, 165, 250, 0.04)',  border: 'rgba(96, 165, 250, 0.18)' },
+  idle:     { bg: 'transparent',                border: '' },
+};
+
+interface CardStateInfo {
+  state: CardVisualState;
+  badgeLabel: string | null;
+  badgeIcon: string | null;
+  badgeColor: string;
+  spinIcon: boolean;
+}
+
+function useCardState(sessionId: string, cardType: KanbanCardType): CardStateInfo {
   const isProcessing = useAtomValue(sessionProcessingAtom(sessionId));
   const hasPendingPrompt = useAtomValue(sessionHasPendingInteractivePromptAtom(sessionId));
   const hasUnread = useAtomValue(sessionUnreadAtom(sessionId));
@@ -148,22 +167,63 @@ function CardStatusBadge({ sessionId, cardType }: { sessionId: string; cardType:
   const hasChildWaiting = isParent && childStates.waiting > 0;
 
   if (isProcessing || hasChildRunning) {
-    return (
-      <span className="flex items-center gap-0.5 text-[10px] px-1 py-px rounded" style={{ color: '#60a5fa', background: 'rgba(96, 165, 250, 0.1)' }}>
-        <span className="material-symbols-outlined text-xs animate-spin" style={{ fontSize: '12px' }}>progress_activity</span>
-        {hasChildRunning ? `${childStates.running} running` : 'running'}
-      </span>
-    );
+    return {
+      state: 'running',
+      badgeLabel: hasChildRunning ? `${childStates.running} running` : 'running',
+      badgeIcon: 'progress_activity',
+      badgeColor: '#60a5fa',
+      spinIcon: true,
+    };
   }
   if (hasPendingPrompt || hasChildWaiting) {
+    return {
+      state: 'waiting',
+      badgeLabel: hasChildWaiting ? `${childStates.waiting} waiting` : 'needs input',
+      badgeIcon: 'help_outline',
+      badgeColor: '#f97316',
+      spinIcon: false,
+    };
+  }
+  if (hasUnread || (isParent && hasChildUnread)) {
+    return {
+      state: 'unread',
+      badgeLabel: null,
+      badgeIcon: null,
+      badgeColor: 'var(--nim-primary)',
+      spinIcon: false,
+    };
+  }
+  return {
+    state: 'idle',
+    badgeLabel: null,
+    badgeIcon: null,
+    badgeColor: '',
+    spinIcon: false,
+  };
+}
+
+// ============================================================
+// Card Status Badge (renders inline badge from CardStateInfo)
+// ============================================================
+
+function CardStatusBadge({ info }: { info: CardStateInfo }) {
+  if (info.state === 'running') {
     return (
-      <span className="flex items-center gap-0.5 text-[10px] px-1 py-px rounded" style={{ color: '#f97316', background: 'rgba(249, 115, 22, 0.1)' }}>
-        <MaterialSymbol icon="help_outline" size={12} />
-        {hasChildWaiting ? `${childStates.waiting} waiting` : 'needs input'}
+      <span className="flex items-center gap-0.5 text-[10px] px-1 py-px rounded" style={{ color: info.badgeColor, background: 'rgba(96, 165, 250, 0.1)' }}>
+        <span className={`material-symbols-outlined ${info.spinIcon ? 'animate-spin' : ''}`} style={{ fontSize: '12px' }}>{info.badgeIcon}</span>
+        {info.badgeLabel}
       </span>
     );
   }
-  if (hasUnread || (isParent && hasChildUnread)) {
+  if (info.state === 'waiting') {
+    return (
+      <span className="flex items-center gap-0.5 text-[10px] px-1 py-px rounded" style={{ color: info.badgeColor, background: 'rgba(249, 115, 22, 0.1)' }}>
+        <MaterialSymbol icon="help_outline" size={12} />
+        {info.badgeLabel}
+      </span>
+    );
+  }
+  if (info.state === 'unread') {
     return (
       <span className="flex items-center justify-center w-[8px] h-[8px] text-[var(--nim-primary)]" title="Unread response">
         <MaterialSymbol icon="circle" size={8} fill />
@@ -298,6 +358,8 @@ interface SessionKanbanCardProps {
 
 function SessionKanbanCard({ session, onSelect, phaseColor, isFocused, showPeekOverride, onPeekToggle }: SessionKanbanCardProps) {
   const cardType = useMemo(() => getCardType(session), [session]);
+  const cardState = useCardState(session.id, cardType);
+  const stateStyle = CARD_STATE_STYLES[cardState.state];
   const tags = session.tags || [];
   const cardRef = useRef<HTMLDivElement>(null);
   const [showPeekLocal, setShowPeekLocal] = useState(false);
@@ -353,10 +415,19 @@ function SessionKanbanCard({ session, onSelect, phaseColor, isFocused, showPeekO
     <>
       <div
         ref={cardRef}
-        className={`w-full text-left p-2.5 rounded-md bg-nim hover:bg-nim-tertiary border transition-colors cursor-default ${
-          isFocused ? 'border-[var(--nim-primary)] ring-1 ring-[var(--nim-primary)]' : 'border-nim'
+        className={`w-full text-left p-2.5 rounded-md border transition-colors cursor-default ${
+          isFocused
+            ? 'border-[var(--nim-primary)] ring-1 ring-[var(--nim-primary)]'
+            : stateStyle.border
+              ? ''
+              : 'border-nim'
         }`}
-        style={{ borderLeftWidth: '3px', borderLeftColor: phaseColor }}
+        style={{
+          borderLeftWidth: '3px',
+          borderLeftColor: phaseColor,
+          backgroundColor: stateStyle.bg || undefined,
+          borderColor: isFocused ? undefined : stateStyle.border || undefined,
+        }}
         onDoubleClick={() => onSelect(session.id)}
         data-testid="session-kanban-card"
         data-session-id={session.id}
@@ -369,7 +440,7 @@ function SessionKanbanCard({ session, onSelect, phaseColor, isFocused, showPeekO
               {session.title}
             </div>
           </div>
-          <CardStatusBadge sessionId={session.id} cardType={cardType} />
+          <CardStatusBadge info={cardState} />
         </div>
 
         {/* Child session count (workstream/worktree only) */}
@@ -989,9 +1060,11 @@ function ArchiveGutter({ onArchive }: { onArchive: (sessionId: string) => void }
 
 interface SessionKanbanBoardProps {
   onSessionSelect?: (sessionId: string) => void;
+  /** Called on double-click to open a session (select + navigate to it) */
+  onSessionOpen?: (sessionId: string) => void;
 }
 
-export const SessionKanbanBoard: React.FC<SessionKanbanBoardProps> = ({ onSessionSelect }) => {
+export const SessionKanbanBoard: React.FC<SessionKanbanBoardProps> = ({ onSessionSelect, onSessionOpen }) => {
   const grouped = useAtomValue(sessionsByPhaseAtom);
   const setPhase = useSetAtom(setSessionPhaseAtom);
   const updateSessionStore = useSetAtom(updateSessionStoreAtom);
@@ -1061,8 +1134,12 @@ export const SessionKanbanBoard: React.FC<SessionKanbanBoardProps> = ({ onSessio
   }, [navigationGrid]);
 
   const handleSelect = useCallback((sessionId: string) => {
-    onSessionSelect?.(sessionId);
-  }, [onSessionSelect]);
+    if (onSessionOpen) {
+      onSessionOpen(sessionId);
+    } else {
+      onSessionSelect?.(sessionId);
+    }
+  }, [onSessionSelect, onSessionOpen]);
 
   const handleDrop = useCallback((sessionId: string, phase: SessionPhase) => {
     setPhase({ sessionId, phase });

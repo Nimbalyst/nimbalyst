@@ -16,6 +16,7 @@ import { atom, useAtomValue, useSetAtom } from 'jotai';
 import { defaultAgentModelAtom, worktreesFeatureAvailableAtom, alphaFeatureEnabledAtom } from '../../store/atoms/appSettings';
 import { ResizablePanel } from '../AgenticCoding/ResizablePanel';
 import { SessionHistory } from '../AgenticCoding/SessionHistory';
+import { SessionKanbanBoard } from '../TrackerMode/SessionKanbanBoard';
 import { useSuperLoopInit } from '../../hooks/useSuperLoop';
 import { AgentWorkstreamPanel, type AgentWorkstreamPanelRef } from './AgentWorkstreamPanel';
 import {
@@ -44,6 +45,8 @@ import {
   isRestoringNavigationAtom,
   markSessionReadAtom,
   activeSessionIdAtom,
+  viewModeAtom,
+  setViewModeAtom,
 } from '../../store';
 import { errorNotificationService } from '../../services/ErrorNotificationService';
 import { initWorkstreamState, loadWorkstreamStates, workstreamStateAtom, workstreamActiveChildAtom, setWorkstreamActiveChildAtom, setWorktreeActiveSessionAtom } from '../../store/atoms/workstreamState';
@@ -52,6 +55,7 @@ import { initFileStateListeners } from '../../store/listeners/fileStateListeners
 import { initFileTreeListeners } from '../../store/listeners/fileTreeListeners';
 import { initSessionListListeners } from '../../store/listeners/sessionListListeners';
 import { initSessionTranscriptListeners } from '../../store/listeners/sessionTranscriptListeners';
+import { initTrayListeners, trayNewSessionRequestAtom } from '../../store/listeners/trayListeners';
 import { fetchSessionSharesAtom } from '../../store';
 import type { WorktreeCreateResult, SessionCreateResult } from '../../../shared/ipc/types';
 import { BlitzDialog } from '../BlitzDialog/BlitzDialog';
@@ -185,6 +189,12 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
     return cleanup;
   }, []);
 
+  // Initialize tray navigation listeners (global, runs once)
+  useEffect(() => {
+    const cleanup = initTrayListeners();
+    return cleanup;
+  }, []);
+
   // Fetch session shares on mount (if authenticated)
   useEffect(() => {
     fetchShares();
@@ -296,6 +306,16 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
       console.error('[AgentMode] Failed to create session:', error);
     }
   }, [workspacePath, addSession, setSelectedWorkstream, defaultModel]);
+
+  // Handle "New Session" from tray menu
+  const trayNewSessionRequest = useAtomValue(trayNewSessionRequestAtom);
+  const setTrayNewSessionRequest = useSetAtom(trayNewSessionRequestAtom);
+  useEffect(() => {
+    if (trayNewSessionRequest) {
+      setTrayNewSessionRequest(false);
+      createNewSession();
+    }
+  }, [trayNewSessionRequest, setTrayNewSessionRequest, createNewSession]);
 
   // Create new worktree session
   const createNewWorktreeSession = useCallback(async () => {
@@ -915,11 +935,27 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
     />
   );
 
+  const viewMode = useAtomValue(viewModeAtom);
+  const setViewMode = useSetAtom(setViewModeAtom);
+
+  // Double-click a kanban card: select the session and switch back to list view
+  const handleKanbanSessionOpen = useCallback((sessionId: string) => {
+    handleSessionSelect(sessionId);
+    setViewMode('list');
+  }, [handleSessionSelect, setViewMode]);
+
+  const kanbanContent = (
+    <SessionKanbanBoard
+      onSessionSelect={handleSessionSelect}
+      onSessionOpen={handleKanbanSessionOpen}
+    />
+  );
+
   return (
     <div className="agent-mode flex flex-row h-full w-full overflow-hidden">
       <ResizablePanel
         leftPanel={leftContent}
-        rightPanel={rightContent}
+        rightPanel={viewMode === 'kanban' ? kanbanContent : rightContent}
         leftWidth={historyWidth}
         minWidth={200}
         maxWidth={500}

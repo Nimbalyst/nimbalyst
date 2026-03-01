@@ -77,6 +77,7 @@ export function KeyboardShortcutsDialog({ isOpen, onClose }: KeyboardShortcutsDi
       shortcuts: [
         { label: 'Files Mode', shortcut: KeyboardShortcuts.view.filesMode }, // shared/KeyboardShortcuts.ts:42 - Cmd+E
         { label: 'Agent Mode', shortcut: KeyboardShortcuts.view.agentMode }, // shared/KeyboardShortcuts.ts:43 - Cmd+K
+        { label: 'Session Kanban View', shortcut: KeyboardShortcuts.window.kanbanView }, // shared/KeyboardShortcuts.ts:81 - Cmd+Shift+K
         { label: 'Toggle AI Chat Panel', shortcut: KeyboardShortcuts.view.toggleAIChat }, // shared/KeyboardShortcuts.ts:46 - Cmd+Shift+A
         { label: 'Toggle Bottom Panel', shortcut: KeyboardShortcuts.view.toggleBottomPanel }, // shared/KeyboardShortcuts.ts:47 - Cmd+J
         { label: 'Toggle Terminal Panel', shortcut: KeyboardShortcuts.view.toggleTerminalPanel }, // shared/KeyboardShortcuts.ts:48 - Ctrl+`
