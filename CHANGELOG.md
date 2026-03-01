@@ -20,6 +20,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.55.2] - 2026-03-01
+
+
+### Added
+- System tray menu showing AI session status with click-to-navigate, dock badge for sessions needing attention
+- Session kanban board as right-panel view in AgentMode (Cmd+Shift+K toggle)
+- Live sub-agent progress tracking in teammate panel (status, elapsed time, tool count)
+- Multi-account support: user avatar menu, add/remove accounts, per-project account binding
+- Click/tap-to-copy on inline code blocks in transcripts with green flash feedback
+- iOS jump-to-prompt bottom sheet in session detail view
+- iOS hierarchical session navigation with worktree/workstream sync (6 new metadata fields)
+- Log rotation on startup (keeps 2 previous sessions) and Developer menu "Rotate Logs" option
+- Rate limit warning/blocked widgets with amber/red styling
+
+### Changed
+- Updated claude-agent-sdk to 0.2.63
+- SDK now handles background sub-agents natively instead of TeammateManager interception
+
+### Fixed
+- Voice agent answering interactive prompts (prompt forwarding race, IPC channels, widget display)
+- iOS transcript blank screen caused by React hooks ordering violation
+- iOS compact button now sends /compact command through native bridge
+- iOS voice playback routed through VPIO bus 0 for proper echo cancellation
+- Auto-delete undecryptable session index entries so they re-sync with correct key
+- Rate limit events from Claude Code SDK now handled instead of dumped as unhandled messages
+- Git commit widget shows committed state when reloading sessions (missing tool_result)
+- Tracker items now load automatically on startup via deferred workspace scan
+- Scroll-to-bottom button is now a proper circle
+- Rate limit reset times use Unix timestamps to prevent timezone parsing bugs
+
 ## [0.55.1] - 2026-02-27
 
 
