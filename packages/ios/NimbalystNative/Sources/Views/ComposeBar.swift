@@ -11,6 +11,7 @@ public struct ComposeBar: View {
     let isExecuting: Bool
     let commands: [SyncedSlashCommand]
     let onSend: (String, [PendingAttachment]) -> Void
+    let onCancel: () -> Void
 
     @FocusState private var isFocused: Bool
     @State private var pendingAttachments: [PendingAttachment] = []
@@ -93,23 +94,33 @@ public struct ComposeBar: View {
                     .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
                     .focused($isFocused)
 
-                Button {
-                    guard canSend else { return }
-                    let prompt = text.trimmingCharacters(in: .whitespacesAndNewlines)
-                    let attachments = pendingAttachments
-                    text = ""
-                    pendingAttachments = []
-                    onSend(prompt, attachments)
-                } label: {
-                    Image(systemName: isExecuting ? "clock.fill" : "arrow.up.circle.fill")
-                        .font(.system(size: 30))
-                        .foregroundStyle(
-                            canSend
-                                ? NimbalystColors.primary
-                                : NimbalystColors.textDisabled
-                        )
+                if isExecuting {
+                    Button {
+                        onCancel()
+                    } label: {
+                        Image(systemName: "stop.circle.fill")
+                            .font(.system(size: 30))
+                            .foregroundStyle(NimbalystColors.error)
+                    }
+                } else {
+                    Button {
+                        guard canSend else { return }
+                        let prompt = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let attachments = pendingAttachments
+                        text = ""
+                        pendingAttachments = []
+                        onSend(prompt, attachments)
+                    } label: {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(.system(size: 30))
+                            .foregroundStyle(
+                                canSend
+                                    ? NimbalystColors.primary
+                                    : NimbalystColors.textDisabled
+                            )
+                    }
+                    .disabled(!canSend)
                 }
-                .disabled(!canSend)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)

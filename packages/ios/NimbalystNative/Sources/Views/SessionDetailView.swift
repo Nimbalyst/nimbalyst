@@ -169,7 +169,8 @@ public struct SessionDetailView: View {
                 text: $composeText,
                 isExecuting: displaySession.isExecuting,
                 commands: projectCommands,
-                onSend: sendPrompt
+                onSend: sendPrompt,
+                onCancel: cancelSession
             )
         }
         .navigationTitle(displaySession.titleDecrypted ?? "Session")
@@ -602,6 +603,12 @@ public struct SessionDetailView: View {
         } catch {
             print("Failed to send prompt: \(error)")
         }
+    }
+
+    private func cancelSession() {
+        guard let syncManager = appState.syncManager else { return }
+        syncManager.sendSessionControlMessage(sessionId: session.id, messageType: "cancel")
+        AnalyticsManager.shared.capture("mobile_session_cancelled")
     }
 
     private func handleInteractiveResponse(_ action: String, _ promptId: String, _ body: [String: Any]) {

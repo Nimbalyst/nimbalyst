@@ -235,16 +235,21 @@ final class WebSocketClient: @unchecked Sendable {
     // MARK: - Reconnection
 
     private func handleDisconnect() {
-        task = nil
-        stopDeviceAnnounceTimer()
-        onConnectionStateChanged?(false)
+        // Receive callbacks fire on a URLSession background queue.
+        // Hop to main for Timer invalidation and shared state mutation.
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.task = nil
+            self.stopDeviceAnnounceTimer()
+            self.onConnectionStateChanged?(false)
 
-        guard !isIntentionallyClosed else { return }
+            guard !self.isIntentionallyClosed else { return }
 
-        logger.info("Scheduling reconnect in \(self.reconnectDelay)s")
-        DispatchQueue.main.asyncAfter(deadline: .now() + reconnectDelay) { [weak self] in
-            guard let self = self, !self.isIntentionallyClosed else { return }
-            self.performConnect()
+            self.logger.info("Scheduling reconnect in \(self.reconnectDelay)s")
+            DispatchQueue.main.asyncAfter(deadline: .now() + self.reconnectDelay) { [weak self] in
+                guard let self = self, !self.isIntentionallyClosed else { return }
+                self.performConnect()
+            }
         }
     }
 
@@ -295,7 +300,9 @@ final class WebSocketClient: @unchecked Sendable {
             return stored
         }
         #if canImport(UIKit)
-        let id = UIDevice.current.identifierForVendor?.uuidString ?? UUID().uuidString
+        let id = MainActor.assumeIsolated {
+            UIDevice.current.identifierForVendor?.uuidString
+        } ?? UUID().uuidString
         #else
         let id = UUID().uuidString
         #endif
@@ -305,7 +312,7 @@ final class WebSocketClient: @unchecked Sendable {
 
     private static var deviceName: String {
         #if canImport(UIKit)
-        return UIDevice.current.name
+        return MainActor.assumeIsolated { UIDevice.current.name }
         #else
         return Host.current().localizedName ?? "Mac"
         #endif
@@ -313,10 +320,12 @@ final class WebSocketClient: @unchecked Sendable {
 
     private static var deviceType: String {
         #if canImport(UIKit)
-        switch UIDevice.current.userInterfaceIdiom {
-        case .phone: return "mobile"
-        case .pad: return "tablet"
-        default: return "unknown"
+        return MainActor.assumeIsolated {
+            switch UIDevice.current.userInterfaceIdiom {
+            case .phone: return "mobile"
+            case .pad: return "tablet"
+            default: return "unknown"
+            }
         }
         #else
         return "desktop"
