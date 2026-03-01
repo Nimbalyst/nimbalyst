@@ -97,7 +97,7 @@ import { stopAllFileWatchers } from './file/FileWatcher';
 import { stopAllWorkspaceWatchers } from './file/WorkspaceWatcher.ts';
 import { autoUpdaterService, AutoUpdaterService } from './services/autoUpdater';
 import { initializeDatabase } from './database/initialize';
-import { HandledError } from './database/PGLiteDatabaseWorker';
+import { database, HandledError } from './database/PGLiteDatabaseWorker';
 import { AnalyticsService } from "./services/analytics/AnalyticsService.ts";
 import { registerAnalyticsHandlers } from "./ipc/AnalyticsHandlers.ts";
 import { shutdownStytchAuth, handleAuthCallback } from './services/StytchAuthService';
@@ -107,6 +107,7 @@ import { registerOrgKeyHandlers } from './services/OrgKeyService';
 import { registerDocumentSyncHandlers } from './ipc/DocumentSyncHandlers';
 import { getPermissionService } from './services/PermissionService';
 import { ClaudeSettingsManager } from './services/ClaudeSettingsManager';
+import { TrayManager } from './tray/TrayManager';
 import { pathToFileURL } from 'url';
 
 // CRITICAL: Hide dock icon when running as background Node process
@@ -839,6 +840,15 @@ app.whenReady().then(async () => {
     registerDocumentSyncHandlers();
     markEnd('ipc-handlers');
 
+    // Initialize system tray for session status visibility
+    try {
+        const trayManager = TrayManager.getInstance();
+        trayManager.setDatabase(database);
+        await trayManager.initialize();
+    } catch (error) {
+        logger.main.error('[TrayManager] Failed to initialize:', error);
+    }
+
     // Inject MCP config loader into ClaudeCodeProvider
     // This allows the runtime package to load merged user + workspace MCP configs
     mcpConfigService = new MCPConfigService();
@@ -1555,6 +1565,13 @@ app.on('before-quit', async (event) => {
 
     // stop analytics
     await analytics.destroy();
+
+    // Shutdown tray
+    try {
+        TrayManager.getInstance().shutdown();
+    } catch (error) {
+        console.error('[QUIT] Error shutting down TrayManager:', error);
+    }
 
     // Shutdown Stytch auth service
     try {

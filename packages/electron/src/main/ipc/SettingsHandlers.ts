@@ -4,7 +4,7 @@ import * as os from 'os';
 import * as fs from 'fs';
 import * as path from 'path';
 import { app } from 'electron';
-import { getWorkspaceState, updateWorkspaceState, getTheme, getThemeSync, isCompletionSoundEnabled, setCompletionSoundEnabled, getCompletionSoundType, setCompletionSoundType, CompletionSoundType, getReleaseChannel, setReleaseChannel, ReleaseChannel, getRecentItems, getDefaultAIModel, setDefaultAIModel, getDefaultEffortLevel, setDefaultEffortLevel, isAnalyticsEnabled, setAnalyticsEnabled, getSessionSyncConfig, setSessionSyncConfig, SessionSyncConfig, isExtensionDevToolsEnabled, setExtensionDevToolsEnabled, getAppSetting, setAppSetting, getAlphaFeatures, setAlphaFeatures, getEnableAllAlphaFeatures, setEnableAllAlphaFeatures, getBetaFeatures, setBetaFeatures, getEnableAllBetaFeatures, setEnableAllBetaFeatures, getDeveloperFeatures, setDeveloperFeatures, isDeveloperFeatureAvailable } from '../utils/store';
+import { getWorkspaceState, updateWorkspaceState, getTheme, getThemeSync, isCompletionSoundEnabled, setCompletionSoundEnabled, getCompletionSoundType, setCompletionSoundType, CompletionSoundType, getReleaseChannel, setReleaseChannel, ReleaseChannel, getRecentItems, getDefaultAIModel, setDefaultAIModel, getDefaultEffortLevel, setDefaultEffortLevel, isAnalyticsEnabled, setAnalyticsEnabled, getSessionSyncConfig, setSessionSyncConfig, SessionSyncConfig, isExtensionDevToolsEnabled, setExtensionDevToolsEnabled, getAppSetting, setAppSetting, getAlphaFeatures, setAlphaFeatures, getEnableAllAlphaFeatures, setEnableAllAlphaFeatures, getBetaFeatures, setBetaFeatures, getEnableAllBetaFeatures, setEnableAllBetaFeatures, getDeveloperFeatures, setDeveloperFeatures, isDeveloperFeatureAvailable, isShowTrayIcon } from '../utils/store';
 import { getEnhancedPath } from '../services/CLIManager';
 import { logger } from '../utils/logger';
 import { SoundNotificationService } from '../services/SoundNotificationService';
@@ -957,6 +957,19 @@ export function registerSettingsHandlers() {
             }
         });
         return StytchAuth.getAuthState();
+    });
+
+    // ============================================================
+    // System Tray Settings
+    // ============================================================
+
+    safeHandle('tray:get-visible', () => {
+        return isShowTrayIcon();
+    });
+
+    safeHandle('tray:set-visible', (_event, visible: boolean) => {
+        TrayManager.getInstance().setVisible(visible);
+        logger.store.info(`[SettingsHandlers] Tray icon ${visible ? 'shown' : 'hidden'}`);
     });
 
     // ============================================================

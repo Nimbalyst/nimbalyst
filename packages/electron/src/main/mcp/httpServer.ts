@@ -26,6 +26,7 @@ import {
   AISessionsRepository,
 } from "@nimbalyst/runtime";
 import { notificationService } from "../services/NotificationService";
+import { TrayManager } from "../tray/TrayManager";
 import { isFileInWorkspaceOrWorktree } from "../utils/workspaceDetection";
 
 /**
@@ -2359,6 +2360,9 @@ The commit message should follow these guidelines:
               "[MCP Server] No commitWindow found to send IPC event"
             );
           }
+
+          // Notify tray of pending prompt
+          TrayManager.getInstance().onPromptCreated(targetSessionId);
         } catch (error) {
           console.error(
             "[MCP Server] Failed to persist git commit proposal:",
