@@ -203,6 +203,10 @@ public final class SyncManager: ObservableObject {
             handleDeviceLeft(data)
         case "settingsSyncBroadcast":
             handleSettingsSyncBroadcast(data)
+        case "createWorktreeResponseBroadcast":
+            // Response to our worktree creation request - the worktree session
+            // will appear via indexBroadcast, so no special handling needed
+            break
         case "error":
             handleServerError(data)
         default:
@@ -341,6 +345,13 @@ public final class SyncManager: ObservableObject {
             clientMeta = try? JSONDecoder().decode(ClientMetadata.self, from: metaData)
         }
 
+        // Encode tags array to JSON string for storage
+        var tagsJson: String? = nil
+        if let tags = clientMeta?.tags, !tags.isEmpty,
+           let data = try? JSONEncoder().encode(tags) {
+            tagsJson = String(data: data, encoding: .utf8)
+        }
+
         let session = Session(
             id: entry.sessionId,
             projectId: projectId,
@@ -351,6 +362,15 @@ public final class SyncManager: ObservableObject {
             model: entry.model,
             mode: entry.mode,
             sessionType: entry.sessionType ?? existing?.sessionType,
+            parentSessionId: entry.parentSessionId ?? existing?.parentSessionId,
+            phase: clientMeta?.phase ?? existing?.phase,
+            tagsJson: tagsJson ?? existing?.tagsJson,
+            worktreeId: entry.worktreeId ?? existing?.worktreeId,
+            isArchived: entry.isArchived ?? existing?.isArchived ?? false,
+            isPinned: entry.isPinned ?? existing?.isPinned ?? false,
+            branchedFromSessionId: entry.branchedFromSessionId ?? existing?.branchedFromSessionId,
+            branchPointMessageId: entry.branchPointMessageId ?? existing?.branchPointMessageId,
+            branchedAt: entry.branchedAt ?? existing?.branchedAt,
             isExecuting: entry.isExecuting ?? existing?.isExecuting ?? false,
             hasQueuedPrompts: clientMeta?.hasPendingPrompt ?? entry.hasPendingPrompt ?? existing?.hasQueuedPrompts ?? false,
             contextTokens: clientMeta?.currentContext?.tokens ?? existing?.contextTokens,
@@ -457,6 +477,13 @@ public final class SyncManager: ObservableObject {
             clientMeta = try? JSONDecoder().decode(ClientMetadata.self, from: metaData)
         }
 
+        // Encode tags array to JSON string for storage
+        var tagsJson: String? = nil
+        if let tags = clientMeta?.tags, !tags.isEmpty,
+           let data = try? JSONEncoder().encode(tags) {
+            tagsJson = String(data: data, encoding: .utf8)
+        }
+
         let session = Session(
             id: entry.sessionId,
             projectId: projectId,
@@ -467,6 +494,15 @@ public final class SyncManager: ObservableObject {
             model: entry.model,
             mode: entry.mode,
             sessionType: entry.sessionType ?? existing?.sessionType,
+            parentSessionId: entry.parentSessionId ?? existing?.parentSessionId,
+            phase: clientMeta?.phase ?? existing?.phase,
+            tagsJson: tagsJson ?? existing?.tagsJson,
+            worktreeId: entry.worktreeId ?? existing?.worktreeId,
+            isArchived: entry.isArchived ?? existing?.isArchived ?? false,
+            isPinned: entry.isPinned ?? existing?.isPinned ?? false,
+            branchedFromSessionId: entry.branchedFromSessionId ?? existing?.branchedFromSessionId,
+            branchPointMessageId: entry.branchPointMessageId ?? existing?.branchPointMessageId,
+            branchedAt: entry.branchedAt ?? existing?.branchedAt,
             isExecuting: entry.isExecuting ?? existing?.isExecuting ?? false,
             hasQueuedPrompts: clientMeta?.hasPendingPrompt ?? entry.hasPendingPrompt ?? existing?.hasQueuedPrompts ?? false,
             contextTokens: clientMeta?.currentContext?.tokens ?? existing?.contextTokens,
@@ -880,6 +916,13 @@ public final class SyncManager: ObservableObject {
                     if let pending = clientMeta.hasPendingPrompt {
                         session.hasQueuedPrompts = pending
                     }
+                    if let phase = clientMeta.phase {
+                        session.phase = phase
+                    }
+                    if let tags = clientMeta.tags, !tags.isEmpty,
+                       let tagData = try? JSONEncoder().encode(tags) {
+                        session.tagsJson = String(data: tagData, encoding: .utf8)
+                    }
                 }
                 if let updatedAt = broadcast.metadata.updatedAt {
                     session.updatedAt = updatedAt
@@ -1161,7 +1204,12 @@ public final class SyncManager: ObservableObject {
     }
 
     /// Request the desktop to create a new session in a project.
-    public func createSession(projectId: String, initialPrompt: String? = nil) throws {
+    public func createSession(
+        projectId: String,
+        initialPrompt: String? = nil,
+        sessionType: String? = nil,
+        parentSessionId: String? = nil
+    ) throws {
         let encryptedProjectId = try crypto.encryptProjectId(projectId)
 
         var encryptedPrompt: String?
@@ -1179,6 +1227,8 @@ public final class SyncManager: ObservableObject {
                 projectIdIv: CryptoManager.projectIdIvBase64,
                 encryptedInitialPrompt: encryptedPrompt,
                 initialPromptIv: promptIv,
+                sessionType: sessionType,
+                parentSessionId: parentSessionId,
                 timestamp: Int(Date().timeIntervalSince1970 * 1000)
             )
         )
@@ -1186,6 +1236,38 @@ public final class SyncManager: ObservableObject {
         if let data = try? JSONEncoder().encode(request),
            let json = String(data: data, encoding: .utf8) {
             indexClient.sendRaw(json)
+        }
+    }
+
+    /// Request the desktop to create a new git worktree.
+    /// The desktop will create the worktree and the result will arrive via index broadcast.
+    public func createWorktree(projectId: String) throws {
+        let encryptedProjectId = try crypto.encryptProjectId(projectId)
+
+        let request = CreateWorktreeRequestMessage(
+            request: CreateWorktreeRequest(
+                requestId: UUID().uuidString,
+                encryptedProjectId: encryptedProjectId,
+                projectIdIv: CryptoManager.projectIdIvBase64,
+                timestamp: Int(Date().timeIntervalSince1970 * 1000)
+            )
+        )
+
+        if let data = try? JSONEncoder().encode(request),
+           let json = String(data: data, encoding: .utf8) {
+            indexClient.sendRaw(json)
+        }
+    }
+
+    /// Update a session's parent (for reparenting into a workstream).
+    /// Updates the local database immediately for instant UI feedback.
+    /// The change will propagate to desktop on the next index sync cycle.
+    public func updateSessionParent(sessionId: String, parentSessionId: String) throws {
+        try database.writer.write { db in
+            try db.execute(
+                sql: "UPDATE sessions SET parentSessionId = ? WHERE id = ?",
+                arguments: [parentSessionId, sessionId]
+            )
         }
     }
 }

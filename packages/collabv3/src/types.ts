@@ -37,6 +37,8 @@ export type ClientMessage =
   | DeviceAnnounceMessage
   | CreateSessionRequestMessage
   | CreateSessionResponseMessage
+  | CreateWorktreeRequestMessage
+  | CreateWorktreeResponseMessage
   | SessionControlCommandMessage
   | RegisterPushTokenMessage
   | RequestMobilePushMessage
@@ -137,6 +139,33 @@ export interface EncryptedCreateSessionResponse {
   error?: string;
 }
 
+/** Request worktree creation from mobile to desktop */
+export interface CreateWorktreeRequestMessage {
+  type: 'createWorktreeRequest';
+  request: EncryptedCreateWorktreeRequest;
+}
+
+/** Response to worktree creation request from desktop */
+export interface CreateWorktreeResponseMessage {
+  type: 'createWorktreeResponse';
+  response: EncryptedCreateWorktreeResponse;
+}
+
+/** Encrypted worktree creation request (sent over wire) */
+export interface EncryptedCreateWorktreeRequest {
+  requestId: string;
+  encryptedProjectId: string;
+  projectIdIv: string;
+  timestamp: number;
+}
+
+/** Encrypted worktree creation response (sent over wire) */
+export interface EncryptedCreateWorktreeResponse {
+  requestId: string;
+  success: boolean;
+  error?: string;
+}
+
 /** Generic session control command - the sync layer just passes these through */
 export interface SessionControlCommandMessage {
   type: 'sessionControl';
@@ -221,6 +250,8 @@ export type ServerMessage =
   | DeviceLeftMessage
   | CreateSessionRequestBroadcastMessage
   | CreateSessionResponseBroadcastMessage
+  | CreateWorktreeRequestBroadcastMessage
+  | CreateWorktreeResponseBroadcastMessage
   | SessionControlBroadcastMessage
   | SettingsSyncBroadcastMessage
   | ErrorMessage;
@@ -307,6 +338,20 @@ export interface CreateSessionRequestBroadcastMessage {
 export interface CreateSessionResponseBroadcastMessage {
   type: 'createSessionResponseBroadcast';
   response: EncryptedCreateSessionResponse;
+  fromConnectionId?: string;
+}
+
+/** Broadcast worktree creation request to other devices (desktop receives this) */
+export interface CreateWorktreeRequestBroadcastMessage {
+  type: 'createWorktreeRequestBroadcast';
+  request: EncryptedCreateWorktreeRequest;
+  fromConnectionId?: string;
+}
+
+/** Broadcast worktree creation response to other devices (mobile receives this) */
+export interface CreateWorktreeResponseBroadcastMessage {
+  type: 'createWorktreeResponseBroadcast';
+  response: EncryptedCreateWorktreeResponse;
   fromConnectionId?: string;
 }
 
@@ -419,6 +464,22 @@ export interface SessionIndexEntry {
   updatedAt: number;
   /** Whether the session is currently executing (processing AI request) */
   isExecuting?: boolean;
+  /** Parent session ID for workstream/worktree hierarchy (plaintext UUID) */
+  parentSessionId?: string;
+  /** Structural type: 'session' (normal), 'workstream' (parent container), 'blitz' (quick task) */
+  sessionType?: string;
+  /** Worktree ID for git worktree association (plaintext UUID) */
+  worktreeId?: string;
+  /** Whether the session is archived */
+  isArchived?: boolean;
+  /** Whether the session is pinned */
+  isPinned?: boolean;
+  /** Session ID this was branched/forked from */
+  branchedFromSessionId?: string;
+  /** Message ID at the branch point */
+  branchPointMessageId?: number;
+  /** When this session was branched (unix ms) */
+  branchedAt?: number;
   /** Encrypted client metadata blob (base64) - opaque to server, decrypted by clients */
   encryptedClientMetadata?: string;
   /** IV for client metadata decryption (base64) */

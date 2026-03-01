@@ -536,6 +536,15 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
               sessionsNeedingIndexUpdate.push(localSession);
               sessionsNeedingMessageSync.push(localSession.id);
               // logger.main.info(`[SyncManager] Session ${localSession.id} needs sync: local=${localUpdatedAt} server=${serverUpdatedAt}`);
+            } else if (
+              // Detect stale server metadata: desktop has fields the server doesn't.
+              // This happens after server schema migrations add new columns -- existing
+              // rows have NULL but the desktop has the real values.
+              (localSession.worktreeId && !serverSession.worktreeId) ||
+              (localSession.sessionType && !serverSession.sessionType) ||
+              (localSession.parentSessionId && !serverSession.parentSessionId)
+            ) {
+              sessionsNeedingIndexUpdate.push(localSession);
             }
             // If server has same or newer timestamp, we're in sync
           }

@@ -28,6 +28,20 @@ struct ServerSessionEntry: Codable {
     let mode: String?
     /// Structural type: "session", "workstream", or "blitz"
     let sessionType: String?
+    /// Parent session ID for workstream/worktree hierarchy
+    let parentSessionId: String?
+    /// Worktree ID for git worktree association
+    let worktreeId: String?
+    /// Whether this session is archived
+    let isArchived: Bool?
+    /// Whether this session is pinned
+    let isPinned: Bool?
+    /// Session ID this was branched/forked from
+    let branchedFromSessionId: String?
+    /// Message sequence number where the branch occurred
+    let branchPointMessageId: Int?
+    /// Timestamp when the branch was created
+    let branchedAt: Int?
     let messageCount: Int?
     let lastMessageAt: Int?
     let createdAt: Int
@@ -83,6 +97,10 @@ struct ContextInfo: Codable {
 struct ClientMetadata: Codable {
     let currentContext: ContextInfo?
     let hasPendingPrompt: Bool?
+    /// Kanban phase: backlog, planning, implementing, validating, complete
+    let phase: String?
+    /// Arbitrary tags for categorization
+    let tags: [String]?
 }
 
 /// A project entry as received from the server (encrypted fields).
@@ -231,6 +249,22 @@ struct EncryptedCreateSessionRequest: Codable {
     let projectIdIv: String
     let encryptedInitialPrompt: String?
     let initialPromptIv: String?
+    let sessionType: String?
+    let parentSessionId: String?
+    let timestamp: Int
+}
+
+// MARK: - Worktree Creation Request
+
+struct CreateWorktreeRequestMessage: Codable {
+    let type = "createWorktreeRequest"
+    let request: CreateWorktreeRequest
+}
+
+struct CreateWorktreeRequest: Codable {
+    let requestId: String
+    let encryptedProjectId: String
+    let projectIdIv: String
     let timestamp: Int
 }
 

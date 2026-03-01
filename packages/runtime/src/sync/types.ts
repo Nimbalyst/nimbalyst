@@ -133,6 +133,9 @@ export interface SyncProvider {
       provider: string;
       model?: string;
       mode?: 'agent' | 'planning';
+      sessionType?: string;
+      parentSessionId?: string;
+      worktreeId?: string;
       messageCount: number;
       lastMessageAt: number;
       createdAt: number;
@@ -227,6 +230,12 @@ export interface SyncProvider {
   /** Subscribe to session creation responses (for mobile to receive response from desktop) */
   onCreateSessionResponse?(callback: (response: CreateSessionResponse) => void): () => void;
 
+  /** Subscribe to worktree creation requests from other devices (e.g., mobile) */
+  onCreateWorktreeRequest?(callback: (request: CreateWorktreeRequest) => void): () => void;
+
+  /** Send a response to a worktree creation request */
+  sendCreateWorktreeResponse?(response: CreateWorktreeResponse): Promise<void>;
+
   /** Send a generic session control message (cross-device via IndexRoom) */
   sendSessionControlMessage?(message: SessionControlMessage): Promise<void>;
 
@@ -275,6 +284,20 @@ export interface SessionIndexData {
   mode?: string;
   /** Structural type: 'session' (normal), 'workstream' (parent container), 'blitz' (quick task) */
   sessionType?: string;
+  /** Parent session ID for workstream/worktree hierarchy */
+  parentSessionId?: string;
+  /** Worktree ID for git worktree association */
+  worktreeId?: string;
+  /** Whether the session is archived */
+  isArchived?: boolean;
+  /** Whether the session is pinned */
+  isPinned?: boolean;
+  /** Session ID this was branched/forked from */
+  branchedFromSessionId?: string;
+  /** Message ID at the branch point */
+  branchPointMessageId?: number;
+  /** When this session was branched (unix ms) */
+  branchedAt?: number;
   workspaceId?: string;
   workspacePath?: string;
   messageCount: number;
@@ -331,6 +354,8 @@ export interface SyncedSessionMetadata {
   mode?: string;
   /** Structural type: 'session' | 'workstream' | 'blitz' */
   sessionType?: string;
+  /** Parent session ID for workstream/worktree hierarchy */
+  parentSessionId?: string;
   provider?: string;
   model?: string;
   workspaceId?: string;
@@ -355,6 +380,10 @@ export interface SyncedSessionMetadata {
   };
   /** Whether there are pending interactive prompts (permissions, questions, plan approvals, git commits) */
   hasPendingPrompt?: boolean;
+  /** Kanban phase: backlog, planning, implementing, validating, complete */
+  phase?: string;
+  /** Arbitrary tags for categorization */
+  tags?: string[];
   /** Unix timestamp ms when this session was last read by any device */
   lastReadAt?: number;
 }
@@ -369,6 +398,20 @@ export interface SessionIndexEntry {
   provider: string;
   model?: string;
   mode?: 'agent' | 'planning';
+  /** Parent session ID for workstream/worktree hierarchy */
+  parentSessionId?: string;
+  /** Worktree ID for git worktree association */
+  worktreeId?: string;
+  /** Whether the session is archived */
+  isArchived?: boolean;
+  /** Whether the session is pinned */
+  isPinned?: boolean;
+  /** Session ID this was branched/forked from */
+  branchedFromSessionId?: string;
+  /** Message ID at the branch point */
+  branchPointMessageId?: number;
+  /** When this session was branched (unix ms) */
+  branchedAt?: number;
   workspaceId?: string;
   workspacePath?: string;
   lastMessageAt: number;
@@ -443,6 +486,10 @@ export interface CreateSessionRequest {
   projectId: string;
   /** Optional initial prompt to send after session creation */
   initialPrompt?: string;
+  /** Session type: "session" (default), "workstream" (parent container) */
+  sessionType?: string;
+  /** Parent session ID for creating child sessions within a workstream */
+  parentSessionId?: string;
   /** Timestamp when request was created */
   timestamp: number;
 }
@@ -458,6 +505,32 @@ export interface CreateSessionResponse {
   success: boolean;
   /** Session ID if created successfully */
   sessionId?: string;
+  /** Error message if creation failed */
+  error?: string;
+}
+
+/**
+ * Request to create a new git worktree from mobile.
+ * Sent via index WebSocket, processed by desktop.
+ */
+export interface CreateWorktreeRequest {
+  /** Unique request ID for tracking */
+  requestId: string;
+  /** Project/workspace ID to create the worktree in */
+  projectId: string;
+  /** Timestamp when request was created */
+  timestamp: number;
+}
+
+/**
+ * Response to a create worktree request.
+ * Sent by desktop after worktree is created.
+ */
+export interface CreateWorktreeResponse {
+  /** Request ID this is responding to */
+  requestId: string;
+  /** Whether worktree creation succeeded */
+  success: boolean;
   /** Error message if creation failed */
   error?: string;
 }

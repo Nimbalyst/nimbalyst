@@ -9,6 +9,7 @@
 
 import { store } from '../index';
 import { refreshSessionListAtom, sessionListWorkspaceAtom, sessionRegistryAtom } from '../atoms/sessions';
+import { workstreamStateAtom } from '../atoms/workstreamState';
 
 // Track pending refresh to debounce rapid-fire events
 let pendingRefreshTimer: NodeJS.Timeout | null = null;
@@ -69,6 +70,18 @@ export function initSessionListListeners(): () => void {
 
   cleanups.push(
     window.electronAPI.on('sessions:session-updated', handleSessionUpdated)
+  );
+
+  // Handle worktree session creation from mobile - set workstream state so desktop groups it
+  const handleWorktreeSessionCreated = (data: { sessionId: string; worktreeId: string }) => {
+    store.set(workstreamStateAtom(data.sessionId), {
+      type: 'worktree',
+      worktreeId: data.worktreeId,
+    });
+  };
+
+  cleanups.push(
+    window.electronAPI.on('worktree:session-created', handleWorktreeSessionCreated)
   );
 
   // Cleanup function

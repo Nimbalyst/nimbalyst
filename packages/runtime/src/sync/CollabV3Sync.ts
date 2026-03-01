@@ -29,6 +29,8 @@ import type {
   DeviceInfo,
   CreateSessionRequest,
   CreateSessionResponse,
+  CreateWorktreeRequest,
+  CreateWorktreeResponse,
   EncryptedSettingsPayload,
   SyncedSettings,
   SessionControlMessage,
@@ -139,6 +141,18 @@ interface SessionIndexEntry {
   sessionType?: string;
   /** Parent session ID for workstream/worktree hierarchy (plaintext UUID) */
   parentSessionId?: string;
+  /** Worktree ID for git worktree association (plaintext UUID) */
+  worktreeId?: string;
+  /** Whether the session is archived */
+  isArchived?: boolean;
+  /** Whether the session is pinned */
+  isPinned?: boolean;
+  /** Session ID this was branched/forked from */
+  branchedFromSessionId?: string;
+  /** Message ID at the branch point */
+  branchPointMessageId?: number;
+  /** When this session was branched (unix ms) */
+  branchedAt?: number;
   messageCount: number;
   lastMessageAt: number;
   createdAt: number;
@@ -198,6 +212,21 @@ interface EncryptedCreateSessionResponse {
   error?: string;
 }
 
+/** Encrypted worktree creation request for wire protocol */
+interface EncryptedCreateWorktreeRequest {
+  requestId: string;
+  encryptedProjectId: string;
+  projectIdIv: string;
+  timestamp: number;
+}
+
+/** Encrypted worktree creation response for wire protocol */
+interface EncryptedCreateWorktreeResponse {
+  requestId: string;
+  success: boolean;
+  error?: string;
+}
+
 type ClientMessage =
   | { type: 'syncRequest'; sinceId?: string; sinceSeq?: number }
   | { type: 'appendMessage'; message: EncryptedMessage }
@@ -210,6 +239,8 @@ type ClientMessage =
   | { type: 'deviceAnnounce'; device: DeviceInfo }
   | { type: 'createSessionRequest'; request: EncryptedCreateSessionRequest }
   | { type: 'createSessionResponse'; response: EncryptedCreateSessionResponse }
+  | { type: 'createWorktreeRequest'; request: EncryptedCreateWorktreeRequest }
+  | { type: 'createWorktreeResponse'; response: EncryptedCreateWorktreeResponse }
   | { type: 'sessionControl'; message: { sessionId: string; messageType: string; payload?: Record<string, unknown>; timestamp: number; sentBy: 'desktop' | 'mobile' } }
   | { type: 'requestMobilePush'; sessionId: string; title: string; body: string; requestingDeviceId?: string }
   | { type: 'settingsSync'; settings: EncryptedSettingsPayload };
@@ -239,6 +270,8 @@ type ServerMessage =
   | { type: 'deviceLeft'; deviceId: string }
   | { type: 'createSessionRequestBroadcast'; request: EncryptedCreateSessionRequest; fromConnectionId?: string }
   | { type: 'createSessionResponseBroadcast'; response: EncryptedCreateSessionResponse; fromConnectionId?: string }
+  | { type: 'createWorktreeRequestBroadcast'; request: EncryptedCreateWorktreeRequest; fromConnectionId?: string }
+  | { type: 'createWorktreeResponseBroadcast'; response: EncryptedCreateWorktreeResponse; fromConnectionId?: string }
   | { type: 'sessionControlBroadcast'; message: { sessionId: string; messageType: string; payload?: Record<string, unknown>; timestamp: number; sentBy: 'desktop' | 'mobile' }; fromConnectionId?: string }
   | { type: 'settingsSyncBroadcast'; settings: EncryptedSettingsPayload; fromConnectionId?: string }
   | { type: 'error'; code: string; message: string };
@@ -623,6 +656,13 @@ interface CachedSessionIndex {
   sessionType?: string;
   /** Parent session ID for workstream/worktree hierarchy */
   parentSessionId?: string;
+  /** Worktree ID for git worktree association */
+  worktreeId?: string;
+  isArchived?: boolean;
+  isPinned?: boolean;
+  branchedFromSessionId?: string;
+  branchPointMessageId?: number;
+  branchedAt?: number;
   messageCount: number;
   lastMessageAt: number;
   createdAt: number;
@@ -721,6 +761,9 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
 
   // Listeners for session creation responses (for mobile to receive response from desktop)
   const createSessionResponseListeners = new Set<(response: CreateSessionResponse) => void>();
+
+  // Listeners for worktree creation requests (from mobile)
+  const createWorktreeRequestListeners = new Set<(request: CreateWorktreeRequest) => void>();
 
   // Listeners for generic session control messages (cancel, question_response, etc.)
   const sessionControlMessageListeners = new Set<(message: SessionControlMessage) => void>();
@@ -1374,6 +1417,12 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
                     mode: entry.mode,
                     sessionType: entry.sessionType,
                     parentSessionId: entry.parentSessionId,
+                    worktreeId: entry.worktreeId,
+                    isArchived: entry.isArchived,
+                    isPinned: entry.isPinned,
+                    branchedFromSessionId: entry.branchedFromSessionId,
+                    branchPointMessageId: entry.branchPointMessageId,
+                    branchedAt: entry.branchedAt,
                     messageCount: entry.messageCount,
                     lastMessageAt: entry.lastMessageAt,
                     createdAt: entry.createdAt,
@@ -1397,6 +1446,12 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
                     mode: decrypted.mode,
                     sessionType: decrypted.sessionType,
                     parentSessionId: decrypted.parentSessionId,
+                    worktreeId: decrypted.worktreeId,
+                    isArchived: decrypted.isArchived,
+                    isPinned: decrypted.isPinned,
+                    branchedFromSessionId: decrypted.branchedFromSessionId,
+                    branchPointMessageId: decrypted.branchPointMessageId,
+                    branchedAt: decrypted.branchedAt,
                     messageCount: decrypted.messageCount,
                     lastMessageAt: decrypted.lastMessageAt,
                     createdAt: decrypted.createdAt,
@@ -1502,6 +1557,13 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
               model: entry.model,
               mode: entry.mode,
               sessionType: entry.sessionType,
+              parentSessionId: entry.parentSessionId,
+              worktreeId: entry.worktreeId,
+              isArchived: entry.isArchived,
+              isPinned: entry.isPinned,
+              branchedFromSessionId: entry.branchedFromSessionId,
+              branchPointMessageId: entry.branchPointMessageId,
+              branchedAt: entry.branchedAt,
               messageCount: entry.messageCount,
               lastMessageAt: entry.lastMessageAt,
               createdAt: entry.createdAt,
@@ -1679,6 +1741,44 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
                 console.error('[CollabV3] Error in create session response listener:', err);
               }
             });
+            break;
+          }
+
+          case 'createWorktreeRequestBroadcast': {
+            // Another device (mobile) requested worktree creation
+            let projectId: string;
+            if (message.request.encryptedProjectId && message.request.projectIdIv && config.encryptionKey) {
+              try {
+                projectId = await decryptProjectId(message.request.encryptedProjectId, message.request.projectIdIv, config.encryptionKey);
+              } catch (err) {
+                console.error('[CollabV3] Failed to decrypt projectId in worktree request:', err);
+                projectId = 'unknown';
+              }
+            } else {
+              projectId = 'unknown';
+            }
+
+            const decryptedRequest: CreateWorktreeRequest = {
+              requestId: message.request.requestId,
+              projectId,
+              timestamp: message.request.timestamp,
+            };
+
+            console.log('[CollabV3] Received createWorktreeRequest from mobile:', decryptedRequest.requestId);
+
+            createWorktreeRequestListeners.forEach((callback) => {
+              try {
+                callback(decryptedRequest);
+              } catch (err) {
+                console.error('[CollabV3] Error in create worktree request listener:', err);
+              }
+            });
+            break;
+          }
+
+          case 'createWorktreeResponseBroadcast': {
+            // Response to worktree creation - just log for now (iOS doesn't need callback)
+            console.log('[CollabV3] Received createWorktreeResponse:', message.response.requestId, 'success:', message.response.success);
             break;
           }
 
@@ -1967,6 +2067,12 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
         mode: session.mode as SessionIndexEntry['mode'],
         sessionType: session.sessionType,
         parentSessionId: session.parentSessionId,
+        worktreeId: session.worktreeId,
+        isArchived: session.isArchived,
+        isPinned: session.isPinned,
+        branchedFromSessionId: session.branchedFromSessionId,
+        branchPointMessageId: session.branchPointMessageId,
+        branchedAt: session.branchedAt,
         messageCount: session.messageCount,
         lastMessageAt: session.updatedAt,
         createdAt: session.createdAt,
@@ -2004,6 +2110,12 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
         mode: session.mode as CachedSessionIndex['mode'],
         sessionType: session.sessionType,
         parentSessionId: session.parentSessionId,
+        worktreeId: session.worktreeId,
+        isArchived: session.isArchived,
+        isPinned: session.isPinned,
+        branchedFromSessionId: session.branchedFromSessionId,
+        branchPointMessageId: session.branchPointMessageId,
+        branchedAt: session.branchedAt,
         messageCount: session.messageCount,
         lastMessageAt: session.updatedAt,
         createdAt: session.createdAt,
@@ -2277,14 +2389,16 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
           }
           // Encrypt client metadata (context usage, pending prompt state, phase, tags, etc.)
           const hasClientMetaFields = ('currentContext' in change.metadata && change.metadata.currentContext) ||
-            ('hasPendingPrompt' in change.metadata);
+            ('hasPendingPrompt' in change.metadata) ||
+            ('phase' in change.metadata) ||
+            ('tags' in change.metadata);
           if (hasClientMetaFields && config.encryptionKey) {
             const cached = sessionIndexCache.get(sessionId);
             const clientMeta: ClientMetadata = {
               currentContext: ('currentContext' in change.metadata ? change.metadata.currentContext : cached?.currentContext) || undefined,
               hasPendingPrompt: 'hasPendingPrompt' in change.metadata ? change.metadata.hasPendingPrompt : cached?.hasPendingPrompt,
-              phase: cached?.phase,
-              tags: cached?.tags,
+              phase: 'phase' in change.metadata ? (change.metadata as any).phase : cached?.phase,
+              tags: 'tags' in change.metadata ? (change.metadata as any).tags : cached?.tags,
             };
             const encrypted = await encryptClientMetadata(clientMeta, config.encryptionKey);
             metadata.encryptedClientMetadata = encrypted.encryptedClientMetadata;
@@ -2407,6 +2521,8 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
               isExecuting: 'isExecuting' in meta ? meta.isExecuting : cached.isExecuting,
               currentContext: 'currentContext' in meta ? meta.currentContext : cached.currentContext,
               hasPendingPrompt: 'hasPendingPrompt' in meta ? meta.hasPendingPrompt : cached.hasPendingPrompt,
+              phase: 'phase' in meta ? (meta as any).phase : cached.phase,
+              tags: 'tags' in meta ? (meta as any).tags : cached.tags,
               lastReadAt: 'lastReadAt' in meta ? (meta as any).lastReadAt : cached.lastReadAt,
             };
             await sendIndexUpdate(updatedCache);
@@ -2430,6 +2546,8 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
               isExecuting: meta.isExecuting,
               currentContext: meta.currentContext,
               hasPendingPrompt: meta.hasPendingPrompt,
+              phase: (meta as any).phase,
+              tags: (meta as any).tags,
               lastReadAt: (meta as any).lastReadAt,
             };
             await sendIndexUpdate(newEntry);
@@ -2694,6 +2812,32 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       return () => {
         createSessionResponseListeners.delete(callback);
       };
+    },
+
+    /** Subscribe to worktree creation requests from other devices (e.g., mobile) */
+    onCreateWorktreeRequest(callback: (request: CreateWorktreeRequest) => void): () => void {
+      createWorktreeRequestListeners.add(callback);
+      return () => {
+        createWorktreeRequestListeners.delete(callback);
+      };
+    },
+
+    /** Send a response to a worktree creation request */
+    async sendCreateWorktreeResponse(response: CreateWorktreeResponse): Promise<void> {
+      if (!indexWs || !indexConnected) {
+        console.error('[CollabV3] Cannot send create worktree response - not connected');
+        return;
+      }
+
+      const wireResponse: EncryptedCreateWorktreeResponse = {
+        requestId: response.requestId,
+        success: response.success,
+        error: response.error,
+      };
+
+      const msg: ClientMessage = { type: 'createWorktreeResponse', response: wireResponse };
+      console.log('[CollabV3] Sending createWorktreeResponse:', response.requestId, 'success:', response.success);
+      indexWs.send(JSON.stringify(msg));
     },
 
     /** Get list of currently connected devices */

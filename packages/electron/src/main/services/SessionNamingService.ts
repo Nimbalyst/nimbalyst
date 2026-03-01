@@ -11,6 +11,7 @@ import {
 } from '../mcp/sessionNamingServer';
 import { getDatabase } from '../database/initialize';
 import { createWorktreeStore } from './WorktreeStore';
+import { getSyncProvider } from './SyncManager';
 
 /**
  * Service to manage the session naming MCP server
@@ -139,6 +140,18 @@ export class SessionNamingService {
             if (!window.isDestroyed()) {
               window.webContents.send('sessions:session-updated', sessionId, metadata);
             }
+          }
+
+          // Push phase/tags to mobile sync so iOS gets updates in real-time
+          const syncProvider = getSyncProvider();
+          if (syncProvider && (metadata.phase !== undefined || metadata.tags !== undefined)) {
+            const syncMeta: Record<string, unknown> = {};
+            if (metadata.phase !== undefined) syncMeta.phase = metadata.phase as string;
+            if (metadata.tags !== undefined) syncMeta.tags = metadata.tags as string[];
+            syncProvider.pushChange(sessionId, {
+              type: 'metadata_updated',
+              metadata: syncMeta as any,
+            });
           }
         });
 

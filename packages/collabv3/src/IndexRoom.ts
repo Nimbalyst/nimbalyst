@@ -167,6 +167,41 @@ export class IndexRoom implements DurableObject {
     } catch {
       // Column already exists
     }
+    // Migration: Add parent_session_id for workstream/worktree hierarchy
+    try {
+      sql.exec(`ALTER TABLE session_index ADD COLUMN parent_session_id TEXT`);
+    } catch {
+      // Column already exists
+    }
+    // Migration: Add session_type for workstream/worktree/blitz classification
+    try {
+      sql.exec(`ALTER TABLE session_index ADD COLUMN session_type TEXT`);
+    } catch {
+      // Column already exists
+    }
+    // Migration: Add worktree_id for git worktree association
+    try {
+      sql.exec(`ALTER TABLE session_index ADD COLUMN worktree_id TEXT`);
+    } catch {
+      // Column already exists
+    }
+    // Migration: Add is_archived and is_pinned
+    try {
+      sql.exec(`ALTER TABLE session_index ADD COLUMN is_archived INTEGER DEFAULT 0`);
+    } catch { /* Column already exists */ }
+    try {
+      sql.exec(`ALTER TABLE session_index ADD COLUMN is_pinned INTEGER DEFAULT 0`);
+    } catch { /* Column already exists */ }
+    // Migration: Add branch tracking fields
+    try {
+      sql.exec(`ALTER TABLE session_index ADD COLUMN branched_from_session_id TEXT`);
+    } catch { /* Column already exists */ }
+    try {
+      sql.exec(`ALTER TABLE session_index ADD COLUMN branch_point_message_id INTEGER`);
+    } catch { /* Column already exists */ }
+    try {
+      sql.exec(`ALTER TABLE session_index ADD COLUMN branched_at INTEGER`);
+    } catch { /* Column already exists */ }
 
     // Project index table
     // Note: project_id column stores encrypted value (encryptedProjectId)
@@ -364,6 +399,14 @@ export class IndexRoom implements DurableObject {
           await this.handleCreateSessionResponse(ws, connState, message.response);
           break;
 
+        case 'createWorktreeRequest':
+          this.broadcast({ type: 'createWorktreeRequestBroadcast', request: message.request, fromConnectionId: this.getConnectionId(ws) }, ws);
+          break;
+
+        case 'createWorktreeResponse':
+          this.broadcast({ type: 'createWorktreeResponseBroadcast', response: message.response, fromConnectionId: this.getConnectionId(ws) }, ws);
+          break;
+
         case 'sessionControl':
           await this.handleSessionControl(ws, connState, message.message);
           break;
@@ -466,8 +509,8 @@ export class IndexRoom implements DurableObject {
     // For last_read_at, only update if incoming value is newer (prevents stale reads from overwriting)
     sql.exec(
       `INSERT INTO session_index
-       (session_id, project_id, project_id_iv, encrypted_title, title_iv, provider, model, mode, message_count, last_message_at, created_at, updated_at, is_executing, last_read_at, encrypted_client_metadata, client_metadata_iv)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       (session_id, project_id, project_id_iv, encrypted_title, title_iv, provider, model, mode, message_count, last_message_at, created_at, updated_at, is_executing, last_read_at, encrypted_client_metadata, client_metadata_iv, parent_session_id, session_type, worktree_id, is_archived, is_pinned, branched_from_session_id, branch_point_message_id, branched_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(session_id) DO UPDATE SET
          project_id = excluded.project_id,
          project_id_iv = excluded.project_id_iv,
@@ -480,26 +523,18 @@ export class IndexRoom implements DurableObject {
          last_message_at = excluded.last_message_at,
          created_at = excluded.created_at,
          updated_at = excluded.updated_at,
-         is_executing = CASE
-           WHEN excluded.is_executing IS NOT NULL
-           THEN excluded.is_executing
-           ELSE session_index.is_executing
-         END,
-         last_read_at = CASE
-           WHEN excluded.last_read_at IS NOT NULL AND (session_index.last_read_at IS NULL OR excluded.last_read_at > session_index.last_read_at)
-           THEN excluded.last_read_at
-           ELSE session_index.last_read_at
-         END,
-         encrypted_client_metadata = CASE
-           WHEN excluded.encrypted_client_metadata IS NOT NULL
-           THEN excluded.encrypted_client_metadata
-           ELSE session_index.encrypted_client_metadata
-         END,
-         client_metadata_iv = CASE
-           WHEN excluded.client_metadata_iv IS NOT NULL
-           THEN excluded.client_metadata_iv
-           ELSE session_index.client_metadata_iv
-         END`,
+         is_executing = CASE WHEN excluded.is_executing IS NOT NULL THEN excluded.is_executing ELSE session_index.is_executing END,
+         last_read_at = CASE WHEN excluded.last_read_at IS NOT NULL AND (session_index.last_read_at IS NULL OR excluded.last_read_at > session_index.last_read_at) THEN excluded.last_read_at ELSE session_index.last_read_at END,
+         encrypted_client_metadata = CASE WHEN excluded.encrypted_client_metadata IS NOT NULL THEN excluded.encrypted_client_metadata ELSE session_index.encrypted_client_metadata END,
+         client_metadata_iv = CASE WHEN excluded.client_metadata_iv IS NOT NULL THEN excluded.client_metadata_iv ELSE session_index.client_metadata_iv END,
+         parent_session_id = CASE WHEN excluded.parent_session_id IS NOT NULL THEN excluded.parent_session_id ELSE session_index.parent_session_id END,
+         session_type = CASE WHEN excluded.session_type IS NOT NULL THEN excluded.session_type ELSE session_index.session_type END,
+         worktree_id = CASE WHEN excluded.worktree_id IS NOT NULL THEN excluded.worktree_id ELSE session_index.worktree_id END,
+         is_archived = CASE WHEN excluded.is_archived IS NOT NULL THEN excluded.is_archived ELSE session_index.is_archived END,
+         is_pinned = CASE WHEN excluded.is_pinned IS NOT NULL THEN excluded.is_pinned ELSE session_index.is_pinned END,
+         branched_from_session_id = CASE WHEN excluded.branched_from_session_id IS NOT NULL THEN excluded.branched_from_session_id ELSE session_index.branched_from_session_id END,
+         branch_point_message_id = CASE WHEN excluded.branch_point_message_id IS NOT NULL THEN excluded.branch_point_message_id ELSE session_index.branch_point_message_id END,
+         branched_at = CASE WHEN excluded.branched_at IS NOT NULL THEN excluded.branched_at ELSE session_index.branched_at END`,
       session.sessionId,
       session.encryptedProjectId,
       session.projectIdIv,
@@ -515,7 +550,15 @@ export class IndexRoom implements DurableObject {
       session.isExecuting != null ? (session.isExecuting ? 1 : 0) : null,
       session.lastReadAt ?? null,
       session.encryptedClientMetadata ?? null,
-      session.clientMetadataIv ?? null
+      session.clientMetadataIv ?? null,
+      session.parentSessionId ?? null,
+      session.sessionType ?? null,
+      session.worktreeId ?? null,
+      session.isArchived != null ? (session.isArchived ? 1 : 0) : null,
+      session.isPinned != null ? (session.isPinned ? 1 : 0) : null,
+      session.branchedFromSessionId ?? null,
+      session.branchPointMessageId ?? null,
+      session.branchedAt ?? null
     );
 
     // Read back the effective last_read_at (may be the existing value if it was newer)
@@ -563,8 +606,8 @@ export class IndexRoom implements DurableObject {
       for (const session of sessions) {
         sql.exec(
           `INSERT INTO session_index
-           (session_id, project_id, project_id_iv, encrypted_title, title_iv, provider, model, mode, message_count, last_message_at, created_at, updated_at, is_executing, last_read_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           (session_id, project_id, project_id_iv, encrypted_title, title_iv, provider, model, mode, message_count, last_message_at, created_at, updated_at, is_executing, last_read_at, parent_session_id, session_type, worktree_id, is_archived, is_pinned, branched_from_session_id, branch_point_message_id, branched_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(session_id) DO UPDATE SET
              project_id = excluded.project_id,
              project_id_iv = excluded.project_id_iv,
@@ -577,16 +620,16 @@ export class IndexRoom implements DurableObject {
              last_message_at = excluded.last_message_at,
              created_at = excluded.created_at,
              updated_at = excluded.updated_at,
-             is_executing = CASE
-               WHEN excluded.is_executing IS NOT NULL
-               THEN excluded.is_executing
-               ELSE session_index.is_executing
-             END,
-             last_read_at = CASE
-               WHEN excluded.last_read_at IS NOT NULL AND (session_index.last_read_at IS NULL OR excluded.last_read_at > session_index.last_read_at)
-               THEN excluded.last_read_at
-               ELSE session_index.last_read_at
-             END`,
+             is_executing = CASE WHEN excluded.is_executing IS NOT NULL THEN excluded.is_executing ELSE session_index.is_executing END,
+             last_read_at = CASE WHEN excluded.last_read_at IS NOT NULL AND (session_index.last_read_at IS NULL OR excluded.last_read_at > session_index.last_read_at) THEN excluded.last_read_at ELSE session_index.last_read_at END,
+             parent_session_id = CASE WHEN excluded.parent_session_id IS NOT NULL THEN excluded.parent_session_id ELSE session_index.parent_session_id END,
+             session_type = CASE WHEN excluded.session_type IS NOT NULL THEN excluded.session_type ELSE session_index.session_type END,
+             worktree_id = CASE WHEN excluded.worktree_id IS NOT NULL THEN excluded.worktree_id ELSE session_index.worktree_id END,
+             is_archived = CASE WHEN excluded.is_archived IS NOT NULL THEN excluded.is_archived ELSE session_index.is_archived END,
+             is_pinned = CASE WHEN excluded.is_pinned IS NOT NULL THEN excluded.is_pinned ELSE session_index.is_pinned END,
+             branched_from_session_id = CASE WHEN excluded.branched_from_session_id IS NOT NULL THEN excluded.branched_from_session_id ELSE session_index.branched_from_session_id END,
+             branch_point_message_id = CASE WHEN excluded.branch_point_message_id IS NOT NULL THEN excluded.branch_point_message_id ELSE session_index.branch_point_message_id END,
+             branched_at = CASE WHEN excluded.branched_at IS NOT NULL THEN excluded.branched_at ELSE session_index.branched_at END`,
           session.sessionId,
           session.encryptedProjectId,
           session.projectIdIv,
@@ -600,7 +643,15 @@ export class IndexRoom implements DurableObject {
           session.createdAt,
           session.updatedAt,
           session.isExecuting != null ? (session.isExecuting ? 1 : 0) : null,
-          session.lastReadAt ?? null
+          session.lastReadAt ?? null,
+          session.parentSessionId ?? null,
+          session.sessionType ?? null,
+          session.worktreeId ?? null,
+          session.isArchived != null ? (session.isArchived ? 1 : 0) : null,
+          session.isPinned != null ? (session.isPinned ? 1 : 0) : null,
+          session.branchedFromSessionId ?? null,
+          session.branchPointMessageId ?? null,
+          session.branchedAt ?? null
         );
         affectedProjects.add(session.encryptedProjectId);
         affectedProjectIvs.set(session.encryptedProjectId, session.projectIdIv);
@@ -1450,6 +1501,14 @@ type SessionIndexRow = {
   last_read_at: number | null;
   encrypted_client_metadata: string | null;
   client_metadata_iv: string | null;
+  parent_session_id: string | null;
+  session_type: string | null;
+  worktree_id: string | null;
+  is_archived: number;
+  is_pinned: number;
+  branched_from_session_id: string | null;
+  branch_point_message_id: number | null;
+  branched_at: number | null;
 };
 
 type ProjectIndexRow = {
@@ -1486,6 +1545,14 @@ function rowToSessionEntry(row: SessionIndexRow): SessionIndexEntry {
     encryptedClientMetadata: row.encrypted_client_metadata ?? undefined,
     clientMetadataIv: row.client_metadata_iv ?? undefined,
     lastReadAt: row.last_read_at ?? undefined,
+    parentSessionId: row.parent_session_id ?? undefined,
+    sessionType: row.session_type ?? undefined,
+    worktreeId: row.worktree_id ?? undefined,
+    isArchived: row.is_archived === 1,
+    isPinned: row.is_pinned === 1,
+    branchedFromSessionId: row.branched_from_session_id ?? undefined,
+    branchPointMessageId: row.branch_point_message_id ?? undefined,
+    branchedAt: row.branched_at ?? undefined,
   };
 }
 

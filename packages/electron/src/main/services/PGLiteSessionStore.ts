@@ -65,6 +65,13 @@ export async function getAllSessionsForSync(includeMessages = false): Promise<Ar
   model?: string;
   mode?: string;
   sessionType?: string;
+  parentSessionId?: string;
+  worktreeId?: string;
+  isArchived?: boolean;
+  isPinned?: boolean;
+  branchedFromSessionId?: string;
+  branchPointMessageId?: number;
+  branchedAt?: number;
   workspaceId?: string;
   workspacePath?: string;
   messageCount: number;
@@ -88,12 +95,15 @@ export async function getAllSessionsForSync(includeMessages = false): Promise<Ar
 
   const queryStart = performance.now();
   const { rows } = await moduleDb.query<any>(
-    `SELECT s.id, s.provider, s.model, s.mode, s.session_type, s.title, s.workspace_id, s.draft_input,
+    `SELECT s.id, s.provider, s.model, s.mode, s.session_type, s.parent_session_id, s.title, s.workspace_id, s.draft_input,
+            s.worktree_id, s.is_archived, s.is_pinned, s.branched_from_session_id, s.branch_point_message_id, s.branched_at,
             s.created_at, s.updated_at, s.metadata, COUNT(m.id) as message_count
      FROM ai_sessions s
      LEFT JOIN ai_agent_messages m ON s.id = m.session_id AND m.direction = 'input' AND (m.hidden = FALSE OR m.hidden IS NULL)
      WHERE (s.is_archived = FALSE OR s.is_archived IS NULL)
-     GROUP BY s.id, s.provider, s.model, s.mode, s.session_type, s.title, s.workspace_id, s.draft_input, s.created_at, s.updated_at, s.metadata
+     GROUP BY s.id, s.provider, s.model, s.mode, s.session_type, s.parent_session_id, s.title, s.workspace_id, s.draft_input,
+              s.worktree_id, s.is_archived, s.is_pinned, s.branched_from_session_id, s.branch_point_message_id, s.branched_at,
+              s.created_at, s.updated_at, s.metadata
      ORDER BY s.updated_at DESC`
   );
   const queryTime = performance.now() - queryStart;
@@ -116,6 +126,13 @@ export async function getAllSessionsForSync(includeMessages = false): Promise<Ar
       model: row.model,
       mode: row.mode,
       sessionType: row.session_type || 'session',
+      parentSessionId: row.parent_session_id || undefined,
+      worktreeId: row.worktree_id || undefined,
+      isArchived: row.is_archived ?? false,
+      isPinned: row.is_pinned ?? false,
+      branchedFromSessionId: row.branched_from_session_id || undefined,
+      branchPointMessageId: row.branch_point_message_id || undefined,
+      branchedAt: row.branched_at ? toMillis(row.branched_at) : undefined,
       // workspace_id is required - we filtered out sessions without it above
       workspaceId: row.workspace_id,
       workspacePath: row.workspace_id, // workspace_id is the path in this system

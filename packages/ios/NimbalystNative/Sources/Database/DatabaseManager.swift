@@ -183,6 +183,27 @@ public final class DatabaseManager: @unchecked Sendable {
             }
         }
 
+        migrator.registerMigration("v6_session_hierarchy") { db in
+            try db.alter(table: "sessions") { t in
+                t.add(column: "parentSessionId", .text)
+                t.add(column: "phase", .text)
+                t.add(column: "tagsJson", .text)
+            }
+            // Index for efficient child lookups
+            try db.create(index: "idx_sessions_parent", on: "sessions", columns: ["parentSessionId"])
+        }
+
+        migrator.registerMigration("v7_worktree_and_branch") { db in
+            try db.alter(table: "sessions") { t in
+                t.add(column: "worktreeId", .text)
+                t.add(column: "isArchived", .boolean).defaults(to: false)
+                t.add(column: "isPinned", .boolean).defaults(to: false)
+                t.add(column: "branchedFromSessionId", .text)
+                t.add(column: "branchPointMessageId", .integer)
+                t.add(column: "branchedAt", .integer)
+            }
+        }
+
         try migrator.migrate(writer)
     }
 

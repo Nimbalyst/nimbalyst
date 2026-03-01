@@ -34,6 +34,7 @@ import { ToolExecutor, toolRegistry, BUILT_IN_TOOLS } from './tools';
 import { initMobileSessionControlHandler } from './MobileSessionControlHandler';
 import { SoundNotificationService } from '../SoundNotificationService';
 import { notificationService } from '../NotificationService';
+import { TrayManager } from '../../tray/TrayManager';
 import { logger } from '../../utils/logger';
 import { windowStates, findWindowByWorkspace, getWindowId } from '../../window/WindowManager';
 import { sessionFileTracker } from '../SessionFileTracker';
@@ -1105,15 +1106,22 @@ export class AIService {
             // Use claude-code as the default provider for mobile-created sessions
             // Use the user's default model preference (same as desktop "New Session")
             const defaultModel = getDefaultAIModel() || 'claude-code:opus';
+            const resolvedSessionType = (request.sessionType || 'session') as import('@nimbalyst/runtime/ai/server/types').SessionType;
             const session = await this.sessionManager.createSession(
-              'claude-code',  // provider
-              undefined,      // documentContext
-              workspacePath,  // workspacePath
-              undefined,      // providerConfig
-              defaultModel,   // model - use user's configured default
-              'session',      // sessionType
-              'agent'         // mode
+              'claude-code',           // provider
+              undefined,               // documentContext
+              workspacePath,           // workspacePath
+              undefined,               // providerConfig
+              defaultModel,            // model - use user's configured default
+              resolvedSessionType,     // sessionType - from mobile request
+              'agent'                  // mode
             );
+
+            // If a parentSessionId was provided, set it on the session
+            if (request.parentSessionId && session) {
+              const { AISessionsRepository } = await import('@nimbalyst/runtime/storage/repositories/AISessionsRepository');
+              await AISessionsRepository.updateMetadata(session.id, { parentSessionId: request.parentSessionId });
+            }
 
             logger.main.info('[AIService] Created session for mobile request:', {
               requestId: request.requestId,
@@ -1208,6 +1216,115 @@ export class AIService {
         logger.main.info('[AIService] Session creation request handler initialized');
       } else {
         logger.main.info('[AIService] onCreateSessionRequest not available on sync provider');
+      }
+
+      // Handle worktree creation requests from mobile
+      // Mirrors the desktop worktree:create IPC handler + AgentMode session creation exactly
+      if (syncProvider.onCreateWorktreeRequest) {
+        syncProvider.onCreateWorktreeRequest(async (request) => {
+          logger.main.info('[AIService] Received worktree creation request from mobile:', request.requestId, 'projectId:', request.projectId);
+          try {
+            // Step 1: Create git worktree with name deduplication (same as worktree:create handler)
+            const { GitWorktreeService } = await import('../GitWorktreeService');
+            const { createWorktreeStore } = await import('../WorktreeStore');
+            const { getDatabase } = await import('../../database/initialize');
+            const { gitRefWatcher } = await import('../../file/GitRefWatcher');
+
+            const gitWorktreeService = new GitWorktreeService();
+            const db = getDatabase();
+            if (!db) throw new Error('Database not initialized');
+            const worktreeStore = createWorktreeStore(db);
+
+            // Deduplicate name across DB, filesystem, and branches (same as worktree:create)
+            const [dbNames, filesystemNames, branchNames] = await Promise.all([
+              worktreeStore.getAllNames(),
+              Promise.resolve(gitWorktreeService.getExistingWorktreeDirectories(request.projectId)),
+              gitWorktreeService.getAllBranchNames(request.projectId),
+            ]);
+            const existingNames = new Set<string>();
+            for (const n of dbNames) existingNames.add(n);
+            for (const n of filesystemNames) existingNames.add(n);
+            for (const n of branchNames) existingNames.add(n);
+            const finalName = gitWorktreeService.generateUniqueWorktreeName(existingNames);
+
+            // Create the git worktree
+            const worktree = await gitWorktreeService.createWorktree(request.projectId, { name: finalName });
+
+            // Store in WorktreeStore (same as worktree:create)
+            await worktreeStore.create(worktree);
+
+            // Start git ref watcher (same as worktree:create)
+            gitRefWatcher.start(worktree.path).catch((err: Error) => {
+              logger.main.error('[AIService] Failed to start GitRefWatcher for worktree:', err);
+            });
+
+            logger.main.info('[AIService] Worktree created from mobile:', worktree.id, 'name:', worktree.name, 'branch:', worktree.branch);
+
+            // Step 2: Create session with worktreeId (same as AgentMode + sessions:create)
+            const { AISessionsRepository } = await import('@nimbalyst/runtime/storage/repositories/AISessionsRepository');
+            const { randomUUID } = await import('crypto');
+            const defaultModel = getDefaultAIModel() || 'claude-code:opus';
+            const sessionId = randomUUID();
+            const sessionTitle = `Worktree: ${worktree.name}`;
+
+            await AISessionsRepository.create({
+              id: sessionId,
+              provider: 'claude-code',
+              model: defaultModel,
+              title: sessionTitle,
+              workspaceId: request.projectId,
+              worktreeId: worktree.id,
+            });
+            logger.main.info('[AIService] Worktree session created:', sessionId, 'worktreeId:', worktree.id);
+
+            // Step 3: Notify renderer to refresh and set workstream state
+            const targetWindow = findWindowByWorkspace(request.projectId);
+            if (targetWindow && !targetWindow.isDestroyed()) {
+              targetWindow.webContents.send('sessions:refresh-list', {
+                workspacePath: request.projectId,
+                sessionId,
+              });
+              targetWindow.webContents.send('worktree:session-created', {
+                sessionId,
+                worktreeId: worktree.id,
+              });
+            }
+
+            // Step 4: Sync to index so iOS sees it
+            if (syncProvider.syncSessionsToIndex) {
+              const now = Date.now();
+              syncProvider.syncSessionsToIndex([{
+                id: sessionId,
+                title: sessionTitle,
+                provider: 'claude-code',
+                model: defaultModel,
+                mode: 'agent',
+                workspaceId: request.projectId,
+                workspacePath: request.projectId,
+                messageCount: 0,
+                updatedAt: now,
+                createdAt: now,
+              }]);
+            }
+
+            if (syncProvider.sendCreateWorktreeResponse) {
+              syncProvider.sendCreateWorktreeResponse({
+                requestId: request.requestId,
+                success: true,
+              });
+            }
+          } catch (error) {
+            logger.main.error('[AIService] Failed to create worktree from mobile:', error);
+            if (syncProvider.sendCreateWorktreeResponse) {
+              syncProvider.sendCreateWorktreeResponse({
+                requestId: request.requestId,
+                success: false,
+                error: error instanceof Error ? error.message : 'Unknown error',
+              });
+            }
+          }
+        });
+        logger.main.info('[AIService] Worktree creation request handler initialized');
       }
 
       // Initialize mobile session control handler (cancel, question responses, etc.)
@@ -2001,6 +2118,7 @@ export class AIService {
         logger.main.info('[AIService] ExitPlanMode confirmation requested:', data.requestId);
         safeSend(event, 'ai:exitPlanModeConfirm', data);
         syncPendingPrompt(data.sessionId, true);
+        TrayManager.getInstance().onPromptCreated(data.sessionId);
 
         // Show OS notification if app is backgrounded
         const sessionTitle = session.title || 'AI Session';
@@ -2019,6 +2137,7 @@ export class AIService {
         // logger.main.info('[AIService] AskUserQuestion requested:', data.questionId);
         safeSend(event, 'ai:askUserQuestion', data);
         syncPendingPrompt(data.sessionId, true);
+        TrayManager.getInstance().onPromptCreated(data.sessionId);
 
         // Show OS notification if app is backgrounded
         const sessionTitle = session.title || 'AI Session';
@@ -2037,6 +2156,7 @@ export class AIService {
         // logger.main.info('[AIService] AskUserQuestion answered:', data.questionId);
         safeSend(event, 'ai:askUserQuestionAnswered', data);
         syncPendingPrompt(data.sessionId, false);
+        TrayManager.getInstance().onPromptResolved(data.sessionId);
       };
       provider.removeAllListeners('askUserQuestion:answered');
       provider.on('askUserQuestion:answered', onAskUserQuestionAnswered);
@@ -2046,6 +2166,7 @@ export class AIService {
         logger.main.info('[AIService] Tool permission requested:', data.requestId);
         safeSend(event, 'ai:toolPermission', data);
         syncPendingPrompt(data.sessionId, true);
+        TrayManager.getInstance().onPromptCreated(data.sessionId);
 
         // Show OS notification if app is backgrounded
         const sessionTitle = session.title || 'AI Session';
@@ -2068,6 +2189,7 @@ export class AIService {
         logger.main.info('[AIService] Tool permission resolved:', data.requestId);
         safeSend(event, 'ai:toolPermissionResolved', data);
         syncPendingPrompt(data.sessionId, false);
+        TrayManager.getInstance().onPromptResolved(data.sessionId);
       };
       provider.removeAllListeners('toolPermission:resolved');
       provider.on('toolPermission:resolved', onToolPermissionResolved);
