@@ -391,8 +391,6 @@ public struct SessionListView: View {
             } else {
                 Image(systemName: "plus")
             }
-        } primaryAction: {
-            createAndNavigateToSession()
         }
         .disabled(isCreatingSession)
     }
