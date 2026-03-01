@@ -74,8 +74,11 @@ public struct SessionDetailView: View {
     @StateObject private var transcriptController = TranscriptController()
     #endif
 
-    /// Cached prompt list for the jump-to-prompt menu.
+    /// Cached prompt list for the jump-to-prompt sheet.
     @State private var promptList: [PromptEntry] = []
+
+    /// Whether the jump-to-prompt sheet is presented.
+    @State private var showPromptPicker = false
 
     /// Whether the transcript web view has loaded and rendered its first data.
     @State private var isTranscriptReady = false
@@ -213,6 +216,27 @@ public struct SessionDetailView: View {
             appState.syncManager?.onSessionSyncDiagnostic = nil
             appState.syncManager?.leaveSessionRoom()
         }
+        #if canImport(UIKit)
+        .sheet(isPresented: $showPromptPicker) {
+            NavigationStack {
+                PromptPickerList(
+                    promptList: promptList,
+                    onSelect: { prompt in
+                        showPromptPicker = false
+                        transcriptController.scrollToMessage(messageId: prompt.id)
+                    }
+                )
+                .navigationTitle("Jump to Prompt")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") { showPromptPicker = false }
+                    }
+                }
+            }
+            .presentationDetents([.medium, .large])
+        }
+        #endif
         .onChange(of: messages.count) { _ in
             // Web view was ready but waiting for initial messages — reveal now
             if isWebViewReady && !isTranscriptReady {
@@ -277,16 +301,10 @@ public struct SessionDetailView: View {
     private var sessionMenu: some View {
         Menu {
             #if canImport(UIKit)
-            // Jump to prompt submenu
+            // Jump to prompt sheet trigger
             if !promptList.isEmpty {
-                Menu {
-                    ForEach(promptList) { prompt in
-                        Button {
-                            transcriptController.scrollToMessage(messageId: prompt.id)
-                        } label: {
-                            Text(prompt.text)
-                        }
-                    }
+                Button {
+                    showPromptPicker = true
                 } label: {
                     Label("Jump to Prompt", systemImage: "text.line.first.and.arrowtriangle.forward")
                 }
@@ -357,10 +375,10 @@ public struct SessionDetailView: View {
             DispatchQueue.main.async {
                 self.promptList = prompts.enumerated().map { index, dict in
                     let id = dict["id"] as? String ?? ""
-                    let text = dict["text"] as? String ?? "Prompt \(index + 1)"
+                    let text = dict["text"] as? String ?? ""
                     let createdAt = dict["createdAt"] as? Int ?? 0
                     let displayText = text.isEmpty ? "Prompt \(index + 1)" : text
-                    return PromptEntry(id: id, text: "#\(index + 1): \(displayText)", createdAt: createdAt)
+                    return PromptEntry(id: id, number: index + 1, text: displayText, createdAt: createdAt)
                 }
             }
         }
@@ -695,6 +713,62 @@ public struct SessionDetailView: View {
 
 struct PromptEntry: Identifiable {
     let id: String
+    let number: Int
     let text: String
     let createdAt: Int
 }
+
+// MARK: - Prompt Picker List
+
+#if canImport(UIKit)
+private struct PromptPickerList: View {
+    let promptList: [PromptEntry]
+    let onSelect: (PromptEntry) -> Void
+
+    @State private var searchText = ""
+
+    private var filteredPrompts: [PromptEntry] {
+        if searchText.isEmpty {
+            return promptList
+        }
+        return promptList.filter { $0.text.localizedCaseInsensitiveContains(searchText) }
+    }
+
+    var body: some View {
+        List(filteredPrompts) { prompt in
+            Button {
+                onSelect(prompt)
+            } label: {
+                HStack(spacing: 12) {
+                    Text("#\(prompt.number)")
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(NimbalystColors.primary)
+                        .frame(minWidth: 30, alignment: .trailing)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(prompt.text)
+                            .font(.body)
+                            .foregroundStyle(.primary)
+                            .lineLimit(2)
+
+                        if prompt.createdAt > 0 {
+                            Text(RelativeTimestamp.format(epochMs: prompt.createdAt))
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+        }
+        .listStyle(.plain)
+        .searchable(text: $searchText, prompt: "Search prompts")
+        .overlay {
+            if filteredPrompts.isEmpty && !searchText.isEmpty {
+                ContentUnavailableView.search(text: searchText)
+            }
+        }
+    }
+}
+#endif

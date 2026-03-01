@@ -205,6 +205,7 @@ function TranscriptApp() {
   const [metadata, setMetadata] = useState<BridgeMetadataUpdate>({});
   const rawMessagesRef = useRef<BridgeMessage[]>([]);
   const transcriptRef = useRef<{ scrollToMessage: (index: number) => void; scrollToTop: () => void }>(null);
+  const sessionDataRef = useRef<SessionData | null>(null);
 
   // Track sessionId in a ref so clearSession can access it without re-running the effect
   const sessionIdRef = useRef<string | null>(null);
@@ -266,33 +267,26 @@ function TranscriptApp() {
       },
 
       scrollToMessage(messageId: string) {
-        // Messages are keyed by index, not ID, so we need to find the index
-        const index = rawMessagesRef.current.findIndex(m => m.id === messageId);
-        if (index !== -1) {
+        // messageId is actually a UI message index (stringified) from getPromptList
+        const index = parseInt(messageId, 10);
+        if (!isNaN(index)) {
           transcriptRef.current?.scrollToMessage(index);
         }
       },
 
       getPromptList(): Array<{ id: string; text: string; createdAt: number }> {
-        return rawMessagesRef.current
-          .filter((m) => m.source === 'user' && m.direction === 'input')
-          .map((m) => {
-            let text = '';
-            try {
-              const raw = m.contentDecrypted || '';
-              const envelope = JSON.parse(raw);
-              const content = envelope?.content;
-              if (typeof content === 'string') {
-                const inner = JSON.parse(content);
-                text = inner?.prompt || inner?.content || content;
-              } else {
-                text = JSON.stringify(content);
-              }
-            } catch {
-              text = m.contentDecrypted || '';
-            }
-            return { id: m.id, text: text.substring(0, 80), createdAt: m.createdAt };
-          });
+        // Use transformed UI messages (same as desktop PromptMarker extraction)
+        // so that the returned indices match the VList item positions.
+        const messages = sessionDataRef.current?.messages;
+        if (!messages) return [];
+        return messages
+          .map((msg, index) => ({ msg, index }))
+          .filter(({ msg }) => msg.role === 'user' && msg.isUserInput !== false)
+          .map(({ msg, index }) => ({
+            id: String(index),
+            text: (msg.content || '').substring(0, 80),
+            createdAt: msg.timestamp || 0,
+          }));
       },
     };
 
@@ -340,6 +334,9 @@ function TranscriptApp() {
       return null;
     }
   }, [sessionId, rawMessages, metadata]);
+
+  // Keep ref in sync so the bridge's getPromptList can access transformed messages
+  sessionDataRef.current = sessionData;
 
   const handleCompact = useCallback(() => {
     try {

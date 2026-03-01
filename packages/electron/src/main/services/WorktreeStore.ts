@@ -108,7 +108,7 @@ export function createWorktreeStore(db: PGliteLike, ensureDbReady?: EnsureReadyF
     async get(id: string): Promise<Worktree | null> {
       await ensureReady();
 
-      logger.info('Getting worktree', { id });
+      // logger.info('Getting worktree', { id });
 
       const { rows } = await db.query<WorktreeRow>(
         `SELECT * FROM worktrees WHERE id = $1 LIMIT 1`,

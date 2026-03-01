@@ -577,7 +577,7 @@ export function registerWorktreeHandlers(): void {
         throw new Error('worktreeId is required');
       }
 
-      logger.info('Getting worktree', { worktreeId });
+      // logger.info('Getting worktree', { worktreeId });
 
       const db = getDatabase();
       if (!db) {
