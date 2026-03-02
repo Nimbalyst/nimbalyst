@@ -99,6 +99,7 @@ All events include `$session_id` property automatically. Dev users are marked wi
 | `content_mode_switched` | `NavigationGutter.tsx:111` | User switches between Files and Agent modes via navigation gutter | `fromMode` (files/agent/settings)<br/>`toMode` (files/agent/settings) | v0.48.13 (2025-12-17) |  |
 | `editor_type_opened` | `TabEditor.tsx:242` | User opens a file in an editor tab | `editorCategory` (markdown/monaco/image or extension name like "Spreadsheet Editor", "PDF Viewer", "Excalidraw Editor", "Data Model Editor")<br/>`fileExtension` (e.g., .md, .csv, .prisma, .mockup.html)<br/>`hasMermaid` (boolean, for markdown)<br/>`hasDataModel` (boolean, for markdown) | v0.48.13 (2025-12-17) | (pending release): Renamed editorType to editorCategory; editorCategory now uses extension displayName for custom editors; fileExtension contains actual extension |
 | `markdown_view_mode_switched` | `TabEditor.tsx:1556, 1606` | User switches between rich text (lexical) and raw markdown (monaco) view modes | `fromMode` (lexical/monaco)<br/>`toMode` (lexical/monaco) | v0.48.13 (2025-12-17) |  |
+| `session_view_mode_switched` | `SessionHistory.tsx` | User switches between list and kanban views for session history | `fromMode` (list/card/kanban)<br/>`toMode` (list/card/kanban) | (pending release) |  |
 
 ### File History
 
@@ -361,7 +362,7 @@ Events from the iOS companion app. These events share the same PostHog project a
 - **Mobile Events**: 7 (via Capacitor AnalyticsService)
 - **File Operations**: 7 events
 - **Workspace Operations**: 4 events
-- **Navigation & Editor Mode**: 3 events
+- **Navigation & Editor Mode**: 4 events
 - **File History**: 2 events
 - **AI-Related**: 23 events
 - **Blitz Mode**: 1 event

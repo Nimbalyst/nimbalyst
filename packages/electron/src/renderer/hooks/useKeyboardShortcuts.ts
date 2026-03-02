@@ -8,6 +8,7 @@ import {
 } from '../store/atoms/terminals';
 import { setViewModeAtom, viewModeAtom } from '../store/atoms/agentMode';
 import { store } from '@nimbalyst/runtime/store';
+import posthog from 'posthog-js';
 
 interface KeyboardShortcutsOptions {
   // Mode state
@@ -136,9 +137,18 @@ export function useKeyboardShortcuts({
 
         if (activeMode === 'agent') {
           // Toggle kanban on/off
-          setViewMode(currentViewMode === 'kanban' ? 'list' : 'kanban');
+          const newMode = currentViewMode === 'kanban' ? 'list' : 'kanban';
+          posthog.capture('session_view_mode_switched', {
+            fromMode: currentViewMode,
+            toMode: newMode,
+          });
+          setViewMode(newMode);
         } else {
           // Switch to agent mode and set kanban view
+          posthog.capture('session_view_mode_switched', {
+            fromMode: currentViewMode,
+            toMode: 'kanban',
+          });
           setViewMode('kanban');
           setActiveMode('agent');
         }

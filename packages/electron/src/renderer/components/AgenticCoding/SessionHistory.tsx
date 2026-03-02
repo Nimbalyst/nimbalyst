@@ -38,6 +38,7 @@ import { useSuperLoopDialog } from '../../hooks/useSuperLoop';
 import type { SuperLoop } from '../../../shared/types/superLoop';
 import { store } from '@nimbalyst/runtime/store';
 import { HelpTooltip } from '../../help';
+import { usePostHog } from 'posthog-js/react';
 import './SessionHistory.css';
 
 // SessionItem is the shared SessionMeta type from the store atoms.
@@ -319,6 +320,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   // View mode persisted via agentMode atoms
   const viewMode = useAtomValue(viewModeAtom);
   const setViewMode = useSetAtom(setViewModeAtom);
+  const posthog = usePostHog();
 
   // Alpha feature check for card mode
   const isCardModeEnabled = useAtomValue(alphaFeatureEnabledAtom('card-mode'));
@@ -2116,19 +2118,28 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
           <div className="session-history-header-path text-[11px] text-[var(--nim-text-muted)] overflow-hidden text-ellipsis whitespace-nowrap opacity-75 font-normal">{workspacePath}</div>
         </div>
         <div className="session-history-header-buttons flex items-center gap-1.5 shrink-0">
-          <button
-            className={`flex items-center gap-1 px-2 py-1.5 text-[11px] font-semibold rounded border cursor-pointer transition-all duration-150 shrink-0 ${viewMode === 'kanban' ? 'bg-[var(--nim-primary)] border-[var(--nim-primary)] text-white hover:opacity-90' : 'bg-[var(--nim-bg-secondary)] border-[var(--nim-border)] text-[var(--nim-text-muted)] hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-primary)] hover:text-[var(--nim-text)]'}`}
-            onClick={() => setViewMode(viewMode === 'kanban' ? 'list' : 'kanban')}
-            title={`${viewMode === 'kanban' ? 'Switch to list view' : 'Switch to kanban view'} (${getShortcutDisplay(KeyboardShortcuts.window.kanbanView)})`}
-            aria-label={viewMode === 'kanban' ? 'Switch to list view' : 'Switch to kanban view'}
-          >
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <rect x="1.5" y="2" width="3.5" height="12" rx="0.75" stroke="currentColor" strokeWidth="1.25"/>
-              <rect x="6.25" y="2" width="3.5" height="8" rx="0.75" stroke="currentColor" strokeWidth="1.25"/>
-              <rect x="11" y="2" width="3.5" height="10" rx="0.75" stroke="currentColor" strokeWidth="1.25"/>
-            </svg>
-            Kanban
-          </button>
+          <HelpTooltip testId="session-kanban-button">
+            <button
+              className={`flex items-center gap-1 px-2 py-1.5 text-[11px] font-semibold rounded border cursor-pointer transition-all duration-150 shrink-0 ${viewMode === 'kanban' ? 'bg-[var(--nim-primary)] border-[var(--nim-primary)] text-white hover:opacity-90' : 'bg-[var(--nim-bg-secondary)] border-[var(--nim-border)] text-[var(--nim-text-muted)] hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-primary)] hover:text-[var(--nim-text)]'}`}
+              data-testid="session-kanban-button"
+              onClick={() => {
+                const newMode = viewMode === 'kanban' ? 'list' : 'kanban';
+                posthog?.capture('session_view_mode_switched', {
+                  fromMode: viewMode,
+                  toMode: newMode,
+                });
+                setViewMode(newMode);
+              }}
+              aria-label={viewMode === 'kanban' ? 'Switch to list view' : 'Switch to kanban view'}
+            >
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="1.5" y="2" width="3.5" height="12" rx="0.75" stroke="currentColor" strokeWidth="1.25"/>
+                <rect x="6.25" y="2" width="3.5" height="8" rx="0.75" stroke="currentColor" strokeWidth="1.25"/>
+                <rect x="11" y="2" width="3.5" height="10" rx="0.75" stroke="currentColor" strokeWidth="1.25"/>
+              </svg>
+              Kanban
+            </button>
+          </HelpTooltip>
           {onOpenQuickSearch && (
             <HelpTooltip testId="session-quick-search-button">
               <button

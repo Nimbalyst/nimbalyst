@@ -19,6 +19,7 @@ import { sessionQuickOpenIntro } from './session-quick-open-intro';
 import { agentWelcomeIntro } from './agent-welcome-intro';
 import { gitCommitModeIntro } from './git-commit-mode-intro';
 import { filesScopeIntro } from './files-scope-intro';
+import { sessionKanbanIntro } from './session-kanban-intro';
 
 /**
  * All available walkthroughs.
@@ -38,4 +39,5 @@ export const walkthroughs: WalkthroughDefinition[] = [
   agentWelcomeIntro,
   gitCommitModeIntro,
   filesScopeIntro,
+  sessionKanbanIntro,
 ];

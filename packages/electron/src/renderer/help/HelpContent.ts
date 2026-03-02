@@ -121,6 +121,16 @@ export const HelpContent: Record<string, HelpEntry> = {
   },
 
   // ============================================================================
+  // Agent Mode - Session Views
+  // ============================================================================
+
+  'session-kanban-button': {
+    title: 'Kanban Board',
+    body: 'Switch to a kanban board view of your sessions organized by phase: Backlog, Planning, Implementing, Validating, and Complete. Drag sessions between columns to update their status.',
+    shortcut: KeyboardShortcuts.window.kanbanView,
+  },
+
+  // ============================================================================
   // Agent Mode - Layout Controls
   // ============================================================================
 

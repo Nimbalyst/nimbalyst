@@ -18,6 +18,7 @@ This document explains how to create and maintain walkthrough guides and help co
 | `plan-mode-intro` | Plan Mode | 1 | agent | 22 | Mode toggle is visible |
 | `context-window-intro` | Context Window | 1 | any | 25 | Context indicator is visible |
 | `layout-controls-intro` | Layout Controls | 1 | agent | 35 | Layout controls visible with Files button enabled |
+| `session-kanban-intro` | Session Kanban Board | 1 | agent | 18 | Kanban button is visible |
 | `file-tree-tools` | File Tree Tools | 2 | files | 5 | Filter button is visible |
 
 ## When Walkthroughs Appear
