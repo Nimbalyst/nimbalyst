@@ -801,8 +801,11 @@ export async function refreshPersonalSession(serverUrl: string): Promise<boolean
     return result;
   }
 
-  // We're in a team org -- do a session exchange to personal org for a fresh JWT
+  // We're in a team org -- do a session exchange to personal org for a fresh JWT.
+  // The team JWT (authState.sessionJwt) has a short lifetime (5 min from Stytch),
+  // so refresh it first to ensure the Authorization header is valid.
   try {
+    await refreshSession(serverUrl);
     const httpUrl = serverUrl.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:');
     const jwt = authState.sessionJwt;
     if (!jwt) return false;

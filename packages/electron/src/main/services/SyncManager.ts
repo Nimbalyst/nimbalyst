@@ -399,8 +399,12 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
         // (from getSessionJwt) has a different sub and would fail auth.
         const now = Date.now();
         if (now - lastRefreshTime > MIN_REFRESH_INTERVAL) {
-          await refreshPersonalSession(serverUrl);
+          const refreshed = await refreshPersonalSession(serverUrl);
           lastRefreshTime = now;
+
+          if (!refreshed) {
+            logger.main.warn('[SyncManager] Personal session refresh failed, JWT may be stale');
+          }
         }
 
         const freshJwt = getPersonalSessionJwt();
@@ -902,8 +906,61 @@ async function getVoiceModeSettings(): Promise<{ voice?: string; submitDelayMs?:
 }
 
 /**
+ * Get available AI models for syncing to mobile.
+ * Uses the same filtering logic as the ai:getModels IPC handler.
+ */
+async function getAvailableModelsForMobile(): Promise<{ models: Array<{ id: string; name: string; provider: string }>; defaultModel?: string }> {
+  try {
+    const Store = (await import('electron-store')).default;
+    const { ModelRegistry } = await import('@nimbalyst/runtime/ai/server/ModelRegistry');
+    const { getDefaultAIModel } = await import('../utils/store');
+
+    const aiStore = new Store<Record<string, unknown>>({ name: 'ai-settings' });
+    const apiKeys = aiStore.get('apiKeys', {}) as Record<string, string>;
+    const providerSettings = aiStore.get('providers', {}) as Record<string, { enabled?: boolean; models?: string[]; baseUrl?: string }>;
+
+    const modelsConfig = {
+      ...apiKeys,
+      lmstudio_url: providerSettings['lmstudio']?.baseUrl || 'http://127.0.0.1:8234'
+    };
+    const allModels = await ModelRegistry.getAllModels(modelsConfig);
+
+    // Filter to enabled providers using the same logic as ai:getModels
+    const enabledModels = allModels.filter(model => {
+      const ps = providerSettings[model.provider] as { enabled?: boolean; models?: string[] } | undefined;
+      // Claude Code is enabled by default
+      if (model.provider === 'claude-code') {
+        if (ps?.enabled === false) return false;
+      } else if (model.provider === 'openai-codex') {
+        if (ps?.enabled !== true) return false;
+      } else if (model.provider === 'claude') {
+        if (ps?.enabled !== true || !(apiKeys['anthropic'] || process.env.ANTHROPIC_API_KEY)) return false;
+      } else if (model.provider === 'openai') {
+        if (ps?.enabled !== true || !(apiKeys['openai'] || process.env.OPENAI_API_KEY)) return false;
+      } else if (model.provider === 'lmstudio') {
+        if (ps?.enabled !== true) return false;
+      } else {
+        return false;
+      }
+      // If specific models are selected for this provider, filter
+      if (ps?.models && ps.models.length > 0) {
+        return ps.models.includes(model.id);
+      }
+      return true;
+    });
+
+    const models = enabledModels.map(m => ({ id: m.id, name: m.name, provider: m.provider }));
+    const defaultModel = getDefaultAIModel() || 'claude-code:opus';
+    return { models, defaultModel };
+  } catch (err) {
+    logger.main.warn('[SyncManager] Failed to fetch models for mobile sync:', err);
+    return { models: [] };
+  }
+}
+
+/**
  * Sync sensitive settings to mobile devices.
- * Syncs the OpenAI API key and voice mode settings.
+ * Syncs the OpenAI API key, voice mode settings, and available AI models.
  *
  * @param openaiApiKey The OpenAI API key to sync
  */
@@ -925,7 +982,10 @@ export async function syncSettingsToMobile(openaiApiKey?: string): Promise<void>
   // Get voice mode settings
   const voiceModeSettings = await getVoiceModeSettings();
 
-  logger.main.info(`[SyncManager] Syncing settings to mobile devices (version ${settingsVersion})`);
+  // Get available AI models for the mobile model picker
+  const { models: availableModels, defaultModel } = await getAvailableModelsForMobile();
+
+  logger.main.info(`[SyncManager] Syncing settings to mobile devices (version ${settingsVersion}, ${availableModels.length} models)`);
 
   try {
     await provider.syncSettings({
@@ -934,6 +994,8 @@ export async function syncSettingsToMobile(openaiApiKey?: string): Promise<void>
         voice: voiceModeSettings.voice as 'alloy' | 'ash' | 'ballad' | 'coral' | 'echo' | 'sage' | 'shimmer' | 'verse' | 'marin' | 'cedar' | undefined,
         submitDelayMs: voiceModeSettings.submitDelayMs,
       } : undefined,
+      availableModels,
+      defaultModel,
       version: settingsVersion,
     });
     logger.main.info('[SyncManager] Settings synced successfully');
