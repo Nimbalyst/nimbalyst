@@ -3,7 +3,6 @@ import { useAtomValue, useSetAtom } from 'jotai';
 import { globalRegistry, loadBuiltinTrackers } from '@nimbalyst/runtime/plugins/TrackerPlugin/models';
 import { TrackerSidebar, type TrackerView } from './TrackerSidebar';
 import { TrackerMainView, type ViewMode } from './TrackerMainView';
-import { SessionKanbanBoard } from './SessionKanbanBoard';
 import type { TrackerItemType } from '@nimbalyst/runtime';
 import {
   trackerModeLayoutAtom,
@@ -17,14 +16,12 @@ interface TrackerModeProps {
   workspacePath: string | null;
   isActive: boolean;
   onSwitchToFilesMode?: () => void;
-  onOpenSession?: (sessionId: string) => void;
 }
 
 export const TrackerMode: React.FC<TrackerModeProps> = ({
   workspacePath,
   isActive,
   onSwitchToFilesMode,
-  onOpenSession,
 }) => {
   // Track registry changes
   const [registryVersion, setRegistryVersion] = React.useState(0);
@@ -60,8 +57,6 @@ export const TrackerMode: React.FC<TrackerModeProps> = ({
 
   const filterType = selectedType as TrackerItemType | 'all';
 
-  const isSessionsView = selectedView === 'sessions';
-
   return (
     <div className="tracker-mode flex-1 flex flex-row overflow-hidden min-h-0">
       <TrackerSidebar
@@ -71,22 +66,14 @@ export const TrackerMode: React.FC<TrackerModeProps> = ({
         onSelectType={handleSelectType}
         onSelectView={handleSelectView}
       />
-      {isSessionsView ? (
-        <SessionKanbanBoard
-          onSessionSelect={(sessionId) => {
-            onOpenSession?.(sessionId);
-          }}
-        />
-      ) : (
-        <TrackerMainView
-          filterType={filterType}
-          viewMode={viewMode}
-          onViewModeChange={handleViewModeChange}
-          onSwitchToFilesMode={onSwitchToFilesMode}
-          workspacePath={workspacePath || undefined}
-          trackerTypes={trackerTypes}
-        />
-      )}
+      <TrackerMainView
+        filterType={filterType}
+        viewMode={viewMode}
+        onViewModeChange={handleViewModeChange}
+        onSwitchToFilesMode={onSwitchToFilesMode}
+        workspacePath={workspacePath || undefined}
+        trackerTypes={trackerTypes}
+      />
     </div>
   );
 };

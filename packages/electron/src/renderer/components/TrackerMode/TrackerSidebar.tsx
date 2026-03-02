@@ -4,9 +4,7 @@ import { MaterialSymbol } from '@nimbalyst/runtime';
 import type { TrackerItemType } from '@nimbalyst/runtime';
 import { trackerItemCountByTypeAtom } from '@nimbalyst/runtime/plugins/TrackerPlugin';
 import type { TrackerDataModel } from '@nimbalyst/runtime/plugins/TrackerPlugin/models';
-import { sessionKanbanTotalCountAtom } from '../../store/atoms/sessionKanban';
-
-export type TrackerView = 'all' | 'high-priority' | 'recently-updated' | 'sessions';
+export type TrackerView = 'all' | 'high-priority' | 'recently-updated';
 
 interface TrackerSidebarProps {
   trackerTypes: TrackerDataModel[];
@@ -20,23 +18,12 @@ const VIEWS: { id: TrackerView; label: string; icon: string }[] = [
   { id: 'all', label: 'All Items', icon: 'list' },
   { id: 'high-priority', label: 'High Priority', icon: 'priority_high' },
   { id: 'recently-updated', label: 'Recently Updated', icon: 'schedule' },
-  { id: 'sessions', label: 'Sessions Board', icon: 'view_kanban' },
 ];
 
 /** Small component so each sidebar row subscribes to its own atom */
 function SidebarTypeCount({ type }: { type: TrackerItemType }) {
   const count = useAtomValue(trackerItemCountByTypeAtom(type));
   return <>{count}</>;
-}
-
-function SessionBoardCount() {
-  const count = useAtomValue(sessionKanbanTotalCountAtom);
-  if (count === 0) return null;
-  return (
-    <span className="text-[10px] font-semibold text-nim-faint min-w-[20px] text-right">
-      {count}
-    </span>
-  );
 }
 
 export const TrackerSidebar: React.FC<TrackerSidebarProps> = ({
@@ -125,7 +112,6 @@ export const TrackerSidebar: React.FC<TrackerSidebarProps> = ({
             >
               <MaterialSymbol icon={view.icon} size={16} />
               <span className="flex-1 text-left truncate">{view.label}</span>
-              {view.id === 'sessions' && <SessionBoardCount />}
             </button>
           ))}
         </div>

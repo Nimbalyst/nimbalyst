@@ -1644,7 +1644,6 @@ export default function App() {
                   workspacePath={workspacePath}
                   isActive={activeMode === 'tracker'}
                   onSwitchToFilesMode={() => setActiveMode('files')}
-                  onOpenSession={handleSessionQuickOpenSelect}
                 />
               )}
             </div>
