@@ -1103,16 +1103,16 @@ export class AIService {
             }
 
             // Create the session using the SessionManager
-            // Use claude-code as the default provider for mobile-created sessions
-            // Use the user's default model preference (same as desktop "New Session")
-            const defaultModel = getDefaultAIModel() || 'claude-code:opus';
+            // Use mobile's provider/model selection if provided, otherwise fall back to desktop defaults
+            const resolvedProvider = (request.provider || 'claude-code') as import('@nimbalyst/runtime/ai/server/types').AIProviderType;
+            const resolvedModel = request.model || getDefaultAIModel() || 'claude-code:opus';
             const resolvedSessionType = (request.sessionType || 'session') as import('@nimbalyst/runtime/ai/server/types').SessionType;
             const session = await this.sessionManager.createSession(
-              'claude-code',           // provider
+              resolvedProvider,        // provider - from mobile or default
               undefined,               // documentContext
               workspacePath,           // workspacePath
               undefined,               // providerConfig
-              defaultModel,            // model - use user's configured default
+              resolvedModel,           // model - from mobile or desktop default
               resolvedSessionType,     // sessionType - from mobile request
               'agent'                  // mode
             );

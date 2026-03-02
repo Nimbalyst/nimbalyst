@@ -201,6 +201,10 @@ interface EncryptedCreateSessionRequest {
   sessionType?: string;
   /** Parent session ID for creating child sessions within a workstream */
   parentSessionId?: string;
+  /** Provider ID selected by mobile (e.g., "claude-code") */
+  provider?: string;
+  /** Model ID selected by mobile (e.g., "claude-code:opus") */
+  model?: string;
   timestamp: number;
 }
 
@@ -1703,6 +1707,8 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
               initialPrompt,
               sessionType: message.request.sessionType,
               parentSessionId: message.request.parentSessionId,
+              provider: message.request.provider,
+              model: message.request.model,
               timestamp: message.request.timestamp,
             };
 
@@ -2786,6 +2792,8 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
         projectIdIv,
         sessionType: request.sessionType,
         parentSessionId: request.parentSessionId,
+        provider: request.provider,
+        model: request.model,
         timestamp: request.timestamp,
       };
 

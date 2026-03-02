@@ -209,6 +209,8 @@ struct SettingsSyncBroadcast: Codable {
 public struct SyncedSettings: Codable {
     public let openaiApiKey: String?
     public let voiceMode: SyncedVoiceModeSettings?
+    public let availableModels: [SyncedAvailableModel]?
+    public let defaultModel: String?
     public let version: Int
 }
 
@@ -216,6 +218,13 @@ public struct SyncedSettings: Codable {
 public struct SyncedVoiceModeSettings: Codable {
     public let voice: String?
     public let submitDelayMs: Int?
+}
+
+/// An AI model available on the desktop, synced to mobile for the model picker.
+public struct SyncedAvailableModel: Codable, Identifiable, Equatable {
+    public let id: String
+    public let name: String
+    public let provider: String
 }
 
 // MARK: - Client -> Server Messages
@@ -251,6 +260,8 @@ struct EncryptedCreateSessionRequest: Codable {
     let initialPromptIv: String?
     let sessionType: String?
     let parentSessionId: String?
+    let provider: String?
+    let model: String?
     let timestamp: Int
 }
 

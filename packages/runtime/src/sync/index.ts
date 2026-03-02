@@ -47,6 +47,8 @@ export type {
   CreateSessionRequest,
   CreateSessionResponse,
   SessionControlMessage,
+  SyncedSettings,
+  SyncedAvailableModel,
 } from './types';
 
 export { createCollabV3Sync } from './CollabV3Sync';

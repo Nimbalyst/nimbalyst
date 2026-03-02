@@ -30,6 +30,12 @@ public final class SyncManager: ObservableObject {
     /// The session ID currently connected to the session room, if any.
     @Published public var activeSessionId: String?
 
+    /// Available AI models synced from the desktop, for the model picker.
+    @Published public var availableModels: [SyncedAvailableModel] = []
+
+    /// The desktop's default model ID (e.g., "claude-code:opus").
+    @Published public var desktopDefaultModel: String?
+
     /// Called when a session transitions from executing to idle (isExecuting: true -> false).
     /// Parameters: (sessionId, lastAssistantMessageSummary)
     public var onSessionCompleted: ((String, String) -> Void)?
@@ -651,6 +657,17 @@ public final class SyncManager: ObservableObject {
         }
         #endif
 
+        // Store available models from desktop for the model picker and persist
+        if let models = settings.availableModels {
+            availableModels = models
+            ModelPreferences.saveAvailableModels(models, defaultModel: settings.defaultModel)
+            logger.info("Synced \(models.count) available models from desktop")
+        }
+        if let defaultModel = settings.defaultModel {
+            desktopDefaultModel = defaultModel
+            logger.info("Desktop default model: \(defaultModel)")
+        }
+
         onSettingsSynced?(settings)
     }
 
@@ -1208,7 +1225,9 @@ public final class SyncManager: ObservableObject {
         projectId: String,
         initialPrompt: String? = nil,
         sessionType: String? = nil,
-        parentSessionId: String? = nil
+        parentSessionId: String? = nil,
+        provider: String? = nil,
+        model: String? = nil
     ) throws {
         let encryptedProjectId = try crypto.encryptProjectId(projectId)
 
@@ -1229,6 +1248,8 @@ public final class SyncManager: ObservableObject {
                 initialPromptIv: promptIv,
                 sessionType: sessionType,
                 parentSessionId: parentSessionId,
+                provider: provider,
+                model: model,
                 timestamp: Int(Date().timeIntervalSince1970 * 1000)
             )
         )
@@ -1269,5 +1290,23 @@ public final class SyncManager: ObservableObject {
                 arguments: [parentSessionId, sessionId]
             )
         }
+    }
+
+    /// Archive or unarchive a session.
+    /// Updates the local database and sends a control message so the desktop
+    /// can propagate the change to the sync server.
+    public func setSessionArchived(sessionId: String, isArchived: Bool) throws {
+        try database.writer.write { db in
+            try db.execute(
+                sql: "UPDATE sessions SET isArchived = ? WHERE id = ?",
+                arguments: [isArchived, sessionId]
+            )
+        }
+
+        sendSessionControlMessage(
+            sessionId: sessionId,
+            messageType: "archive",
+            payload: ["isArchived": isArchived]
+        )
     }
 }

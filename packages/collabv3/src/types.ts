@@ -128,6 +128,14 @@ export interface EncryptedCreateSessionRequest {
   encryptedInitialPrompt?: string;
   /** Base64 encoded IV for initial prompt decryption */
   initialPromptIv?: string;
+  /** Session type: "session" (default), "workstream" (parent container) */
+  sessionType?: string;
+  /** Parent session ID for creating child sessions within a workstream */
+  parentSessionId?: string;
+  /** Provider ID selected by mobile (e.g., "claude-code") */
+  provider?: string;
+  /** Model ID selected by mobile (e.g., "claude-code:opus") */
+  model?: string;
   timestamp: number;
 }
 

@@ -917,16 +917,21 @@ async function getAvailableModelsForMobile(): Promise<{ models: Array<{ id: stri
 
     const aiStore = new Store<Record<string, unknown>>({ name: 'ai-settings' });
     const apiKeys = aiStore.get('apiKeys', {}) as Record<string, string>;
-    const providerSettings = aiStore.get('providers', {}) as Record<string, { enabled?: boolean; models?: string[]; baseUrl?: string }>;
+    const providerSettings = aiStore.get('providerSettings', {}) as Record<string, { enabled?: boolean; models?: string[]; baseUrl?: string }>;
 
     const modelsConfig = {
       ...apiKeys,
       lmstudio_url: providerSettings['lmstudio']?.baseUrl || 'http://127.0.0.1:8234'
     };
     const allModels = await ModelRegistry.getAllModels(modelsConfig);
+    const showExtendedContextModels = aiStore.get('showExtendedContextModels', false) as boolean;
 
     // Filter to enabled providers using the same logic as ai:getModels
     const enabledModels = allModels.filter(model => {
+      // Hide 1M models unless the setting is enabled
+      if (!showExtendedContextModels && model.provider === 'claude-code' && (model.id.endsWith('-1m') || model.id.includes('-1m'))) {
+        return false;
+      }
       const ps = providerSettings[model.provider] as { enabled?: boolean; models?: string[] } | undefined;
       // Claude Code is enabled by default
       if (model.provider === 'claude-code') {

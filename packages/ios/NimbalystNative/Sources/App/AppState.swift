@@ -21,6 +21,8 @@ public final class AppState: ObservableObject {
     private let logger = Logger(subsystem: "com.nimbalyst.app", category: "AppState")
     @Published public var isPaired: Bool = false
     @Published public var isConnected: Bool = false
+    @Published public var availableModels: [SyncedAvailableModel] = ModelPreferences.loadAvailableModels()
+    @Published public var desktopDefaultModel: String? = ModelPreferences.loadDefaultModel()
 
     /// When true, views should show demo connection indicators (green desktop dot).
     public var screenshotMode: Bool = false
@@ -361,10 +363,16 @@ public final class AppState: ObservableObject {
             }
         }
 
-        // Wire settings sync to update VoiceAgent when settings arrive from desktop
-        sync.onSettingsSynced = { [weak voice] _ in
+        // Wire settings sync to update VoiceAgent and model list when settings arrive from desktop
+        sync.onSettingsSynced = { [weak self, weak voice] settings in
             Task { @MainActor in
                 voice?.settings = VoiceModeSettings.load()
+                if let models = settings.availableModels {
+                    self?.availableModels = models
+                }
+                if let defaultModel = settings.defaultModel {
+                    self?.desktopDefaultModel = defaultModel
+                }
             }
         }
 

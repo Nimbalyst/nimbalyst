@@ -155,6 +155,9 @@ public struct SessionListView: View {
     @State private var searchText = ""
     @State private var isCreatingSession = false
     @State private var phaseFilter: PhaseFilter = .all
+    @State private var showArchived = false
+    @State private var selectedModelId: String?
+    @State private var showModelPicker = false
 
     private var voiceFocusedSessionId: String? {
         #if os(iOS)
@@ -167,6 +170,11 @@ public struct SessionListView: View {
     private var filteredSessions: [Session] {
         var result = sessions
 
+        // Filter archived sessions unless showArchived is enabled
+        if !showArchived {
+            result = result.filter { !$0.isArchived }
+        }
+
         if !searchText.isEmpty {
             result = result.filter { session in
                 session.titleDecrypted?.localizedCaseInsensitiveContains(searchText) == true
@@ -177,6 +185,11 @@ public struct SessionListView: View {
         // but we keep all sessions here and apply group-level filtering in the computed properties
 
         return result
+    }
+
+    /// Whether any sessions are archived (controls visibility of the archive toggle).
+    private var hasArchivedSessions: Bool {
+        sessions.contains { $0.isArchived }
     }
 
     /// Whether any sessions have phase data (controls visibility of the filter picker).
@@ -332,10 +345,27 @@ public struct SessionListView: View {
                         VoiceStatusPill(state: voice.state)
                     }
                     #endif
+                    if hasArchivedSessions {
+                        Button {
+                            withAnimation { showArchived.toggle() }
+                        } label: {
+                            Image(systemName: showArchived ? "archivebox.fill" : "archivebox")
+                                .font(.system(size: 14))
+                                .foregroundStyle(showArchived ? NimbalystColors.primary : .secondary)
+                        }
+                    }
                     connectionIndicator
                     creationMenu
                 }
             }
+        }
+        .sheet(isPresented: $showModelPicker) {
+            ModelPickerView(
+                models: appState.availableModels,
+                selectedModelId: $selectedModelId,
+                onDismiss: { showModelPicker = false }
+            )
+            .presentationDetents([.medium, .large])
         }
         .overlay {
             if sessions.isEmpty {
@@ -357,6 +387,10 @@ public struct SessionListView: View {
             startObserving()
             loadExpandedState()
             appState.configureVoiceAgent(forProject: project.id)
+            resolveDefaultModel()
+        }
+        .onChange(of: appState.availableModels) { _ in
+            resolveDefaultModel()
         }
         .onDisappear {
             cancellable?.cancel()
@@ -383,6 +417,16 @@ public struct SessionListView: View {
                 createWorkstream()
             } label: {
                 Label("New Workstream", systemImage: "folder.badge.plus")
+            }
+
+            if !appState.availableModels.isEmpty {
+                Divider()
+
+                Button {
+                    showModelPicker = true
+                } label: {
+                    Label("Model: \(selectedModelDisplayName)", systemImage: "cpu")
+                }
             }
         } label: {
             if isCreatingSession {
@@ -454,6 +498,15 @@ public struct SessionListView: View {
 
         Divider()
 
+        Button {
+            archiveSession(session, archive: !session.isArchived)
+        } label: {
+            Label(
+                session.isArchived ? "Unarchive" : "Archive",
+                systemImage: session.isArchived ? "arrow.uturn.backward" : "archivebox"
+            )
+        }
+
         Button(role: .destructive) {
             deleteSession(session)
         } label: {
@@ -472,6 +525,15 @@ public struct SessionListView: View {
         }
 
         Divider()
+
+        Button {
+            archiveSession(group.parent, archive: !group.parent.isArchived)
+        } label: {
+            Label(
+                group.parent.isArchived ? "Unarchive" : "Archive",
+                systemImage: group.parent.isArchived ? "arrow.uturn.backward" : "archivebox"
+            )
+        }
 
         Button(role: .destructive) {
             deleteSession(group.parent)
@@ -497,6 +559,28 @@ public struct SessionListView: View {
                 .frame(width: 8, height: 8)
         }
     }
+
+    // MARK: - Model Selector
+
+    private var selectedModelDisplayName: String {
+        guard let modelId = selectedModelId else { return "Default" }
+        if let model = appState.availableModels.first(where: { $0.id == modelId }) {
+            return model.name
+        }
+        // Fallback: strip provider prefix
+        let parts = modelId.split(separator: ":", maxSplits: 1)
+        return parts.count > 1 ? String(parts[1]) : modelId
+    }
+
+    private func resolveDefaultModel() {
+        if selectedModelId == nil {
+            selectedModelId = ModelPreferences.resolveModel(
+                available: appState.availableModels,
+                desktopDefault: appState.desktopDefaultModel
+            )
+        }
+    }
+
 
     // MARK: - GRDB Observation
 
@@ -562,8 +646,15 @@ public struct SessionListView: View {
         guard let sync = appState.syncManager else { return }
         isCreatingSession = true
         do {
-            try sync.createSession(projectId: project.id, initialPrompt: nil)
-            AnalyticsManager.shared.capture("mobile_session_created")
+            try sync.createSession(
+                projectId: project.id,
+                initialPrompt: nil,
+                provider: ModelPreferences.providerFromModelId(selectedModelId),
+                model: selectedModelId
+            )
+            AnalyticsManager.shared.capture("mobile_session_created", properties: [
+                "model": selectedModelId ?? "default"
+            ])
         } catch {
             print("Failed to create session: \(error)")
         }
@@ -580,7 +671,9 @@ public struct SessionListView: View {
             try sync.createSession(
                 projectId: project.id,
                 initialPrompt: nil,
-                sessionType: "workstream"
+                sessionType: "workstream",
+                provider: ModelPreferences.providerFromModelId(selectedModelId),
+                model: selectedModelId
             )
             AnalyticsManager.shared.capture("mobile_workstream_created")
         } catch {
@@ -598,7 +691,9 @@ public struct SessionListView: View {
             try sync.createSession(
                 projectId: project.id,
                 initialPrompt: nil,
-                parentSessionId: parentId
+                parentSessionId: parentId,
+                provider: ModelPreferences.providerFromModelId(selectedModelId),
+                model: selectedModelId
             )
             AnalyticsManager.shared.capture("mobile_child_session_created")
             // Auto-expand the parent workstream
@@ -660,6 +755,17 @@ public struct SessionListView: View {
             }
         } catch {
             print("Failed to convert to workstream: \(error)")
+        }
+    }
+
+    /// Archive or unarchive a session.
+    private func archiveSession(_ session: Session, archive: Bool) {
+        guard let sync = appState.syncManager else { return }
+        do {
+            try sync.setSessionArchived(sessionId: session.id, isArchived: archive)
+            AnalyticsManager.shared.capture(archive ? "mobile_session_archived" : "mobile_session_unarchived")
+        } catch {
+            print("Failed to \(archive ? "archive" : "unarchive") session: \(error)")
         }
     }
 
@@ -800,8 +906,15 @@ struct SessionRow: View {
                     .font(isChild ? .callout : .body)
                     .fontWeight(session.hasUnread ? .semibold : .regular)
                     .lineLimit(1)
+                    .foregroundStyle(session.isArchived ? .secondary : .primary)
 
                 HStack(spacing: 6) {
+                    if session.isArchived {
+                        Image(systemName: "archivebox")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+
                     ProviderBadge(provider: session.provider, model: session.model)
 
                     if let phase = session.phase, !phase.isEmpty {
@@ -859,20 +972,20 @@ struct PhaseBadge: View {
         switch phase {
         case "backlog": return "Backlog"
         case "planning": return "Planning"
-        case "implementing": return "Impl"
+        case "implementing": return "Implementing"
         case "validating": return "Validating"
-        case "complete": return "Done"
+        case "complete": return "Complete"
         default: return phase.capitalized
         }
     }
 
     private var phaseColor: Color {
         switch phase {
-        case "backlog": return .gray
-        case "planning": return .purple
-        case "implementing": return .blue
-        case "validating": return .orange
-        case "complete": return .green
+        case "backlog": return Color(hex: 0x6b7280)  // gray
+        case "planning": return Color(hex: 0x60a5fa)  // blue
+        case "implementing": return Color(hex: 0xeab308)  // yellow
+        case "validating": return Color(hex: 0xa78bfa)  // purple
+        case "complete": return Color(hex: 0x4ade80)  // green
         default: return .gray
         }
     }

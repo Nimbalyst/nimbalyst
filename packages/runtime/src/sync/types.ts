@@ -490,6 +490,10 @@ export interface CreateSessionRequest {
   sessionType?: string;
   /** Parent session ID for creating child sessions within a workstream */
   parentSessionId?: string;
+  /** Provider ID selected by mobile (e.g., "claude-code"). Falls back to desktop default if omitted. */
+  provider?: string;
+  /** Model ID selected by mobile (e.g., "claude-code:opus"). Falls back to desktop default if omitted. */
+  model?: string;
   /** Timestamp when request was created */
   timestamp: number;
 }
@@ -571,8 +575,24 @@ export interface SyncedSettings {
   openaiApiKey?: string;
   /** Voice mode settings */
   voiceMode?: SyncedVoiceModeSettings;
+  /** Available AI models from desktop, for mobile model picker */
+  availableModels?: SyncedAvailableModel[];
+  /** Desktop's default model ID (e.g., "claude-code:opus") */
+  defaultModel?: string;
   /** Version for handling future upgrades */
   version: number;
+}
+
+/**
+ * An AI model available on the desktop, synced to mobile for the model picker.
+ */
+export interface SyncedAvailableModel {
+  /** Full model ID (e.g., "claude-code:opus", "claude:claude-sonnet-4-20250514") */
+  id: string;
+  /** Display name (e.g., "Claude Opus 4.6", "Claude Sonnet 4") */
+  name: string;
+  /** Provider identifier (e.g., "claude-code", "claude", "openai") */
+  provider: string;
 }
 
 /**
