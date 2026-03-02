@@ -39,6 +39,14 @@ export const sharedDocumentsAtom = atom<SharedDocument[]>([]);
 export const teamSyncStatusAtom = atom<'disconnected' | 'connecting' | 'syncing' | 'connected' | 'error'>('disconnected');
 
 /**
+ * Whether the current workspace has an active team configured.
+ * Set to true when initSharedDocuments successfully resolves team config,
+ * false when no team is found. Used to conditionally show team-only UI
+ * (e.g., the collab mode nav button).
+ */
+export const workspaceHasTeamAtom = atom(false);
+
+/**
  * Pending document to auto-open in CollabMode after switching modes.
  * Set by "Share to Team" action, consumed by CollabMode on activation.
  * Cleared after consumption. Carries initialContent for first-time shares
@@ -185,6 +193,9 @@ export async function initSharedDocuments(workspacePath: string, retryCount = 0)
       console.log('[collabDocuments] Could not resolve index config:', result.error);
       // Only retry for transient errors (key not yet available), not for "no team found"
       const isTransient = result.error && !result.error.includes('No team found');
+      if (!isTransient) {
+        store.set(workspaceHasTeamAtom, false);
+      }
       const maxRetries = 5;
       if (isTransient && retryCount < maxRetries) {
         const delayMs = Math.min(3000 * Math.pow(2, retryCount), 30000);
@@ -197,6 +208,7 @@ export async function initSharedDocuments(workspacePath: string, retryCount = 0)
       return;
     }
 
+    store.set(workspaceHasTeamAtom, true);
     const { orgId, orgKeyBase64, serverUrl, userId } = result.config;
 
     // Import the provider class from runtime
@@ -311,5 +323,6 @@ export function destroyTeamSync(): void {
     activeProvider = null;
     activeWorkspacePath = null;
     store.set(teamSyncStatusAtom, 'disconnected');
+    store.set(workspaceHasTeamAtom, false);
   }
 }

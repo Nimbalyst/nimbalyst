@@ -368,7 +368,7 @@ export function VoiceModeButton({ workspacePath }: VoiceModeButtonProps) {
   ) : undefined;
 
   return (
-    <HelpTooltip testId="voice-mode-toggle" extraContent={contextExtraContent}>
+    <HelpTooltip testId="voice-mode-toggle" placement="right" extraContent={contextExtraContent}>
       <div className="relative">
         <button
           onClick={handleToggleVoice}

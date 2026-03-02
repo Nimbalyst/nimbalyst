@@ -15,9 +15,11 @@ interface StytchAuthState {
 interface UserMenuPopoverProps {
   onNavigateSettings: (scope: SettingsScope, category?: SettingsCategory) => void;
   onClose: () => void;
+  /** Whether the user has a team or mobile sync configured for this workspace */
+  isProjectConnected?: boolean;
 }
 
-export function UserMenuPopover({ onNavigateSettings, onClose }: UserMenuPopoverProps) {
+export function UserMenuPopover({ onNavigateSettings, onClose, isProjectConnected = false }: UserMenuPopoverProps) {
   const [authState, setAuthState] = useState<StytchAuthState | null>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
 
@@ -96,20 +98,21 @@ export function UserMenuPopover({ onNavigateSettings, onClose }: UserMenuPopover
         onClose();
       },
     },
-    {
+    // Only show Team Settings when the user is connected to a team/sync
+    ...(isProjectConnected ? [{
       label: 'Team Settings',
       icon: 'group' as const,
       onClick: () => {
         onNavigateSettings('project', 'team');
         onClose();
       },
-    },
+    }] : []),
   ];
 
   return (
     <div
       ref={popoverRef}
-      className="absolute bottom-full left-0 mb-2 ml-1 w-56 bg-nim-secondary border border-nim rounded-lg shadow-lg z-50 overflow-hidden"
+      className="absolute bottom-0 left-full ml-2 w-56 bg-nim-secondary border border-nim rounded-lg shadow-lg z-50 overflow-hidden"
       data-testid="user-menu-popover"
     >
       {/* Navigation links */}
@@ -127,32 +130,34 @@ export function UserMenuPopover({ onNavigateSettings, onClose }: UserMenuPopover
         ))}
       </div>
 
-      {/* Separator */}
-      <div className="border-t border-nim" />
-
-      {/* Identity row */}
-      <button
-        className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-nim-tertiary cursor-pointer border-none bg-transparent text-left transition-colors duration-100"
-        onClick={() => {
-          onNavigateSettings('user', 'sync');
-          onClose();
-        }}
-        data-testid="user-menu-identity"
-      >
-        <div className="w-7 h-7 rounded-full bg-nim-primary flex items-center justify-center shrink-0">
-          <span className="text-xs font-semibold text-white leading-none">
-            {email ? email[0].toUpperCase() : '?'}
-          </span>
-        </div>
-        <div className="flex flex-col min-w-0">
-          <span className="text-sm text-nim truncate">
-            {email ?? 'No account'}
-          </span>
-          <span className="text-xs text-nim-muted">
-            {isSignedIn ? 'Signed in' : 'Not signed in'}
-          </span>
-        </div>
-      </button>
+      {/* Identity row - only shown when connected to team/sync */}
+      {isProjectConnected && (
+        <>
+          <div className="border-t border-nim" />
+          <button
+            className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-nim-tertiary cursor-pointer border-none bg-transparent text-left transition-colors duration-100"
+            onClick={() => {
+              onNavigateSettings('user', 'sync');
+              onClose();
+            }}
+            data-testid="user-menu-identity"
+          >
+            <div className="w-7 h-7 rounded-full bg-nim-primary flex items-center justify-center shrink-0">
+              <span className="text-xs font-semibold text-white leading-none">
+                {email ? email[0].toUpperCase() : '?'}
+              </span>
+            </div>
+            <div className="flex flex-col min-w-0">
+              <span className="text-sm text-nim truncate">
+                {email ?? 'No account'}
+              </span>
+              <span className="text-xs text-nim-muted">
+                {isSignedIn ? 'Signed in' : 'Not signed in'}
+              </span>
+            </div>
+          </button>
+        </>
+      )}
     </div>
   );
 }

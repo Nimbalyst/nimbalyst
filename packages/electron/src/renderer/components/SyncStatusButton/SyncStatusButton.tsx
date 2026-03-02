@@ -241,7 +241,7 @@ export const SyncStatusButton: React.FC<SyncStatusButtonProps> = ({ workspacePat
 
   return (
     <div className="sync-status-button-container relative">
-      <HelpTooltip testId="gutter-sync-button">
+      <HelpTooltip testId="gutter-sync-button" placement="right">
         <button
           ref={buttonRef}
           className={`sync-status-button nav-button relative w-9 h-9 flex items-center justify-center bg-transparent border-none rounded-md cursor-pointer transition-all duration-150 p-0 hover:bg-nim-tertiary active:scale-95 focus-visible:outline-2 focus-visible:outline-[var(--nim-primary)] focus-visible:outline-offset-2 ${getButtonColorClass()}`}

@@ -15,7 +15,8 @@ import { CodexUsageIndicator } from '../CodexUsageIndicator';
 import { VoiceModeButton } from '../UnifiedAI/VoiceModeButton';
 import { useExtensionGutterButtons } from '../../extensions/panels/usePanels';
 import { HelpTooltip } from '../../help';
-import { terminalFeatureAvailableAtom } from '../../store/atoms/appSettings';
+import { terminalFeatureAvailableAtom, syncEnabledAtom, syncEnabledProjectsAtom } from '../../store/atoms/appSettings';
+import { workspaceHasTeamAtom } from '../../store/atoms/collabDocuments';
 import { UserMenuPopover } from './UserMenuPopover';
 
 export type NavigationMode = 'planning' | 'coding';
@@ -93,6 +94,17 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
 
   // Check if terminal feature is available (developer mode + feature enabled)
   const isTerminalAvailable = useAtomValue(terminalFeatureAvailableAtom);
+
+  // Only show collab mode button when workspace has an active team
+  const hasTeam = useAtomValue(workspaceHasTeamAtom);
+
+  // Check if mobile sync is configured for this workspace
+  const syncEnabled = useAtomValue(syncEnabledAtom);
+  const syncEnabledProjects = useAtomValue(syncEnabledProjectsAtom);
+  const isSyncConfigured = syncEnabled && !!workspacePath && syncEnabledProjects.includes(workspacePath);
+
+  // User is "connected" to this project if they have a team or mobile sync configured
+  const isProjectConnected = hasTeam || isSyncConfigured;
 
   // Get extension panel buttons from the panel registry
   const extensionPanelButtons = useExtensionGutterButtons();
@@ -193,7 +205,7 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
         {contentModeButtonsTop.map((button) => {
           const testId = `${button.id}-mode-button`;
           return (
-            <HelpTooltip key={button.id} testId={testId}>
+            <HelpTooltip key={button.id} testId={testId} placement="right">
               <button
                 className={`nav-button relative w-9 h-9 flex items-center justify-center border-none rounded-md cursor-pointer transition-all duration-150 p-0 active:scale-95 focus-visible:outline-2 focus-visible:outline-[var(--nim-primary)] focus-visible:outline-offset-2 ${contentMode === button.contentMode && !activeExtensionPanel ? 'active bg-nim-primary text-white hover:bg-nim-primary-hover' : 'bg-transparent text-nim-muted hover:bg-nim-tertiary hover:text-nim'}`}
                 onClick={() => {
@@ -233,7 +245,7 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
         {contentModeButtonsAgent.map((button) => {
           const testId = `${button.id}-mode-button`;
           return (
-            <HelpTooltip key={button.id} testId={testId}>
+            <HelpTooltip key={button.id} testId={testId} placement="right">
               <button
                 className={`nav-button relative w-9 h-9 flex items-center justify-center border-none rounded-md cursor-pointer transition-all duration-150 p-0 active:scale-95 focus-visible:outline-2 focus-visible:outline-[var(--nim-primary)] focus-visible:outline-offset-2 ${contentMode === button.contentMode && !activeExtensionPanel ? 'active bg-nim-primary text-white hover:bg-nim-primary-hover' : 'bg-transparent text-nim-muted hover:bg-nim-tertiary hover:text-nim'}`}
                 onClick={() => {
@@ -272,7 +284,7 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
         {contentModeButtonsTracker.map((button) => {
           const testId = `${button.id}-button`;
           return (
-            <HelpTooltip key={button.id} testId={testId}>
+            <HelpTooltip key={button.id} testId={testId} placement="right">
               <button
                 className={`nav-button relative w-9 h-9 flex items-center justify-center border-none rounded-md cursor-pointer transition-all duration-150 p-0 active:scale-95 focus-visible:outline-2 focus-visible:outline-[var(--nim-primary)] focus-visible:outline-offset-2 ${contentMode === button.contentMode && !activeExtensionPanel ? 'active bg-nim-primary text-white hover:bg-nim-primary-hover' : 'bg-transparent text-nim-muted hover:bg-nim-tertiary hover:text-nim'}`}
                 onClick={() => {
@@ -295,33 +307,35 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
         })}
       </div>
 
-      {/* Content Mode Switcher - Collab Group (Shared Docs) */}
-      <div className="nav-section nav-content-modes flex flex-col items-center gap-1 w-full px-1.5 py-1">
-        {contentModeButtonsCollab.map((button) => {
-          const testId = `${button.id}-button`;
-          return (
-            <HelpTooltip key={button.id} testId={testId}>
-              <button
-                className={`nav-button relative w-9 h-9 flex items-center justify-center border-none rounded-md cursor-pointer transition-all duration-150 p-0 active:scale-95 focus-visible:outline-2 focus-visible:outline-[var(--nim-primary)] focus-visible:outline-offset-2 ${contentMode === button.contentMode && !activeExtensionPanel ? 'active bg-nim-primary text-white hover:bg-nim-primary-hover' : 'bg-transparent text-nim-muted hover:bg-nim-tertiary hover:text-nim'}`}
-                onClick={() => {
-                  // Clear any active fullscreen extension panel when switching to a content mode
-                  onExtensionPanelChange?.(null);
-                  handleButtonClick(button);
-                }}
-                aria-pressed={contentMode === button.contentMode && !activeExtensionPanel}
-                data-mode={button.contentMode || button.id}
-                data-testid={testId}
-              >
-                <MaterialSymbol
-                  icon={button.icon}
-                  size={20}
-                  fill={contentMode === button.contentMode && !activeExtensionPanel}
-                />
-              </button>
-            </HelpTooltip>
-          );
-        })}
-      </div>
+      {/* Content Mode Switcher - Collab Group (Shared Docs) - only shown when workspace has a team */}
+      {hasTeam && (
+        <div className="nav-section nav-content-modes flex flex-col items-center gap-1 w-full px-1.5 py-1">
+          {contentModeButtonsCollab.map((button) => {
+            const testId = `${button.id}-button`;
+            return (
+              <HelpTooltip key={button.id} testId={testId} placement="right">
+                <button
+                  className={`nav-button relative w-9 h-9 flex items-center justify-center border-none rounded-md cursor-pointer transition-all duration-150 p-0 active:scale-95 focus-visible:outline-2 focus-visible:outline-[var(--nim-primary)] focus-visible:outline-offset-2 ${contentMode === button.contentMode && !activeExtensionPanel ? 'active bg-nim-primary text-white hover:bg-nim-primary-hover' : 'bg-transparent text-nim-muted hover:bg-nim-tertiary hover:text-nim'}`}
+                  onClick={() => {
+                    // Clear any active fullscreen extension panel when switching to a content mode
+                    onExtensionPanelChange?.(null);
+                    handleButtonClick(button);
+                  }}
+                  aria-pressed={contentMode === button.contentMode && !activeExtensionPanel}
+                  data-mode={button.contentMode || button.id}
+                  data-testid={testId}
+                >
+                  <MaterialSymbol
+                    icon={button.icon}
+                    size={20}
+                    fill={contentMode === button.contentMode && !activeExtensionPanel}
+                  />
+                </button>
+              </HelpTooltip>
+            );
+          })}
+        </div>
+      )}
 
       {/* Fullscreen Extension Panels - appear below Agent as additional modes */}
       {extensionPanelButtons.filter(p => p.placement === 'fullscreen').length > 0 && (
@@ -422,7 +436,7 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
           const isActive = button.id === 'terminal' && terminalPanelVisible;
           const testId = `${button.id}-panel-button`;
           return (
-            <HelpTooltip key={button.id} testId={testId}>
+            <HelpTooltip key={button.id} testId={testId} placement="right">
               <button
                 className={`nav-button relative w-9 h-9 flex items-center justify-center border-none rounded-md cursor-pointer transition-all duration-150 p-0 active:scale-95 focus-visible:outline-2 focus-visible:outline-[var(--nim-primary)] focus-visible:outline-offset-2 ${isActive ? 'active bg-nim-primary text-white hover:bg-nim-primary-hover' : 'bg-transparent text-nim-muted hover:bg-nim-tertiary hover:text-nim'}`}
                 onClick={() => handleButtonClick(button)}
@@ -468,7 +482,7 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
           <ThemeToggleButton />
         </div>
 
-        <HelpTooltip testId="gutter-feedback-button">
+        <HelpTooltip testId="gutter-feedback-button" placement="right">
           <button
             className="nimbalyst-feedback-button nav-button relative w-9 h-9 flex items-center justify-center bg-transparent border-none rounded-md text-nim-muted cursor-pointer transition-all duration-150 p-0 hover:bg-nim-tertiary hover:text-nim active:scale-95 focus-visible:outline-2 focus-visible:outline-[var(--nim-primary)] focus-visible:outline-offset-2"
             onClick={() => {
@@ -490,18 +504,19 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
             <UserMenuPopover
               onNavigateSettings={handleNavigateSettings}
               onClose={() => setUserMenuOpen(false)}
+              isProjectConnected={isProjectConnected}
             />
           )}
-          <HelpTooltip testId="gutter-user-button">
+          <HelpTooltip testId="gutter-user-button" placement="right">
             <button
               className={`nav-button relative w-9 h-9 flex items-center justify-center border-none rounded-md cursor-pointer transition-all duration-150 p-0 active:scale-95 focus-visible:outline-2 focus-visible:outline-[var(--nim-primary)] focus-visible:outline-offset-2 ${userMenuOpen ? 'bg-nim-tertiary text-nim' : 'bg-transparent text-nim-muted hover:bg-nim-tertiary hover:text-nim'}`}
               onClick={() => setUserMenuOpen(!userMenuOpen)}
-              aria-label="User menu"
+              aria-label={isProjectConnected ? 'User menu' : 'Settings'}
               aria-expanded={userMenuOpen}
               data-testid="gutter-user-button"
             >
               <MaterialSymbol
-                icon="person"
+                icon={isProjectConnected ? 'person' : 'settings'}
                 size={20}
               />
             </button>

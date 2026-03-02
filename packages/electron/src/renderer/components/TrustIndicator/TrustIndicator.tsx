@@ -278,7 +278,7 @@ export const TrustIndicator: React.FC<TrustIndicatorProps> = ({
 
   return (
     <div className="trust-indicator-container relative">
-      <HelpTooltip testId="gutter-permissions-button">
+      <HelpTooltip testId="gutter-permissions-button" placement="right">
         <button
           ref={buttonRef}
           className={`trust-indicator nav-button relative w-9 h-9 flex items-center justify-center bg-transparent border-none rounded-md cursor-pointer transition-all duration-150 p-0 hover:bg-nim-tertiary active:scale-95 focus-visible:outline-2 focus-visible:outline-[var(--nim-primary)] focus-visible:outline-offset-2 ${getStatusClass()} ${getIndicatorColorClass()}`}
