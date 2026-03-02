@@ -20,6 +20,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.55.4] - 2026-03-02
+
+
+### Added
+- Bidirectional draft sync and queued prompts between desktop and iOS
+- Multi-account team management with admin role editing and account picker for team creation
+- Editable tag rollup in workstream headers with inline autocomplete
+- Cmd+Shift+N shortcut to create new AI session from any mode
+- New agent sessions pre-populated with @file reference to currently open document
+- Kanban board walkthrough and PostHog analytics for session view mode switching
+
+### Changed
+- Reduced verbose logging across CollabV3Sync, TeamService, SyncManager, AIService, TrackerSyncManager
+- Skip model fetching for disabled AI providers (fixes LM Studio fetch error when not in use)
+
+### Fixed
+- Kanban view auto-exits when navigating to a specific session (tray, quick open, double-click)
+- Session token corruption when exchanging for secondary accounts
+- Undecryptable project entries cleaned up during sync instead of logging errors
+- Tray icon uses macOS template images for correct dark/light menu bar rendering
+- Tray icon uses system appearance instead of app theme for foreground color
+- Tray BGRA byte order fix (blue dots were rendering as orange)
+- Unread sessions now seeded from database on tray init
+- Key envelope overwrite vulnerability closed in DocumentRoom (empty sender_user_id truthiness check)
+- Sub-agent transcript truncation and tool name mismatch (Agent vs Task rename)
+- Stale session data when navigating to completed sessions with cached mid-stream snapshots
+
 ## [0.55.3] - 2026-03-02
 
 
