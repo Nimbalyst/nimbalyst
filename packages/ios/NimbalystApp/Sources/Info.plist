@@ -17,20 +17,7 @@
 	<key>CFBundlePackageType</key>
 	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0</string>
-	<key>CFBundleVersion</key>
-	<string>1</string>
-	<key>LSRequiresIPhoneOS</key>
-	<true/>
-	<key>UIApplicationSceneManifest</key>
-	<dict>
-		<key>UIApplicationSupportsMultipleScenes</key>
-		<false/>
-	</dict>
-	<key>NSCameraUsageDescription</key>
-	<string>Nimbalyst uses the camera to scan QR codes for pairing with your Mac.</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Nimbalyst uses the microphone for voice mode to communicate with your coding agent.</string>
+	<string>1.0.1</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -42,19 +29,34 @@
 			</array>
 		</dict>
 	</array>
-	<key>UILaunchScreen</key>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Nimbalyst uses the camera to scan QR codes for pairing with your Mac.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Nimbalyst uses the microphone for voice mode to communicate with your coding agent.</string>
+	<key>UIApplicationSceneManifest</key>
 	<dict>
-		<key>UIImageName</key>
-		<string>Splash</string>
-		<key>UIColorName</key>
-		<string>SystemBackgroundColor</string>
-		<key>UIImageRespectsSafeAreaInsets</key>
-		<true/>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
 	</dict>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>
 	</array>
+	<key>UILaunchScreen</key>
+	<dict>
+		<key>UIColorName</key>
+		<string>SystemBackgroundColor</string>
+		<key>UIImageName</key>
+		<string>Splash</string>
+		<key>UIImageRespectsSafeAreaInsets</key>
+		<true/>
+	</dict>
 	<key>UIRequiredDeviceCapabilities</key>
 	<array>
 		<string>armv7</string>
@@ -65,8 +67,6 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
-	<key>ITSAppUsesNonExemptEncryption</key>
-	<false/>
 	<key>UISupportedInterfaceOrientations~ipad</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
