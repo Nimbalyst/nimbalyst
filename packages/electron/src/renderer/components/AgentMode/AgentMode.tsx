@@ -953,11 +953,19 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
   const viewMode = useAtomValue(viewModeAtom);
   const setViewMode = useSetAtom(setViewModeAtom);
 
+  // Auto-exit kanban view when a specific session is selected.
+  // This covers ALL navigation paths: tray click, kanban double-click,
+  // session list click, openSessionInTab, etc.
+  useEffect(() => {
+    if (selectedWorkstream && viewMode === 'kanban') {
+      setViewMode('list');
+    }
+  }, [selectedWorkstream?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Double-click a kanban card: select the session and switch back to list view
   const handleKanbanSessionOpen = useCallback((sessionId: string) => {
     handleSessionSelect(sessionId);
-    setViewMode('list');
-  }, [handleSessionSelect, setViewMode]);
+  }, [handleSessionSelect]);
 
   const kanbanContent = (
     <SessionKanbanBoard
