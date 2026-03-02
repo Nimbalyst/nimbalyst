@@ -13,8 +13,9 @@
 import React, { useCallback } from 'react';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import { store } from '@nimbalyst/runtime/store';
+import { useAtomValue } from 'jotai';
 import { useFileActions } from '../hooks/useFileActions';
-import { registerDocumentInIndex, pendingCollabDocumentAtom } from '../store/atoms/collabDocuments';
+import { registerDocumentInIndex, pendingCollabDocumentAtom, workspaceHasTeamAtom } from '../store/atoms/collabDocuments';
 import { setWindowModeAtom } from '../store/atoms/windowMode';
 
 interface CommonFileActionsProps {
@@ -44,6 +45,7 @@ export function CommonFileActions({
   useButtons = false,
 }: CommonFileActionsProps) {
   const actions = useFileActions(filePath, fileName);
+  const hasTeam = useAtomValue(workspaceHasTeamAtom);
   const handleShareToTeam = useCallback(async () => {
     // Read file content to seed the collaborative document on first share
     let initialContent: string | undefined;
@@ -132,8 +134,8 @@ export function CommonFileActions({
         </Item>
       )}
 
-      {/* Share to Team (collaborative editing - conditional on file type) */}
-      {actions.isShareable && (
+      {/* Share to Team (collaborative editing - conditional on file type and team connection) */}
+      {actions.isShareable && hasTeam && (
         <Item
           className={menuItemClass}
           onClick={() => { handleShareToTeam(); onClose(); }}
