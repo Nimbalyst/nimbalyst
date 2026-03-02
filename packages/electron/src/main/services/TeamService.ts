@@ -184,7 +184,9 @@ export async function getOrgScopedJwt(orgId: string, accountOrgId?: string): Pro
   // Stytch session exchange replaces the session token -- the old one is now
   // invalid. We MUST persist the new token so that refreshSession() and
   // getSessionToken() continue to work.
-  if (data.sessionToken) {
+  // BUT: only update the global token when operating under the primary account.
+  // Secondary account exchanges must NOT overwrite the primary's token.
+  if (data.sessionToken && !accountOrgId) {
     updateSessionToken(data.sessionToken);
   }
 
