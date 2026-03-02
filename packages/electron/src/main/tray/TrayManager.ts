@@ -270,6 +270,7 @@ export class TrayManager {
         if (session) {
           session.status = 'completed';
           session.isStreaming = false;
+          session.hasPendingPrompt = false; // Session done -- can't be blocked
           session.completedAt = Date.now();
 
           // Check if app is backgrounded -- if so, mark as unread

@@ -11,6 +11,7 @@ import { ProviderFactory } from '@nimbalyst/runtime/ai/server';
 import type { BrowserWindow } from 'electron';
 import { logger } from '../../utils/logger';
 import type { PermissionScope } from '@nimbalyst/runtime';
+import { TrayManager } from '../../tray/TrayManager';
 
 const log = logger.ai;
 
@@ -334,6 +335,8 @@ function handleExitPlanModeResponse(
     startNewSession: response.startNewSession,
     answeredBy: 'mobile',
   });
+
+  TrayManager.getInstance().onPromptResolved(sessionId);
 }
 
 /**
@@ -392,6 +395,7 @@ async function handleGitCommitResponse(
     ipcMain.emit(promptId, null, result);
     // Notify renderer to clear the pending interactive prompt indicator
     notifyAllWindows('ai:gitCommitProposalResolved', { sessionId, proposalId: promptId });
+    TrayManager.getInstance().onPromptResolved(sessionId);
   };
 
   if (response.action === 'cancelled') {

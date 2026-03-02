@@ -6,6 +6,7 @@ import path from "path";
 import { existsSync } from "fs";
 import { safeHandle, safeOn } from '../utils/ipcRegistry';
 import type { SessionCreateResult } from '../../shared/ipc/types';
+import { TrayManager } from '../tray/TrayManager';
 
 // Initialize session manager
 const sessionManager = new SessionManager();
@@ -1532,6 +1533,7 @@ export async function registerSessionHandlers() {
                 const { ipcMain } = await import('electron');
                 ipcMain.emit(canonicalPromptId, null, response);
                 event.sender.send('ai:gitCommitProposalResolved', { sessionId, proposalId: canonicalPromptId });
+                TrayManager.getInstance().onPromptResolved(sessionId);
             }
 
             return { success: true, responseContent };

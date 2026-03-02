@@ -4074,7 +4074,8 @@ export class AIService {
           }
         }
 
-        // Clear pending prompt state for mobile sync
+        // Clear pending prompt state for mobile sync and tray
+        TrayManager.getInstance().onPromptResolved(sessionId);
         const syncProvider = getSyncProvider();
         if (syncProvider) {
           syncProvider.pushChange(sessionId, {
