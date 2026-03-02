@@ -28,8 +28,10 @@ import {
   workstreamSessionsAtom,
   workstreamTitleAtom,
   workstreamProcessingAtom,
+  workstreamTagsAtom,
   sessionArchivedAtom,
   sessionStoreAtom,
+  sessionRegistryAtom,
   sessionParentIdDerivedAtom,
   sessionWorktreeIdAtom,
   loadSessionChildrenAtom,
@@ -62,6 +64,10 @@ import { useArchiveWorktreeDialog } from '../../hooks/useArchiveWorktreeDialog';
 import { detectFileType, type SerializableDocumentContext } from '../../hooks/useDocumentContext';
 import { getTextSelection } from '../UnifiedAI/TextSelectionIndicator';
 import { terminalListAtom, setActiveTerminal, loadTerminals } from '../../store/atoms/terminals';
+import {
+  sessionKanbanTagsAtom,
+  setSessionTagsAtom,
+} from '../../store/atoms/sessionKanban';
 
 export interface AgentWorkstreamPanelRef {
   closeActiveTab: () => void;
@@ -106,6 +112,9 @@ const WorkstreamHeader: React.FC<{
   const layoutMode = useAtomValue(workstreamLayoutModeAtom(workstreamId));
   const hasTabs = useAtomValue(workstreamHasOpenFilesAtom(workstreamId));
   const sessions = useAtomValue(workstreamSessionsAtom(workstreamId));
+  const tags = useAtomValue(workstreamTagsAtom(workstreamId));
+  const allTags = useAtomValue(sessionKanbanTagsAtom);
+  const setSessionTags = useSetAtom(setSessionTagsAtom);
   const [isArchived, setIsArchived] = useAtom(sessionArchivedAtom(workstreamId));
   const setLayoutMode = useSetAtom(setWorkstreamLayoutModeAtom);
   const updateSessionStore = useSetAtom(updateSessionStoreAtom);
@@ -114,6 +123,12 @@ const WorkstreamHeader: React.FC<{
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(title ?? '');
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Tag editing state
+  const [isEditingTags, setIsEditingTags] = useState(false);
+  const [tagInput, setTagInput] = useState('');
+  const tagInputRef = useRef<HTMLInputElement>(null);
+  const tagDropdownRef = useRef<HTMLDivElement>(null);
 
   // Terminal button context menu state
   const [terminalContextMenu, setTerminalContextMenu] = useState<{ x: number; y: number } | null>(null);
@@ -152,6 +167,78 @@ const WorkstreamHeader: React.FC<{
     setTerminalContextMenu(null);
     onCreateNewTerminal?.();
   }, [onCreateNewTerminal]);
+
+  // Close tag dropdown when clicking outside
+  useEffect(() => {
+    if (!isEditingTags) return;
+
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        tagDropdownRef.current && !tagDropdownRef.current.contains(e.target as Node) &&
+        tagInputRef.current && !tagInputRef.current.contains(e.target as Node)
+      ) {
+        setIsEditingTags(false);
+        setTagInput('');
+      }
+    };
+
+    const handleEscape = (e: globalThis.KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsEditingTags(false);
+        setTagInput('');
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [isEditingTags]);
+
+  // Focus tag input when editing starts
+  useEffect(() => {
+    if (isEditingTags && tagInputRef.current) {
+      tagInputRef.current.focus();
+    }
+  }, [isEditingTags]);
+
+  // Get the root session's own tags from registry (what we write to)
+  const registry = useAtomValue(sessionRegistryAtom);
+  const rootTags = registry.get(workstreamId)?.tags ?? [];
+
+  const handleAddTag = useCallback((tag: string) => {
+    const trimmed = tag.trim().toLowerCase();
+    if (!trimmed || rootTags.includes(trimmed)) return;
+    setSessionTags({ sessionId: workstreamId, tags: [...rootTags, trimmed] });
+    setTagInput('');
+  }, [workstreamId, rootTags, setSessionTags]);
+
+  const handleRemoveTag = useCallback((tag: string) => {
+    setSessionTags({ sessionId: workstreamId, tags: rootTags.filter(t => t !== tag) });
+  }, [workstreamId, rootTags, setSessionTags]);
+
+  const handleTagInputKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    e.stopPropagation();
+    if (e.key === 'Enter' && tagInput.trim()) {
+      e.preventDefault();
+      handleAddTag(tagInput);
+    } else if (e.key === 'Backspace' && !tagInput && rootTags.length > 0) {
+      handleRemoveTag(rootTags[rootTags.length - 1]);
+    } else if (e.key === 'Escape') {
+      setIsEditingTags(false);
+      setTagInput('');
+    }
+  }, [tagInput, rootTags, handleAddTag, handleRemoveTag]);
+
+  const filteredSuggestions = React.useMemo(() => {
+    if (!tagInput.trim()) return [];
+    const q = tagInput.trim().toLowerCase();
+    return allTags
+      .filter(t => t.name.toLowerCase().includes(q) && !tags.includes(t.name))
+      .slice(0, 5);
+  }, [tagInput, allTags, tags]);
 
   // A workstream has children if there are multiple sessions
   const hasChildren = sessions.length > 1;
@@ -278,6 +365,70 @@ const WorkstreamHeader: React.FC<{
             >
               {title}
             </h2>
+          )}
+        </div>
+
+        <div className="workstream-header-tags flex items-center gap-1 flex-wrap max-w-[50%] min-w-0 relative">
+          {tags.map(tag => (
+            <span
+              key={tag}
+              className="group flex items-center gap-0.5 text-[10px] font-medium leading-none pl-1.5 pr-1 py-0.5 rounded-full whitespace-nowrap cursor-default"
+              style={{ background: 'color-mix(in srgb, var(--nim-text) 8%, transparent)', color: 'var(--nim-text-faint)' }}
+            >
+              {tag}
+              <button
+                className="opacity-0 group-hover:opacity-100 flex items-center justify-center w-3 h-3 rounded-full border-none bg-transparent cursor-pointer text-[var(--nim-text-faint)] hover:text-[var(--nim-text)] transition-opacity duration-100"
+                onClick={() => handleRemoveTag(tag)}
+                title={`Remove tag "${tag}"`}
+              >
+                <MaterialSymbol icon="close" size={10} />
+              </button>
+            </span>
+          ))}
+          {isEditingTags ? (
+            <div className="relative">
+              <input
+                ref={tagInputRef}
+                type="text"
+                className="text-[10px] leading-none py-0.5 px-1.5 rounded-full border border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] text-[var(--nim-text)] outline-none w-[80px]"
+                placeholder="add tag..."
+                value={tagInput}
+                onChange={(e) => setTagInput(e.target.value)}
+                onKeyDown={handleTagInputKeyDown}
+                onBlur={() => {
+                  // Delay to allow click on suggestion
+                  setTimeout(() => {
+                    setIsEditingTags(false);
+                    setTagInput('');
+                  }, 150);
+                }}
+              />
+              {filteredSuggestions.length > 0 && (
+                <div
+                  ref={tagDropdownRef}
+                  className="absolute top-full left-0 mt-1 min-w-[120px] rounded-md z-[10000] py-0.5 text-[11px]"
+                  style={{ background: 'var(--nim-bg)', border: '1px solid var(--nim-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.3)' }}
+                >
+                  {filteredSuggestions.map(s => (
+                    <div
+                      key={s.name}
+                      className="px-2 py-1 cursor-pointer text-[var(--nim-text-muted)] hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)]"
+                      onMouseDown={(e) => { e.preventDefault(); handleAddTag(s.name); }}
+                    >
+                      {s.name} <span className="text-[var(--nim-text-faint)]">({s.count})</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <button
+              className="flex items-center justify-center w-4 h-4 rounded-full border border-dashed border-[var(--nim-border)] bg-transparent cursor-pointer text-[var(--nim-text-faint)] hover:border-[var(--nim-text-faint)] hover:text-[var(--nim-text-muted)] transition-colors duration-100"
+              onClick={() => setIsEditingTags(true)}
+              title="Add tag"
+            >
+              <MaterialSymbol icon="add" size={10} />
+            </button>
           )}
         </div>
 

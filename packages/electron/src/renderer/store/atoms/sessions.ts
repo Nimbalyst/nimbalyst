@@ -2110,6 +2110,34 @@ export const workstreamProcessingAtom = atomFamily((workstreamId: string) =>
 );
 
 /**
+ * Derived: Unique tags across all sessions in this workstream (parent + children).
+ * Returns a deduplicated, sorted array of tag strings.
+ */
+export const workstreamTagsAtom = atomFamily((workstreamId: string) =>
+  atom((get) => {
+    const sessions = get(workstreamSessionsAtom(workstreamId));
+    const registry = get(sessionRegistryAtom);
+    const tagSet = new Set<string>();
+
+    // Collect tags from the workstream root itself
+    const rootMeta = registry.get(workstreamId);
+    if (rootMeta?.tags) {
+      for (const tag of rootMeta.tags) tagSet.add(tag);
+    }
+
+    // Collect tags from all child sessions
+    for (const sessionId of sessions) {
+      const meta = registry.get(sessionId);
+      if (meta?.tags) {
+        for (const tag of meta.tags) tagSet.add(tag);
+      }
+    }
+
+    return Array.from(tagSet).sort();
+  })
+);
+
+/**
  * Derived: Does any session in this workstream have unread messages?
  */
 export const workstreamUnreadAtom = atomFamily((workstreamId: string) =>

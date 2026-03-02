@@ -142,6 +142,7 @@ export {
   workstreamSessionsAtom,
   setActiveSessionInWorkstreamAtom, // Wrapper that also marks as read
   workstreamProcessingAtom,
+  workstreamTagsAtom,
   workstreamUnreadAtom,
   workstreamPendingPromptAtom,
   workstreamPendingInteractivePromptAtom,
