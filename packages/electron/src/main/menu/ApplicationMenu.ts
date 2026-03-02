@@ -99,7 +99,6 @@ function createWindowListMenu(): any[] {
     });
 
     // Build menu items with groups
-    let shortcutIndex = 0;
 
     // Add workspace windows
     if (workspaceWindows.length > 0) {
@@ -108,11 +107,8 @@ function createWindowListMenu(): any[] {
         }
         menuItems.push({ label: 'Open Projects', enabled: false });
         workspaceWindows.forEach(({ window, title }) => {
-            const accelerator = shortcutIndex < 9 ? `CmdOrCtrl+${shortcutIndex + 1}` : undefined;
-            shortcutIndex++;
             menuItems.push({
                 label: title,
-                accelerator,
                 type: 'checkbox',
                 checked: !window.isDestroyed() && window.isFocused(),
                 click: async () => {
@@ -131,11 +127,8 @@ function createWindowListMenu(): any[] {
         }
         menuItems.push({ label: 'Open Documents', enabled: false });
         documentWindows.forEach(({ window, title }) => {
-            const accelerator = shortcutIndex < 9 ? `CmdOrCtrl+${shortcutIndex + 1}` : undefined;
-            shortcutIndex++;
             menuItems.push({
                 label: title,
-                accelerator,
                 type: 'checkbox',
                 checked: !window.isDestroyed() && window.isFocused(),
                 click: async () => {
