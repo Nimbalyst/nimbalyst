@@ -44,7 +44,7 @@ export function KeyboardShortcutsDialog({ isOpen, onClose }: KeyboardShortcutsDi
       title: 'File',
       shortcuts: [
         { label: 'New File / New Session', shortcut: KeyboardShortcuts.file.newFile }, // shared/KeyboardShortcuts.ts:9 - Cmd+N
-        { label: 'New Window', shortcut: KeyboardShortcuts.file.newWindow }, // shared/KeyboardShortcuts.ts:11 - Cmd+Shift+N
+        { label: 'New Session (any mode)', shortcut: KeyboardShortcuts.file.newSessionGlobal }, // shared/KeyboardShortcuts.ts:11 - Cmd+Shift+N
         { label: 'Open File', shortcut: KeyboardShortcuts.file.open }, // shared/KeyboardShortcuts.ts:12 - Cmd+O
         { label: 'Open Folder', shortcut: KeyboardShortcuts.file.openFolder }, // shared/KeyboardShortcuts.ts:13 - Cmd+Shift+O
         { label: 'Save', shortcut: KeyboardShortcuts.file.save }, // shared/KeyboardShortcuts.ts:14 - Cmd+S

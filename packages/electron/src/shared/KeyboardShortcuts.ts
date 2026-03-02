@@ -8,7 +8,7 @@ export const KeyboardShortcuts = {
   file: {
     newFile: 'Cmd+N',
     newSession: 'Cmd+N',
-    newWindow: 'Cmd+Shift+N',
+    newSessionGlobal: 'Cmd+Shift+N',
     open: 'Cmd+O',
     openFolder: 'Cmd+Shift+O',
     save: 'Cmd+S',
