@@ -112,14 +112,27 @@ function TrustStatusIcon({ status, onClick }: { status: TrustStatus; onClick?: (
   );
 }
 
-function RoleBadge({ role }: { role: 'admin' | 'member' }) {
-  return role === 'admin' ? (
-    <span className="px-[7px] py-[2px] rounded-[10px] text-[10px] font-semibold bg-[rgba(96,165,250,0.15)] text-[var(--nim-primary)]">
-      Admin
-    </span>
-  ) : (
-    <span className="px-[7px] py-[2px] rounded-[10px] text-[10px] font-semibold bg-[rgba(180,180,180,0.1)] text-[var(--nim-text-faint)]">
-      Member
+function RoleBadge({ role, editable, onChange }: { role: 'admin' | 'member'; editable?: boolean; onChange?: (newRole: 'admin' | 'member') => void }) {
+  const colorClass = role === 'admin'
+    ? 'bg-[rgba(96,165,250,0.15)] text-[var(--nim-primary)]'
+    : 'bg-[rgba(180,180,180,0.1)] text-[var(--nim-text-faint)]';
+
+  if (editable && onChange) {
+    return (
+      <select
+        value={role}
+        onChange={(e) => onChange(e.target.value as 'admin' | 'member')}
+        className={`${colorClass} px-[5px] py-[2px] rounded-[10px] text-[10px] font-semibold border-none cursor-pointer outline-none hover:ring-1 hover:ring-[var(--nim-primary)]`}
+      >
+        <option value="admin">Admin</option>
+        <option value="member">Member</option>
+      </select>
+    );
+  }
+
+  return (
+    <span className={`${colorClass} px-[7px] py-[2px] rounded-[10px] text-[10px] font-semibold`}>
+      {role === 'admin' ? 'Admin' : 'Member'}
     </span>
   );
 }
@@ -306,7 +319,7 @@ function NoTeamState({ gitRemote, onCreateTeam, loading }: {
 // Team Exists State
 // ============================================================================
 
-function TeamExistsState({ team, onInvite, onRemoveMember, onDeleteTeam, onLinkProject, onUnlinkProject, isAdmin, localGitRemote, fingerprints, myFingerprint, onVerifyMember, onRevokeTrust, onReshareKey }: {
+function TeamExistsState({ team, onInvite, onRemoveMember, onDeleteTeam, onLinkProject, onUnlinkProject, isAdmin, localGitRemote, fingerprints, myFingerprint, onVerifyMember, onRevokeTrust, onReshareKey, onUpdateRole }: {
   team: TeamData;
   onInvite: (email: string) => void;
   onRemoveMember: (memberId: string) => void;
@@ -320,6 +333,7 @@ function TeamExistsState({ team, onInvite, onRemoveMember, onDeleteTeam, onLinkP
   onVerifyMember: (memberId: string, fingerprint: string) => void;
   onRevokeTrust: (memberId: string) => void;
   onReshareKey: (memberId: string) => void;
+  onUpdateRole: (memberId: string, newRole: 'admin' | 'member') => void;
 }) {
   const [inviteEmail, setInviteEmail] = useState('');
   const [expandedMemberId, setExpandedMemberId] = useState<string | null>(null);
@@ -453,7 +467,11 @@ function TeamExistsState({ team, onInvite, onRemoveMember, onDeleteTeam, onLinkP
                       <PendingBadge />
                     ) : (
                       <>
-                        <RoleBadge role={member.role} />
+                        <RoleBadge
+                          role={member.role}
+                          editable={isAdmin && !member.isYou}
+                          onChange={(newRole) => onUpdateRole(member.id, newRole)}
+                        />
                         <TrustStatusIcon
                           status={displayTrustStatus}
                           onClick={canExpand ? () => setExpandedMemberId(isExpanded ? null : member.id) : undefined}
@@ -645,6 +663,11 @@ export function TeamPanel({ workspacePath }: TeamPanelProps) {
 
     (window as any).electronAPI.stytch.getAuthState().then((state: any) => {
       setStytchAuth({ isAuthenticated: state.isAuthenticated, user: state.user });
+      // Validate session is alive server-side; if dead, signOut broadcasts
+      // auth state change and the listener below updates the UI
+      if (state.isAuthenticated) {
+        (window as any).electronAPI.stytch.refreshSession();
+      }
     });
 
     // Subscribe to auth state changes
@@ -671,7 +694,7 @@ export function TeamPanel({ workspacePath }: TeamPanelProps) {
     const membersResult = await (window as any).electronAPI.team.listMembers(orgId);
     if (!membersResult.success) return;
 
-    const currentUserId = await getCurrentUserId();
+    const currentUserId = membersResult.callerMemberId || '';
 
     // Fetch key envelopes to determine trust status
     let envelopeUserIds = new Set<string>();
@@ -862,15 +885,24 @@ export function TeamPanel({ workspacePath }: TeamPanelProps) {
     }
   };
 
-  const handleCreateTeam = () => {
+  const handleCreateTeam = async () => {
+    // Load accounts to show picker if multiple are signed in
+    let accounts: Array<{ personalOrgId: string; email: string | null; isPrimary: boolean }> = [];
+    try {
+      accounts = await (window as any).electronAPI.stytch.getAccounts() || [];
+    } catch {
+      // Fall back to empty -- dialog will work without account picker
+    }
+
     createTeamDialog.open({
       gitRemote: gitRemote || 'No git remote detected',
       suggestedName: workspacePath?.split('/').pop() || 'my-project',
-      onCreateTeam: async (name: string) => {
+      accounts,
+      onCreateTeam: async (name: string, accountOrgId?: string) => {
         setLoading(true);
         setError(null);
         try {
-          const result = await (window as any).electronAPI.team.create(name, workspacePath);
+          const result = await (window as any).electronAPI.team.create(name, workspacePath, accountOrgId);
           if (result.success) {
             await loadTeamData();
           } else {
@@ -1001,6 +1033,27 @@ export function TeamPanel({ workspacePath }: TeamPanelProps) {
     }
   };
 
+  const handleUpdateRole = async (memberId: string, newRole: 'admin' | 'member') => {
+    if (!team) return;
+    setError(null);
+    try {
+      const result = await (window as any).electronAPI.team.updateRole(team.orgId, memberId, newRole);
+      if (result.success) {
+        // Optimistic update
+        setTeam({
+          ...team,
+          members: team.members.map((m) =>
+            m.id === memberId ? { ...m, role: newRole } : m
+          ),
+        });
+      } else {
+        setError(result.error || 'Failed to update role');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update role');
+    }
+  };
+
   const handleDeleteTeam = async () => {
     if (!team) return;
     const confirmed = window.confirm(
@@ -1070,7 +1123,7 @@ export function TeamPanel({ workspacePath }: TeamPanelProps) {
         <p className="provider-panel-description text-[13px] leading-relaxed text-[var(--nim-text-muted)]">
           Create a team to collaborate on shared tracker items and documents with end-to-end encryption.
         </p>
-        {userEmail && (
+        {userEmail && team && (
           <div className="flex items-center gap-1.5 mt-2 text-[12px] text-[var(--nim-text-faint)]">
             <MaterialSymbol icon="person" size={13} />
             <span>Signed in as <span className="text-[var(--nim-text-muted)]">{userName || userEmail}</span></span>
@@ -1095,6 +1148,7 @@ export function TeamPanel({ workspacePath }: TeamPanelProps) {
           onVerifyMember={handleVerifyMember}
           onRevokeTrust={handleRevokeTrust}
           onReshareKey={handleReshareKey}
+          onUpdateRole={handleUpdateRole}
         />
       ) : pendingInvite ? (
         <InvitePendingState
@@ -1112,14 +1166,4 @@ export function TeamPanel({ workspacePath }: TeamPanelProps) {
       )}
     </div>
   );
-}
-
-// Helper to get current user ID from Stytch auth state
-async function getCurrentUserId(): Promise<string> {
-  try {
-    const authState = await (window as any).electronAPI.stytch.getAuthState();
-    return authState?.user?.user_id || '';
-  } catch {
-    return '';
-  }
 }

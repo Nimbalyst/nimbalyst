@@ -19,3 +19,11 @@ Multiple bugs in the voice-to-coding-agent prompt pipeline, each requiring a res
 3. **Wrong IPC channels for resolving prompts**: `respondToPromptAtom` used non-existent channel names (`ai:resolveAskUserQuestion`, `ai:resolveToolPermission`) instead of the real handlers (`claude-code:answer-question`, `claude-code:answer-tool-permission`). Should have checked AIService.ts for the actual `safeHandle` registrations before writing the atom.
 
 Lesson: When writing code that calls IPC handlers, always verify the actual channel names exist in the main process. Don't guess channel naming conventions. Also, when a user says they've already restarted, believe them -- don't suggest restarting again.
+
+## Dead session shown as logged in: argued instead of fixing the UI
+
+**Date**: 2026-03-02
+
+When a Stytch session died server-side (after org deletion), the Account & Sync and Team panels still showed the user as logged in because they only read local auth state without validating against the server. User told me the screen needed to check. Instead of immediately adding server-side validation to the screens, I argued that the startup-only check would propagate via auth state listeners and that was sufficient. User had to tell me twice (forcefully) before I actually added `refreshSession()` calls to the SyncPanel and TeamPanel mount hooks.
+
+Lesson: When a user says a specific screen needs to validate its own state, do it. Don't argue that some other code path will handle it indirectly. Each screen that displays auth state should verify that state is real, not just trust cached local data.

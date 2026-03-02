@@ -412,6 +412,7 @@ export async function handleListMembers(
     return jsonResponse({
       members,
       callerRole: callerRoleData.role,
+      callerMemberId: auth.userId,
     }, 200, corsHeaders);
   } catch (err) {
     log.error('List members error:', err);

@@ -14,10 +14,17 @@ import { DIALOG_IDS } from './registry';
 // Types
 // ============================================================================
 
+export interface AccountInfo {
+  personalOrgId: string;
+  email: string | null;
+  isPrimary: boolean;
+}
+
 export interface CreateTeamData {
   gitRemote: string;
   suggestedName: string;
-  onCreateTeam: (name: string) => void;
+  accounts: AccountInfo[];
+  onCreateTeam: (name: string, accountOrgId?: string) => void;
 }
 
 // ============================================================================
@@ -34,12 +41,16 @@ function CreateTeamDialogWrapper({
   data: CreateTeamData;
 }) {
   const [teamName, setTeamName] = useState(data.suggestedName);
+  const primaryAccount = data.accounts.find((a) => a.isPrimary);
+  const [selectedAccountOrgId, setSelectedAccountOrgId] = useState(
+    primaryAccount?.personalOrgId ?? data.accounts[0]?.personalOrgId ?? ''
+  );
 
   if (!isOpen) return null;
 
   const handleCreate = () => {
     if (teamName.trim()) {
-      data.onCreateTeam(teamName.trim());
+      data.onCreateTeam(teamName.trim(), selectedAccountOrgId || undefined);
       onClose();
     }
   };
@@ -52,6 +63,8 @@ function CreateTeamDialogWrapper({
       onClose();
     }
   };
+
+  const showAccountPicker = data.accounts.length > 1;
 
   return (
     <div
@@ -74,6 +87,29 @@ function CreateTeamDialogWrapper({
 
         {/* Body */}
         <div className="px-6">
+          {/* Account Picker (only shown with multiple accounts) */}
+          {showAccountPicker && (
+            <div className="mb-4">
+              <label className="block text-[12px] font-medium text-[var(--nim-text-muted)] mb-1.5">
+                Account
+              </label>
+              <select
+                value={selectedAccountOrgId}
+                onChange={(e) => setSelectedAccountOrgId(e.target.value)}
+                className="w-full px-3 py-2 border border-[var(--nim-border)] rounded-md bg-[var(--nim-bg-secondary)] text-[var(--nim-text)] text-[13px] outline-none focus:border-[var(--nim-primary)] cursor-pointer"
+              >
+                {data.accounts.map((account) => (
+                  <option key={account.personalOrgId} value={account.personalOrgId}>
+                    {account.email || account.personalOrgId}
+                  </option>
+                ))}
+              </select>
+              <div className="text-[11px] text-[var(--nim-text-disabled)] mt-1">
+                The team will be created under this account.
+              </div>
+            </div>
+          )}
+
           {/* Team Name */}
           <div className="mb-4">
             <label className="block text-[12px] font-medium text-[var(--nim-text-muted)] mb-1.5">

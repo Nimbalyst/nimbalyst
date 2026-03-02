@@ -26,8 +26,11 @@ import { safeHandle } from '../utils/ipcRegistry';
 import { logger } from '../utils/logger';
 import { getSessionSyncConfig } from '../utils/store';
 import {
+  getAccounts,
   getSessionJwt,
+  getSessionJwtForAccount,
   getSessionToken,
+  getSessionTokenForAccount,
   isAuthenticated,
   refreshSession,
   onAuthStateChange,
@@ -128,7 +131,7 @@ function getJwtExp(jwt: string): number | null {
  * Cache TTL is derived from the actual JWT `exp` claim (minus a 60s buffer)
  * so we never serve an expired token.
  */
-export async function getOrgScopedJwt(orgId: string): Promise<string> {
+export async function getOrgScopedJwt(orgId: string, accountOrgId?: string): Promise<string> {
   // Check cache
   const cached = orgJwtCache.get(orgId);
   if (cached && cached.expiresAt > Date.now()) {
@@ -136,8 +139,10 @@ export async function getOrgScopedJwt(orgId: string): Promise<string> {
   }
   logger.main.info(`[TeamService] Org JWT cache miss for ${orgId}, exchanging session...`);
 
-  // Need to exchange -- use the personal org session token
-  const sessionToken = getSessionToken();
+  // Need to exchange -- use the correct account's session token
+  const sessionToken = accountOrgId
+    ? getSessionTokenForAccount(accountOrgId)
+    : getSessionToken();
   if (!sessionToken) {
     logger.main.warn('[TeamService] getOrgScopedJwt: no session token available');
     throw new Error('Not authenticated. Sign in first.');
@@ -145,8 +150,10 @@ export async function getOrgScopedJwt(orgId: string): Promise<string> {
 
   const httpUrl = getCollabServerUrl();
 
-  // Use the personal org JWT to authenticate the exchange request
-  const personalJwt = getSessionJwt();
+  // Use the correct account's JWT to authenticate the exchange request
+  const personalJwt = accountOrgId
+    ? getSessionJwtForAccount(accountOrgId)
+    : getSessionJwt();
   if (!personalJwt) {
     throw new Error('Not authenticated. Sign in first.');
   }
@@ -207,12 +214,13 @@ export async function getOrgScopedJwt(orgId: string): Promise<string> {
  * Make an authenticated REST call to the collabv3 team API.
  * Uses the personal org JWT for team-listing endpoints.
  * Uses org-scoped JWT when orgId is provided (for member operations).
+ * When accountOrgId is provided, uses that account's JWT instead of the primary.
  */
-async function fetchTeamApi(path: string, method: string, body?: unknown, orgId?: string): Promise<any> {
+async function fetchTeamApi(path: string, method: string, body?: unknown, orgId?: string, accountOrgId?: string): Promise<any> {
   const httpUrl = getCollabServerUrl();
 
   const jwtSource = orgId ? 'org-scoped' : 'personal';
-  logger.main.info(`[TeamService] ${method} ${path} (jwt: ${jwtSource}${orgId ? `, org: ${orgId}` : ''})`);
+  logger.main.info(`[TeamService] ${method} ${path} (jwt: ${jwtSource}${orgId ? `, org: ${orgId}` : ''}${accountOrgId ? `, account: ${accountOrgId}` : ''})`);
 
   const makeRequest = async (jwt: string) => {
     const headers: Record<string, string> = {
@@ -229,7 +237,12 @@ async function fetchTeamApi(path: string, method: string, body?: unknown, orgId?
   };
 
   // Use org-scoped JWT if orgId provided, otherwise personal JWT
-  let jwt = orgId ? await getOrgScopedJwt(orgId) : getSessionJwt();
+  // When accountOrgId is set, use that specific account's JWT
+  let jwt = orgId
+    ? await getOrgScopedJwt(orgId)
+    : accountOrgId
+      ? getSessionJwtForAccount(accountOrgId)
+      : getSessionJwt();
   if (!jwt) {
     logger.main.warn(`[TeamService] No JWT available (source: ${jwtSource})`);
     throw new Error('Not authenticated. Sign in first.');
@@ -239,7 +252,10 @@ async function fetchTeamApi(path: string, method: string, body?: unknown, orgId?
 
   // On 401, retry once: refresh personal session or re-exchange org JWT
   if (response.status === 401) {
-    if (!orgId) {
+    if (accountOrgId && !orgId) {
+      // Non-primary account JWT rejected -- refresh won't help a secondary account
+      logger.main.warn(`[TeamService] Got 401 on account JWT for ${accountOrgId}, cannot auto-refresh secondary account`);
+    } else if (!orgId) {
       logger.main.info('[TeamService] Got 401 on personal JWT, refreshing session...');
       const refreshed = await refreshSession();
       if (refreshed) {
@@ -341,8 +357,8 @@ function getMemberIdFromJwt(jwt: string): string | null {
 // ============================================================================
 
 /**
- * List all teams the current user belongs to.
- * Uses the personal org JWT (no org context needed).
+ * List all teams the current user belongs to, across all signed-in accounts.
+ * Queries each account's teams and deduplicates by orgId.
  */
 async function listTeams(): Promise<TeamDetails[]> {
   if (!isAuthenticated()) {
@@ -350,15 +366,36 @@ async function listTeams(): Promise<TeamDetails[]> {
     return [];
   }
 
-  try {
-    const data = await fetchTeamApi('/api/teams', 'GET') as { teams: TeamDetails[] };
-    const teams = data.teams || [];
-    logger.main.info(`[TeamService] listTeams: found ${teams.length} team(s)`, teams.map(t => ({ orgId: t.orgId, name: t.name, hash: t.gitRemoteHash?.substring(0, 8) })));
-    return teams;
-  } catch (err) {
-    logger.main.error('[TeamService] listTeams error:', err);
-    return [];
+  const allAccounts = getAccounts();
+  const seenOrgIds = new Set<string>();
+  const allTeams: TeamDetails[] = [];
+
+  // Query teams for each signed-in account in parallel
+  const results = await Promise.allSettled(
+    allAccounts.map(async (account) => {
+      try {
+        const data = await fetchTeamApi('/api/teams', 'GET', undefined, undefined, account.personalOrgId) as { teams: TeamDetails[] };
+        return data.teams || [];
+      } catch (err) {
+        logger.main.error(`[TeamService] listTeams error for account ${account.email}:`, err);
+        return [];
+      }
+    })
+  );
+
+  for (const result of results) {
+    if (result.status === 'fulfilled') {
+      for (const team of result.value) {
+        if (!seenOrgIds.has(team.orgId)) {
+          seenOrgIds.add(team.orgId);
+          allTeams.push(team);
+        }
+      }
+    }
   }
+
+  logger.main.info(`[TeamService] listTeams: found ${allTeams.length} team(s)`, allTeams.map(t => ({ orgId: t.orgId, name: t.name, hash: t.gitRemoteHash?.substring(0, 8) })));
+  return allTeams;
 }
 
 /**
@@ -441,7 +478,7 @@ export async function findPendingInviteForWorkspace(workspacePath: string): Prom
  * Create a new team (Stytch org + D1 metadata + encryption key setup).
  * Returns the new team details. Does NOT modify global auth state.
  */
-async function createTeam(name: string, workspacePath?: string): Promise<TeamDetails> {
+async function createTeam(name: string, workspacePath?: string, accountOrgId?: string): Promise<TeamDetails> {
   let gitRemoteHash: string | undefined;
   if (workspacePath) {
     const remote = getGitRemote(workspacePath);
@@ -450,17 +487,17 @@ async function createTeam(name: string, workspacePath?: string): Promise<TeamDet
     }
   }
 
-  // Create team using personal org JWT
+  // Create team using the specified account's JWT (or primary if not specified)
   const result = await fetchTeamApi('/api/teams', 'POST', {
     name,
     gitRemoteHash,
-  }) as { orgId: string; name: string; creatorMemberId: string };
+  }, undefined, accountOrgId) as { orgId: string; name: string; creatorMemberId: string };
 
   logger.main.info('[TeamService] Team created:', result.orgId, name);
 
   // Set up encryption: identity key + org key + self-wrap
   try {
-    const orgJwt = await getOrgScopedJwt(result.orgId);
+    const orgJwt = await getOrgScopedJwt(result.orgId, accountOrgId);
 
     // 1. Ensure identity key pair exists
     await getOrCreateIdentityKeyPair();
@@ -889,9 +926,9 @@ export function registerTeamHandlers(): void {
     }
   });
 
-  safeHandle('team:create', async (_event, name: string, workspacePath?: string) => {
+  safeHandle('team:create', async (_event, name: string, workspacePath?: string, accountOrgId?: string) => {
     try {
-      const team = await createTeam(name, workspacePath);
+      const team = await createTeam(name, workspacePath, accountOrgId);
       return { success: true, team };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : String(error) };

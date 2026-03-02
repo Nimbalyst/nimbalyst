@@ -140,7 +140,7 @@ export function SyncPanel() {
     }
   };
 
-  // Load Stytch auth state on mount
+  // Load Stytch auth state on mount and validate session server-side
   useEffect(() => {
     async function loadStytchAuth() {
       if (!window.electronAPI?.stytch) return;
@@ -150,6 +150,13 @@ export function SyncPanel() {
           isAuthenticated: state.isAuthenticated,
           user: state.user,
         });
+
+        // Validate session is actually alive server-side.
+        // If dead, this triggers signOut which broadcasts auth state change
+        // and the onAuthStateChange listener below will update the UI.
+        if (state.isAuthenticated) {
+          window.electronAPI.stytch.refreshSession();
+        }
       } catch (error) {
         console.error('Failed to load Stytch auth state:', error);
       }

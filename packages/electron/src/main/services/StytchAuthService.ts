@@ -444,7 +444,17 @@ export function initializeStytchAuth(config: StytchConfig): void {
         if (refreshed) {
           logger.main.info('[StytchAuthService] Session refreshed on startup - JWT now available');
         } else {
-          logger.main.warn('[StytchAuthService] Session refresh failed - user may need to re-authenticate');
+          logger.main.warn('[StytchAuthService] Session refresh failed on startup - signing out');
+          await signOut();
+        }
+      });
+    } else {
+      // JWT looks valid locally, but verify it's still alive server-side
+      setImmediate(async () => {
+        const refreshed = await refreshSession();
+        if (!refreshed) {
+          logger.main.warn('[StytchAuthService] Session dead server-side on startup - signing out');
+          await signOut();
         }
       });
     }
@@ -745,6 +755,32 @@ export async function resolvePersonalUserId(serverUrl: string): Promise<string |
  */
 export function getSessionJwt(): string | null {
   return authState.sessionJwt;
+}
+
+/**
+ * Get the session JWT for a specific account by personalOrgId.
+ * Falls back to the default getSessionJwt() if the account is the primary
+ * or not found.
+ */
+export function getSessionJwtForAccount(personalOrgId: string): string | null {
+  // If it's the primary account, just return the normal JWT
+  if (personalOrgId === primaryAccountId) {
+    return authState.sessionJwt;
+  }
+  const creds = accounts.get(personalOrgId);
+  return creds?.sessionJwt ?? null;
+}
+
+/**
+ * Get the session token for a specific account by personalOrgId.
+ * Used for org-scoped JWT exchanges when operating under a non-primary account.
+ */
+export function getSessionTokenForAccount(personalOrgId: string): string | null {
+  if (personalOrgId === primaryAccountId) {
+    return authState.sessionToken;
+  }
+  const creds = accounts.get(personalOrgId);
+  return creds?.sessionToken ?? null;
 }
 
 /**
@@ -1254,22 +1290,24 @@ function getSyncServerUrl(): string {
 }
 
 /**
- * Validate and refresh the current session if needed.
- * @deprecated Use refreshSession() instead for getting a fresh JWT
+ * Validate the current session against the server and sign out if dead.
+ * Always calls refreshSession() to verify the session is alive server-side,
+ * not just locally valid. Signs out on failure so the UI stays in sync.
  */
 export async function validateAndRefreshSession(): Promise<boolean> {
   const creds = loadStytchCredentials();
-  if (creds && creds.expiresAt > Date.now()) {
-    // Check if we have a valid JWT
-    if (authState.sessionJwt && authState.sessionJwt.split('.').length === 3) {
-      return true;
-    }
-    // We have a valid session but no JWT - try to refresh
-    return refreshSession();
+  if (!creds || creds.expiresAt <= Date.now()) {
+    await signOut();
+    return false;
   }
-  // Session expired
-  await signOut();
-  return false;
+
+  const refreshed = await refreshSession();
+  if (!refreshed) {
+    logger.main.warn('[StytchAuthService] Session validation failed - signing out');
+    await signOut();
+    return false;
+  }
+  return true;
 }
 
 /**
