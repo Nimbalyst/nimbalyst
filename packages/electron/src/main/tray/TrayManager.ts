@@ -8,10 +8,12 @@
  * Icon states (priority order): Error > Needs Attention > Running > Idle
  */
 
+import path from 'node:path';
 import { Tray, Menu, app, nativeImage, nativeTheme, BrowserWindow } from 'electron';
 import { getSessionStateManager } from '@nimbalyst/runtime/ai/server/SessionStateManager';
 import type { SessionStateEvent } from '@nimbalyst/runtime/ai/server/types/SessionState';
 import { findWindowByWorkspace } from '../window/WindowManager';
+import { getPackageRoot } from '../utils/appPaths';
 import { isShowTrayIcon, setShowTrayIcon } from '../utils/store';
 import { logger } from '../utils/logger';
 
@@ -443,6 +445,9 @@ export class TrayManager {
 
   // ─── Icon management ───────────────────────────────────────────────────
 
+  /** Cached base template image (loaded once from disk) */
+  private templateIcon: Electron.NativeImage | null = null;
+
   private updateIcon(): void {
     if (!this.tray) return;
 
@@ -480,102 +485,100 @@ export class TrayManager {
     return 'idle';
   }
 
+  /**
+   * Load the pre-rendered template icon from resources.
+   * Falls back to a 1x1 transparent image if the file is missing (should never happen).
+   */
+  private loadTemplateIcon(): Electron.NativeImage {
+    if (this.templateIcon) return this.templateIcon;
+
+    // In dev: resources/ is at the package root (packages/electron/resources/)
+    // getPackageRoot() handles alternate outDir (e.g. out2/main) correctly.
+    // In packaged builds: electron-builder copies resources/ into the app Resources dir.
+    const resourcesDir = app.isPackaged
+      ? process.resourcesPath
+      : path.join(getPackageRoot(), 'resources');
+
+    const iconPath = path.join(resourcesDir, 'trayTemplate.png');
+    const icon2xPath = path.join(resourcesDir, 'trayTemplate@2x.png');
+
+    // nativeImage.createFromPath handles @2x variants automatically when
+    // the base path is given, but only if both files exist at the same location.
+    // Load explicitly to ensure correct scale factor mapping.
+    try {
+      this.templateIcon = nativeImage.createFromPath(iconPath);
+      if (this.templateIcon.isEmpty()) {
+        logger.main.warn(`[TrayManager] Template icon is empty at ${iconPath}, trying @2x`);
+        this.templateIcon = nativeImage.createFromPath(icon2xPath);
+      }
+    } catch {
+      logger.main.warn(`[TrayManager] Failed to load template icon from ${iconPath}`);
+      this.templateIcon = nativeImage.createEmpty();
+    }
+
+    return this.templateIcon;
+  }
+
   private getIconForState(state: TrayIconState): Electron.NativeImage {
-    // 32x32 pixel buffer at @2x scale = 16pt icon on retina displays
-    const size = 32;
-    const canvas = Buffer.alloc(size * size * 4, 0); // RGBA
-    const cx = 16, cy = 16;
-
-    // Attention/error states need a blue dot, which requires explicit color.
-    // Template images are monochrome (macOS tints them automatically).
-    // Non-template images need us to pick the right foreground color.
+    const baseIcon = this.loadTemplateIcon();
     const needsColorDot = state === 'attention' || state === 'error';
+
+    if (!needsColorDot) {
+      // Pure template image -- macOS tints it to match the menu bar automatically
+      baseIcon.setTemplateImage(true);
+      return baseIcon;
+    }
+
+    // For attention/error states, composite a colored dot onto the icon.
+    // This requires a non-template image so we render the foreground ourselves.
+    //
+    // Work at @2x (32x32 pixels) for retina crispness.
+    const scaleFactor = 2.0;
+    const physicalSize = 32; // 16pt * 2
+
+    // Get the raw RGBA bitmap at @2x scale
+    const baseBitmap = baseIcon.toBitmap({ scaleFactor });
+    const canvas = Buffer.from(baseBitmap);
+    const stride = physicalSize; // pixels per row
+
+    // Template icons are black-with-alpha. For non-template rendering,
+    // recolor the foreground to match the menu bar appearance.
     const isDarkMenuBar = nativeTheme.shouldUseDarkColors;
+    const fg = isDarkMenuBar ? 255 : 0;
 
-    // Icon foreground color
-    let fgR = 0, fgG = 0, fgB = 0; // Black for template images
-    if (needsColorDot) {
-      // Non-template: adapt foreground to menu bar appearance
-      if (isDarkMenuBar) { fgR = 255; fgG = 255; fgB = 255; }
-    }
-
-    const setPixel = (x: number, y: number, r: number, g: number, b: number, a: number) => {
-      if (x < 0 || x >= size || y < 0 || y >= size) return;
-      const offset = (y * size + x) * 4;
-      canvas[offset] = r;
-      canvas[offset + 1] = g;
-      canvas[offset + 2] = b;
-      canvas[offset + 3] = a;
-    };
-
-    const setFgPixel = (x: number, y: number, a: number) => {
-      setPixel(x, y, fgR, fgG, fgB, a);
-    };
-
-    // ── Splat/blob outline ────────────────────────────────────────────
-    // Irregular boundary using sinusoidal radius variation (5 lobes)
-    // Creates the Nimbalyst "splat" silhouette
-    for (let y = 0; y < size; y++) {
-      for (let x = 0; x < size; x++) {
-        const dx = x - cx, dy = y - cy;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        const angle = Math.atan2(dy, dx);
-        // 5-lobed boundary with secondary wobble for organic feel
-        const boundary = 11.5 + 2.2 * Math.sin(5 * angle + 0.4) + 0.8 * Math.sin(3 * angle - 0.7);
-
-        // Draw outline (1.4px thick ring)
-        if (Math.abs(dist - boundary) < 1.4) {
-          setFgPixel(x, y, 210);
-        }
+    for (let i = 0; i < canvas.length; i += 4) {
+      if (canvas[i + 3] > 0) {
+        canvas[i] = fg;
+        canvas[i + 1] = fg;
+        canvas[i + 2] = fg;
       }
     }
 
-    // ── # hash mark ──────────────────────────────────────────────────
-    const drawRect = (rx: number, ry: number, w: number, h: number, alpha: number) => {
-      for (let dy = 0; dy < h; dy++) {
-        for (let dx = 0; dx < w; dx++) {
-          setFgPixel(rx + dx, ry + dy, alpha);
-        }
-      }
-    };
-
-    if (state === 'running') {
-      // Bolder # for running state
-      drawRect(cx - 5, cy - 5, 3, 10, 230);
-      drawRect(cx + 2, cy - 5, 3, 10, 230);
-      drawRect(cx - 6, cy - 3, 12, 3, 230);
-      drawRect(cx - 6, cy + 1, 12, 3, 230);
-    } else {
-      // Normal weight #
-      drawRect(cx - 4, cy - 5, 2, 10, 220);
-      drawRect(cx + 2, cy - 5, 2, 10, 220);
-      drawRect(cx - 6, cy - 2, 12, 2, 220);
-      drawRect(cx - 6, cy + 1, 12, 2, 220);
-    }
-
-    // ── Blue dot indicator ───────────────────────────────────────────
-    if (needsColorDot) {
-      const dotCx = 25, dotCy = 25, dotR = 4;
-      for (let dy = -dotR; dy <= dotR; dy++) {
-        for (let dx = -dotR; dx <= dotR; dx++) {
-          if (dx * dx + dy * dy <= dotR * dotR) {
-            // Nimbalyst primary blue: #3B82F6
-            setPixel(dotCx + dx, dotCy + dy, 59, 130, 246, 255);
-          }
+    // Draw blue dot in bottom-right quadrant
+    const dotCx = Math.floor(physicalSize * 0.78);
+    const dotCy = Math.floor(physicalSize * 0.78);
+    const dotR = Math.floor(physicalSize * 0.14);
+    for (let y = dotCy - dotR; y <= dotCy + dotR; y++) {
+      for (let x = dotCx - dotR; x <= dotCx + dotR; x++) {
+        if (x < 0 || x >= physicalSize || y < 0 || y >= physicalSize) continue;
+        const dx = x - dotCx, dy = y - dotCy;
+        if (dx * dx + dy * dy <= dotR * dotR) {
+          const offset = (y * stride + x) * 4;
+          canvas[offset] = 59;      // R: #3B
+          canvas[offset + 1] = 130;  // G: #82
+          canvas[offset + 2] = 246;  // B: #F6
+          canvas[offset + 3] = 255;
         }
       }
     }
 
     const image = nativeImage.createFromBuffer(canvas, {
-      width: size,
-      height: size,
-      scaleFactor: 2.0,
+      width: physicalSize,
+      height: physicalSize,
+      scaleFactor,
     });
-
-    // Template images auto-adapt to dark/light menu bar (monochrome only).
-    // Non-template for states with colored elements (blue dot).
-    image.setTemplateImage(!needsColorDot);
-
+    // Non-template so the blue dot color is preserved
+    image.setTemplateImage(false);
     return image;
   }
 
