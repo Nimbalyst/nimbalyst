@@ -45,6 +45,19 @@ export interface DocumentSyncConfig {
   onReviewStateChange?: (state: ReviewGateState) => void;
 
   /**
+   * Called when a key envelope is received from the server.
+   * The consumer should verify `senderPublicKey` against the sender's
+   * registered identity key (from TeamRoom) before using the envelope
+   * to unwrap the document key. Use ECDHKeyManager.unwrapDocumentKeyVerified().
+   */
+  onKeyEnvelope?: (envelope: {
+    wrappedKey: string;
+    iv: string;
+    senderPublicKey: string;
+    senderUserId: string;
+  }) => void;
+
+  /**
    * Enable the review gate for remote changes.
    * When true, remote updates are applied to the Y.Doc (for CRDT correctness and live preview)
    * but marked as "unreviewed" -- the host application should not autosave until
@@ -176,6 +189,8 @@ export interface DocKeyEnvelopeMessage {
   wrappedKey: string;
   iv: string;
   senderPublicKey: string;
+  /** User ID of the sender who created this envelope */
+  senderUserId: string;
 }
 
 export interface DocErrorMessage {

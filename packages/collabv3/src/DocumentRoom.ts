@@ -475,7 +475,7 @@ export class DocumentRoom implements DurableObject {
       targetUserId
     ).toArray()[0];
 
-    if (existing && existing.sender_user_id && existing.sender_user_id !== senderId) {
+    if (existing && existing.sender_user_id !== '' && existing.sender_user_id !== senderId) {
       this.sendError(ws, 'envelope_sender_mismatch',
         'Cannot overwrite envelope created by a different user');
       return;

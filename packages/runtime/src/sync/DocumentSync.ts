@@ -505,7 +505,12 @@ export class DocumentSyncProvider {
           await this.handleAwarenessBroadcast(msg);
           break;
         case 'keyEnvelope':
-          // Key envelopes are handled at a higher layer (ECDHKeyManager)
+          this.config.onKeyEnvelope?.({
+            wrappedKey: msg.wrappedKey,
+            iv: msg.iv,
+            senderPublicKey: msg.senderPublicKey,
+            senderUserId: msg.senderUserId,
+          });
           break;
         case 'error':
           console.error('[DocumentSync] Server error:', msg.code, msg.message);

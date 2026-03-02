@@ -240,6 +240,22 @@ describe('DocumentRoom integration', () => {
     expect(awareness.fromUserId).toBe('user1');
   });
 
+  // Valid P-256 public key JWK for use in envelope tests
+  const TEST_P256_JWK = JSON.stringify({
+    kty: 'EC',
+    crv: 'P-256',
+    x: 'f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU',
+    y: 'x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0',
+  });
+
+  // A different valid P-256 public key for overwrite tests
+  const TEST_P256_JWK_2 = JSON.stringify({
+    kty: 'EC',
+    crv: 'P-256',
+    x: 'iGaLqP6y-SJCRExUhqGilFLjIgecIWd1BaHPPH85gqo',
+    y: 'eFfxMi6fCAvEWM0s-PEUmqZfjGhpEOVRLKTi3qqnMGo',
+  });
+
   it('should store and retrieve key envelopes', async () => {
     const docId = `test-envelope-${Date.now()}`;
 
@@ -253,7 +269,7 @@ describe('DocumentRoom integration', () => {
       targetUserId: 'user2',
       wrappedKey: btoa('wrapped-doc-key'),
       iv: btoa('envelope-iv'),
-      senderPublicKey: btoa('user1-pubkey'),
+      senderPublicKey: TEST_P256_JWK,
     }));
     await new Promise(r => setTimeout(r, 300));
 
@@ -270,7 +286,102 @@ describe('DocumentRoom integration', () => {
 
     expect(envelope.wrappedKey).toBe(btoa('wrapped-doc-key'));
     expect(envelope.iv).toBe(btoa('envelope-iv'));
-    expect(envelope.senderPublicKey).toBe(btoa('user1-pubkey'));
+    expect(envelope.senderPublicKey).toBe(TEST_P256_JWK);
+    expect(envelope.senderUserId).toBe('user1');
+  });
+
+  it('should reject envelope overwrite by a different sender', async () => {
+    const docId = `test-envelope-overwrite-${Date.now()}`;
+
+    // User1 stores an envelope for user3
+    const ws1 = connect(docId, 'user1');
+    await waitForOpen(ws1);
+    await sendAndWait(ws1, { type: 'docSyncRequest', sinceSeq: 0 }, 'docSyncResponse');
+
+    ws1.send(JSON.stringify({
+      type: 'addKeyEnvelope',
+      targetUserId: 'user3',
+      wrappedKey: btoa('original-key'),
+      iv: btoa('original-iv'),
+      senderPublicKey: TEST_P256_JWK,
+    }));
+    await new Promise(r => setTimeout(r, 300));
+
+    // User2 tries to overwrite user3's envelope -- should be rejected
+    const ws2 = connect(docId, 'user2');
+    await waitForOpen(ws2);
+    await sendAndWait(ws2, { type: 'docSyncRequest', sinceSeq: 0 }, 'docSyncResponse');
+
+    const error = await sendAndWait<Extract<DocServerMessage, { type: 'error' }>>(
+      ws2,
+      {
+        type: 'addKeyEnvelope',
+        targetUserId: 'user3',
+        wrappedKey: btoa('malicious-key'),
+        iv: btoa('malicious-iv'),
+        senderPublicKey: TEST_P256_JWK_2,
+      } as any,
+      'error'
+    );
+
+    expect(error.code).toBe('envelope_sender_mismatch');
+
+    // Verify the original envelope is still intact
+    const ws3 = connect(docId, 'user3');
+    await waitForOpen(ws3);
+    await sendAndWait(ws3, { type: 'docSyncRequest', sinceSeq: 0 }, 'docSyncResponse');
+
+    const envelope = await sendAndWait<Extract<DocServerMessage, { type: 'keyEnvelope' }>>(
+      ws3,
+      { type: 'requestKeyEnvelope' },
+      'keyEnvelope'
+    );
+
+    expect(envelope.wrappedKey).toBe(btoa('original-key'));
+    expect(envelope.senderUserId).toBe('user1');
+  });
+
+  it('should allow same sender to update their own envelope', async () => {
+    const docId = `test-envelope-self-update-${Date.now()}`;
+
+    // User1 stores an envelope for user2
+    const ws1 = connect(docId, 'user1');
+    await waitForOpen(ws1);
+    await sendAndWait(ws1, { type: 'docSyncRequest', sinceSeq: 0 }, 'docSyncResponse');
+
+    ws1.send(JSON.stringify({
+      type: 'addKeyEnvelope',
+      targetUserId: 'user2',
+      wrappedKey: btoa('original-key'),
+      iv: btoa('original-iv'),
+      senderPublicKey: TEST_P256_JWK,
+    }));
+    await new Promise(r => setTimeout(r, 300));
+
+    // User1 updates the envelope (same sender, should succeed)
+    ws1.send(JSON.stringify({
+      type: 'addKeyEnvelope',
+      targetUserId: 'user2',
+      wrappedKey: btoa('updated-key'),
+      iv: btoa('updated-iv'),
+      senderPublicKey: TEST_P256_JWK,
+    }));
+    await new Promise(r => setTimeout(r, 300));
+
+    // User2 retrieves envelope and gets the updated data
+    const ws2 = connect(docId, 'user2');
+    await waitForOpen(ws2);
+    await sendAndWait(ws2, { type: 'docSyncRequest', sinceSeq: 0 }, 'docSyncResponse');
+
+    const envelope = await sendAndWait<Extract<DocServerMessage, { type: 'keyEnvelope' }>>(
+      ws2,
+      { type: 'requestKeyEnvelope' },
+      'keyEnvelope'
+    );
+
+    expect(envelope.wrappedKey).toBe(btoa('updated-key'));
+    expect(envelope.iv).toBe(btoa('updated-iv'));
+    expect(envelope.senderUserId).toBe('user1');
   });
 
   it('should return error when no key envelope exists', async () => {
