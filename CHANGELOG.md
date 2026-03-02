@@ -20,6 +20,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.55.3] - 2026-03-02
+
+
+### Added
+- Custom Claude executable path setting for corporate SSO wrappers (Browse file picker in Claude Agent settings)
+- iOS AI model picker synced from desktop with provider/model fields in CreateSessionRequest
+- iOS cancel button for running AI sessions via control messages
+- Session archive/unarchive control messages from mobile
+- Pre-rendered logo template assets for system tray icon (crisp splat silhouette with hash cutout)
+- Uncommitted/committed tag tracking in agent session naming prompt
+- /ios-release command for iOS App Store releases with platform-prefixed tags
+
+### Fixed
+- Child sessions of worktree-group parents now visible in session list
+- Team JWT refresh before personal session exchange to prevent stale token 401s after idle/sleep
+- iOS session creation menu shows on single tap instead of requiring long press
+- Diff stats color toned down in agent turn summary (opacity-60 to match surrounding text)
+- TypeScript error for openFileDialog in ClaudeCodePanel (missing ElectronAPI type)
+
 ## [0.55.2] - 2026-03-01
 
 
