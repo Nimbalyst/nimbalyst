@@ -436,13 +436,13 @@ export class IndexRoom implements DurableObject {
           this.sendError(ws, 'unknown_message_type', `Unknown message type`);
       }
     } catch (err) {
-      console.error('[IndexRoom] Error handling message:', err);
-      console.error('[IndexRoom] Data type:', typeof data, 'length:', typeof data === 'string' ? data.length : (data as ArrayBuffer).byteLength);
-      if (typeof data === 'string' && data.length < 500) {
-        console.error('[IndexRoom] Data:', data);
-      } else if (typeof data === 'string') {
-        console.error('[IndexRoom] Data (first 500 chars):', data.substring(0, 500));
-      }
+      log.error('Error handling message:', err);
+      // log.error('Data type:', typeof data, 'length:', typeof data === 'string' ? data.length : (data as ArrayBuffer).byteLength);
+      // if (typeof data === 'string' && data.length < 500) {
+      //   log.error('Data:', data);
+      // } else if (typeof data === 'string') {
+      //   log.error('Data (first 500 chars):', data.substring(0, 500));
+      // }
       this.sendError(ws, 'parse_error', 'Failed to parse message');
     }
   }
@@ -903,7 +903,7 @@ export class IndexRoom implements DurableObject {
     connState: ConnectionState,
     message: RegisterPushTokenMessage
   ): Promise<void> {
-    console.log('[IndexRoom] Registering push token for device:', message.deviceId, 'platform:', message.platform, 'token length:', message.token.length);
+    // log.info('Registering push token for device:', message.deviceId, 'platform:', message.platform, 'token length:', message.token.length);
 
     // Store the token in DO storage
     const key = `push_token:${message.deviceId}`;
@@ -915,7 +915,7 @@ export class IndexRoom implements DurableObject {
     };
 
     await this.state.storage.put(key, value);
-    console.log('[IndexRoom] Push token stored for device:', message.deviceId);
+    // log.info('Push token stored for device:', message.deviceId);
   }
 
   /**
@@ -930,7 +930,7 @@ export class IndexRoom implements DurableObject {
     connState: ConnectionState,
     message: RequestMobilePushMessage
   ): Promise<void> {
-    console.log('[IndexRoom] Received push request for session:', message.sessionId);
+    // log.info('Received push request for session:', message.sessionId);
 
     // Get all registered push tokens for mobile devices
     const pushTokens = await this.state.storage.list<{
@@ -940,10 +940,9 @@ export class IndexRoom implements DurableObject {
       registered_at: number;
     }>({ prefix: 'push_token:' });
 
-    console.log('[IndexRoom] Found push tokens:', pushTokens.size);
+    // log.info('Found push tokens:', pushTokens.size);
 
     if (pushTokens.size === 0) {
-      console.log('[IndexRoom] No push tokens registered, skipping notification');
       return;
     }
 
@@ -956,27 +955,24 @@ export class IndexRoom implements DurableObject {
       }
     }
 
-    if (mostRecentDevice) {
-      console.log('[IndexRoom] Most recently active device:', mostRecentDevice.name,
-        'type:', mostRecentDevice.type, 'status:', mostRecentDevice.status,
-        'lastActiveAt:', mostRecentDevice.lastActiveAt);
-    }
+    // if (mostRecentDevice) {
+    //   log.info('Most recently active device:', mostRecentDevice.name,
+    //     'type:', mostRecentDevice.type, 'status:', mostRecentDevice.status,
+    //     'lastActiveAt:', mostRecentDevice.lastActiveAt);
+    // }
 
     // Route push notifications based on active device
     for (const [key, tokenData] of pushTokens) {
       // Skip the device that is most recently active - user is already there
       if (mostRecentDevice && tokenData.deviceId === mostRecentDevice.deviceId) {
-        console.log('[IndexRoom] Skipping push to most recently active device:', tokenData.deviceId);
         continue;
       }
 
       // Skip the requesting device (desktop that triggered the push)
       if (message.requestingDeviceId && tokenData.deviceId === message.requestingDeviceId) {
-        console.log('[IndexRoom] Skipping push to requesting device:', tokenData.deviceId);
         continue;
       }
 
-      console.log('[IndexRoom] Sending push to device:', tokenData.deviceId, 'platform:', tokenData.platform);
       if (tokenData.platform === 'ios') {
         const result = await this.sendAPNsPush(tokenData.token, {
           title: message.title,
@@ -984,7 +980,7 @@ export class IndexRoom implements DurableObject {
           sessionId: message.sessionId,
         });
         if (result.badToken) {
-          console.log('[IndexRoom] Removing bad token for device:', tokenData.deviceId);
+          log.warn('Removing bad token for device:', tokenData.deviceId);
           await this.state.storage.delete(key);
         }
       }
@@ -1002,14 +998,14 @@ export class IndexRoom implements DurableObject {
     const env = this.env as Env;
 
     if (!env.APNS_KEY || !env.APNS_KEY_ID || !env.APNS_TEAM_ID) {
-      console.log('[IndexRoom] APNs not configured, skipping push');
+      log.warn('APNs not configured, skipping push');
       return { success: false, badToken: false };
     }
 
     try {
       const jwt = await this.generateAPNsJWT(env.APNS_KEY, env.APNS_KEY_ID, env.APNS_TEAM_ID);
       const normalizedToken = deviceToken.toLowerCase();
-      console.log('[IndexRoom] Sending APNs push, token length:', normalizedToken.length, 'topic:', env.APNS_BUNDLE_ID || 'com.nimbalyst.app');
+      // log.info('Sending APNs push, token length:', normalizedToken.length, 'topic:', env.APNS_BUNDLE_ID || 'com.nimbalyst.app');
 
       const response = await fetch(
         `https://api.push.apple.com/3/device/${normalizedToken}`,
@@ -1035,16 +1031,15 @@ export class IndexRoom implements DurableObject {
       );
 
       if (response.ok) {
-        console.log('[IndexRoom] APNs push sent successfully');
         return { success: true, badToken: false };
       }
 
       const errorBody = await response.text();
-      console.error('[IndexRoom] APNs push failed:', response.status, errorBody);
+      log.error('APNs push failed:', response.status, errorBody);
       const badToken = errorBody.includes('BadDeviceToken') || errorBody.includes('Unregistered');
       return { success: false, badToken };
     } catch (error) {
-      console.error('[IndexRoom] APNs push error:', error);
+      log.error('APNs push error:', error);
       return { success: false, badToken: false };
     }
   }
@@ -1295,7 +1290,7 @@ export class IndexRoom implements DurableObject {
         try {
           ws.send(data);
         } catch (err) {
-          console.error('Broadcast error:', err);
+          log.error('Broadcast error:', err);
           this.connections.delete(ws);
         }
       }
@@ -1393,7 +1388,7 @@ export class IndexRoom implements DurableObject {
    * Handle WebSocket error
    */
   async webSocketError(ws: WebSocket, error: unknown): Promise<void> {
-    console.error('WebSocket error:', error);
+    log.error('WebSocket error:', error);
     const connState = this.connections.get(ws);
 
     // If this connection had device info, broadcast that it left and clean up storage

@@ -428,11 +428,11 @@ async function getAvailableExtensionTools(
     });
   });
 
-  console.log(
-    `[MCP Server] getAvailableExtensionTools: Filtered ${filtered.length}/${
-      tools.length
-    } tools for workspace: ${workspacePath}, filePath: ${filePath || "none"}`
-  );
+  // console.log(
+  //   `[MCP Server] getAvailableExtensionTools: Filtered ${filtered.length}/${
+  //     tools.length
+  //   } tools for workspace: ${workspacePath}, filePath: ${filePath || "none"}`
+  // );
 
   return filtered;
 }

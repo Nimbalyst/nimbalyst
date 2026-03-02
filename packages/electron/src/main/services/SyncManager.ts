@@ -455,7 +455,7 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
     logger.main.info('[SyncManager] Setting up incremental sync...');
     setTimeout(async () => {
       const syncStart = performance.now();
-      logger.main.info('[SyncManager] Starting initial incremental sync...');
+      // logger.main.info('[SyncManager] Starting initial incremental sync...');
       // Prevent triggered syncs from overlapping with the initial sync
       incrementalSyncInFlight = true;
       try {
@@ -471,7 +471,7 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
         try {
           serverIndex = await provider.fetchIndex();
           const fetchTime = performance.now() - fetchStart;
-          logger.main.info(`[SyncManager] Server has ${serverIndex.sessions.length} sessions (fetch took ${fetchTime.toFixed(1)}ms)`);
+          // logger.main.info(`[SyncManager] Server has ${serverIndex.sessions.length} sessions (fetch took ${fetchTime.toFixed(1)}ms)`);
         } catch (fetchError) {
           // Don't fall back to full sync - that would load ALL messages for ALL sessions into memory
           // and cause OOM crashes. Instead, skip sync and wait for connection to be restored.
@@ -489,13 +489,13 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
         const { getAllSessionsForSync } = await import('./PGLiteSessionStore');
         const allLocalSessions = await getAllSessionsForSync(false); // No messages yet
         const localTime = performance.now() - localStart;
-        logger.main.info(`[SyncManager] Local has ${allLocalSessions.length} sessions (query took ${localTime.toFixed(1)}ms)`);
+        // logger.main.info(`[SyncManager] Local has ${allLocalSessions.length} sessions (query took ${localTime.toFixed(1)}ms)`);
 
         // Get enabled projects filter (if configured)
         const { store } = await import('../utils/store');
         const syncSettings = store.get('sessionSync');
         const enabledProjects = syncSettings?.enabledProjects ?? [];
-        logger.main.info(`[SyncManager] Enabled projects filter: ${JSON.stringify(enabledProjects)}`);
+        // logger.main.info(`[SyncManager] Enabled projects filter: ${JSON.stringify(enabledProjects)}`);
 
         // Build enabled projects set - only sync explicitly selected projects
         const enabledProjectIds = new Set(enabledProjects);
@@ -554,11 +554,11 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
           }
         }
 
-        logger.main.info(`[SyncManager] Delta sync: ${sessionsNeedingIndexUpdate.length}/${allLocalSessions.length} sessions need update, ${sessionsNeedingMessageSync.length} need message sync (server has ${serverIndex.sessions.length})`);
+        // logger.main.info(`[SyncManager] Delta sync: ${sessionsNeedingIndexUpdate.length}/${allLocalSessions.length} sessions need update, ${sessionsNeedingMessageSync.length} need message sync (server has ${serverIndex.sessions.length})`);
 
         // Sync sessions that need it
         if (sessionsNeedingIndexUpdate.length === 0 && sessionsNeedingMessageSync.length === 0) {
-          logger.main.info('[SyncManager] All sessions up to date, no sync needed');
+          // logger.main.info('[SyncManager] All sessions up to date, no sync needed');
         } else {
           // Build per-session sinceTimestamp requests for lazy message loading.
           // Messages are NOT loaded here -- the provider loads them in small batches
@@ -602,8 +602,8 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
           }
         }
 
-        const totalSyncTime = performance.now() - syncStart;
-        logger.main.info(`[SyncManager] Incremental sync completed in ${totalSyncTime.toFixed(1)}ms`);
+        // const totalSyncTime = performance.now() - syncStart;
+        // logger.main.info(`[SyncManager] Incremental sync completed in ${totalSyncTime.toFixed(1)}ms`);
       } catch (error) {
         logger.main.warn('[SyncManager] Failed to sync sessions:', error);
       } finally {
@@ -620,7 +620,7 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
         const apiKeys = aiStore.get('apiKeys', {}) as Record<string, string>;
         const openaiKey = apiKeys['openai'];
         if (openaiKey) {
-          logger.main.info('[SyncManager] Syncing existing OpenAI API key to mobile devices');
+          // logger.main.info('[SyncManager] Syncing existing OpenAI API key to mobile devices');
           syncSettingsToMobile(openaiKey);
         }
       } catch (error) {
@@ -919,34 +919,28 @@ async function getAvailableModelsForMobile(): Promise<{ models: Array<{ id: stri
     const apiKeys = aiStore.get('apiKeys', {}) as Record<string, string>;
     const providerSettings = aiStore.get('providerSettings', {}) as Record<string, { enabled?: boolean; models?: string[]; baseUrl?: string }>;
 
+    // Build enabled provider set to avoid fetching from disabled providers (e.g., LMStudio network call)
+    const enabledSet = new Set<string>();
+    if (providerSettings['claude']?.enabled === true && !!(apiKeys['anthropic'] || process.env.ANTHROPIC_API_KEY)) enabledSet.add('claude');
+    if (providerSettings['claude-code']?.enabled !== false) enabledSet.add('claude-code');
+    if (providerSettings['openai']?.enabled === true && !!(apiKeys['openai'] || process.env.OPENAI_API_KEY)) enabledSet.add('openai');
+    if (providerSettings['openai-codex']?.enabled === true) enabledSet.add('openai-codex');
+    if (providerSettings['lmstudio']?.enabled === true) enabledSet.add('lmstudio');
+
     const modelsConfig = {
       ...apiKeys,
       lmstudio_url: providerSettings['lmstudio']?.baseUrl || 'http://127.0.0.1:8234'
     };
-    const allModels = await ModelRegistry.getAllModels(modelsConfig);
+    const allModels = await ModelRegistry.getAllModels(modelsConfig, enabledSet as Set<any>);
     const showExtendedContextModels = aiStore.get('showExtendedContextModels', false) as boolean;
 
-    // Filter to enabled providers using the same logic as ai:getModels
+    // Filter to enabled models (model-level filtering for specific model selection)
     const enabledModels = allModels.filter(model => {
       // Hide 1M models unless the setting is enabled
       if (!showExtendedContextModels && model.provider === 'claude-code' && (model.id.endsWith('-1m') || model.id.includes('-1m'))) {
         return false;
       }
       const ps = providerSettings[model.provider] as { enabled?: boolean; models?: string[] } | undefined;
-      // Claude Code is enabled by default
-      if (model.provider === 'claude-code') {
-        if (ps?.enabled === false) return false;
-      } else if (model.provider === 'openai-codex') {
-        if (ps?.enabled !== true) return false;
-      } else if (model.provider === 'claude') {
-        if (ps?.enabled !== true || !(apiKeys['anthropic'] || process.env.ANTHROPIC_API_KEY)) return false;
-      } else if (model.provider === 'openai') {
-        if (ps?.enabled !== true || !(apiKeys['openai'] || process.env.OPENAI_API_KEY)) return false;
-      } else if (model.provider === 'lmstudio') {
-        if (ps?.enabled !== true) return false;
-      } else {
-        return false;
-      }
       // If specific models are selected for this provider, filter
       if (ps?.models && ps.models.length > 0) {
         return ps.models.includes(model.id);
@@ -990,7 +984,7 @@ export async function syncSettingsToMobile(openaiApiKey?: string): Promise<void>
   // Get available AI models for the mobile model picker
   const { models: availableModels, defaultModel } = await getAvailableModelsForMobile();
 
-  logger.main.info(`[SyncManager] Syncing settings to mobile devices (version ${settingsVersion}, ${availableModels.length} models)`);
+  // logger.main.info(`[SyncManager] Syncing settings to mobile devices (version ${settingsVersion}, ${availableModels.length} models)`);
 
   try {
     await provider.syncSettings({
@@ -1003,7 +997,7 @@ export async function syncSettingsToMobile(openaiApiKey?: string): Promise<void>
       defaultModel,
       version: settingsVersion,
     });
-    logger.main.info('[SyncManager] Settings synced successfully');
+    // logger.main.info('[SyncManager] Settings synced successfully');
   } catch (error) {
     logger.main.error('[SyncManager] Failed to sync settings:', error);
   }

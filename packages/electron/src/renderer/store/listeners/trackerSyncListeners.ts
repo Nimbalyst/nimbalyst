@@ -37,7 +37,7 @@ async function loadAllTrackerItems(): Promise<void> {
     const items: TrackerItem[] = await window.electronAPI.invoke(
       'document-service:tracker-items-list'
     );
-    console.log('[trackerSyncListeners] Initial load:', items?.length || 0, 'items');
+    // console.log('[trackerSyncListeners] Initial load:', items?.length || 0, 'items');
     store.set(replaceAllTrackerItemsAtom, items || []);
   } catch (err) {
     console.error('[trackerSyncListeners] Failed to load tracker items:', err);
@@ -70,7 +70,7 @@ async function triggerWorkspaceScan(): Promise<void> {
 export function initTrackerSyncListeners(): () => void {
   const cleanups: Array<() => void> = [];
 
-  console.log('[trackerSyncListeners] Initializing tracker data listeners');
+  // console.log('[trackerSyncListeners] Initializing tracker data listeners');
 
   // Initial load from PGLite (shows cached data from previous session)
   loadAllTrackerItems();
@@ -90,11 +90,11 @@ export function initTrackerSyncListeners(): () => void {
     window.electronAPI.on(
       'document-service:tracker-items-changed',
       (change: TrackerItemChangeEvent) => {
-        console.log('[trackerSyncListeners] Received tracker-items-changed:', {
-          added: change.added?.length || 0,
-          updated: change.updated?.length || 0,
-          removed: change.removed?.length || 0,
-        });
+        // console.log('[trackerSyncListeners] Received tracker-items-changed:', {
+        //   added: change.added?.length || 0,
+        //   updated: change.updated?.length || 0,
+        //   removed: change.removed?.length || 0,
+        // });
         // Apply granular updates to the atom map
         if (change.added?.length) {
           for (const item of change.added) {

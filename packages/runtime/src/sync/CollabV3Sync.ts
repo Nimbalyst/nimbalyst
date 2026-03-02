@@ -1303,7 +1303,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
     indexWs.onopen = () => {
       indexConnected = true;
       indexReconnectAttempts = 0;
-      console.log('[CollabV3] Connected to index');
+      // console.log('[CollabV3] Connected to index');
 
       // Send device announcement if device info is provided
       announceDevice();
@@ -1349,7 +1349,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
             if (totalCount !== undefined && totalCount !== message.sessions.length) {
               console.warn(`[CollabV3] INDEX TRUNCATION DETECTED! Server COUNT(*)=${totalCount} but received ${message.sessions.length} sessions`);
             } else {
-              console.log(`[CollabV3] Received indexSyncResponse: ${message.sessions.length} sessions (server total: ${totalCount ?? 'unknown'})`);
+              // console.log(`[CollabV3] Received indexSyncResponse: ${message.sessions.length} sessions (server total: ${totalCount ?? 'unknown'})`);
             }
             if (pendingIndexFetch) {
               // Track sessions that fail decryption so we can delete them from the
@@ -1543,7 +1543,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
               );
               const decryptedProjects = decryptedProjectsRaw.filter((p): p is NonNullable<typeof p> => p !== null);
               if (decryptedProjectsRaw.length !== decryptedProjects.length) {
-                console.log(`[CollabV3] Filtered out ${decryptedProjectsRaw.length - decryptedProjects.length} undecryptable project entries (will be cleaned up by server TTL)`);
+                // console.log(`[CollabV3] Filtered out ${decryptedProjectsRaw.length - decryptedProjects.length} undecryptable project entries (will be cleaned up by server TTL)`);
               }
 
               pendingIndexFetch.resolve({
@@ -2420,7 +2420,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
           }
           // Encrypt client metadata (context usage, pending prompt state, phase, tags, draft, etc.)
           if ('draftInput' in change.metadata) {
-            console.log('[CollabV3] metadata_updated has draftInput:', (change.metadata as any).draftInput?.substring(0, 50));
+            // console.log('[CollabV3] metadata_updated has draftInput:', (change.metadata as any).draftInput?.substring(0, 50));
           }
           const hasClientMetaFields = ('currentContext' in change.metadata && change.metadata.currentContext) ||
             ('hasPendingPrompt' in change.metadata) ||
@@ -2437,7 +2437,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
               draftInput: 'draftInput' in change.metadata ? (change.metadata as any).draftInput : cached?.draftInput,
             };
             if (clientMeta.draftInput !== undefined) {
-              console.log('[CollabV3] Encrypting clientMeta with draftInput, sending to index');
+              // console.log('[CollabV3] Encrypting clientMeta with draftInput, sending to index');
             }
             const encrypted = await encryptClientMetadata(clientMeta, config.encryptionKey);
             metadata.encryptedClientMetadata = encrypted.encryptedClientMetadata;
@@ -2988,13 +2988,13 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
         };
 
         const msg: ClientMessage = { type: 'settingsSync', settings: payload };
-        console.log('[CollabV3] Syncing settings, version:', settings.version, 'ws state:', indexWs.readyState);
+        // console.log('[CollabV3] Syncing settings, version:', settings.version, 'ws state:', indexWs.readyState);
         if (indexWs.readyState !== WebSocket.OPEN) {
           console.error('[CollabV3] Cannot sync settings - websocket not open, state:', indexWs.readyState);
           return;
         }
         indexWs.send(JSON.stringify(msg));
-        console.log('[CollabV3] Settings sync message sent successfully');
+        // console.log('[CollabV3] Settings sync message sent successfully');
       } catch (err) {
         console.error('[CollabV3] Failed to encrypt/send settings:', err);
       }
@@ -3041,10 +3041,10 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
         body,
         requestingDeviceId: deviceId,
       };
-      console.log('[CollabV3] Requesting mobile push for session:', sessionId, 'deviceId:', deviceId, 'readyState:', indexWs.readyState);
+      // console.log('[CollabV3] Requesting mobile push for session:', sessionId, 'deviceId:', deviceId, 'readyState:', indexWs.readyState);
       try {
         indexWs.send(JSON.stringify(msg));
-        console.log('[CollabV3] Mobile push message sent successfully');
+        // console.log('[CollabV3] Mobile push message sent successfully');
       } catch (error) {
         console.error('[CollabV3] Failed to send mobile push message:', error);
       }

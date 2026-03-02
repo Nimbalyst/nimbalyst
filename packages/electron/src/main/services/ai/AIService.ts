@@ -3358,7 +3358,7 @@ export class AIService {
 
                 // Request mobile push notification for agent completion
                 if (syncProvider) {
-                  logger.main.info('[AIService] Requesting mobile push for session:', session.id, 'hasMethod:', !!syncProvider.requestMobilePush);
+                  // logger.main.info('[AIService] Requesting mobile push for session:', session.id, 'hasMethod:', !!syncProvider.requestMobilePush);
                   syncProvider.requestMobilePush?.(
                     session.id,
                     session.title || 'AI Session',
@@ -4271,7 +4271,7 @@ export class AIService {
 
     // Cancel current request
     safeHandle('ai:cancelRequest', async (event, sessionId: string, chunksReceived?: number) => {
-      console.log(`[AIService] ai:cancelRequest received for sessionId: ${sessionId}`);
+      // console.log(`[AIService] ai:cancelRequest received for sessionId: ${sessionId}`);
       // Abort the provider for the specific session
       if (!sessionId) {
         throw new Error('Session ID is required to cancel request');
@@ -4286,9 +4286,9 @@ export class AIService {
         return { success: false, error: 'Session not found' };
       }
 
-      console.log(`[AIService] Session found, provider type: ${session.provider}`);
+      // console.log(`[AIService] Session found, provider type: ${session.provider}`);
       const provider = ProviderFactory.getProvider(session.provider as AIProviderType, sessionId);
-      console.log(`[AIService] Provider lookup result: ${provider ? 'found' : 'NOT FOUND'}`);
+      // console.log(`[AIService] Provider lookup result: ${provider ? 'found' : 'NOT FOUND'}`);
       if (provider) {
         // Get provider type
         const providerType = (provider as any).providerType || 'unknown';
@@ -4301,7 +4301,7 @@ export class AIService {
         });
 
         provider.abort();
-        console.log(`[AIService] Cancelled request for session ${sessionId}`);
+        // console.log(`[AIService] Cancelled request for session ${sessionId}`);
         this.analytics.sendEvent('cancel_ai_request', {provider: providerType})
         return { success: true };
       }
@@ -4616,17 +4616,19 @@ export class AIService {
       const providerSettings = this.getNormalizedProviderSettings() as Record<AIProviderType, any>;
       const apiKeys = this.getSettingsStore().get('apiKeys', {}) as Record<string, string>;
 
-      //   anthropic: !!apiKeys['anthropic'],
-      //   openai: !!apiKeys['openai'],
-      //   lmstudio_url: apiKeys['lmstudio_url']
-      // });
+      // Only fetch from providers that are enabled (skip LMStudio network call when disabled)
+      const enabledSet = new Set<AIProviderType>();
+      if (providerSettings['claude']?.enabled === true && !!(apiKeys['anthropic'] || process.env.ANTHROPIC_API_KEY)) enabledSet.add('claude');
+      if (providerSettings['claude-code']?.enabled !== false) enabledSet.add('claude-code');
+      if (providerSettings['openai']?.enabled === true && !!(apiKeys['openai'] || process.env.OPENAI_API_KEY)) enabledSet.add('openai');
+      if (providerSettings['openai-codex']?.enabled === true) enabledSet.add('openai-codex');
+      if (providerSettings['lmstudio']?.enabled === true) enabledSet.add('lmstudio');
 
-      // Get all models - pass provider settings for LMStudio URL
       const modelsConfig = {
         ...apiKeys,
         lmstudio_url: providerSettings['lmstudio']?.baseUrl || 'http://127.0.0.1:8234'
       };
-      const allModels = await ModelRegistry.getAllModels(modelsConfig);
+      const allModels = await ModelRegistry.getAllModels(modelsConfig, enabledSet);
 
       // Group ALL models by provider (for configuration UI)
       const grouped: Record<string, any[]> = {};
@@ -4691,29 +4693,17 @@ export class AIService {
 
     // Get ENABLED models for actual use
     safeHandle('ai:getModels', async () => {
-      console.log('[AIService] ai:getModels called - fetching enabled models');
+      // console.log('[AIService] ai:getModels called - fetching enabled models');
       const providerSettings = this.getNormalizedProviderSettings() as Record<AIProviderType, any>;
       const apiKeys = this.getSettingsStore().get('apiKeys', {}) as Record<string, string>;
       const claudeCodeSettings = providerSettings['claude-code'] || {};
 
-      console.log('[AIService] ai:getModels - claude-code settings:', {
-        enabled: claudeCodeSettings.enabled,
-        models: claudeCodeSettings.models
-      });
+      // console.log('[AIService] ai:getModels - claude-code settings:', {
+      //   enabled: claudeCodeSettings.enabled,
+      //   models: claudeCodeSettings.models
+      // });
 
-      // Get all models - pass provider settings for LMStudio URL
-      const modelsConfig = {
-        ...apiKeys,
-        lmstudio_url: providerSettings['lmstudio']?.baseUrl || 'http://127.0.0.1:8234'
-      };
-      const allModels = await ModelRegistry.getAllModels(modelsConfig);
-
-      // Log claude-code models specifically
-      const claudeCodeModels = allModels.filter(m => m.provider === 'claude-code');
-      console.log('[AIService] ai:getModels - claude-code models from registry:',
-        claudeCodeModels.map(m => ({ id: m.id, name: m.name })));
-
-      // Build enabled providers map
+      // Build enabled providers map (needed before fetching to skip disabled providers)
       const enabledProviders: Record<AIProviderType, { enabled: boolean; models?: string[] }> = {
         'claude': {
           enabled: providerSettings['claude']?.enabled === true && !!(apiKeys['anthropic'] || process.env.ANTHROPIC_API_KEY),
@@ -4738,6 +4728,22 @@ export class AIService {
         }
       };
 
+      // Only fetch models from enabled providers (avoids network errors for disabled ones like LMStudio)
+      const enabledProviderSet = new Set(
+        (Object.entries(enabledProviders) as [AIProviderType, { enabled: boolean }][])
+          .filter(([, v]) => v.enabled)
+          .map(([k]) => k)
+      );
+      const modelsConfig = {
+        ...apiKeys,
+        lmstudio_url: providerSettings['lmstudio']?.baseUrl || 'http://127.0.0.1:8234'
+      };
+      const allModels = await ModelRegistry.getAllModels(modelsConfig, enabledProviderSet);
+
+      // const claudeCodeModels = allModels.filter(m => m.provider === 'claude-code');
+      // console.log('[AIService] ai:getModels - claude-code models from registry:',
+      //   claudeCodeModels.map(m => ({ id: m.id, name: m.name })));
+
       // Check if extended context (1M) models should be shown
       const showExtendedContextModels = this.getSettingsStore().get('showExtendedContextModels', false) as boolean;
 
@@ -4748,13 +4754,13 @@ export class AIService {
           return false;
         }
         const provider = enabledProviders[model.provider as AIProviderType];
-        if (model.provider === 'openai-codex') {
-          console.log('[AIService] Filtering openai-codex model:', {
-            modelId: model.id,
-            providerEnabled: provider?.enabled,
-            selectedModels: provider?.models
-          });
-        }
+        // if (model.provider === 'openai-codex') {
+        //   console.log('[AIService] Filtering openai-codex model:', {
+        //     modelId: model.id,
+        //     providerEnabled: provider?.enabled,
+        //     selectedModels: provider?.models
+        //   });
+        // }
         if (!provider?.enabled) return false;
         // If specific models are selected, filter to those
         if (provider.models && provider.models.length > 0) {
@@ -5169,7 +5175,7 @@ export class AIService {
       }
     );
     this.codexSessionWatchers.set(sessionId, { cache, watcher, workspacePath });
-    logger.main.info('[AIService] Started Codex file watcher for session:', sessionId, { workspacePath });
+    // logger.main.info('[AIService] Started Codex file watcher for session:', sessionId, { workspacePath });
   }
 
   /**
@@ -5400,7 +5406,7 @@ export class AIService {
         await entry.watcher?.stop();
         entry.cache.stopSession();
         this.codexSessionWatchers.delete(sessionId);
-        logger.main.info('[AIService] Stopped Codex file watcher for session:', sessionId);
+        // logger.main.info('[AIService] Stopped Codex file watcher for session:', sessionId);
       } catch (error) {
         logger.main.error('[AIService] Error stopping Codex file watcher:', error);
         this.codexSessionWatchers.delete(sessionId);

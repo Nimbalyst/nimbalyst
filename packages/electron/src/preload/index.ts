@@ -226,7 +226,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getThemeSync: () => {
     try {
       const theme = ipcRenderer.sendSync('get-theme-sync');
-      console.log('[preload] getThemeSync returned:', theme);
+      // console.log('[preload] getThemeSync returned:', theme);
       return theme;
     } catch (err) {
       console.error('[preload] getThemeSync error:', err);

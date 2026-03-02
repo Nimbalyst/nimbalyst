@@ -204,7 +204,7 @@ export async function getOrgScopedJwt(orgId: string, accountOrgId?: string): Pro
     expiresAt,
   });
 
-  logger.main.info('[TeamService] Obtained org-scoped JWT for:', orgId, 'expires in', Math.round((expiresAt - Date.now()) / 1000), 's');
+  // logger.main.info('[TeamService] Obtained org-scoped JWT for:', orgId, 'expires in', Math.round((expiresAt - Date.now()) / 1000), 's');
   return data.sessionJwt;
 }
 
@@ -222,7 +222,7 @@ async function fetchTeamApi(path: string, method: string, body?: unknown, orgId?
   const httpUrl = getCollabServerUrl();
 
   const jwtSource = orgId ? 'org-scoped' : 'personal';
-  logger.main.info(`[TeamService] ${method} ${path} (jwt: ${jwtSource}${orgId ? `, org: ${orgId}` : ''}${accountOrgId ? `, account: ${accountOrgId}` : ''})`);
+  // logger.main.info(`[TeamService] ${method} ${path} (jwt: ${jwtSource}${orgId ? `, org: ${orgId}` : ''}${accountOrgId ? `, account: ${accountOrgId}` : ''})`);
 
   const makeRequest = async (jwt: string) => {
     const headers: Record<string, string> = {
@@ -396,7 +396,7 @@ async function listTeams(): Promise<TeamDetails[]> {
     }
   }
 
-  logger.main.info(`[TeamService] listTeams: found ${allTeams.length} team(s)`, allTeams.map(t => ({ orgId: t.orgId, name: t.name, hash: t.gitRemoteHash?.substring(0, 8) })));
+  // logger.main.info(`[TeamService] listTeams: found ${allTeams.length} team(s)`, allTeams.map(t => ({ orgId: t.orgId, name: t.name, hash: t.gitRemoteHash?.substring(0, 8) })));
   return allTeams;
 }
 
@@ -420,13 +420,13 @@ async function getTeamByOrgId(orgId: string): Promise<TeamDetails | null> {
  */
 export async function findTeamForWorkspace(workspacePath: string): Promise<TeamDetails | null> {
   if (!isAuthenticated()) {
-    logger.main.info('[TeamService] findTeamForWorkspace: not authenticated');
+    // logger.main.info('[TeamService] findTeamForWorkspace: not authenticated');
     return null;
   }
 
   const remote = getGitRemote(workspacePath);
   if (!remote) {
-    logger.main.info('[TeamService] findTeamForWorkspace: no git remote for', workspacePath);
+    // logger.main.info('[TeamService] findTeamForWorkspace: no git remote for', workspacePath);
     return null;
   }
 
@@ -438,11 +438,11 @@ export async function findTeamForWorkspace(workspacePath: string): Promise<TeamD
     // invited or pending teams without explicit user consent.
     const activeTeams = teams.filter(t => !t.membershipType || t.membershipType === 'active_member');
     const match = activeTeams.find(t => t.gitRemoteHash === remoteHash) || null;
-    if (match) {
-      logger.main.info('[TeamService] findTeamForWorkspace: matched team:', match.name, 'orgId:', match.orgId, 'for workspace:', workspacePath);
-    } else if (teams.length > 0) {
-      logger.main.info('[TeamService] findTeamForWorkspace: no hash match. workspace hash:', remoteHash, 'team hashes:', teams.map(t => ({ orgId: t.orgId, name: t.name, hash: t.gitRemoteHash, membership: t.membershipType })));
-    }
+    // if (match) {
+    //   logger.main.info('[TeamService] findTeamForWorkspace: matched team:', match.name, 'orgId:', match.orgId, 'for workspace:', workspacePath);
+    // } else if (teams.length > 0) {
+    //   logger.main.info('[TeamService] findTeamForWorkspace: no hash match. workspace hash:', remoteHash, 'team hashes:', teams.map(t => ({ orgId: t.orgId, name: t.name, hash: t.gitRemoteHash, membership: t.membershipType })));
+    // }
     return match;
   } catch (err) {
     logger.main.error('[TeamService] findTeamForWorkspace error:', err);

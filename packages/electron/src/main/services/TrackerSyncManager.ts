@@ -54,7 +54,7 @@ const statusListeners = new Set<TrackerSyncStatusListener>();
 
 function sendToAllWindows(channel: string, data?: unknown): void {
   const windows = BrowserWindow.getAllWindows();
-  logger.main.info(`[TrackerSyncManager] sendToAllWindows(${channel}) to ${windows.length} window(s)`);
+  logger.main.debug(`[TrackerSyncManager] sendToAllWindows(${channel}) to ${windows.length} window(s)`);
   windows.forEach(window => {
     if (!window.isDestroyed()) {
       window.webContents.send(channel, data);
@@ -164,11 +164,10 @@ export function isTrackerSyncActive(workspacePath?: string): boolean {
  * - Workspace has a git remote (for project identity)
  */
 export async function initializeTrackerSync(workspacePath: string): Promise<void> {
-  logger.main.info('[TrackerSyncManager] initializeTrackerSync called', { workspacePath });
+  logger.main.debug('[TrackerSyncManager] initializeTrackerSync called', { workspacePath });
 
   // If already connected for this workspace, skip
   if (workspaceStates.has(workspacePath)) {
-    logger.main.info('[TrackerSyncManager] Already connected for this workspace, skipping');
     return;
   }
 
@@ -177,19 +176,16 @@ export async function initializeTrackerSync(workspacePath: string): Promise<void
   const config = getSessionSyncConfig();
   const projectSyncEnabled = config?.enabledProjects?.includes(workspacePath);
   if (!config?.enabled && !projectSyncEnabled) {
-    logger.main.info('[TrackerSyncManager] Sync not enabled for this workspace, skipping tracker sync');
     return;
   }
 
   // Require authentication
   if (!isAuthenticated()) {
-    logger.main.info('[TrackerSyncManager] Not authenticated, skipping tracker sync');
     return;
   }
 
   const userId = getStytchUserId();
   if (!userId) {
-    logger.main.info('[TrackerSyncManager] No Stytch user ID, skipping tracker sync');
     return;
   }
 
@@ -197,7 +193,6 @@ export async function initializeTrackerSync(workspacePath: string): Promise<void
   // Users auth to their personal org, but tracker rooms are scoped to team orgs
   const team = await findTeamForWorkspace(workspacePath);
   if (!team) {
-    logger.main.info('[TrackerSyncManager] No team found for workspace, skipping tracker sync');
     return;
   }
   const orgId = team.orgId;
@@ -205,7 +200,6 @@ export async function initializeTrackerSync(workspacePath: string): Promise<void
   // Get project identity from git remote
   const projectId = getGitProjectId(workspacePath);
   if (!projectId) {
-    logger.main.info('[TrackerSyncManager] No git remote found, skipping tracker sync');
     return;
   }
 
@@ -217,12 +211,7 @@ export async function initializeTrackerSync(workspacePath: string): Promise<void
   const serverUrl = effectiveEnvironment === 'development' ? DEVELOPMENT_SYNC_URL : PRODUCTION_SYNC_URL;
 
   try {
-    logger.main.info('[TrackerSyncManager] Initializing tracker sync...', {
-      serverUrl,
-      userId,
-      orgId,
-      projectId,
-    });
+    // logger.main.info('[TrackerSyncManager] Connecting tracker sync', { orgId, projectId });
 
     const { TrackerSyncProvider, payloadToTrackerItem } = loadSyncModule();
 
@@ -231,7 +220,6 @@ export async function initializeTrackerSync(workspacePath: string): Promise<void
     let encryptionKey = await getOrgKey(orgId);
     if (!encryptionKey) {
       // Key not cached locally - try to fetch from server via key envelope
-      logger.main.info('[TrackerSyncManager] No org key cached, attempting to fetch envelope...');
       try {
         const orgJwt = await getOrgScopedJwt(orgId);
         await getOrCreateIdentityKeyPair();
@@ -241,7 +229,7 @@ export async function initializeTrackerSync(workspacePath: string): Promise<void
         logger.main.warn('[TrackerSyncManager] Failed to fetch org key envelope:', err);
       }
       if (!encryptionKey) {
-        logger.main.info('[TrackerSyncManager] No org key available (no envelope on server?), skipping tracker sync');
+        logger.main.warn('[TrackerSyncManager] No org key available, skipping tracker sync');
         return;
       }
     }
@@ -296,7 +284,7 @@ export async function initializeTrackerSync(workspacePath: string): Promise<void
 
     // Connect
     await provider.connect();
-    logger.main.info('[TrackerSyncManager] Tracker sync initialized successfully for', workspacePath);
+    // logger.main.info('[TrackerSyncManager] Tracker sync initialized successfully for', workspacePath);
 
     // Push local unsynced items to the server.
     // This handles first-time share: admin has local items that need to be uploaded
@@ -308,7 +296,7 @@ export async function initializeTrackerSync(workspacePath: string): Promise<void
         [workspacePath]
       );
       if (localResult.rows.length > 0) {
-        logger.main.info('[TrackerSyncManager] Uploading', localResult.rows.length, 'local items to server for', workspacePath);
+        // logger.main.info('[TrackerSyncManager] Uploading', localResult.rows.length, 'local items to server for', workspacePath);
         const payloads: import('@nimbalyst/runtime/sync').TrackerItemPayload[] = [];
         for (const row of localResult.rows) {
           const data = typeof row.data === 'string' ? JSON.parse(row.data) : row.data;
@@ -343,10 +331,9 @@ export async function initializeTrackerSync(workspacePath: string): Promise<void
           `UPDATE tracker_items SET sync_status = 'synced' WHERE id = ANY($1::text[])`,
           [ids]
         );
-        logger.main.info('[TrackerSyncManager] Uploaded', payloads.length, 'local items to server');
-      } else {
-        logger.main.info('[TrackerSyncManager] No local unsynced items to upload for', workspacePath);
+        // logger.main.info('[TrackerSyncManager] Uploaded', payloads.length, 'local items to server');
       }
+
     } catch (uploadErr) {
       // Non-fatal -- items can be synced individually later
       logger.main.warn('[TrackerSyncManager] Failed to upload local items:', uploadErr);
@@ -366,7 +353,7 @@ export function shutdownTrackerSync(workspacePath?: string): void {
   if (workspacePath) {
     const wsState = workspaceStates.get(workspacePath);
     if (wsState) {
-      logger.main.info('[TrackerSyncManager] Shutting down tracker sync for', workspacePath);
+      // logger.main.info('[TrackerSyncManager] Shutting down tracker sync for', workspacePath);
       wsState.provider.destroy();
       workspaceStates.delete(workspacePath);
       statusListeners.forEach(listener => listener(getAggregateStatus()));
@@ -375,7 +362,7 @@ export function shutdownTrackerSync(workspacePath?: string): void {
   } else {
     // Shut down all
     if (workspaceStates.size > 0) {
-      logger.main.info('[TrackerSyncManager] Shutting down all tracker sync connections...');
+      // logger.main.info('[TrackerSyncManager] Shutting down all tracker sync connections...');
       for (const [wp, wsState] of workspaceStates) {
         wsState.provider.destroy();
         sendToAllWindows('tracker-sync:status-changed', { workspacePath: wp, status: 'disconnected' });
@@ -407,7 +394,7 @@ async function hydrateTrackerItem(
   workspacePath: string,
   payloadToTrackerItem: typeof import('@nimbalyst/runtime/sync').payloadToTrackerItem,
 ): Promise<void> {
-  logger.main.info('[TrackerSyncManager] Hydrating item:', payload.itemId, payload.title, 'into workspace:', workspacePath);
+  // logger.main.info('[TrackerSyncManager] Hydrating item:', payload.itemId, payload.title, 'into workspace:', workspacePath);
   const item = payloadToTrackerItem(payload, workspacePath);
 
   // Build JSONB data object with collaborative fields
@@ -443,7 +430,7 @@ async function hydrateTrackerItem(
     ]
   );
 
-  logger.main.info('[TrackerSyncManager] Hydrated item:', payload.itemId, 'into PGLite. Notifying renderer...');
+  // logger.main.info('[TrackerSyncManager] Hydrated item:', payload.itemId, 'into PGLite. Notifying renderer...');
 
   // Notify renderer of item change via the document-service channel
   // that TrackerTable's watchTrackerItems is already subscribed to.
@@ -670,7 +657,7 @@ export function registerTrackerSyncHandlers(): void {
 
         await provider.connect();
 
-        logger.main.info('[TrackerSyncManager] Test: Tracker sync connected for', payload.workspacePath);
+        // logger.main.info('[TrackerSyncManager] Test: Tracker sync connected for', payload.workspacePath);
         const wsState = workspaceStates.get(payload.workspacePath);
         return { success: true, status: wsState?.status ?? 'connecting', projectId: payload.projectId };
       } catch (error) {

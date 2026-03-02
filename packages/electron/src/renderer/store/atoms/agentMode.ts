@@ -411,7 +411,7 @@ export const toggleSessionHistoryCollapsedAtom = atom(
  * Restores layout settings and selected workstream.
  */
 export async function initAgentModeLayout(workspacePath: string): Promise<void> {
-  console.log('[agentMode] initAgentModeLayout called with workspacePath:', workspacePath);
+  // console.log('[agentMode] initAgentModeLayout called with workspacePath:', workspacePath);
   currentWorkspacePath = workspacePath;
 
   try {

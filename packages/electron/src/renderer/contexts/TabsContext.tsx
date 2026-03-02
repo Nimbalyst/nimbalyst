@@ -86,7 +86,7 @@ export function TabsProvider({
   getNavigationState,
   disablePersistence = false
 }: TabsProviderProps) {
-  if (import.meta.env.DEV) console.log('[TabsProvider] render');
+  // if (import.meta.env.DEV) console.log('[TabsProvider] render');
   // Store state in refs to avoid re-renders
   // We keep mutable state in storeRef and create immutable snapshots for useSyncExternalStore
   const storeRef = useRef<TabsStore>({

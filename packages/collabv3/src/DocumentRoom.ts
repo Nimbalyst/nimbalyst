@@ -539,7 +539,7 @@ export class DocumentRoom implements DurableObject {
         try {
           ws.send(data);
         } catch (err) {
-          console.error('Broadcast error:', err);
+          log.error('Broadcast error:', err);
           this.connections.delete(ws);
         }
       }
@@ -581,7 +581,7 @@ export class DocumentRoom implements DurableObject {
    * Handle WebSocket error.
    */
   async webSocketError(ws: WebSocket, error: unknown): Promise<void> {
-    console.error('WebSocket error:', error);
+    log.error('WebSocket error:', error);
     this.connections.delete(ws);
 
     if (this.connections.size === 0) {

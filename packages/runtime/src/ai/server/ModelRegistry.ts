@@ -78,19 +78,23 @@ export class ModelRegistry {
   }
 
   /**
-   * Get all available models across all providers
+   * Get all available models across all providers.
+   * @param apiKeys - API keys and config (e.g., anthropic, openai, lmstudio_url)
+   * @param enabledProviders - Optional set of enabled provider types. If provided, only these providers are fetched.
    */
-  static async getAllModels(apiKeys: Record<string, string>): Promise<AIModel[]> {
+  static async getAllModels(apiKeys: Record<string, string>, enabledProviders?: Set<AIProviderType>): Promise<AIModel[]> {
     const allModels: AIModel[] = [];
 
-    // Fetch from each provider in parallel
-    const promises = [
-      this.getModelsForProvider('claude', apiKeys['anthropic']),
-      this.getModelsForProvider('claude-code'), // Claude Code uses its own auth, not the Chat API key
-      this.getModelsForProvider('openai', apiKeys['openai']),
-      this.getModelsForProvider('openai-codex', apiKeys['openai']),
-      this.getModelsForProvider('lmstudio', undefined, apiKeys['lmstudio_url'])
-    ];
+    const shouldFetch = (provider: AIProviderType) => !enabledProviders || enabledProviders.has(provider);
+
+    // Fetch from each enabled provider in parallel
+    const promises: Promise<AIModel[]>[] = [];
+
+    if (shouldFetch('claude')) promises.push(this.getModelsForProvider('claude', apiKeys['anthropic']));
+    if (shouldFetch('claude-code')) promises.push(this.getModelsForProvider('claude-code'));
+    if (shouldFetch('openai')) promises.push(this.getModelsForProvider('openai', apiKeys['openai']));
+    if (shouldFetch('openai-codex')) promises.push(this.getModelsForProvider('openai-codex', apiKeys['openai']));
+    if (shouldFetch('lmstudio')) promises.push(this.getModelsForProvider('lmstudio', undefined, apiKeys['lmstudio_url']));
 
     const results = await Promise.allSettled(promises);
 

@@ -107,7 +107,7 @@ class GitOperationLockService {
     });
 
     this.operationLocks.set(repoPath, lockPromise);
-    logger.info('Acquired operation lock', { repoPath, operationName });
+    // logger.info('Acquired operation lock', { repoPath, operationName });
 
     try {
       const result = await operation();
@@ -119,7 +119,7 @@ class GitOperationLockService {
       if (this.operationLocks.get(repoPath) === lockPromise) {
         this.operationLocks.delete(repoPath);
       }
-      logger.info('Released operation lock', { repoPath, operationName });
+      // logger.info('Released operation lock', { repoPath, operationName });
     }
   }
 

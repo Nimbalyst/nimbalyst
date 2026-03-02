@@ -38,7 +38,7 @@ export const TabManager: React.FC<TabManagerProps> = ({
   isAIChatCollapsed,
   children
 }) => {
-  if (import.meta.env.DEV) console.log('[TabManager] render');
+  // if (import.meta.env.DEV) console.log('[TabManager] render');
   // Get tabs from context - this component subscribes to tab changes
   // NOTE: hasPendingDiffs polling removed - dirty/pending state now via Jotai atoms per-tab
   const { tabs, activeTabId, switchTab, togglePin, reorderTabs } = useTabs();
