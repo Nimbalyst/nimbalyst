@@ -12,7 +12,7 @@ import { diffModeIntro } from './diff-mode-intro';
 import { fileTreeTools } from './file-tree-tools';
 import { layoutControlsIntro } from './layout-controls-intro';
 import { modelPickerIntro } from './model-picker-intro';
-import { navigationIntro } from './navigation-intro';
+import { agentModeIntro, filesModeIntro } from './navigation-intro';
 import { planModeIntro } from './plan-mode-intro';
 import { attachFilesIntro } from './attach-files-intro';
 import { sessionQuickOpenIntro } from './session-quick-open-intro';
@@ -26,7 +26,8 @@ import { sessionKanbanIntro } from './session-kanban-intro';
  * Add new walkthroughs here as they are created.
  */
 export const walkthroughs: WalkthroughDefinition[] = [
-  navigationIntro,
+  agentModeIntro,
+  filesModeIntro,
   aiSessionsButton,
   contextWindowIntro,
   diffModeIntro,

@@ -65,7 +65,8 @@ test.describe('Walkthrough System', () => {
   test('should list available walkthroughs', async () => {
     const walkthroughs = await getAvailableWalkthroughs(page);
 
-    expect(walkthroughs).toContain('navigation-intro');
+    expect(walkthroughs).toContain('agent-mode-intro');
+    expect(walkthroughs).toContain('files-mode-intro');
     expect(walkthroughs).toContain('ai-sessions-button');
     expect(walkthroughs).toContain('file-tree-tools');
   });

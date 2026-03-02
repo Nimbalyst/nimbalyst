@@ -1,22 +1,49 @@
 /**
- * Navigation Introduction Walkthrough
+ * Navigation Introduction Walkthroughs
  *
- * Introduces users to the navigation gutter with Files mode and Agent mode.
- * This is a high-priority walkthrough shown to new users.
+ * Two context-aware walkthroughs that introduce users to the OTHER mode:
+ * - In Files mode: introduces Agent Mode
+ * - In Agent mode: introduces Files Mode
  */
 
 import type { WalkthroughDefinition } from '../types';
 
-export const navigationIntro: WalkthroughDefinition = {
-  id: 'navigation-intro',
-  name: 'Navigation Introduction',
+/**
+ * Shown in Files mode to introduce Agent Mode.
+ */
+export const agentModeIntro: WalkthroughDefinition = {
+  id: 'agent-mode-intro',
+  name: 'Agent Mode Introduction',
   version: 1,
   trigger: {
-    // Show in any mode since the nav gutter is always visible
-    screen: '*',
-    // Short delay after app loads
+    screen: 'files',
     delay: 500,
-    // Highest priority - show this first
+    priority: 5,
+  },
+  steps: [
+    {
+      id: 'agent-mode',
+      target: {
+        testId: 'agent-mode-button',
+      },
+      title: 'Agent Mode',
+      body: 'A focused coding agent management interface. Manage many running AI agent sessions, track their execution, control their commits and organize them with a Kanban board. Pick your agent, give instructions, and the AI agent will write code, run commands, and make changes across your project.',
+      placement: 'right',
+      shortcut: 'Cmd+2',
+    },
+  ],
+};
+
+/**
+ * Shown in Agent mode to introduce Files Mode.
+ */
+export const filesModeIntro: WalkthroughDefinition = {
+  id: 'files-mode-intro',
+  name: 'Files Mode Introduction',
+  version: 1,
+  trigger: {
+    screen: 'agent',
+    delay: 500,
     priority: 5,
   },
   steps: [
@@ -29,16 +56,6 @@ export const navigationIntro: WalkthroughDefinition = {
       body: 'Browse and edit your project files. Open markdown documents, code files, and more. The AI assistant sidebar is available here too.',
       placement: 'right',
       shortcut: 'Cmd+1',
-    },
-    {
-      id: 'agent-mode',
-      target: {
-        testId: 'agent-mode-button',
-      },
-      title: 'Agent Mode',
-      body: 'A focused coding environment powered by Claude. Give instructions, and the AI agent will write code, run commands, and make changes across your project.',
-      placement: 'right',
-      shortcut: 'Cmd+2',
     },
   ],
 };
