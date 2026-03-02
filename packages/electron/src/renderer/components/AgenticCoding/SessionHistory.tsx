@@ -1503,8 +1503,37 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
         }
       }
     }
+
+    // Include child sessions of worktree-group members that don't have a worktreeId themselves.
+    // This handles the case where a worktree session is also a workstream parent (has children
+    // created via mobile/sync with parentSessionId but no worktreeId). Without this, those
+    // children are invisible - filtered out of the root list by parentSessionId, but not
+    // included in any worktree group by worktreeId.
+    const worktreeSessionIds = new Set<string>();
+    for (const [, group] of groups) {
+      for (const s of group.sessions) {
+        worktreeSessionIds.add(s.id);
+      }
+    }
+    for (const child of sessionRegistry.values()) {
+      if (child.parentSessionId && worktreeSessionIds.has(child.parentSessionId) && !child.worktreeId) {
+        // Find which worktree group the parent belongs to
+        const parent = sessions.find(s => s.id === child.parentSessionId);
+        if (parent?.worktreeId) {
+          const group = groups.get(parent.worktreeId);
+          if (group) {
+            group.sessions.push(child);
+            if (sortBy === 'updated') {
+              const childTimestamp = child.updatedAt || child.createdAt;
+              group.timestamp = Math.max(group.timestamp, childTimestamp);
+            }
+          }
+        }
+      }
+    }
+
     return groups;
-  }, [sessions, sortBy]);
+  }, [sessions, sortBy, sessionRegistry]);
 
   // Get all worktree IDs for batch fetching
   const sortedWorktreeIds = useMemo(() => {
