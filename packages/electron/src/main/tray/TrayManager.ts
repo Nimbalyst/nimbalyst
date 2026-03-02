@@ -9,7 +9,7 @@
  */
 
 import path from 'node:path';
-import { Tray, Menu, app, nativeImage, nativeTheme, BrowserWindow } from 'electron';
+import { Tray, Menu, app, nativeImage, nativeTheme, systemPreferences, BrowserWindow } from 'electron';
 import { getSessionStateManager } from '@nimbalyst/runtime/ai/server/SessionStateManager';
 import type { SessionStateEvent } from '@nimbalyst/runtime/ai/server/types/SessionState';
 import { findWindowByWorkspace } from '../window/WindowManager';
@@ -101,10 +101,20 @@ export class TrayManager {
       this.onSessionStateEvent(event);
     });
 
-    // Re-render icon when system theme changes (needed for non-template icons with blue dots)
+    // Re-render icon when system appearance changes (needed for non-template icons with blue dots).
+    // nativeTheme 'updated' fires when the app's themeSource changes or when the system
+    // appearance changes AND themeSource is 'system'. Since the app may force dark mode,
+    // also listen to systemPreferences for actual macOS appearance changes.
     const onThemeUpdated = () => this.updateIcon();
     nativeTheme.on('updated', onThemeUpdated);
-    this.themeListener = () => nativeTheme.removeListener('updated', onThemeUpdated);
+    const appearanceSubId = systemPreferences.subscribeNotification(
+      'AppleInterfaceThemeChangedNotification',
+      onThemeUpdated,
+    );
+    this.themeListener = () => {
+      nativeTheme.removeListener('updated', onThemeUpdated);
+      systemPreferences.unsubscribeNotification(appearanceSubId);
+    };
 
     // Create the tray if setting is enabled (default: true)
     if (isShowTrayIcon()) {
@@ -543,7 +553,10 @@ export class TrayManager {
 
     // Template icons are black-with-alpha. For non-template rendering,
     // recolor the foreground to match the menu bar appearance.
-    const isDarkMenuBar = nativeTheme.shouldUseDarkColors;
+    // IMPORTANT: nativeTheme.shouldUseDarkColors reflects the app's theme (which may
+    // force dark mode). The macOS menu bar follows the SYSTEM appearance, so we must
+    // check that directly via systemPreferences.
+    const isDarkMenuBar = systemPreferences.getEffectiveAppearance().includes('Dark');
     const fg = isDarkMenuBar ? 255 : 0;
 
     for (let i = 0; i < canvas.length; i += 4) {
