@@ -1565,8 +1565,8 @@ export const RichTranscriptView = React.forwardRef<
                                 {fileStats && (
                                   <span>
                                     {' · '}{fileStats.filesModified} file{fileStats.filesModified !== 1 ? 's' : ''}
-                                    {fileStats.linesAdded > 0 && <span className="text-[var(--nim-success)]"> +{fileStats.linesAdded}</span>}
-                                    {fileStats.linesRemoved > 0 && <span className="text-[var(--nim-error)]"> -{fileStats.linesRemoved}</span>}
+                                    {fileStats.linesAdded > 0 && <span className="text-[var(--nim-success)] opacity-60"> +{fileStats.linesAdded}</span>}
+                                    {fileStats.linesRemoved > 0 && <span className="text-[var(--nim-error)] opacity-60"> -{fileStats.linesRemoved}</span>}
                                   </span>
                                 )}
                               </div>
@@ -1833,8 +1833,8 @@ export const RichTranscriptView = React.forwardRef<
                               {fileStats && (
                                 <span>
                                   {' · '}{fileStats.filesModified} file{fileStats.filesModified !== 1 ? 's' : ''}
-                                  {fileStats.linesAdded > 0 && <span className="text-[var(--nim-success)]"> +{fileStats.linesAdded}</span>}
-                                  {fileStats.linesRemoved > 0 && <span className="text-[var(--nim-error)]"> -{fileStats.linesRemoved}</span>}
+                                  {fileStats.linesAdded > 0 && <span className="text-[var(--nim-success)] opacity-60"> +{fileStats.linesAdded}</span>}
+                                  {fileStats.linesRemoved > 0 && <span className="text-[var(--nim-error)] opacity-60"> -{fileStats.linesRemoved}</span>}
                                 </span>
                               )}
                             </div>
