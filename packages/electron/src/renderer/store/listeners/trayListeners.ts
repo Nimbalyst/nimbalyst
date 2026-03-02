@@ -37,7 +37,8 @@ export function initTrayListeners(): () => void {
     const { sessionId, workspacePath } = data;
     if (!sessionId || !workspacePath) return;
 
-    // Switch to agent mode first
+    // Switch to agent mode (kanban exit is handled globally by
+    // onWorkstreamSelectedCallbackAtom when setSelectedWorkstreamAtom fires)
     store.set(setWindowModeAtom, 'agent');
 
     // Look up the session in the registry

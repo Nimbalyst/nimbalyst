@@ -1975,6 +1975,23 @@ export const selectedWorkstreamAtom = atomFamily((_workspacePath: string) =>
 let selectedWorkstreamPersistTimer: ReturnType<typeof setTimeout> | null = null;
 
 /**
+ * Plain module-level callback invoked whenever a workstream is selected.
+ * NOT a Jotai atom -- avoids Provider/store mismatch issues where the
+ * atom getter inside setSelectedWorkstreamAtom reads from a different
+ * store than the one used to register the callback.
+ *
+ * Used to trigger side effects (like exiting kanban view) without
+ * creating circular dependencies between atom modules.
+ * agentMode.ts imports from sessions.ts, so sessions.ts cannot import
+ * agentMode atoms directly -- this callback breaks the cycle.
+ */
+let _workstreamSelectedHook: (() => void) | null = null;
+
+export function registerWorkstreamSelectedHook(hook: (() => void) | null): void {
+  _workstreamSelectedHook = hook;
+}
+
+/**
  * Set the selected workstream.
  * Handles marking the session as active/read.
  * Persists to workspace state for restore on reload.
@@ -1986,9 +2003,14 @@ export const setSelectedWorkstreamAtom = atom(
     selection: { type: WorkstreamType; id: string } | null;
   }) => {
     const prev = get(selectedWorkstreamAtom(workspacePath));
-    // console.log(`[setSelectedWorkstreamAtom] Changing selection from ${prev?.type}:${prev?.id} to ${selection?.type}:${selection?.id}`);
-    // console.trace('[setSelectedWorkstreamAtom] Call stack');
     set(selectedWorkstreamAtom(workspacePath), selection);
+
+    // Fire the selection hook (e.g., exit kanban view).
+    // This fires on EVERY selection, including re-selecting the same session,
+    // which is intentional -- the user explicitly navigated to a session.
+    if (selection) {
+      _workstreamSelectedHook?.();
+    }
 
     // If selecting a single session OR a worktree session, set it as active immediately.
     // Worktree selections use a session ID as the selection ID, and may not go through

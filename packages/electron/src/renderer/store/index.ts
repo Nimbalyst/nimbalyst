@@ -139,6 +139,7 @@ export {
   // Workstream atoms (AgentMode rewrite)
   selectedWorkstreamAtom,
   setSelectedWorkstreamAtom,
+  registerWorkstreamSelectedHook,
   workstreamSessionsAtom,
   setActiveSessionInWorkstreamAtom, // Wrapper that also marks as read
   workstreamProcessingAtom,

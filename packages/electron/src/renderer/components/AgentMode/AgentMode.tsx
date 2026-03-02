@@ -48,6 +48,7 @@ import {
   setSessionDraftInputAtom,
   viewModeAtom,
   setViewModeAtom,
+  registerWorkstreamSelectedHook,
 } from '../../store';
 import { errorNotificationService } from '../../services/ErrorNotificationService';
 import { initWorkstreamState, loadWorkstreamStates, workstreamStateAtom, workstreamActiveChildAtom, setWorkstreamActiveChildAtom, setWorktreeActiveSessionAtom } from '../../store/atoms/workstreamState';
@@ -194,6 +195,20 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
   useEffect(() => {
     const cleanup = initTrayListeners();
     return cleanup;
+  }, []);
+
+  // Register global hook: exit kanban view whenever a workstream is selected.
+  // This is the ONE place that handles kanban exit for ALL navigation paths:
+  // tray clicks, SessionQuickOpen, kanban double-click, session list click, etc.
+  // Uses a plain module-level callback in sessions.ts (not a Jotai atom) to
+  // avoid Provider/store mismatch issues and circular dependency.
+  useEffect(() => {
+    registerWorkstreamSelectedHook(() => {
+      store.set(setViewModeAtom, 'list');
+    });
+    return () => {
+      registerWorkstreamSelectedHook(null);
+    };
   }, []);
 
   // Fetch session shares on mount (if authenticated)
@@ -951,18 +966,9 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
   );
 
   const viewMode = useAtomValue(viewModeAtom);
-  const setViewMode = useSetAtom(setViewModeAtom);
 
-  // Auto-exit kanban view when a specific session is selected.
-  // This covers ALL navigation paths: tray click, kanban double-click,
-  // session list click, openSessionInTab, etc.
-  useEffect(() => {
-    if (selectedWorkstream && viewMode === 'kanban') {
-      setViewMode('list');
-    }
-  }, [selectedWorkstream?.id]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Double-click a kanban card: select the session and switch back to list view
+  // Double-click a kanban card: select the session (kanban exit is handled
+  // globally by registerWorkstreamSelectedHook in setSelectedWorkstreamAtom)
   const handleKanbanSessionOpen = useCallback((sessionId: string) => {
     handleSessionSelect(sessionId);
   }, [handleSessionSelect]);

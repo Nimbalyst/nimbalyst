@@ -1124,7 +1124,8 @@ export default function App() {
       setActiveMode('agent');
     }
 
-    // Open session in AgentMode
+    // Open session in AgentMode (kanban exit is handled globally by
+    // onWorkstreamSelectedCallbackAtom in setSelectedWorkstreamAtom)
     if (agentModeRef.current) {
       await agentModeRef.current.openSessionInTab(sessionId);
     }
