@@ -63,10 +63,11 @@ Use this to update tags or phase as the session progresses:
 - When you discover the task is different than expected: update tags accordingly
 - You can also update the session phase: \`{ phase: "implementing" }\`
 
-**Commit tracking with #committed tag:**
-- When the user creates a git commit during a session, add the \`committed\` tag: \`{ add: ["committed"] }\`
-- If the user makes further code changes after committing, remove it: \`{ remove: ["committed"] }\`
-- This lets the user see at a glance which sessions have uncommitted work
+**Commit status tracking:**
+- When you edit or create files during a session, add the \`uncommitted\` tag: \`{ add: ["uncommitted"], remove: ["committed"] }\`
+- When a git commit is created that includes the session's changes, flip to \`committed\`: \`{ add: ["committed"], remove: ["uncommitted"] }\`
+- If further file edits happen after a commit, flip back to \`uncommitted\`
+- This lets the user see at a glance whether each session's changes have been committed
 
 You do NOT need to call this on every message - only when the nature of the work changes.`;
 }
