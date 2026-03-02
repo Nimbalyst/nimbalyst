@@ -22,7 +22,8 @@ export type ControlMessageType =
   | 'cancel'
   | 'question_response'  // Legacy - kept for backwards compatibility
   | 'prompt_response'    // New unified prompt response type
-  | 'prompt';
+  | 'prompt'
+  | 'archive';
 
 // ============================================================
 // Payload Types
@@ -138,6 +139,13 @@ function handleControlMessage(
       break;
     }
 
+    case 'archive': {
+      const payload = message.payload as { isArchived?: boolean } | undefined;
+      const isArchived = payload?.isArchived ?? true;
+      handleArchive(message.sessionId, isArchived);
+      break;
+    }
+
     default:
       log.warn('Unknown control message type:', message.type);
   }
@@ -217,6 +225,23 @@ function handleCancel(sessionId: string): void {
     notifyAllWindows('ai:sessionCancelled', { sessionId });
   } else {
     log.warn('No provider found or provider does not support abort:', sessionId);
+  }
+}
+
+/**
+ * Handle an archive/unarchive command from mobile
+ */
+async function handleArchive(sessionId: string, isArchived: boolean): Promise<void> {
+  log.info(`${isArchived ? 'Archiving' : 'Unarchiving'} session from mobile:`, sessionId);
+
+  try {
+    const { AISessionsRepository } = await import('@nimbalyst/runtime/storage/repositories/AISessionsRepository');
+    await AISessionsRepository.updateMetadata(sessionId, { isArchived });
+
+    // Notify renderer to update UI
+    notifyAllWindows('ai:sessionMetadataUpdated', { sessionId, isArchived });
+  } catch (error) {
+    log.error('Failed to archive session:', error);
   }
 }
 
