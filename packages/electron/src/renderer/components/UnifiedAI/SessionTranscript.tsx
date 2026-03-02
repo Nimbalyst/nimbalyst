@@ -47,6 +47,7 @@ import {
   sessionProcessingAtom,
   sessionWorktreeIdAtom,
   loadSessionDataAtom,
+  reloadSessionDataAtom,
   updateSessionStoreAtom,
   navigateSessionHistoryAtom,
   resetSessionHistoryAtom,
@@ -249,6 +250,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   const [isProcessing, setIsProcessing] = useAtom(sessionProcessingAtom(sessionId));
   const worktreeId = useAtomValue(sessionWorktreeIdAtom(sessionId));
   const loadSessionData = useSetAtom(loadSessionDataAtom);
+  const reloadSessionData = useSetAtom(reloadSessionDataAtom);
   const updateSessionStore = useSetAtom(updateSessionStoreAtom);
 
   // Child session creation for "start new session" option
@@ -371,8 +373,14 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     if (!sessionId || !workspacePath) return;
     if (!sessionData) {
       loadSessionData({ sessionId, workspacePath });
+    } else if (!isProcessing) {
+      // Session data exists but session is idle/completed -- reload from DB
+      // to pick up any messages that arrived after the cached snapshot
+      // (e.g., the user navigated away during streaming and came back after completion)
+      reloadSessionData({ sessionId, workspacePath });
     }
-  }, [sessionId, workspacePath, sessionData, loadSessionData]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId, workspacePath]);
 
   // Ensure centralized file/pending atoms are initialized for this session in Files mode.
   useEffect(() => {

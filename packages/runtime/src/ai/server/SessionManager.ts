@@ -363,7 +363,7 @@ export function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
                     continue;
                   }
 
-                  const isTaskAgent = block.name === 'Task';
+                  const isTaskAgent = block.name === 'Task' || block.name === 'Agent';
                   const parentToolId = parentToolMap.get(block.id);
                   const taskInput = (block.input || block.arguments) as TaskToolInput | undefined;
 

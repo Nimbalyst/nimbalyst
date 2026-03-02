@@ -1086,7 +1086,7 @@ export const RichTranscriptView = React.forwardRef<
     const tool = toolMsg.toolCall;
     const toolId = tool.id || tool.name || `tool-${toolIndex}`;
     const isExpanded = expandedTools.has(toolId);
-    const isSubAgent = tool.isSubAgent && tool.name === 'Task';
+    const isSubAgent = tool.isSubAgent && (tool.name === 'Task' || tool.name === 'Agent');
     const isTeammate = isSubAgent && !!(tool.teammateName || tool.teamName);
     const hasChildren = tool.childToolCalls && tool.childToolCalls.length > 0;
     // Check for custom widget first
