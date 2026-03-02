@@ -116,6 +116,11 @@ export class TrayManager {
       systemPreferences.unsubscribeNotification(appearanceSubId);
     };
 
+    // Seed the cache with sessions that are already unread in the database.
+    // Without this, sessions that completed before this app session started
+    // would never appear in the tray's "Unread" section.
+    await this.seedUnreadFromDatabase();
+
     // Create the tray if setting is enabled (default: true)
     if (isShowTrayIcon()) {
       this.createTray();
@@ -214,13 +219,30 @@ export class TrayManager {
 
   /**
    * Mark a session as having unread messages.
-   * Called when a session completes while the app is backgrounded.
+   * Called from ai:updateSessionMetadata when the renderer persists hasUnread changes.
+   * If the session isn't in the cache yet (e.g., it completed before the tray initialized),
+   * fetch its metadata from the database and add it.
    */
   onSessionUnread(sessionId: string, hasUnread: boolean): void {
     const session = this.sessionCache.get(sessionId);
     if (session) {
       session.hasUnread = hasUnread;
+      // If no longer unread and not running/attention, remove from cache
+      if (!hasUnread && session.status !== 'running' && !session.hasPendingPrompt) {
+        this.sessionCache.delete(sessionId);
+      }
       this.scheduleMenuRebuild();
+      return;
+    }
+
+    // Session not in cache -- if marking as unread, fetch metadata and add it
+    if (hasUnread) {
+      this.fetchSessionMetadata(sessionId).then((info) => {
+        info.status = 'completed';
+        info.hasUnread = true;
+        this.sessionCache.set(sessionId, info);
+        this.scheduleMenuRebuild();
+      });
     }
   }
 
@@ -318,16 +340,17 @@ export class TrayManager {
     const g = parseInt(hex.slice(3, 5), 16);
     const b = parseInt(hex.slice(5, 7), 16);
 
-    // Draw a filled circle centered at (16, 16) with radius 5
+    // Draw a filled circle centered at (16, 16) with radius 5.
+    // macOS nativeImage bitmap format is BGRA, not RGBA.
     const cx = 16, cy = 16, radius = 5;
     for (let y = 0; y < size; y++) {
       for (let x = 0; x < size; x++) {
         const dx = x - cx, dy = y - cy;
         if (dx * dx + dy * dy <= radius * radius) {
           const offset = (y * size + x) * 4;
-          canvas[offset] = r;
+          canvas[offset] = b;
           canvas[offset + 1] = g;
-          canvas[offset + 2] = b;
+          canvas[offset + 2] = r;
           canvas[offset + 3] = 255;
         }
       }
@@ -533,31 +556,41 @@ export class TrayManager {
     const baseIcon = this.loadTemplateIcon();
     const needsColorDot = state === 'attention' || state === 'error';
 
+    // For states without a colored dot, use the template image directly.
+    // macOS automatically tints template images white on dark menu bars and
+    // dark on light menu bars. This tinting is handled by the OS at the
+    // NSStatusBar level and is NOT affected by nativeTheme.themeSource.
     if (!needsColorDot) {
-      // Pure template image -- macOS tints it to match the menu bar automatically
+      // Ensure the template flag is set (Electron auto-detects from filename
+      // "trayTemplate.png" but be explicit)
       baseIcon.setTemplateImage(true);
       return baseIcon;
     }
 
-    // For attention/error states, composite a colored dot onto the icon.
-    // This requires a non-template image so we render the foreground ourselves.
+    // For attention/error states, we need a colored blue dot overlay.
+    // Template images are monochrome so we must render manually.
     //
     // Work at @2x (32x32 pixels) for retina crispness.
     const scaleFactor = 2.0;
     const physicalSize = 32; // 16pt * 2
 
-    // Get the raw RGBA bitmap at @2x scale
+    // Get the raw bitmap at @2x scale (macOS uses BGRA byte order)
     const baseBitmap = baseIcon.toBitmap({ scaleFactor });
     const canvas = Buffer.from(baseBitmap);
-    const stride = physicalSize; // pixels per row
 
-    // Template icons are black-with-alpha. For non-template rendering,
-    // recolor the foreground to match the menu bar appearance.
-    // IMPORTANT: nativeTheme.shouldUseDarkColors reflects the app's theme (which may
-    // force dark mode). The macOS menu bar follows the SYSTEM appearance, so we must
-    // check that directly via systemPreferences.
-    const isDarkMenuBar = systemPreferences.getEffectiveAppearance().includes('Dark');
-    const fg = isDarkMenuBar ? 255 : 0;
+    // Always use white (255) foreground for the attention/error icon.
+    //
+    // Why not detect dark vs light menu bar?
+    // - systemPreferences.getEffectiveAppearance() returns the system appearance
+    //   ('light'/'dark'), but the macOS menu bar is TRANSLUCENT -- a dark wallpaper
+    //   makes it appear dark even in light mode. There's no Electron API to detect
+    //   the actual menu bar background luminance.
+    // - Template images handle this automatically (macOS tints them at the
+    //   NSStatusBar level), but we can't use template mode here because we have
+    //   colored pixels (the blue dot).
+    // - White foreground matches what other apps (ChatGPT, Slack) use for their
+    //   status bar icons when they include colored elements.
+    const fg = 255;
 
     for (let i = 0; i < canvas.length; i += 4) {
       if (canvas[i + 3] > 0) {
@@ -567,7 +600,7 @@ export class TrayManager {
       }
     }
 
-    // Draw blue dot in bottom-right quadrant
+    // Draw blue dot in bottom-right (BGRA byte order)
     const dotCx = Math.floor(physicalSize * 0.78);
     const dotCy = Math.floor(physicalSize * 0.78);
     const dotR = Math.floor(physicalSize * 0.14);
@@ -576,10 +609,10 @@ export class TrayManager {
         if (x < 0 || x >= physicalSize || y < 0 || y >= physicalSize) continue;
         const dx = x - dotCx, dy = y - dotCy;
         if (dx * dx + dy * dy <= dotR * dotR) {
-          const offset = (y * stride + x) * 4;
-          canvas[offset] = 59;      // R: #3B
+          const offset = (y * physicalSize + x) * 4;
+          canvas[offset] = 246;     // B: #F6
           canvas[offset + 1] = 130;  // G: #82
-          canvas[offset + 2] = 246;  // B: #F6
+          canvas[offset + 2] = 59;   // R: #3B
           canvas[offset + 3] = 255;
         }
       }
@@ -590,7 +623,7 @@ export class TrayManager {
       height: physicalSize,
       scaleFactor,
     });
-    // Non-template so the blue dot color is preserved
+    // Must NOT be template -- we have colored pixels (blue dot)
     image.setTemplateImage(false);
     return image;
   }
@@ -645,6 +678,51 @@ export class TrayManager {
   }
 
   // ─── Database queries ─────────────────────────────────────────────────
+
+  /**
+   * Query the database for sessions that already have hasUnread = true and
+   * seed the session cache. Without this, sessions that completed before this
+   * app session started would never appear in the tray's "Unread" section.
+   */
+  private async seedUnreadFromDatabase(): Promise<void> {
+    if (!this.database) return;
+
+    try {
+      // The hasUnread flag is stored in the metadata JSONB column.
+      // metadata.metadata.hasUnread is the nested path used by sessionStateListeners.
+      // Also check metadata.hasUnread for backwards compatibility.
+      const { rows } = await this.database.query<any>(
+        `SELECT id, title, workspace_id, metadata FROM ai_sessions
+         WHERE is_archived = false
+           AND (metadata->'metadata'->>'hasUnread' = 'true'
+                OR metadata->>'hasUnread' = 'true')`
+      );
+
+      for (const row of rows) {
+        // Don't overwrite sessions already in cache (e.g., currently running)
+        if (this.sessionCache.has(row.id)) continue;
+
+        this.sessionCache.set(row.id, {
+          sessionId: row.id,
+          title: row.title || 'Untitled Session',
+          workspacePath: row.workspace_id || '',
+          status: 'completed',
+          isStreaming: false,
+          // Don't inherit stale hasPendingPrompt from old metadata --
+          // a completed session that's merely unread isn't blocked on user input.
+          hasPendingPrompt: false,
+          hasUnread: true,
+        });
+      }
+
+      if (rows.length > 0) {
+        logger.main.info(`[TrayManager] Seeded ${rows.length} unread session(s) from database`);
+        this.scheduleMenuRebuild();
+      }
+    } catch (error) {
+      logger.main.error('[TrayManager] Failed to seed unread sessions from database:', error);
+    }
+  }
 
   private async fetchSessionMetadata(sessionId: string): Promise<TraySessionInfo> {
     if (!this.database) {

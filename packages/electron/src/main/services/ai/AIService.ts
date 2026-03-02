@@ -909,6 +909,23 @@ export class AIService {
                       lastMessageAt: entry.lastMessageAt,
                     });
                   }
+
+                  // Forward draftInput from remote device
+                  if (entry.draftInput !== undefined) {
+                    logger.main.info('[AIService] Forwarding draftInput to renderer:', { sessionId, draftInput: entry.draftInput });
+                    targetWindow.webContents.send('sessions:sync-draft-input', {
+                      sessionId,
+                      draftInput: entry.draftInput ?? '',
+                    });
+                  }
+                } else {
+                  if (entry.draftInput !== undefined) {
+                    logger.main.info('[AIService] DEBUG: draftInput present but no targetWindow for projectId:', cachedEntry.projectId);
+                  }
+                }
+              } else {
+                if (entry.draftInput !== undefined) {
+                  logger.main.info('[AIService] DEBUG: draftInput present but no projectId in cachedEntry for session:', sessionId);
                 }
               }
             }
@@ -3756,6 +3773,11 @@ export class AIService {
     ) => {
       const { AISessionsRepository } = await import('@nimbalyst/runtime/storage/repositories/AISessionsRepository');
       await AISessionsRepository.updateMetadata(sessionId, { metadata });
+
+      // Notify TrayManager when hasUnread state changes so the tray menu stays in sync
+      if (metadata.metadata?.hasUnread !== undefined) {
+        TrayManager.getInstance().onSessionUnread(sessionId, !!metadata.metadata.hasUnread);
+      }
 
       // If lastReadAt is being updated, also push through sync for cross-device read state
       // NOTE: Do NOT include updatedAt here. Reading a session is not meaningful activity
