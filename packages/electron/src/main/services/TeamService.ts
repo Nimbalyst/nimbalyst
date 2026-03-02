@@ -33,6 +33,7 @@ import {
   getSessionTokenForAccount,
   isAuthenticated,
   refreshSession,
+  refreshSessionForAccount,
   onAuthStateChange,
   updateSessionToken,
 } from './StytchAuthService';
@@ -255,8 +256,15 @@ async function fetchTeamApi(path: string, method: string, body?: unknown, orgId?
   // On 401, retry once: refresh personal session or re-exchange org JWT
   if (response.status === 401) {
     if (accountOrgId && !orgId) {
-      // Non-primary account JWT rejected -- refresh won't help a secondary account
-      logger.main.warn(`[TeamService] Got 401 on account JWT for ${accountOrgId}, cannot auto-refresh secondary account`);
+      // Non-primary account JWT rejected -- try refreshing the secondary account's session
+      logger.main.info(`[TeamService] Got 401 on account JWT for ${accountOrgId}, attempting refresh...`);
+      const freshJwt = await refreshSessionForAccount(accountOrgId);
+      if (freshJwt) {
+        logger.main.info(`[TeamService] Secondary account ${accountOrgId} refreshed, retrying request...`);
+        response = await makeRequest(freshJwt);
+      } else {
+        logger.main.warn(`[TeamService] Secondary account ${accountOrgId} refresh failed`);
+      }
     } else if (!orgId) {
       logger.main.info('[TeamService] Got 401 on personal JWT, refreshing session...');
       const refreshed = await refreshSession();

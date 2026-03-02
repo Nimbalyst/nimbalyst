@@ -1275,6 +1275,82 @@ export async function refreshSession(serverUrl?: string): Promise<boolean> {
   }
 }
 
+/**
+ * Refresh a specific account's session by personalOrgId.
+ * Works for both primary and secondary accounts.
+ * Returns the fresh JWT on success, null on failure.
+ */
+export async function refreshSessionForAccount(personalOrgId: string): Promise<string | null> {
+  // For primary account, delegate to refreshSession which updates global authState
+  if (personalOrgId === primaryAccountId) {
+    const ok = await refreshSession();
+    return ok ? (authState.sessionJwt ?? null) : null;
+  }
+
+  // Secondary account: use its session token to hit /auth/refresh
+  const creds = accounts.get(personalOrgId);
+  if (!creds?.sessionToken) {
+    logger.main.warn(`[StytchAuthService] Cannot refresh account ${personalOrgId} - no session token`);
+    return null;
+  }
+
+  const syncServerUrl = getSyncServerUrl();
+  const httpUrl = syncServerUrl
+    .replace(/^ws:/, 'http:')
+    .replace(/^wss:/, 'https:')
+    .replace(/\/$/, '');
+
+  try {
+    logger.main.info(`[StytchAuthService] Refreshing secondary account session for ${personalOrgId}...`);
+
+    const response = await net.fetch(`${httpUrl}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_token: creds.sessionToken }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({})) as { error?: string };
+      logger.main.warn(`[StytchAuthService] Secondary account refresh failed for ${personalOrgId}:`, errorData.error || response.status);
+      return null;
+    }
+
+    const data = await response.json() as {
+      session_token: string;
+      session_jwt: string;
+      user_id: string;
+      email?: string;
+      expires_at: string;
+      org_id?: string;
+    };
+
+    if (!data.session_jwt || data.session_jwt.split('.').length !== 3) {
+      logger.main.error(`[StytchAuthService] Secondary account refresh returned invalid JWT for ${personalOrgId}`);
+      return null;
+    }
+
+    let expiresAtMs = Date.now() + (7 * 24 * 60 * 60 * 1000);
+    if (data.expires_at) {
+      try { expiresAtMs = new Date(data.expires_at).getTime(); } catch { /* use default */ }
+    }
+
+    // Update the account in the accounts map
+    updateAccountCredentials(personalOrgId, {
+      sessionToken: data.session_token,
+      sessionJwt: data.session_jwt,
+      userId: data.user_id || creds.userId,
+      email: data.email || creds.email,
+      expiresAt: expiresAtMs,
+    });
+
+    logger.main.info(`[StytchAuthService] Secondary account session refreshed for ${personalOrgId}`);
+    return data.session_jwt;
+  } catch (error) {
+    logger.main.error(`[StytchAuthService] Secondary account refresh error for ${personalOrgId}:`, error);
+    return null;
+  }
+}
+
 const PRODUCTION_SYNC_URL = 'https://sync.nimbalyst.com';
 const DEVELOPMENT_SYNC_URL = 'http://localhost:8790';
 
