@@ -267,10 +267,65 @@ Repository has branch protection rules. You need admin access to bypass, or:
 - Open a PR
 - Merge after CI passes
 
+## iOS Release Workflow
+
+iOS uses a separate release process from Electron, with its own versioning, changelog, and git tags.
+
+### Tag Convention
+
+- **Electron**: `v0.55.2` (unchanged)
+- **iOS**: `ios/v1.0.2` (platform-prefixed)
+
+### Using /ios-release
+
+Run the `/ios-release` slash command in Claude Code:
+
+```
+/ios-release patch    # For bug fixes (1.0.1 -> 1.0.2)
+/ios-release minor    # For new features (1.0.1 -> 1.1.0)
+/ios-release major    # For breaking changes (1.0.1 -> 2.0.0)
+```
+
+This command will:
+1. Find commits since last `ios/*` tag touching `packages/ios/` and `packages/runtime/`
+2. Generate developer changelog (for `IOS_CHANGELOG.md`) and App Store "What's New" text
+3. Update `IOS_CHANGELOG.md` [Unreleased] section
+4. Wait for your approval
+5. Run `./scripts/ios-release.sh` which bumps Info.plist version + build number, commits, and creates an annotated `ios/v*` tag
+
+### After Tagging
+
+```bash
+# Review the changes
+git show HEAD
+git show ios/v1.0.2
+
+# Push commit and tag
+git push origin main
+git push origin ios/v1.0.2
+
+# Build and upload
+# 1. Open Xcode, select NimbalystApp scheme
+# 2. Product > Archive
+# 3. Upload to App Store Connect
+# 4. Paste the App Store "What's New" text into the version description
+```
+
+### Build Number
+
+The build number (`CFBundleVersion`) auto-increments by 1 with each release. It is independent of the marketing version (`CFBundleShortVersionString`). Apple requires the build number to increase monotonically for each upload.
+
 ## Files Involved
 
+### Electron
 - **CHANGELOG.md**: Release notes history
 - **scripts/release.sh**: Release automation script
 - **.claude/commands/release.md**: Claude Code slash command
 - **.github/workflows/electron-build.yml**: CI/CD workflow
 - **packages/electron/package.json**: Version number
+
+### iOS
+- **IOS_CHANGELOG.md**: iOS release notes history
+- **scripts/ios-release.sh**: iOS release automation script
+- **.claude/commands/ios-release.md**: Claude Code slash command
+- **packages/ios/NimbalystApp/Sources/Info.plist**: Version and build number
