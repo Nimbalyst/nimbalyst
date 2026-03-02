@@ -702,16 +702,22 @@ export default function App() {
 
   // Handle switch to agent mode - extracted to useCallback to prevent EditorMode re-renders
   const handleSwitchToAgentMode = useCallback((planDocumentPath?: string, sessionId?: string) => {
+    console.log('[App] handleSwitchToAgentMode called:', { planDocumentPath, sessionId, workspacePath });
     // Switch to agent mode first
     setActiveMode('agent');
 
     // Wait for next tick to ensure AgentMode is mounted/visible
     setTimeout(() => {
       if (planDocumentPath) {
-        // Create new session with document reference
-        // AgentMode doesn't support planDocumentPath yet, just create a new session
+        // Create new session with @ file reference to the document
         if (agentModeRef.current?.createNewSession) {
-          agentModeRef.current.createNewSession();
+          const relativePath = workspacePath && planDocumentPath.startsWith(workspacePath + '/')
+            ? planDocumentPath.slice(workspacePath.length + 1)
+            : planDocumentPath;
+          console.log('[App] Creating session with draft:', `@${relativePath} `);
+          agentModeRef.current.createNewSession(`@${relativePath} `);
+        } else {
+          console.warn('[App] agentModeRef.current?.createNewSession not available');
         }
       } else if (sessionId && agentModeRef.current) {
         // Load existing session
@@ -719,7 +725,7 @@ export default function App() {
         agentModeRef.current.openSessionInTab(sessionId);
       }
     }, 100);
-  }, []);
+  }, [workspacePath]);
 
   // Wrapper for workspace file selection - delegates to EditorMode
   // CRITICAL: Use activeModeStateRef.current to avoid stale closure bugs

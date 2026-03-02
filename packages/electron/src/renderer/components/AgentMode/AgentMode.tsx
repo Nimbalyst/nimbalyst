@@ -45,6 +45,7 @@ import {
   isRestoringNavigationAtom,
   markSessionReadAtom,
   activeSessionIdAtom,
+  setSessionDraftInputAtom,
   viewModeAtom,
   setViewModeAtom,
 } from '../../store';
@@ -61,7 +62,7 @@ import type { WorktreeCreateResult, SessionCreateResult } from '../../../shared/
 import { BlitzDialog } from '../BlitzDialog/BlitzDialog';
 
 export interface AgentModeRef {
-  createNewSession: () => Promise<void>;
+  createNewSession: (initialDraft?: string) => Promise<string | undefined>;
   createNewWorktreeSession: () => Promise<void>;
   openSessionInTab: (sessionId: string) => Promise<void>;
   closeActiveTab: () => void;
@@ -260,8 +261,8 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
   }, [isActive, actualActiveSessionId, selectedWorkstream?.id, activeChildId, pushNavigationEntry, isRestoringNavigation]);
 
   // Create new session
-  const createNewSession = useCallback(async () => {
-    if (!window.electronAPI) return;
+  const createNewSession = useCallback(async (initialDraft?: string): Promise<string | undefined> => {
+    if (!window.electronAPI) return undefined;
 
     try {
       const sessionId = crypto.randomUUID();
@@ -296,15 +297,29 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
           uncommittedCount: 0,
         });
 
+        // Set initial draft input before selecting the session
+        // so it's ready when the session component mounts
+        if (initialDraft) {
+          store.set(setSessionDraftInputAtom, {
+            sessionId: result.id,
+            draftInput: initialDraft,
+            workspacePath,
+            persist: true,
+          });
+        }
+
         // Select the new session
         setSelectedWorkstream({
           workspacePath,
           selection: { type: 'session', id: result.id },
         });
+
+        return result.id;
       }
     } catch (error) {
       console.error('[AgentMode] Failed to create session:', error);
     }
+    return undefined;
   }, [workspacePath, addSession, setSelectedWorkstream, defaultModel]);
 
   // Handle "New Session" from tray menu
@@ -901,7 +916,7 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
     <div className="agent-mode-empty flex flex-col items-center justify-center h-full gap-4 text-nim-muted">
       <p className="m-0 text-sm">Select a session or create a new one to get started</p>
       <button
-        onClick={createNewSession}
+        onClick={() => createNewSession()}
         className="agent-mode-new-button py-2 px-4 rounded-md border border-nim-border bg-nim-bg-secondary text-nim cursor-pointer text-sm transition-colors hover:bg-nim-bg-active"
       >
         New Session
