@@ -738,7 +738,7 @@ export function registerWorktreeHandlers(): void {
         })
       );
 
-      logger.info('Batch fetch completed', { requested: worktreeIds.length, fetched: Object.keys(results).length });
+      // logger.info('Batch fetch completed', { requested: worktreeIds.length, fetched: Object.keys(results).length });
 
       return {
         success: true,

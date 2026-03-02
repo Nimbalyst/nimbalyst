@@ -704,9 +704,9 @@ export class ExtensionLoader {
       this.loadedExtensions.set(manifest.id, loaded);
       this.notifyListeners();
 
-      console.info(
-        `[ExtensionLoader] Loaded extension: ${manifest.name} v${manifest.version}`
-      );
+      // console.info(
+      //   `[ExtensionLoader] Loaded extension: ${manifest.name} v${manifest.version}`
+      // );
 
       return { success: true, extension: loaded };
     } catch (error) {
@@ -1467,9 +1467,9 @@ export async function initializeExtensions(): Promise<void> {
         }
       }
 
-      console.info(
-        `[ExtensionLoader] Loaded ${loader.getLoadedExtensions().length} extension(s)`
-      );
+      // console.info(
+      //   `[ExtensionLoader] Loaded ${loader.getLoadedExtensions().length} extension(s)`
+      // );
 
       extensionsInitialized = true;
     } finally {

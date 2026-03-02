@@ -61,9 +61,9 @@ function registerExtensionEditors(extensionId: string): string[] {
       });
 
       registeredExtensions.push(...extensions);
-      console.log(
-        `[ExtensionEditorBridge] Registered ${contribution.displayName} for ${extensions.join(', ')} (sourceMode=${contribution.supportsSourceMode || false})`
-      );
+      // console.log(
+      //   `[ExtensionEditorBridge] Registered ${contribution.displayName} for ${extensions.join(', ')} (sourceMode=${contribution.supportsSourceMode || false})`
+      // );
     }
   }
 
