@@ -80,6 +80,9 @@ export function ClaudeCodePanel({
   // Extended context (1M) models setting
   const [showExtendedContextModels, setShowExtendedContextModelsState] = useState(false);
 
+  // Custom Claude executable path
+  const [customClaudeCodePath, setCustomClaudeCodePathState] = useState('');
+
   // Agent teams toggle (experimental) - stored as env var in ~/.claude/settings.json
   const [agentTeamsEnabled, setAgentTeamsEnabled] = useState(false);
 
@@ -197,6 +200,7 @@ export function ClaudeCodePanel({
       const settings = await window.electronAPI.aiGetSettings();
       setUseStandaloneBinaryState(settings?.useStandaloneBinary ?? false);
       setShowExtendedContextModelsState(settings?.showExtendedContextModels ?? false);
+      setCustomClaudeCodePathState(settings?.customClaudeCodePath ?? '');
     } catch (error) {
       console.error('[ClaudeCodePanel] Failed to load standalone binary setting:', error);
     }
@@ -215,6 +219,37 @@ export function ClaudeCodePanel({
       console.error('[ClaudeCodePanel] Failed to save standalone binary setting:', error);
       // Revert on error
       setUseStandaloneBinaryState(!enabled);
+    }
+  };
+
+  // Save custom Claude Code path
+  const handleSaveCustomClaudeCodePath = async (newPath: string) => {
+    const previousPath = customClaudeCodePath;
+    setCustomClaudeCodePathState(newPath);
+    try {
+      const currentSettings = await window.electronAPI.aiGetSettings();
+      await window.electronAPI.aiSaveSettings({
+        ...currentSettings,
+        customClaudeCodePath: newPath,
+      });
+    } catch (error) {
+      console.error('[ClaudeCodePanel] Failed to save custom Claude Code path:', error);
+      setCustomClaudeCodePathState(previousPath);
+    }
+  };
+
+  // Browse for custom Claude Code executable
+  const handleBrowseCustomClaudeCodePath = async () => {
+    try {
+      const result = await window.electronAPI.openFileDialog({
+        title: 'Select Claude Code Executable',
+        buttonLabel: 'Select',
+      });
+      if (result && !result.canceled && result.filePaths?.length > 0) {
+        handleSaveCustomClaudeCodePath(result.filePaths[0]);
+      }
+    } catch (error) {
+      console.error('[ClaudeCodePanel] Failed to open file dialog:', error);
     }
   };
 
@@ -334,6 +369,42 @@ export function ClaudeCodePanel({
             </p>
           </div>
         )}
+      </div>
+
+      {/* Custom Claude Installation */}
+      <div className="provider-enable flex flex-col gap-2 py-4 mb-4 border-b border-[var(--nim-border)]">
+        <div>
+          <span className="provider-enable-label text-sm font-medium text-[var(--nim-text)]">Custom Claude Installation</span>
+          <p className="text-xs text-[var(--nim-text-muted)] mt-1">
+            Override the default Claude executable path. Use this to point to a custom Claude CLI wrapper
+            (e.g., for corporate SSO authentication).
+          </p>
+        </div>
+        <div className="flex items-center gap-2 mt-1">
+          <input
+            type="text"
+            value={customClaudeCodePath}
+            onChange={(e) => setCustomClaudeCodePathState(e.target.value)}
+            onBlur={(e) => handleSaveCustomClaudeCodePath(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                handleSaveCustomClaudeCodePath((e.target as HTMLInputElement).value);
+                (e.target as HTMLInputElement).blur();
+              }
+            }}
+            placeholder="/usr/local/bin/claude"
+            className="flex-1 py-1.5 px-2 rounded text-sm bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] text-[var(--nim-text)] font-mono focus:border-[var(--nim-primary)] outline-none"
+          />
+          <button
+            onClick={handleBrowseCustomClaudeCodePath}
+            className="py-1.5 px-3 rounded text-xs font-medium bg-[var(--nim-bg-tertiary)] border border-[var(--nim-border)] text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)] transition-colors whitespace-nowrap"
+          >
+            Browse
+          </button>
+        </div>
+        <p className="text-[11px] text-[var(--nim-text-faint)] leading-relaxed">
+          Leave empty to use the built-in SDK. Changes take effect on the next agent session.
+        </p>
       </div>
 
       {/* Agent Teams Toggle (Experimental) */}

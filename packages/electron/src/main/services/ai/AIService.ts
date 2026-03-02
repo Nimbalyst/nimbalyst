@@ -4297,6 +4297,7 @@ export class AIService {
       const showUsageIndicator = this.getSettingsStore().get('showUsageIndicator', true) as boolean;
       const showCodexUsageIndicator = this.getSettingsStore().get('showCodexUsageIndicator', true) as boolean;
       const useStandaloneBinary = this.getSettingsStore().get('useStandaloneBinary', false) as boolean;
+      const customClaudeCodePath = this.getSettingsStore().get('customClaudeCodePath', '') as string;
       const autoCommitEnabled = this.getSettingsStore().get('autoCommitEnabled', false) as boolean;
       const showExtendedContextModels = this.getSettingsStore().get('showExtendedContextModels', false) as boolean;
 
@@ -4310,6 +4311,7 @@ export class AIService {
         showUsageIndicator,
         showCodexUsageIndicator,
         useStandaloneBinary,
+        customClaudeCodePath,
         autoCommitEnabled,
         showExtendedContextModels,
       };
@@ -4397,6 +4399,11 @@ export class AIService {
         this.getSettingsStore().set('useStandaloneBinary', settings.useStandaloneBinary);
         // Update ClaudeCodeProvider immediately so new sessions use the updated setting
         ClaudeCodeProvider.setUseStandaloneBinary(settings.useStandaloneBinary);
+      }
+
+      if (settings.customClaudeCodePath !== undefined) {
+        this.getSettingsStore().set('customClaudeCodePath', settings.customClaudeCodePath);
+        ClaudeCodeProvider.setCustomClaudeCodePath(settings.customClaudeCodePath);
       }
 
       if (settings.autoCommitEnabled !== undefined) {

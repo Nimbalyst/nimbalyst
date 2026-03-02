@@ -1201,12 +1201,15 @@ app.whenReady().then(async () => {
     const sessionRestored = shouldSkipSessionRestore ? false : await restoreSessionState();
     markEnd('session-restore');
 
-    // Initialize useStandaloneBinary setting from persisted store
-    // This determines whether macOS uses the Bun-compiled binary to hide dock icons
+    // Initialize useStandaloneBinary and customClaudeCodePath from persisted store
+    // useStandaloneBinary determines whether macOS uses the Bun-compiled binary to hide dock icons
+    // customClaudeCodePath allows overriding the Claude executable (e.g., for corporate SSO wrappers)
     const { store } = await import('./utils/store');
     const useStandaloneBinary = store.get('useStandaloneBinary', false) as boolean;
     ClaudeCodeProvider.setUseStandaloneBinary(useStandaloneBinary);
-    logger.main.info('[ClaudeCodeProvider] Initialized useStandaloneBinary setting', { useStandaloneBinary });
+    const customClaudeCodePath = store.get('customClaudeCodePath', '') as string;
+    ClaudeCodeProvider.setCustomClaudeCodePath(customClaudeCodePath);
+    logger.main.info('[ClaudeCodeProvider] Initialized settings', { useStandaloneBinary, customClaudeCodePath: customClaudeCodePath ? '(set)' : '(empty)' });
 
     // Close splash screen now that initialization is done and a real window is about to show
     closeSplashScreen();

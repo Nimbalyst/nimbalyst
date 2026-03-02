@@ -147,12 +147,25 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
   // When true, use Bun-compiled standalone binary on macOS to hide dock icon
   private static useStandaloneBinary: boolean = false;
 
+  // Custom Claude Code executable path (injected from electron main process)
+  // When set, overrides the bundled CLI and standalone binary
+  private static customClaudeCodePath: string = '';
+
   /**
    * Set whether to use the standalone binary for spawning Claude Code.
    * When true on macOS, uses the Bun-compiled binary to avoid dock icons.
    */
   public static setUseStandaloneBinary(enabled: boolean): void {
     ClaudeCodeProvider.useStandaloneBinary = enabled;
+  }
+
+  /**
+   * Set a custom path to the Claude Code executable.
+   * When set, this overrides the bundled CLI and standalone binary.
+   * Used for corporate SSO wrappers or custom Claude installations.
+   */
+  public static setCustomClaudeCodePath(path: string): void {
+    ClaudeCodeProvider.customClaudeCodePath = path;
   }
 
   constructor() {
@@ -875,8 +888,8 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
       // console.log('[CLAUDE-CODE] ========================================');
 
       const options: any = {
-        // The SDK might internally need the CLI path
-        pathToClaudeCodeExecutable: await this.findCliPath().catch(() => undefined),
+        // Custom path takes priority over bundled CLI
+        pathToClaudeCodeExecutable: ClaudeCodeProvider.customClaudeCodePath || await this.findCliPath().catch(() => undefined),
         // BREAKING CHANGE: Claude Agent SDK requires explicit system prompt preset
         systemPrompt: {
           type: 'preset',
@@ -1020,13 +1033,17 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
         const packagedEnv = setupClaudeCodeEnvironment();
         Object.assign(env, packagedEnv);
 
-        // Set executable options (macOS can use standalone binary if enabled)
-        const { options: executableOptions, method } = getClaudeCodeExecutableOptions(
-          ClaudeCodeProvider.useStandaloneBinary,
-          (message, data) => console.log(`[ClaudeCodeProvider] ${message}`, data || '')
-        );
-        Object.assign(options, executableOptions);
-        this.helperMethod = method;
+        // Custom executable path is a standalone binary that runs directly -
+        // skip Electron/standalone binary options to avoid overwriting pathToClaudeCodeExecutable
+        if (!ClaudeCodeProvider.customClaudeCodePath) {
+          // Set executable options (macOS can use standalone binary if enabled)
+          const { options: executableOptions, method } = getClaudeCodeExecutableOptions(
+            ClaudeCodeProvider.useStandaloneBinary,
+            (message, data) => console.log(`[ClaudeCodeProvider] ${message}`, data || '')
+          );
+          Object.assign(options, executableOptions);
+          this.helperMethod = method;
+        }
 
         // Set custom spawn function (Windows uses windowsHide to hide console)
         const spawnFunction = getClaudeCodeSpawnFunction();
@@ -1036,9 +1053,15 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
 
         // Share packaged-build options with TeammateManager so sub-agents
         // can also spawn Claude Code subprocesses in production builds
+        const executableOptionsForTeammates = ClaudeCodeProvider.customClaudeCodePath
+          ? { pathToClaudeCodeExecutable: ClaudeCodeProvider.customClaudeCodePath }
+          : getClaudeCodeExecutableOptions(
+              ClaudeCodeProvider.useStandaloneBinary,
+              (message, data) => console.log(`[ClaudeCodeProvider] ${message}`, data || '')
+            ).options;
         this.teammateManager.packagedBuildOptions = {
           env: packagedEnv as Record<string, string | undefined>,
-          ...executableOptions,
+          ...executableOptionsForTeammates,
           ...(spawnFunction ? { spawnClaudeCodeProcess: spawnFunction } : {}),
         };
       }
