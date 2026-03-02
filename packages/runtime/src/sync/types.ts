@@ -178,6 +178,8 @@ export interface SyncProvider {
     queuedPromptCount?: number;
     /** Full queue of prompts (sent via indexUpdate for desktop to process) */
     queuedPrompts?: Array<{ id: string; prompt: string; timestamp: number; attachments?: EncryptedAttachment[] }>;
+    /** Draft input text (unsent message) from another device */
+    draftInput?: string;
   }) => void): () => void;
 
   /** Get cached metadata for a session (populated from syncResponse and metadataBroadcast) */

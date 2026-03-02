@@ -36,6 +36,7 @@ import {
   sessionPendingPromptsAtom,
   sessionRegistryAtom,
   sessionStoreAtom,
+  sessionDraftInputAtom,
   type PendingPrompt,
 } from './atoms/sessions';
 import { workstreamActiveChildAtom, workstreamStateAtom } from './atoms/workstreamState';
@@ -505,6 +506,18 @@ export function initSessionStateListeners(): () => void {
   };
 
   /**
+   * Handle cross-device draft input from sync.
+   * Always apply the remote draft so cross-device sync wins.
+   * The user's next local keystroke will immediately override via debounced push.
+   */
+  const handleSyncDraftInput = (data: { sessionId: string; draftInput: string }) => {
+    const { sessionId, draftInput } = data;
+    if (!sessionId) return;
+
+    store.set(sessionDraftInputAtom(sessionId), draftInput);
+  };
+
+  /**
    * Handle cross-device read state from sync.
    * When another device (e.g. mobile) reads a session, update the unread atom.
    */
@@ -561,6 +574,7 @@ export function initSessionStateListeners(): () => void {
   let cleanupGitCommitProposalResolved: (() => void) | undefined;
   let cleanupNotificationClicked: (() => void) | undefined;
   let cleanupSyncReadState: (() => void) | undefined;
+  let cleanupSyncDraftInput: (() => void) | undefined;
   if (window.electronAPI?.on) {
     cleanupMessageLogged = window.electronAPI.on('ai:message-logged', handleMessageLogged);
     cleanupTitleUpdated = window.electronAPI.on('session:title-updated', handleTitleUpdated);
@@ -575,6 +589,7 @@ export function initSessionStateListeners(): () => void {
     cleanupGitCommitProposalResolved = window.electronAPI.on('ai:gitCommitProposalResolved', handleGitCommitProposalResolved);
     cleanupNotificationClicked = window.electronAPI.on('notification-clicked', handleNotificationClicked);
     cleanupSyncReadState = window.electronAPI.on('sessions:sync-read-state', handleSyncReadState);
+    cleanupSyncDraftInput = window.electronAPI.on('sessions:sync-draft-input', handleSyncDraftInput);
   }
 
   // Return cleanup function
@@ -610,5 +625,6 @@ export function initSessionStateListeners(): () => void {
     cleanupGitCommitProposalResolved?.();
     cleanupNotificationClicked?.();
     cleanupSyncReadState?.();
+    cleanupSyncDraftInput?.();
   };
 }

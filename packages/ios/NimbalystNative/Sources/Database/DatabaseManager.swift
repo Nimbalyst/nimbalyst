@@ -204,6 +204,16 @@ public final class DatabaseManager: @unchecked Sendable {
             }
         }
 
+        migrator.registerMigration("v8_draft_and_queue_display") { db in
+            try db.alter(table: "sessions") { t in
+                t.add(column: "draftInput", .text)
+            }
+            try db.alter(table: "queuedPrompts") { t in
+                t.add(column: "promptTextDecrypted", .text)
+                t.add(column: "source", .text)
+            }
+        }
+
         try migrator.migrate(writer)
     }
 
@@ -385,6 +395,52 @@ public final class DatabaseManager: @unchecked Sendable {
             try db.execute(
                 sql: "UPDATE queuedPrompts SET sentAt = ? WHERE id = ?",
                 arguments: [now, promptId]
+            )
+        }
+    }
+
+    /// All queued prompts for a session (including synced from desktop), ordered by creation time.
+    public func queuedPrompts(forSession sessionId: String) throws -> [QueuedPrompt] {
+        try writer.read { db in
+            try QueuedPrompt
+                .filter(QueuedPrompt.Columns.sessionId == sessionId)
+                .order(QueuedPrompt.Columns.createdAt)
+                .fetchAll(db)
+        }
+    }
+
+    /// Replace all queued prompts for a session with the given list (used for sync updates).
+    public func replaceQueuedPrompts(forSession sessionId: String, with prompts: [QueuedPrompt]) throws {
+        try writer.write { db in
+            // Delete existing prompts for this session that were synced from remote
+            // (keep locally-created ones that haven't been sent yet)
+            try QueuedPrompt
+                .filter(QueuedPrompt.Columns.sessionId == sessionId)
+                .filter(QueuedPrompt.Columns.source != nil)
+                .deleteAll(db)
+            // Insert the new synced prompts
+            for prompt in prompts {
+                try prompt.save(db)
+            }
+        }
+    }
+
+    /// Delete all synced queued prompts for a session (queue was cleared).
+    public func deleteRemoteQueuedPrompts(forSession sessionId: String) throws {
+        try writer.write { db in
+            try QueuedPrompt
+                .filter(QueuedPrompt.Columns.sessionId == sessionId)
+                .filter(QueuedPrompt.Columns.source != nil)
+                .deleteAll(db)
+        }
+    }
+
+    /// Update draft input for a session.
+    public func updateSessionDraftInput(sessionId: String, draftInput: String?) throws {
+        try writer.write { db in
+            try db.execute(
+                sql: "UPDATE sessions SET draftInput = ? WHERE id = ?",
+                arguments: [draftInput, sessionId]
             )
         }
     }

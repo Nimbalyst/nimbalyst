@@ -101,6 +101,8 @@ struct ClientMetadata: Codable {
     let phase: String?
     /// Arbitrary tags for categorization
     let tags: [String]?
+    /// Draft input text (unsent message) for cross-device sync
+    let draftInput: String?
 }
 
 /// A project entry as received from the server (encrypted fields).
@@ -304,6 +306,9 @@ struct IndexUpdateEntry: Codable {
     let isExecuting: Bool?
     let queuedPromptCount: Int?
     let encryptedQueuedPrompts: [EncryptedQueuedPrompt]?
+    /// Encrypted client metadata blob (context, draft, phase, tags, etc.)
+    var encryptedClientMetadata: String?
+    var clientMetadataIv: String?
 }
 
 struct SessionControlMessage: Codable {

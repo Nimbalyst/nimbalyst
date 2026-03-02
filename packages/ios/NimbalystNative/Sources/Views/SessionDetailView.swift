@@ -64,6 +64,14 @@ public struct SessionDetailView: View {
 
     /// Compose bar state.
     @State private var composeText = ""
+    /// Debounce work item for pushing draft input changes to sync.
+    @State private var draftDebounceItem: DispatchWorkItem?
+    /// Whether we are currently applying a synced draft (suppress push-back).
+    @State private var isApplyingRemoteDraft = false
+
+    /// Queued prompts for this session (from GRDB observation).
+    @State private var queuedPrompts: [QueuedPrompt] = []
+    @State private var queuedPromptsCancellable: AnyDatabaseCancellable?
 
     /// Slash commands synced from desktop for this project.
     @State private var projectCommands: [SyncedSlashCommand] = []
@@ -164,13 +172,19 @@ public struct SessionDetailView: View {
             nativeMessageList
             #endif
 
+            // Queued prompts display
+            if !queuedPrompts.isEmpty {
+                QueuedPromptsList(prompts: queuedPrompts)
+            }
+
             // Compose bar
             ComposeBar(
                 text: $composeText,
                 isExecuting: displaySession.isExecuting,
                 commands: projectCommands,
                 onSend: sendPrompt,
-                onCancel: cancelSession
+                onCancel: cancelSession,
+                onQueue: { text, attachments in sendPrompt(text, attachments) }
             )
         }
         .navigationTitle(displaySession.titleDecrypted ?? "Session")
@@ -200,9 +214,40 @@ public struct SessionDetailView: View {
             startObserving()
             startLoadTimeout()
             subscribeToDiagnostics()
+            startObservingQueuedPrompts()
+            // Seed compose text from synced draft if local compose is empty
+            if composeText.isEmpty, let draft = session.draftInput, !draft.isEmpty {
+                isApplyingRemoteDraft = true
+                composeText = draft
+                DispatchQueue.main.async { isApplyingRemoteDraft = false }
+            }
             // Mark session as read when viewing it
             appState.syncManager?.markSessionRead(sessionId: session.id)
             AnalyticsManager.shared.capture("mobile_session_viewed")
+        }
+        .onChange(of: liveSession?.draftInput) { newDraft in
+            // Apply synced draft from another device.
+            // Always apply (even if local compose has text) so cross-device sync wins.
+            // The isApplyingRemoteDraft flag prevents feedback loops, and the user's
+            // next local keystroke will immediately override via the debounced push.
+            let draft = newDraft ?? ""
+            guard draft != composeText else { return }
+            isApplyingRemoteDraft = true
+            composeText = draft
+            DispatchQueue.main.async { isApplyingRemoteDraft = false }
+        }
+        .onChange(of: composeText) { newText in
+            // Push draft changes back to sync (debounced)
+            guard !isApplyingRemoteDraft else { return }
+            draftDebounceItem?.cancel()
+            let item = DispatchWorkItem { [weak appState] in
+                appState?.syncManager?.updateDraftInput(
+                    sessionId: session.id,
+                    draftInput: newText
+                )
+            }
+            draftDebounceItem = item
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: item)
         }
         .task {
             // Join session room async to avoid blocking navigation transition
@@ -212,8 +257,10 @@ public struct SessionDetailView: View {
             sessionCancellable?.cancel()
             messagesCancellable?.cancel()
             projectCancellable?.cancel()
+            queuedPromptsCancellable?.cancel()
             timeoutWorkItem?.cancel()
             promptRefreshWorkItem?.cancel()
+            draftDebounceItem?.cancel()
             appState.syncManager?.onSessionSyncDiagnostic = nil
             appState.syncManager?.leaveSessionRoom()
         }
@@ -585,6 +632,27 @@ public struct SessionDetailView: View {
             },
             onChange: { project in
                 projectCommands = project?.commands ?? []
+            }
+        )
+    }
+
+    private func startObservingQueuedPrompts() {
+        guard let db = appState.databaseManager else { return }
+        let sessionId = session.id
+
+        let observation = ValueObservation.tracking { db in
+            try QueuedPrompt
+                .filter(QueuedPrompt.Columns.sessionId == sessionId)
+                .order(QueuedPrompt.Columns.createdAt)
+                .fetchAll(db)
+        }
+        queuedPromptsCancellable = observation.start(
+            in: db.writer,
+            onError: { error in
+                print("Queued prompts observation error: \(error)")
+            },
+            onChange: { prompts in
+                queuedPrompts = prompts
             }
         )
     }

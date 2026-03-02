@@ -40,6 +40,8 @@ public struct Session: Codable, Identifiable, Hashable, Sendable {
     public var lastSyncedSeq: Int
     public var lastReadAt: Int?
     public var lastMessageAt: Int?
+    /// Draft input text (unsent message) synced across devices
+    public var draftInput: String?
 
     /// Context usage as a percentage (0-100), or nil if no context info available.
     public var contextUsagePercent: Int? {
@@ -92,7 +94,8 @@ public struct Session: Codable, Identifiable, Hashable, Sendable {
         updatedAt: Int = Int(Date().timeIntervalSince1970 * 1000),
         lastSyncedSeq: Int = 0,
         lastReadAt: Int? = nil,
-        lastMessageAt: Int? = nil
+        lastMessageAt: Int? = nil,
+        draftInput: String? = nil
     ) {
         self.id = id
         self.projectId = projectId
@@ -121,6 +124,7 @@ public struct Session: Codable, Identifiable, Hashable, Sendable {
         self.lastSyncedSeq = lastSyncedSeq
         self.lastReadAt = lastReadAt
         self.lastMessageAt = lastMessageAt
+        self.draftInput = draftInput
     }
 }
 
@@ -136,7 +140,7 @@ extension Session: FetchableRecord, PersistableRecord {
         case isExecuting, hasQueuedPrompts
         case contextTokens, contextWindow
         case createdAt, updatedAt, lastSyncedSeq
-        case lastReadAt, lastMessageAt
+        case lastReadAt, lastMessageAt, draftInput
     }
 
     /// Association to parent project.

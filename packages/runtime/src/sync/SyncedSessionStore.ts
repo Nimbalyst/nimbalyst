@@ -70,8 +70,10 @@ export function createSyncedSessionStore(
   }
 
   // Push a change to sync (fire and forget)
+  // metadata_updated changes can flow via the index channel even without a session room connection,
+  // so we allow them through regardless of connectedSessions state.
   function pushToSync(sessionId: string, change: SessionChange): void {
-    if (!connectedSessions.has(sessionId)) return;
+    if (!connectedSessions.has(sessionId) && change.type !== 'metadata_updated') return;
 
     try {
       syncProvider.pushChange(sessionId, change);

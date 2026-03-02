@@ -384,12 +384,38 @@ public final class SyncManager: ObservableObject {
             createdAt: entry.createdAt,
             updatedAt: entry.updatedAt,
             lastReadAt: entry.lastReadAt ?? existing?.lastReadAt,
-            lastMessageAt: entry.lastMessageAt ?? existing?.lastMessageAt
+            lastMessageAt: entry.lastMessageAt ?? existing?.lastMessageAt,
+            // "" from remote means "cleared" -> nil locally; nil means "not sent" -> keep existing
+            draftInput: clientMeta?.draftInput != nil ? (clientMeta!.draftInput!.isEmpty ? nil : clientMeta!.draftInput!) : existing?.draftInput
         )
 
         do {
             try database.upsertSession(session)
             try database.updateProjectLastActivity(projectId: projectId, activityAt: entry.updatedAt)
+
+            // Decrypt and store queued prompts from remote for display
+            if let encryptedPrompts = entry.encryptedQueuedPrompts, !encryptedPrompts.isEmpty {
+                var decrypted: [QueuedPrompt] = []
+                for ep in encryptedPrompts {
+                    guard let plaintext = crypto.decryptOrNil(encryptedBase64: ep.encryptedPrompt, ivBase64: ep.iv) else {
+                        continue
+                    }
+                    decrypted.append(QueuedPrompt(
+                        id: ep.id,
+                        sessionId: entry.sessionId,
+                        promptTextEncrypted: ep.encryptedPrompt,
+                        iv: ep.iv,
+                        createdAt: ep.timestamp,
+                        sentAt: nil,
+                        promptTextDecrypted: plaintext,
+                        source: ep.source ?? "desktop"
+                    ))
+                }
+                try? database.replaceQueuedPrompts(forSession: entry.sessionId, with: decrypted)
+            } else if entry.queuedPromptCount == 0 || entry.encryptedQueuedPrompts?.isEmpty == true {
+                try? database.deleteRemoteQueuedPrompts(forSession: entry.sessionId)
+            }
+
             return true
         } catch {
             logger.error("Failed to upsert session: \(error.localizedDescription)")
@@ -516,18 +542,51 @@ public final class SyncManager: ObservableObject {
             createdAt: entry.createdAt,
             updatedAt: entry.updatedAt,
             lastReadAt: entry.lastReadAt ?? existing?.lastReadAt,
-            lastMessageAt: entry.lastMessageAt ?? existing?.lastMessageAt
+            lastMessageAt: entry.lastMessageAt ?? existing?.lastMessageAt,
+            // "" from remote means "cleared" -> nil locally; nil means "not sent" -> keep existing
+            draftInput: clientMeta?.draftInput != nil ? (clientMeta!.draftInput!.isEmpty ? nil : clientMeta!.draftInput!) : existing?.draftInput
         )
 
         do {
             try database.upsertSession(session)
             // Update the project's lastUpdatedAt if this session is more recent
             try database.updateProjectLastActivity(projectId: projectId, activityAt: entry.updatedAt)
+
+            // Decrypt and store queued prompts from remote for display
+            if let encryptedPrompts = entry.encryptedQueuedPrompts, !encryptedPrompts.isEmpty {
+                decryptAndStoreQueuedPrompts(sessionId: entry.sessionId, encryptedPrompts: encryptedPrompts)
+            } else if entry.queuedPromptCount == 0 || entry.encryptedQueuedPrompts?.isEmpty == true {
+                // Queue was cleared on remote -- remove synced prompts
+                try? database.deleteRemoteQueuedPrompts(forSession: entry.sessionId)
+            }
+
             return true
         } catch {
             logger.error("Failed to upsert session: \(error.localizedDescription)")
             return false
         }
+    }
+
+    /// Decrypt queued prompts from the server and store for local display.
+    private func decryptAndStoreQueuedPrompts(sessionId: String, encryptedPrompts: [EncryptedQueuedPrompt]) {
+        var decrypted: [QueuedPrompt] = []
+        for ep in encryptedPrompts {
+            guard let plaintext = crypto.decryptOrNil(encryptedBase64: ep.encryptedPrompt, ivBase64: ep.iv) else {
+                continue
+            }
+            let qp = QueuedPrompt(
+                id: ep.id,
+                sessionId: sessionId,
+                promptTextEncrypted: ep.encryptedPrompt,
+                iv: ep.iv,
+                createdAt: ep.timestamp,
+                sentAt: nil,
+                promptTextDecrypted: plaintext,
+                source: ep.source ?? "desktop"
+            )
+            decrypted.append(qp)
+        }
+        try? database.replaceQueuedPrompts(forSession: sessionId, with: decrypted)
     }
 
     // MARK: - Real-time Broadcasts
@@ -982,6 +1041,66 @@ public final class SyncManager: ObservableObject {
             metadataJson: nil,
             createdAt: entry.createdAt
         )
+    }
+
+    // MARK: - Draft Input Sync
+
+    /// Update draft input for a session, persisting locally and pushing to sync.
+    public func updateDraftInput(sessionId: String, draftInput: String) {
+        logger.info("[Draft] updateDraftInput called: sessionId=\(sessionId), draftInput='\(draftInput.prefix(30))'")
+        // Persist locally
+        try? database.updateSessionDraftInput(sessionId: sessionId, draftInput: draftInput.isEmpty ? nil : draftInput)
+
+        // Push to sync via index update with encrypted client metadata
+        guard let session = try? database.session(byId: sessionId) else {
+            logger.warning("[Draft] Session not found in database: \(sessionId)")
+            return
+        }
+
+        do {
+            let clientMeta = ClientMetadata(
+                currentContext: nil,
+                hasPendingPrompt: nil,
+                phase: session.phase,
+                tags: session.tags.isEmpty ? nil : session.tags,
+                draftInput: draftInput  // Send "" explicitly when clearing so remote caches update
+            )
+            let metaJson = try JSONEncoder().encode(clientMeta)
+            guard let metaString = String(data: metaJson, encoding: .utf8) else { return }
+            let encrypted = try crypto.encrypt(plaintext: metaString)
+
+            let encryptedProjectId = try crypto.encryptProjectId(session.projectId)
+            var indexEntry = IndexUpdateEntry(
+                sessionId: sessionId,
+                encryptedProjectId: encryptedProjectId,
+                projectIdIv: CryptoManager.projectIdIvBase64,
+                encryptedTitle: session.titleEncrypted,
+                titleIv: session.titleIv,
+                provider: session.provider ?? "claude-code",
+                model: session.model,
+                mode: session.mode,
+                messageCount: (try? database.messages(forSession: sessionId).count) ?? 0,
+                lastMessageAt: session.lastMessageAt ?? session.updatedAt,
+                createdAt: session.createdAt,
+                updatedAt: Int(Date().timeIntervalSince1970 * 1000),
+                isExecuting: session.isExecuting,
+                queuedPromptCount: nil,
+                encryptedQueuedPrompts: nil
+            )
+            indexEntry.encryptedClientMetadata = encrypted.encrypted
+            indexEntry.clientMetadataIv = encrypted.iv
+
+            let indexMessage = IndexUpdateMessage(session: indexEntry)
+            if let data = try? JSONEncoder().encode(indexMessage),
+               let json = String(data: data, encoding: .utf8) {
+                logger.info("[Draft] Sending indexUpdate via WebSocket, json length=\(json.count), hasClientMeta=\(indexEntry.encryptedClientMetadata != nil)")
+                indexClient.sendRaw(json)
+            } else {
+                logger.error("[Draft] Failed to encode IndexUpdateMessage to JSON")
+            }
+        } catch {
+            logger.error("[Draft] Failed to push draft input to sync: \(error.localizedDescription)")
+        }
     }
 
     // MARK: - Send Prompt

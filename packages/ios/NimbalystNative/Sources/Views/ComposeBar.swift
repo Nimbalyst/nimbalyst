@@ -12,6 +12,8 @@ public struct ComposeBar: View {
     let commands: [SyncedSlashCommand]
     let onSend: (String, [PendingAttachment]) -> Void
     let onCancel: () -> Void
+    /// Optional queue callback -- when provided and session is executing, shows queue button instead of stop when user has typed text.
+    var onQueue: ((String, [PendingAttachment]) -> Void)? = nil
 
     @FocusState private var isFocused: Bool
     @State private var pendingAttachments: [PendingAttachment] = []
@@ -94,7 +96,21 @@ public struct ComposeBar: View {
                     .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
                     .focused($isFocused)
 
-                if isExecuting {
+                if isExecuting && canSend && onQueue != nil {
+                    // Queue button: session is executing and user has typed text
+                    Button {
+                        let prompt = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let attachments = pendingAttachments
+                        text = ""
+                        pendingAttachments = []
+                        onQueue?(prompt, attachments)
+                    } label: {
+                        Image(systemName: "text.badge.plus")
+                            .font(.system(size: 26))
+                            .foregroundStyle(NimbalystColors.warning)
+                    }
+                } else if isExecuting {
+                    // Stop button: session is executing, compose is empty
                     Button {
                         onCancel()
                     } label: {
@@ -103,6 +119,7 @@ public struct ComposeBar: View {
                             .foregroundStyle(NimbalystColors.error)
                     }
                 } else {
+                    // Send button: session is idle
                     Button {
                         guard canSend else { return }
                         let prompt = text.trimmingCharacters(in: .whitespacesAndNewlines)
