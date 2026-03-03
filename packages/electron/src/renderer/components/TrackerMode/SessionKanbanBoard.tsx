@@ -10,8 +10,15 @@
  *   Arrow Left/Right - move focus between columns
  *   Enter          - open the focused session in agent mode
  *   Space          - toggle transcript peek on the focused card
- *   Cmd+Right/Left - move the focused card to the next/previous phase column
- *   Escape         - close peek / clear focus
+ *   Cmd+Right/Left - move selected card(s) to the next/previous phase column
+ *   Cmd+A          - select all visible cards
+ *   Escape         - close peek / clear selection / clear focus
+ *
+ * Multi-select:
+ *   Click          - select single card (clears previous selection)
+ *   Cmd+Click      - toggle card in/out of selection
+ *   Shift+Click    - select range from last-clicked to this card
+ *   Drag selected  - moves all selected cards to target column
  *
  * Collapsible columns:
  *   Any phase column can be collapsed to a thin vertical strip.
@@ -19,6 +26,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { MaterialSymbol, ProviderIcon, RichTranscriptView } from '@nimbalyst/runtime';
 import type { SessionMeta } from '@nimbalyst/runtime';
@@ -301,7 +309,7 @@ function TranscriptPeek({ sessionId, anchorRef, onClose }: TranscriptPeekProps) 
 
     setPosition({
       top: above ? rect.top - peekHeight - 4 : rect.bottom + 4,
-      left: Math.min(rect.left, window.innerWidth - 420),
+      left: Math.min(rect.left, window.innerWidth - 610),
     });
   }, [anchorRef, messages]);
 
@@ -316,7 +324,7 @@ function TranscriptPeek({ sessionId, anchorRef, onClose }: TranscriptPeekProps) 
     return () => document.removeEventListener('mousedown', handleClick);
   }, [onClose]);
 
-  return (
+  return createPortal(
     <div
       ref={peekRef}
       className="fixed z-[100] w-[600px] h-[350px] bg-nim-secondary border border-nim rounded-lg shadow-2xl overflow-hidden flex flex-col"
@@ -340,7 +348,8 @@ function TranscriptPeek({ sessionId, anchorRef, onClose }: TranscriptPeekProps) 
           No messages yet
         </div>
       )}
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -355,11 +364,12 @@ interface SessionKanbanCardProps {
   onRename?: (sessionId: string, newName: string) => void;
   phaseColor: string;
   isFocused?: boolean;
+  isSelected?: boolean;
   showPeekOverride?: boolean;
   onPeekToggle?: () => void;
 }
 
-function SessionKanbanCard({ session, onSelect, onArchive, onRename, phaseColor, isFocused, showPeekOverride, onPeekToggle }: SessionKanbanCardProps) {
+function SessionKanbanCard({ session, onSelect, onArchive, onRename, phaseColor, isFocused, isSelected, showPeekOverride, onPeekToggle }: SessionKanbanCardProps) {
   const cardType = useMemo(() => getCardType(session), [session]);
   const cardState = useCardState(session.id, cardType);
   const stateStyle = CARD_STATE_STYLES[cardState.state];
@@ -464,15 +474,17 @@ function SessionKanbanCard({ session, onSelect, onArchive, onRename, phaseColor,
         className={`w-full text-left p-2.5 rounded-md border transition-colors cursor-default ${
           isFocused
             ? 'border-[var(--nim-primary)] ring-1 ring-[var(--nim-primary)]'
-            : stateStyle.border
-              ? ''
-              : 'border-nim'
+            : isSelected
+              ? 'border-[rgba(96,165,250,0.5)] bg-[rgba(96,165,250,0.06)]'
+              : stateStyle.border
+                ? ''
+                : 'border-nim'
         }`}
         style={{
           borderLeftWidth: '3px',
           borderLeftColor: phaseColor,
-          backgroundColor: stateStyle.bg || undefined,
-          borderColor: isFocused ? undefined : stateStyle.border || undefined,
+          backgroundColor: isFocused ? stateStyle.bg || undefined : isSelected ? undefined : stateStyle.bg || undefined,
+          borderColor: isFocused ? undefined : isSelected ? undefined : stateStyle.border || undefined,
         }}
         onDoubleClick={() => onSelect(session.id)}
         onContextMenu={handleContextMenu}
@@ -616,16 +628,18 @@ interface SessionKanbanColumnProps {
   onSelect: (sessionId: string) => void;
   onArchive?: (sessionId: string) => void;
   onRename?: (sessionId: string, newName: string) => void;
-  onDrop: (sessionId: string, phase: SessionPhase) => void;
+  onDrop: (sessionIds: string[], phase: SessionPhase) => void;
   isCollapsed: boolean;
   onToggleCollapse: () => void;
   focusedCardId: string | null;
+  selectedIds: Set<string>;
   peekCardId: string | null;
-  onCardClick: (sessionId: string) => void;
+  onCardClick: (sessionId: string, e: React.MouseEvent) => void;
   onPeekToggle: (sessionId: string) => void;
+  onDragStart: (sessionId: string) => string[];
 }
 
-function SessionKanbanColumn({ phase, label, color, sessions, onSelect, onArchive, onRename, onDrop, isCollapsed, onToggleCollapse, focusedCardId, peekCardId, onCardClick, onPeekToggle }: SessionKanbanColumnProps) {
+function SessionKanbanColumn({ phase, label, color, sessions, onSelect, onArchive, onRename, onDrop, isCollapsed, onToggleCollapse, focusedCardId, selectedIds, peekCardId, onCardClick, onPeekToggle, onDragStart: onDragStartProp }: SessionKanbanColumnProps) {
   const [isDragOver, setIsDragOver] = useState(false);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -641,16 +655,29 @@ function SessionKanbanColumn({ phase, label, color, sessions, onSelect, onArchiv
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(false);
-    const sessionId = e.dataTransfer.getData('text/session-id');
-    if (sessionId) {
-      onDrop(sessionId, phase);
+    const raw = e.dataTransfer.getData('text/session-ids');
+    if (raw) {
+      try {
+        const ids: string[] = JSON.parse(raw);
+        if (ids.length > 0) onDrop(ids, phase);
+      } catch { /* ignore malformed */ }
     }
   }, [onDrop, phase]);
 
   const handleDragStart = useCallback((e: React.DragEvent, sessionId: string) => {
-    e.dataTransfer.setData('text/session-id', sessionId);
+    const ids = onDragStartProp(sessionId);
+    e.dataTransfer.setData('text/session-ids', JSON.stringify(ids));
     e.dataTransfer.effectAllowed = 'move';
-  }, []);
+    // Custom drag image showing count
+    if (ids.length > 1) {
+      const badge = document.createElement('div');
+      badge.textContent = `${ids.length} sessions`;
+      badge.style.cssText = 'position:fixed;left:-1000px;top:-1000px;padding:4px 10px;border-radius:6px;background:#60a5fa;color:#fff;font-size:12px;font-weight:600;white-space:nowrap;';
+      document.body.appendChild(badge);
+      e.dataTransfer.setDragImage(badge, badge.offsetWidth / 2, badge.offsetHeight / 2);
+      requestAnimationFrame(() => document.body.removeChild(badge));
+    }
+  }, [onDragStartProp]);
 
   const isComplete = phase === 'complete';
 
@@ -730,7 +757,7 @@ function SessionKanbanColumn({ phase, label, color, sessions, onSelect, onArchiv
               draggable
               onDragStart={(e) => handleDragStart(e, session.id)}
               className={isComplete ? 'opacity-65' : ''}
-              onClick={() => onCardClick(session.id)}
+              onClick={(e) => onCardClick(session.id, e)}
             >
               <SessionKanbanCard
                 session={session}
@@ -739,6 +766,7 @@ function SessionKanbanColumn({ phase, label, color, sessions, onSelect, onArchiv
                 onRename={onRename}
                 phaseColor={color}
                 isFocused={focusedCardId === session.id}
+                isSelected={selectedIds.has(session.id)}
                 showPeekOverride={peekCardId === session.id ? true : undefined}
                 onPeekToggle={() => onPeekToggle(session.id)}
               />
@@ -759,15 +787,17 @@ interface UnphasedColumnProps {
   onSelect: (sessionId: string) => void;
   onArchive?: (sessionId: string) => void;
   onRename?: (sessionId: string, newName: string) => void;
-  onDropToPhase: (sessionId: string, phase: SessionPhase) => void;
-  onRemovePhase: (sessionId: string) => void;
+  onDropToPhase: (sessionIds: string[], phase: SessionPhase) => void;
+  onRemovePhase: (sessionIds: string[]) => void;
   focusedCardId: string | null;
+  selectedIds: Set<string>;
   peekCardId: string | null;
-  onCardClick: (sessionId: string) => void;
+  onCardClick: (sessionId: string, e: React.MouseEvent) => void;
   onPeekToggle: (sessionId: string) => void;
+  onDragStart: (sessionId: string) => string[];
 }
 
-function UnphasedColumn({ sessions, onSelect, onArchive, onRename, onDropToPhase, onRemovePhase, focusedCardId, peekCardId, onCardClick, onPeekToggle }: UnphasedColumnProps) {
+function UnphasedColumn({ sessions, onSelect, onArchive, onRename, onDropToPhase, onRemovePhase, focusedCardId, selectedIds, peekCardId, onCardClick, onPeekToggle, onDragStart: onDragStartProp }: UnphasedColumnProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
 
@@ -784,16 +814,28 @@ function UnphasedColumn({ sessions, onSelect, onArchive, onRename, onDropToPhase
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(false);
-    const sessionId = e.dataTransfer.getData('text/session-id');
-    if (sessionId) {
-      onRemovePhase(sessionId);
+    const raw = e.dataTransfer.getData('text/session-ids');
+    if (raw) {
+      try {
+        const ids: string[] = JSON.parse(raw);
+        if (ids.length > 0) onRemovePhase(ids);
+      } catch { /* ignore malformed */ }
     }
   }, [onRemovePhase]);
 
   const handleDragStart = useCallback((e: React.DragEvent, sessionId: string) => {
-    e.dataTransfer.setData('text/session-id', sessionId);
+    const ids = onDragStartProp(sessionId);
+    e.dataTransfer.setData('text/session-ids', JSON.stringify(ids));
     e.dataTransfer.effectAllowed = 'move';
-  }, []);
+    if (ids.length > 1) {
+      const badge = document.createElement('div');
+      badge.textContent = `${ids.length} sessions`;
+      badge.style.cssText = 'position:fixed;left:-1000px;top:-1000px;padding:4px 10px;border-radius:6px;background:#60a5fa;color:#fff;font-size:12px;font-weight:600;white-space:nowrap;';
+      document.body.appendChild(badge);
+      e.dataTransfer.setDragImage(badge, badge.offsetWidth / 2, badge.offsetHeight / 2);
+      requestAnimationFrame(() => document.body.removeChild(badge));
+    }
+  }, [onDragStartProp]);
 
   if (sessions.length === 0) return null;
 
@@ -872,7 +914,7 @@ function UnphasedColumn({ sessions, onSelect, onArchive, onRename, onDropToPhase
             key={session.id}
             draggable
             onDragStart={(e) => handleDragStart(e, session.id)}
-            onClick={() => onCardClick(session.id)}
+            onClick={(e) => onCardClick(session.id, e)}
           >
             <SessionKanbanCard
               session={session}
@@ -881,6 +923,7 @@ function UnphasedColumn({ sessions, onSelect, onArchive, onRename, onDropToPhase
               onRename={onRename}
               phaseColor="#525252"
               isFocused={focusedCardId === session.id}
+              isSelected={selectedIds.has(session.id)}
               showPeekOverride={peekCardId === session.id ? true : undefined}
               onPeekToggle={() => onPeekToggle(session.id)}
             />
@@ -895,7 +938,7 @@ function UnphasedColumn({ sessions, onSelect, onArchive, onRename, onDropToPhase
 // SessionKanbanToolbar
 // ============================================================
 
-function SessionKanbanToolbar() {
+function SessionKanbanToolbar({ selectedCount, onClearSelection }: { selectedCount: number; onClearSelection: () => void }) {
   const filter = useAtomValue(sessionKanbanFilterAtom);
   const setFilter = useSetAtom(sessionKanbanFilterAtom);
   const totalCount = useAtomValue(sessionKanbanTotalCountAtom);
@@ -1059,6 +1102,18 @@ function SessionKanbanToolbar() {
         </button>
       ))}
 
+      {/* Selection indicator */}
+      {selectedCount > 0 && (
+        <button
+          className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] border border-[rgba(96,165,250,0.4)] text-[#60a5fa] bg-[rgba(96,165,250,0.08)] cursor-pointer shrink-0"
+          onClick={onClearSelection}
+          title="Clear selection (Esc)"
+        >
+          {selectedCount} selected
+          <MaterialSymbol icon="close" size={12} />
+        </button>
+      )}
+
       <div className="flex-1" />
 
       {/* Count */}
@@ -1087,7 +1142,7 @@ function SessionKanbanToolbar() {
 // ArchiveGutter - Right-side drop zone to archive sessions
 // ============================================================
 
-function ArchiveGutter({ onArchive }: { onArchive: (sessionId: string) => void }) {
+function ArchiveGutter({ onArchive }: { onArchive: (sessionIds: string[]) => void }) {
   const [isDragOver, setIsDragOver] = useState(false);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -1103,9 +1158,14 @@ function ArchiveGutter({ onArchive }: { onArchive: (sessionId: string) => void }
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(false);
-    const sessionId = e.dataTransfer.getData('text/session-id');
-    if (sessionId) {
-      onArchive(sessionId);
+    const raw = e.dataTransfer.getData('text/session-ids');
+    // console.log('[ArchiveGutter] drop raw:', raw, 'types:', Array.from(e.dataTransfer.types));
+    if (raw) {
+      try {
+        const ids: string[] = JSON.parse(raw);
+        // console.log('[ArchiveGutter] parsed ids:', ids);
+        if (ids.length > 0) onArchive(ids);
+      } catch { /* ignore malformed */ }
     }
   }, [onArchive]);
 
@@ -1158,6 +1218,10 @@ export const SessionKanbanBoard: React.FC<SessionKanbanBoardProps> = ({ onSessio
   const [peekCardId, setPeekCardId] = useState<string | null>(null);
   const boardRef = useRef<HTMLDivElement>(null);
 
+  // Multi-selection state
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const lastClickedIdRef = useRef<string | null>(null);
+
   // Collapsible column state
   const [collapsedColumns, setCollapsedColumns] = useState<Set<SessionPhaseKey>>(new Set());
 
@@ -1172,6 +1236,18 @@ export const SessionKanbanBoard: React.FC<SessionKanbanBoardProps> = ({ onSessio
       return next;
     });
   }, []);
+
+  // Flat list of all visible session IDs in board order (for shift-select ranges)
+  const flatSessionIds = useMemo(() => {
+    const ids: string[] = [];
+    const unphasedSessions = grouped.get('unphased') || [];
+    for (const s of unphasedSessions) ids.push(s.id);
+    for (const col of SESSION_PHASE_COLUMNS) {
+      const sessions = grouped.get(col.value) || [];
+      for (const s of sessions) ids.push(s.id);
+    }
+    return ids;
+  }, [grouped]);
 
   // Build a flat ordered list of [columnKey, sessionId] for keyboard navigation
   const navigationGrid = useMemo(() => {
@@ -1225,24 +1301,41 @@ export const SessionKanbanBoard: React.FC<SessionKanbanBoardProps> = ({ onSessio
     }
   }, [onSessionSelect, onSessionOpen]);
 
-  const handleDrop = useCallback((sessionId: string, phase: SessionPhase) => {
-    setPhase({ sessionId, phase });
-  }, [setPhase]);
-
-  const handleRemovePhase = useCallback((sessionId: string) => {
-    setPhase({ sessionId, phase: null });
-  }, [setPhase]);
-
-  const handleArchive = useCallback(async (sessionId: string) => {
-    try {
-      const result = await window.electronAPI.invoke('sessions:update-metadata', sessionId, { isArchived: true });
-      if (result.success) {
-        updateSessionStore({ sessionId, updates: { isArchived: true } });
-      }
-    } catch (err) {
-      console.error('[SessionKanbanBoard] Failed to archive session:', err);
+  const handleDrop = useCallback((sessionIds: string[], phase: SessionPhase) => {
+    for (const id of sessionIds) {
+      setPhase({ sessionId: id, phase });
     }
-  }, [updateSessionStore]);
+    setSelectedIds(new Set());
+  }, [setPhase]);
+
+  const handleRemovePhase = useCallback((sessionIds: string[]) => {
+    for (const id of sessionIds) {
+      setPhase({ sessionId: id, phase: null });
+    }
+    setSelectedIds(new Set());
+  }, [setPhase]);
+
+  const handleArchive = useCallback(async (sessionIds: string[]) => {
+    for (const sessionId of sessionIds) {
+      try {
+        // Archive AND clear phase so the session leaves the board entirely
+        const result = await window.electronAPI.invoke('sessions:update-metadata', sessionId, { isArchived: true });
+        if (result.success) {
+          updateSessionStore({ sessionId, updates: { isArchived: true } });
+          // Clear phase so it doesn't linger in the complete column
+          setPhase({ sessionId, phase: null });
+        }
+      } catch (err) {
+        console.error('[SessionKanbanBoard] Failed to archive session:', err);
+      }
+    }
+    setSelectedIds(new Set());
+  }, [updateSessionStore, setPhase]);
+
+  // Single-session archive wrapper for context menu
+  const handleArchiveSingle = useCallback((sessionId: string) => {
+    handleArchive([sessionId]);
+  }, [handleArchive]);
 
   const handleRename = useCallback(async (sessionId: string, newName: string) => {
     try {
@@ -1253,14 +1346,59 @@ export const SessionKanbanBoard: React.FC<SessionKanbanBoardProps> = ({ onSessio
     }
   }, [updateSessionStore]);
 
-  // Click on a card sets focus
-  const handleCardClick = useCallback((sessionId: string) => {
+  // Click on a card: plain = select one, Cmd = toggle, Shift = range
+  const handleCardClick = useCallback((sessionId: string, e: React.MouseEvent) => {
+    const mod = e.metaKey || e.ctrlKey;
+    const shift = e.shiftKey;
+
+    if (mod) {
+      // Toggle this card in/out of selection
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        if (next.has(sessionId)) {
+          next.delete(sessionId);
+        } else {
+          next.add(sessionId);
+        }
+        return next;
+      });
+    } else if (shift && lastClickedIdRef.current) {
+      // Select range from lastClicked to this card
+      const anchorIdx = flatSessionIds.indexOf(lastClickedIdRef.current);
+      const targetIdx = flatSessionIds.indexOf(sessionId);
+      if (anchorIdx !== -1 && targetIdx !== -1) {
+        const start = Math.min(anchorIdx, targetIdx);
+        const end = Math.max(anchorIdx, targetIdx);
+        const rangeIds = flatSessionIds.slice(start, end + 1);
+        setSelectedIds(new Set(rangeIds));
+      } else {
+        setSelectedIds(new Set([sessionId]));
+      }
+    } else {
+      // Plain click: select just this card
+      setSelectedIds(new Set([sessionId]));
+    }
+
+    lastClickedIdRef.current = sessionId;
     setFocusedCardId(sessionId);
+
     // Close peek if clicking a different card
     if (peekCardId && peekCardId !== sessionId) {
       setPeekCardId(null);
     }
-  }, [peekCardId]);
+  }, [peekCardId, flatSessionIds]);
+
+  // Called by columns when a drag starts. Returns the set of IDs being dragged.
+  // If the dragged card is part of the selection, drag the whole selection.
+  // Otherwise, select just the dragged card.
+  const handleDragStart = useCallback((sessionId: string): string[] => {
+    if (selectedIds.has(sessionId)) {
+      return Array.from(selectedIds);
+    }
+    setSelectedIds(new Set([sessionId]));
+    lastClickedIdRef.current = sessionId;
+    return [sessionId];
+  }, [selectedIds]);
 
   // Toggle peek for a specific card
   const handlePeekToggle = useCallback((sessionId: string) => {
@@ -1276,6 +1414,13 @@ export const SessionKanbanBoard: React.FC<SessionKanbanBoardProps> = ({ onSessio
     }
   }, [peekCardId]);
 
+  // Get IDs to act on for keyboard commands: selection if non-empty, else focused card
+  const getActionIds = useCallback((): string[] => {
+    if (selectedIds.size > 0) return Array.from(selectedIds);
+    if (focusedCardId) return [focusedCardId];
+    return [];
+  }, [selectedIds, focusedCardId]);
+
   // Keyboard handler
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     // Don't handle if the search input is focused
@@ -1285,11 +1430,20 @@ export const SessionKanbanBoard: React.FC<SessionKanbanBoardProps> = ({ onSessio
     const { key, metaKey, ctrlKey } = e;
     const mod = metaKey || ctrlKey;
 
-    // Escape: close peek, then clear focus
+    // Cmd+A: select all visible cards
+    if (key === 'a' && mod) {
+      e.preventDefault();
+      setSelectedIds(new Set(flatSessionIds));
+      return;
+    }
+
+    // Escape: close peek, then clear selection, then clear focus
     if (key === 'Escape') {
       e.preventDefault();
       if (peekCardId) {
         setPeekCardId(null);
+      } else if (selectedIds.size > 0) {
+        setSelectedIds(new Set());
       } else {
         setFocusedCardId(null);
       }
@@ -1313,13 +1467,13 @@ export const SessionKanbanBoard: React.FC<SessionKanbanBoardProps> = ({ onSessio
     if (colIdx === -1) return;
 
     // Arrow navigation
-    if (key === 'ArrowDown') {
+    if (key === 'ArrowDown' && !mod) {
       e.preventDefault();
       const next = getSessionAtPosition(colIdx, pos.cardIndex + 1);
       if (next) moveFocusTo(next);
       return;
     }
-    if (key === 'ArrowUp') {
+    if (key === 'ArrowUp' && !mod) {
       e.preventDefault();
       if (pos.cardIndex > 0) {
         const prev = getSessionAtPosition(colIdx, pos.cardIndex - 1);
@@ -1365,40 +1519,62 @@ export const SessionKanbanBoard: React.FC<SessionKanbanBoardProps> = ({ onSessio
       return;
     }
 
-    // Cmd+Right: move card to next phase
+    // Cmd+Right: move selected cards to next phase
     if (key === 'ArrowRight' && mod) {
       e.preventDefault();
       const phaseKeys = SESSION_PHASE_COLUMNS.map(c => c.value);
       const currentPhaseIdx = pos.columnKey === 'unphased' ? -1 : phaseKeys.indexOf(pos.columnKey as SessionPhase);
       const nextPhaseIdx = currentPhaseIdx + 1;
       if (nextPhaseIdx < phaseKeys.length) {
-        setPhase({ sessionId: focusedCardId, phase: phaseKeys[nextPhaseIdx] });
+        const ids = getActionIds();
+        for (const id of ids) {
+          setPhase({ sessionId: id, phase: phaseKeys[nextPhaseIdx] });
+        }
       }
       return;
     }
 
-    // Cmd+Left: move card to previous phase
+    // Cmd+Left: move selected cards to previous phase
     if (key === 'ArrowLeft' && mod) {
       e.preventDefault();
       const phaseKeys = SESSION_PHASE_COLUMNS.map(c => c.value);
       const currentPhaseIdx = pos.columnKey === 'unphased' ? -1 : phaseKeys.indexOf(pos.columnKey as SessionPhase);
       if (currentPhaseIdx > 0) {
-        setPhase({ sessionId: focusedCardId, phase: phaseKeys[currentPhaseIdx - 1] });
+        const ids = getActionIds();
+        for (const id of ids) {
+          setPhase({ sessionId: id, phase: phaseKeys[currentPhaseIdx - 1] });
+        }
       } else if (currentPhaseIdx === 0) {
-        // Move to unphased (remove phase)
-        setPhase({ sessionId: focusedCardId, phase: null });
+        const ids = getActionIds();
+        for (const id of ids) {
+          setPhase({ sessionId: id, phase: null });
+        }
       }
       return;
     }
-  }, [focusedCardId, peekCardId, findPosition, findColumnIndex, getSessionAtPosition, navigationGrid, handleSelect, handlePeekToggle, setPhase, moveFocusTo]);
+  }, [focusedCardId, peekCardId, selectedIds, flatSessionIds, findPosition, findColumnIndex, getSessionAtPosition, navigationGrid, handleSelect, handlePeekToggle, setPhase, moveFocusTo, getActionIds]);
 
-  // Clear focus/peek when grouped data changes and the focused card is gone
+  // Clear focus/peek/selection when grouped data changes and cards are gone
   useEffect(() => {
     if (focusedCardId && !findPosition(focusedCardId)) {
       setFocusedCardId(null);
       setPeekCardId(null);
     }
-  }, [focusedCardId, findPosition]);
+    // Prune selected IDs that no longer exist
+    if (selectedIds.size > 0) {
+      const allIds = new Set(flatSessionIds);
+      let changed = false;
+      const pruned = new Set<string>();
+      for (const id of selectedIds) {
+        if (allIds.has(id)) {
+          pruned.add(id);
+        } else {
+          changed = true;
+        }
+      }
+      if (changed) setSelectedIds(pruned);
+    }
+  }, [focusedCardId, findPosition, selectedIds, flatSessionIds]);
 
   const unphasedSessions = grouped.get('unphased') || [];
 
@@ -1421,7 +1597,7 @@ export const SessionKanbanBoard: React.FC<SessionKanbanBoardProps> = ({ onSessio
       tabIndex={0}
       onKeyDown={handleKeyDown}
     >
-      <SessionKanbanToolbar />
+      <SessionKanbanToolbar selectedCount={selectedIds.size} onClearSelection={() => setSelectedIds(new Set())} />
 
       {isEmpty ? (
         <div className="flex-1 flex items-center justify-center text-nim-muted" data-testid="kanban-empty-state">
@@ -1438,14 +1614,16 @@ export const SessionKanbanBoard: React.FC<SessionKanbanBoardProps> = ({ onSessio
           <UnphasedColumn
             sessions={unphasedSessions}
             onSelect={handleSelect}
-            onArchive={handleArchive}
+            onArchive={handleArchiveSingle}
             onRename={handleRename}
             onDropToPhase={handleDrop}
             onRemovePhase={handleRemovePhase}
             focusedCardId={focusedCardId}
+            selectedIds={selectedIds}
             peekCardId={peekCardId}
             onCardClick={handleCardClick}
             onPeekToggle={handlePeekToggle}
+            onDragStart={handleDragStart}
           />
           {SESSION_PHASE_COLUMNS.map(col => (
             <SessionKanbanColumn
@@ -1455,15 +1633,17 @@ export const SessionKanbanBoard: React.FC<SessionKanbanBoardProps> = ({ onSessio
               color={col.color}
               sessions={grouped.get(col.value) || []}
               onSelect={handleSelect}
-              onArchive={handleArchive}
+              onArchive={handleArchiveSingle}
               onRename={handleRename}
               onDrop={handleDrop}
               isCollapsed={collapsedColumns.has(col.value)}
               onToggleCollapse={() => toggleCollapse(col.value)}
               focusedCardId={focusedCardId}
+              selectedIds={selectedIds}
               peekCardId={peekCardId}
               onCardClick={handleCardClick}
               onPeekToggle={handlePeekToggle}
+              onDragStart={handleDragStart}
             />
           ))}
           <ArchiveGutter onArchive={handleArchive} />
