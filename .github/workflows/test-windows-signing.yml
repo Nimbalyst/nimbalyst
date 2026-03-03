@@ -67,7 +67,7 @@ jobs:
         env:
           NODE_ENV: production
         working-directory: packages/electron
-        run: npm run build && npm run build:extensions && electron-builder --win --x64 --publish=never
+        run: npm run build && npm run build:extensions && npx electron-builder --win --x64 --publish=never
         shell: bash
 
       - name: List built artifacts
