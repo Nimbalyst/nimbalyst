@@ -20,6 +20,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.55.9] - 2026-03-03
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- Worktree archive from kanban board updates UI immediately without requiring refresh
+- Resolved false Codex workspace trust warning by using actual workspace path for connection tests
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.55.8] - 2026-03-03
 
 
