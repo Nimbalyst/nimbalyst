@@ -159,22 +159,16 @@ jobs:
           # Clean up
           rm certificate.p12
 
-      # Windows specific setup (optional - only if certificate is provided)
-      - name: Import Windows certificate
-        if: matrix.os == 'windows-latest' && env.WINDOWS_CERTIFICATE != ''
+      # Windows code signing setup (DigiCert KeyLocker)
+      - name: Decode DigiCert Client Certificate (Windows)
+        if: matrix.os == 'windows-latest' && env.DIGICERT_CLIENT_CERT_BASE64 != ''
         env:
-          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
-          WINDOWS_CERTIFICATE_PWD: ${{ secrets.WINDOWS_CERTIFICATE_PWD }}
+          DIGICERT_CLIENT_CERT_BASE64: ${{ secrets.DIGICERT_CLIENT_CERT_BASE64 }}
         run: |
-          # Decode certificate
-          [System.Convert]::FromBase64String($env:WINDOWS_CERTIFICATE) | Set-Content -Path certificate.pfx -Encoding Byte
-          
-          # Import to certificate store
-          $password = ConvertTo-SecureString -String $env:WINDOWS_CERTIFICATE_PWD -Force -AsPlainText
-          Import-PfxCertificate -FilePath certificate.pfx -CertStoreLocation Cert:\CurrentUser\My -Password $password
-          
-          # Clean up
-          Remove-Item certificate.pfx
+          $certBytes = [System.Convert]::FromBase64String($env:DIGICERT_CLIENT_CERT_BASE64)
+          $certPath = Join-Path $env:RUNNER_TEMP "digicert_client_cert.p12"
+          [System.IO.File]::WriteAllBytes($certPath, $certBytes)
+          Write-Host "DigiCert client certificate decoded ($($certBytes.Length) bytes)"
         shell: powershell
 
       # Build Electron app
@@ -189,9 +183,7 @@ jobs:
           CSC_NAME: ${{ secrets.CSC_NAME }}
           CSC_LINK: ${{ secrets.MACOS_CERTIFICATE }}
           CSC_KEY_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
-          # Windows signing
-          WIN_CSC_LINK: ${{ secrets.WINDOWS_CERTIFICATE }}
-          WIN_CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PWD }}
+          # Windows signing is handled post-build by DigiCert KeyLocker
           # CRITICAL: GH_TOKEN is required for electron-builder to publish releases
           # The package.json "publish" config points to nimbalyst/nimbalyst-code (private repo)
           # This enables electron-builder to create releases in the PRIVATE repo for internal testing
@@ -220,33 +212,20 @@ jobs:
           fi
         shell: bash
 
-      # TODO: Re-enable Windows code signing once DigiCert credentials are configured correctly
-      # The certificate and keypair alias need to match - see error:
-      # "pkcs7: first certificate must match private key"
-      #
-      # # Decode Digicert Client Certificate from base64 secret (windows only)
-      # - name: Decode Digicert Client Certificate (Windows Only)
-      #   if: matrix.os == 'windows-latest'
-      #   env:
-      #     DIGICERT_CLIENT_CERT_BASE64: ${{ secrets.DIGICERT_CLIENT_CERT_BASE64 }}
-      #   run: |
-      #     # Decode certificate
-      #     [System.Convert]::FromBase64String($env:DIGICERT_CLIENT_CERT_BASE64) | Set-Content -Path $env:RUNNER_TEMP_DIR\digicert_client_cert.p12 -Encoding Byte
-      #   shell: powershell
-      #
-      # # Sign with Digicert Software Trust Manager (Windows Only)
-      # - name: Setup Digicert Software Trust Manager (Windows Only)
-      #   if: matrix.os == 'windows-latest'
-      #   uses: digicert/code-signing-software-trust-action@v1.0.0
-      #   with:
-      #     simple-signing-mode: true
-      #     input: "packages/electron/release/Nimbalyst-Windows.exe"
-      #     keypair-alias: ${{ secrets.DIGICERT_KEYPAIR_ALIAS }}
-      #   env:
-      #     SM_HOST: "https://clientauth.one.digicert.com"
-      #     SM_API_KEY: ${{ secrets.DIGICERT_CLIENT_API_TOKEN }}
-      #     SM_CLIENT_CERT_FILE: ${{ env.RUNNER_TEMP_DIR }}\digicert_client_cert.p12
-      #     SM_CLIENT_CERT_PASSWORD: ${{ secrets.DIGICERT_CLIENT_CERT_PW }}
+      # Sign Windows exe with DigiCert KeyLocker (post-build)
+      - name: Sign Windows exe with DigiCert KeyLocker
+        if: matrix.os == 'windows-latest' && env.DIGICERT_CLIENT_CERT_BASE64 != ''
+        uses: digicert/code-signing-software-trust-action@v1.0.0
+        with:
+          simple-signing-mode: true
+          input: "packages/electron/release/Nimbalyst-Windows.exe"
+          keypair-alias: ${{ secrets.DIGICERT_KEYPAIR_ALIAS }}
+        env:
+          DIGICERT_CLIENT_CERT_BASE64: ${{ secrets.DIGICERT_CLIENT_CERT_BASE64 }}
+          SM_HOST: "https://clientauth.one.digicert.com"
+          SM_API_KEY: ${{ secrets.DIGICERT_CLIENT_API_TOKEN }}
+          SM_CLIENT_CERT_FILE: ${{ runner.temp }}\digicert_client_cert.p12
+          SM_CLIENT_CERT_PASSWORD: ${{ secrets.DIGICERT_CLIENT_CERT_PW }}
 
       # Generate update metadata files
       - name: Generate update metadata

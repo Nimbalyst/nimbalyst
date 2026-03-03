@@ -30,14 +30,22 @@ This guide explains how to set up the required secrets for building and releasin
 6. **KEYCHAIN_PASSWORD** (optional)
    - Random password for temporary keychain (workflow will generate one if not provided)
 
-### Windows Code Signing (Optional)
+### Windows Code Signing via DigiCert KeyLocker (Optional)
 
-7. **WINDOWS_CERTIFICATE**
-   - Your Windows code signing certificate as base64
-   - Export as .pfx and convert: `base64 -i certificate.pfx | pbcopy`
+7. **DIGICERT_CLIENT_CERT_BASE64**
+   - DigiCert KeyLocker client authentication certificate (.p12), base64-encoded
+   - Download from DigiCert ONE: Profile > Admin Profile > Client authentication certificates
+   - Convert to base64: `base64 -i client_cert.p12 | pbcopy`
 
-8. **WINDOWS_CERTIFICATE_PWD**
-   - Password for the Windows certificate
+8. **DIGICERT_CLIENT_CERT_PW**
+   - Password for the client authentication certificate
+
+9. **DIGICERT_CLIENT_API_TOKEN**
+   - API token from DigiCert ONE: Profile > Admin Profile > API key > Create API token
+   - Must be scoped to KeyLocker
+
+10. **DIGICERT_KEYPAIR_ALIAS**
+    - Keypair alias from DigiCert ONE: KeyLocker > Keypairs (first column)
 
 ## How to Add Secrets to GitHub
 
