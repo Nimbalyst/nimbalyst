@@ -7,9 +7,73 @@ permissions:
   contents: read
 
 jobs:
-  test-signing:
+  # Fast job (~2 min): test DigiCert credentials by signing a dummy exe
+  test-credentials:
     runs-on: windows-latest
+    steps:
+      - name: Verify DigiCert secrets are present
+        env:
+          SM_API_KEY: ${{ secrets.DIGICERT_CLIENT_API_TOKEN }}
+          SM_CLIENT_CERT_PASSWORD: ${{ secrets.DIGICERT_CLIENT_CERT_PW }}
+          DIGICERT_KEYPAIR_ALIAS: ${{ secrets.DIGICERT_KEYPAIR_ALIAS }}
+          DIGICERT_CLIENT_CERT_BASE64: ${{ secrets.DIGICERT_CLIENT_CERT_BASE64 }}
+        run: |
+          echo "=== DigiCert Secret Verification ==="
+          $hasError = $false
+          if ([string]::IsNullOrEmpty($env:DIGICERT_CLIENT_CERT_BASE64)) { Write-Host "ERROR: DIGICERT_CLIENT_CERT_BASE64 is empty"; $hasError = $true } else { Write-Host "DIGICERT_CLIENT_CERT_BASE64: set ($($env:DIGICERT_CLIENT_CERT_BASE64.Length) chars)" }
+          if ([string]::IsNullOrEmpty($env:SM_API_KEY)) { Write-Host "ERROR: DIGICERT_CLIENT_API_TOKEN is empty"; $hasError = $true } else { Write-Host "DIGICERT_CLIENT_API_TOKEN: set ($($env:SM_API_KEY.Length) chars)" }
+          if ([string]::IsNullOrEmpty($env:SM_CLIENT_CERT_PASSWORD)) { Write-Host "ERROR: DIGICERT_CLIENT_CERT_PW is empty"; $hasError = $true } else { Write-Host "DIGICERT_CLIENT_CERT_PW: set ($($env:SM_CLIENT_CERT_PASSWORD.Length) chars)" }
+          if ([string]::IsNullOrEmpty($env:DIGICERT_KEYPAIR_ALIAS)) { Write-Host "ERROR: DIGICERT_KEYPAIR_ALIAS is empty"; $hasError = $true } else { Write-Host "DIGICERT_KEYPAIR_ALIAS: set ($($env:DIGICERT_KEYPAIR_ALIAS.Length) chars)" }
+          if ($hasError) { exit 1 }
+        shell: powershell
 
+      - name: Decode DigiCert Client Certificate
+        env:
+          DIGICERT_CLIENT_CERT_BASE64: ${{ secrets.DIGICERT_CLIENT_CERT_BASE64 }}
+        run: |
+          $certBytes = [System.Convert]::FromBase64String($env:DIGICERT_CLIENT_CERT_BASE64)
+          $certPath = Join-Path $env:RUNNER_TEMP "digicert_client_cert.p12"
+          [System.IO.File]::WriteAllBytes($certPath, $certBytes)
+          Write-Host "Certificate decoded to: $certPath"
+          Write-Host "Certificate size: $($certBytes.Length) bytes"
+        shell: powershell
+
+      # Create a tiny dummy exe to test signing
+      - name: Create dummy executable
+        run: |
+          # Create a minimal C# program and compile it
+          @'
+          class Program { static void Main() { } }
+          '@ | Set-Content -Path dummy.cs
+          & "$env:SystemRoot\Microsoft.NET\Framework64\v4.0.30319\csc.exe" /out:dummy.exe dummy.cs
+          Write-Host "Created dummy.exe: $((Get-Item dummy.exe).Length) bytes"
+        shell: powershell
+
+      # Test signing the dummy exe
+      - name: Sign dummy exe with DigiCert KeyLocker
+        uses: digicert/code-signing-software-trust-action@v1.0.0
+        with:
+          simple-signing-mode: true
+          input: "dummy.exe"
+          keypair-alias: ${{ secrets.DIGICERT_KEYPAIR_ALIAS }}
+        env:
+          SM_HOST: "https://clientauth.one.digicert.com"
+          SM_API_KEY: ${{ secrets.DIGICERT_CLIENT_API_TOKEN }}
+          SM_CLIENT_CERT_FILE: ${{ runner.temp }}\digicert_client_cert.p12
+          SM_CLIENT_CERT_PASSWORD: ${{ secrets.DIGICERT_CLIENT_CERT_PW }}
+
+      - name: Verify dummy signature
+        run: |
+          echo "=== Signature verification ==="
+          signtool verify /pa /v dummy.exe
+          echo ""
+          echo "SUCCESS: DigiCert KeyLocker signing credentials are working!"
+        shell: cmd
+
+  # Full build + sign job: only runs after credentials are verified
+  build-and-sign:
+    needs: test-credentials
+    runs-on: windows-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -76,24 +140,6 @@ jobs:
           dir packages\electron\release\
         shell: cmd
 
-      # Verify DigiCert secrets are present
-      - name: Verify DigiCert secrets
-        env:
-          SM_API_KEY: ${{ secrets.DIGICERT_CLIENT_API_TOKEN }}
-          SM_CLIENT_CERT_PASSWORD: ${{ secrets.DIGICERT_CLIENT_CERT_PW }}
-          DIGICERT_KEYPAIR_ALIAS: ${{ secrets.DIGICERT_KEYPAIR_ALIAS }}
-          DIGICERT_CLIENT_CERT_BASE64: ${{ secrets.DIGICERT_CLIENT_CERT_BASE64 }}
-        run: |
-          echo "=== DigiCert Secret Verification ==="
-          $hasError = $false
-          if ([string]::IsNullOrEmpty($env:DIGICERT_CLIENT_CERT_BASE64)) { Write-Host "ERROR: DIGICERT_CLIENT_CERT_BASE64 is empty"; $hasError = $true } else { Write-Host "DIGICERT_CLIENT_CERT_BASE64: set ($($env:DIGICERT_CLIENT_CERT_BASE64.Length) chars)" }
-          if ([string]::IsNullOrEmpty($env:SM_API_KEY)) { Write-Host "ERROR: DIGICERT_CLIENT_API_TOKEN is empty"; $hasError = $true } else { Write-Host "DIGICERT_CLIENT_API_TOKEN: set ($($env:SM_API_KEY.Length) chars)" }
-          if ([string]::IsNullOrEmpty($env:SM_CLIENT_CERT_PASSWORD)) { Write-Host "ERROR: DIGICERT_CLIENT_CERT_PW is empty"; $hasError = $true } else { Write-Host "DIGICERT_CLIENT_CERT_PW: set ($($env:SM_CLIENT_CERT_PASSWORD.Length) chars)" }
-          if ([string]::IsNullOrEmpty($env:DIGICERT_KEYPAIR_ALIAS)) { Write-Host "ERROR: DIGICERT_KEYPAIR_ALIAS is empty"; $hasError = $true } else { Write-Host "DIGICERT_KEYPAIR_ALIAS: set ($($env:DIGICERT_KEYPAIR_ALIAS.Length) chars)" }
-          if ($hasError) { exit 1 }
-        shell: powershell
-
-      # Decode DigiCert client certificate
       - name: Decode DigiCert Client Certificate
         env:
           DIGICERT_CLIENT_CERT_BASE64: ${{ secrets.DIGICERT_CLIENT_CERT_BASE64 }}
@@ -101,11 +147,8 @@ jobs:
           $certBytes = [System.Convert]::FromBase64String($env:DIGICERT_CLIENT_CERT_BASE64)
           $certPath = Join-Path $env:RUNNER_TEMP "digicert_client_cert.p12"
           [System.IO.File]::WriteAllBytes($certPath, $certBytes)
-          Write-Host "Certificate decoded to: $certPath"
-          Write-Host "Certificate size: $($certBytes.Length) bytes"
         shell: powershell
 
-      # Sign with DigiCert KeyLocker via Software Trust Manager action
       - name: Sign with DigiCert KeyLocker
         uses: digicert/code-signing-software-trust-action@v1.0.0
         with:
