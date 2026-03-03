@@ -26,8 +26,8 @@ final class TranscriptWebViewTests: XCTestCase {
             titleDecrypted: "Test Session",
             provider: "claude-code",
             mode: "agent",
-            createdAt: Date().timeIntervalSince1970,
-            updatedAt: Date().timeIntervalSince1970
+            createdAt: Int(Date().timeIntervalSince1970),
+            updatedAt: Int(Date().timeIntervalSince1970)
         )
         try db.upsertSession(session)
 
@@ -41,7 +41,7 @@ final class TranscriptWebViewTests: XCTestCase {
                 encryptedContent: "",
                 iv: "",
                 contentDecrypted: "{\"type\":\"user\",\"message\":{\"role\":\"user\",\"content\":\"Hello\"}}",
-                createdAt: Date().timeIntervalSince1970
+                createdAt: Int(Date().timeIntervalSince1970)
             ),
             Message(
                 id: "msg-2",
@@ -52,7 +52,7 @@ final class TranscriptWebViewTests: XCTestCase {
                 encryptedContent: "",
                 iv: "",
                 contentDecrypted: "{\"type\":\"text\",\"text\":\"Hello! How can I help you?\"}",
-                createdAt: Date().timeIntervalSince1970
+                createdAt: Int(Date().timeIntervalSince1970)
             )
         ]
         try db.appendMessages(messages)
