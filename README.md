@@ -5,7 +5,6 @@
 - Manage multiple sessions in parallel, search, resume, link sessions to files and files to sessions. For developers we include git management, AI commit, workstreams, worktrees, and terminal. 
 
 ![Version](https://img.shields.io/github/v/release/nimbalyst/nimbalyst)
-![Downloads](https://img.shields.io/github/downloads/nimbalyst/nimbalyst/total)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)
 
 
