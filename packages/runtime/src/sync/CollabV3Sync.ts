@@ -720,22 +720,35 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
   let currentUserId: string | null = null;
 
   // Helper to get fresh JWT and extract user ID.
-  // Always extract userId from JWT sub claim -- the server validates that
-  // the JWT sub matches the userId in the room URL path.
+  // Uses config.userId as the authoritative room routing ID.
+  // The JWT sub claim is validated against config.userId -- if they differ,
+  // the JWT is from a different org (e.g., team) and the caller's getJwt()
+  // should be returning a personal-org-scoped JWT. Log a warning so the
+  // mismatch is visible but still use config.userId for routing to ensure
+  // desktop and mobile always connect to the same index room.
   async function ensureFreshJwt(): Promise<{ jwt: string; userId: string }> {
     const jwt = await config.getJwt();
-    const userId = extractUserIdFromJwt(jwt);
+    const jwtUserId = extractUserIdFromJwt(jwt);
     currentJwt = jwt;
-    currentUserId = userId;
-    return { jwt, userId };
+
+    // Use config.userId (personalUserId from SyncManager) as the canonical
+    // room routing ID. This must match iOS which also uses the personal
+    // member ID. If the JWT sub doesn't match, the server may reject the
+    // connection -- but routing to the wrong room is worse because it
+    // silently breaks cross-device sync (prompts, drafts, etc.).
+    if (config.userId && jwtUserId !== config.userId) {
+      console.warn('[CollabV3] JWT sub mismatch! JWT sub:', jwtUserId, 'config.userId:', config.userId,
+        '-- using config.userId for room routing. The JWT may be team-scoped instead of personal-org-scoped.');
+    }
+    currentUserId = config.userId || jwtUserId;
+    return { jwt, userId: currentUserId };
   }
 
-  // Get user ID synchronously if we have a cached JWT, otherwise throw
+  // Get user ID synchronously if we have a cached JWT, otherwise use config.userId
   function getUserId(): string {
-    if (!currentUserId) {
-      throw new Error('JWT not initialized - call ensureFreshJwt first');
-    }
-    return currentUserId;
+    if (currentUserId) return currentUserId;
+    if (config.userId) return config.userId;
+    throw new Error('JWT not initialized - call ensureFreshJwt first');
   }
 
   const sessions = new Map<string, SessionConnection>();

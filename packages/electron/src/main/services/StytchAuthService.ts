@@ -828,16 +828,45 @@ export async function refreshPersonalSession(serverUrl: string): Promise<boolean
   }
 
   // If we're already in the personal org (no team exchange happened),
-  // just do a normal refresh
+  // just do a normal refresh -- but verify the JWT sub matches personalUserId.
+  // The session token may have been silently exchanged to a team org, in which
+  // case Stytch returns a team-scoped JWT even though authState.orgId appears
+  // to be the personal org. If the sub doesn't match, fall through to the
+  // session exchange path to get a genuine personal-org JWT.
   if (!authState.orgId || authState.orgId === personalOrgId) {
     const result = await refreshSession(serverUrl);
-    if (result) {
+    if (result && authState.sessionJwt) {
+      // Verify the JWT sub matches personalUserId
+      try {
+        const parts = authState.sessionJwt.split('.');
+        if (parts.length === 3) {
+          const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString()) as { sub?: string };
+          if (payload.sub && authState.personalUserId && payload.sub !== authState.personalUserId) {
+            // JWT sub is a team member ID, not personal -- the session was exchanged
+            // to a team org at some point. Fall through to the exchange path.
+            logger.main.warn('[StytchAuthService] Refreshed JWT sub mismatch:',
+              payload.sub, '!==', authState.personalUserId,
+              '-- session was team-exchanged, falling through to personal org exchange');
+          } else {
+            authState = { ...authState, personalSessionJwt: authState.sessionJwt };
+            return true;
+          }
+        }
+      } catch {
+        // Parse failed -- use the JWT as-is
+        authState = { ...authState, personalSessionJwt: authState.sessionJwt };
+        return result;
+      }
+    } else if (result) {
       authState = { ...authState, personalSessionJwt: authState.sessionJwt };
+      return result;
+    } else {
+      return false;
     }
-    return result;
   }
 
-  // We're in a team org -- do a session exchange to personal org for a fresh JWT.
+  // We're in a team org (or the refresh above detected a team-scoped JWT)
+  // -- do a session exchange to personal org for a fresh JWT.
   // The team JWT (authState.sessionJwt) has a short lifetime (5 min from Stytch),
   // so refresh it first to ensure the Authorization header is valid.
   try {
