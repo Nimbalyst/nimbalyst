@@ -36,6 +36,9 @@ const log = createLogger('IndexRoom');
 /** Session TTL: 30 days in milliseconds */
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
+/** Device TTL: 90 days - remove stored devices not seen in this period */
+const DEVICE_TTL_MS = 90 * 24 * 60 * 60 * 1000;
+
 /** How often IndexRoom scans for expired entries: every 24 hours */
 const INDEX_CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
@@ -1139,28 +1142,29 @@ export class IndexRoom implements DurableObject {
    * Returns devices from active connections that have announced themselves,
    * plus stored devices as fallback for connections recovering from hibernation.
    */
+  /**
+   * Get all known devices with online/offline status.
+   * Online devices come from active WebSocket connections.
+   * Offline devices come from DO storage (persisted across disconnects).
+   */
   private getConnectedDevices(): DeviceInfo[] {
     const devices: DeviceInfo[] = [];
     const seenIds = new Set<string>();
 
-    // First: devices from active connections (fresh announcements)
+    // First: devices from active connections (these are online)
     for (const [, state] of this.connections) {
       if (state.device && !seenIds.has(state.device.deviceId)) {
-        devices.push(state.device);
+        devices.push({ ...state.device, isOnline: true });
         seenIds.add(state.device.deviceId);
       }
     }
 
-    // Fallback: include stored devices for connections that haven't re-announced
-    // after hibernation recovery. Only use the fallback when some connections are
-    // missing device info (indicating they were restored from hibernation).
-    const connectionsWithoutDevice = [...this.connections.values()].filter(s => !s.device).length;
-    if (connectionsWithoutDevice > 0) {
-      for (const [, device] of this.storedDevices) {
-        if (!seenIds.has(device.deviceId)) {
-          devices.push(device);
-          seenIds.add(device.deviceId);
-        }
+    // Include stored devices that aren't currently connected (offline)
+    // Also include stored devices for hibernation-recovered connections
+    for (const [, device] of this.storedDevices) {
+      if (!seenIds.has(device.deviceId)) {
+        devices.push({ ...device, isOnline: false });
+        seenIds.add(device.deviceId);
       }
     }
 
@@ -1359,6 +1363,23 @@ export class IndexRoom implements DurableObject {
       }
     }
 
+    // Clean up stale offline devices (not seen in 90 days)
+    const deviceCutoff = Date.now() - DEVICE_TTL_MS;
+    const staleDeviceIds: string[] = [];
+    for (const [deviceId, device] of this.storedDevices) {
+      const lastSeen = device.lastSeenAt ?? device.lastActiveAt ?? 0;
+      if (lastSeen < deviceCutoff) {
+        staleDeviceIds.push(deviceId);
+      }
+    }
+    if (staleDeviceIds.length > 0) {
+      log.info('Cleaning up', staleDeviceIds.length, 'stale offline devices');
+      for (const deviceId of staleDeviceIds) {
+        this.storedDevices.delete(deviceId);
+        await this.state.storage.delete(`device:${deviceId}`);
+      }
+    }
+
     // Reschedule for next cleanup cycle
     await this.state.storage.setAlarm(Date.now() + INDEX_CLEANUP_INTERVAL_MS);
   }
@@ -1369,16 +1390,17 @@ export class IndexRoom implements DurableObject {
   async webSocketClose(ws: WebSocket): Promise<void> {
     const connState = this.connections.get(ws);
 
-    // If this connection had device info, broadcast that it left and clean up storage
+    // If this connection had device info, broadcast that it left and persist lastSeenAt
     if (connState?.device) {
       const leftMessage: DeviceLeftMessage = {
         type: 'deviceLeft',
         deviceId: connState.device.deviceId,
       };
       this.broadcast(leftMessage, ws);
-      // Remove from stored devices so it's not returned as a stale fallback
-      this.storedDevices.delete(connState.device.deviceId);
-      await this.state.storage.delete(`device:${connState.device.deviceId}`);
+      // Keep device in storage with lastSeenAt so it appears as offline in device list
+      const updatedDevice = { ...connState.device, lastSeenAt: Date.now() };
+      this.storedDevices.set(updatedDevice.deviceId, updatedDevice);
+      await this.state.storage.put(`device:${updatedDevice.deviceId}`, updatedDevice);
     }
 
     this.connections.delete(ws);
@@ -1391,15 +1413,16 @@ export class IndexRoom implements DurableObject {
     log.error('WebSocket error:', error);
     const connState = this.connections.get(ws);
 
-    // If this connection had device info, broadcast that it left and clean up storage
+    // If this connection had device info, broadcast that it left and persist lastSeenAt
     if (connState?.device) {
       const leftMessage: DeviceLeftMessage = {
         type: 'deviceLeft',
         deviceId: connState.device.deviceId,
       };
       this.broadcast(leftMessage, ws);
-      this.storedDevices.delete(connState.device.deviceId);
-      await this.state.storage.delete(`device:${connState.device.deviceId}`);
+      const updatedDevice = { ...connState.device, lastSeenAt: Date.now() };
+      this.storedDevices.set(updatedDevice.deviceId, updatedDevice);
+      await this.state.storage.put(`device:${updatedDevice.deviceId}`, updatedDevice);
     }
 
     this.connections.delete(ws);

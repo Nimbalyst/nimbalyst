@@ -51,6 +51,8 @@ interface DeviceInfo {
   appVersion?: string;
   connectedAt: number;
   lastActiveAt: number;
+  isOnline?: boolean;
+  lastSeenAt?: number;
 }
 
 // NOTE: Props have been removed - SyncPanel now uses Jotai atoms directly.
@@ -757,41 +759,49 @@ export function SyncPanel() {
         </div>
       )}
 
-      {/* Connected Devices */}
-      {connectedDevices.length > 0 && (
-        <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
-          <h4 className="provider-panel-section-title text-[15px] font-semibold mb-3 text-[var(--nim-text)]">
-            Online Devices
-            <button
-              onClick={loadDevices}
-              disabled={devicesLoading}
-              className={`ml-2 px-1.5 py-0.5 text-[10px] bg-nim-secondary border border-nim rounded text-nim-faint ${
-                devicesLoading ? 'cursor-wait' : 'cursor-pointer hover:bg-nim-hover'
-              }`}
+      {/* Paired Devices */}
+      <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
+        <h4 className="provider-panel-section-title text-[15px] font-semibold mb-3 text-[var(--nim-text)]">
+          Devices
+          <button
+            onClick={loadDevices}
+            disabled={devicesLoading}
+            className={`ml-2 px-1.5 py-0.5 text-[10px] bg-nim-secondary border border-nim rounded text-nim-faint ${
+              devicesLoading ? 'cursor-wait' : 'cursor-pointer hover:bg-nim-hover'
+            }`}
+          >
+            Refresh
+          </button>
+        </h4>
+        <div className="mt-2">
+          {connectedDevices.length === 0 && !devicesLoading && (
+            <div className="text-[12px] text-nim-faint px-2.5 py-2">
+              No paired devices. Use &quot;Pair Device&quot; to connect a mobile device.
+            </div>
+          )}
+          {connectedDevices.map((device) => (
+            <div
+              key={device.deviceId}
+              className="flex items-center gap-2.5 px-2.5 py-2 bg-nim-secondary rounded-md mb-1.5 last:mb-0"
             >
-              Refresh
-            </button>
-          </h4>
-          <div className="mt-2">
-            {connectedDevices.map((device) => (
-              <div
-                key={device.deviceId}
-                className="flex items-center gap-2.5 px-2.5 py-2 bg-nim-secondary rounded-md mb-1.5 last:mb-0"
-              >
-                <div className="w-2 h-2 rounded-full bg-green-500" />
-                <div className="flex-1">
-                  <div className="text-[13px] text-nim">
-                    {device.name}
-                  </div>
-                  <div className="text-[11px] text-nim-faint">
-                    {device.platform} - {formatRelativeTime(device.connectedAt)}
-                  </div>
+              <div className={`w-2 h-2 rounded-full ${device.isOnline ? 'bg-green-500' : 'bg-neutral-500'}`} />
+              <div className="flex-1">
+                <div className="text-[13px] text-nim">
+                  {device.name}
+                </div>
+                <div className="text-[11px] text-nim-faint">
+                  {device.platform}
+                  {device.isOnline
+                    ? ` - connected ${formatRelativeTime(device.connectedAt)}`
+                    : device.lastSeenAt
+                      ? ` - last seen ${formatRelativeTime(device.lastSeenAt)}`
+                      : ''}
                 </div>
               </div>
-            ))}
-          </div>
+            </div>
+          ))}
         </div>
-      )}
+      </div>
 
       {/* Encryption footer */}
       <div className="provider-panel-section py-4">

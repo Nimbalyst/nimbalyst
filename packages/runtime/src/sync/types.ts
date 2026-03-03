@@ -67,6 +67,10 @@ export interface DeviceInfo {
   isFocused?: boolean;
   /** Derived status for presence display (optional for backwards compatibility) */
   status?: 'active' | 'idle' | 'away';
+  /** Whether the device is currently connected (set by server, not by client) */
+  isOnline?: boolean;
+  /** When this device was last seen online (Unix timestamp ms, set by server on disconnect) */
+  lastSeenAt?: number;
 }
 
 export interface SyncStatus {
