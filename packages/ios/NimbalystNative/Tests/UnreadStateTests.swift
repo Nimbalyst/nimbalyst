@@ -104,14 +104,14 @@ final class UnreadStateTests: XCTestCase {
     func testServerSessionEntryDecodesLastReadAt() throws {
         let json = """
         {
-            "session_id": "s1",
-            "encrypted_project_id": "abc",
-            "project_id_iv": "def",
+            "sessionId": "s1",
+            "encryptedProjectId": "abc",
+            "projectIdIv": "def",
             "provider": "claude-code",
-            "message_count": 10,
-            "last_message_at": 5000,
-            "created_at": 1000,
-            "updated_at": 2000,
+            "messageCount": 10,
+            "lastMessageAt": 5000,
+            "createdAt": 1000,
+            "updatedAt": 2000,
             "lastReadAt": 3000
         }
         """
@@ -125,14 +125,14 @@ final class UnreadStateTests: XCTestCase {
     func testServerSessionEntryDecodesWithoutLastReadAt() throws {
         let json = """
         {
-            "session_id": "s1",
-            "encrypted_project_id": "abc",
-            "project_id_iv": "def",
+            "sessionId": "s1",
+            "encryptedProjectId": "abc",
+            "projectIdIv": "def",
             "provider": "claude-code",
-            "message_count": 10,
-            "last_message_at": 5000,
-            "created_at": 1000,
-            "updated_at": 2000
+            "messageCount": 10,
+            "lastMessageAt": 5000,
+            "createdAt": 1000,
+            "updatedAt": 2000
         }
         """
 

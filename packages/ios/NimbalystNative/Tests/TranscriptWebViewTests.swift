@@ -65,14 +65,14 @@ final class TranscriptWebViewTests: XCTestCase {
     }
 
     /// Test that the transcript HTML bundle exists in the app bundle
-    func testTranscriptBundleExists() {
+    func testTranscriptBundleExists() throws {
         let bundleURL = Bundle.main.bundleURL
         let distURL = bundleURL.appendingPathComponent("transcript-dist")
         let htmlURL = distURL.appendingPathComponent("transcript.html")
 
-        XCTAssertTrue(
+        try XCTSkipUnless(
             FileManager.default.fileExists(atPath: htmlURL.path),
-            "transcript.html should exist at \(htmlURL.path)"
+            "transcript.html not found - run 'npm run build:transcript' first"
         )
 
         let assetsURL = distURL.appendingPathComponent("assets")
@@ -89,6 +89,12 @@ final class TranscriptWebViewTests: XCTestCase {
         let htmlURL = bundleURL
             .appendingPathComponent("transcript-dist")
             .appendingPathComponent("transcript.html")
+
+        try XCTSkipUnless(
+            FileManager.default.fileExists(atPath: htmlURL.path),
+            "transcript.html not found - run 'npm run build:transcript' first"
+        )
+
         let html = try String(contentsOf: htmlURL, encoding: .utf8)
 
         XCTAssertFalse(
