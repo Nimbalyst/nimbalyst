@@ -115,12 +115,19 @@ jobs:
       - name: Build NimbalystNative package
         run: |
           cd NimbalystNative
-          swift build -c debug
+          xcodebuild build \
+            -scheme NimbalystNative \
+            -destination 'platform=iOS Simulator,name=iPhone 16,OS=26.2' \
+            -skipPackagePluginValidation
 
       - name: Run NimbalystNative tests
         run: |
           cd NimbalystNative
-          swift test --enable-code-coverage
+          xcodebuild test \
+            -scheme NimbalystNative \
+            -destination 'platform=iOS Simulator,name=iPhone 16,OS=26.2' \
+            -skipPackagePluginValidation \
+            -enableCodeCoverage YES
 
       - name: Build iOS app (simulator)
         run: |
