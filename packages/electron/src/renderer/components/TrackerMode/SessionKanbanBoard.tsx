@@ -51,6 +51,7 @@ import {
   updateSessionStoreAtom,
   workstreamUnreadAtom,
   removeSessionFullAtom,
+  sessionRegistryAtom,
   sessionListWorkspaceAtom,
 } from '../../store/atoms/sessions';
 import { SessionContextMenu } from '../AgenticCoding/SessionContextMenu';
@@ -1216,8 +1217,9 @@ export const SessionKanbanBoard: React.FC<SessionKanbanBoardProps> = ({ onSessio
   const grouped = useAtomValue(sessionsByPhaseAtom);
   const setPhase = useSetAtom(setSessionPhaseAtom);
   const updateSessionStore = useSetAtom(updateSessionStoreAtom);
-  const removeSessionFromAtom = useSetAtom(removeSessionFullAtom);
-  const workspacePath = useAtomValue(sessionListWorkspaceAtom) || '';
+  const registry = useAtomValue(sessionRegistryAtom);
+  const removeSession = useSetAtom(removeSessionFullAtom);
+  const workspacePath = useAtomValue(sessionListWorkspaceAtom);
 
   // Worktree archive dialog
   const {
@@ -1355,22 +1357,6 @@ export const SessionKanbanBoard: React.FC<SessionKanbanBoardProps> = ({ onSessio
     }
   }, [showArchiveWorktreeDialog]);
 
-  const handleConfirmArchiveWorktree = useCallback(async () => {
-    if (!archiveWorktreeDialogState) return;
-    const worktreeId = archiveWorktreeDialogState.worktreeId;
-
-    await confirmArchiveWorktree(workspacePath, () => {
-      // Remove worktree sessions from atom state for immediate UI update
-      for (const sessions of grouped.values()) {
-        for (const session of sessions) {
-          if (session.worktreeId === worktreeId) {
-            removeSessionFromAtom(session.id);
-          }
-        }
-      }
-    });
-  }, [confirmArchiveWorktree, workspacePath, archiveWorktreeDialogState, grouped, removeSessionFromAtom]);
-
   // Archive sessions, routing worktree sessions to the worktree archive dialog
   const handleArchive = useCallback(async (sessionIds: string[]) => {
     const worktreeIds = new Set<string>();
@@ -1378,7 +1364,25 @@ export const SessionKanbanBoard: React.FC<SessionKanbanBoardProps> = ({ onSessio
     for (const sessionId of sessionIds) {
       const session = findSession(sessionId);
       if (session?.worktreeId) {
-        worktreeIds.add(session.worktreeId);
+        // Only trigger full worktree archive if this is the last non-archived session in the worktree
+        const siblingCount = Array.from(registry.values()).filter(
+          s => s.worktreeId === session.worktreeId && !s.isArchived && s.id !== sessionId
+        ).length;
+
+        if (siblingCount === 0) {
+          worktreeIds.add(session.worktreeId);
+        } else {
+          // Still other sessions in this worktree - just archive this session
+          try {
+            const result = await window.electronAPI.invoke('sessions:update-metadata', sessionId, { isArchived: true });
+            if (result.success) {
+              updateSessionStore({ sessionId, updates: { isArchived: true } });
+              setPhase({ sessionId, phase: null });
+            }
+          } catch (err) {
+            console.error('[SessionKanbanBoard] Failed to archive session:', err);
+          }
+        }
         continue;
       }
       try {
@@ -1401,7 +1405,7 @@ export const SessionKanbanBoard: React.FC<SessionKanbanBoardProps> = ({ onSessio
     }
 
     setSelectedIds(new Set());
-  }, [updateSessionStore, setPhase, findSession, handleArchiveWorktree]);
+  }, [updateSessionStore, setPhase, findSession, handleArchiveWorktree, registry]);
 
   // Single-session archive wrapper for context menu
   const handleArchiveSingle = useCallback((sessionId: string) => {
@@ -1416,6 +1420,20 @@ export const SessionKanbanBoard: React.FC<SessionKanbanBoardProps> = ({ onSessio
       console.error('[SessionKanbanBoard] Failed to rename session:', err);
     }
   }, [updateSessionStore]);
+
+  const handleConfirmArchiveWorktree = useCallback(async () => {
+    if (!archiveWorktreeDialogState || !workspacePath) return;
+
+    const worktreeId = archiveWorktreeDialogState.worktreeId;
+    const worktreeSessions = Array.from(registry.values()).filter(s => s.worktreeId === worktreeId);
+
+    await confirmArchiveWorktree(workspacePath, () => {
+      // Remove worktree sessions from registry (optimistic update)
+      worktreeSessions.forEach(session => {
+        removeSession(session.id);
+      });
+    });
+  }, [archiveWorktreeDialogState, workspacePath, registry, confirmArchiveWorktree, removeSession]);
 
   // Click on a card: plain = select one, Cmd = toggle, Shift = range
   const handleCardClick = useCallback((sessionId: string, e: React.MouseEvent) => {
