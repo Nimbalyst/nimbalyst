@@ -469,3 +469,63 @@ jobs:
             echo "ℹ️  GitHub Release NOT created (alpha testing only)"
             echo "   To promote to stable, re-run workflow with create_github_release=true"
           fi
+
+      - name: Notify Slack - Release Published
+        if: success() && env.SLACK_WEBHOOK_URL != ''
+        uses: slackapi/slack-github-action@v2.1.0
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
+          payload: |
+            {
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Nimbalyst ${{ steps.get_version.outputs.VERSION }} alpha build published*\nPlatforms: macOS (arm64, x64), Linux, Windows\nR2 alpha channel updated"
+                  }
+                },
+                {
+                  "type": "context",
+                  "elements": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View build> | Triggered by ${{ github.actor }}"
+                    }
+                  ]
+                }
+              ]
+            }
+
+      - name: Notify Slack - Release Failed
+        if: failure() && env.SLACK_WEBHOOK_URL != ''
+        uses: slackapi/slack-github-action@v2.1.0
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
+          payload: |
+            {
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Nimbalyst ${{ steps.get_version.outputs.VERSION }} release FAILED*\nThe release job did not complete successfully."
+                  }
+                },
+                {
+                  "type": "context",
+                  "elements": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View logs> | Triggered by ${{ github.actor }}"
+                    }
+                  ]
+                }
+              ]
+            }
