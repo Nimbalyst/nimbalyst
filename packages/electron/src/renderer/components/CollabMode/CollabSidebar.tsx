@@ -88,7 +88,7 @@ export const CollabSidebar: React.FC<CollabSidebarProps> = ({
 
   return (
     <div
-      className="collab-sidebar w-[220px] min-w-[180px] flex flex-col bg-nim-secondary border-r border-nim overflow-hidden"
+      className="collab-sidebar w-full h-full flex flex-col bg-nim-secondary border-r border-nim overflow-hidden"
       data-testid="collab-sidebar"
     >
       {/* Header */}

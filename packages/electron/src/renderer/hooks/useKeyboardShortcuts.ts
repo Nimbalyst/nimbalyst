@@ -119,6 +119,13 @@ export function useKeyboardShortcuts({
         e.preventDefault();
         setActiveMode('tracker');
       }
+
+      // Cmd+D to switch to Shared Documents (Collab) mode
+      if (workspaceMode && isAppModifier && !e.shiftKey && !e.altKey && e.key === 'd') {
+        e.preventDefault();
+        e.stopPropagation();
+        setActiveMode('collab');
+      }
       // Ctrl+` for Terminal panel (Ctrl on all platforms, matching VS Code)
       if (workspaceMode && e.code === 'Backquote' && !e.shiftKey && !e.altKey &&
           e.ctrlKey && !e.metaKey) {

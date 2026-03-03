@@ -147,7 +147,7 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
     {
       id: 'collab-mode',
       icon: 'cloud_sync',
-      label: 'Shared Docs',
+      label: `Shared Docs (${getShortcutDisplay(KeyboardShortcuts.view.collabMode)})`,
       contentMode: 'collab',
     },
   ];

@@ -47,6 +47,7 @@ export const KeyboardShortcuts = {
     toggleBottomPanel: 'Cmd+J',
     toggleTerminalPanel: 'Ctrl+`',
     trackerMode: 'Cmd+T',
+    collabMode: 'Cmd+D',
     toggleSidebar: 'Cmd+B',
 
     // Navigation

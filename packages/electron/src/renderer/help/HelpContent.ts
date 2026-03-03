@@ -285,6 +285,11 @@ export const HelpContent: Record<string, HelpEntry> = {
     body: 'Switch to Tracker mode for a full project management view with table and kanban layouts.',
     shortcut: KeyboardShortcuts.view.trackerMode,
   },
+  'collab-mode-button': {
+    title: 'Shared Documents',
+    body: 'Browse and edit documents shared with your team in real-time. Collaborate on markdown, spreadsheets, and diagrams.',
+    shortcut: KeyboardShortcuts.view.collabMode,
+  },
 
   // ============================================================================
   // Settings

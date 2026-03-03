@@ -8,7 +8,7 @@
  * EditorMode, AgentMode, and TrackerMode.
  */
 
-import React, { useCallback, useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect, useRef } from 'react';
 import { useAtomValue } from 'jotai';
 import { store } from '@nimbalyst/runtime/store';
 import { CollabSidebar } from './CollabSidebar';
@@ -60,8 +60,18 @@ export const CollabMode: React.FC<CollabModeProps> = ({
 };
 
 // ---------------------------------------------------------------------------
-// Persist open collab document IDs in workspace state so they survive refresh.
+// Persist open collab document IDs and layout in workspace state.
 // ---------------------------------------------------------------------------
+
+const COLLAB_SIDEBAR_DEFAULT = 220;
+const COLLAB_SIDEBAR_MIN = 150;
+const COLLAB_SIDEBAR_MAX = 400;
+const COLLAB_CHAT_DEFAULT = 350;
+
+interface CollabLayout {
+  sidebarWidth: number;
+  chatWidth: number;
+}
 
 /** Save the list of open collab document IDs to workspace state. */
 async function persistOpenCollabDocs(workspacePath: string, documentIds: string[]): Promise<void> {
@@ -84,6 +94,35 @@ async function loadOpenCollabDocs(workspacePath: string): Promise<string[]> {
   }
 }
 
+let layoutPersistTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Save collab layout to workspace state (debounced). */
+function persistCollabLayout(workspacePath: string, layout: CollabLayout): void {
+  if (layoutPersistTimer) clearTimeout(layoutPersistTimer);
+  layoutPersistTimer = setTimeout(async () => {
+    try {
+      await window.electronAPI?.invoke?.('workspace:update-state', workspacePath, {
+        collabLayout: layout,
+      });
+    } catch (err) {
+      console.warn('[CollabMode] Failed to persist layout:', err);
+    }
+  }, 500);
+}
+
+/** Load collab layout from workspace state. */
+async function loadCollabLayout(workspacePath: string): Promise<CollabLayout> {
+  try {
+    const state = await window.electronAPI?.invoke?.('workspace:get-state', workspacePath);
+    return {
+      sidebarWidth: state?.collabLayout?.sidebarWidth ?? COLLAB_SIDEBAR_DEFAULT,
+      chatWidth: state?.collabLayout?.chatWidth ?? COLLAB_CHAT_DEFAULT,
+    };
+  } catch {
+    return { sidebarWidth: COLLAB_SIDEBAR_DEFAULT, chatWidth: COLLAB_CHAT_DEFAULT };
+  }
+}
+
 /**
  * Inner component that has access to TabsProvider context.
  */
@@ -97,6 +136,60 @@ const CollabModeInner: React.FC<CollabModeProps> = ({
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
   const pendingDoc = useAtomValue(pendingCollabDocumentAtom);
   const [restored, setRestored] = useState(false);
+
+  // --- Resizable panel state ---
+  const [sidebarWidth, setSidebarWidth] = useState(COLLAB_SIDEBAR_DEFAULT);
+  const [chatWidth, setChatWidth] = useState(COLLAB_CHAT_DEFAULT);
+
+  // Refs for sidebar resize drag (avoids re-renders during drag)
+  const sidebarDragRef = useRef({ isDragging: false, startX: 0, startWidth: 0 });
+
+  // Load persisted layout on mount
+  useEffect(() => {
+    let cancelled = false;
+    loadCollabLayout(workspacePath).then((layout) => {
+      if (cancelled) return;
+      setSidebarWidth(layout.sidebarWidth);
+      setChatWidth(layout.chatWidth);
+    });
+    return () => { cancelled = true; };
+  }, [workspacePath]);
+
+  // --- Sidebar resize handlers ---
+  const handleSidebarMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    sidebarDragRef.current = { isDragging: true, startX: e.clientX, startWidth: sidebarWidth };
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    const handleMouseMove = (ev: MouseEvent) => {
+      const delta = ev.clientX - sidebarDragRef.current.startX;
+      const newWidth = Math.max(COLLAB_SIDEBAR_MIN, Math.min(COLLAB_SIDEBAR_MAX, sidebarDragRef.current.startWidth + delta));
+      setSidebarWidth(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      sidebarDragRef.current.isDragging = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      // Persist after drag ends
+      setSidebarWidth((w) => {
+        persistCollabLayout(workspacePath, { sidebarWidth: w, chatWidth });
+        return w;
+      });
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  }, [sidebarWidth, chatWidth, workspacePath]);
+
+  // --- Chat sidebar resize handler (via ChatSidebar's onWidthChange) ---
+  const handleChatWidthChange = useCallback((newWidth: number) => {
+    setChatWidth(newWidth);
+    persistCollabLayout(workspacePath, { sidebarWidth, chatWidth: newWidth });
+  }, [workspacePath, sidebarWidth]);
 
   const handleDocumentSelect = useCallback(async (doc: SharedDocument, initialContent?: string) => {
     setSelectedDocId(doc.documentId);
@@ -187,11 +280,21 @@ const CollabModeInner: React.FC<CollabModeProps> = ({
 
   return (
     <div className="collab-mode flex-1 flex flex-row overflow-hidden min-h-0">
-      {/* Left: Document sidebar */}
-      <CollabSidebar
-        onDocumentSelect={handleDocumentSelect}
-        selectedDocumentId={selectedDocId}
-      />
+      {/* Left: Document sidebar (resizable) */}
+      <div style={{ width: sidebarWidth, minWidth: COLLAB_SIDEBAR_MIN, maxWidth: COLLAB_SIDEBAR_MAX }} className="shrink-0">
+        <CollabSidebar
+          onDocumentSelect={handleDocumentSelect}
+          selectedDocumentId={selectedDocId}
+        />
+      </div>
+
+      {/* Left resize handle */}
+      <div
+        onMouseDown={handleSidebarMouseDown}
+        className="w-1 cursor-col-resize shrink-0 relative z-10 bg-nim-secondary"
+      >
+        <div className="w-0.5 h-full mx-auto bg-nim-border transition-colors duration-200 hover:bg-nim-accent" />
+      </div>
 
       {/* Center: Tabs + editor */}
       <div className="flex-1 flex flex-col overflow-hidden min-h-0">
@@ -219,14 +322,14 @@ const CollabModeInner: React.FC<CollabModeProps> = ({
         )}
       </div>
 
-      {/* Right: AI Chat sidebar */}
+      {/* Right: AI Chat sidebar (resizable via ChatSidebar built-in handle) */}
       {hasTabs && (
-        <div className="w-[350px] min-w-[280px] max-w-[500px] flex flex-col border-l border-nim overflow-hidden">
-          <ChatSidebar
-            workspacePath={workspacePath}
-            onFileOpen={async (filePath) => onFileOpen(filePath)}
-          />
-        </div>
+        <ChatSidebar
+          workspacePath={workspacePath}
+          onFileOpen={async (filePath) => onFileOpen(filePath)}
+          width={chatWidth}
+          onWidthChange={handleChatWidthChange}
+        />
       )}
     </div>
   );
