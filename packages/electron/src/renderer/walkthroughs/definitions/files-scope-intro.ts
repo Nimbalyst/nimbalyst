@@ -19,10 +19,12 @@ export const filesScopeIntro: WalkthroughDefinition = {
   trigger: {
     // Show when in agent mode (where Files Edited sidebar lives)
     screen: 'agent',
-    // Only show when the dropdown is visible (session has edited files)
+    // Only show when the dropdown is visible AND the sidebar has actual files (not the empty state)
     condition: () => {
       const dropdown = document.querySelector('[data-testid="files-scope-dropdown"]');
-      return dropdown !== null && isTargetValid(dropdown as HTMLElement);
+      if (!dropdown || !isTargetValid(dropdown as HTMLElement)) return false;
+      // Empty state shows .file-edits-sidebar__empty; if it's present, no real files yet
+      return !document.querySelector('.file-edits-sidebar__empty');
     },
     // Wait for sidebar to fully render
     delay: 2500,
