@@ -16,6 +16,7 @@ import {
   trackerModeLayoutAtom,
   setTrackerModeLayoutAtom,
 } from '../../store/atoms/trackers';
+import { useAlphaFeature } from '../../hooks/useAlphaFeature';
 
 export type ViewMode = 'table' | 'kanban';
 
@@ -36,6 +37,7 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
   workspacePath,
   trackerTypes,
 }) => {
+  const isKanbanEnabled = useAlphaFeature('tracker-kanban');
   const [sortBy, setSortBy] = useState<TrackerSortColumn>('lastIndexed');
   const [sortDirection, setSortDirection] = useState<TrackerSortDirection>('desc');
   const [searchQuery, setSearchQuery] = useState('');
@@ -147,31 +149,33 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
 
         <div className="flex-1" />
 
-        {/* View mode toggle */}
-        <div className="flex items-center rounded border border-nim overflow-hidden">
-          <button
-            className={`flex items-center justify-center w-7 h-6 transition-colors ${
-              viewMode === 'table'
-                ? 'bg-nim-active text-nim'
-                : 'bg-nim-secondary text-nim-muted hover:text-nim'
-            }`}
-            onClick={() => onViewModeChange('table')}
-            title="Table view"
-          >
-            <MaterialSymbol icon="table_rows" size={16} />
-          </button>
-          <button
-            className={`flex items-center justify-center w-7 h-6 border-l border-nim transition-colors ${
-              viewMode === 'kanban'
-                ? 'bg-nim-active text-nim'
-                : 'bg-nim-secondary text-nim-muted hover:text-nim'
-            }`}
-            onClick={() => onViewModeChange('kanban')}
-            title="Kanban view"
-          >
-            <MaterialSymbol icon="view_kanban" size={16} />
-          </button>
-        </div>
+        {/* View mode toggle (kanban is alpha-only) */}
+        {isKanbanEnabled && (
+          <div className="flex items-center rounded border border-nim overflow-hidden">
+            <button
+              className={`flex items-center justify-center w-7 h-6 transition-colors ${
+                viewMode === 'table'
+                  ? 'bg-nim-active text-nim'
+                  : 'bg-nim-secondary text-nim-muted hover:text-nim'
+              }`}
+              onClick={() => onViewModeChange('table')}
+              title="Table view"
+            >
+              <MaterialSymbol icon="table_rows" size={16} />
+            </button>
+            <button
+              className={`flex items-center justify-center w-7 h-6 border-l border-nim transition-colors ${
+                viewMode === 'kanban'
+                  ? 'bg-nim-active text-nim'
+                  : 'bg-nim-secondary text-nim-muted hover:text-nim'
+              }`}
+              onClick={() => onViewModeChange('kanban')}
+              title="Kanban view"
+            >
+              <MaterialSymbol icon="view_kanban" size={16} />
+            </button>
+          </div>
+        )}
 
         {/* New item button */}
         <button
@@ -187,7 +191,7 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
       <div className="flex-1 flex flex-row overflow-hidden min-h-0">
         {/* Table/Kanban (flex-1, shrinks when detail is open) */}
         <div className="flex-1 overflow-hidden min-h-0 min-w-0 relative">
-          {viewMode === 'table' ? (
+          {viewMode === 'table' || !isKanbanEnabled ? (
             <TrackerTable
               filterType={filterType}
               sortBy={sortBy}

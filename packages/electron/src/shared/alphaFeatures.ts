@@ -61,6 +61,12 @@ export const ALPHA_FEATURES: readonly AlphaFeatureDefinition[] = [
     description: 'Enable team collaboration features including shared trackers and team management.',
     icon: 'group',
   },
+  {
+    tag: 'tracker-kanban',
+    name: 'Tracker Kanban View',
+    description: 'Enable kanban board view in tracker mode.',
+    icon: 'view_kanban',
+  },
 ] as const;
 
 /**
