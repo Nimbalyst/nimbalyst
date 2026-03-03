@@ -261,6 +261,14 @@
         "to": "assets"
       },
       {
+        "from": "resources/trayTemplate.png",
+        "to": "trayTemplate.png"
+      },
+      {
+        "from": "resources/trayTemplate@2x.png",
+        "to": "trayTemplate@2x.png"
+      },
+      {
         "from": "../extensions",
         "to": "extensions",
         "filter": [
