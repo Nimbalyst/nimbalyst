@@ -113,10 +113,10 @@ final class TranscriptWebViewTests: XCTestCase {
         let distURL = bundleURL.appendingPathComponent("transcript-dist")
         let htmlURL = distURL.appendingPathComponent("transcript.html")
 
-        guard FileManager.default.fileExists(atPath: htmlURL.path) else {
-            XCTFail("transcript.html not found - run 'npm run build:transcript' first")
-            return
-        }
+        try XCTSkipUnless(
+            FileManager.default.fileExists(atPath: htmlURL.path),
+            "transcript.html not found - run 'npm run build:transcript' first"
+        )
 
         let config = WKWebViewConfiguration()
         let contentController = WKUserContentController()
@@ -169,10 +169,10 @@ final class TranscriptWebViewTests: XCTestCase {
         let distURL = bundleURL.appendingPathComponent("transcript-dist")
         let htmlURL = distURL.appendingPathComponent("transcript.html")
 
-        guard FileManager.default.fileExists(atPath: htmlURL.path) else {
-            XCTFail("transcript.html not found - run 'npm run build:transcript' first")
-            return
-        }
+        try XCTSkipUnless(
+            FileManager.default.fileExists(atPath: htmlURL.path),
+            "transcript.html not found - run 'npm run build:transcript' first"
+        )
 
         let config = WKWebViewConfiguration()
         let contentController = WKUserContentController()

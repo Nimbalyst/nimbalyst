@@ -204,8 +204,8 @@ final class Phase3Tests: XCTestCase {
         let data = try JSONEncoder().encode(request)
         let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
 
-        XCTAssertEqual(json["type"] as? String, "sync_request")
-        XCTAssertEqual(json["since_seq"] as? Int, 42)
+        XCTAssertEqual(json["type"] as? String, "syncRequest")
+        XCTAssertEqual(json["sinceSeq"] as? Int, 42)
     }
 
     func testSessionSyncRequestEncodingNilSeq() throws {
@@ -213,32 +213,32 @@ final class Phase3Tests: XCTestCase {
         let data = try JSONEncoder().encode(request)
         let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
 
-        XCTAssertEqual(json["type"] as? String, "sync_request")
-        XCTAssertNil(json["since_seq"])
+        XCTAssertEqual(json["type"] as? String, "syncRequest")
+        XCTAssertNil(json["sinceSeq"])
     }
 
     func testSessionSyncResponseDecoding() throws {
         let json = """
         {
-            "type": "sync_response",
+            "type": "syncResponse",
             "messages": [
                 {
                     "id": "msg-1",
                     "sequence": 1,
-                    "created_at": 1707820800000,
+                    "createdAt": 1707820800000,
                     "source": "user",
                     "direction": "input",
-                    "encrypted_content": "base64data",
+                    "encryptedContent": "base64data",
                     "iv": "base64iv"
                 }
             ],
-            "has_more": true,
+            "hasMore": true,
             "cursor": "1"
         }
         """.data(using: .utf8)!
 
         let response = try JSONDecoder().decode(SessionSyncResponse.self, from: json)
-        XCTAssertEqual(response.type, "sync_response")
+        XCTAssertEqual(response.type, "syncResponse")
         XCTAssertEqual(response.messages.count, 1)
         XCTAssertEqual(response.messages[0].id, "msg-1")
         XCTAssertEqual(response.messages[0].sequence, 1)
@@ -250,22 +250,22 @@ final class Phase3Tests: XCTestCase {
     func testMessageBroadcastDecoding() throws {
         let json = """
         {
-            "type": "message_broadcast",
+            "type": "messageBroadcast",
             "message": {
                 "id": "msg-2",
                 "sequence": 5,
-                "created_at": 1707820900000,
+                "createdAt": 1707820900000,
                 "source": "assistant",
                 "direction": "output",
-                "encrypted_content": "encdata",
+                "encryptedContent": "encdata",
                 "iv": "ivdata"
             },
-            "from_connection_id": "conn-123"
+            "fromConnectionId": "conn-123"
         }
         """.data(using: .utf8)!
 
         let broadcast = try JSONDecoder().decode(MessageBroadcast.self, from: json)
-        XCTAssertEqual(broadcast.type, "message_broadcast")
+        XCTAssertEqual(broadcast.type, "messageBroadcast")
         XCTAssertEqual(broadcast.message.id, "msg-2")
         XCTAssertEqual(broadcast.message.sequence, 5)
         XCTAssertEqual(broadcast.message.source, "assistant")
@@ -275,19 +275,19 @@ final class Phase3Tests: XCTestCase {
     func testMetadataBroadcastDecoding() throws {
         let json = """
         {
-            "type": "metadata_broadcast",
+            "type": "metadataBroadcast",
             "metadata": {
                 "isExecuting": false,
                 "provider": "claude-code",
                 "model": "claude-opus-4-6",
-                "updated_at": 1707821000000
+                "updatedAt": 1707821000000
             },
-            "from_connection_id": "conn-456"
+            "fromConnectionId": "conn-456"
         }
         """.data(using: .utf8)!
 
         let broadcast = try JSONDecoder().decode(MetadataBroadcast.self, from: json)
-        XCTAssertEqual(broadcast.type, "metadata_broadcast")
+        XCTAssertEqual(broadcast.type, "metadataBroadcast")
         XCTAssertEqual(broadcast.metadata.isExecuting, false)
         XCTAssertEqual(broadcast.metadata.provider, "claude-code")
         XCTAssertEqual(broadcast.metadata.model, "claude-opus-4-6")
@@ -309,7 +309,7 @@ final class Phase3Tests: XCTestCase {
         let data = try JSONEncoder().encode(request)
         let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
 
-        XCTAssertEqual(json["type"] as? String, "append_message")
+        XCTAssertEqual(json["type"] as? String, "appendMessage")
         let message = json["message"] as! [String: Any]
         XCTAssertEqual(message["id"] as? String, "msg-new")
         XCTAssertEqual(message["source"] as? String, "user")
@@ -394,22 +394,21 @@ final class Phase3Tests: XCTestCase {
 
         let message = IndexUpdateMessage(session: entry)
 
-        // Encode WITHOUT .convertToSnakeCase - IndexUpdateEntry uses explicit CodingKeys
-        // for snake_case fields, camelCase for fields desktop expects in camelCase
+        // Encode with default strategy - types use camelCase field names
         let data = try JSONEncoder().encode(message)
         let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
 
         // Top-level type
-        XCTAssertEqual(json["type"] as? String, "index_update")
+        XCTAssertEqual(json["type"] as? String, "indexUpdate")
 
-        // Session entry uses snake_case keys
+        // Session entry uses camelCase keys (standard Codable encoding)
         let session = json["session"] as! [String: Any]
-        XCTAssertEqual(session["session_id"] as? String, "sess-1")
-        XCTAssertEqual(session["encrypted_project_id"] as? String, "enc-project")
-        XCTAssertEqual(session["project_id_iv"] as? String, CryptoManager.projectIdIvBase64)
-        XCTAssertEqual(session["encrypted_title"] as? String, "enc-title")
-        XCTAssertEqual(session["message_count"] as? Int, 5)
-        XCTAssertEqual(session["created_at"] as? Int, 1707000000000)
+        XCTAssertEqual(session["sessionId"] as? String, "sess-1")
+        XCTAssertEqual(session["encryptedProjectId"] as? String, "enc-project")
+        XCTAssertEqual(session["projectIdIv"] as? String, CryptoManager.projectIdIvBase64)
+        XCTAssertEqual(session["encryptedTitle"] as? String, "enc-title")
+        XCTAssertEqual(session["messageCount"] as? Int, 5)
+        XCTAssertEqual(session["createdAt"] as? Int, 1707000000000)
         XCTAssertEqual(session["provider"] as? String, "claude-code")
 
         // Queued prompts array
@@ -419,20 +418,15 @@ final class Phase3Tests: XCTestCase {
 
         let firstPrompt = prompts![0]
         XCTAssertEqual(firstPrompt["id"] as? String, "prompt-1")
-        XCTAssertEqual(firstPrompt["encrypted_prompt"] as? String, "encrypted-text")
+        XCTAssertEqual(firstPrompt["encryptedPrompt"] as? String, "encrypted-text")
         XCTAssertEqual(firstPrompt["iv"] as? String, "prompt-iv")
         XCTAssertEqual(firstPrompt["timestamp"] as? Int, 1707820800000)
         XCTAssertEqual(firstPrompt["source"] as? String, "keyboard")
-
-        // Ensure camelCase keys are NOT present
-        XCTAssertNil(session["sessionId"])
-        XCTAssertNil(session["encryptedProjectId"])
-        XCTAssertNil(session["messageCount"])
     }
 
-    // MARK: - AppendMessageRequest Encoding via convertToSnakeCase
+    // MARK: - AppendMessageRequest Encoding (camelCase wire format)
 
-    func testAppendMessageRequestEncodingWithSnakeCaseStrategy() throws {
+    func testAppendMessageRequestEncodingFields() throws {
         let entry = ServerMessageEntry(
             id: "msg-new",
             sequence: 0,
@@ -445,23 +439,16 @@ final class Phase3Tests: XCTestCase {
         )
         let request = AppendMessageRequest(message: entry)
 
-        // Encode with the same strategy WebSocketClient.send() uses
-        let encoder = JSONEncoder()
-        encoder.keyEncodingStrategy = .convertToSnakeCase
-        let data = try encoder.encode(request)
+        let data = try JSONEncoder().encode(request)
         let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
 
-        XCTAssertEqual(json["type"] as? String, "append_message")
+        XCTAssertEqual(json["type"] as? String, "appendMessage")
         let message = json["message"] as! [String: Any]
-        // CodingKeys should produce snake_case keys
-        XCTAssertEqual(message["created_at"] as? Int, 1707820800000)
-        XCTAssertEqual(message["encrypted_content"] as? String, "encrypted-data")
+        XCTAssertEqual(message["createdAt"] as? Int, 1707820800000)
+        XCTAssertEqual(message["encryptedContent"] as? String, "encrypted-data")
         XCTAssertEqual(message["iv"] as? String, "iv123")
         XCTAssertEqual(message["source"] as? String, "user")
         XCTAssertEqual(message["direction"] as? String, "input")
-        // Ensure camelCase keys are NOT present
-        XCTAssertNil(message["createdAt"])
-        XCTAssertNil(message["encryptedContent"])
     }
 
     // MARK: - Sync State Watermark
