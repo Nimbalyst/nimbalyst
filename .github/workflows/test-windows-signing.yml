@@ -62,13 +62,12 @@ jobs:
         run: npm run build:claude-helper:windows
         shell: bash
 
-      # Build unsigned first
+      # Build unsigned -- use --publish=never to skip uploading to GitHub Releases
       - name: Build Electron app (unsigned)
         env:
           NODE_ENV: production
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         working-directory: packages/electron
-        run: npm run build:win
+        run: npm run build && npm run build:extensions && electron-builder --win --x64 --publish=never
         shell: bash
 
       - name: List built artifacts
