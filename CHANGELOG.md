@@ -20,6 +20,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.55.6] - 2026-03-03
+
+
+### Added
+- Collaboration features gated behind alpha release channel flag
+- Slack notifications for alpha release builds
+- Developer mode users routed to agent mode after onboarding
+
+### Changed
+- Unified session context menu across sidebar, kanban, and tabs (shared SessionContextMenu component)
+- Paired devices persist across disconnects with online/offline status and "last seen" time
+
+### Fixed
+- QuickOpen reveals folders in file tree instead of failing to open them
+- iOS CI builds against iOS SDK instead of macOS (xcodebuild targeting iOS Simulator)
+- iOS test fixtures aligned with camelCase wire protocol
+- iOS transcript bundle tests skip gracefully instead of failing when bundle is absent
+
 ## [0.55.5] - 2026-03-02
 
 
