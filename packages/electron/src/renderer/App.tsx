@@ -488,7 +488,7 @@ export default function App() {
   // Load terminal panel state from terminal store into Jotai atoms
   useEffect(() => {
     if (!workspacePath) return;
-    loadTerminalPanelState().then(() => {
+    loadTerminalPanelState(workspacePath).then(() => {
       // If terminal panel is visible on load, close tracker panel (mutually exclusive)
       if (store.get(terminalPanelVisibleAtom)) {
         closeTrackerPanel();

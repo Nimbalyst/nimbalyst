@@ -1050,15 +1050,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getWorkspaceState: (workspacePath: string) =>
       ipcRenderer.invoke('terminal:get-workspace-state', workspacePath),
 
-    // Panel state
-    getPanelState: () =>
-      ipcRenderer.invoke('terminal:get-panel-state'),
-    updatePanelState: (updates: { panelHeight?: number; panelVisible?: boolean }) =>
-      ipcRenderer.invoke('terminal:update-panel-state', updates),
-    setPanelVisible: (visible: boolean) =>
-      ipcRenderer.invoke('terminal:set-panel-visible', visible),
-    setPanelHeight: (height: number) =>
-      ipcRenderer.invoke('terminal:set-panel-height', height),
+    // Panel state (per-workspace)
+    getPanelState: (workspacePath: string) =>
+      ipcRenderer.invoke('terminal:get-panel-state', workspacePath),
+    updatePanelState: (workspacePath: string, updates: { panelHeight?: number; panelVisible?: boolean }) =>
+      ipcRenderer.invoke('terminal:update-panel-state', workspacePath, updates),
+    setPanelVisible: (workspacePath: string, visible: boolean) =>
+      ipcRenderer.invoke('terminal:set-panel-visible', workspacePath, visible),
+    setPanelHeight: (workspacePath: string, height: number) =>
+      ipcRenderer.invoke('terminal:set-panel-height', workspacePath, height),
 
     // PTY operations
     initialize: (terminalId: string, options: { workspacePath: string; cwd?: string; cols?: number; rows?: number }) =>

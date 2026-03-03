@@ -410,35 +410,35 @@ export function registerTerminalHandlers(): void {
   // =========================================================================
 
   /**
-   * Get terminal panel state (height, visibility)
+   * Get terminal panel state (height, visibility) for a workspace
    */
-  safeHandle('terminal:get-panel-state', async () => {
-    return getTerminalPanelState();
+  safeHandle('terminal:get-panel-state', async (_event, workspacePath: string) => {
+    return getTerminalPanelState(workspacePath);
   });
 
   /**
-   * Update terminal panel state
+   * Update terminal panel state for a workspace
    */
   safeHandle(
     'terminal:update-panel-state',
-    async (_event, updates: { panelHeight?: number; panelVisible?: boolean }) => {
-      return updateTerminalPanelState(updates);
+    async (_event, workspacePath: string, updates: { panelHeight?: number; panelVisible?: boolean }) => {
+      return updateTerminalPanelState(workspacePath, updates);
     }
   );
 
   /**
-   * Set panel visibility
+   * Set panel visibility for a workspace
    */
-  safeHandle('terminal:set-panel-visible', async (_event, visible: boolean) => {
-    setTerminalPanelVisible(visible);
+  safeHandle('terminal:set-panel-visible', async (_event, workspacePath: string, visible: boolean) => {
+    setTerminalPanelVisible(workspacePath, visible);
     return { success: true };
   });
 
   /**
-   * Set panel height
+   * Set panel height for a workspace
    */
-  safeHandle('terminal:set-panel-height', async (_event, height: number) => {
-    setTerminalPanelHeight(height);
+  safeHandle('terminal:set-panel-height', async (_event, workspacePath: string, height: number) => {
+    setTerminalPanelHeight(workspacePath, height);
     return { success: true };
   });
 

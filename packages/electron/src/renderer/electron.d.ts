@@ -534,11 +534,11 @@ interface ElectronAPI {
     setTabOrder: (workspacePath: string, tabOrder: string[]) => Promise<{ success: boolean }>;
     getWorkspaceState: (workspacePath: string) => Promise<ElectronAPI['terminal']['WorkspaceTerminalState']>;
 
-    // Panel state
-    getPanelState: () => Promise<ElectronAPI['terminal']['TerminalPanelState']>;
-    updatePanelState: (updates: { panelHeight?: number; panelVisible?: boolean }) => Promise<ElectronAPI['terminal']['TerminalPanelState']>;
-    setPanelVisible: (visible: boolean) => Promise<{ success: boolean }>;
-    setPanelHeight: (height: number) => Promise<{ success: boolean }>;
+    // Panel state (per-workspace)
+    getPanelState: (workspacePath: string) => Promise<ElectronAPI['terminal']['TerminalPanelState']>;
+    updatePanelState: (workspacePath: string, updates: { panelHeight?: number; panelVisible?: boolean }) => Promise<ElectronAPI['terminal']['TerminalPanelState']>;
+    setPanelVisible: (workspacePath: string, visible: boolean) => Promise<{ success: boolean }>;
+    setPanelHeight: (workspacePath: string, height: number) => Promise<{ success: boolean }>;
 
     // PTY operations
     initialize: (terminalId: string, options: { workspacePath: string; cwd?: string; cols?: number; rows?: number }) => Promise<{ success: boolean; alreadyActive?: boolean; error?: string }>;

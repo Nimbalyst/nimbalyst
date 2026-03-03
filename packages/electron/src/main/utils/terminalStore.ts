@@ -55,10 +55,14 @@ export interface WorkspaceTerminalState {
   activeTerminalId?: string;
   /** Tab order (array of terminal IDs) */
   tabOrder: string[];
+  /** Panel height in pixels */
+  panelHeight?: number;
+  /** Whether panel is visible */
+  panelVisible?: boolean;
 }
 
 /**
- * Global terminal panel state (shared across workspaces)
+ * Terminal panel state (returned to renderer)
  */
 export interface TerminalPanelState {
   /** Panel height in pixels */
@@ -73,7 +77,7 @@ export interface TerminalPanelState {
 interface TerminalStoreSchema {
   /** Per-workspace terminal state (keyed by workspace path) */
   workspaces: Record<string, WorkspaceTerminalState>;
-  /** Global panel state */
+  /** @deprecated Global panel state - kept for migration, new state lives in per-workspace */
   panel: TerminalPanelState;
 }
 
@@ -284,35 +288,47 @@ export function setTabOrder(workspacePath: string, tabOrder: string[]): void {
 // ============================================================================
 
 /**
- * Get terminal panel state
+ * Get terminal panel state for a workspace.
+ * Falls back to the legacy global panel state for migration, then to defaults.
  */
-export function getTerminalPanelState(): TerminalPanelState {
+export function getTerminalPanelState(workspacePath: string): TerminalPanelState {
+  const ws = getWorkspaceTerminalState(workspacePath);
+  // If workspace has panel state, use it
+  if (ws.panelVisible !== undefined || ws.panelHeight !== undefined) {
+    return {
+      panelHeight: ws.panelHeight ?? DEFAULT_PANEL_STATE.panelHeight,
+      panelVisible: ws.panelVisible ?? DEFAULT_PANEL_STATE.panelVisible,
+    };
+  }
+  // Fall back to legacy global state for migration
   return getTerminalStore().get('panel', DEFAULT_PANEL_STATE);
 }
 
 /**
- * Update terminal panel state
+ * Update terminal panel state for a workspace
  */
-export function updateTerminalPanelState(updates: Partial<TerminalPanelState>): TerminalPanelState {
-  const store = getTerminalStore();
-  const current = store.get('panel', DEFAULT_PANEL_STATE);
+export function updateTerminalPanelState(workspacePath: string, updates: Partial<TerminalPanelState>): TerminalPanelState {
+  const current = getTerminalPanelState(workspacePath);
   const next = { ...current, ...updates };
-  store.set('panel', next);
+  updateWorkspaceTerminalState(workspacePath, (state) => {
+    if (updates.panelVisible !== undefined) state.panelVisible = updates.panelVisible;
+    if (updates.panelHeight !== undefined) state.panelHeight = updates.panelHeight;
+  });
   return next;
 }
 
 /**
- * Set panel visibility
+ * Set panel visibility for a workspace
  */
-export function setTerminalPanelVisible(visible: boolean): void {
-  updateTerminalPanelState({ panelVisible: visible });
+export function setTerminalPanelVisible(workspacePath: string, visible: boolean): void {
+  updateTerminalPanelState(workspacePath, { panelVisible: visible });
 }
 
 /**
- * Set panel height
+ * Set panel height for a workspace
  */
-export function setTerminalPanelHeight(height: number): void {
-  updateTerminalPanelState({ panelHeight: height });
+export function setTerminalPanelHeight(workspacePath: string, height: number): void {
+  updateTerminalPanelState(workspacePath, { panelHeight: height });
 }
 
 // ============================================================================

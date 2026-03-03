@@ -138,9 +138,9 @@ export const TerminalBottomPanel: React.FC<TerminalBottomPanelProps> = ({
         terminalCount: terminals.length,
       });
     }
-    // Persist visibility state
-    window.electronAPI.terminal.setPanelVisible(visible);
-  }, [visible, posthog, terminals.length]);
+    // Persist visibility state per-workspace
+    window.electronAPI.terminal.setPanelVisible(workspacePath, visible);
+  }, [visible, workspacePath, posthog, terminals.length]);
 
   // Create new terminal
   const handleCreateTerminal = useCallback(async () => {
@@ -274,10 +274,10 @@ export const TerminalBottomPanel: React.FC<TerminalBottomPanelProps> = ({
   const handleMouseUp = useCallback(() => {
     if (isResizing) {
       setIsResizing(false);
-      // Persist height
-      window.electronAPI.terminal.setPanelHeight(height);
+      // Persist height per-workspace
+      window.electronAPI.terminal.setPanelHeight(workspacePath, height);
     }
-  }, [isResizing, height]);
+  }, [isResizing, height, workspacePath]);
 
   // Add/remove resize listeners
   useEffect(() => {

@@ -81,12 +81,12 @@ export const openTerminalPanelAtom = atom(null, (_get, set) => {
 
 /**
  * Load terminal panel state from backend and update atoms.
- * Called once on startup.
+ * Called once on startup per workspace.
  */
-export async function loadTerminalPanelState(): Promise<void> {
+export async function loadTerminalPanelState(workspacePath: string): Promise<void> {
   try {
     if (!window.electronAPI?.terminal?.getPanelState) return;
-    const state = await window.electronAPI.terminal.getPanelState();
+    const state = await window.electronAPI.terminal.getPanelState(workspacePath);
     if (state?.panelVisible !== undefined) {
       store.set(terminalPanelVisibleAtom, state.panelVisible);
     }
