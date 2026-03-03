@@ -267,7 +267,7 @@ function TranscriptPeek({ sessionId, anchorRef, onClose }: TranscriptPeekProps) 
   const [messages, setMessages] = useState<Message[] | null>(tailMessageCache.get(sessionId) || null);
   const [loading, setLoading] = useState(!tailMessageCache.has(sessionId));
   const peekRef = useRef<HTMLDivElement>(null);
-  const [position, setPosition] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
+  const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
 
   // Fetch tail messages on mount
   useEffect(() => {
@@ -328,7 +328,7 @@ function TranscriptPeek({ sessionId, anchorRef, onClose }: TranscriptPeekProps) 
     <div
       ref={peekRef}
       className="fixed z-[100] w-[600px] h-[350px] bg-nim-secondary border border-nim rounded-lg shadow-2xl overflow-hidden flex flex-col"
-      style={{ top: position.top, left: position.left }}
+      style={{ top: position?.top ?? 0, left: position?.left ?? 0, visibility: position ? 'visible' : 'hidden' }}
       onMouseLeave={onClose}
     >
       {loading ? (
