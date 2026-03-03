@@ -1,6 +1,13 @@
 import * as fs from 'fs';
+import * as path from 'path';
 import * as crypto from 'crypto';
 import * as yaml from 'js-yaml';
+
+/**
+ * File extensions where --- delimiters contain code (not YAML).
+ * These use the same --- syntax but the content is JavaScript/TypeScript.
+ */
+const NON_YAML_FRONTMATTER_EXTENSIONS = new Set(['.astro']);
 
 /**
  * Reads only the frontmatter portion of a file using bounded reads
@@ -89,6 +96,12 @@ export async function extractFrontmatter(filePath: string): Promise<{
   parseErrors?: string[];
 }> {
   try {
+    // Skip files where --- delimiters contain code, not YAML
+    const ext = path.extname(filePath).toLowerCase();
+    if (NON_YAML_FRONTMATTER_EXTENSIONS.has(ext)) {
+      return { data: null, hash: null };
+    }
+
     // console.log(`[FrontmatterReader] Reading frontmatter from: ${filePath}`);
     const frontmatterContent = await readFrontmatterOnly(filePath);
 
