@@ -20,6 +20,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.55.8] - 2026-03-03
+
+
+### Added
+- Resizable panels, keyboard shortcut, and help tooltip for CollabMode
+- Sharing discovery callout on Account & Sync page
+- Multi-select and batch drag-drop on session kanban board
+- Tracker kanban view (gated behind alpha release channel)
+
+### Changed
+- Session context menu reordered into logical groups with dividers
+
+### Fixed
+- Worktree sessions load instantly instead of spawning hundreds of git processes
+- Single-instance lock so Windows OAuth deep links route to existing app on Windows
+- Transcript peek widget no longer flashes at top-left on keyboard navigation
+- Terminal panel visibility persists per-workspace instead of globally
+- Tray icon included in packaged builds via extraResources
+- Team name no longer leaks to Stytch org metadata
+- File scope walkthrough delayed until sidebar has actual files
+
 ## [0.55.7] - 2026-03-03
 
 
