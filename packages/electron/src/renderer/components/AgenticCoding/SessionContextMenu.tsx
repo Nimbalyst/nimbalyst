@@ -178,6 +178,7 @@ export const SessionContextMenu: React.FC<SessionContextMenuProps> = ({
       onClick={(e) => e.stopPropagation()}
       onMouseLeave={onClose}
     >
+      {/* Group 1: Organize (most frequent) */}
       {onRename && (
         <button className={menuItemClass} onClick={(e) => handleAction(e, onRename)}>
           <MaterialSymbol icon="edit" size={14} />
@@ -190,47 +191,6 @@ export const SessionContextMenu: React.FC<SessionContextMenuProps> = ({
           {isPinned ? 'Unpin' : 'Pin'}
         </button>
       )}
-      {onBranch && (
-        <button className={menuItemClass} onClick={(e) => handleAction(e, onBranch)}>
-          <MaterialSymbol icon="fork_right" size={14} />
-          Branch conversation
-        </button>
-      )}
-      {onRemoveFromWorkstream && parentSessionId && !isWorktreeSession && (
-        <button className={menuItemClass} onClick={(e) => handleAction(e, onRemoveFromWorkstream)}>
-          <MaterialSymbol icon="drive_file_move_rtl" size={14} />
-          Remove from workstream
-        </button>
-      )}
-      <button className={menuItemClass} onClick={handleCopySessionId}>
-        <MaterialSymbol icon="content_copy" size={14} />
-        Copy Session ID
-      </button>
-      {shareInfo ? (
-        <>
-          <button className={menuItemClass} onClick={handleCopyShareLink}>
-            <MaterialSymbol icon="content_copy" size={14} />
-            Copy share link
-          </button>
-          <button className={menuItemClass} onClick={handleUnshare}>
-            <MaterialSymbol icon="link_off" size={14} />
-            Unshare
-          </button>
-        </>
-      ) : (
-        <button className={menuItemClass} onClick={handleShareLink}>
-          <MaterialSymbol icon="link" size={14} />
-          Share link
-        </button>
-      )}
-      <button className={menuItemClass} onClick={handleExportHtml}>
-        <MaterialSymbol icon="download" size={14} />
-        Export as HTML
-      </button>
-      <button className={menuItemClass} onClick={handleCopyTranscript}>
-        <MaterialSymbol icon="assignment" size={14} />
-        Copy transcript
-      </button>
       {/* Set Phase submenu */}
       <div
         className="relative"
@@ -284,6 +244,63 @@ export const SessionContextMenu: React.FC<SessionContextMenuProps> = ({
           </div>
         )}
       </div>
+
+      {/* Group 2: Branch / workstream actions */}
+      {(onBranch || (onRemoveFromWorkstream && parentSessionId && !isWorktreeSession)) && (
+        <div className="h-px bg-[var(--nim-border)] my-1" />
+      )}
+      {onBranch && (
+        <button className={menuItemClass} onClick={(e) => handleAction(e, onBranch)}>
+          <MaterialSymbol icon="fork_right" size={14} />
+          Branch conversation
+        </button>
+      )}
+      {onRemoveFromWorkstream && parentSessionId && !isWorktreeSession && (
+        <button className={menuItemClass} onClick={(e) => handleAction(e, onRemoveFromWorkstream)}>
+          <MaterialSymbol icon="drive_file_move_rtl" size={14} />
+          Remove from workstream
+        </button>
+      )}
+
+      {/* Group 3: Copy to clipboard */}
+      <div className="h-px bg-[var(--nim-border)] my-1" />
+      <button className={menuItemClass} onClick={handleCopyTranscript}>
+        <MaterialSymbol icon="assignment" size={14} />
+        Copy transcript
+      </button>
+      <button className={menuItemClass} onClick={handleCopySessionId}>
+        <MaterialSymbol icon="content_copy" size={14} />
+        Copy Session ID
+      </button>
+
+      {/* Group 4: Share / export */}
+      <div className="h-px bg-[var(--nim-border)] my-1" />
+      {shareInfo ? (
+        <>
+          <button className={menuItemClass} onClick={handleCopyShareLink}>
+            <MaterialSymbol icon="content_copy" size={14} />
+            Copy share link
+          </button>
+          <button className={menuItemClass} onClick={handleUnshare}>
+            <MaterialSymbol icon="link_off" size={14} />
+            Unshare
+          </button>
+        </>
+      ) : (
+        <button className={menuItemClass} onClick={handleShareLink}>
+          <MaterialSymbol icon="link" size={14} />
+          Share link
+        </button>
+      )}
+      <button className={menuItemClass} onClick={handleExportHtml}>
+        <MaterialSymbol icon="download" size={14} />
+        Export as HTML
+      </button>
+
+      {/* Group 5: Destructive actions */}
+      {(onArchive || onUnarchive || onDelete) && (
+        <div className="h-px bg-[var(--nim-border)] my-1" />
+      )}
       {(onArchive || onUnarchive) && (
         <button
           className={menuItemClass}
