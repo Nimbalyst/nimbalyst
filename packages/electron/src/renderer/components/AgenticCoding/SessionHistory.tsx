@@ -2805,7 +2805,9 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                     sortBy={sortBy}
                     onClick={(e) => handleSessionClick(session.id, e)}
                     onDelete={onSessionDelete ? () => handleDeleteSession(session.id) : undefined}
-                    onArchive={() => handleArchiveSession(session.id)}
+                    onArchive={item.isWorktreeSession && session.worktreeId
+                      ? () => handleArchiveWorktree(session.worktreeId!)
+                      : () => handleArchiveSession(session.id)}
                     onUnarchive={() => handleUnarchiveSession(session.id)}
                     onRename={onSessionRename ? (newName: string) => onSessionRename(session.id, newName) : undefined}
                     onPinToggle={(isPinned) => handleSessionPinToggle(session.id, isPinned)}

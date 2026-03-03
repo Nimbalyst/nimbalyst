@@ -312,12 +312,12 @@ export const SessionContextMenu: React.FC<SessionContextMenuProps> = ({
           {isArchived ? (
             <>
               <MaterialSymbol icon="unarchive" size={14} />
-              Unarchive {isWorkstream ? 'Workstream' : 'Session'}
+              Unarchive {isWorkstream ? 'Workstream' : isWorktreeSession ? 'Worktree' : 'Session'}
             </>
           ) : (
             <>
               <MaterialSymbol icon="archive" size={14} />
-              Archive {isWorkstream ? 'Workstream' : 'Session'}
+              Archive {isWorkstream ? 'Workstream' : isWorktreeSession ? 'Worktree' : 'Session'}
             </>
           )}
         </button>

@@ -50,8 +50,12 @@ import {
   sessionUnreadAtom,
   updateSessionStoreAtom,
   workstreamUnreadAtom,
+  removeSessionFullAtom,
+  sessionListWorkspaceAtom,
 } from '../../store/atoms/sessions';
 import { SessionContextMenu } from '../AgenticCoding/SessionContextMenu';
+import { ArchiveWorktreeDialog } from '../AgentMode/ArchiveWorktreeDialog';
+import { useArchiveWorktreeDialog } from '../../hooks/useArchiveWorktreeDialog';
 
 // ============================================================
 // Keyboard Navigation Types
@@ -1212,6 +1216,16 @@ export const SessionKanbanBoard: React.FC<SessionKanbanBoardProps> = ({ onSessio
   const grouped = useAtomValue(sessionsByPhaseAtom);
   const setPhase = useSetAtom(setSessionPhaseAtom);
   const updateSessionStore = useSetAtom(updateSessionStoreAtom);
+  const removeSessionFromAtom = useSetAtom(removeSessionFullAtom);
+  const workspacePath = useAtomValue(sessionListWorkspaceAtom) || '';
+
+  // Worktree archive dialog
+  const {
+    dialogState: archiveWorktreeDialogState,
+    showDialog: showArchiveWorktreeDialog,
+    closeDialog: closeArchiveWorktreeDialog,
+    confirmArchive: confirmArchiveWorktree,
+  } = useArchiveWorktreeDialog();
 
   // Keyboard navigation state
   const [focusedCardId, setFocusedCardId] = useState<string | null>(null);
@@ -1315,22 +1329,79 @@ export const SessionKanbanBoard: React.FC<SessionKanbanBoardProps> = ({ onSessio
     setSelectedIds(new Set());
   }, [setPhase]);
 
+  // Look up a session by ID from the grouped data
+  const findSession = useCallback((sessionId: string): SessionMeta | undefined => {
+    for (const sessions of grouped.values()) {
+      const found = sessions.find(s => s.id === sessionId);
+      if (found) return found;
+    }
+    return undefined;
+  }, [grouped]);
+
+  // Archive a worktree via the confirmation dialog
+  const handleArchiveWorktree = useCallback(async (worktreeId: string) => {
+    try {
+      const result = await window.electronAPI.invoke('worktree:get', worktreeId);
+      if (result.success && result.worktree) {
+        const wt = result.worktree;
+        await showArchiveWorktreeDialog({
+          worktreeId,
+          worktreeName: wt.displayName || wt.name || wt.path?.split('/').pop() || 'worktree',
+          worktreePath: wt.path || '',
+        });
+      }
+    } catch (err) {
+      console.error('[SessionKanbanBoard] Failed to get worktree data for archive:', err);
+    }
+  }, [showArchiveWorktreeDialog]);
+
+  const handleConfirmArchiveWorktree = useCallback(async () => {
+    if (!archiveWorktreeDialogState) return;
+    const worktreeId = archiveWorktreeDialogState.worktreeId;
+
+    await confirmArchiveWorktree(workspacePath, () => {
+      // Remove worktree sessions from atom state for immediate UI update
+      for (const sessions of grouped.values()) {
+        for (const session of sessions) {
+          if (session.worktreeId === worktreeId) {
+            removeSessionFromAtom(session.id);
+          }
+        }
+      }
+    });
+  }, [confirmArchiveWorktree, workspacePath, archiveWorktreeDialogState, grouped, removeSessionFromAtom]);
+
+  // Archive sessions, routing worktree sessions to the worktree archive dialog
   const handleArchive = useCallback(async (sessionIds: string[]) => {
+    const worktreeIds = new Set<string>();
+
     for (const sessionId of sessionIds) {
+      const session = findSession(sessionId);
+      if (session?.worktreeId) {
+        worktreeIds.add(session.worktreeId);
+        continue;
+      }
       try {
         // Archive AND clear phase so the session leaves the board entirely
         const result = await window.electronAPI.invoke('sessions:update-metadata', sessionId, { isArchived: true });
         if (result.success) {
           updateSessionStore({ sessionId, updates: { isArchived: true } });
-          // Clear phase so it doesn't linger in the complete column
           setPhase({ sessionId, phase: null });
         }
       } catch (err) {
         console.error('[SessionKanbanBoard] Failed to archive session:', err);
       }
     }
+
+    // Trigger worktree archive dialog for the first worktree found
+    // (subsequent ones would need to be archived separately)
+    for (const worktreeId of worktreeIds) {
+      await handleArchiveWorktree(worktreeId);
+      break; // Show dialog for one at a time
+    }
+
     setSelectedIds(new Set());
-  }, [updateSessionStore, setPhase]);
+  }, [updateSessionStore, setPhase, findSession, handleArchiveWorktree]);
 
   // Single-session archive wrapper for context menu
   const handleArchiveSingle = useCallback((sessionId: string) => {
@@ -1648,6 +1719,17 @@ export const SessionKanbanBoard: React.FC<SessionKanbanBoardProps> = ({ onSessio
           ))}
           <ArchiveGutter onArchive={handleArchive} />
         </div>
+      )}
+
+      {/* Archive worktree confirmation dialog */}
+      {archiveWorktreeDialogState && (
+        <ArchiveWorktreeDialog
+          worktreeName={archiveWorktreeDialogState.worktreeName}
+          onArchive={handleConfirmArchiveWorktree}
+          onKeep={closeArchiveWorktreeDialog}
+          hasUncommittedChanges={archiveWorktreeDialogState.hasUncommittedChanges}
+          uncommittedFileCount={archiveWorktreeDialogState.uncommittedFileCount}
+        />
       )}
     </div>
   );

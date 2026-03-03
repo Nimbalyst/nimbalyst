@@ -486,8 +486,8 @@ export const SessionListItem = memo<SessionListItemProps>(({
               if (isArchived && onUnarchive) onUnarchive();
               else if (!isArchived && onArchive) onArchive();
             }}
-            aria-label={isArchived ? `Unarchive ${isWorkstream ? 'workstream' : 'session'}` : `Archive ${isWorkstream ? 'workstream' : 'session'}`}
-            title={isArchived ? `Unarchive ${isWorkstream ? 'workstream' : 'session'}` : `Archive ${isWorkstream ? 'workstream' : 'session'}`}
+            aria-label={isArchived ? `Unarchive ${isWorkstream ? 'workstream' : isWorktreeSession ? 'worktree' : 'session'}` : `Archive ${isWorkstream ? 'workstream' : isWorktreeSession ? 'worktree' : 'session'}`}
+            title={isArchived ? `Unarchive ${isWorkstream ? 'workstream' : isWorktreeSession ? 'worktree' : 'session'}` : `Archive ${isWorkstream ? 'workstream' : isWorktreeSession ? 'worktree' : 'session'}`}
           >
             {isArchived ? (
               <MaterialSymbol icon="unarchive" size={14} />

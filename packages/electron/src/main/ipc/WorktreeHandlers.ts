@@ -18,6 +18,7 @@ import { getTerminalsByWorktreeId, deleteTerminalInstance } from '../utils/termi
 import { gitRefWatcher } from '../file/GitRefWatcher';
 import type { WorktreeCreateResult } from '../../shared/ipc/types';
 import { gitOperationLock } from '../services/GitOperationLock';
+import fs from 'node:fs';
 
 const logger = log.scope('WorktreeHandlers');
 
@@ -111,10 +112,16 @@ export async function archiveWorktree(worktreeId: string, workspacePath: string)
       );
     }
 
-    // Already archived - skip
+    // Already archived - but only skip if the directory is actually gone
     if (worktree.isArchived) {
-      archiveLogger.info('Worktree already archived, skipping', { worktreeId });
-      return { success: true };
+      if (!fs.existsSync(worktree.path)) {
+        archiveLogger.info('Worktree already archived and directory removed, skipping', { worktreeId });
+        return { success: true };
+      }
+      // Directory still exists despite being marked archived - re-run cleanup
+      archiveLogger.info('Worktree marked as archived but directory still exists, re-running cleanup', { worktreeId, path: worktree.path });
+      // Reset the archived flag so the cleanup flow can set it properly after disk deletion
+      await worktreeStore.updateArchived(worktreeId, false);
     }
 
     const gitWorktreeService = new GitWorktreeService();
