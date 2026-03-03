@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { MaterialSymbol } from '@nimbalyst/runtime';
+import { useAlphaFeature } from '../../hooks/useAlphaFeature';
 import type { SettingsCategory } from '../Settings/SettingsSidebar';
 import type { SettingsScope } from '../Settings/SettingsView';
 
@@ -78,6 +79,7 @@ export function UserMenuPopover({ onNavigateSettings, onClose, isProjectConnecte
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [onClose]);
 
+  const isCollaborationEnabled = useAlphaFeature('collaboration');
   const email = authState?.user?.emails?.[0]?.email;
   const isSignedIn = authState?.isAuthenticated ?? false;
 
@@ -98,8 +100,8 @@ export function UserMenuPopover({ onNavigateSettings, onClose, isProjectConnecte
         onClose();
       },
     },
-    // Only show Team Settings when the user is connected to a team/sync
-    ...(isProjectConnected ? [{
+    // Only show Team Settings when the user is connected to a team/sync AND collaboration alpha is enabled
+    ...(isProjectConnected && isCollaborationEnabled ? [{
       label: 'Team Settings',
       icon: 'group' as const,
       onClick: () => {
@@ -130,8 +132,8 @@ export function UserMenuPopover({ onNavigateSettings, onClose, isProjectConnecte
         ))}
       </div>
 
-      {/* Identity row - only shown when connected to team/sync */}
-      {isProjectConnected && (
+      {/* Identity row - only shown when connected to team/sync and collaboration is enabled */}
+      {isProjectConnected && isCollaborationEnabled && (
         <>
           <div className="border-t border-nim" />
           <button

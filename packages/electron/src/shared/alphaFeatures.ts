@@ -55,6 +55,12 @@ export const ALPHA_FEATURES: readonly AlphaFeatureDefinition[] = [
     description: 'Run the same prompt on multiple isolated worktrees to make more than one attempt at a task.',
     icon: 'bolt',
   },
+  {
+    tag: 'collaboration',
+    name: 'Collaboration',
+    description: 'Enable team collaboration features including shared trackers and team management.',
+    icon: 'group',
+  },
 ] as const;
 
 /**

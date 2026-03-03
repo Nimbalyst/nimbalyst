@@ -17,6 +17,7 @@ import { useExtensionGutterButtons } from '../../extensions/panels/usePanels';
 import { HelpTooltip } from '../../help';
 import { terminalFeatureAvailableAtom, syncEnabledAtom, syncEnabledProjectsAtom } from '../../store/atoms/appSettings';
 import { workspaceHasTeamAtom } from '../../store/atoms/collabDocuments';
+import { useAlphaFeature } from '../../hooks/useAlphaFeature';
 import { UserMenuPopover } from './UserMenuPopover';
 
 export type NavigationMode = 'planning' | 'coding';
@@ -95,8 +96,11 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
   // Check if terminal feature is available (developer mode + feature enabled)
   const isTerminalAvailable = useAtomValue(terminalFeatureAvailableAtom);
 
-  // Only show collab mode button when workspace has an active team
-  const hasTeam = useAtomValue(workspaceHasTeamAtom);
+  // Collaboration features are gated behind the alpha release channel
+  const isCollaborationEnabled = useAlphaFeature('collaboration');
+
+  // Only show collab mode button when workspace has an active team AND collaboration alpha is enabled
+  const hasTeam = useAtomValue(workspaceHasTeamAtom) && isCollaborationEnabled;
 
   // Check if mobile sync is configured for this workspace
   const syncEnabled = useAtomValue(syncEnabledAtom);

@@ -59,7 +59,7 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
 }) => {
   // Get release channel and alpha/beta feature flags from Jotai atoms
   const releaseChannel = useAtomValue(releaseChannelAtom);
-  const alphaFeatures = useAlphaFeatures(['voice-mode', 'claude-plugins']);
+  const alphaFeatures = useAlphaFeatures(['voice-mode', 'claude-plugins', 'collaboration']);
   const getStatusDot = (providerId: string): 'success' | 'warning' | 'error' | undefined => {
     const status = providerStatus[providerId];
     if (!status) return undefined;
@@ -171,21 +171,21 @@ Best for quick edits and tasks that do not require multi-file operations.`,
         },
       ],
     },
-    {
+    ...(alphaFeatures['collaboration'] ? [{
       title: 'Collaboration',
       items: [
         {
-          id: 'team',
+          id: 'team' as SettingsCategory,
           name: 'Team',
           icon: <MaterialSymbol icon="group" size={16} />,
         },
         {
-          id: 'tracker-config',
+          id: 'tracker-config' as SettingsCategory,
           name: 'Trackers',
           icon: <MaterialSymbol icon="assignment" size={16} />,
         },
       ],
-    },
+    }] : []),
     {
       title: 'Extensions',
       items: [
@@ -214,12 +214,12 @@ Best for quick edits and tasks that do not require multi-file operations.`,
   // User scope: Show Agent/Chat Providers, Application, Extensions (not Project)
   const filteredGroups = scope === 'project'
     ? [
-        categoryGroups.find(g => g.title === 'Project')!,
-        categoryGroups.find(g => g.title === 'Collaboration')!,
-        categoryGroups.find(g => g.title === 'Agent Providers')!,
-        categoryGroups.find(g => g.title === 'Chat Providers')!,
-        categoryGroups.find(g => g.title === 'Extensions')!,
-      ].filter(Boolean)
+        categoryGroups.find(g => g.title === 'Project'),
+        categoryGroups.find(g => g.title === 'Collaboration'),
+        categoryGroups.find(g => g.title === 'Agent Providers'),
+        categoryGroups.find(g => g.title === 'Chat Providers'),
+        categoryGroups.find(g => g.title === 'Extensions'),
+      ].filter((g): g is CategoryGroup => g != null)
     : categoryGroups.filter(g => g.title !== 'Project' && g.title !== 'Collaboration');
 
   const [tooltip, setTooltip] = useState<{ text: string; top: number; left: number } | null>(null);
