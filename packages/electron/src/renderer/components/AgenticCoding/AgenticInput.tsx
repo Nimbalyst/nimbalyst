@@ -233,8 +233,10 @@ export function AgenticInput({
     let insertText: string;
 
     if (typeaheadMatch.trigger === '@') {
-      // Format as simple file mention: @<filepath>
-      insertText = `@${option.data?.path || option.label}`;
+      const doc = option.data;
+      const isDirectory = doc?.type === 'directory';
+      const mentionPath = doc?.path || option.label;
+      insertText = `@${mentionPath}${isDirectory && !mentionPath.endsWith('/') ? '/' : ''}`;
     } else if (typeaheadMatch.trigger === '/') {
       // Format as slash command: /commandname
       // Extract command name (remove "/" if it's in the label)

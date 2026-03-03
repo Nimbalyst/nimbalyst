@@ -79,7 +79,7 @@ function getFileType(filePath: string): string {
 }
 
 // Cache for quick open file searches
-const fileNameCaches = new Map<string, Array<{ path: string; name: string }>>();
+const fileNameCaches = new Map<string, Array<{ path: string; name: string; type: 'file' | 'directory' }>>();
 
 // Binary file extensions to exclude from QuickOpen results
 // Note: Images are NOT excluded - Nimbalyst can display them
@@ -362,11 +362,35 @@ export function registerWorkspaceHandlers() {
             // Use cross-platform Node.js file walking instead of Unix find command
             const files = await findWorkspaceFiles(workspacePath);
 
-            const cache: Array<{ path: string; name: string }> = [];
+            const cache: Array<{ path: string; name: string; type: 'file' | 'directory' }> = [];
+
+            // Extract unique directories from file paths
+            const dirs = new Set<string>();
+            for (const file of files) {
+                // Walk up the directory tree from each file
+                let dir = dirname(file);
+                while (dir.length > workspacePath.length) {
+                    if (dirs.has(dir)) break; // Already seen this dir and its parents
+                    dirs.add(dir);
+                    dir = dirname(dir);
+                }
+            }
+
+            // Add directories to cache
+            for (const dir of dirs) {
+                cache.push({
+                    path: dir,
+                    name: basename(dir).toLowerCase(),
+                    type: 'directory'
+                });
+            }
+
+            // Add files to cache
             for (const file of files) {
                 cache.push({
                     path: file,
-                    name: basename(file).toLowerCase()
+                    name: basename(file).toLowerCase(),
+                    type: 'file'
                 });
             }
 
@@ -383,13 +407,31 @@ export function registerWorkspaceHandlers() {
     safeHandle('search-workspace-file-names', async (event, workspacePath: string, query: string) => {
         try {
             const trimmedQuery = query.trim();
-            if (!trimmedQuery) return [];
 
             // Use cache if available
             const cache = fileNameCaches.get(workspacePath);
             if (!cache) {
                 console.warn('Quick open cache not built for workspace:', workspacePath);
                 return [];
+            }
+
+            // Empty query: return top-level items sorted by path depth then alphabetically
+            if (!trimmedQuery) {
+                const sorted = [...cache]
+                    .sort((a, b) => {
+                        const depthA = a.path.split('/').length;
+                        const depthB = b.path.split('/').length;
+                        if (depthA !== depthB) return depthA - depthB;
+                        return a.path.localeCompare(b.path);
+                    })
+                    .slice(0, 50);
+                return sorted.map(item => ({
+                    path: path.normalize(item.path),
+                    isFileNameMatch: true,
+                    matches: [],
+                    score: 0,
+                    type: item.type,
+                }));
             }
 
             // Use fuzzy matching for better search experience
@@ -412,6 +454,7 @@ export function registerWorkspaceHandlers() {
                 isFileNameMatch: true,
                 matches: [],
                 score: r.match.score,
+                type: r.item.type,
             }));
 
             return results;

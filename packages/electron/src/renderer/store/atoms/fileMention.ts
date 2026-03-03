@@ -34,6 +34,7 @@ interface FileSearchResult {
   isFileNameMatch: boolean;
   matches: unknown[];
   score: number;
+  type?: 'file' | 'directory';
 }
 
 // ============================================================
@@ -136,6 +137,26 @@ async function ensureQuickOpenCache(workspacePath: string): Promise<void> {
 function resultsToOptions(results: FileSearchResult[], workspacePath: string): TypeaheadOption[] {
   return results.map(result => {
     const relativePath = getRelativePath(result.path, workspacePath);
+    const isDirectory = result.type === 'directory';
+
+    if (isDirectory) {
+      const dirName = getFileName(relativePath);
+      const parentPath = getDirectoryPath(relativePath);
+      const truncatedPath = truncatePath(parentPath);
+      return {
+        id: relativePath,
+        label: dirName + '/',
+        description: truncatedPath || undefined,
+        icon: 'folder',
+        data: {
+          id: relativePath,
+          name: dirName,
+          path: relativePath,
+          type: 'directory',
+        }
+      };
+    }
+
     const fileName = getFileName(relativePath);
     const dirPath = getDirectoryPath(relativePath);
     const truncatedPath = truncatePath(dirPath);
@@ -167,12 +188,6 @@ export const searchFileMentionAtom = atom(
   async (get, set, { workspacePath, query }: { workspacePath: string; query: string }) => {
     const api = (window as any).electronAPI || (window as any).electron;
     if (!api?.searchWorkspaceFileNames) return;
-
-    // Empty query: clear results
-    if (!query.trim()) {
-      set(fileMentionOptionsAtom(workspacePath), []);
-      return;
-    }
 
     set(documentsLoadingAtom(workspacePath), true);
 
