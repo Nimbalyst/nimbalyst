@@ -666,30 +666,42 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
         if (result?.success) {
           // Reload files, commits, and status
           await Promise.all([loadWorktreeChangedFiles(), loadWorktreeCommits(), loadWorktreeStatus()]);
-          // Check if there are uncommitted changes - if so, don't show archive dialog
-          // (user might accidentally archive and lose their uncommitted work)
-          const statusResult = await window.electronAPI.worktreeGetStatus(worktreePath);
-          if (statusResult.success && statusResult.status?.hasUncommittedChanges) {
-            // Don't show archive dialog - user has uncommitted changes
-          } else {
-            // Check if this session belongs to a blitz (parent_session_id -> blitz session)
-            if (sessionId) {
-              try {
-                const sessionResult = await window.electronAPI.invoke('sessions:get', sessionId);
-                if (sessionResult?.session?.parentSessionId) {
-                  const blitzResult = await window.electronAPI.invoke('blitz:get', sessionResult.session.parentSessionId);
-                  if (blitzResult?.success && blitzResult?.blitz) {
-                    setBlitzId(sessionResult.session.parentSessionId);
-                    setBlitzName(blitzResult.blitz.displayName || blitzResult.blitz.prompt?.slice(0, 60) || 'Blitz');
-                    setShowArchiveBlitzDialog(true);
-                    return;
-                  }
+          // Check for blitz membership first (affects which dialog/action to take)
+          let isBlitz = false;
+          if (sessionId) {
+            try {
+              const sessionResult = await window.electronAPI.invoke('sessions:get', sessionId);
+              if (sessionResult?.session?.parentSessionId) {
+                const blitzResult = await window.electronAPI.invoke('blitz:get', sessionResult.session.parentSessionId);
+                if (blitzResult?.success && blitzResult?.blitz) {
+                  setBlitzId(sessionResult.session.parentSessionId);
+                  setBlitzName(blitzResult.blitz.displayName || blitzResult.blitz.prompt?.slice(0, 60) || 'Blitz');
+                  isBlitz = true;
                 }
-              } catch (err) {
-                console.error('[GitOperationsPanel] Failed to check blitz membership:', err);
               }
+            } catch (err) {
+              console.error('[GitOperationsPanel] Failed to check blitz membership:', err);
             }
-            setShowArchiveDialog(true);
+          }
+
+          // Check for uncommitted changes after merge
+          const statusResult = await window.electronAPI.worktreeGetStatus(worktreePath);
+          const hasUncommitted = statusResult.success && statusResult.status?.hasUncommittedChanges;
+
+          if (hasUncommitted) {
+            // Has uncommitted changes - show dialog with warning
+            if (isBlitz) {
+              setShowArchiveBlitzDialog(true);
+            } else {
+              setShowArchiveDialog(true);
+            }
+          } else {
+            // Clean after merge - auto-archive directly
+            if (isBlitz) {
+              setShowArchiveBlitzDialog(true);
+            } else {
+              handleArchiveWorktree();
+            }
           }
         } else {
           // Check if this is a merge conflict error (detected before merge started)

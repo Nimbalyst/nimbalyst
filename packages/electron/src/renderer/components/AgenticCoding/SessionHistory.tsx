@@ -779,18 +779,46 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     }
   };
 
-  // Show confirmation dialog before archiving worktree
+  // Clean up UI state after a worktree archive (used by both auto-archive and dialog confirm paths)
+  const cleanupAfterWorktreeArchive = useCallback((worktreeId: string) => {
+    const worktreeSessions = allSessions.filter(s => s.worktreeId === worktreeId);
+    worktreeSessions.forEach(session => {
+      removeSessionFromAtom(session.id);
+    });
+    setSessions(prev => prev.filter(s => s.worktreeId !== worktreeId));
+    worktreeSessions.forEach(session => {
+      if (onSessionArchive) {
+        onSessionArchive(session.id);
+      }
+    });
+    setWorktreeCache(prev => {
+      const newCache = new Map(prev);
+      newCache.delete(worktreeId);
+      return newCache;
+    });
+    const superLoop = superLoops.find(loop => loop.worktreeId === worktreeId);
+    if (superLoop) {
+      removeSuperLoop(superLoop.id);
+    }
+  }, [allSessions, removeSessionFromAtom, onSessionArchive, superLoops, removeSuperLoop]);
+
+  // Archive worktree: auto-archives if clean, otherwise shows confirmation dialog
   const handleArchiveWorktree = async (worktreeId: string) => {
     // Get worktree info from cache
     const worktreeData = worktreeCache.get(worktreeId);
     const worktreeName = worktreeData?.displayName || worktreeData?.name || worktreeData?.path?.split('/').pop() || 'worktree';
     const worktreePath = worktreeData?.path || '';
 
-    await showArchiveWorktreeDialog({
+    const autoArchived = await showArchiveWorktreeDialog({
       worktreeId,
       worktreeName,
       worktreePath,
+      workspacePath,
     });
+
+    if (autoArchived) {
+      cleanupAfterWorktreeArchive(worktreeId);
+    }
   };
 
   const handleCleanGitignored = useCallback(async (worktreeId: string) => {
@@ -820,44 +848,16 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     }
   }, [worktreeCache]);
 
-  // Handle archive confirmation - clean up sessions and cache after successful archive
+  // Handle archive confirmation from the dialog
   const handleConfirmArchiveWorktree = useCallback(async () => {
     if (!archiveWorktreeDialogState) return;
 
     const worktreeId = archiveWorktreeDialogState.worktreeId;
 
-    // Get sessions for this worktree to notify parent to close tabs
-    const worktreeSessions = allSessions.filter(s => s.worktreeId === worktreeId);
-
     await confirmArchiveWorktree(workspacePath, () => {
-      // Remove worktree sessions from atom state immediately (optimistic update)
-      worktreeSessions.forEach(session => {
-        removeSessionFromAtom(session.id);
-      });
-      // Also remove from filtered list for immediate feedback
-      setSessions(prev => prev.filter(s => s.worktreeId !== worktreeId));
-
-      // Notify parent to close tabs for archived sessions
-      worktreeSessions.forEach(session => {
-        if (onSessionArchive) {
-          onSessionArchive(session.id);
-        }
-      });
-
-      // Remove from worktree cache
-      setWorktreeCache(prev => {
-        const newCache = new Map(prev);
-        newCache.delete(worktreeId);
-        return newCache;
-      });
-
-      // If this worktree belongs to a Super Loop, remove the loop from state
-      const superLoop = superLoops.find(loop => loop.worktreeId === worktreeId);
-      if (superLoop) {
-        removeSuperLoop(superLoop.id);
-      }
+      cleanupAfterWorktreeArchive(worktreeId);
     });
-  }, [archiveWorktreeDialogState, allSessions, workspacePath, confirmArchiveWorktree, removeSessionFromAtom, onSessionArchive, superLoops, removeSuperLoop]);
+  }, [archiveWorktreeDialogState, workspacePath, confirmArchiveWorktree, cleanupAfterWorktreeArchive]);
 
   const handleUnarchiveSession = async (sessionId: string) => {
     try {
@@ -1199,15 +1199,19 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
         return;
       }
       const wt = result.worktree;
-      await showArchiveWorktreeDialog({
+      const autoArchived = await showArchiveWorktreeDialog({
         worktreeId: wt.id,
         worktreeName: wt.displayName || wt.name || wt.path?.split('/').pop() || 'worktree',
         worktreePath: wt.path,
+        workspacePath,
       });
+      if (autoArchived) {
+        cleanupAfterWorktreeArchive(wt.id);
+      }
     } catch (error) {
       console.error('[SessionHistory] Failed to archive super loop:', error);
     }
-  }, [showArchiveWorktreeDialog]);
+  }, [showArchiveWorktreeDialog, workspacePath, cleanupAfterWorktreeArchive]);
 
   const handleSuperLoopRename = useCallback((loopId: string, newName: string) => {
     handleSuperLoopUpdate(loopId, { title: newName });
@@ -3008,6 +3012,8 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
           onKeep={closeArchiveWorktreeDialog}
           hasUncommittedChanges={archiveWorktreeDialogState.hasUncommittedChanges}
           uncommittedFileCount={archiveWorktreeDialogState.uncommittedFileCount}
+          hasUnmergedChanges={archiveWorktreeDialogState.hasUnmergedChanges}
+          unmergedCommitCount={archiveWorktreeDialogState.unmergedCommitCount}
         />
       )}
 

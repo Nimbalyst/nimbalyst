@@ -1331,46 +1331,41 @@ export const SessionKanbanBoard: React.FC<SessionKanbanBoardProps> = ({ onSessio
     setSelectedIds(new Set());
   }, [setPhase]);
 
-  // Look up a session by ID from the grouped data
-  const findSession = useCallback((sessionId: string): SessionMeta | undefined => {
-    for (const sessions of grouped.values()) {
-      const found = sessions.find(s => s.id === sessionId);
-      if (found) return found;
-    }
-    return undefined;
-  }, [grouped]);
-
-  // Archive a worktree via the confirmation dialog
-  const handleArchiveWorktree = useCallback(async (worktreeId: string) => {
-    try {
-      const result = await window.electronAPI.invoke('worktree:get', worktreeId);
-      if (result.success && result.worktree) {
-        const wt = result.worktree;
-        await showArchiveWorktreeDialog({
-          worktreeId,
-          worktreeName: wt.displayName || wt.name || wt.path?.split('/').pop() || 'worktree',
-          worktreePath: wt.path || '',
-        });
-      }
-    } catch (err) {
-      console.error('[SessionKanbanBoard] Failed to get worktree data for archive:', err);
-    }
-  }, [showArchiveWorktreeDialog]);
+  const cleanupWorktreeSessions = useCallback((worktreeId: string) => {
+    const worktreeSessions = Array.from(registry.values()).filter(s => s.worktreeId === worktreeId);
+    worktreeSessions.forEach(session => {
+      removeSession(session.id);
+    });
+  }, [registry, removeSession]);
 
   // Archive sessions, routing worktree sessions to the worktree archive dialog
   const handleArchive = useCallback(async (sessionIds: string[]) => {
-    const worktreeIds = new Set<string>();
-
     for (const sessionId of sessionIds) {
-      const session = findSession(sessionId);
+      const session = registry.get(sessionId);
       if (session?.worktreeId) {
         // Only trigger full worktree archive if this is the last non-archived session in the worktree
         const siblingCount = Array.from(registry.values()).filter(
           s => s.worktreeId === session.worktreeId && !s.isArchived && s.id !== sessionId
         ).length;
 
-        if (siblingCount === 0) {
-          worktreeIds.add(session.worktreeId);
+        if (siblingCount === 0 && workspacePath) {
+          // Last session in worktree - trigger full worktree archive flow
+          const worktreeResult = await window.electronAPI.worktreeGet(session.worktreeId);
+          const worktree = worktreeResult.worktree;
+          const worktreeName = worktree?.name || worktree?.path?.split('/').pop() || 'worktree';
+          const worktreePath = worktree?.path || '';
+
+          const autoArchived = await showArchiveWorktreeDialog({
+            worktreeId: session.worktreeId,
+            worktreeName,
+            worktreePath,
+            workspacePath,
+          });
+
+          if (autoArchived) {
+            cleanupWorktreeSessions(session.worktreeId);
+          }
+          return;
         } else {
           // Still other sessions in this worktree - just archive this session
           try {
@@ -1397,15 +1392,8 @@ export const SessionKanbanBoard: React.FC<SessionKanbanBoardProps> = ({ onSessio
       }
     }
 
-    // Trigger worktree archive dialog for the first worktree found
-    // (subsequent ones would need to be archived separately)
-    for (const worktreeId of worktreeIds) {
-      await handleArchiveWorktree(worktreeId);
-      break; // Show dialog for one at a time
-    }
-
     setSelectedIds(new Set());
-  }, [updateSessionStore, setPhase, findSession, handleArchiveWorktree, registry]);
+  }, [updateSessionStore, setPhase, registry, showArchiveWorktreeDialog, workspacePath, cleanupWorktreeSessions]);
 
   // Single-session archive wrapper for context menu
   const handleArchiveSingle = useCallback((sessionId: string) => {
@@ -1425,15 +1413,11 @@ export const SessionKanbanBoard: React.FC<SessionKanbanBoardProps> = ({ onSessio
     if (!archiveWorktreeDialogState || !workspacePath) return;
 
     const worktreeId = archiveWorktreeDialogState.worktreeId;
-    const worktreeSessions = Array.from(registry.values()).filter(s => s.worktreeId === worktreeId);
 
     await confirmArchiveWorktree(workspacePath, () => {
-      // Remove worktree sessions from registry (optimistic update)
-      worktreeSessions.forEach(session => {
-        removeSession(session.id);
-      });
+      cleanupWorktreeSessions(worktreeId);
     });
-  }, [archiveWorktreeDialogState, workspacePath, registry, confirmArchiveWorktree, removeSession]);
+  }, [archiveWorktreeDialogState, workspacePath, confirmArchiveWorktree, cleanupWorktreeSessions]);
 
   // Click on a card: plain = select one, Cmd = toggle, Shift = range
   const handleCardClick = useCallback((sessionId: string, e: React.MouseEvent) => {
@@ -1747,6 +1731,8 @@ export const SessionKanbanBoard: React.FC<SessionKanbanBoardProps> = ({ onSessio
           onKeep={closeArchiveWorktreeDialog}
           hasUncommittedChanges={archiveWorktreeDialogState.hasUncommittedChanges}
           uncommittedFileCount={archiveWorktreeDialogState.uncommittedFileCount}
+          hasUnmergedChanges={archiveWorktreeDialogState.hasUnmergedChanges}
+          unmergedCommitCount={archiveWorktreeDialogState.unmergedCommitCount}
         />
       )}
     </div>

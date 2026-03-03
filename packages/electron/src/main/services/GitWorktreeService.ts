@@ -361,6 +361,16 @@ export class GitWorktreeService {
       // Use provided base branch (from database) or fall back to inferring
       const baseBranch = baseBranchOverride || await this.inferBaseBranch(git);
 
+      // Prefer origin/<baseBranch> for comparison - it's more accurate since local
+      // branch refs can be stale (e.g. local main behind origin/main)
+      let comparisonRef = baseBranch;
+      try {
+        await git.raw(['rev-parse', '--verify', `origin/${baseBranch}`]);
+        comparisonRef = `origin/${baseBranch}`;
+      } catch {
+        // origin/<baseBranch> doesn't exist, use local ref
+      }
+
       // Get commits ahead/behind base branch
       let commitsAhead = 0;
       let commitsBehind = 0;
@@ -368,24 +378,21 @@ export class GitWorktreeService {
       let uniqueCommitsAhead: number | undefined;
 
       try {
-        // Run rev-list and branch --merged in parallel (they are independent)
-        const [revListResult, mergedBranchesResult] = await Promise.all([
-          git.raw(['rev-list', '--left-right', '--count', `${baseBranch}...${currentBranch}`]),
-          git.raw(['branch', '--merged', baseBranch]),
-        ]);
-
-        const [behind, ahead] = revListResult.trim().split('\t').map(Number);
+        const revList = await git.raw(['rev-list', '--left-right', '--count', `${comparisonRef}...${currentBranch}`]);
+        const [behind, ahead] = revList.trim().split('\t').map(Number);
         commitsBehind = behind || 0;
         commitsAhead = ahead || 0;
 
-        isMerged = mergedBranchesResult.includes(currentBranch);
+        // Check if branch is merged (use -a to include remote tracking branches)
+        const mergedBranches = await git.raw(['branch', '-a', '--merged', comparisonRef]);
+        isMerged = mergedBranches.includes(currentBranch);
 
         // Use git cherry to find truly unique commits (by patch content, not hash)
         // This handles cases where commits were rebased and have different hashes
         // but the same content on both branches
         if (commitsAhead > 0) {
           try {
-            const cherryResult = await git.raw(['cherry', baseBranch, currentBranch]);
+            const cherryResult = await git.raw(['cherry', comparisonRef, currentBranch]);
             // Lines starting with '+' are unique, '-' means equivalent exists on base
             const uniqueCount = cherryResult.split('\n').filter(line => line.startsWith('+')).length;
             // Only set if different from commitsAhead (indicates duplicates exist)

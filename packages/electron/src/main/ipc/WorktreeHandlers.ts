@@ -7,6 +7,7 @@
 
 import { ipcMain, BrowserWindow } from 'electron';
 import log from 'electron-log/main';
+import simpleGit from 'simple-git';
 import { GitWorktreeService } from '../services/GitWorktreeService';
 import { WorktreeStore, createWorktreeStore } from '../services/WorktreeStore';
 import { getDatabase } from '../database/initialize';
@@ -454,7 +455,7 @@ export function registerWorktreeHandlers(): void {
    * @param worktreePath - Path to the worktree directory
    * @returns Git status including uncommitted changes, commits ahead/behind, merge status
    */
-  ipcMain.handle('worktree:get-status', async (_event, worktreePath: string) => {
+  ipcMain.handle('worktree:get-status', async (_event, worktreePath: string, options?: { fetchFirst?: boolean }) => {
     if (!worktreePath) {
       return { success: false, error: 'worktreePath is required' };
     }
@@ -468,7 +469,7 @@ export function registerWorktreeHandlers(): void {
 
     const requestPromise = (async () => {
       try {
-        logger.info('Getting worktree status', { worktreePath });
+        logger.info('Getting worktree status', { worktreePath, fetchFirst: options?.fetchFirst });
 
         // Look up the worktree to get the stored base branch
         const db = getDatabase();
@@ -478,6 +479,16 @@ export function registerWorktreeHandlers(): void {
           const worktree = await worktreeStore.getByPath(worktreePath);
           baseBranch = worktree?.baseBranch;
           logger.info('Found worktree base branch for status', { worktreePath, baseBranch: baseBranch || 'not found' });
+        }
+
+        // Fetch latest remote refs for accurate merge detection
+        if (options?.fetchFirst && baseBranch) {
+          try {
+            const git = simpleGit(worktreePath);
+            await git.fetch(['origin', baseBranch]);
+          } catch (fetchError) {
+            logger.warn('Failed to fetch base branch before status check (continuing with local refs)', { fetchError });
+          }
         }
 
         const status = await gitWorktreeService.getWorktreeStatus(worktreePath, baseBranch);

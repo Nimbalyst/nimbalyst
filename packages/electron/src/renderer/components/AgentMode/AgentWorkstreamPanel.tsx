@@ -802,12 +802,16 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
   // Archive dialog handler
   const handleShowArchiveDialog = useCallback(async () => {
     if (!sessionWorktreeId || !worktreePath) return;
-    await showArchiveDialog({
+    const autoArchived = await showArchiveDialog({
       worktreeId: sessionWorktreeId,
       worktreeName: getWorktreeNameFromPath(worktreePath, 'worktree'),
       worktreePath,
+      workspacePath,
     });
-  }, [sessionWorktreeId, worktreePath, showArchiveDialog]);
+    if (autoArchived) {
+      onWorktreeArchived?.();
+    }
+  }, [sessionWorktreeId, worktreePath, showArchiveDialog, workspacePath, onWorktreeArchived]);
 
   const handleConfirmArchive = useCallback(async () => {
     await confirmArchive(workspacePath, onWorktreeArchived);
@@ -1192,6 +1196,8 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
           onKeep={closeArchiveDialog}
           hasUncommittedChanges={archiveDialogState.hasUncommittedChanges}
           uncommittedFileCount={archiveDialogState.uncommittedFileCount}
+          hasUnmergedChanges={archiveDialogState.hasUnmergedChanges}
+          unmergedCommitCount={archiveDialogState.unmergedCommitCount}
         />
       )}
     </div>

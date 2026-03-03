@@ -622,7 +622,7 @@ interface ElectronAPI {
       updatedAt?: number;
     };
   }>;
-  worktreeGetStatus: (worktreePath: string) => Promise<{
+  worktreeGetStatus: (worktreePath: string, options?: { fetchFirst?: boolean }) => Promise<{
     success: boolean;
     error?: string;
     status?: {

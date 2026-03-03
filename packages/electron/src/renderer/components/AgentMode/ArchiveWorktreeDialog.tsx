@@ -11,6 +11,10 @@ interface ArchiveWorktreeDialogProps {
   hasUncommittedChanges?: boolean;
   /** Number of uncommitted files (for display) */
   uncommittedFileCount?: number;
+  /** Whether the branch has unmerged commits */
+  hasUnmergedChanges?: boolean;
+  /** Number of unmerged commits */
+  unmergedCommitCount?: number;
 }
 
 export function ArchiveWorktreeDialog({
@@ -20,6 +24,8 @@ export function ArchiveWorktreeDialog({
   contextMessage,
   hasUncommittedChanges,
   uncommittedFileCount,
+  hasUnmergedChanges,
+  unmergedCommitCount,
 }: ArchiveWorktreeDialogProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
 
@@ -61,7 +67,7 @@ export function ArchiveWorktreeDialog({
             <strong className="font-medium text-[var(--nim-text)]">{worktreeName}</strong>?
           </p>
 
-          {hasUncommittedChanges ? (
+          {hasUncommittedChanges && (
             <div className="archive-worktree-warning flex items-start gap-3 mb-4 p-3 rounded-lg bg-[var(--nim-warning)]/10 border border-[var(--nim-warning)]/30">
               <MaterialSymbol icon="warning" size={20} className="text-[var(--nim-warning)] shrink-0 mt-0.5" />
               <div>
@@ -74,12 +80,23 @@ export function ArchiveWorktreeDialog({
                 </p>
               </div>
             </div>
-          ) : (
-            <div className="archive-worktree-clean flex items-start gap-3 mb-4 p-3 rounded-lg bg-[var(--nim-success)]/10 border border-[var(--nim-success)]/30">
-              <MaterialSymbol icon="check_circle" size={20} className="text-[var(--nim-success)] shrink-0 mt-0.5" />
-              <p className="m-0 text-sm text-[var(--nim-text-muted)]">
-                No uncommitted changes. All work has been committed.
-              </p>
+          )}
+
+          {hasUnmergedChanges && (
+            <div className="archive-worktree-warning flex items-start gap-3 mb-4 p-3 rounded-lg bg-[var(--nim-warning)]/10 border border-[var(--nim-warning)]/30">
+              <MaterialSymbol icon="warning" size={20} className="text-[var(--nim-warning)] shrink-0 mt-0.5" />
+              <div>
+                <p className="m-0 text-sm font-medium text-[var(--nim-warning)]">
+                  Unmerged commits will be lost
+                </p>
+                <p className="m-0 mt-1 text-[0.8125rem] text-[var(--nim-text-muted)]">
+                  {(unmergedCommitCount ?? 0) > 0
+                    ? <>This branch has {unmergedCommitCount === 1 ? '1 commit' : `${unmergedCommitCount} commits`} that
+                      {unmergedCommitCount === 1 ? " hasn't" : " haven't"} been merged to the base branch.</>
+                    : <>This branch hasn&apos;t been merged to the base branch.</>
+                  }
+                </p>
+              </div>
             </div>
           )}
 
