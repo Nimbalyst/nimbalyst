@@ -51,6 +51,7 @@ export { ToolPermissionWidget } from './ToolPermissionWidget';
 export { FileChangeWidget } from './FileChangeWidget';
 export { SuperProgressSnapshotWidget } from './SuperProgressSnapshotWidget';
 export { SuperLoopProgressWidget } from './SuperLoopProgressWidget';
+export { UpdateSessionMetaWidget } from './UpdateSessionMetaWidget';
 
 // Re-export host types (for use in SessionTranscript to set the host)
 export type { InteractiveWidgetHost, PermissionScope, ToolPermissionResponse } from './InteractiveWidgetHost';
@@ -116,6 +117,7 @@ import { ToolPermissionWidget } from './ToolPermissionWidget';
 import { FileChangeWidget } from './FileChangeWidget';
 import { SuperProgressSnapshotWidget } from './SuperProgressSnapshotWidget';
 import { SuperLoopProgressWidget } from './SuperLoopProgressWidget';
+import { UpdateSessionMetaWidget } from './UpdateSessionMetaWidget';
 
 /**
  * Registry of custom tool widgets
@@ -164,6 +166,15 @@ export const CUSTOM_TOOL_WIDGETS: CustomToolWidgetRegistry = {
   // Super Loop progress update tool - shows progress summary or blocked feedback UI
   'super_loop_progress_update': SuperLoopProgressWidget,
   'mcp__nimbalyst-super-loop-progress__super_loop_progress_update': SuperLoopProgressWidget,
+
+  // Session metadata update tool - shows tag/phase/name transitions
+  'update_session_meta': UpdateSessionMetaWidget,
+  'mcp__nimbalyst-session-naming__update_session_meta': UpdateSessionMetaWidget,
+  // Legacy tool names (pre-merge) - fallback rendering for old sessions
+  'name_session': UpdateSessionMetaWidget,
+  'mcp__nimbalyst-session-naming__name_session': UpdateSessionMetaWidget,
+  'update_tags': UpdateSessionMetaWidget,
+  'mcp__nimbalyst-session-naming__update_tags': UpdateSessionMetaWidget,
 };
 
 /**

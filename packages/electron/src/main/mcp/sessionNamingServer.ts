@@ -323,17 +323,28 @@ function createSessionNamingMcpServer(aiSessionId: string): Server {
     };
   });
 
-  // Helper to build the full metadata summary for tool responses
-  async function buildMetaSummary(notes: string[]): Promise<string> {
-    const currentName = getSessionTitleFn ? await getSessionTitleFn(aiSessionId) : null;
-    const currentTags: string[] = getSessionTagsFn ? await getSessionTagsFn(aiSessionId) : [];
-    const currentPhase = getSessionPhaseFn ? await getSessionPhaseFn(aiSessionId) : null;
+  // Snapshot the current session metadata state
+  async function snapshotMeta(): Promise<{ name: string | null; tags: string[]; phase: string | null }> {
+    const name = getSessionTitleFn ? await getSessionTitleFn(aiSessionId) : null;
+    const tags: string[] = getSessionTagsFn ? await getSessionTagsFn(aiSessionId) : [];
+    const phase = getSessionPhaseFn ? await getSessionPhaseFn(aiSessionId) : null;
+    return { name, tags, phase };
+  }
 
+  // Build structured JSON response with before/after state for the widget
+  function buildMetaResponse(
+    notes: string[],
+    before: { name: string | null; tags: string[]; phase: string | null },
+    after: { name: string | null; tags: string[]; phase: string | null },
+  ): string {
+    // Human-readable summary for the AI
     const parts = [...notes];
-    parts.push(`Name: ${currentName || '(not set)'}`);
-    parts.push(`Tags: ${currentTags.length > 0 ? currentTags.map(t => `#${t}`).join(', ') : '(none)'}`);
-    parts.push(`Phase: ${currentPhase || '(not set)'}`);
-    return parts.join('\n');
+    parts.push(`Name: ${after.name || '(not set)'}`);
+    parts.push(`Tags: ${after.tags.length > 0 ? after.tags.map(t => `#${t}`).join(', ') : '(none)'}`);
+    parts.push(`Phase: ${after.phase || '(not set)'}`);
+    const summary = parts.join('\n');
+
+    return JSON.stringify({ summary, before, after });
   }
 
   // Tool execution handler - aiSessionId is captured from outer scope
@@ -362,6 +373,8 @@ function createSessionNamingMcpServer(aiSessionId: string): Server {
         };
       }
 
+      // Capture state before changes for the widget transition display
+      const before = await snapshotMeta();
       const notes: string[] = [];
 
       // Handle name (write-once)
@@ -495,10 +508,11 @@ function createSessionNamingMcpServer(aiSessionId: string): Server {
         }
       }
 
-      // Build full summary with current state
-      const summary = await buildMetaSummary(notes);
+      // Build structured response with before/after for widget
+      const after = await snapshotMeta();
+      const response = buildMetaResponse(notes, before, after);
       return {
-        content: [{ type: "text", text: summary }],
+        content: [{ type: "text", text: response }],
         isError: false,
       };
     } else {
