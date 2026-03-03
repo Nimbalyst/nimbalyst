@@ -178,7 +178,7 @@ export class MCPConfigBuilder {
       };
     }
 
-    // session-naming server (provides name_session tool)
+    // session-naming server (provides update_session_meta tool)
     if (internalServers.sessionNamingPort && sessionId) {
       config['nimbalyst-session-naming'] = {
         type: 'sse',

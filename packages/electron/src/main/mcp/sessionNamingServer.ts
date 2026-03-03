@@ -47,6 +47,14 @@ let getSessionTagsFn:
   | ((sessionId: string) => Promise<string[]>)
   | null = null;
 
+let getSessionTitleFn:
+  | ((sessionId: string) => Promise<string | null>)
+  | null = null;
+
+let getSessionPhaseFn:
+  | ((sessionId: string) => Promise<string | null>)
+  | null = null;
+
 /**
  * Set the update function for session titles (called once at startup)
  */
@@ -81,6 +89,24 @@ export function setGetSessionTagsFn(
   getTagsFn: (sessionId: string) => Promise<string[]>
 ) {
   getSessionTagsFn = getTagsFn;
+}
+
+/**
+ * Set the function to get current title for a session (called once at startup)
+ */
+export function setGetSessionTitleFn(
+  getTitleFn: (sessionId: string) => Promise<string | null>
+) {
+  getSessionTitleFn = getTitleFn;
+}
+
+/**
+ * Set the function to get current phase for a session (called once at startup)
+ */
+export function setGetSessionPhaseFn(
+  getPhaseFn: (sessionId: string) => Promise<string | null>
+) {
+  getSessionPhaseFn = getPhaseFn;
 }
 
 export function cleanupSessionNamingServer() {
@@ -247,13 +273,13 @@ function createSessionNamingMcpServer(aiSessionId: string): Server {
   // Register tool handlers with aiSessionId captured in closure
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     // Build dynamic tag description with existing workspace tags
-    let tagDescription = 'Tags describing this work. Use for type of work (bug-fix, feature, refactor), area/module (electron, runtime, ios), status, or any relevant category.';
+    let addTagDescription = 'Tags to add to the session. Use for type of work (bug-fix, feature, refactor), area/module (electron, runtime, ios), status, or any relevant category.';
     if (getWorkspaceTagsFn) {
       try {
         const existingTags = await getWorkspaceTagsFn(aiSessionId);
         if (existingTags.length > 0) {
           const tagList = existingTags.slice(0, 20).map(t => `${t.name} (${t.count})`).join(', ');
-          tagDescription += ` Existing tags in this workspace: ${tagList}. Use existing tags for consistency, or create new ones as needed.`;
+          addTagDescription += ` Existing tags in this workspace: ${tagList}. Use existing tags for consistency, or create new ones as needed.`;
         }
       } catch {
         // Ignore - just use default description
@@ -263,43 +289,21 @@ function createSessionNamingMcpServer(aiSessionId: string): Server {
     return {
       tools: [
         {
-          name: "name_session",
+          name: "update_session_meta",
           description:
-            "Set a concise, descriptive name and optional tags for the current AI chat session. This should be called ONCE at the start of the conversation after understanding the user's task. The name should be 2-5 words with the descriptive part FIRST and action word LAST (noun-phrase style for easier scanning).",
+            "Update session metadata. On the first call, set name, tags, and phase. On subsequent calls, update tags and/or phase. The name can only be set once -- if already set, the name is ignored but other fields are still applied. Always returns the full current session metadata.",
           inputSchema: {
             type: "object",
             properties: {
               name: {
                 type: "string",
                 description:
-                  'A concise session name (2-5 words) with descriptive part first. Examples: "Authentication bug fix", "Dark mode implementation", "Database layer refactor", "Crash report analysis"',
+                  'A concise session name (2-5 words) with descriptive part first. Can only be set once per session. Examples: "Authentication bug fix", "Dark mode implementation", "Database layer refactor"',
               },
-              tags: {
-                type: "array",
-                items: { type: "string" },
-                description: tagDescription,
-              },
-              phase: {
-                type: "string",
-                enum: ["backlog", "planning", "implementing", "validating", "complete"],
-                description:
-                  'The current phase of work. Controls which kanban column the session appears in. Use "planning" for exploration/design, "implementing" for coding, "validating" for testing, "complete" when done.',
-              },
-            },
-            required: ["name"],
-          },
-        },
-        {
-          name: "update_tags",
-          description:
-            "Update tags on this AI session. Use to change status (e.g., planning -> implementing -> complete) or add/remove tags as context changes during the session.",
-          inputSchema: {
-            type: "object",
-            properties: {
               add: {
                 type: "array",
                 items: { type: "string" },
-                description: "Tags to add to the session",
+                description: addTagDescription,
               },
               remove: {
                 type: "array",
@@ -310,7 +314,7 @@ function createSessionNamingMcpServer(aiSessionId: string): Server {
                 type: "string",
                 enum: ["backlog", "planning", "implementing", "validating", "complete"],
                 description:
-                  'Update the session phase. Controls which kanban column the session appears in.',
+                  'The current phase of work. Controls which kanban column the session appears in. Use "planning" for exploration/design, "implementing" for coding, "validating" for testing, "complete" when done.',
               },
             },
           },
@@ -319,6 +323,19 @@ function createSessionNamingMcpServer(aiSessionId: string): Server {
     };
   });
 
+  // Helper to build the full metadata summary for tool responses
+  async function buildMetaSummary(notes: string[]): Promise<string> {
+    const currentName = getSessionTitleFn ? await getSessionTitleFn(aiSessionId) : null;
+    const currentTags: string[] = getSessionTagsFn ? await getSessionTagsFn(aiSessionId) : [];
+    const currentPhase = getSessionPhaseFn ? await getSessionPhaseFn(aiSessionId) : null;
+
+    const parts = [...notes];
+    parts.push(`Name: ${currentName || '(not set)'}`);
+    parts.push(`Tags: ${currentTags.length > 0 ? currentTags.map(t => `#${t}`).join(', ') : '(none)'}`);
+    parts.push(`Phase: ${currentPhase || '(not set)'}`);
+    return parts.join('\n');
+  }
+
   // Tool execution handler - aiSessionId is captured from outer scope
   server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
     const { name, arguments: args } = request.params;
@@ -326,203 +343,164 @@ function createSessionNamingMcpServer(aiSessionId: string): Server {
     // Strip MCP server prefix if present
     const toolName = name.replace(/^mcp__nimbalyst-session-naming__/, "");
 
-    if (toolName === "name_session") {
-      const sessionName = args?.name;
-      const tags = args?.tags as string[] | undefined;
+    if (toolName === "update_session_meta") {
+      const sessionName = args?.name as string | undefined;
+      const addTags = args?.add as string[] | undefined;
+      const removeTags = args?.remove as string[] | undefined;
       const phase = args?.phase as string | undefined;
 
-      // Validate session name
-      if (!sessionName || typeof sessionName !== "string") {
+      // Require at least one parameter
+      if (!sessionName && !addTags?.length && !removeTags?.length && !phase) {
         return {
           content: [
             {
               type: "text",
-              text: 'Error: The "name" parameter is required and must be a string. Example: { "name": "Database layer refactor" }',
+              text: 'Error: At least one of "name", "add", "remove", or "phase" must be provided.',
             },
           ],
           isError: true,
         };
       }
 
-      // Validate length (max 100 chars as per database schema)
-      if (sessionName.length > 100) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error: Session name too long (${sessionName.length} chars, max 100)`,
-            },
-          ],
-          isError: true,
-        };
-      }
+      const notes: string[] = [];
 
-      // Validate tags if provided
-      if (tags !== undefined && !Array.isArray(tags)) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: 'Error: "tags" must be an array of strings.',
-            },
-          ],
-          isError: true,
-        };
-      }
-
-      try {
-        // Use the aiSessionId captured in the closure
-        // The updateSessionTitleFn performs an atomic check-and-set at the database level
-        await updateSessionTitleFn!(aiSessionId, sessionName);
-
-        // Set tags and/or phase if provided
-        const metadataUpdate: Record<string, unknown> = {};
-        if (tags && tags.length > 0) metadataUpdate.tags = tags;
-        if (phase) metadataUpdate.phase = phase;
-
-        if (Object.keys(metadataUpdate).length > 0 && updateSessionMetadataFn) {
-          try {
-            await updateSessionMetadataFn(aiSessionId, metadataUpdate);
-          } catch (metadataError) {
-            console.error("[Session Naming MCP] Failed to set metadata (title was set successfully):", metadataError);
-          }
-        }
-
-        const parts = [`Successfully named session: "${sessionName}"`];
-        if (tags && tags.length > 0) {
-          parts.push(`Tags: ${tags.map(t => `#${t}`).join(', ')}`);
-        }
-        if (phase) {
-          parts.push(`Phase: ${phase}`);
-        }
-
-        return {
-          content: [
-            {
-              type: "text",
-              text: parts.join(". "),
-            },
-          ],
-          isError: false,
-        };
-      } catch (error) {
-        console.error(
-          "[Session Naming MCP] Failed to update session title:",
-          error
-        );
-
-        // Check if this is the "already named" error
-        const errorMessage =
-          error instanceof Error ? error.message : "Unknown error";
-        if (errorMessage.includes("already been named")) {
+      // Handle name (write-once)
+      if (sessionName) {
+        if (typeof sessionName !== "string") {
           return {
             content: [
               {
                 type: "text",
-                text: `Error: This session has already been named. The name_session tool can only be called once per session.`,
+                text: 'Error: "name" must be a string.',
               },
             ],
             isError: true,
           };
         }
 
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error updating session title: ${errorMessage}`,
-            },
-          ],
-          isError: true,
-        };
-      }
-    } else if (toolName === "update_tags") {
-      const addTags = args?.add as string[] | undefined;
-      const removeTags = args?.remove as string[] | undefined;
-      const phase = args?.phase as string | undefined;
-
-      if (!addTags?.length && !removeTags?.length && !phase) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: 'Error: At least one of "add", "remove", or "phase" must be provided.',
-            },
-          ],
-          isError: true,
-        };
-      }
-
-      if (!updateSessionMetadataFn) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Error: Session metadata update not available.",
-            },
-          ],
-          isError: true,
-        };
-      }
-
-      try {
-        // Get current tags from session via injected function (no dynamic imports!)
-        const currentTags: string[] = getSessionTagsFn
-          ? await getSessionTagsFn(aiSessionId)
-          : [];
-
-        // Apply add/remove
-        let newTags = [...currentTags];
-        if (removeTags?.length) {
-          const removeSet = new Set(removeTags);
-          newTags = newTags.filter(t => !removeSet.has(t));
+        if (sessionName.length > 100) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Error: Session name too long (${sessionName.length} chars, max 100)`,
+              },
+            ],
+            isError: true,
+          };
         }
-        if (addTags?.length) {
-          for (const tag of addTags) {
-            if (!newTags.includes(tag)) {
-              newTags.push(tag);
-            }
+
+        try {
+          await updateSessionTitleFn!(aiSessionId, sessionName);
+          notes.push(`Set name: "${sessionName}"`);
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : "Unknown error";
+          if (errorMessage.includes("already been named")) {
+            notes.push(`Note: Name already set, skipped.`);
+          } else {
+            console.error("[Session Naming MCP] Failed to update session title:", error);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Error updating session title: ${errorMessage}`,
+                },
+              ],
+              isError: true,
+            };
           }
         }
-
-        const metadataUpdate: Record<string, unknown> = { tags: newTags };
-        if (phase) metadataUpdate.phase = phase;
-
-        await updateSessionMetadataFn(aiSessionId, metadataUpdate);
-
-        const parts: string[] = [];
-        if (addTags?.length) {
-          parts.push(`Added: ${addTags.map(t => `#${t}`).join(', ')}`);
-        }
-        if (removeTags?.length) {
-          parts.push(`Removed: ${removeTags.map(t => `#${t}`).join(', ')}`);
-        }
-        parts.push(`Current tags: ${newTags.length > 0 ? newTags.map(t => `#${t}`).join(', ') : '(none)'}`);
-        if (phase) {
-          parts.push(`Phase: ${phase}`);
-        }
-
-        return {
-          content: [
-            {
-              type: "text",
-              text: parts.join(". "),
-            },
-          ],
-          isError: false,
-        };
-      } catch (error) {
-        console.error("[Session Naming MCP] Failed to update tags:", error);
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error updating tags: ${error instanceof Error ? error.message : "Unknown error"}`,
-            },
-          ],
-          isError: true,
-        };
       }
+
+      // Handle tags (add/remove)
+      if (addTags?.length || removeTags?.length) {
+        if (!updateSessionMetadataFn) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: "Error: Session metadata update not available.",
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        try {
+          const currentTags: string[] = getSessionTagsFn
+            ? await getSessionTagsFn(aiSessionId)
+            : [];
+
+          let newTags = [...currentTags];
+          if (removeTags?.length) {
+            const removeSet = new Set(removeTags);
+            newTags = newTags.filter(t => !removeSet.has(t));
+          }
+          if (addTags?.length) {
+            for (const tag of addTags) {
+              if (!newTags.includes(tag)) {
+                newTags.push(tag);
+              }
+            }
+          }
+
+          const metadataUpdate: Record<string, unknown> = { tags: newTags };
+          if (phase) metadataUpdate.phase = phase;
+
+          await updateSessionMetadataFn(aiSessionId, metadataUpdate);
+
+          if (addTags?.length) notes.push(`Added tags: ${addTags.map(t => `#${t}`).join(', ')}`);
+          if (removeTags?.length) notes.push(`Removed tags: ${removeTags.map(t => `#${t}`).join(', ')}`);
+          if (phase) notes.push(`Set phase: ${phase}`);
+        } catch (error) {
+          console.error("[Session Naming MCP] Failed to update tags:", error);
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Error updating tags: ${error instanceof Error ? error.message : "Unknown error"}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      } else if (phase) {
+        // Phase-only update (no tag changes)
+        if (!updateSessionMetadataFn) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: "Error: Session metadata update not available.",
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        try {
+          await updateSessionMetadataFn(aiSessionId, { phase });
+          notes.push(`Set phase: ${phase}`);
+        } catch (error) {
+          console.error("[Session Naming MCP] Failed to update phase:", error);
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Error updating phase: ${error instanceof Error ? error.message : "Unknown error"}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+
+      // Build full summary with current state
+      const summary = await buildMetaSummary(notes);
+      return {
+        content: [{ type: "text", text: summary }],
+        isError: false,
+      };
     } else {
       throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
     }

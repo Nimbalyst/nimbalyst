@@ -7,6 +7,8 @@ import {
   setUpdateSessionMetadataFn,
   setGetWorkspaceTagsFn,
   setGetSessionTagsFn,
+  setGetSessionTitleFn,
+  setGetSessionPhaseFn,
   shutdownSessionNamingHttpServer
 } from '../mcp/sessionNamingServer';
 import { getDatabase } from '../database/initialize';
@@ -96,7 +98,7 @@ export class SessionNamingService {
               console.error('[SessionNamingService] Failed to update blitz display name:', error);
             }
 
-            // Mark child as named so name_session won't be called again, but keep model-based title
+            // Mark child as named so update_session_meta won't set name again, but keep model-based title
             await AISessionsRepository.updateMetadata(sessionId, { hasBeenNamed: true } as any);
             return;
           }
@@ -185,10 +187,22 @@ export class SessionNamingService {
           }
         });
 
-        // Set the session tags query function (for update_tags to read current tags)
+        // Set the session tags query function (for reading current tags)
         setGetSessionTagsFn(async (sessionId: string) => {
           const session = await AISessionsRepository.get(sessionId);
           return (session?.metadata as any)?.tags || [];
+        });
+
+        // Set the session title query function (for reading current name)
+        setGetSessionTitleFn(async (sessionId: string) => {
+          const session = await AISessionsRepository.get(sessionId);
+          return session?.title || null;
+        });
+
+        // Set the session phase query function (for reading current phase)
+        setGetSessionPhaseFn(async (sessionId: string) => {
+          const session = await AISessionsRepository.get(sessionId);
+          return (session?.metadata as any)?.phase || null;
         });
 
         // Start the MCP server

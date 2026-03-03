@@ -233,7 +233,7 @@ export interface SessionData {
   lastReadMessageTimestamp?: number;  // Timestamp of the last message the user has read
 
   // Session naming tracking
-  hasBeenNamed?: boolean;  // Whether the session has been named by name_session tool
+  hasBeenNamed?: boolean;  // Whether the session has been named by update_session_meta tool
 
   // Archive state
   isArchived?: boolean;  // Whether the session is archived

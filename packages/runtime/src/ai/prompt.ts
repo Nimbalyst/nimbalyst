@@ -7,69 +7,58 @@ import type { DocumentContext } from './types';
 function buildSessionNamingSection(): string {
   return `
 
-## Session Naming and Tagging
+## Session Metadata
 
-You have access to two tools for session organization:
+You have one tool for managing session metadata: \`mcp__nimbalyst-session-naming__update_session_meta\`
 
-### \`mcp__nimbalyst-session-naming__name_session\` - Name and tag the session
+This tool sets the session name, tags, and phase. It always returns the full current metadata in its response.
 
-CRITICAL: You MUST call this tool ONCE per conversation, during your first turn. If you see a successful call to this tool earlier in the chat history, do NOT call it again.
+### First turn
 
-Parameters:
-- \`name\` (required): A concise session name (2-5 words)
-- \`tags\` (optional): Array of tags describing this work
+CRITICAL: You MUST call this tool during your first turn to set the session name.
 
-Requirements for the session name:
-- 2-5 words long
-- Concise and descriptive
-- Put the unique/descriptive part FIRST, action word LAST (noun-phrase style for easier scanning)
+Call it as soon as you understand what the user wants. Usually this means right away, but if the user asks you to 'implement plan.md' you would look at plan.md first to understand before naming. You **MUST** call this before the end of your first turn.
+
+On the first call, provide \`name\`, \`add\` (tags), and \`phase\`:
+\`{ "name": "Dark mode implementation", "add": ["feature", "ui"], "phase": "implementing" }\`
+
+### Subsequent calls
+
+Call again to update tags or phase as work progresses. The name can only be set once -- subsequent attempts are silently ignored while other fields are still applied.
+
+- Update phase: \`{ "phase": "validating" }\`
+- Add/remove tags: \`{ "add": ["committed"], "remove": ["uncommitted"] }\`
+
+You do NOT need to call this on every message -- only when the nature of the work changes.
+
+### Name guidelines
+
+- 2-5 words, concise and descriptive
+- Put the unique/descriptive part FIRST, action word LAST (noun-phrase style)
 - Based on what the USER asked for, not your solution
 
-Good examples (descriptive part first):
-- "Electron crash report analysis" (not "Analyze Electron crash report")
-- "Dark mode implementation" (not "Implement dark mode")
-- "Login bug debugging" (not "Debug login bug")
-- "Database layer refactor" (not "Refactor database layer")
-- "Session naming prompt update" (not "Update session naming prompt")
+Good examples: "Electron crash report analysis", "Dark mode implementation", "Database layer refactor"
+Bad examples: "Fix null check in handleAuth" (too specific), "Update code" (too vague)
 
-Bad examples:
-- "Fix null check in handleAuth" (too specific to solution)
-- "Update code" (too vague)
-- "Working on feature" (not descriptive)
+### Tag guidelines
 
-Requirements for tags:
-- Always include tags when naming a session
 - Use lowercase, hyphen-separated words (e.g., "bug-fix", "feature", "refactor")
-- Include tags for: type of work (bug-fix, feature, refactor, research, design) and area/module if relevant (electron, runtime, ios, collabv3, mcp)
-- Reuse existing workspace tags shown in the tool description for consistency
-- Create new tags when no existing tag fits
-- Do NOT include status tags like "planning" or "implementing" in tags -- use the \`phase\` parameter instead
+- Include tags for type of work and area/module if relevant
+- Reuse existing workspace tags (shown in the tool description) for consistency
+- Do NOT use status tags like "planning" or "implementing" -- use the \`phase\` parameter instead
 
-Requirements for phase:
-- Always set the phase when naming a session
+### Phase guidelines
+
 - Phase controls which kanban column the session appears in
 - Valid phases: "backlog", "planning", "implementing", "validating", "complete"
-- Choose based on the current state of work: use "planning" if you're exploring/designing, "implementing" if writing code, etc.
+- Choose based on the current state of work
 
-Call this tool as soon as you understand what the user wants to accomplish. Usually this means you will call it right away, but for example if the user asks you to 'implement plan.md' you would want to look at plan.md to understand before giving the session a name. You **MUST** call this before the end of your first turn. After it has been called once successfully in a conversation, subsequent calls will return an error. If you see a successful call anywhere in your chat history, you should not call it again.
+### Commit tracking
 
-**IMPORTANT: You must name the session before ending your first turn.** This is a hard requirement - do not finish your first response without calling \`mcp__nimbalyst-session-naming__name_session\`.
-
-### \`mcp__nimbalyst-session-naming__update_tags\` - Update tags and phase during the session
-
-Use this to update tags or phase as the session progresses:
-- When transitioning from planning to implementation: \`{ add: ["implementing"], remove: ["planning"] }\` -- but prefer updating the phase instead
-- When work is complete: \`{ add: ["complete"], remove: ["implementing"] }\`
-- When you discover the task is different than expected: update tags accordingly
-- You can also update the session phase: \`{ phase: "implementing" }\`
-
-**Commit status tracking:**
-- When you edit or create files during a session, add the \`uncommitted\` tag: \`{ add: ["uncommitted"], remove: ["committed"] }\`
-- When a git commit is created that includes the session's changes, flip to \`committed\`: \`{ add: ["committed"], remove: ["uncommitted"] }\`
+- When you edit or create files during a session, add the \`uncommitted\` tag: \`{ "add": ["uncommitted"], "remove": ["committed"] }\`
+- When a git commit is created that includes the session's changes, flip to \`committed\`: \`{ "add": ["committed"], "remove": ["uncommitted"] }\`
 - If further file edits happen after a commit, flip back to \`uncommitted\`
-- This lets the user see at a glance whether each session's changes have been committed
-
-You do NOT need to call this on every message - only when the nature of the work changes.`;
+- This lets the user see at a glance whether each session's changes have been committed\`;
 }
 
 /**

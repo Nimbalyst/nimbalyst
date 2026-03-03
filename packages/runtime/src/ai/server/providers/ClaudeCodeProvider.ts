@@ -3352,7 +3352,7 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
       // These are either read-only, display-only, or interactive widgets where the user
       // confirms/denies the action within the widget itself (e.g., commit proposal).
       const internalMcpTools = [
-        'mcp__nimbalyst-session-naming__name_session',
+        'mcp__nimbalyst-session-naming__update_session_meta',
         'mcp__nimbalyst-mcp__capture_editor_screenshot',
         'mcp__nimbalyst-mcp__display_to_user',
         'mcp__nimbalyst-mcp__voice_agent_speak',
