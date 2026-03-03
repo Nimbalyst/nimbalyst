@@ -63,6 +63,11 @@ export function useOnboarding({
     // Update the atom so UI reflects the change immediately (without requiring refresh)
     updateDeveloperSettings({ developerMode: data.developerMode });
 
+    // If user selected developer mode, switch to agent mode
+    if (data.developerMode) {
+      setActiveMode('agent');
+    }
+
     if (posthog) {
       // Set person properties (persist to user profile)
       const personProperties: Record<string, string | boolean> = {
@@ -147,7 +152,7 @@ export function useOnboarding({
 
     // After onboarding closes, check if we need to show Windows warning
     checkWindowsWarning();
-  }, [posthog, workspacePath, updateDeveloperSettings]);
+  }, [posthog, workspacePath, updateDeveloperSettings, setActiveMode]);
 
   // Handle unified onboarding skip
   const handleOnboardingSkip = useCallback(async () => {
