@@ -1,14 +1,10 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo, memo } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
-import { MaterialSymbol, ProviderIcon, copyToClipboard } from '@nimbalyst/runtime';
+import { MaterialSymbol, ProviderIcon } from '@nimbalyst/runtime';
 import { getRelativeTimeString } from '../../utils/dateFormatting';
-import { sessionOrChildProcessingAtom, sessionUnreadAtom, sessionPendingPromptAtom, sessionHasPendingInteractivePromptAtom, reparentSessionAtom, refreshSessionListAtom, sessionShareAtom, addSessionShareAtom, removeSessionShareAtom, shareKeysAtom, buildShareUrl } from '../../store';
+import { sessionOrChildProcessingAtom, sessionUnreadAtom, sessionPendingPromptAtom, sessionHasPendingInteractivePromptAtom, reparentSessionAtom, refreshSessionListAtom, sessionShareAtom } from '../../store';
 import { convertToWorkstreamAtom } from '../../store/atoms/sessions';
-import { setSessionPhaseAtom, SESSION_PHASE_COLUMNS, type SessionPhase } from '../../store/atoms/sessionKanban';
-import type { ShareInfo } from '../../store';
-import { errorNotificationService } from '../../services/ErrorNotificationService';
-import { dialogRef, DIALOG_IDS } from '../../dialogs';
-import type { ShareDialogData } from '../../dialogs';
+import { SessionContextMenu } from './SessionContextMenu';
 
 /**
  * Combined status indicator that subscribes to this session's state atoms.
@@ -137,26 +133,20 @@ export const SessionListItem = memo<SessionListItemProps>(({
 }) => {
   const [isHovering, setIsHovering] = useState(false);
   const [showContextMenu, setShowContextMenu] = useState(false);
-  const [showPhaseSubmenu, setShowPhaseSubmenu] = useState(false);
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
-  const [adjustedContextMenuPosition, setAdjustedContextMenuPosition] = useState<{ x: number; y: number } | null>(null);
   const [isRenaming, setIsRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState('');
   const [isDragging, setIsDragging] = useState(false);
   const [isValidDropTarget, setIsValidDropTarget] = useState(false);
-  const contextMenuRef = useRef<HTMLDivElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
 
   // Atom setters for drag-drop
   const reparentSession = useSetAtom(reparentSessionAtom);
   const convertToWorkstream = useSetAtom(convertToWorkstreamAtom);
   const refreshSessionList = useSetAtom(refreshSessionListAtom);
-  const setSessionPhase = useSetAtom(setSessionPhaseAtom);
 
-  // Share state
+  // Share state (for the share icon indicator in the list item)
   const shareInfo = useAtomValue(sessionShareAtom(id));
-  const shareKeys = useAtomValue(shareKeysAtom);
-  const removeShare = useSetAtom(removeSessionShareAtom);
 
   // Determine if this session can be dragged
   // Can drag if: (1) Has a parent (is a child session), OR (2) Is an orphan (no parent, no children)
@@ -168,43 +158,7 @@ export const SessionListItem = memo<SessionListItemProps>(({
   // Worktree sessions/workstreams cannot accept drops - they are tied to their git worktree
   const isDropTarget = !isWorktreeSession && (isWorkstream || parentSessionId === null);
 
-  const handleDelete = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setShowContextMenu(false);
-    if (onDelete) {
-      onDelete();
-    }
-  };
-
-  const handleArchiveToggle = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setShowContextMenu(false);
-    if (isArchived && onUnarchive) {
-      onUnarchive();
-    } else if (!isArchived && onArchive) {
-      onArchive();
-    }
-  };
-
-  const handlePinToggle = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setShowContextMenu(false);
-    if (onPinToggle) {
-      onPinToggle(!isPinned);
-    }
-  };
-
-  const handleBranch = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setShowContextMenu(false);
-    if (onBranch) {
-      onBranch();
-    }
-  };
-
-  const handleRemoveFromWorkstream = useCallback(async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setShowContextMenu(false);
+  const handleRemoveFromWorkstream = useCallback(async () => {
     if (!parentSessionId || !projectPath) return;
 
     const success = await reparentSession({
@@ -219,61 +173,6 @@ export const SessionListItem = memo<SessionListItemProps>(({
     }
   }, [id, parentSessionId, projectPath, reparentSession, refreshSessionList]);
 
-  const handleCopySessionId = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setShowContextMenu(false);
-    copyToClipboard(id);
-  };
-
-  const handleExportHtml = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setShowContextMenu(false);
-    (window as any).electronAPI?.exportSessionToHtml({ sessionId: id });
-  };
-
-  const handleCopyTranscript = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setShowContextMenu(false);
-    (window as any).electronAPI?.exportSessionToClipboard({ sessionId: id });
-  };
-
-  const handleShareLink = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setShowContextMenu(false);
-    dialogRef.current?.open<ShareDialogData>(DIALOG_IDS.SHARE, {
-      contentType: 'session',
-      sessionId: id,
-      title,
-    });
-  };
-
-  const handleCopyShareLink = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setShowContextMenu(false);
-    if (shareInfo) {
-      const url = buildShareUrl(shareInfo.shareId, shareKeys.get(id));
-      copyToClipboard(url);
-      errorNotificationService.showInfo('Share link copied', 'The share link has been copied to your clipboard.', { duration: 3000 });
-    }
-  };
-
-  const handleUnshare = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setShowContextMenu(false);
-    if (!shareInfo) return;
-    try {
-      const result = await (window as any).electronAPI?.deleteShare({ shareId: shareInfo.shareId, sessionId: id });
-      if (result?.success) {
-        removeShare(id);
-        errorNotificationService.showInfo('Session unshared', 'The share link has been removed.', { duration: 3000 });
-      } else if (result?.error) {
-        errorNotificationService.showError('Unshare failed', result.error);
-      }
-    } catch (error) {
-      errorNotificationService.showError('Unshare failed', error instanceof Error ? error.message : 'An unexpected error occurred');
-    }
-  };
-
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -283,16 +182,7 @@ export const SessionListItem = memo<SessionListItemProps>(({
 
   const handleCloseContextMenu = useCallback(() => {
     setShowContextMenu(false);
-    setAdjustedContextMenuPosition(null);
-    setIsRenaming(false);
   }, []);
-
-  const handleRenameClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setShowContextMenu(false);
-    setRenameValue(title);
-    setIsRenaming(true);
-  };
 
   const handleRenameSubmit = () => {
     const trimmedValue = renameValue.trim();
@@ -452,35 +342,6 @@ export const SessionListItem = memo<SessionListItemProps>(({
     }
   }, [isRenaming]);
 
-  // Adjust context menu position to keep it within viewport
-  useEffect(() => {
-    if (showContextMenu && contextMenuRef.current) {
-      const rect = contextMenuRef.current.getBoundingClientRect();
-      const viewportWidth = window.innerWidth;
-      const viewportHeight = window.innerHeight;
-
-      let newX = contextMenuPosition.x;
-      let newY = contextMenuPosition.y;
-
-      // If menu extends beyond right edge, shift it left
-      if (contextMenuPosition.x + rect.width > viewportWidth) {
-        newX = contextMenuPosition.x - rect.width;
-      }
-      // If menu extends beyond bottom edge, shift it up
-      if (contextMenuPosition.y + rect.height > viewportHeight) {
-        newY = contextMenuPosition.y - rect.height;
-      }
-
-      // Ensure menu doesn't go off the left or top edge
-      newX = Math.max(0, newX);
-      newY = Math.max(0, newY);
-
-      if (newX !== contextMenuPosition.x || newY !== contextMenuPosition.y) {
-        setAdjustedContextMenuPosition({ x: newX, y: newY });
-      }
-    }
-  }, [showContextMenu, contextMenuPosition]);
-
   // Get the first line of the title (truncate if too long)
   const displayTitle = title || 'Untitled Session';
   const truncatedTitle = displayTitle.length > 40
@@ -524,7 +385,7 @@ export const SessionListItem = memo<SessionListItemProps>(({
       `}
       onClick={onClick}
       onMouseEnter={() => setIsHovering(true)}
-      onMouseLeave={() => { setIsHovering(false); setShowContextMenu(false); }}
+      onMouseLeave={() => setIsHovering(false)}
       onContextMenu={handleContextMenu}
       draggable={isDraggable}
       onDragStart={handleDragStart}
@@ -620,7 +481,11 @@ export const SessionListItem = memo<SessionListItemProps>(({
               ${isHovering ? 'visible opacity-70 pointer-events-auto hover:bg-[var(--nim-bg-tertiary)] hover:text-[var(--nim-text)] hover:opacity-100' : 'opacity-0 pointer-events-none'}
               disabled:cursor-default disabled:opacity-0 disabled:pointer-events-none
             `}
-            onClick={handleArchiveToggle}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (isArchived && onUnarchive) onUnarchive();
+              else if (!isArchived && onArchive) onArchive();
+            }}
             aria-label={isArchived ? `Unarchive ${isWorkstream ? 'workstream' : 'session'}` : `Archive ${isWorkstream ? 'workstream' : 'session'}`}
             title={isArchived ? `Unarchive ${isWorkstream ? 'workstream' : 'session'}` : `Archive ${isWorkstream ? 'workstream' : 'session'}`}
           >
@@ -635,180 +500,25 @@ export const SessionListItem = memo<SessionListItemProps>(({
 
       {/* Context Menu */}
       {showContextMenu && (
-        <div
-          ref={contextMenuRef}
-          className="session-list-item-context-menu fixed z-[1000] min-w-[140px] p-1 bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-md shadow-[0_4px_12px_rgba(0,0,0,0.15)]"
-          style={{
-            left: (adjustedContextMenuPosition || contextMenuPosition).x,
-            top: (adjustedContextMenuPosition || contextMenuPosition).y
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {onRename && (
-            <button
-              className="session-list-item-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
-              onClick={handleRenameClick}
-            >
-              <MaterialSymbol icon="edit" size={14} />
-              Rename
-            </button>
-          )}
-          {onPinToggle && (
-            <button
-              className="session-list-item-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
-              onClick={handlePinToggle}
-            >
-              <MaterialSymbol icon="push_pin" size={14} />
-              {isPinned ? 'Unpin' : 'Pin'}
-            </button>
-          )}
-          {onBranch && (
-            <button
-              className="session-list-item-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
-              onClick={handleBranch}
-            >
-              <MaterialSymbol icon="fork_right" size={14} />
-              Branch conversation
-            </button>
-          )}
-          {parentSessionId && !isWorktreeSession && (
-            <button
-              className="session-list-item-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
-              onClick={handleRemoveFromWorkstream}
-            >
-              <MaterialSymbol icon="drive_file_move_rtl" size={14} />
-              Remove from workstream
-            </button>
-          )}
-          <button
-            className="session-list-item-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
-            onClick={handleCopySessionId}
-          >
-            <MaterialSymbol icon="content_copy" size={14} />
-            Copy Session ID
-          </button>
-          {shareInfo ? (
-            <>
-              <button
-                className="session-list-item-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
-                onClick={handleCopyShareLink}
-              >
-                <MaterialSymbol icon="content_copy" size={14} />
-                Copy share link
-              </button>
-              <button
-                className="session-list-item-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
-                onClick={handleUnshare}
-              >
-                <MaterialSymbol icon="link_off" size={14} />
-                Unshare
-              </button>
-            </>
-          ) : (
-            <button
-              className="session-list-item-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
-              onClick={handleShareLink}
-            >
-              <MaterialSymbol icon="link" size={14} />
-              Share link
-            </button>
-          )}
-          <button
-            className="session-list-item-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
-            onClick={handleExportHtml}
-          >
-            <MaterialSymbol icon="download" size={14} />
-            Export as HTML
-          </button>
-          <button
-            className="session-list-item-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
-            onClick={handleCopyTranscript}
-          >
-            <MaterialSymbol icon="assignment" size={14} />
-            Copy transcript
-          </button>
-          {/* Set Phase submenu */}
-          <div
-            className="relative"
-            onMouseEnter={() => setShowPhaseSubmenu(true)}
-            onMouseLeave={() => setShowPhaseSubmenu(false)}
-          >
-            <button
-              className="session-list-item-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
-              onClick={(e) => { e.stopPropagation(); setShowPhaseSubmenu(!showPhaseSubmenu); }}
-            >
-              <MaterialSymbol icon="view_kanban" size={14} />
-              <span className="flex-1">Set Phase</span>
-              {phase && (
-                <span className="text-[10px] text-[var(--nim-text-faint)] ml-1">{phase}</span>
-              )}
-              <MaterialSymbol icon="chevron_right" size={12} />
-            </button>
-            {showPhaseSubmenu && (
-              <div className="absolute left-full top-0 ml-0.5 min-w-[140px] p-1 bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-md shadow-[0_4px_12px_rgba(0,0,0,0.15)] z-[1001]">
-                {SESSION_PHASE_COLUMNS.map((col) => (
-                  <button
-                    key={col.value}
-                    className={`session-list-item-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0 ${phase === col.value ? 'text-[var(--nim-primary)]' : 'text-[var(--nim-text)]'}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setShowContextMenu(false);
-                      setShowPhaseSubmenu(false);
-                      setSessionPhase({ sessionId: id, phase: col.value });
-                    }}
-                  >
-                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: col.color }} />
-                    {col.label}
-                    {phase === col.value && <MaterialSymbol icon="check" size={14} className="ml-auto" />}
-                  </button>
-                ))}
-                {phase && (
-                  <>
-                    <div className="h-px bg-[var(--nim-border)] my-1" />
-                    <button
-                      className="session-list-item-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text-faint)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setShowContextMenu(false);
-                        setShowPhaseSubmenu(false);
-                        // Remove from board by setting phase to null via IPC
-                        window.electronAPI.invoke('sessions:update-session-metadata', id, { phase: null });
-                      }}
-                    >
-                      <MaterialSymbol icon="close" size={14} />
-                      Remove from board
-                    </button>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-          <button
-            className="session-list-item-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
-            onClick={handleArchiveToggle}
-          >
-            {isArchived ? (
-              <>
-                <MaterialSymbol icon="unarchive" size={14} />
-                Unarchive {isWorkstream ? 'Workstream' : 'Session'}
-              </>
-            ) : (
-              <>
-                <MaterialSymbol icon="archive" size={14} />
-                Archive {isWorkstream ? 'Workstream' : 'Session'}
-              </>
-            )}
-          </button>
-          {onDelete && (
-            <button
-              className="session-list-item-context-menu-item destructive flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-error)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-error)] hover:text-white [&_svg]:shrink-0"
-              onClick={handleDelete}
-            >
-              <MaterialSymbol icon="delete" size={14} />
-              Delete
-            </button>
-          )}
-        </div>
+        <SessionContextMenu
+          sessionId={id}
+          title={title}
+          position={contextMenuPosition}
+          onClose={handleCloseContextMenu}
+          isArchived={isArchived}
+          isPinned={isPinned}
+          isWorkstream={isWorkstream}
+          isWorktreeSession={isWorktreeSession}
+          parentSessionId={parentSessionId}
+          phase={phase}
+          onRename={onRename ? () => { setRenameValue(title); setIsRenaming(true); } : undefined}
+          onPinToggle={onPinToggle}
+          onBranch={onBranch}
+          onRemoveFromWorkstream={parentSessionId && !isWorktreeSession ? handleRemoveFromWorkstream : undefined}
+          onArchive={onArchive}
+          onUnarchive={onUnarchive}
+          onDelete={onDelete}
+        />
       )}
     </div>
   );

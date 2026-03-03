@@ -26,6 +26,7 @@ import {
 import { defaultAgentModelAtom } from '../../store/atoms/appSettings';
 import { convertToWorkstreamAtom } from '../../store/atoms/sessions';
 import { workstreamHasChildrenAtom } from '../../store/atoms/workstreamState';
+import { SessionContextMenu } from '../AgenticCoding/SessionContextMenu';
 import type { SerializableDocumentContext } from '../../hooks/useDocumentContext';
 
 export interface WorkstreamSessionTabsProps {
@@ -66,7 +67,6 @@ const SessionTab: React.FC<{
 
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
-  const contextMenuRef = useRef<HTMLDivElement>(null);
 
   // Rename state
   const [isRenaming, setIsRenaming] = useState(false);
@@ -79,25 +79,6 @@ const SessionTab: React.FC<{
     setContextMenuPosition({ x: e.clientX, y: e.clientY });
     setShowContextMenu(true);
   }, []);
-
-  const handleArchive = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    setShowContextMenu(false);
-    onArchive?.();
-  }, [onArchive]);
-
-  const handleUnarchive = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    setShowContextMenu(false);
-    onUnarchive?.();
-  }, [onUnarchive]);
-
-  const handleRenameClick = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    setShowContextMenu(false);
-    setRenameValue(title || '');
-    setIsRenaming(true);
-  }, [title]);
 
   const handleRenameSubmit = useCallback(() => {
     const trimmedValue = renameValue.trim();
@@ -126,20 +107,8 @@ const SessionTab: React.FC<{
     }
   }, [isRenaming]);
 
-  // Close context menu when clicking outside
-  useEffect(() => {
-    if (!showContextMenu) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
-        setShowContextMenu(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showContextMenu]);
-
   return (
-    <div className="relative" onMouseLeave={() => setShowContextMenu(false)}>
+    <div className="relative">
       <button
         className={`session-tab flex items-center gap-1.5 px-2.5 py-[5px] border-none rounded text-xs font-medium cursor-pointer whitespace-nowrap transition-colors duration-150 ${
           isActive
@@ -180,35 +149,17 @@ const SessionTab: React.FC<{
       </button>
 
       {/* Context Menu */}
-      {showContextMenu && (onArchive || onUnarchive || onRename) && (
-        <div
-          ref={contextMenuRef}
-          className="fixed z-[1000] min-w-[140px] bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-md shadow-[0_4px_12px_rgba(0,0,0,0.15)] p-1"
-          style={{
-            left: contextMenuPosition.x,
-            top: contextMenuPosition.y
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {onRename && (
-            <button
-              className="flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
-              onClick={handleRenameClick}
-            >
-              <MaterialSymbol icon="edit" size={14} />
-              Rename
-            </button>
-          )}
-          {(onArchive || onUnarchive) && (
-            <button
-              className="flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
-              onClick={isArchived ? handleUnarchive : handleArchive}
-            >
-              <MaterialSymbol icon={isArchived ? "unarchive" : "archive"} size={14} />
-              {isArchived ? 'Unarchive' : 'Archive'}
-            </button>
-          )}
-        </div>
+      {showContextMenu && (
+        <SessionContextMenu
+          sessionId={sessionId}
+          title={title || 'Untitled'}
+          position={contextMenuPosition}
+          onClose={() => setShowContextMenu(false)}
+          isArchived={isArchived}
+          onRename={onRename ? () => { setRenameValue(title || ''); setIsRenaming(true); } : undefined}
+          onArchive={onArchive}
+          onUnarchive={onUnarchive}
+        />
       )}
     </div>
   );

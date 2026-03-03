@@ -43,6 +43,7 @@ import {
   updateSessionStoreAtom,
   workstreamUnreadAtom,
 } from '../../store/atoms/sessions';
+import { SessionContextMenu } from '../AgenticCoding/SessionContextMenu';
 
 // ============================================================
 // Keyboard Navigation Types
@@ -350,13 +351,15 @@ function TranscriptPeek({ sessionId, anchorRef, onClose }: TranscriptPeekProps) 
 interface SessionKanbanCardProps {
   session: SessionMeta;
   onSelect: (sessionId: string) => void;
+  onArchive?: (sessionId: string) => void;
+  onRename?: (sessionId: string, newName: string) => void;
   phaseColor: string;
   isFocused?: boolean;
   showPeekOverride?: boolean;
   onPeekToggle?: () => void;
 }
 
-function SessionKanbanCard({ session, onSelect, phaseColor, isFocused, showPeekOverride, onPeekToggle }: SessionKanbanCardProps) {
+function SessionKanbanCard({ session, onSelect, onArchive, onRename, phaseColor, isFocused, showPeekOverride, onPeekToggle }: SessionKanbanCardProps) {
   const cardType = useMemo(() => getCardType(session), [session]);
   const cardState = useCardState(session.id, cardType);
   const stateStyle = CARD_STATE_STYLES[cardState.state];
@@ -366,6 +369,49 @@ function SessionKanbanCard({ session, onSelect, phaseColor, isFocused, showPeekO
   const showPeek = showPeekOverride ?? showPeekLocal;
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const peekIconRef = useRef<HTMLSpanElement>(null);
+
+  // Context menu state
+  const [showContextMenu, setShowContextMenu] = useState(false);
+  const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
+
+  // Inline rename state
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState('');
+  const renameInputRef = useRef<HTMLInputElement>(null);
+
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenuPosition({ x: e.clientX, y: e.clientY });
+    setShowContextMenu(true);
+  }, []);
+
+  const handleRenameSubmit = useCallback(() => {
+    const trimmedValue = renameValue.trim();
+    if (trimmedValue && trimmedValue !== session.title && onRename) {
+      onRename(session.id, trimmedValue);
+    }
+    setIsRenaming(false);
+  }, [renameValue, session.title, session.id, onRename]);
+
+  const handleRenameKeyDown = useCallback((e: React.KeyboardEvent) => {
+    e.stopPropagation();
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleRenameSubmit();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setIsRenaming(false);
+    }
+  }, [handleRenameSubmit]);
+
+  // Focus and select input when entering rename mode
+  useEffect(() => {
+    if (isRenaming && renameInputRef.current) {
+      renameInputRef.current.focus();
+      renameInputRef.current.select();
+    }
+  }, [isRenaming]);
 
   // Scroll focused card into view
   useEffect(() => {
@@ -429,6 +475,7 @@ function SessionKanbanCard({ session, onSelect, phaseColor, isFocused, showPeekO
           borderColor: isFocused ? undefined : stateStyle.border || undefined,
         }}
         onDoubleClick={() => onSelect(session.id)}
+        onContextMenu={handleContextMenu}
         data-testid="session-kanban-card"
         data-session-id={session.id}
       >
@@ -436,9 +483,22 @@ function SessionKanbanCard({ session, onSelect, phaseColor, isFocused, showPeekO
         <div className="flex items-start gap-1.5 mb-1.5">
           <CardTypeIcon type={cardType} provider={session.provider} />
           <div className="flex-1 min-w-0">
-            <div className="text-xs font-medium text-nim leading-snug line-clamp-2">
-              {session.title}
-            </div>
+            {isRenaming ? (
+              <input
+                ref={renameInputRef}
+                type="text"
+                className="w-full px-1 py-0.5 text-xs font-medium border border-[var(--nim-primary)] rounded bg-[var(--nim-bg)] text-[var(--nim-text)] outline-none"
+                value={renameValue}
+                onChange={(e) => setRenameValue(e.target.value)}
+                onKeyDown={handleRenameKeyDown}
+                onBlur={handleRenameSubmit}
+                onClick={(e) => e.stopPropagation()}
+              />
+            ) : (
+              <div className="text-xs font-medium text-nim leading-snug line-clamp-2">
+                {session.title}
+              </div>
+            )}
           </div>
           <CardStatusBadge info={cardState} />
         </div>
@@ -524,6 +584,22 @@ function SessionKanbanCard({ session, onSelect, phaseColor, isFocused, showPeekO
           }}
         />
       )}
+
+      {/* Context Menu */}
+      {showContextMenu && (
+        <SessionContextMenu
+          sessionId={session.id}
+          title={session.title}
+          position={contextMenuPosition}
+          onClose={() => setShowContextMenu(false)}
+          isArchived={session.isArchived}
+          isWorkstream={cardType === 'workstream'}
+          isWorktreeSession={cardType === 'worktree'}
+          phase={session.phase}
+          onRename={onRename ? () => { setRenameValue(session.title); setIsRenaming(true); } : undefined}
+          onArchive={onArchive ? () => onArchive(session.id) : undefined}
+        />
+      )}
     </>
   );
 }
@@ -538,6 +614,8 @@ interface SessionKanbanColumnProps {
   color: string;
   sessions: SessionMeta[];
   onSelect: (sessionId: string) => void;
+  onArchive?: (sessionId: string) => void;
+  onRename?: (sessionId: string, newName: string) => void;
   onDrop: (sessionId: string, phase: SessionPhase) => void;
   isCollapsed: boolean;
   onToggleCollapse: () => void;
@@ -547,7 +625,7 @@ interface SessionKanbanColumnProps {
   onPeekToggle: (sessionId: string) => void;
 }
 
-function SessionKanbanColumn({ phase, label, color, sessions, onSelect, onDrop, isCollapsed, onToggleCollapse, focusedCardId, peekCardId, onCardClick, onPeekToggle }: SessionKanbanColumnProps) {
+function SessionKanbanColumn({ phase, label, color, sessions, onSelect, onArchive, onRename, onDrop, isCollapsed, onToggleCollapse, focusedCardId, peekCardId, onCardClick, onPeekToggle }: SessionKanbanColumnProps) {
   const [isDragOver, setIsDragOver] = useState(false);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -657,6 +735,8 @@ function SessionKanbanColumn({ phase, label, color, sessions, onSelect, onDrop, 
               <SessionKanbanCard
                 session={session}
                 onSelect={onSelect}
+                onArchive={onArchive}
+                onRename={onRename}
                 phaseColor={color}
                 isFocused={focusedCardId === session.id}
                 showPeekOverride={peekCardId === session.id ? true : undefined}
@@ -677,6 +757,8 @@ function SessionKanbanColumn({ phase, label, color, sessions, onSelect, onDrop, 
 interface UnphasedColumnProps {
   sessions: SessionMeta[];
   onSelect: (sessionId: string) => void;
+  onArchive?: (sessionId: string) => void;
+  onRename?: (sessionId: string, newName: string) => void;
   onDropToPhase: (sessionId: string, phase: SessionPhase) => void;
   onRemovePhase: (sessionId: string) => void;
   focusedCardId: string | null;
@@ -685,7 +767,7 @@ interface UnphasedColumnProps {
   onPeekToggle: (sessionId: string) => void;
 }
 
-function UnphasedColumn({ sessions, onSelect, onDropToPhase, onRemovePhase, focusedCardId, peekCardId, onCardClick, onPeekToggle }: UnphasedColumnProps) {
+function UnphasedColumn({ sessions, onSelect, onArchive, onRename, onDropToPhase, onRemovePhase, focusedCardId, peekCardId, onCardClick, onPeekToggle }: UnphasedColumnProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
 
@@ -795,6 +877,8 @@ function UnphasedColumn({ sessions, onSelect, onDropToPhase, onRemovePhase, focu
             <SessionKanbanCard
               session={session}
               onSelect={onSelect}
+              onArchive={onArchive}
+              onRename={onRename}
               phaseColor="#525252"
               isFocused={focusedCardId === session.id}
               showPeekOverride={peekCardId === session.id ? true : undefined}
@@ -1160,6 +1244,15 @@ export const SessionKanbanBoard: React.FC<SessionKanbanBoardProps> = ({ onSessio
     }
   }, [updateSessionStore]);
 
+  const handleRename = useCallback(async (sessionId: string, newName: string) => {
+    try {
+      await window.electronAPI.invoke('sessions:update-session-metadata', sessionId, { title: newName });
+      updateSessionStore({ sessionId, updates: { title: newName } });
+    } catch (err) {
+      console.error('[SessionKanbanBoard] Failed to rename session:', err);
+    }
+  }, [updateSessionStore]);
+
   // Click on a card sets focus
   const handleCardClick = useCallback((sessionId: string) => {
     setFocusedCardId(sessionId);
@@ -1345,6 +1438,8 @@ export const SessionKanbanBoard: React.FC<SessionKanbanBoardProps> = ({ onSessio
           <UnphasedColumn
             sessions={unphasedSessions}
             onSelect={handleSelect}
+            onArchive={handleArchive}
+            onRename={handleRename}
             onDropToPhase={handleDrop}
             onRemovePhase={handleRemovePhase}
             focusedCardId={focusedCardId}
@@ -1360,6 +1455,8 @@ export const SessionKanbanBoard: React.FC<SessionKanbanBoardProps> = ({ onSessio
               color={col.color}
               sessions={grouped.get(col.value) || []}
               onSelect={handleSelect}
+              onArchive={handleArchive}
+              onRename={handleRename}
               onDrop={handleDrop}
               isCollapsed={collapsedColumns.has(col.value)}
               onToggleCollapse={() => toggleCollapse(col.value)}
