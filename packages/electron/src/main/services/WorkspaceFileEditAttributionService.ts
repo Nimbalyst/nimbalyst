@@ -63,10 +63,7 @@ class WorkspaceFileEditAttributionServiceImpl {
   private logCounterSummary(): void {
     for (const [workspacePath, c] of this.counters.entries()) {
       if (c.eventsReceived === 0) continue;
-      logger.main.info('[WorkspaceFileEditAttributionService] Counter summary:', {
-        workspacePath,
-        ...c,
-      });
+      // logger.main.handleSetContentMode
     }
   }
 

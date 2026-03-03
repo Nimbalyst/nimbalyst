@@ -163,7 +163,7 @@ if (!pluginsRegistered) {
 }
 
 export default function App() {
-  if (import.meta.env.DEV) console.log('[App] render');
+  // if (import.meta.env.DEV) console.log('[App] render');
 
    // IMPORTANT: This state must be declared before the useEffect that uses it
   // and before any conditional early returns (workspace-manager, usage-report, etc.)
@@ -872,7 +872,7 @@ export default function App() {
     if (!window.electronAPI?.on) return;
 
     const handleSetContentMode = (mode: ContentMode) => {
-      console.log('[App] handleSetContentMode called with mode:', mode);
+      // console.log('[App] handleSetContentMode called with mode:', mode);
       setActiveMode(mode);
     };
 
