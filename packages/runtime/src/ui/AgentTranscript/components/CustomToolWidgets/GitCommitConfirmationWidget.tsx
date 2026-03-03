@@ -899,12 +899,12 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
     return null;
   }
 
-  // When auto-commit is enabled, the server already committed in the MCP handler
-  // before the widget renders. Show the committed success state directly rather than
-  // the interactive form (which can't work since the commit already happened).
-  // The tool result will arrive later and update completedState, but until then
-  // we can confidently show success since the server commits synchronously.
-  if (host?.autoCommitEnabled) {
+  // When auto-commit is enabled AND we're not currently committing, the server
+  // already committed in the MCP handler before the widget rendered. Show the
+  // committed success state directly. If isCommitting is true, the user just
+  // toggled auto-commit on and handleConfirm is running — let the normal commit
+  // flow handle the UI (shows "Committing..." then completed state).
+  if (host?.autoCommitEnabled && !isCommitting) {
     return (
       <div
         data-testid="git-commit-widget"
