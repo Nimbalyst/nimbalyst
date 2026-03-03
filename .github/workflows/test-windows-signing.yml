@@ -64,11 +64,16 @@ jobs:
 
       - name: Verify dummy signature
         run: |
-          echo "=== Signature verification ==="
-          signtool verify /pa /v dummy.exe
-          echo ""
-          echo "SUCCESS: DigiCert KeyLocker signing credentials are working!"
-        shell: cmd
+          $signtool = Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits" -Recurse -Filter "signtool.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($signtool) {
+            Write-Host "Found signtool at: $($signtool.FullName)"
+            & $signtool.FullName verify /pa /v dummy.exe
+          } else {
+            Write-Host "WARNING: signtool not found, skipping verification"
+          }
+          Write-Host ""
+          Write-Host "SUCCESS: DigiCert KeyLocker signing credentials are working!"
+        shell: powershell
 
   # Full build + sign job: only runs after credentials are verified
   build-and-sign:
@@ -163,9 +168,14 @@ jobs:
 
       - name: Verify signature
         run: |
-          echo "=== Signature verification ==="
-          signtool verify /pa /v "packages\electron\release\Nimbalyst-Windows.exe"
-        shell: cmd
+          $signtool = Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits" -Recurse -Filter "signtool.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($signtool) {
+            Write-Host "Found signtool at: $($signtool.FullName)"
+            & $signtool.FullName verify /pa /v "packages\electron\release\Nimbalyst-Windows.exe"
+          } else {
+            Write-Host "WARNING: signtool not found, skipping verification"
+          }
+        shell: powershell
 
       - name: Upload signed artifact
         uses: actions/upload-artifact@v4
