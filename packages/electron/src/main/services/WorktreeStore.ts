@@ -139,6 +139,43 @@ export function createWorktreeStore(db: PGliteLike, ensureDbReady?: EnsureReadyF
     },
 
     /**
+     * Get multiple worktrees by IDs in a single query
+     */
+    async getByIds(ids: string[]): Promise<Map<string, Worktree>> {
+      await ensureReady();
+
+      if (ids.length === 0) {
+        return new Map();
+      }
+
+      // Build parameterized query: WHERE id IN ($1, $2, ...)
+      const placeholders = ids.map((_, i) => `$${i + 1}`).join(', ');
+      const { rows } = await db.query<WorktreeRow>(
+        `SELECT * FROM worktrees WHERE id IN (${placeholders})`,
+        ids
+      );
+
+      const result = new Map<string, Worktree>();
+      for (const row of rows) {
+        result.set(row.id, {
+          id: row.id,
+          name: row.name,
+          displayName: row.display_name ?? undefined,
+          path: row.path,
+          branch: row.branch,
+          baseBranch: row.base_branch,
+          projectPath: row.workspace_id,
+          createdAt: toMillis(row.created_at),
+          updatedAt: toMillis(row.updated_at),
+          isPinned: row.is_pinned ?? false,
+          isArchived: row.is_archived ?? false,
+        });
+      }
+
+      return result;
+    },
+
+    /**
      * Get a worktree by path
      */
     async getByPath(path: string): Promise<Worktree | null> {

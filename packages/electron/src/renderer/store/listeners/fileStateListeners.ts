@@ -159,6 +159,8 @@ export function initFileStateListeners(workspacePath: string): () => void {
   currentWorkspacePath = workspacePath;
   const cleanups: Array<() => void> = [];
   const enrichDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const gitStatusDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const GIT_STATUS_DEBOUNCE_MS = 300;
 
   // Load all uncommitted files for workspace immediately
   (async () => {
@@ -240,7 +242,7 @@ export function initFileStateListeners(workspacePath: string): () => void {
   // =========================================================================
 
   cleanups.push(
-    window.electronAPI.on('git:status-changed', async (data: { workspacePath: string }) => {
+    window.electronAPI.on('git:status-changed', (data: { workspacePath: string }) => {
       // Check if event is for current workspace OR any registered worktree
       const isCurrentWorkspace = data.workspacePath === currentWorkspacePath;
       const isRegisteredWorktree = Array.from(worktreePathRegistry.values()).includes(data.workspacePath);
@@ -249,41 +251,49 @@ export function initFileStateListeners(workspacePath: string): () => void {
         return;
       }
 
-      try {
-        // 1. Refresh all uncommitted files for the workspace/worktree
-        const uncommittedResult = await window.electronAPI.invoke(
-          'git:get-uncommitted-files',
-          data.workspacePath
-        );
-        if (uncommittedResult.success && uncommittedResult.files) {
-          store.set(workspaceUncommittedFilesAtom(data.workspacePath), uncommittedResult.files);
+      // Debounce per workspace path to coalesce rapid-fire events during startup
+      const existingTimer = gitStatusDebounceTimers.get(data.workspacePath);
+      if (existingTimer) clearTimeout(existingTimer);
+
+      gitStatusDebounceTimers.set(data.workspacePath, setTimeout(async () => {
+        gitStatusDebounceTimers.delete(data.workspacePath);
+
+        try {
+          // 1. Refresh all uncommitted files for the workspace/worktree
+          const uncommittedResult = await window.electronAPI.invoke(
+            'git:get-uncommitted-files',
+            data.workspacePath
+          );
+          if (uncommittedResult.success && uncommittedResult.files) {
+            store.set(workspaceUncommittedFilesAtom(data.workspacePath), uncommittedResult.files);
+          }
+
+          // 2. Refresh git status for ALL sessions in this workspace
+          const sessionsInWorkspace = Array.from(sessionWorkspaceRegistry.entries())
+            .filter(([, wsPath]) => wsPath === data.workspacePath)
+            .map(([sessionId]) => sessionId);
+
+          await Promise.all(sessionsInWorkspace.map(sessionId => refreshSessionGitStatus(sessionId)));
+
+          // 3. Auto-prune committed files from staging for all sessions
+          for (const sessionId of sessionsInWorkspace) {
+            await pruneCommittedFilesFromStaging(sessionId, data.workspacePath);
+          }
+
+          // 4. Refresh worktree changed files and git status for worktrees matching this path
+          const matchingWorktrees = Array.from(worktreePathRegistry.entries())
+            .filter(([, worktreePath]) => worktreePath === data.workspacePath);
+
+          await Promise.all(
+            matchingWorktrees.flatMap(([worktreeId, worktreePath]) => [
+              refreshWorktreeChangedFiles(worktreeId, worktreePath),
+              refreshWorktreeGitStatus(worktreeId, worktreePath),
+            ])
+          );
+        } catch (error) {
+          console.error('[fileStateListeners] Failed to handle git:status-changed:', error);
         }
-
-        // 2. Refresh git status for ALL sessions in this workspace
-        const sessionsInWorkspace = Array.from(sessionWorkspaceRegistry.entries())
-          .filter(([, wsPath]) => wsPath === data.workspacePath)
-          .map(([sessionId]) => sessionId);
-
-        await Promise.all(sessionsInWorkspace.map(sessionId => refreshSessionGitStatus(sessionId)));
-
-        // 3. Auto-prune committed files from staging for all sessions
-        for (const sessionId of sessionsInWorkspace) {
-          await pruneCommittedFilesFromStaging(sessionId, data.workspacePath);
-        }
-
-        // 4. Refresh worktree changed files and git status for worktrees matching this path
-        const matchingWorktrees = Array.from(worktreePathRegistry.entries())
-          .filter(([, worktreePath]) => worktreePath === data.workspacePath);
-
-        await Promise.all(
-          matchingWorktrees.flatMap(([worktreeId, worktreePath]) => [
-            refreshWorktreeChangedFiles(worktreeId, worktreePath),
-            refreshWorktreeGitStatus(worktreeId, worktreePath),
-          ])
-        );
-      } catch (error) {
-        console.error('[fileStateListeners] Failed to handle git:status-changed:', error);
-      }
+      }, GIT_STATUS_DEBOUNCE_MS));
     })
   );
 
@@ -320,6 +330,8 @@ export function initFileStateListeners(workspacePath: string): () => void {
     cleanups.forEach(cleanup => cleanup?.());
     enrichDebounceTimers.forEach(timer => clearTimeout(timer));
     enrichDebounceTimers.clear();
+    gitStatusDebounceTimers.forEach(timer => clearTimeout(timer));
+    gitStatusDebounceTimers.clear();
   };
 }
 

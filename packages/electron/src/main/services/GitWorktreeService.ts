@@ -340,18 +340,26 @@ export class GitWorktreeService {
     const git: SimpleGit = simpleGit(worktreePath);
 
     try {
-      // Get current branch
-      const currentBranch = await git.revparse(['--abbrev-ref', 'HEAD']);
-      // logger.info('Current branch', { currentBranch });
-
-      // Get status to check for uncommitted changes
+      // git.status() already provides the current branch via .current,
+      // so we skip the separate git.revparse(['--abbrev-ref', 'HEAD']) call
       const status = await git.status();
+      const currentBranch = status.current;
       const hasUncommittedChanges = !status.isClean();
       const modifiedFileCount = status.files.length;
 
+      if (!currentBranch) {
+        // Detached HEAD -- return basic status without branch comparison
+        return {
+          hasUncommittedChanges,
+          modifiedFileCount,
+          commitsAhead: 0,
+          commitsBehind: 0,
+          isMerged: false,
+        };
+      }
+
       // Use provided base branch (from database) or fall back to inferring
       const baseBranch = baseBranchOverride || await this.inferBaseBranch(git);
-      // logger.info('Using base branch', { baseBranch });
 
       // Get commits ahead/behind base branch
       let commitsAhead = 0;
@@ -360,17 +368,17 @@ export class GitWorktreeService {
       let uniqueCommitsAhead: number | undefined;
 
       try {
-        // Check if branch exists in remote
-        const revList = await git.raw(['rev-list', '--left-right', '--count', `${baseBranch}...${currentBranch}`]);
-        const [behind, ahead] = revList.trim().split('\t').map(Number);
+        // Run rev-list and branch --merged in parallel (they are independent)
+        const [revListResult, mergedBranchesResult] = await Promise.all([
+          git.raw(['rev-list', '--left-right', '--count', `${baseBranch}...${currentBranch}`]),
+          git.raw(['branch', '--merged', baseBranch]),
+        ]);
+
+        const [behind, ahead] = revListResult.trim().split('\t').map(Number);
         commitsBehind = behind || 0;
         commitsAhead = ahead || 0;
 
-        // logger.info('Commits ahead/behind', { commitsAhead, commitsBehind });
-
-        // Check if branch is merged
-        const mergedBranches = await git.raw(['branch', '--merged', baseBranch]);
-        isMerged = mergedBranches.includes(currentBranch);
+        isMerged = mergedBranchesResult.includes(currentBranch);
 
         // Use git cherry to find truly unique commits (by patch content, not hash)
         // This handles cases where commits were rebased and have different hashes

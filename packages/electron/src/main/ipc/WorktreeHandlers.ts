@@ -22,6 +22,28 @@ import { gitOperationLock } from '../services/GitOperationLock';
 const logger = log.scope('WorktreeHandlers');
 
 /**
+ * Create a concurrency limiter that allows at most `limit` async operations at once.
+ * Queued operations run in FIFO order as slots free up.
+ */
+function createConcurrencyLimiter(limit: number) {
+  let active = 0;
+  const queue: Array<() => void> = [];
+
+  return async <T>(fn: () => Promise<T>): Promise<T> => {
+    if (active >= limit) {
+      await new Promise<void>(resolve => queue.push(resolve));
+    }
+    active++;
+    try {
+      return await fn();
+    } finally {
+      active--;
+      queue.shift()?.();
+    }
+  };
+}
+
+/**
  * Emit git status changed event to all windows
  */
 function emitGitStatusChanged(workspacePath: string): void {
@@ -254,6 +276,10 @@ export function registerWorktreeHandlers(): void {
   const gitWorktreeService = new GitWorktreeService();
   let watchersInitialized = false;
 
+  // In-flight request dedup for worktree:get-status -- if multiple sessions share
+  // the same worktree path, only one set of git commands runs at a time.
+  const inFlightStatusRequests = new Map<string, Promise<any>>();
+
   /**
    * Create a new git worktree and store its metadata
    *
@@ -422,35 +448,51 @@ export function registerWorktreeHandlers(): void {
    * @returns Git status including uncommitted changes, commits ahead/behind, merge status
    */
   ipcMain.handle('worktree:get-status', async (_event, worktreePath: string) => {
+    if (!worktreePath) {
+      return { success: false, error: 'worktreePath is required' };
+    }
+
+    // Deduplicate: if a request for this path is already in flight, reuse it
+    const existing = inFlightStatusRequests.get(worktreePath);
+    if (existing) {
+      logger.info('Reusing in-flight worktree:get-status request', { worktreePath });
+      return existing;
+    }
+
+    const requestPromise = (async () => {
+      try {
+        logger.info('Getting worktree status', { worktreePath });
+
+        // Look up the worktree to get the stored base branch
+        const db = getDatabase();
+        let baseBranch: string | undefined;
+        if (db) {
+          const worktreeStore = createWorktreeStore(db);
+          const worktree = await worktreeStore.getByPath(worktreePath);
+          baseBranch = worktree?.baseBranch;
+          logger.info('Found worktree base branch for status', { worktreePath, baseBranch: baseBranch || 'not found' });
+        }
+
+        const status = await gitWorktreeService.getWorktreeStatus(worktreePath, baseBranch);
+
+        return {
+          success: true,
+          status,
+        };
+      } catch (error) {
+        logger.error('Failed to get worktree status:', error);
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Failed to get worktree status',
+        };
+      }
+    })();
+
+    inFlightStatusRequests.set(worktreePath, requestPromise);
     try {
-      if (!worktreePath) {
-        throw new Error('worktreePath is required');
-      }
-
-      logger.info('Getting worktree status', { worktreePath });
-
-      // Look up the worktree to get the stored base branch
-      const db = getDatabase();
-      let baseBranch: string | undefined;
-      if (db) {
-        const worktreeStore = createWorktreeStore(db);
-        const worktree = await worktreeStore.getByPath(worktreePath);
-        baseBranch = worktree?.baseBranch;
-        logger.info('Found worktree base branch for status', { worktreePath, baseBranch: baseBranch || 'not found' });
-      }
-
-      const status = await gitWorktreeService.getWorktreeStatus(worktreePath, baseBranch);
-
-      return {
-        success: true,
-        status,
-      };
-    } catch (error) {
-      logger.error('Failed to get worktree status:', error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Failed to get worktree status',
-      };
+      return await requestPromise;
+    } finally {
+      inFlightStatusRequests.delete(worktreePath);
     }
   });
 
@@ -536,19 +578,25 @@ export function registerWorktreeHandlers(): void {
       // Start git ref watchers for all non-archived worktrees on first list call.
       // This ensures commit detection works for worktrees loaded on app restart.
       // Only runs once; per-worktree start() is called at creation time.
+      // Concurrency-limited to avoid a burst of git processes at startup.
       if (!watchersInitialized) {
         watchersInitialized = true;
-        for (const worktree of worktrees) {
-          if (!worktree.isArchived) {
-            gitRefWatcher.start(worktree.path).catch((error) => {
+        const limitConcurrency = createConcurrencyLimiter(2);
+        const activeWorktrees = worktrees.filter(wt => !wt.isArchived);
+
+        Promise.all(
+          activeWorktrees.map(worktree =>
+            limitConcurrency(() => gitRefWatcher.start(worktree.path)).catch((error) => {
               logger.warn('Failed to start GitRefWatcher for worktree:', {
                 worktreeId: worktree.id,
                 path: worktree.path,
                 error: error instanceof Error ? error.message : String(error),
               });
-            });
-          }
-        }
+            })
+          )
+        ).catch(error => {
+          logger.error('Error during worktree watcher initialization:', error);
+        });
       }
 
       return {
@@ -700,43 +748,15 @@ export function registerWorktreeHandlers(): void {
         };
       }> = {};
 
-      // Fetch all worktrees and their statuses in parallel
-      await Promise.all(
-        worktreeIds.map(async (worktreeId) => {
-          try {
-            // Fetch worktree metadata
-            const worktree = await worktreeStore.get(worktreeId);
-            if (!worktree) {
-              logger.warn('Worktree not found in batch fetch', { worktreeId });
-              return;
-            }
-
-            // Fetch git status (skip for archived worktrees since they don't exist on disk)
-            let gitStatus: { ahead?: number; behind?: number; uncommitted?: boolean } | undefined;
-            if (!worktree.isArchived) {
-              try {
-                const statusResult = await gitWorktreeService.getWorktreeStatus(worktree.path);
-                gitStatus = {
-                  ahead: statusResult.commitsAhead,
-                  behind: statusResult.commitsBehind,
-                  uncommitted: statusResult.hasUncommittedChanges,
-                };
-              } catch (err) {
-                logger.warn('Failed to get git status in batch fetch', { worktreeId, error: err });
-                // Continue without git status - it's not critical
-              }
-            }
-
-            results[worktreeId] = {
-              ...worktree,
-              gitStatus,
-            };
-          } catch (err) {
-            logger.error('Failed to fetch worktree in batch', { worktreeId, error: err });
-            // Continue with other worktrees
-          }
-        })
-      );
+      // Single batch query for all worktree metadata (no git operations).
+      // Git status (ahead/behind/uncommitted) is fetched lazily when the user
+      // views a specific worktree via GitOperationsPanel and worktree:get-status.
+      // With 270+ non-archived worktrees, fetching git status here would spawn
+      // ~800+ git processes at startup.
+      const worktreeMap = await worktreeStore.getByIds(worktreeIds);
+      for (const [worktreeId, worktree] of worktreeMap) {
+        results[worktreeId] = { ...worktree };
+      }
 
       // logger.info('Batch fetch completed', { requested: worktreeIds.length, fetched: Object.keys(results).length });
 
