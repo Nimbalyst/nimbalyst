@@ -452,7 +452,7 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
         try {
           const result = await window.electronAPI.aiTestConnection(
             selectedCategory,
-            scope === 'project' ? (workspacePath ?? undefined) : undefined
+            workspacePath ?? undefined
           );
 
           setProviders(prev => ({

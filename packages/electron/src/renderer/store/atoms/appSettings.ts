@@ -22,7 +22,7 @@ import { type EffortLevel, DEFAULT_EFFORT_LEVEL, parseEffortLevel } from '@nimba
 import { AlphaFeatureTag } from '../../../shared/alphaFeatures';
 import { BetaFeatureTag } from '../../../shared/betaFeatures';
 import { DeveloperFeatureTag, DEVELOPER_FEATURES, getDefaultDeveloperFeatures, enableAllDeveloperFeatures, disableAllDeveloperFeatures, areAllDeveloperFeaturesEnabled } from '../../../shared/developerFeatures';
-import { normalizeCodexProviderConfig, omitModelsField } from '@nimbalyst/runtime/ai/server/utils/modelConfigUtils';
+import { normalizeCodexProviderConfig, omitModelsField, stripTransientProviderFields } from '@nimbalyst/runtime/ai/server/utils/modelConfigUtils';
 
 // Voice type - all available OpenAI Realtime voices
 export type VoiceId = 'alloy' | 'ash' | 'ballad' | 'coral' | 'echo' | 'sage' | 'shimmer' | 'verse' | 'marin' | 'cedar';
@@ -1115,7 +1115,9 @@ const AI_PROVIDER_PERSIST_DEBOUNCE_MS = 500;
  * Codex uses dynamic model discovery from the API instead of user-configured model selections.
  */
 function sanitizeProvidersForPersistence(providers: Record<string, ProviderConfig>): Record<string, ProviderConfig> {
-  return normalizeCodexProviderConfig(providers);
+  return normalizeCodexProviderConfig(
+    stripTransientProviderFields(providers)
+  );
 }
 
 /**

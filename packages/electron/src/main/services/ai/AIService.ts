@@ -58,7 +58,7 @@ import {
 import { mergeAISettings } from '../../utils/aiSettingsMerge';
 import { DocumentContextService, type RawDocumentContext, type PreparedDocumentContext } from '@nimbalyst/runtime';
 import { getMessageSyncHandler, getSyncProvider } from '../SyncManager';
-import { normalizeCodexProviderConfig, omitModelsField } from '@nimbalyst/runtime/ai/server/utils/modelConfigUtils';
+import { normalizeCodexProviderConfig, omitModelsField, stripTransientProviderFields } from '@nimbalyst/runtime/ai/server/utils/modelConfigUtils';
 import { isFileInWorkspaceOrWorktree, resolveProjectPath } from '../../utils/workspaceDetection';
 import { SessionFilesRepository } from '@nimbalyst/runtime';
 import * as fs from 'fs';
@@ -4514,7 +4514,14 @@ export class AIService {
           const testProvider = new OpenAICodexProvider();
           const windowState = windowStates.get(event.sender.id);
           const effectiveWorkspacePath =
-            workspacePath || windowState?.workspacePath || process.cwd();
+            workspacePath || windowState?.workspacePath;
+
+          if (!effectiveWorkspacePath) {
+            return {
+              success: false,
+              error: 'Open a workspace and trust it to test OpenAI Codex.',
+            };
+          }
 
           await testProvider.initialize({
             apiKey,
@@ -5039,7 +5046,9 @@ export class AIService {
   }
 
   private normalizeProviderSettings(providerSettings: Record<string, any>): Record<string, any> {
-    return normalizeCodexProviderConfig(providerSettings);
+    return normalizeCodexProviderConfig(
+      stripTransientProviderFields(providerSettings)
+    );
   }
 
   private normalizeProjectOverrides(overrides: any): any {

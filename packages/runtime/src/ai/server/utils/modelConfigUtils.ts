@@ -42,3 +42,39 @@ export function normalizeCodexProviderConfig<T extends Record<string, any>>(
     'openai-codex': omitModelsField(codexConfig),
   } as T;
 }
+
+/**
+ * Remove transient provider status fields that should never be persisted.
+ * These fields are UI state for the current renderer session only.
+ */
+export function stripTransientProviderFields<T extends Record<string, any>>(
+  providers: T
+): T {
+  if (!providers || typeof providers !== 'object') {
+    return providers;
+  }
+
+  let changed = false;
+  const sanitized: Record<string, any> = {};
+
+  for (const [providerId, config] of Object.entries(providers)) {
+    if (!config || typeof config !== 'object') {
+      sanitized[providerId] = config;
+      continue;
+    }
+
+    const {
+      testStatus: _testStatus,
+      testMessage: _testMessage,
+      ...rest
+    } = config as Record<string, any>;
+
+    if ('testStatus' in config || 'testMessage' in config) {
+      changed = true;
+    }
+
+    sanitized[providerId] = rest;
+  }
+
+  return (changed ? sanitized : providers) as T;
+}
