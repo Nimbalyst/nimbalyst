@@ -1005,6 +1005,14 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
               onChange={(e) => {
                 host?.setAutoCommitEnabled(e.target.checked);
                 host?.trackEvent(e.target.checked ? 'auto_commit_enabled' : 'auto_commit_disabled', { source: 'commit_widget' });
+                // When enabling auto-commit on a pending proposal, trigger the commit
+                // immediately — same code path as clicking "Confirm & Commit".
+                // Without this, the widget re-renders showing success (because
+                // autoCommitEnabled is now true) but no commit actually happens,
+                // leaving the MCP tool call hanging.
+                if (e.target.checked) {
+                  handleConfirm();
+                }
               }}
               className="accent-[var(--nim-primary)] w-3.5 h-3.5 cursor-pointer"
             />
