@@ -837,6 +837,20 @@ export class AIService {
         await queueStore.fail(claimed.id, queueError instanceof Error ? queueError.message : 'Unknown error');
       } finally {
         this.sessionsProcessingQueue.delete(sessionId);
+
+        // Check for more pending prompts after clearing the processing guard.
+        // The completion handler inside sendMessageHandler skips queue chaining
+        // when sessionsProcessingQueue is set (which it is during mobile-initiated
+        // processing). We must check here to avoid leaving prompts stuck as 'pending'.
+        try {
+          const pendingPrompts = await queueStore.listPending(sessionId);
+          if (pendingPrompts.length > 0 && targetWindow && !targetWindow.isDestroyed()) {
+            logger.main.info(`[AIService] processQueuedPrompt finally: ${pendingPrompts.length} pending prompts remain, triggering next`);
+            this.processQueuedPrompt(sessionId, workspacePath, targetWindow);
+          }
+        } catch (chainErr) {
+          logger.main.error('[AIService] processQueuedPrompt finally: error checking for pending prompts:', chainErr);
+        }
       }
     });
 
@@ -916,6 +930,7 @@ export class AIService {
                     targetWindow.webContents.send('sessions:sync-draft-input', {
                       sessionId,
                       draftInput: entry.draftInput ?? '',
+                      draftUpdatedAt: entry.draftUpdatedAt,
                     });
                   }
                 } else {

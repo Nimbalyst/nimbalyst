@@ -386,7 +386,8 @@ public final class SyncManager: ObservableObject {
             lastReadAt: entry.lastReadAt ?? existing?.lastReadAt,
             lastMessageAt: entry.lastMessageAt ?? existing?.lastMessageAt,
             // "" from remote means "cleared" -> nil locally; nil means "not sent" -> keep existing
-            draftInput: clientMeta?.draftInput != nil ? (clientMeta!.draftInput!.isEmpty ? nil : clientMeta!.draftInput!) : existing?.draftInput
+            draftInput: clientMeta?.draftInput != nil ? (clientMeta!.draftInput!.isEmpty ? nil : clientMeta!.draftInput!) : existing?.draftInput,
+            draftUpdatedAt: clientMeta?.draftUpdatedAt ?? existing?.draftUpdatedAt
         )
 
         do {
@@ -544,7 +545,8 @@ public final class SyncManager: ObservableObject {
             lastReadAt: entry.lastReadAt ?? existing?.lastReadAt,
             lastMessageAt: entry.lastMessageAt ?? existing?.lastMessageAt,
             // "" from remote means "cleared" -> nil locally; nil means "not sent" -> keep existing
-            draftInput: clientMeta?.draftInput != nil ? (clientMeta!.draftInput!.isEmpty ? nil : clientMeta!.draftInput!) : existing?.draftInput
+            draftInput: clientMeta?.draftInput != nil ? (clientMeta!.draftInput!.isEmpty ? nil : clientMeta!.draftInput!) : existing?.draftInput,
+            draftUpdatedAt: clientMeta?.draftUpdatedAt ?? existing?.draftUpdatedAt
         )
 
         do {
@@ -1047,9 +1049,10 @@ public final class SyncManager: ObservableObject {
 
     /// Update draft input for a session, persisting locally and pushing to sync.
     public func updateDraftInput(sessionId: String, draftInput: String) {
-        logger.info("[Draft] updateDraftInput called: sessionId=\(sessionId), draftInput='\(draftInput.prefix(30))'")
-        // Persist locally
-        try? database.updateSessionDraftInput(sessionId: sessionId, draftInput: draftInput.isEmpty ? nil : draftInput)
+        let now = Int(Date().timeIntervalSince1970 * 1000)
+        logger.info("[Draft] updateDraftInput called: sessionId=\(sessionId), draftInput='\(draftInput.prefix(30))', draftUpdatedAt=\(now)")
+        // Persist locally (including timestamp so GRDB observation carries it)
+        try? database.updateSessionDraftInput(sessionId: sessionId, draftInput: draftInput.isEmpty ? nil : draftInput, draftUpdatedAt: now)
 
         // Push to sync via index update with encrypted client metadata
         guard let session = try? database.session(byId: sessionId) else {
@@ -1063,7 +1066,8 @@ public final class SyncManager: ObservableObject {
                 hasPendingPrompt: nil,
                 phase: session.phase,
                 tags: session.tags.isEmpty ? nil : session.tags,
-                draftInput: draftInput  // Send "" explicitly when clearing so remote caches update
+                draftInput: draftInput,  // Send "" explicitly when clearing so remote caches update
+                draftUpdatedAt: now
             )
             let metaJson = try JSONEncoder().encode(clientMeta)
             guard let metaString = String(data: metaJson, encoding: .utf8) else { return }

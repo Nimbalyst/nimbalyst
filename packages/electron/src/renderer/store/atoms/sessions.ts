@@ -314,6 +314,16 @@ export const sessionDraftAttachmentsAtom = atomFamily((_sessionId: string) =>
 );
 
 /**
+ * Per-session timestamp of last prompt submit (epoch ms).
+ * Used to reject stale draft echoes from cross-device sync.
+ * When a user submits a prompt, we record the timestamp. If a remote device
+ * echoes back a non-empty draft with draftUpdatedAt <= lastSubmitAt, we ignore it.
+ */
+export const sessionLastSubmitAtAtom = atomFamily((_sessionId: string) =>
+  atom<number>(0)
+);
+
+/**
  * Set draft input for a session.
  *
  * This is the canonical way to set a session's initial prompt when creating
@@ -1604,6 +1614,7 @@ export const cleanupSessionAtom = atom(null, (get, set, sessionId: string) => {
   sessionLastReadAtom.remove(sessionId);
   sessionDraftInputAtom.remove(sessionId);
   sessionDraftAttachmentsAtom.remove(sessionId);
+  sessionLastSubmitAtAtom.remove(sessionId);
   // Hierarchical session atoms
   sessionChildrenAtom.remove(sessionId);
   sessionActiveChildAtom.remove(sessionId);

@@ -103,6 +103,8 @@ struct ClientMetadata: Codable {
     let tags: [String]?
     /// Draft input text (unsent message) for cross-device sync
     let draftInput: String?
+    /// Epoch ms when draftInput was last updated by the sending device
+    let draftUpdatedAt: Int?
 }
 
 /// A project entry as received from the server (encrypted fields).

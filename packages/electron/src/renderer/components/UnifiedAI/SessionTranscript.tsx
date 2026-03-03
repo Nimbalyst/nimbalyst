@@ -66,7 +66,7 @@ import {
   clearSessionError,
   loadInitialQueuedPrompts,
 } from '../../store';
-import { convertToWorkstreamAtom, sessionPromptAdditionsAtom } from '../../store/atoms/sessions';
+import { convertToWorkstreamAtom, sessionPromptAdditionsAtom, sessionLastSubmitAtAtom } from '../../store/atoms/sessions';
 import { scrollToTeammateAtom } from '../../store/atoms/agentMode';
 import { usePostHog } from 'posthog-js/react';
 import { setAgentModeSettingsAtom, showPromptAdditionsAtom, hasExternalEditorAtom, externalEditorNameAtom, openInExternalEditorAtom, defaultAgentModelAtom, defaultEffortLevelAtom } from '../../store/atoms/appSettings';
@@ -274,6 +274,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   // Draft input state via Jotai atoms - only this component re-renders on typing
   const [draftInput, setDraftInput] = useAtom(sessionDraftInputAtom(sessionId));
   const [draftAttachments, setDraftAttachments] = useAtom(sessionDraftAttachmentsAtom(sessionId));
+  const setLastSubmitAt = useSetAtom(sessionLastSubmitAtAtom(sessionId));
 
   // Debounced persistence of draft input to database
   // This ensures drafts survive app restarts
@@ -602,6 +603,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
         attachments: draftAttachments
       }]);
 
+      setLastSubmitAt(Date.now());
       setDraftInput('');
       setDraftAttachments([]);
     } catch (error) {
@@ -609,7 +611,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     } finally {
       setIsQueueing(false);
     }
-  }, [sessionId, getEffectiveDocumentContext, draftAttachments, setDraftInput, setDraftAttachments, isQueueing]);
+  }, [sessionId, getEffectiveDocumentContext, draftAttachments, setDraftInput, setDraftAttachments, setLastSubmitAt, isQueueing]);
 
   const handleSend = useCallback(async () => {
     if (!draftInput.trim() || !sessionData) return;
@@ -733,6 +735,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
       message = `${message}\n\n<NIMBALYST_SYSTEM_MESSAGE>\n${PLAN_MODE_DEACTIVATION}\n</NIMBALYST_SYSTEM_MESSAGE>`;
     }
 
+    setLastSubmitAt(Date.now());
     setDraftInput('');
     setDraftAttachments([]);
     resetHistory(sessionId); // Reset prompt history navigation
@@ -793,7 +796,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
       });
       setIsProcessing(false);
     }
-  }, [sessionId, sessionData, draftInput, draftAttachments, isLoading, getEffectiveDocumentContext, aiMode, workspacePath, setDraftInput, setDraftAttachments, resetHistory, updateSessionStore, handleQueue, setIsProcessing, messages, mode, onClearSession, onClearAgentSession]);
+  }, [sessionId, sessionData, draftInput, draftAttachments, isLoading, getEffectiveDocumentContext, aiMode, workspacePath, setDraftInput, setDraftAttachments, setLastSubmitAt, resetHistory, updateSessionStore, handleQueue, setIsProcessing, messages, mode, onClearSession, onClearAgentSession]);
 
   const handleCancel = useCallback(async () => {
     try {

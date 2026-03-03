@@ -68,6 +68,8 @@ public struct SessionDetailView: View {
     @State private var draftDebounceItem: DispatchWorkItem?
     /// Whether we are currently applying a synced draft (suppress push-back).
     @State private var isApplyingRemoteDraft = false
+    /// Epoch ms of last local submit -- used to reject stale remote drafts.
+    @State private var lastSubmitAt: Int = 0
 
     /// Queued prompts for this session (from GRDB observation).
     @State private var queuedPrompts: [QueuedPrompt] = []
@@ -232,6 +234,11 @@ public struct SessionDetailView: View {
             // next local keystroke will immediately override via the debounced push.
             let draft = newDraft ?? ""
             guard draft != composeText else { return }
+            // Reject stale drafts: if the remote draftUpdatedAt is older than our
+            // last submit, this is an echo of the pre-submit draft -- ignore it.
+            if let remoteTs = liveSession?.draftUpdatedAt, !draft.isEmpty, remoteTs <= lastSubmitAt {
+                return
+            }
             isApplyingRemoteDraft = true
             composeText = draft
             DispatchQueue.main.async { isApplyingRemoteDraft = false }
@@ -661,6 +668,14 @@ public struct SessionDetailView: View {
 
     private func sendPrompt(_ text: String, _ attachments: [PendingAttachment] = []) {
         guard let syncManager = appState.syncManager else { return }
+
+        // Immediately clear draft input to prevent stale draft from bouncing back via sync.
+        // Cancel the pending debounce so it doesn't race with the immediate clear.
+        // Record submit timestamp so we can reject any remote draft older than this.
+        draftDebounceItem?.cancel()
+        draftDebounceItem = nil
+        lastSubmitAt = Int(Date().timeIntervalSince1970 * 1000)
+        syncManager.updateDraftInput(sessionId: session.id, draftInput: "")
 
         do {
             try syncManager.sendPrompt(sessionId: session.id, text: text, attachments: attachments)

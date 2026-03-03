@@ -485,6 +485,8 @@ interface ClientMetadata {
   tags?: string[];
   /** Draft input text (unsent message) for cross-device sync */
   draftInput?: string;
+  /** Epoch ms when draftInput was last updated by the sending device */
+  draftUpdatedAt?: number;
 }
 
 /**
@@ -496,10 +498,13 @@ function buildClientMetadataFromRaw(metadata?: Record<string, any>): ClientMetad
   const phase = metadata?.phase as string | undefined;
   const tags = metadata?.tags as string[] | undefined;
   const draftInput = metadata?.draftInput as string | undefined;
+  const draftUpdatedAt = metadata?.draftUpdatedAt as number | undefined;
   const hasTokenUsage = tokenUsage?.totalTokens && tokenUsage?.contextWindow;
   const hasPhaseOrTags = phase || (tags && tags.length > 0);
+  // draftInput can be "" (explicit clear) - treat as meaningful
+  const hasDraftField = draftInput !== undefined;
 
-  if (!hasTokenUsage && !hasPhaseOrTags && !draftInput) return undefined;
+  if (!hasTokenUsage && !hasPhaseOrTags && !hasDraftField) return undefined;
 
   const result: ClientMetadata = {};
   if (hasTokenUsage) {
@@ -510,7 +515,8 @@ function buildClientMetadataFromRaw(metadata?: Record<string, any>): ClientMetad
   }
   if (phase) result.phase = phase;
   if (tags && tags.length > 0) result.tags = tags;
-  if (draftInput) result.draftInput = draftInput;
+  if (hasDraftField) result.draftInput = draftInput;
+  if (draftUpdatedAt) result.draftUpdatedAt = draftUpdatedAt;
   return result;
 }
 
@@ -699,6 +705,8 @@ interface CachedSessionIndex {
   lastReadAt?: number;
   /** Draft input text (unsent message) for cross-device sync */
   draftInput?: string;
+  /** Epoch ms when draftInput was last updated by the sending device */
+  draftUpdatedAt?: number;
 }
 
 // ============================================================================
@@ -838,6 +846,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       currentContext: 'currentContext' in pending ? pending.currentContext : cached.currentContext,
       hasPendingPrompt: 'hasPendingPrompt' in pending ? pending.hasPendingPrompt : cached.hasPendingPrompt,
       draftInput: 'draftInput' in pending ? (pending as any).draftInput : cached.draftInput,
+      draftUpdatedAt: 'draftUpdatedAt' in pending ? (pending as any).draftUpdatedAt : cached.draftUpdatedAt,
     };
 
     // Update cache with decrypted values
@@ -885,6 +894,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
         phase: updatedCache.phase,
         tags: updatedCache.tags,
         draftInput: updatedCache.draftInput,
+        draftUpdatedAt: updatedCache.draftUpdatedAt,
       };
       const { encryptedClientMetadata, clientMetadataIv } = await encryptClientMetadata(clientMeta, config.encryptionKey);
       indexEntry.encryptedClientMetadata = encryptedClientMetadata;
@@ -1212,7 +1222,8 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
         const clientMeta = await decryptClientMetadata(broadcast.metadata.encryptedClientMetadata, broadcast.metadata.clientMetadataIv, session.encryptionKey);
         metadata.currentContext = clientMeta.currentContext;
         metadata.hasPendingPrompt = clientMeta.hasPendingPrompt;
-        if (clientMeta.draftInput !== undefined) metadata.draftInput = clientMeta.draftInput || undefined;
+        if (clientMeta.draftInput !== undefined) metadata.draftInput = clientMeta.draftInput;
+        if (clientMeta.draftUpdatedAt !== undefined) metadata.draftUpdatedAt = clientMeta.draftUpdatedAt;
       } catch (err) {
         console.error('[CollabV3] Failed to decrypt client metadata from broadcast:', err);
       }
@@ -1409,6 +1420,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
                   let phase: string | undefined;
                   let tags: string[] | undefined;
                   let draftInput: string | undefined;
+                  let draftUpdatedAt: number | undefined;
                   if (entry.encryptedClientMetadata && entry.clientMetadataIv && config.encryptionKey) {
                     try {
                       const clientMeta = await decryptClientMetadata(entry.encryptedClientMetadata, entry.clientMetadataIv, config.encryptionKey);
@@ -1417,6 +1429,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
                       phase = clientMeta.phase;
                       tags = clientMeta.tags;
                       draftInput = clientMeta.draftInput || undefined;
+                      draftUpdatedAt = clientMeta.draftUpdatedAt;
                     } catch (err) {
                       // Non-fatal: metadata is supplementary, just skip
                       console.warn(`[CollabV3] Failed to decrypt client metadata for session ${entry.sessionId}, skipping`);
@@ -1478,6 +1491,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
                     phase,
                     tags,
                     draftInput,
+                    draftUpdatedAt,
                     lastReadAt: decrypted.lastReadAt,
                   };
                   sessionIndexCache.set(entry.sessionId, cacheEntry);
@@ -1608,8 +1622,9 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
                 }
                 if (clientMeta.phase) decryptedEntry.phase = clientMeta.phase;
                 if (clientMeta.tags) decryptedEntry.tags = clientMeta.tags;
-                // Normalize empty string to undefined so the cache is cleared (not echoed back)
-                if (clientMeta.draftInput !== undefined) decryptedEntry.draftInput = clientMeta.draftInput || undefined;
+                // Allow empty string through so "clear draft" propagates to renderer
+                if (clientMeta.draftInput !== undefined) decryptedEntry.draftInput = clientMeta.draftInput;
+                if (clientMeta.draftUpdatedAt !== undefined) decryptedEntry.draftUpdatedAt = clientMeta.draftUpdatedAt;
               } catch (err) {
                 console.error('[CollabV3] Failed to decrypt client metadata:', err);
               }
@@ -2156,6 +2171,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
         phase: clientMeta?.phase,
         tags: clientMeta?.tags,
         draftInput: clientMeta?.draftInput,
+        draftUpdatedAt: clientMeta?.draftUpdatedAt,
       };
       sessionIndexCache.set(session.id, cacheEntry);
 
@@ -2435,6 +2451,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
               phase: 'phase' in change.metadata ? (change.metadata as any).phase : cached?.phase,
               tags: 'tags' in change.metadata ? (change.metadata as any).tags : cached?.tags,
               draftInput: 'draftInput' in change.metadata ? (change.metadata as any).draftInput : cached?.draftInput,
+              draftUpdatedAt: 'draftUpdatedAt' in change.metadata ? (change.metadata as any).draftUpdatedAt : cached?.draftUpdatedAt,
             };
             if (clientMeta.draftInput !== undefined) {
               // console.log('[CollabV3] Encrypting clientMeta with draftInput, sending to index');
@@ -2529,6 +2546,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
                 phase: baseEntry.phase,
                 tags: baseEntry.tags,
                 draftInput: baseEntry.draftInput,
+                draftUpdatedAt: baseEntry.draftUpdatedAt,
               };
               const { encryptedClientMetadata, clientMetadataIv } = await encryptClientMetadata(clientMeta, config.encryptionKey);
               indexEntry.encryptedClientMetadata = encryptedClientMetadata;
@@ -2566,6 +2584,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
               tags: 'tags' in meta ? (meta as any).tags : cached.tags,
               lastReadAt: 'lastReadAt' in meta ? (meta as any).lastReadAt : cached.lastReadAt,
               draftInput: 'draftInput' in meta ? (meta as any).draftInput : cached.draftInput,
+              draftUpdatedAt: 'draftUpdatedAt' in meta ? (meta as any).draftUpdatedAt : cached.draftUpdatedAt,
             };
             await sendIndexUpdate(updatedCache);
           } else if (meta.title && meta.provider) {
@@ -2592,6 +2611,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
               tags: (meta as any).tags,
               lastReadAt: (meta as any).lastReadAt,
               draftInput: (meta as any).draftInput,
+              draftUpdatedAt: (meta as any).draftUpdatedAt,
             };
             await sendIndexUpdate(newEntry);
           } else {
@@ -2607,6 +2627,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
               if ('pendingExecution' in meta) existing.pendingExecution = meta.pendingExecution;
               if (meta.title !== undefined) existing.title = meta.title;
               if ('draftInput' in meta) (existing as any).draftInput = (meta as any).draftInput;
+              if ('draftUpdatedAt' in meta) (existing as any).draftUpdatedAt = (meta as any).draftUpdatedAt;
               pendingMetadataUpdates.set(sessionId, existing);
             } else {
               // console.log('[CollabV3] Skipping index update - no cached data and missing required fields for session:', sessionId);

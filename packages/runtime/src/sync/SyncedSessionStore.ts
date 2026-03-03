@@ -138,7 +138,10 @@ export function createSyncedSessionStore(
       if (metadata.isArchived !== undefined) syncMetadata.isArchived = metadata.isArchived;
       if ((metadata as any).provider !== undefined) syncMetadata.provider = (metadata as any).provider;
       if ((metadata as any).model !== undefined) syncMetadata.model = (metadata as any).model;
-      if (metadata.draftInput !== undefined) syncMetadata.draftInput = metadata.draftInput;
+      if (metadata.draftInput !== undefined) {
+        syncMetadata.draftInput = metadata.draftInput;
+        syncMetadata.draftUpdatedAt = Date.now();
+      }
 
       // NOTE: Do NOT call ensureSyncConnected here!
       // Metadata updates should only push to sessions that are ALREADY connected.

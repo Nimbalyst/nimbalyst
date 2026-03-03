@@ -180,6 +180,8 @@ export interface SyncProvider {
     queuedPrompts?: Array<{ id: string; prompt: string; timestamp: number; attachments?: EncryptedAttachment[] }>;
     /** Draft input text (unsent message) from another device */
     draftInput?: string;
+    /** Epoch ms when draftInput was last updated by the sending device */
+    draftUpdatedAt?: number;
   }) => void): () => void;
 
   /** Get cached metadata for a session (populated from syncResponse and metadataBroadcast) */
@@ -364,6 +366,8 @@ export interface SyncedSessionMetadata {
   workspacePath?: string;
   isArchived?: boolean;
   draftInput?: string;
+  /** Epoch ms when draftInput was last updated by the sending device */
+  draftUpdatedAt?: number;
   updatedAt: number;
   /** Queued prompts waiting to be processed by desktop */
   queuedPrompts?: SyncedQueuedPrompt[];

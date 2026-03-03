@@ -214,6 +214,12 @@ public final class DatabaseManager: @unchecked Sendable {
             }
         }
 
+        migrator.registerMigration("v9_draft_updated_at") { db in
+            try db.alter(table: "sessions") { t in
+                t.add(column: "draftUpdatedAt", .integer)
+            }
+        }
+
         try migrator.migrate(writer)
     }
 
@@ -436,11 +442,11 @@ public final class DatabaseManager: @unchecked Sendable {
     }
 
     /// Update draft input for a session.
-    public func updateSessionDraftInput(sessionId: String, draftInput: String?) throws {
+    public func updateSessionDraftInput(sessionId: String, draftInput: String?, draftUpdatedAt: Int? = nil) throws {
         try writer.write { db in
             try db.execute(
-                sql: "UPDATE sessions SET draftInput = ? WHERE id = ?",
-                arguments: [draftInput, sessionId]
+                sql: "UPDATE sessions SET draftInput = ?, draftUpdatedAt = ? WHERE id = ?",
+                arguments: [draftInput, draftUpdatedAt, sessionId]
             )
         }
     }

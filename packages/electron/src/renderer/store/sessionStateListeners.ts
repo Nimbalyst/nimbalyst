@@ -37,6 +37,7 @@ import {
   sessionRegistryAtom,
   sessionStoreAtom,
   sessionDraftInputAtom,
+  sessionLastSubmitAtAtom,
   type PendingPrompt,
 } from './atoms/sessions';
 import { workstreamActiveChildAtom, workstreamStateAtom } from './atoms/workstreamState';
@@ -507,12 +508,21 @@ export function initSessionStateListeners(): () => void {
 
   /**
    * Handle cross-device draft input from sync.
-   * Always apply the remote draft so cross-device sync wins.
+   * Apply the remote draft unless it's a stale echo from before a local submit.
    * The user's next local keystroke will immediately override via debounced push.
    */
-  const handleSyncDraftInput = (data: { sessionId: string; draftInput: string }) => {
-    const { sessionId, draftInput } = data;
+  const handleSyncDraftInput = (data: { sessionId: string; draftInput: string; draftUpdatedAt?: number }) => {
+    const { sessionId, draftInput, draftUpdatedAt } = data;
     if (!sessionId) return;
+
+    // Reject stale draft echoes: if we recently submitted a prompt and the
+    // remote draft is non-empty with a timestamp from before our submit, skip it.
+    if (draftInput && draftUpdatedAt) {
+      const lastSubmitAt = store.get(sessionLastSubmitAtAtom(sessionId));
+      if (lastSubmitAt > 0 && draftUpdatedAt <= lastSubmitAt) {
+        return;
+      }
+    }
 
     store.set(sessionDraftInputAtom(sessionId), draftInput);
   };
