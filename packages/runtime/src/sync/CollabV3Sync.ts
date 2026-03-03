@@ -1300,12 +1300,12 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       indexWs = null;
     }
 
-    // console.log('[CollabV3] connectToIndex() - CREATING INDEX WebSocket');
-
     // Get fresh JWT before connecting
     const { jwt } = await ensureFreshJwt();
 
-    const url = getWebSocketUrl(getIndexRoomId());
+    const indexRoomId = getIndexRoomId();
+    console.log('[CollabV3] connectToIndex() roomId:', indexRoomId, 'orgId:', config.orgId, 'userId:', getUserId());
+    const url = getWebSocketUrl(indexRoomId);
     // Pass JWT via query parameter (WebSocket doesn't support custom headers in browsers)
     const wsUrl = `${url}?token=${encodeURIComponent(jwt)}`;
 

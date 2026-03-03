@@ -70,6 +70,12 @@ public struct SessionDetailView: View {
     @State private var isApplyingRemoteDraft = false
     /// Epoch ms of last local submit -- used to reject stale remote drafts.
     @State private var lastSubmitAt: Int = 0
+    /// Error message shown when prompt send fails.
+    @State private var sendError: String?
+    /// Warning shown when prompt was sent but desktop hasn't picked it up.
+    @State private var deliveryWarning: String?
+    /// Timer that fires if desktop doesn't start executing after a prompt send.
+    @State private var deliveryTimeoutItem: DispatchWorkItem?
 
     /// Queued prompts for this session (from GRDB observation).
     @State private var queuedPrompts: [QueuedPrompt] = []
@@ -292,6 +298,30 @@ public struct SessionDetailView: View {
             .presentationDetents([.medium, .large])
         }
         #endif
+        .alert("Send Error", isPresented: Binding(
+            get: { sendError != nil },
+            set: { if !$0 { sendError = nil } }
+        )) {
+            Button("OK") { sendError = nil }
+        } message: {
+            Text(sendError ?? "")
+        }
+        .alert("Delivery Warning", isPresented: Binding(
+            get: { deliveryWarning != nil },
+            set: { if !$0 { deliveryWarning = nil } }
+        )) {
+            Button("OK") { deliveryWarning = nil }
+        } message: {
+            Text(deliveryWarning ?? "")
+        }
+        .onChange(of: liveSession?.isExecuting) { isExec in
+            // Desktop picked up the prompt - cancel the delivery timeout
+            if isExec == true {
+                deliveryTimeoutItem?.cancel()
+                deliveryTimeoutItem = nil
+                deliveryWarning = nil
+            }
+        }
         .onChange(of: messages.count) { _ in
             // Web view was ready but waiting for initial messages — reveal now
             if isWebViewReady && !isTranscriptReady {
@@ -667,7 +697,10 @@ public struct SessionDetailView: View {
     // MARK: - Actions
 
     private func sendPrompt(_ text: String, _ attachments: [PendingAttachment] = []) {
-        guard let syncManager = appState.syncManager else { return }
+        guard let syncManager = appState.syncManager else {
+            sendError = "Sync not connected. Try closing and reopening the session."
+            return
+        }
 
         // Immediately clear draft input to prevent stale draft from bouncing back via sync.
         // Cancel the pending debounce so it doesn't race with the immediate clear.
@@ -677,14 +710,30 @@ public struct SessionDetailView: View {
         lastSubmitAt = Int(Date().timeIntervalSince1970 * 1000)
         syncManager.updateDraftInput(sessionId: session.id, draftInput: "")
 
-        do {
-            try syncManager.sendPrompt(sessionId: session.id, text: text, attachments: attachments)
-            AnalyticsManager.shared.capture("mobile_ai_message_sent", properties: [
-                "hasAttachments": !attachments.isEmpty,
-                "attachmentCount": attachments.count,
-            ])
-        } catch {
-            print("Failed to send prompt: \(error)")
+        Task {
+            do {
+                try await syncManager.sendPrompt(sessionId: session.id, text: text, attachments: attachments)
+                AnalyticsManager.shared.capture("mobile_ai_message_sent", properties: [
+                    "hasAttachments": !attachments.isEmpty,
+                    "attachmentCount": attachments.count,
+                ])
+
+                // Start a delivery timeout -- if the session doesn't start executing
+                // within 10s, warn the user that the desktop may not have received it.
+                deliveryTimeoutItem?.cancel()
+                let timeout = DispatchWorkItem { [self] in
+                    // Only warn if session still hasn't started executing
+                    if !(liveSession?.isExecuting ?? false) {
+                        deliveryWarning = "Your prompt was sent but the desktop hasn't started processing it. Make sure the desktop app is running and connected."
+                    }
+                }
+                deliveryTimeoutItem = timeout
+                DispatchQueue.main.asyncAfter(deadline: .now() + 10, execute: timeout)
+            } catch {
+                // Restore the draft so the user doesn't lose their text
+                composeText = text
+                sendError = "Failed to send: \(error.localizedDescription)"
+            }
         }
     }
 

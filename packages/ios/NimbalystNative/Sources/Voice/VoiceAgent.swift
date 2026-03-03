@@ -577,11 +577,13 @@ public final class VoiceAgent: ObservableObject {
             return
         }
 
-        do {
-            try syncManager.sendPrompt(sessionId: prompt.sessionId, text: prompt.prompt)
-            logger.info("Submitted voice prompt to session \(prompt.sessionId)")
-        } catch {
-            logger.error("Failed to submit prompt: \(error.localizedDescription)")
+        Task {
+            do {
+                try await syncManager.sendPrompt(sessionId: prompt.sessionId, text: prompt.prompt)
+                logger.info("Submitted voice prompt to session \(prompt.sessionId)")
+            } catch {
+                logger.error("Failed to submit prompt: \(error.localizedDescription)")
+            }
         }
     }
 

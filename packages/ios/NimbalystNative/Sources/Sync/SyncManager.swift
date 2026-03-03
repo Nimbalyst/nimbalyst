@@ -94,6 +94,7 @@ public final class SyncManager: ObservableObject {
         self.authUserId = authUserId
         self.orgId = orgId
         let roomId = "org:\(orgId):user:\(effectiveUserId):index"
+        logger.info("[Connect] IndexRoom roomId=\(roomId), orgId=\(orgId), effectiveUserId=\(self.effectiveUserId), authUserId=\(authUserId ?? "nil"), pairingUserId=\(self.userId)")
         indexClient.connect(serverUrl: serverUrl, roomId: roomId, authToken: authToken)
     }
 
@@ -1111,8 +1112,14 @@ public final class SyncManager: ObservableObject {
 
     /// Send a prompt to the current session via the queued prompts system.
     /// Desktop picks up prompts from index_update broadcasts (not session room messages).
-    public func sendPrompt(sessionId: String, text: String, attachments: [PendingAttachment] = []) throws {
+    public func sendPrompt(sessionId: String, text: String, attachments: [PendingAttachment] = []) async throws {
+        logger.info("[SendPrompt] Starting: sessionId=\(sessionId), textLength=\(text.count), attachments=\(attachments.count), wsConnected=\(self.indexClient.isConnected), roomOrgId=\(self.orgId ?? "nil")")
+        guard indexClient.isConnected else {
+            logger.error("[SendPrompt] WebSocket not connected - cannot send prompt")
+            throw SyncError.webSocketSendFailed("Not connected to sync server")
+        }
         guard let session = try database.session(byId: sessionId) else {
+            logger.error("[SendPrompt] Session not found: \(sessionId)")
             throw SyncError.sessionNotFound
         }
 
@@ -1175,9 +1182,19 @@ public final class SyncManager: ObservableObject {
         )
 
         let indexMessage = IndexUpdateMessage(session: indexEntry)
-        if let data = try? JSONEncoder().encode(indexMessage),
-           let json = String(data: data, encoding: .utf8) {
-            indexClient.sendRaw(json)
+        let data = try JSONEncoder().encode(indexMessage)
+        guard let json = String(data: data, encoding: .utf8) else {
+            throw SyncError.encodingFailed
+        }
+
+        // Send via WebSocket with completion handler to detect failures
+        let sendResult = await withCheckedContinuation { continuation in
+            indexClient.sendRaw(json) { error in
+                continuation.resume(returning: error)
+            }
+        }
+        if let sendError = sendResult {
+            throw SyncError.webSocketSendFailed(sendError.localizedDescription)
         }
 
         // Store the prompt locally for immediate display in transcript
@@ -1247,8 +1264,21 @@ public final class SyncManager: ObservableObject {
         }
     }
 
-    enum SyncError: Error {
+    enum SyncError: LocalizedError {
         case sessionNotFound
+        case encodingFailed
+        case webSocketSendFailed(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .sessionNotFound:
+                return "Session not found"
+            case .encodingFailed:
+                return "Failed to encode message"
+            case .webSocketSendFailed(let detail):
+                return "Failed to send: \(detail)"
+            }
+        }
     }
 
     /// Diagnostic information from a session message sync operation.
