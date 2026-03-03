@@ -1982,8 +1982,19 @@ export const selectedWorkstreamAtom = atomFamily((_workspacePath: string) =>
   atom<{ type: WorkstreamType; id: string } | null>(null)
 );
 
-// Debounce timer for selected workstream persistence
-let selectedWorkstreamPersistTimer: ReturnType<typeof setTimeout> | null = null;
+// Persist helper for selected workstream - called inline (no debounce needed,
+// selection only changes on user click, not on rapid programmatic events).
+// Using a standalone function avoids stale-closure issues after Vite HMR
+// where a debounce timer callback would capture a stale module scope.
+function persistSelectedWorkstream(workspacePath: string, selection: { type: WorkstreamType; id: string } | null): void {
+  window.electronAPI.invoke('workspace:update-state', workspacePath, {
+    agenticCodingWindowState: {
+      selectedWorkstream: selection,
+    },
+  }).catch((err: unknown) => {
+    console.error('[sessions] Failed to persist selected workstream:', err);
+  });
+}
 
 /**
  * Plain module-level callback invoked whenever a workstream is selected.
@@ -2035,21 +2046,9 @@ export const setSelectedWorkstreamAtom = atom(
     // For workstream parents, do NOT set activeChildId here.
     // Let loadSessionChildren or persisted state handle it.
 
-    // Persist to workspace state (debounced)
-    if (selectedWorkstreamPersistTimer) {
-      clearTimeout(selectedWorkstreamPersistTimer);
-    }
-    selectedWorkstreamPersistTimer = setTimeout(async () => {
-      try {
-        await window.electronAPI.invoke('workspace:update-state', workspacePath, {
-          agenticCodingWindowState: {
-            selectedWorkstream: selection,
-          },
-        });
-      } catch (err) {
-        console.error('[sessions] Failed to persist selected workstream:', err);
-      }
-    }, 300);
+    // Persist to workspace state immediately (fire-and-forget).
+    // No debounce needed: selection only changes on explicit user navigation.
+    persistSelectedWorkstream(workspacePath, selection);
   }
 );
 
