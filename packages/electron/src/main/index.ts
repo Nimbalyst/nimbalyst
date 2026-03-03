@@ -433,6 +433,44 @@ if (process.defaultApp) {
     app.setAsDefaultProtocolClient('nimbalyst');
 }
 
+// Single-instance lock (Windows deep link support)
+// On Windows, protocol handler launches a new process with the URL in argv.
+// Without this, OAuth callbacks open a second app instance instead of routing
+// to the existing one. Skip for multi-instance dev mode and Playwright tests.
+const allowMultipleInstances = !!process.env.NIMBALYST_USER_DATA_DIR || !!process.env.PLAYWRIGHT;
+
+if (!allowMultipleInstances) {
+    const gotTheLock = app.requestSingleInstanceLock();
+
+    if (!gotTheLock) {
+        // Another instance is already running -- it will receive our argv via
+        // the 'second-instance' event. Quit immediately.
+        logger.main.info('[SingleInstance] Another instance is running, forwarding args and quitting');
+        app.quit();
+    } else {
+        // We are the primary instance. When a second instance tries to launch,
+        // extract any deep link URL from its argv and handle it here.
+        app.on('second-instance', (_event, argv, _workingDirectory) => {
+            logger.main.info('[SingleInstance] second-instance event, argv:', argv);
+
+            // On Windows the protocol URL is passed as the last argument
+            const deepLinkUrl = argv.find(arg => arg.startsWith('nimbalyst://'));
+            if (deepLinkUrl) {
+                logger.main.info(`[SingleInstance] Found deep link in argv: ${deepLinkUrl}`);
+                handleDeepLink(deepLinkUrl);
+            }
+
+            // Focus an existing window so the user sees the result
+            const windows = BrowserWindow.getAllWindows();
+            if (windows.length > 0) {
+                const win = windows[0];
+                if (win.isMinimized()) win.restore();
+                win.focus();
+            }
+        });
+    }
+}
+
 // Track pending deep link URL
 let pendingDeepLinkUrl: string | null = null;
 
