@@ -1117,6 +1117,13 @@ export default function App() {
     }
   }, [activeMode]);
 
+  // Handle QuickOpen folder selection - switches to files mode so the file tree is visible
+  const handleQuickOpenFolderSelect = useCallback(() => {
+    if (activeMode !== 'files') {
+      setActiveMode('files');
+    }
+  }, [activeMode]);
+
   // Handle SessionQuickOpen session selection - switches to agent mode and opens session
   const handleSessionQuickOpenSelect = useCallback(async (sessionId: string) => {
     // Switch to agent mode
@@ -1470,6 +1477,7 @@ export default function App() {
       workspacePath={workspacePath}
       currentFilePath={currentFilePathRef.current}
       onFileSelect={handleQuickOpenFileSelect}
+      onFolderSelect={handleQuickOpenFolderSelect}
       onSessionSelect={handleSessionQuickOpenSelect}
       onPromptSelect={handlePromptQuickOpenSelect}
       documentContext={{
@@ -1587,6 +1595,7 @@ export default function App() {
                           workspacePath,
                           currentFilePath: currentFilePathRef.current,
                           onFileSelect: handleQuickOpenFileSelect,
+                          onFolderSelect: handleQuickOpenFolderSelect,
                         });
                       }
                     }}

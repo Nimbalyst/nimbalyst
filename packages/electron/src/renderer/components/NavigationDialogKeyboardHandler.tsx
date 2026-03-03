@@ -25,6 +25,8 @@ interface NavigationDialogKeyboardHandlerProps {
   currentFilePath: string | null;
   /** Callback when a file is selected in QuickOpen */
   onFileSelect: (filePath: string) => void;
+  /** Callback when a folder is selected in QuickOpen -- switches to files mode */
+  onFolderSelect?: () => void;
   /** Callback when a session is selected in SessionQuickOpen */
   onSessionSelect: (sessionId: string) => void;
   /** Callback when a prompt is selected in PromptQuickOpen */
@@ -42,6 +44,7 @@ export function NavigationDialogKeyboardHandler({
   workspacePath,
   currentFilePath,
   onFileSelect,
+  onFolderSelect,
   onSessionSelect,
   onPromptSelect,
   documentContext,
@@ -59,6 +62,7 @@ export function NavigationDialogKeyboardHandler({
     workspacePath,
     currentFilePath,
     onFileSelect,
+    onFolderSelect,
     onSessionSelect,
     onPromptSelect,
     documentContext,
@@ -70,6 +74,7 @@ export function NavigationDialogKeyboardHandler({
       workspacePath,
       currentFilePath,
       onFileSelect,
+      onFolderSelect,
       onSessionSelect,
       onPromptSelect,
       documentContext,
@@ -118,6 +123,7 @@ export function NavigationDialogKeyboardHandler({
           workspacePath: props.workspacePath,
           currentFilePath: props.currentFilePath,
           onFileSelect: props.onFileSelect,
+          onFolderSelect: props.onFolderSelect,
           startInContentSearchMode: true,
           onShowFileSessions: (filePath: string) => {
             dialogs.openSessionQuickOpen({
@@ -146,6 +152,7 @@ export function NavigationDialogKeyboardHandler({
           workspacePath: props.workspacePath,
           currentFilePath: props.currentFilePath,
           onFileSelect: props.onFileSelect,
+          onFolderSelect: props.onFolderSelect,
           onShowFileSessions: (filePath: string) => {
             dialogs.openSessionQuickOpen({
               workspacePath: props.workspacePath!,

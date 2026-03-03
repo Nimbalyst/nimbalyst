@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useSetAtom } from 'jotai';
 import { usePostHog } from 'posthog-js/react';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import { getFileName, getRelativeDir } from '../utils/pathUtils';
+import { revealFolderAtom } from '../store';
 
 interface FileItem {
   path: string;
   name: string;
+  type?: 'file' | 'directory';
   lastOpened?: Date;
   isRecent?: boolean;
   matches?: Array<{
@@ -25,6 +28,8 @@ interface QuickOpenProps {
   workspacePath: string;
   currentFilePath?: string | null;
   onFileSelect: (filePath: string) => void;
+  /** Callback when a folder is selected -- switches to files mode and reveals in tree */
+  onFolderSelect?: (folderPath: string) => void;
   /** If true, immediately trigger content search mode when opened */
   startInContentSearchMode?: boolean;
   /** Callback to show sessions that edited a file (opens Session Quick Open with @path) */
@@ -37,10 +42,12 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
   workspacePath,
   currentFilePath,
   onFileSelect,
+  onFolderSelect,
   startInContentSearchMode = false,
   onShowFileSessions,
 }) => {
   const posthog = usePostHog();
+  const revealFolder = useSetAtom(revealFolderAtom);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [searchResults, setSearchResults] = useState<FileItem[]>([]);
@@ -108,6 +115,7 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
           .map((result: any) => ({
             path: result.path,
             name: getFileName(result.path),
+            type: result.type as 'file' | 'directory' | undefined,
             isRecent: recentFiles.includes(result.path),
             matches: result.matches || [],
             isFileNameMatch: result.isFileNameMatch || false,
@@ -398,7 +406,7 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
         case 'Enter':
           e.preventDefault();
           if (displayFiles[selectedIndex]) {
-            handleFileSelect(displayFiles[selectedIndex].path);
+            handleItemSelect(displayFiles[selectedIndex].path, displayFiles[selectedIndex].type);
           }
           break;
         case 'Tab':
@@ -418,7 +426,16 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, selectedIndex, displayFiles, searchQuery, contentSearchTriggered, onClose, searchFileContents]);
 
-  const handleFileSelect = (filePath: string) => {
+  const handleItemSelect = (filePath: string, fileType?: 'file' | 'directory') => {
+    if (fileType === 'directory') {
+      // Switch to files mode and reveal the folder in the file tree
+      if (onFolderSelect) {
+        onFolderSelect(filePath);
+      }
+      revealFolder(filePath);
+      onClose();
+      return;
+    }
     onFileSelect(filePath);
     onClose();
   };
@@ -488,7 +505,7 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
                   className={`quick-open-item relative group px-4 py-2.5 cursor-pointer border-l-[3px] transition-all duration-100 ${
                     index === selectedIndex ? 'selected bg-nim-selected border-l-nim-primary' : 'border-transparent hover:bg-nim-hover'
                   } ${file.isContentMatch ? 'content-match' : ''} ${file.isFileNameMatch ? 'name-match' : ''}`}
-                  onClick={() => handleFileSelect(file.path)}
+                  onClick={() => handleItemSelect(file.path, file.type)}
                   onMouseEnter={() => {
                     if (mouseHasMoved) {
                       setSelectedIndex(index);
@@ -515,7 +532,10 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
                   <div
                     className={`quick-open-item-name text-sm font-medium flex items-center gap-2 text-nim ${file.isContentMatch ? 'mb-1' : ''}`}
                   >
-                    {file.name}
+                    {file.type === 'directory' && (
+                      <MaterialSymbol icon="folder" size={16} className="text-nim-faint shrink-0" />
+                    )}
+                    {file.type === 'directory' ? file.name + '/' : file.name}
                     {file.isRecent && !searchQuery && (
                       <span className="quick-open-badge nim-badge-primary text-[10px]">Recent</span>
                     )}

@@ -20,6 +20,8 @@ export interface QuickOpenData {
   workspacePath: string;
   currentFilePath?: string | null;
   onFileSelect: (filePath: string) => void;
+  /** Callback when a folder is selected -- switches to files mode and reveals in tree */
+  onFolderSelect?: (folderPath: string) => void;
   /** If true, immediately trigger content search mode when opened */
   startInContentSearchMode?: boolean;
   /** Callback to show sessions that edited a file (opens Session Quick Open with @path) */
@@ -68,6 +70,7 @@ function QuickOpenWrapper({
         data.onFileSelect(filePath);
         onClose();
       }}
+      onFolderSelect={data.onFolderSelect}
       startInContentSearchMode={data.startInContentSearchMode}
       onShowFileSessions={data.onShowFileSessions}
     />
