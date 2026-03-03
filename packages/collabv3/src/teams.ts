@@ -72,7 +72,9 @@ export async function handleCreateTeam(
     const stytchAuth = getStytchAuth(env);
 
     // Step 1: Create Stytch organization
-    const slug = teamName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    // Use opaque identifiers so the team name doesn't leak to Stytch.
+    // The real team name is stored E2E-encrypted in the TeamRoom Durable Object.
+    const opaqueId = crypto.randomUUID();
     const createOrgResponse = await fetch(`${apiBase}/organizations`, {
       method: 'POST',
       headers: {
@@ -80,8 +82,8 @@ export async function handleCreateTeam(
         'Authorization': stytchAuth,
       },
       body: JSON.stringify({
-        organization_name: teamName,
-        organization_slug: `${slug}-${Date.now().toString(36)}`,
+        organization_name: `Team-${opaqueId}`,
+        organization_slug: `team-${opaqueId}`,
         // Allow all auth methods so session exchange works regardless of how the user signed in
         // (magic_link, google_oauth, etc.). Without this, Stytch rejects session exchange with
         // "Unknown token type: multi_tenant_magic_links".
@@ -314,7 +316,7 @@ export async function handleListTeams(
 
         return {
           orgId,
-          name: meta.name || d.organization?.organization_name || 'Unknown Team',
+          name: meta.name || 'Unknown Team',
           gitRemoteHash: meta.gitRemoteHash || null,
           createdAt: meta.createdAt ? new Date(meta.createdAt).toISOString() : '',
           role: roleData?.role || 'member',
