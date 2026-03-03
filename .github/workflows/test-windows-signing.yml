@@ -1,0 +1,133 @@
+name: Test Windows Code Signing
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-signing:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: '**/package-lock.json'
+
+      - name: Upgrade npm to 10.x
+        run: npm install -g npm@10
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build runtime package (for theme assets)
+        working-directory: packages/runtime
+        env:
+          NODE_ENV: production
+        run: npm run build
+
+      - name: Build extension-sdk
+        working-directory: packages/extension-sdk
+        env:
+          NODE_ENV: production
+        run: npm run build
+
+      - name: Build extensions
+        env:
+          NODE_ENV: production
+        run: |
+          cd packages/extensions/datamodellm
+          npm run build
+          cd ../../..
+          cd packages/extensions/pdf-viewer
+          npm run build
+          cd ../../..
+          cd packages/extensions/csv-spreadsheet
+          npm run build
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.8
+
+      - name: Build Claude helper binary
+        working-directory: packages/electron
+        run: npm run build:claude-helper:windows
+        shell: bash
+
+      # Build unsigned first
+      - name: Build Electron app (unsigned)
+        env:
+          NODE_ENV: production
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        working-directory: packages/electron
+        run: npm run build:win
+        shell: bash
+
+      - name: List built artifacts
+        run: |
+          echo "=== Built artifacts ==="
+          dir packages\electron\release\
+        shell: cmd
+
+      # Verify DigiCert secrets are present
+      - name: Verify DigiCert secrets
+        env:
+          SM_API_KEY: ${{ secrets.DIGICERT_CLIENT_API_TOKEN }}
+          SM_CLIENT_CERT_PASSWORD: ${{ secrets.DIGICERT_CLIENT_CERT_PW }}
+          DIGICERT_KEYPAIR_ALIAS: ${{ secrets.DIGICERT_KEYPAIR_ALIAS }}
+          DIGICERT_CLIENT_CERT_BASE64: ${{ secrets.DIGICERT_CLIENT_CERT_BASE64 }}
+        run: |
+          echo "=== DigiCert Secret Verification ==="
+          $hasError = $false
+          if ([string]::IsNullOrEmpty($env:DIGICERT_CLIENT_CERT_BASE64)) { Write-Host "ERROR: DIGICERT_CLIENT_CERT_BASE64 is empty"; $hasError = $true } else { Write-Host "DIGICERT_CLIENT_CERT_BASE64: set ($($env:DIGICERT_CLIENT_CERT_BASE64.Length) chars)" }
+          if ([string]::IsNullOrEmpty($env:SM_API_KEY)) { Write-Host "ERROR: DIGICERT_CLIENT_API_TOKEN is empty"; $hasError = $true } else { Write-Host "DIGICERT_CLIENT_API_TOKEN: set ($($env:SM_API_KEY.Length) chars)" }
+          if ([string]::IsNullOrEmpty($env:SM_CLIENT_CERT_PASSWORD)) { Write-Host "ERROR: DIGICERT_CLIENT_CERT_PW is empty"; $hasError = $true } else { Write-Host "DIGICERT_CLIENT_CERT_PW: set ($($env:SM_CLIENT_CERT_PASSWORD.Length) chars)" }
+          if ([string]::IsNullOrEmpty($env:DIGICERT_KEYPAIR_ALIAS)) { Write-Host "ERROR: DIGICERT_KEYPAIR_ALIAS is empty"; $hasError = $true } else { Write-Host "DIGICERT_KEYPAIR_ALIAS: set ($($env:DIGICERT_KEYPAIR_ALIAS.Length) chars)" }
+          if ($hasError) { exit 1 }
+        shell: powershell
+
+      # Decode DigiCert client certificate
+      - name: Decode DigiCert Client Certificate
+        env:
+          DIGICERT_CLIENT_CERT_BASE64: ${{ secrets.DIGICERT_CLIENT_CERT_BASE64 }}
+        run: |
+          $certBytes = [System.Convert]::FromBase64String($env:DIGICERT_CLIENT_CERT_BASE64)
+          $certPath = Join-Path $env:RUNNER_TEMP "digicert_client_cert.p12"
+          [System.IO.File]::WriteAllBytes($certPath, $certBytes)
+          Write-Host "Certificate decoded to: $certPath"
+          Write-Host "Certificate size: $($certBytes.Length) bytes"
+        shell: powershell
+
+      # Sign with DigiCert KeyLocker via Software Trust Manager action
+      - name: Sign with DigiCert KeyLocker
+        uses: digicert/code-signing-software-trust-action@v1.0.0
+        with:
+          simple-signing-mode: true
+          input: "packages/electron/release/Nimbalyst-Windows.exe"
+          keypair-alias: ${{ secrets.DIGICERT_KEYPAIR_ALIAS }}
+        env:
+          SM_HOST: "https://clientauth.one.digicert.com"
+          SM_API_KEY: ${{ secrets.DIGICERT_CLIENT_API_TOKEN }}
+          SM_CLIENT_CERT_FILE: ${{ runner.temp }}\digicert_client_cert.p12
+          SM_CLIENT_CERT_PASSWORD: ${{ secrets.DIGICERT_CLIENT_CERT_PW }}
+
+      - name: Verify signature
+        run: |
+          echo "=== Signature verification ==="
+          signtool verify /pa /v "packages\electron\release\Nimbalyst-Windows.exe"
+        shell: cmd
+
+      - name: Upload signed artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-signed-test
+          path: packages/electron/release/*.exe
+          retention-days: 3
