@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { usePostHog } from 'posthog-js/react';
 import { useAtom } from 'jotai';
+import { MaterialSymbol } from '@nimbalyst/runtime';
 import { QRPairingModal } from './QRPairingModal';
 import {
   syncConfigAtom,
@@ -69,6 +70,47 @@ interface StytchAuthState {
 
 /** Maximum number of projects to show inline before collapsing */
 const INLINE_PROJECT_LIMIT = 5;
+
+function SharingCallout() {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)]">
+      <div className="p-3.5 bg-nim-primary/8 border border-nim-primary/20 rounded-lg">
+        <div className="flex items-start gap-2.5">
+          <MaterialSymbol icon="share" size={18} className="text-[var(--nim-primary)] shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-[13px] font-semibold text-[var(--nim-text)]">
+                Sharing Sessions & Documents
+              </span>
+              <button
+                className="inline-flex items-center justify-center w-[18px] h-[18px] p-0 border-none rounded-full bg-[var(--nim-bg-tertiary)] cursor-pointer hover:bg-[var(--nim-bg-active)] transition-colors"
+                onClick={() => setExpanded(!expanded)}
+                title={expanded ? 'Hide details' : 'How does sharing work?'}
+              >
+                <MaterialSymbol icon={expanded ? 'expand_less' : 'help'} size={14} className="text-[var(--nim-text-muted)]" />
+              </button>
+            </div>
+            <p className="m-0 text-[12px] text-[var(--nim-text-muted)] leading-relaxed">
+              Right-click any session or document to create an encrypted share link for collaborators.
+            </p>
+          </div>
+        </div>
+        {expanded && (
+          <div className="mt-3 pt-3 border-t border-nim-primary/15">
+            <ul className="m-0 pl-5 text-[12px] text-[var(--nim-text-muted)] leading-7 list-disc">
+              <li>In <strong className="text-[var(--nim-text)]">Agent mode</strong>, right-click a session in the sidebar and select &quot;Share link&quot;</li>
+              <li>In <strong className="text-[var(--nim-text)]">Files mode</strong>, right-click a document in the file tree and select &quot;Share Link&quot;</li>
+              <li>Links are end-to-end encrypted and you choose the expiration (1, 7, or 30 days)</li>
+              <li>View and manage all your shared links under <strong className="text-[var(--nim-text)]">Shared Links</strong> in settings</li>
+            </ul>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export function SyncPanel() {
   const posthog = usePostHog();
@@ -638,6 +680,11 @@ export function SyncPanel() {
           </div>
         )}
       </div>
+
+      {/* Sharing Discovery Callout */}
+      {stytchAuth.isAuthenticated && (
+        <SharingCallout />
+      )}
 
       {/* Projects to Sync */}
       <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
