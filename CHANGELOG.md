@@ -20,6 +20,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.55.5] - 2026-03-02
+
+
+### Added
+- @ mention shows files immediately on typing "@" and supports directory mentions with folder icon
+- Context-aware walkthrough guides: agent-mode-intro in Files mode, files-mode-intro in Agent mode
+- Hide collab UI when no team configured; show gear icon for disconnected projects
+
+### Changed
+- Cmd+1-9 now exclusively switches tabs (removed conflicting window switching shortcuts)
+- Sessions Board removed from tracker panel (lives in AgentMode now)
+
+### Fixed
+- iOS mobile prompt send failures now show user-visible error alerts and restore draft text
+- Draft text no longer bounces back after mobile prompt submit (draftUpdatedAt timestamp for stale rejection)
+- Secondary account JWTs auto-refresh on 401 in TeamService instead of failing
+- "Share to Team" menu hidden when project has no team
+- Tray menu no longer shows stale "blocked" status for completed sessions
+- Skip YAML parsing for .astro files whose --- blocks contain JavaScript
+- Gutter popover placement fixed to open right instead of above
+
 ## [0.55.4] - 2026-03-02
 
 
