@@ -20,6 +20,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.55.7] - 2026-03-03
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- Toggling auto-commit ON in commit widget now actually triggers a commit
+- Commit widget shows real progress indicator when toggling auto-commit on
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.55.6] - 2026-03-03
 
 
