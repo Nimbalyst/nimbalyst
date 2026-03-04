@@ -2,7 +2,6 @@ import React, { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { copyToClipboard } from '../../../utils/clipboard';
 
 // Inject MarkdownRenderer styles once (for syntax highlighting, scrollbar, and overflow wrapper)
 const injectMarkdownRendererStyles = () => {
@@ -180,119 +179,6 @@ const OverflowWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) 
   );
 };
 
-/** Inline code with click/tap-to-copy and brief visual feedback. */
-function InlineCode({ className, children, ...props }: any) {
-  const [copied, setCopied] = useState(false);
-
-  const handleClick = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    const text = String(children).replace(/\n$/, '');
-    try {
-      await copyToClipboard(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch { /* ignore */ }
-  };
-
-  return (
-    <code
-      className={className}
-      onClick={handleClick}
-      style={{
-        backgroundColor: copied ? 'rgba(74, 222, 128, 0.2)' : 'var(--nim-bg-tertiary)',
-        padding: '0.125rem 0.375rem',
-        borderRadius: '0.25rem',
-        fontSize: '0.875em',
-        fontFamily: 'var(--font-mono, monospace)',
-        color: 'var(--nim-text)',
-        cursor: 'pointer',
-        transition: 'background-color 0.15s ease',
-        userSelect: 'none',
-        WebkitUserSelect: 'none',
-      } as React.CSSProperties}
-      title="Click to copy"
-      {...props}
-    >
-      {children}
-    </code>
-  );
-}
-
-/** Context to distinguish inline code from fenced code blocks in react-markdown v9+. */
-const CodeBlockContext = React.createContext(false);
-
-/** Wrapper for fenced code blocks that sets context so `code` component knows it's not inline. */
-function PreBlock({ children }: { children?: React.ReactNode }) {
-  return <CodeBlockContext.Provider value={true}>{children}</CodeBlockContext.Provider>;
-}
-
-/** Code component used inside react-markdown. Uses CodeBlockContext to detect inline vs block. */
-function CodeComponent({ node, className, children, ...props }: any) {
-  const isCodeBlock = React.useContext(CodeBlockContext);
-  const match = /language-(\w+)/.exec(className || '');
-  const language = match ? match[1] : '';
-  const codeString = String(children).replace(/\n$/, '');
-  const isSingleLine = !codeString.includes('\n');
-
-  // Inline code (backticks in text) — click/tap to copy
-  if (!isCodeBlock) {
-    return (
-      <InlineCode className={className} {...props}>
-        {children}
-      </InlineCode>
-    );
-  }
-
-  const codeStyle: React.CSSProperties = {
-    backgroundColor: 'var(--nim-bg-tertiary)',
-    padding: isSingleLine ? '0.25rem 0.5rem' : '0.75rem',
-    borderRadius: isSingleLine ? '0.25rem' : '0.375rem',
-    fontSize: '0.8125rem',
-    lineHeight: isSingleLine ? '1.4' : '1.5',
-    margin: isSingleLine ? 0 : '0.5rem 0'
-  };
-
-  // Code block with language - use syntax highlighting
-  if (language) {
-    const syntaxBlock = (
-      <SyntaxHighlighter
-        style={{} as any}
-        customStyle={codeStyle}
-        language={language}
-        PreTag="div"
-        codeTagProps={{
-          style: {
-            fontFamily: 'var(--font-mono, monospace)',
-            fontSize: 'inherit',
-            background: 'none'
-          }
-        }}
-        {...props}
-      >
-        {codeString}
-      </SyntaxHighlighter>
-    );
-    return isSingleLine ? syntaxBlock : <OverflowWrapper>{syntaxBlock}</OverflowWrapper>;
-  }
-
-  // Code block without language
-  const codeBlock = (
-    <code
-      className={className}
-      style={{
-        display: isSingleLine ? 'inline-block' : 'block',
-        ...codeStyle,
-        fontFamily: 'var(--font-mono, monospace)',
-        color: 'var(--nim-text)'
-      }}
-      {...props}
-    >
-      {children}
-    </code>
-  );
-  return isSingleLine ? codeBlock : <OverflowWrapper>{codeBlock}</OverflowWrapper>;
-}
-
 interface MarkdownRendererProps {
   content: string;
   isUser?: boolean;
@@ -314,10 +200,86 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
-          // pre sets CodeBlockContext so code component knows it's a fenced block
-          pre: PreBlock,
-          // code handles both inline (click-to-copy) and block (syntax highlighting)
-          code: CodeComponent,
+          // Code blocks with syntax highlighting
+          code({ node, inline, className, children, ...props }: any) {
+            const match = /language-(\w+)/.exec(className || '');
+            const language = match ? match[1] : '';
+            const codeString = String(children).replace(/\n$/, '');
+            const isSingleLine = !codeString.includes('\n');
+
+            // True inline code (backticks in text)
+            if (inline) {
+              return (
+                <code
+                  className={className}
+                  style={{
+                    backgroundColor: 'var(--nim-bg-tertiary)',
+                    padding: '0.125rem 0.375rem',
+                    borderRadius: '0.25rem',
+                    fontSize: '0.875em',
+                    fontFamily: 'var(--font-mono, monospace)',
+                    color: 'var(--nim-text)'
+                  }}
+                  {...props}
+                >
+                  {children}
+                </code>
+              );
+            }
+
+            const codeStyle: React.CSSProperties = {
+              backgroundColor: 'var(--nim-bg-tertiary)',
+              padding: isSingleLine ? '0.25rem 0.5rem' : '0.75rem',
+              borderRadius: isSingleLine ? '0.25rem' : '0.375rem',
+              fontSize: '0.8125rem',
+              lineHeight: isSingleLine ? '1.4' : '1.5',
+              margin: isSingleLine ? 0 : '0.5rem 0'
+            };
+
+            // Code block with language - use syntax highlighting
+            if (language) {
+              const syntaxBlock = (
+                <SyntaxHighlighter
+                  style={{} as any}
+                  customStyle={codeStyle}
+                  language={language}
+                  PreTag="div"
+                  codeTagProps={{
+                    style: {
+                      fontFamily: 'var(--font-mono, monospace)',
+                      fontSize: 'inherit',
+                      background: 'none'
+                    }
+                  }}
+                  {...props}
+                >
+                  {codeString}
+                </SyntaxHighlighter>
+              );
+              // Only wrap multi-line blocks with OverflowWrapper
+              return isSingleLine ? syntaxBlock : <OverflowWrapper>{syntaxBlock}</OverflowWrapper>;
+            }
+
+            // Code block without language
+            const codeBlock = (
+              <code
+                className={className}
+                style={{
+                  display: isSingleLine ? 'inline-block' : 'block',
+                  ...codeStyle,
+                  fontFamily: 'var(--font-mono, monospace)',
+                  color: 'var(--nim-text)'
+                }}
+                {...props}
+              >
+                {children}
+              </code>
+            );
+            // Only wrap multi-line blocks with OverflowWrapper
+            return isSingleLine ? codeBlock : <OverflowWrapper>{codeBlock}</OverflowWrapper>;
+          },
+          // Remove default pre wrapper - we handle styling in code component
+          pre: ({ children }) => <>{children}</>,
           // Headings
           h1: ({ children }) => (
             <h1 style={{
