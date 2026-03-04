@@ -23,6 +23,7 @@ export const PLAYWRIGHT_TEST_SELECTORS = {
 
   // Workspace and file tree
   workspaceSidebar: '.workspace-sidebar',
+  fileTreeContainer: '.workspace-file-tree',
   fileTreeItem: '.file-tree-name',
   fileTreeFilterButton: '.workspace-action-button[aria-label="Filter files"]',
   fileTreeFilterMenu: '.file-tree-filter-menu',
@@ -46,6 +47,9 @@ export const PLAYWRIGHT_TEST_SELECTORS = {
   // API key dialog
   apiKeyDialogOverlay: '.api-key-dialog-overlay',
   apiKeyDialogDismissButton: '.api-key-dialog-button.secondary',
+
+  // Discord invitation overlay (appears after N launches, intercepts pointer events)
+  discordInvitationOverlay: '.discord-invitation-overlay',
 
   // AI Chat
   aiChatPanel: '[data-testid="chat-sidebar-panel"]',

@@ -318,16 +318,16 @@ test('Opening a second file should not re-render the first file TabEditor', asyn
 
 test('should show relative path from workspace root in breadcrumb', async () => {
   // Wait for file tree to load
-  await page.waitForSelector('.file-tree', { timeout: TEST_TIMEOUTS.FILE_TREE_LOAD });
+  await page.waitForSelector(PLAYWRIGHT_TEST_SELECTORS.workspaceSidebar, { timeout: TEST_TIMEOUTS.FILE_TREE_LOAD });
 
   // Expand the crumb-subdir folder by clicking on it
-  const folderItem = page.locator('.file-tree-item').filter({ hasText: 'crumb-subdir' }).first();
+  const folderItem = page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeItem).filter({ hasText: 'crumb-subdir' }).first();
   await expect(folderItem).toBeVisible({ timeout: 5000 });
   await folderItem.click();
   await page.waitForTimeout(500);
 
   // Click on the test file
-  const fileItem = page.locator('.file-tree-item').filter({ hasText: 'crumb-file.md' }).first();
+  const fileItem = page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeItem).filter({ hasText: 'crumb-file.md' }).first();
   await expect(fileItem).toBeVisible({ timeout: 5000 });
   await fileItem.dblclick();
 

@@ -3,6 +3,7 @@ import type { ElectronApplication, Page } from 'playwright';
 import {
   launchElectronApp,
   createTempWorkspace,
+  waitForAppReady,
   TEST_TIMEOUTS
 } from '../helpers';
 import path from 'path';
@@ -21,13 +22,11 @@ test.describe('Update Toast', () => {
   let page: Page;
   let workspacePath: string;
 
-  test.beforeEach(async () => {
-    // Create a temporary workspace
+  test.beforeAll(async () => {
     workspacePath = await createTempWorkspace();
     const testFilePath = path.join(workspacePath, 'test.md');
     await fs.writeFile(testFilePath, '# Test Document\n\nThis is a test.');
 
-    // Launch app with workspace
     electronApp = await launchElectronApp({
       workspace: workspacePath,
       env: { NODE_ENV: 'test' }
@@ -35,27 +34,41 @@ test.describe('Update Toast', () => {
 
     page = await electronApp.firstWindow();
 
-    // Listen to console logs
     page.on('console', msg => {
       const text = msg.text();
       console.log(`[BROWSER ${msg.type()}]`, text);
     });
 
-    // Wait for app to load
-    await page.waitForLoadState('domcontentloaded');
-    await page.waitForTimeout(1000);
-
-    // Clear any reminder suppression from previous tests
-    await page.evaluate(async () => {
-      await window.electronAPI.invoke('test:clear-update-suppression');
-    });
+    await waitForAppReady(page);
   });
 
-  test.afterEach(async () => {
+  test.afterAll(async () => {
     if (electronApp) {
       await electronApp.close();
     }
     await fs.rm(workspacePath, { recursive: true, force: true }).catch(() => undefined);
+  });
+
+  // Clean up any lingering toast/dialog state between tests
+  test.beforeEach(async () => {
+    // Close any open dialog
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(100);
+
+    // Dismiss any visible toast
+    const container = page.locator('[data-testid="update-toast-container"]');
+    if (await container.isVisible().catch(() => false)) {
+      const dismiss = page.locator('[data-testid="update-toast-dismiss"]');
+      if (await dismiss.isVisible().catch(() => false)) {
+        await dismiss.click();
+      }
+      await expect(container).toHaveCount(0, { timeout: 2000 }).catch(() => {});
+    }
+
+    // Clear any reminder suppression
+    await page.evaluate(async () => {
+      await window.electronAPI.invoke('test:clear-update-suppression');
+    });
   });
 
   test('should show update available toast with version and buttons', async () => {

@@ -146,8 +146,8 @@ test.describe('Blitz Creation', () => {
     const textarea = dialogModal.locator('textarea');
     await expect(textarea).toBeVisible();
 
-    // Check Models section exists
-    await expect(dialogModal.locator('text=Models')).toBeVisible();
+    // Check Models section exists (use exact match to avoid matching "Loading models...")
+    await expect(dialogModal.locator('label', { hasText: 'Models' })).toBeVisible();
 
     // Check Cancel and Submit buttons
     await expect(dialogModal.locator('button', { hasText: 'Cancel' })).toBeVisible();
@@ -318,6 +318,33 @@ test.describe('Blitz Creation', () => {
       console.log('[Blitz Test] Dialog still open. Error:', errorMessage || 'No error shown');
       // This is acceptable in CI/test env without real API keys
     }
+  });
+
+  test('should capture Blitz dialog screenshot', async () => {
+    await switchToAgentMode(page);
+
+    const sessionHistory = page.locator(PLAYWRIGHT_TEST_SELECTORS.sessionHistory);
+    await expect(sessionHistory).toBeVisible({ timeout: 10000 });
+
+    const newDropdownButton = page.locator('[data-testid="new-dropdown-button"]');
+    await expect(newDropdownButton).toBeVisible({ timeout: 5000 });
+    await newDropdownButton.click();
+
+    const newBlitzButton = page.locator('[data-testid="new-blitz-button"]');
+    await expect(newBlitzButton).toBeVisible({ timeout: 3000 });
+    await newBlitzButton.click();
+
+    const dialogModal = page.locator('.nim-modal');
+    await expect(dialogModal).toBeVisible({ timeout: 3000 });
+
+    const screenshotDir = path.resolve(__dirname, '../../../../e2e_test_output/screenshots');
+    await fs.mkdir(screenshotDir, { recursive: true });
+    await page.waitForTimeout(500);
+    await dialogModal.screenshot({ path: path.join(screenshotDir, 'blitz-dialog.png') });
+
+    // Close dialog for next test
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(300);
   });
 
   test('should not show New Blitz button in files mode', async () => {

@@ -36,30 +36,28 @@ test.describe('Walkthrough System', () => {
   let page: Page;
   let workspaceDir: string;
 
-  test.beforeEach(async () => {
-    // Create a temp workspace with a test file
+  test.beforeAll(async () => {
     workspaceDir = await createTempWorkspace();
     const testFilePath = path.join(workspaceDir, 'test.md');
     await fs.writeFile(testFilePath, '# Test File\n\nSome content here.', 'utf8');
 
-    // Launch app with workspace
     electronApp = await launchElectronApp({ workspace: workspaceDir });
     page = await electronApp.firstWindow();
     await waitForAppReady(page);
 
     // Wait for walkthrough helpers to be available
     await waitForWalkthroughHelpers(page);
-
-    // Reset walkthrough state before each test
-    await resetWalkthroughState(page);
-
-    // Wait a bit for state to settle
-    await page.waitForTimeout(500);
   });
 
-  test.afterEach(async () => {
+  test.afterAll(async () => {
     await electronApp.close();
     await fs.rm(workspaceDir, { recursive: true, force: true });
+  });
+
+  // Reset walkthrough state before each test so they're independent
+  test.beforeEach(async () => {
+    await resetWalkthroughState(page);
+    await page.waitForTimeout(300);
   });
 
   test('should list available walkthroughs', async () => {

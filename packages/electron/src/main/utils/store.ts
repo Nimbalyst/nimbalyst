@@ -1020,6 +1020,7 @@ export function incrementCompletedSessionsWithTools(): number {
 }
 
 export function shouldShowCommunityPopup(): boolean {
+  if (process.env.PLAYWRIGHT === '1') return false;
   const dismissed = isCommunityPopupDismissed();
   if (dismissed) return false;
   const completedSessionsWithTools = getCompletedSessionsWithTools();

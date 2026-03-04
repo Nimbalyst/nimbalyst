@@ -7,6 +7,7 @@
  * - External file change detection
  * - AI diff accept
  * - AI diff reject
+ * - Copy as markdown (Cmd+Shift+C)
  *
  * This file consolidates tests that previously lived in separate files.
  * All tests share a single app instance for performance.
@@ -62,6 +63,11 @@ test.beforeAll(async () => {
   await fs.writeFile(
     path.join(workspaceDir, 'diff-reject-test.md'),
     '# Original Title\n\nThis is the original content.\n',
+    'utf8'
+  );
+  await fs.writeFile(
+    path.join(workspaceDir, 'copy-test.md'),
+    '# Initial Content\n\nTest file.',
     'utf8'
   );
 
@@ -351,4 +357,66 @@ test('rejecting diff reverts to original content', async () => {
 
   // Close the tab to clean up
   await closeTabByFileName(page, 'diff-reject-test.md');
+});
+
+// --- Copy as Markdown test (from markdown-copy.spec.ts) ---
+
+test('Cmd+Shift+C should copy selection as markdown', async () => {
+  await openFileFromTree(page, 'copy-test.md');
+
+  await page.waitForSelector(ACTIVE_EDITOR_SELECTOR, { timeout: TEST_TIMEOUTS.EDITOR_LOAD });
+
+  // Set up clipboard permissions
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+
+  // Type some content with formatting
+  const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
+  await editor.click();
+  await page.keyboard.press('Meta+A');
+  await editor.pressSequentially('Hello ');
+  await page.keyboard.press('Meta+B');
+  await editor.pressSequentially('world');
+
+  // Select all and copy as markdown with Cmd+Shift+C
+  await page.keyboard.press('Meta+A');
+  await page.keyboard.press('Meta+Shift+C');
+
+  // Wait for copy to complete
+  await page.waitForTimeout(500);
+
+  // Check what's actually on the system clipboard
+  const clipboardData = await page.evaluate(async () => {
+    try {
+      const items = await navigator.clipboard.read();
+      const result: any = {
+        types: [],
+        textContent: '',
+        htmlContent: ''
+      };
+
+      for (const item of items) {
+        result.types.push(...item.types);
+
+        if (item.types.includes('text/plain')) {
+          const blob = await item.getType('text/plain');
+          result.textContent = await blob.text();
+        }
+
+        if (item.types.includes('text/html')) {
+          const blob = await item.getType('text/html');
+          result.htmlContent = await blob.text();
+        }
+      }
+
+      return result;
+    } catch (error) {
+      return { error: String(error), types: [] };
+    }
+  });
+
+  // text/plain should contain markdown
+  expect(clipboardData.textContent).toContain('**world**');
+
+  // Close the tab to clean up
+  await closeTabByFileName(page, 'copy-test.md');
 });
