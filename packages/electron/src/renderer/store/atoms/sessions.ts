@@ -1987,6 +1987,7 @@ export const selectedWorkstreamAtom = atomFamily((_workspacePath: string) =>
 // Using a standalone function avoids stale-closure issues after Vite HMR
 // where a debounce timer callback would capture a stale module scope.
 function persistSelectedWorkstream(workspacePath: string, selection: { type: WorkstreamType; id: string } | null): void {
+  // console.log('[sessions] persistSelectedWorkstream:', selection?.type, selection?.id);
   window.electronAPI.invoke('workspace:update-state', workspacePath, {
     agenticCodingWindowState: {
       selectedWorkstream: selection,

@@ -82,11 +82,13 @@ function mergeWithDefaults(persisted: Partial<AgentModeLayout> | undefined): Age
     ...DEFAULT_SESSION_HISTORY_LAYOUT,
     ...persisted?.sessionHistoryLayout,
   };
+  // Only pick known layout fields from persisted data.
+  // agenticCodingWindowState stores both layout AND selectedWorkstream at the same level.
+  // Blindly spreading ...persisted would pull selectedWorkstream into the layout object,
+  // and schedulePersist would write it back, overwriting newer selections.
   return {
-    ...DEFAULT_LAYOUT,
-    ...persisted,
     sessionHistoryLayout,
-    // Ensure panel collapse states have defaults if missing from old persisted data
+    filesEditedWidth: persisted?.filesEditedWidth ?? DEFAULT_LAYOUT.filesEditedWidth,
     todoPanelCollapsed: persisted?.todoPanelCollapsed ?? DEFAULT_LAYOUT.todoPanelCollapsed,
     teammatePanelCollapsed: persisted?.teammatePanelCollapsed ?? DEFAULT_LAYOUT.teammatePanelCollapsed,
     agentPanelCollapsed: persisted?.agentPanelCollapsed ?? DEFAULT_LAYOUT.agentPanelCollapsed,
@@ -205,8 +207,7 @@ function schedulePersist(workspacePath: string, layout: AgentModeLayout): void {
       // Persist directly - runtime shape matches persisted shape
       const state = { agenticCodingWindowState: layout };
       // console.log('[agentMode] Persisting layout:', JSON.stringify(state, null, 2));
-      const result = await window.electronAPI.invoke('workspace:update-state', workspacePath, state);
-      // console.log('[agentMode] Persist result:', result);
+      await window.electronAPI.invoke('workspace:update-state', workspacePath, state);
     } catch (err) {
       console.error('[agentMode] Failed to persist layout:', err);
     }
@@ -232,7 +233,8 @@ export const setSessionHistoryLayoutAtom = atom(
     set(agentModeLayoutAtom, newLayout);
 
     if (!currentWorkspacePath) {
-      throw new Error('[agentMode] Cannot persist layout - initAgentModeLayout not called');
+      console.warn('[agentMode] Cannot persist layout - initAgentModeLayout not called yet');
+      return;
     }
     schedulePersist(currentWorkspacePath, newLayout);
   }
@@ -251,7 +253,8 @@ export const setAgentModeLayoutAtom = atom(
     set(agentModeLayoutAtom, newLayout);
 
     if (!currentWorkspacePath) {
-      throw new Error('[agentMode] Cannot persist layout - initAgentModeLayout not called');
+      console.warn('[agentMode] Cannot persist layout - initAgentModeLayout not called yet');
+      return;
     }
     schedulePersist(currentWorkspacePath, newLayout);
   }
@@ -335,7 +338,8 @@ export const toggleTodoPanelCollapsedAtom = atom(
     set(agentModeLayoutAtom, newLayout);
 
     if (!currentWorkspacePath) {
-      throw new Error('[agentMode] Cannot persist layout - initAgentModeLayout not called');
+      console.warn('[agentMode] Cannot persist layout - initAgentModeLayout not called yet');
+      return;
     }
     schedulePersist(currentWorkspacePath, newLayout);
   }
@@ -353,7 +357,8 @@ export const toggleTeammatePanelCollapsedAtom = atom(
     set(agentModeLayoutAtom, newLayout);
 
     if (!currentWorkspacePath) {
-      throw new Error('[agentMode] Cannot persist layout - initAgentModeLayout not called');
+      console.warn('[agentMode] Cannot persist layout - initAgentModeLayout not called yet');
+      return;
     }
     schedulePersist(currentWorkspacePath, newLayout);
   }
@@ -371,7 +376,8 @@ export const toggleAgentPanelCollapsedAtom = atom(
     set(agentModeLayoutAtom, newLayout);
 
     if (!currentWorkspacePath) {
-      throw new Error('[agentMode] Cannot persist layout - initAgentModeLayout not called');
+      console.warn('[agentMode] Cannot persist layout - initAgentModeLayout not called yet');
+      return;
     }
     schedulePersist(currentWorkspacePath, newLayout);
   }
