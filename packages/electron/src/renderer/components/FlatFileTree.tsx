@@ -448,6 +448,8 @@ export function FlatFileTree({
 
     e.dataTransfer.effectAllowed = 'copyMove';
     e.dataTransfer.setData('text/plain', node.path);
+    // Also set custom MIME type so AI input can accept this as an @-file mention
+    e.dataTransfer.setData('application/x-nimbalyst-file-mention', node.path);
     setDragState({
       sourcePaths: [node.path],
       dropTargetPath: null,

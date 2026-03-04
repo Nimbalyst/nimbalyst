@@ -845,10 +845,16 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
       e.stopPropagation();
       setDragActive(false);
 
-      // Handle file mention drops from the files-edited sidebar
+      // Handle file mention drops from file tree or files-edited sidebar
       const fileMentionPath = e.dataTransfer.getData('application/x-nimbalyst-file-mention');
       if (fileMentionPath) {
-        const mention = `@${fileMentionPath}`;
+        // Convert absolute paths to relative (file tree uses absolute, files-edited uses relative)
+        let relativePath = fileMentionPath;
+        if (workspacePath && fileMentionPath.startsWith(workspacePath)) {
+          relativePath = fileMentionPath.slice(workspacePath.length);
+          if (relativePath.startsWith('/')) relativePath = relativePath.slice(1);
+        }
+        const mention = `@${relativePath}`;
         // Insert at cursor position, or append with space separator
         const textarea = textareaRef.current;
         const cursorPos = textarea?.selectionStart ?? value.length;
@@ -875,7 +881,7 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
       for (const file of files) {
         await handleFileAttachment(file);
       }
-    }, [onAttachmentAdd, handleFileAttachment, value, onChange]);
+    }, [onAttachmentAdd, handleFileAttachment, value, onChange, workspacePath]);
 
     // Threshold for converting large text pastes to attachments (25 lines or 2000 characters)
     const LARGE_PASTE_LINE_THRESHOLD = 25;
