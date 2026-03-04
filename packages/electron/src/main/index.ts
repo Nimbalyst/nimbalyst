@@ -732,6 +732,13 @@ app.whenReady().then(async () => {
     // Check if Claude Code is installed (only on very first launch)
     checkClaudeCodeInstallationOnFirstLaunch();
 
+    // Fire user_created event on very first launch (launchCount === 1)
+    if (launchCount === 1) {
+        analytics.sendEvent('user_created', {
+            $set_once: { first_seen_version: app.getVersion() },
+        });
+    }
+
     // Parse command line arguments
     parseCommandLineArgs();
 

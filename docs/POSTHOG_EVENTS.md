@@ -310,6 +310,7 @@ The `known_error` event uses an `errorId` property to identify specific error co
 
 | Event Name | File(s) | Trigger | Properties | First Added (Public) | Significant Changes |
 | --- | --- | --- | --- | --- | --- |
+| `user_created` | `index.ts:736` | Very first app launch only (launchCount === 1) - fires once per user | `$set_once: first_seen_version` | (pending release) |  |
 | `nimbalyst_session_start` | `AnalyticsService.ts:154` | Application starts (sent even for opted-out users) | `$session_id`<br/>`has_git_installed`<br/>`nimbalyst_version`<br/>`$set_once: is_dev_user`<br/>`$set_once: is_dev_install` | v0.45.25 (2025-11-14) |  |
 | `analytics_opt_out` | `AnalyticsService.ts:89` | User opts out of analytics in settings | None | v0.45.25 (2025-11-14) |  |
 | `first_launch_claude_check` | `index.ts:114` | Very first app launch only - checks if Claude Code is installed | `hasClaudeInstalled` (boolean) | v0.47.2 (2025-12-10) |  |
@@ -356,7 +357,7 @@ Events from the iOS companion app. These events share the same PostHog project a
 
 ## Event Summary Statistics
 
-- **Total Events**: 110 unique event names
+- **Total Events**: 111 unique event names
 - **Main Process Events**: 56 (via AnalyticsService)
 - **Renderer Process Events**: 47 (via usePostHog hook)
 - **Mobile Events**: 7 (via Capacitor AnalyticsService)
@@ -378,7 +379,7 @@ Events from the iOS companion app. These events share the same PostHog project a
 - **Permissions**: 4 events
 - **Auto-Update**: 6 events
 - **Voice Mode**: 3 events
-- **System/Infrastructure**: 11 events
+- **System/Infrastructure**: 12 events
 
 ## Person Properties
 
@@ -390,6 +391,7 @@ Person properties are attached to user profiles in PostHog via `posthog.people.s
 | `user_role` | `string` | `App.tsx` (onboarding) | User's role (e.g., "Software Developer", "Designer") |
 | `referral_source` | `string` | `App.tsx` (onboarding) | How user heard about Nimbalyst (e.g., "Search", "Social Media") |
 | `developer_mode` | `boolean` | `App.tsx` (onboarding)<br/>`AdvancedPanel.tsx` (settings) | Whether developer mode is enabled |
+| `first_seen_version` | `string` | `index.ts` (first launch) | Set via `$set_once` - the app version when user first launched |
 | `is_dev_user` | `boolean` | `AnalyticsService.ts` | Set via `$set_once` - true for development/non-official builds |
 | `is_dev_install` | `boolean` | `AnalyticsService.ts` | Set via `$set_once` - true if installed from dev build |
 | `nimbalyst_mobile_version` | `string` | Mobile `main.tsx` | Mobile app version (iOS/Android) |
