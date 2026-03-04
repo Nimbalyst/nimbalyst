@@ -149,6 +149,57 @@ Tracks file changes within a specific AI session for the change tracking pipelin
 - `markEditorSave(filePath)` - Mark a file as user-saved (prevents false AI attribution)
 - `handleChange(filePath)` / `handleAdd(filePath)` / `handleUnlink(filePath)` - Process detected changes
 
+### WorkspaceEventBus Gitignore Bypass System
+
+**File:** `packages/electron/src/main/file/WorkspaceEventBus.ts`
+
+The gitignore bypass mechanism ensures that files written by AI tools to gitignored directories (e.g., `build/`, `dist/`, `node_modules/`) still trigger file change events. Without this, the watcher's gitignore filter silently drops events for AI-edited files in ignored paths, so the editor never learns about the change.
+
+#### Why It Exists
+
+WorkspaceEventBus loads `.gitignore` (or fallback patterns) and filters all file events through it. This is correct for user-facing file tree updates (nobody wants `node_modules/` flooding the sidebar), but breaks AI change detection when Claude Code writes to a gitignored path. The bypass system lets specific paths opt out of gitignore filtering.
+
+#### API
+
+| Function | Description |
+|----------|-------------|
+| `addGitignoreBypass(workspacePath, absolutePath)` | Register a path to bypass gitignore. Validates the path is inside the workspace. Events for this path dispatch with `gitignoreBypassed=true`. Also replays any recently dropped events from the replay buffer. |
+| `removeGitignoreBypass(workspacePath, absolutePath)` | Remove a path from the bypass set. |
+| `hasGitignoreBypass(workspacePath, absolutePath)` | Check if a path is in the bypass set (testing/diagnostics). |
+| `clearGitignoreBypasses(workspacePath)` | Clear all bypass paths and the replay buffer for a workspace. Called during session cleanup. Also automatically runs when the last subscriber unsubscribes. |
+
+All paths are normalized to forward slashes internally for cross-platform consistency.
+
+#### Replay Buffer
+
+Because `fs.watch` events typically arrive within a few milliseconds of a file write, the bypass registration (which arrives via the AI streaming chunk) may come *after* the event has already been dropped. The replay buffer solves this race:
+
+- **Max entries:** 50 per workspace
+- **TTL:** 5 seconds (expired entries are pruned on each insertion)
+- **Behavior:** When `addGitignoreBypass` is called, matching entries in the replay buffer are re-dispatched to all listeners with `gitignoreBypassed=true`
+- **Rename handling:** Buffered `rename` events use an async `fs.access` check on replay to determine whether the event is an `add` or `unlink`, matching the live watcher behavior
+
+#### Who Registers Bypasses
+
+| Caller | When | Purpose |
+|--------|------|---------|
+| `ToolExecutor.executeTool()` | Before tool execution | Pre-registers the target path so the watcher bypass is in place before the file write occurs |
+| `SessionFileTracker.trackSingleFile()` | After tool execution, for edited files | Ensures bypass is registered for files tracked as AI edits |
+| `FileHandlers` (`start-watching-file`) | When a tab opens a file | Ensures gitignored files opened in tabs receive change events |
+| `FileHandlers` (`stop-watching-file`) | When a tab closes | Removes the bypass so closed gitignored files stop generating events |
+
+#### How OptimizedWorkspaceWatcher Handles Bypassed Events
+
+When events arrive with `gitignoreBypassed=true`:
+
+- **`onChange`**: Ignored entirely (no editor notification). SessionFileWatcher handles change detection for bypassed files.
+- **`onAdd`**: File tree refresh is triggered (so new AI-created files appear in the sidebar), but no `file-changed-on-disk` event is sent to editors.
+- **`onUnlink`**: File tree refresh is triggered, but no `file-changed-on-disk` or `file-deleted` event is sent to editors.
+
+#### Markdown Always Bypasses
+
+Files with a `.md` extension always bypass gitignore filtering regardless of whether they are in the bypass set. This ensures documentation files in gitignored directories are always visible.
+
 ---
 
 ## 2. Snapshot and Before/After State

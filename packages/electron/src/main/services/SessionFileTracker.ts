@@ -9,12 +9,15 @@
  */
 
 import * as path from 'path';
+import { existsSync } from 'fs';
 import { BrowserWindow } from 'electron';
 import { SessionFilesRepository } from '@nimbalyst/runtime';
 import type { FileLinkType, EditedFileMetadata, ReadFileMetadata, ReferencedFileMetadata } from '@nimbalyst/runtime/ai/server/types';
 import { logger } from '../utils/logger';
 import { startFileWatcher } from '../file/FileWatcher';
+import { addGitignoreBypass } from '../file/WorkspaceEventBus';
 import { documentServices } from '../window/WindowManager';
+import { extractFilePath } from './ai/tools/extractFilePath';
 
 /**
  * Extract file mentions from user messages
@@ -53,31 +56,8 @@ function getLinkTypeForTool(toolName: string): FileLinkType | null {
   return null;
 }
 
-/**
- * Extract file path(s) from tool arguments
- * Returns the first file path found, or null if none.
- * Bash commands are intentionally excluded from file path extraction.
- */
-function extractFilePathFromArgs(toolName: string, args: any): string | null {
-  if (!args) return null;
-
-  // Common patterns for file paths in tool arguments
-  const pathFields = [
-    'file_path',
-    'filePath',
-    'path',
-    'notebook_path',
-    'notebookPath'
-  ];
-
-  for (const field of pathFields) {
-    if (args[field] && typeof args[field] === 'string') {
-      return args[field];
-    }
-  }
-
-  return null;
-}
+// extractFilePathFromArgs has been replaced by the shared extractFilePath utility
+// in packages/electron/src/main/services/ai/tools/extractFilePath.ts
 
 /**
  * Extract metadata for edited files
@@ -202,12 +182,18 @@ export class SessionFileTracker {
           logger.main.debug('[SessionFileTracker] No changes found in file_change args');
           return;
         }
+        let bypassCount = 0;
         for (const change of changes) {
           if (!change || typeof change.path !== 'string' || !change.path.trim()) continue;
           // Resolve relative paths against workspace (Codex sometimes sends relative paths)
           const changePath = change.path.startsWith('/')
             ? change.path
             : path.resolve(workspaceId, change.path);
+          // Cap bypass additions at 10 per file_change tool call
+          if (bypassCount < 10) {
+            addGitignoreBypass(workspaceId, changePath);
+            bypassCount++;
+          }
           await this.trackSingleFile(sessionId, workspaceId, changePath, linkType, toolName, args, result, toolUseId, window);
         }
         return;
@@ -226,7 +212,7 @@ export class SessionFileTracker {
       }
 
       // For non-Bash tools, extract single file path from args
-      const filePath = extractFilePathFromArgs(toolName, args);
+      const filePath = extractFilePath(args);
       // console.log('[SessionFileTracker] Extracted file path:', { toolName, filePath, args });
 
       if (!filePath) {
@@ -272,6 +258,11 @@ export class SessionFileTracker {
           }
           this.recentEdits.delete(dedupeKey);
         }
+      }
+
+      // Register gitignore bypass for edited files so watcher events fire
+      if (linkType === 'edited') {
+        addGitignoreBypass(workspaceId, filePath);
       }
 
       // Prepare metadata based on link type
@@ -360,7 +351,6 @@ export class SessionFileTracker {
           : `${workspaceId}/${filePath}`;
 
         // Only track if file exists
-        const { existsSync } = await import('fs');
         if (!existsSync(resolvedPath)) {
           logger.main.debug(`[SessionFileTracker] Skipping non-existent @mention: ${filePath}`);
           continue;

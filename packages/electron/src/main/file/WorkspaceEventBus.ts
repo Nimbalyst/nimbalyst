@@ -4,6 +4,7 @@ import * as path from 'path';
 import chokidar, { FSWatcher as ChokidarFSWatcher } from 'chokidar';
 import ignore, { Ignore } from 'ignore';
 import { logger } from '../utils/logger';
+import { isPathInWorkspace } from '../utils/workspaceDetection';
 
 /**
  * Whether the platform supports `fs.watch(dir, { recursive: true })`.
@@ -79,6 +80,15 @@ const FALLBACK_IGNORE_PATTERNS = [
   '.DS_Store',
   'Thumbs.db',
 ];
+
+// ---------------------------------------------------------------------------
+// Path normalization
+// ---------------------------------------------------------------------------
+
+/** Normalize a path to forward slashes for consistent Set comparisons across platforms. */
+function normalizeToForwardSlash(p: string): string {
+  return p.replace(/\\/g, '/');
+}
 
 // ---------------------------------------------------------------------------
 // Workspace path safety
@@ -173,10 +183,22 @@ function recordEvent(cb: CircuitBreakerState): boolean {
 export type WorkspaceEventType = 'change' | 'add' | 'unlink';
 
 export interface WorkspaceEventListener {
-  onChange: (filePath: string) => void;
-  onAdd: (filePath: string) => void;
-  onUnlink: (filePath: string) => void;
+  onChange: (filePath: string, gitignoreBypassed?: boolean) => void;
+  onAdd: (filePath: string, gitignoreBypassed?: boolean) => void;
+  onUnlink: (filePath: string, gitignoreBypassed?: boolean) => void;
 }
+
+/** Dropped gitignored event stored in replay buffer. */
+interface DroppedGitignoreEvent {
+  absolutePath: string;
+  eventType: 'change' | 'add' | 'unlink' | 'rename';
+  timestamp: number;
+}
+
+/** Max entries in the replay buffer per workspace. */
+const REPLAY_BUFFER_MAX = 50;
+/** TTL for replay buffer entries (ms). */
+const REPLAY_BUFFER_TTL_MS = 5000;
 
 interface BusEntry {
   watcher: fs.FSWatcher | ChokidarFSWatcher;
@@ -188,6 +210,10 @@ interface BusEntry {
   gitignoreFilter: Ignore;
   /** Event rate circuit breaker — kills the watcher if events flood in. */
   circuitBreaker: CircuitBreakerState;
+  /** Absolute paths that bypass gitignore filtering. */
+  gitignoreBypassPaths: Set<string>;
+  /** Ring buffer of recently dropped gitignored events for replay on bypass registration. */
+  replayBuffer: DroppedGitignoreEvent[];
 }
 
 // ---------------------------------------------------------------------------
@@ -307,6 +333,8 @@ export function unsubscribe(workspacePath: string, subscriberId: string): void {
   if (entry.refCount <= 0) {
     busEntries.delete(key);
     closeWatcher(entry.watcher);
+    entry.gitignoreBypassPaths.clear();
+    entry.replayBuffer = [];
     logger.main.info('[WorkspaceEventBus] Closed shared watcher for workspace:', {
       workspacePath: key,
       lastSubscriberId: subscriberId,
@@ -356,6 +384,82 @@ export function addWatchedPath(workspacePath: string, folderPath: string): void 
   const watcher = entry.watcher;
   if ('add' in watcher) {
     (watcher as ChokidarFSWatcher).add(folderPath);
+  }
+}
+
+/**
+ * Register a file path to bypass gitignore filtering.
+ * Events for this path will be dispatched with `gitignoreBypassed=true`.
+ * On Linux (chokidar), also adds the path to the watcher so events fire
+ * for files inside already-ignored directories.
+ */
+export function addGitignoreBypass(workspacePath: string, absolutePath: string): void {
+  const key = path.resolve(workspacePath);
+  const entry = busEntries.get(key);
+  if (!entry) return;
+
+  // Validate that the path is inside the workspace
+  if (!isPathInWorkspace(absolutePath, key)) {
+    logger.main.debug('[WorkspaceEventBus] Rejected gitignore bypass for path outside workspace:', {
+      workspacePath: key,
+      absolutePath,
+    });
+    return;
+  }
+
+  const normalizedPath = normalizeToForwardSlash(absolutePath);
+  entry.gitignoreBypassPaths.add(normalizedPath);
+
+  // On Linux, ensure chokidar watches this specific path
+  if (!supportsRecursiveWatch && 'add' in entry.watcher) {
+    (entry.watcher as ChokidarFSWatcher).add(absolutePath);
+  }
+
+  // Replay any recently dropped events for this path
+  replayDroppedEvents(entry, normalizedPath);
+
+  logger.main.debug('[WorkspaceEventBus] Added gitignore bypass:', {
+    workspacePath: key,
+    absolutePath: normalizedPath,
+    bypassCount: entry.gitignoreBypassPaths.size,
+  });
+}
+
+/**
+ * Remove a file path from the gitignore bypass set.
+ */
+export function removeGitignoreBypass(workspacePath: string, absolutePath: string): void {
+  const key = path.resolve(workspacePath);
+  const entry = busEntries.get(key);
+  if (!entry) return;
+
+  entry.gitignoreBypassPaths.delete(normalizeToForwardSlash(absolutePath));
+}
+
+/** Check if absolute path is in the bypass set for a workspace. Visible for testing. */
+export function hasGitignoreBypass(workspacePath: string, absolutePath: string): boolean {
+  const entry = busEntries.get(path.resolve(workspacePath));
+  return entry?.gitignoreBypassPaths.has(normalizeToForwardSlash(absolutePath)) ?? false;
+}
+
+/**
+ * Clear all gitignore bypass paths for a workspace.
+ * Called during session cleanup or when bypass state should be reset.
+ */
+export function clearGitignoreBypasses(workspacePath: string): void {
+  const key = path.resolve(workspacePath);
+  const entry = busEntries.get(key);
+  if (!entry) return;
+
+  const count = entry.gitignoreBypassPaths.size;
+  entry.gitignoreBypassPaths.clear();
+  entry.replayBuffer = [];
+
+  if (count > 0) {
+    logger.main.debug('[WorkspaceEventBus] Cleared all gitignore bypasses:', {
+      workspacePath: key,
+      clearedCount: count,
+    });
   }
 }
 
@@ -449,6 +553,104 @@ function shouldFilter(relativePath: string, ig: Ignore): boolean {
   return false;
 }
 
+/** Returns true if the relative path is gitignored (but NOT hardcoded-ignored). */
+function isGitignored(relativePath: string, ig: Ignore): boolean {
+  return ig.ignores(relativePath) || ig.ignores(relativePath + '/');
+}
+
+/** Returns true if a file has a .md extension. */
+function isMarkdownFile(filePath: string): boolean {
+  return path.extname(filePath).toLowerCase() === '.md';
+}
+
+/**
+ * Determine how a gitignored file should be handled:
+ * - 'bypass': dispatch with gitignoreBypassed=true (.md file or in bypass set)
+ * - 'drop': filter out (store in replay buffer)
+ */
+function getGitignoreAction(
+  absolutePath: string,
+  entry: BusEntry,
+): 'bypass' | 'drop' {
+  if (entry.gitignoreBypassPaths.has(normalizeToForwardSlash(absolutePath))) return 'bypass';
+  if (isMarkdownFile(absolutePath)) return 'bypass';
+  return 'drop';
+}
+
+/** Add a dropped gitignored event to the replay buffer. */
+function addToReplayBuffer(
+  entry: BusEntry,
+  absolutePath: string,
+  eventType: 'change' | 'add' | 'unlink' | 'rename',
+): void {
+  const now = Date.now();
+
+  // Prune expired entries
+  entry.replayBuffer = entry.replayBuffer.filter(
+    (e) => now - e.timestamp < REPLAY_BUFFER_TTL_MS,
+  );
+
+  // Cap at max size
+  if (entry.replayBuffer.length >= REPLAY_BUFFER_MAX) {
+    entry.replayBuffer.shift();
+  }
+
+  entry.replayBuffer.push({ absolutePath: normalizeToForwardSlash(absolutePath), eventType, timestamp: now });
+}
+
+/** Re-dispatch matching events from the replay buffer when a bypass is added. */
+function replayDroppedEvents(entry: BusEntry, absolutePath: string): void {
+  const now = Date.now();
+  const matching: DroppedGitignoreEvent[] = [];
+  const remaining: DroppedGitignoreEvent[] = [];
+
+  for (const event of entry.replayBuffer) {
+    if (now - event.timestamp >= REPLAY_BUFFER_TTL_MS) continue; // expired
+    if (event.absolutePath === absolutePath) {
+      matching.push(event);
+    } else {
+      remaining.push(event);
+    }
+  }
+
+  entry.replayBuffer = remaining;
+
+  if (matching.length === 0) return;
+
+  // Re-dispatch matching events to all listeners.
+  // 'rename' events need an async fs.access check to determine add vs unlink,
+  // matching the same logic used in the live startRecursiveWatch path.
+  for (const event of matching) {
+    switch (event.eventType) {
+      case 'change':
+        for (const l of entry.listeners.values()) l.onChange(event.absolutePath, true);
+        break;
+      case 'add':
+        for (const l of entry.listeners.values()) l.onAdd(event.absolutePath, true);
+        break;
+      case 'unlink':
+        for (const l of entry.listeners.values()) l.onUnlink(event.absolutePath, true);
+        break;
+      case 'rename':
+        // Determine add vs unlink by checking file existence, same as live path
+        fsPromises.access(event.absolutePath).then(
+          () => {
+            for (const l of entry.listeners.values()) l.onAdd(event.absolutePath, true);
+          },
+          () => {
+            for (const l of entry.listeners.values()) l.onUnlink(event.absolutePath, true);
+          },
+        );
+        break;
+    }
+  }
+
+  logger.main.debug('[WorkspaceEventBus] Replayed dropped events:', {
+    absolutePath,
+    count: matching.length,
+  });
+}
+
 function tripCircuitBreaker(key: string, entry: BusEntry): void {
   logger.main.error(
     `[WorkspaceEventBus] Circuit breaker tripped for "${key}" — ` +
@@ -473,6 +675,8 @@ function startRecursiveWatch(
     listeners: new Map([[subscriberId, listener]]),
     gitignoreFilter: ig,
     circuitBreaker: cb,
+    gitignoreBypassPaths: new Set(),
+    replayBuffer: [],
   };
 
   try {
@@ -489,22 +693,38 @@ function startRecursiveWatch(
       }
 
       const relativePath = filename.split(path.sep).join('/');
-      if (shouldFilter(relativePath, ig)) return;
+
+      // Stage 1: hardcoded ignores always apply (.git, OS junk)
+      if (shouldIgnoreHardcoded(relativePath)) return;
 
       const absolutePath = path.join(workspacePath, filename);
 
+      // Stage 2: gitignore check with bypass support
+      let bypassed = false;
+      if (isGitignored(relativePath, ig)) {
+        const action = getGitignoreAction(absolutePath, entry);
+        if (action === 'drop') {
+          // Store in replay buffer for potential late bypass registration.
+          // Preserve the raw fs.watch event type so replay can determine add vs unlink.
+          const bufferEventType = eventType === 'change' ? 'change' : 'rename';
+          addToReplayBuffer(entry, absolutePath, bufferEventType);
+          return;
+        }
+        bypassed = true;
+      }
+
       if (eventType === 'change') {
-        for (const l of entry.listeners.values()) l.onChange(absolutePath);
+        for (const l of entry.listeners.values()) l.onChange(absolutePath, bypassed || undefined);
       } else {
         // 'rename' — could be add or delete. Use fs.access to determine.
         fsPromises.access(absolutePath).then(
           () => {
             // File exists — treat as add
-            for (const l of entry.listeners.values()) l.onAdd(absolutePath);
+            for (const l of entry.listeners.values()) l.onAdd(absolutePath, bypassed || undefined);
           },
           () => {
             // File does not exist — treat as unlink
-            for (const l of entry.listeners.values()) l.onUnlink(absolutePath);
+            for (const l of entry.listeners.values()) l.onUnlink(absolutePath, bypassed || undefined);
           },
         );
       }
@@ -563,11 +783,30 @@ function startChokidarWatch(
   ig: Ignore,
 ): void {
   try {
+    // Create entry first so the `ignored` callback can reference bypass set.
+    const cb = createCircuitBreaker();
+    const entry: BusEntry = {
+      watcher: null!,
+      refCount: 1,
+      listeners: new Map([[subscriberId, listener]]),
+      gitignoreFilter: ig,
+      circuitBreaker: cb,
+      gitignoreBypassPaths: new Set(),
+      replayBuffer: [],
+    };
+
+    // Chokidar's `ignored` applies both hardcoded and gitignore filtering,
+    // but checks the bypass set so explicitly added paths get through.
+    // This keeps the perf benefit of not recursing into node_modules etc.
+    // Bypassed files inside ignored dirs are added via watcher.add() in addGitignoreBypass.
     const watcher = chokidar.watch(workspacePath, {
       ignored: (filePath: string) => {
         const relativePath = path.relative(workspacePath, filePath);
         if (!relativePath) return false;
-        return shouldFilter(relativePath, ig);
+        if (shouldIgnoreHardcoded(relativePath)) return true;
+        if (!isGitignored(relativePath, ig)) return false;
+        // Gitignored — let through if bypassed
+        return getGitignoreAction(filePath, entry) === 'drop';
       },
       ignoreInitial: true,
       followSymlinks: false,
@@ -581,14 +820,7 @@ function startChokidarWatch(
       depth: CHOKIDAR_MAX_DEPTH,
     });
 
-    const cb = createCircuitBreaker();
-    const entry: BusEntry = {
-      watcher,
-      refCount: 1,
-      listeners: new Map([[subscriberId, listener]]),
-      gitignoreFilter: ig,
-      circuitBreaker: cb,
-    };
+    entry.watcher = watcher;
     busEntries.set(key, entry);
 
     const checkBreaker = (): boolean => {
@@ -601,18 +833,28 @@ function startChokidarWatch(
       return false;
     };
 
+    /** Check if an event that passed chokidar's filter was gitignore-bypassed. */
+    const isBypassed = (filePath: string): boolean => {
+      const relativePath = path.relative(workspacePath, filePath);
+      if (!relativePath) return false;
+      return isGitignored(relativePath, ig);
+    };
+
     watcher
       .on('change', (filePath: string) => {
         if (checkBreaker()) return;
-        for (const l of entry.listeners.values()) l.onChange(filePath);
+        const bypassed = isBypassed(filePath) || undefined;
+        for (const l of entry.listeners.values()) l.onChange(filePath, bypassed);
       })
       .on('add', (filePath: string) => {
         if (checkBreaker()) return;
-        for (const l of entry.listeners.values()) l.onAdd(filePath);
+        const bypassed = isBypassed(filePath) || undefined;
+        for (const l of entry.listeners.values()) l.onAdd(filePath, bypassed);
       })
       .on('unlink', (filePath: string) => {
         if (checkBreaker()) return;
-        for (const l of entry.listeners.values()) l.onUnlink(filePath);
+        const bypassed = isBypassed(filePath) || undefined;
+        for (const l of entry.listeners.values()) l.onUnlink(filePath, bypassed);
       })
       .on('error', (error: unknown) => {
         const code = error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined;

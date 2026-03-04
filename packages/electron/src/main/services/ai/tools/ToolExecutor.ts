@@ -8,6 +8,8 @@ import type { DiffArgs, DiffResult, ToolDefinition } from '@nimbalyst/runtime/ai
 import { toolRegistry } from './ToolRegistry';
 import { logger } from '../../../utils/logger';
 import { sessionFileTracker } from '../../SessionFileTracker';
+import { addGitignoreBypass } from '../../../file/WorkspaceEventBus';
+import { extractFilePath } from './extractFilePath';
 import {AnalyticsService} from "../../analytics/AnalyticsService.ts";
 
 const LOG_PREVIEW_LENGTH = 400;
@@ -79,6 +81,11 @@ export class ToolExecutor extends EventEmitter {
         resolve(result);
       });
 
+      // Pre-register bypass for the target file
+      if (this.workspaceId && args.targetFilePath) {
+        addGitignoreBypass(this.workspaceId, args.targetFilePath);
+      }
+
       // Send to renderer with explicit targetFilePath
       console.log(`[ToolExecutor] Sending applyDiff to renderer with targetFilePath:`, args.targetFilePath);
       this.webContents.send('ai:applyDiff', {
@@ -116,6 +123,11 @@ export class ToolExecutor extends EventEmitter {
       position: positionType,
       contentLength: this.bucketContentLength(args.content.length)
     });
+
+    // Pre-register bypass for the target file
+    if (this.workspaceId && args.targetFilePath) {
+      addGitignoreBypass(this.workspaceId, args.targetFilePath);
+    }
 
     // Start streaming - include targetFilePath so renderer knows which document to target
     // This prevents race conditions if user switches tabs while waiting for AI response
@@ -293,6 +305,16 @@ export class ToolExecutor extends EventEmitter {
     const tool = toolRegistry.get(name);
     if (!tool) {
       throw new Error(`Tool ${name} not found`);
+    }
+
+    // Pre-register gitignore bypass BEFORE tool execution so the watcher
+    // picks up file changes even if the bypass registration from
+    // SessionFileTracker arrives after the fs event.
+    if (this.workspaceId) {
+      const filePath = extractFilePath(args);
+      if (filePath) {
+        addGitignoreBypass(this.workspaceId, filePath);
+      }
     }
 
     let result: any;

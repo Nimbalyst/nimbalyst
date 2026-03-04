@@ -13,6 +13,7 @@ import { homedir } from 'os';
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
 import { isPathInWorkspace, getRelativeWorkspacePath } from '../utils/workspaceDetection';
 import { SessionFileWatcher } from '../file/SessionFileWatcher';
+import { addGitignoreBypass, removeGitignoreBypass } from '../file/WorkspaceEventBus';
 
 // Helper function to get file type from extension
 function getFileType(filePath: string): string {
@@ -584,6 +585,15 @@ export function registerFileHandlers() {
         }
 
         try {
+            // Register gitignore bypass so watcher events fire for open gitignored files
+            const windowId = getWindowId(window);
+            if (windowId !== null) {
+                const state = windowStates.get(windowId);
+                if (state?.workspacePath) {
+                    addGitignoreBypass(state.workspacePath, filePath);
+                }
+            }
+
             // Wait for the watcher to be ready before returning
             await startFileWatcher(window, filePath);
             return { success: true };
@@ -611,7 +621,12 @@ export function registerFileHandlers() {
             return { success: false };
         }
 
-        // No-op: WorkspaceEventBus watches the entire tree, no per-file cleanup needed
+        // Remove gitignore bypass when tab is closed
+        const state = windowStates.get(windowId);
+        if (state?.workspacePath) {
+            removeGitignoreBypass(state.workspacePath, filePath);
+        }
+
         return { success: true };
     });
 }

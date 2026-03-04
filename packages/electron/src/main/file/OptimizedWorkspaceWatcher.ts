@@ -55,27 +55,29 @@ export class OptimizedWorkspaceWatcher {
         this.subscriberIds.set(windowId, subscriberId);
 
         await workspaceEventBus.subscribe(workspacePath, subscriberId, {
-            onChange: (filePath: string) => {
+            onChange: (filePath: string, gitignoreBypassed?: boolean) => {
+                if (gitignoreBypassed) return; // Don't notify editors about bypassed gitignored files
                 // Content modification -- notify editors, do NOT rebuild file tree
                 if (!window.isDestroyed()) {
                     window.webContents.send('file-changed-on-disk', { path: filePath });
                 }
             },
-            onAdd: (filePath: string) => {
-                // Tree structure changed
+            onAdd: (filePath: string, gitignoreBypassed?: boolean) => {
+                // Always refresh file tree for new files — the tree builder has its
+                // own EXCLUDED_DIRS filtering, so gitignored files in non-excluded
+                // dirs (e.g. AI-created files) will correctly appear.
                 triggerUpdate();
-                // Also send file-changed-on-disk so editors pick up external additions
+                if (gitignoreBypassed) return; // SessionFileWatcher handles editor notifications
                 if (!window.isDestroyed()) {
                     window.webContents.send('file-changed-on-disk', { path: filePath });
                 }
             },
-            onUnlink: (filePath: string) => {
-                // Tree structure changed
+            onUnlink: (filePath: string, gitignoreBypassed?: boolean) => {
+                // Always refresh file tree for deleted files
                 triggerUpdate();
+                if (gitignoreBypassed) return; // SessionFileWatcher handles editor notifications
                 if (!window.isDestroyed()) {
-                    // Notify editors of the change
                     window.webContents.send('file-changed-on-disk', { path: filePath });
-                    // Notify renderer to close the tab for this deleted file
                     window.webContents.send('file-deleted', { filePath });
                 }
             },

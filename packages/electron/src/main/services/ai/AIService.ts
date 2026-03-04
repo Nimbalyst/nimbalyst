@@ -44,6 +44,7 @@ import {AnalyticsService} from "../analytics/AnalyticsService.ts";
 import { historyManager } from '../../HistoryManager';
 import { FileSnapshotCache } from '../../file/FileSnapshotCache';
 import { SessionFileWatcher } from '../../file/SessionFileWatcher';
+import { addGitignoreBypass } from '../../file/WorkspaceEventBus';
 import {
   getAIProviderOverrides,
   saveAIProviderOverrides,
@@ -2729,6 +2730,16 @@ export class AIService {
                         : path.resolve(effectiveWorkspacePath, change.path),
                     }));
 
+                  // Register gitignore bypass for all changed files immediately.
+                  // Codex writes files before emitting file_change events, so the
+                  // fs.watch event may have already fired and been buffered. The bypass
+                  // triggers replay of any buffered events.
+                  for (const change of changes) {
+                    if (change?.path && effectiveWorkspacePath) {
+                      addGitignoreBypass(effectiveWorkspacePath, change.path);
+                    }
+                  }
+
                   const fileSnapshots: Record<string, { content: string | null; error?: string; isBinary?: boolean; truncated?: boolean }> = {};
                   const MAX_SNAPSHOT_SIZE = 100_000; // 100KB per file
 
@@ -5298,6 +5309,11 @@ export class AIService {
     if (filePaths.length === 0) return false;
 
     let trackedAny = false;
+
+    // Register gitignore bypass for Bash-edited files so watcher events fire
+    for (const fp of filePaths) {
+      addGitignoreBypass(effectivePath, fp);
+    }
 
     for (const filePath of filePaths) {
       try {
