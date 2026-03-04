@@ -508,7 +508,7 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore, theme = 'l
             </button>
           </div>
         </div>
-        
+
         <div className="history-dialog-content flex-1 flex overflow-hidden">
           <div className="history-list w-[350px] border-r border-[var(--nim-border)] flex flex-col">
             <div className="history-list-header py-2 px-3 border-b border-[var(--nim-border)] flex items-center justify-between bg-[var(--nim-bg-secondary)]">
@@ -570,14 +570,14 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore, theme = 'l
                             <span className={`history-item-time text-[11px] whitespace-nowrap shrink-0 ${isSelected ? 'text-white' : 'text-[var(--nim-text-faint)]'}`}>{relativeTime}</span>
                           </div>
                           {isAIEdit && session && (
-                            <a
+                            <span
                               className={`history-item-session-link flex items-center gap-1 text-[11px] cursor-pointer transition-colors duration-150 max-w-full overflow-hidden no-underline ${isSelected ? 'text-white/80 hover:text-white' : 'text-[var(--nim-link)] hover:text-[var(--nim-link-hover)]'}`}
-                              onClick={handleSessionClick}
-                              title="Open AI session in chat"
                             >
                               <ProviderIcon provider={session.provider} size={11} />
-                              <span className="history-item-session-name whitespace-nowrap overflow-hidden text-ellipsis hover:underline">{session.title}</span>
-                            </a>
+                              <a title="Open AI session in chat"
+                                  onClick={handleSessionClick}
+                                  className="history-item-session-name whitespace-nowrap overflow-hidden text-ellipsis hover:underline">{session.title}</a>
+                            </span>
                           )}
                         </div>
                       </div>
@@ -601,7 +601,7 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore, theme = 'l
               </div>
             )}
           </div>
-          
+
           <div className="history-preview flex-1 flex flex-col relative min-w-0 overflow-hidden">
             <div className="history-preview-header py-2 px-3 border-b border-[var(--nim-border)] flex items-center justify-between bg-[var(--nim-bg-secondary)] gap-3">
               <div className="history-preview-header-left flex items-center gap-3 min-w-0 flex-1 overflow-hidden flex-wrap">
