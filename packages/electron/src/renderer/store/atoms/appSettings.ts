@@ -1084,6 +1084,7 @@ const defaultProviders: Record<string, ProviderConfig> = {
  */
 const defaultApiKeys: Record<string, string> = {
   anthropic: '',
+  'claude-code': '',
   openai: '',
   'openai-codex': '',
   lmstudio_url: 'http://127.0.0.1:8234',

@@ -1021,11 +1021,6 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
         env.CLAUDE_CODE_AGENT_TYPE = 'team-lead';
       }
 
-      if (this.config.apiKey) {
-        env.ANTHROPIC_API_KEY = this.config.apiKey;
-      } else {
-      }
-
       // In production, we need to spawn claude-code differently
       // The SDK expects to spawn with 'node', but we need to use Electron in node mode
       if (app.isPackaged) {
@@ -1064,6 +1059,15 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
           ...executableOptionsForTeammates,
           ...(spawnFunction ? { spawnClaudeCodeProcess: spawnFunction } : {}),
         };
+      }
+
+      // If a per-session API key is explicitly configured, prefer it.
+      // Otherwise leave inherited environment values untouched.
+      if (this.config.apiKey) {
+        env.ANTHROPIC_API_KEY = this.config.apiKey;
+        if (this.teammateManager.packagedBuildOptions?.env) {
+          this.teammateManager.packagedBuildOptions.env.ANTHROPIC_API_KEY = this.config.apiKey;
+        }
       }
 
       options.env = env;

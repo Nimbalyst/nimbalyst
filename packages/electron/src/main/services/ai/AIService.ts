@@ -704,12 +704,23 @@ export class AIService {
    */
   private getApiKeyForProvider(provider: string, workspacePath?: string): string | undefined {
     const globalApiKeys = this.getSettingsStore().get('apiKeys', {}) as Record<string, string>;
+    const providerSettings = this.getNormalizedProviderSettings() as any;
+
+    // Claude Code must never use implicit keys.
+    // It only uses its dedicated key when API-key auth is explicitly selected.
+    if (provider === 'claude-code') {
+      const authMethod = providerSettings?.['claude-code']?.authMethod ?? 'login';
+      if (authMethod !== 'api-key') {
+        return undefined;
+      }
+    }
 
     // Check for project-level API key override
     if (workspacePath) {
       const overrides = getAIProviderOverrides(workspacePath);
-      if (overrides?.providers?.[provider]?.apiKey) {
-        return overrides.providers[provider].apiKey;
+      const overrideKey = overrides?.providers?.[provider]?.apiKey;
+      if (overrideKey) {
+        return overrideKey;
       }
     }
 
@@ -718,7 +729,6 @@ export class AIService {
       case 'claude':
         return globalApiKeys['anthropic'] || process.env.ANTHROPIC_API_KEY;
       case 'claude-code':
-        // Claude Code has its own auth (SSO login) - never use the Claude Chat API key
         return globalApiKeys['claude-code'];
       case 'openai':
         return globalApiKeys['openai'] || process.env.OPENAI_API_KEY;
@@ -729,6 +739,39 @@ export class AIService {
       default:
         return globalApiKeys[provider];
     }
+  }
+
+  /**
+   * Build the latest Claude Code runtime config from current settings/session state.
+   * This is used to refresh existing provider instances so auth changes take effect immediately.
+   */
+  private async buildClaudeCodeRuntimeConfig(
+    session: SessionData,
+    workspacePath?: string
+  ): Promise<ProviderConfig> {
+    const effectiveWorkspacePath = session.workspacePath || workspacePath;
+    const apiKey = this.getApiKeyForProvider('claude-code', effectiveWorkspacePath);
+
+    const config: ProviderConfig = {
+      maxTokens: (session.providerConfig as any)?.maxTokens,
+      temperature: (session.providerConfig as any)?.temperature,
+      ...(apiKey ? { apiKey } : {}),
+      ...((session.metadata as any)?.effortLevel && {
+        effortLevel: parseEffortLevel((session.metadata as any).effortLevel),
+      }),
+    };
+
+    const fullModel = session.model || session.providerConfig?.model;
+    if (fullModel) {
+      config.model = fullModel;
+    } else {
+      const defaultModel = await ModelRegistry.getDefaultModel('claude-code');
+      if (defaultModel) {
+        config.model = defaultModel;
+      }
+    }
+
+    return config;
   }
 
   /**
@@ -1735,8 +1778,12 @@ export class AIService {
         temperature: (session.providerConfig as any)?.temperature
       };
 
-      // Claude Code manages its own authentication - do not pass API key
-      if (provider !== 'claude-code') {
+      // Claude Code can use a dedicated API key, but must never use anthropic.
+      if (provider === 'claude-code') {
+        if (apiKey) {
+          initConfig.apiKey = apiKey;
+        }
+      } else {
         initConfig.apiKey = apiKey;
       }
 
@@ -1959,29 +2006,26 @@ export class AIService {
       if (!provider) {
         if (isProviderClaudeCode) {
         }
-        const apiKeys = this.getSettingsStore().get('apiKeys', {}) as Record<string, string>;
 
         // Get the correct API key based on provider
         let apiKey: string | undefined;
         let errorMessage = 'API key not configured';
         let requiresApiKey = true;
+        const effectiveWorkspacePath = session.workspacePath || workspacePath;
+        apiKey = this.getApiKeyForProvider(session.provider, effectiveWorkspacePath);
         switch (session.provider) {
           case 'claude':
-            apiKey = apiKeys['anthropic'] || process.env.ANTHROPIC_API_KEY;
             errorMessage = 'Anthropic API key not configured';
             break;
           case 'claude-code':
-            // Claude Code: API key is optional, uses SSO login if not provided
-            apiKey = apiKeys['claude-code'];
+            // Claude Code: API key is optional and uses OAuth login when not configured.
             requiresApiKey = false;
             break;
           case 'openai':
-            apiKey = apiKeys['openai'] || process.env.OPENAI_API_KEY;
             errorMessage = 'OpenAI API key not configured';
             break;
           case 'openai-codex':
             // Codex SDK uses its own auth (codex auth login), API key is optional
-            apiKey = apiKeys['openai-codex'];
             requiresApiKey = false;
             break;
           case 'lmstudio':
@@ -2434,6 +2478,10 @@ export class AIService {
         const logPrefix = isClaudeCode ? '[CLAUDE-CODE-SERVICE]' : '[AIService]';
 
         if (isClaudeCode) {
+          // Refresh provider config every turn so auth/key changes in settings apply immediately.
+          const refreshedConfig = await this.buildClaudeCodeRuntimeConfig(session, effectiveWorkspacePath);
+          await provider.initialize(refreshedConfig);
+
           //   messageLength: message.length,
           //   hasContext: !!documentContext,
           //   sessionId: session.id,
@@ -4382,6 +4430,16 @@ export class AIService {
             delete currentKeys['anthropic'];
           } else if (key !== this.maskApiKey(currentKeys['anthropic'] || '')) {
             currentKeys['anthropic'] = key as string;
+          }
+        }
+
+        // Save Claude Code key (kept separate from anthropic)
+        if (settings.apiKeys['claude-code'] !== undefined) {
+          const key = settings.apiKeys['claude-code'];
+          if (!key) {
+            delete currentKeys['claude-code'];
+          } else if (key !== this.maskApiKey(currentKeys['claude-code'] || '')) {
+            currentKeys['claude-code'] = key as string;
           }
         }
 
