@@ -26,7 +26,7 @@ import {
 } from 'lexical';
 
 import {createNodeFromSerialized} from '../core/createNodeFromSerialized';
-import {$setDiffState, $getDiffState, $clearDiffState} from '../core/DiffState';
+import {$setDiffState, $getDiffState, $clearDiffState, $getOriginalChecked, $setOriginalChecked, $clearOriginalChecked} from '../core/DiffState';
 import {$applyInlineTextDiff} from '../core/inlineTextDiff';
 import {$applySubTreeDiff} from '../core/diffUtils';
 
@@ -300,6 +300,24 @@ export class ListDiffHandler implements DiffNodeHandler {
     targetNode: SerializedLexicalNode,
     context: DiffHandlerContext,
   ): DiffHandlerResult {
+    // Handle checkbox state changes (e.g., [ ] -> [x])
+    // The checked property is on the listitem node itself, not in children,
+    // so the inline text diff system won't detect it.
+    // We use Lexical's NodeState API ($setOriginalChecked) instead of direct
+    // property assignment because setChecked() calls getWritable() which clones
+    // the node -- direct properties on the original reference would be lost.
+    if ($isListItemNode(liveNode)) {
+      const sourceChecked = (sourceNode as any).checked;
+      const targetChecked = (targetNode as any).checked;
+
+      if (sourceChecked !== targetChecked && typeof targetChecked === 'boolean') {
+        // Store original value for rejection FIRST (before setChecked clones)
+        $setOriginalChecked(liveNode, sourceChecked ?? false);
+        // Apply the new checked state so it's visible in diff mode
+        liveNode.setChecked(targetChecked);
+      }
+    }
+
     const sourceChildren =
       'children' in sourceNode && Array.isArray(sourceNode.children)
         ? sourceNode.children
@@ -355,6 +373,9 @@ export class ListDiffHandler implements DiffNodeHandler {
         // Approve modification - clear diff state and handle text nodes
         $clearDiffState(child);
 
+        // Clean up stored original checkbox state (checked state already applied)
+        $clearOriginalChecked(child);
+
         if ($isElementNode(child)) {
           // Process list item children for inline diff markers
           this.approveTextDiffMarkers(child);
@@ -391,6 +412,13 @@ export class ListDiffHandler implements DiffNodeHandler {
       } else if (diffState === 'modified') {
         // Reject modification - clear diff state and handle text nodes
         $clearDiffState(child);
+
+        // Restore original checkbox state on rejection
+        const originalChecked = $getOriginalChecked(child);
+        if (originalChecked !== null && $isListItemNode(child)) {
+          child.setChecked(originalChecked);
+          $clearOriginalChecked(child);
+        }
 
         if ($isElementNode(child)) {
           // Process list item children for inline diff markers

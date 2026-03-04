@@ -112,6 +112,28 @@ function calculateSimilarity(
   return Math.max(0, Math.min(1, textSimilarity - attrsMismatch));
 }
 
+/**
+ * Check if two canonical nodes are deeply equal, including children attrs.
+ * Used to catch attribute-only changes (e.g., checkbox checked state) that
+ * TOPT considers "equal" due to low wAttr weight.
+ */
+function nodesDeepEqual(a: CanonicalTreeNode, b: CanonicalTreeNode): boolean {
+  if (a.type !== b.type) return false;
+  if (a.text !== b.text) return false;
+  if (JSON.stringify(a.attrs) !== JSON.stringify(b.attrs)) return false;
+
+  const ac = a.children || [];
+  const bc = b.children || [];
+  if (ac.length !== bc.length) return false;
+
+  for (let i = 0; i < ac.length; i++) {
+    if (!nodesDeepEqual(ac[i], bc[i])) return false;
+  }
+
+  return true;
+}
+
+
 function registerCanonicalNode(
   node: CanonicalTreeNode,
   cache: CanonicalCache,
@@ -443,19 +465,31 @@ export class WindowedTreeMatcher {
         // CRITICAL: Skip exact matches - they require no diff operations
         // When ThresholdedOrderPreservingTree marks as EQUAL (isExact=true), trust it
         // even if calculateSimilarity returns something < 1.0 due to different algorithms
+        //
+        // EXCEPTION: Attribute-only changes (e.g., checkbox checked state) have very low
+        // cost in TOPT (wAttr=0.15, and 1 changed attr out of many = ~0.02 total cost)
+        // which falls well below equalThreshold (0.35). We catch these by comparing
+        // node attrs directly - including children attrs for structural nodes.
+        // Track whether TOPT said equal but deep comparison disagrees
+        let toptSaysEqual = isExact;
         if (isExact) {
-          // Debug: log skipped exact matches
-          if (process?.env?.DIFF_DEBUG === '1') {
-            console.log(`[TreeMatcher] Skipping exact match at source[${sourceIdx}] -> target[${targetIdx}]: ${sourceNodes[sourceIdx].type} "${(sourceNodes[sourceIdx].text || '').substring(0, 30)}" (similarity=${similarity.toFixed(4)})`);
+          if (nodesDeepEqual(sourceNodes[sourceIdx], targetNodes[targetIdx])) {
+            // Debug: log skipped exact matches
+            if (process?.env?.DIFF_DEBUG === '1') {
+              console.log(`[TreeMatcher] Skipping exact match at source[${sourceIdx}] -> target[${targetIdx}]: ${sourceNodes[sourceIdx].type} "${(sourceNodes[sourceIdx].text || '').substring(0, 30)}" (similarity=${similarity.toFixed(4)})`);
+            }
+            // Still mark as matched to prevent false delete/add pairs,
+            // but don't create a diff operation
+            continue;
           }
-          // Still mark as matched to prevent false delete/add pairs,
-          // but don't create a diff operation
-          continue;
+          // Nodes differ despite TOPT saying "equal" - override to "similar"
+          // (e.g., list with checkbox state changes: checked: false -> true)
+          toptSaysEqual = false;
         }
 
         // Debug: log non-exact matches
         if (process?.env?.DIFF_DEBUG === '1') {
-          console.log(`[TreeMatcher] Creating UPDATE for source[${sourceIdx}] -> target[${targetIdx}]: ${sourceNodes[sourceIdx].type} "${(sourceNodes[sourceIdx].text || '').substring(0, 30)}" (similarity=${similarity.toFixed(4)}, isExact=${isExact})`);
+          console.log(`[TreeMatcher] Creating UPDATE for source[${sourceIdx}] -> target[${targetIdx}]: ${sourceNodes[sourceIdx].type} "${(sourceNodes[sourceIdx].text || '').substring(0, 30)}" (similarity=${similarity.toFixed(4)}, isExact=${toptSaysEqual})`);
         }
 
         const diff: NodeDiff = {
@@ -471,7 +505,7 @@ export class WindowedTreeMatcher {
           targetMarkdown: targetNodes[targetIdx].text || '',
           nodeType: sourceNodes[sourceIdx].type,
           similarity,
-          matchType: isExact ? 'exact' : 'similar',
+          matchType: toptSaysEqual ? 'exact' : 'similar',
         };
 
         diffs.push(diff);

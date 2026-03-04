@@ -103,3 +103,35 @@ export function $setOriginalMarkdown(node: LexicalNode, markdown: string): void 
 export function $clearOriginalMarkdown(node: LexicalNode): void {
   $setState(node, OriginalMarkdownState, null);
 }
+
+/**
+ * Configuration for tracking original checkbox checked state on list item nodes.
+ * Used during diff to restore the original checked state when rejecting changes.
+ * Uses Lexical's NodeState API so the value survives node cloning via getWritable().
+ */
+export const OriginalCheckedState = createState<boolean | null>('originalChecked', {
+  parse: (value): boolean | null => {
+    return typeof value === 'boolean' ? value : null;
+  },
+});
+
+/**
+ * Get the original checked state of a list item node
+ */
+export function $getOriginalChecked(node: LexicalNode): boolean | null {
+  return $getState(node, OriginalCheckedState);
+}
+
+/**
+ * Set the original checked state of a list item node
+ */
+export function $setOriginalChecked(node: LexicalNode, checked: boolean): void {
+  $setState(node, OriginalCheckedState, checked);
+}
+
+/**
+ * Clear the original checked state of a list item node
+ */
+export function $clearOriginalChecked(node: LexicalNode): void {
+  $setState(node, OriginalCheckedState, null);
+}

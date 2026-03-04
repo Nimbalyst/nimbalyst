@@ -83,8 +83,15 @@ export function getNodeContent(
     if (node.type === 'text' && 'text' in node) {
       return (node as SerializedTextNode).text;
     } else if ('children' in node && Array.isArray(node.children)) {
+      // Include checkbox state for list items so similarity computation
+      // detects check/uncheck changes (otherwise [ ] and [x] both produce
+      // identical text content and the diff system considers them "exact")
+      let prefix = '';
+      if (node.type === 'listitem' && typeof (node as any).checked === 'boolean') {
+        prefix = (node as any).checked ? 'checked ' : 'unchecked ';
+      }
       // Recursively extract text from all children, including nested elements
-      return node.children.map((child) => getNodeContent(child)).join('');
+      return prefix + node.children.map((child) => getNodeContent(child)).join('');
     }
   }
   return '';
