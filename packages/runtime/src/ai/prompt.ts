@@ -58,7 +58,7 @@ Bad examples: "Fix null check in handleAuth" (too specific), "Update code" (too 
 - When you edit or create files during a session, add the \`uncommitted\` tag: \`{ "add": ["uncommitted"], "remove": ["committed"] }\`
 - When a git commit is created that includes the session's changes, flip to \`committed\`: \`{ "add": ["committed"], "remove": ["uncommitted"] }\`
 - If further file edits happen after a commit, flip back to \`uncommitted\`
-- This lets the user see at a glance whether each session's changes have been committed\`;
+- This lets the user see at a glance whether each session's changes have been committed`;
 }
 
 /**
