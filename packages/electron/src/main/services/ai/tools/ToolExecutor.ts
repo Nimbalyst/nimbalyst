@@ -310,7 +310,10 @@ export class ToolExecutor extends EventEmitter {
     // Pre-register gitignore bypass BEFORE tool execution so the watcher
     // picks up file changes even if the bypass registration from
     // SessionFileTracker arrives after the fs event.
-    if (this.workspaceId) {
+    // Only for tools that write files — read-only tools (getDocumentContent,
+    // searchFiles, etc.) should not register bypasses.
+    const WRITE_TOOLS = ['applyDiff', 'streamContent', 'writeFile', 'editFile', 'createDocument', 'updateFrontmatter'];
+    if (this.workspaceId && WRITE_TOOLS.includes(name)) {
       const filePath = extractFilePath(args);
       if (filePath) {
         addGitignoreBypass(this.workspaceId, filePath);

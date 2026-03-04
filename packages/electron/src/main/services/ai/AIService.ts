@@ -5310,7 +5310,8 @@ export class AIService {
 
     let trackedAny = false;
 
-    // Register gitignore bypass for Bash-edited files so watcher events fire
+    // Register gitignore bypass for Codex Bash-edited files so watcher events fire.
+    // Codex uses Bash for all file operations, so this is necessary for change detection.
     for (const fp of filePaths) {
       addGitignoreBypass(effectivePath, fp);
     }
