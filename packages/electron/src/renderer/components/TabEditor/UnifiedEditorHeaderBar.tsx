@@ -64,8 +64,9 @@ const SessionItem: React.FC<{
   session: AISession;
   isLast?: boolean;
   onClick?: (id: string) => void;
+  onOpenChat?: (id: string) => void;
   formatTime: (ts: number) => string;
-}> = ({ session, isLast, onClick, formatTime }) => (
+}> = ({ session, isLast, onClick, onOpenChat, formatTime }) => (
   <div
     className={`ai-session-item py-2 px-3 flex items-center gap-2 ${isLast ? 'last:border-b-0' : ''} hover:bg-[var(--nim-bg-hover)] cursor-pointer`}
     onClick={() => onClick?.(session.id)}
@@ -73,6 +74,17 @@ const SessionItem: React.FC<{
     <span className="shrink-0 text-[var(--nim-text-muted)]"><ProviderIcon provider={session.provider} size={14} /></span>
     <div className="ai-session-title text-sm font-medium whitespace-nowrap overflow-hidden text-ellipsis text-[var(--nim-text)] flex-1 min-w-0">{session.title}</div>
     <div className="ai-session-time text-xs text-[var(--nim-text-faint)] shrink-0">{formatTime(session.updatedAt)}</div>
+    {onOpenChat && (
+      <button
+        className="shrink-0 w-6 h-6 flex items-center justify-center rounded text-[var(--nim-text-faint)] hover:text-[var(--nim-text)] hover:bg-[var(--nim-bg-tertiary)] transition-colors duration-150 bg-transparent border-none cursor-pointer"
+        title="Open in Chat panel"
+        onClick={(e) => { e.stopPropagation(); onOpenChat(session.id); }}
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+        </svg>
+      </button>
+    )}
   </div>
 );
 
@@ -539,6 +551,13 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
     setShowAISessions(false);
   };
 
+  const handleLoadSessionInChat = (sessionId: string) => {
+    if (onOpenSessionInChat) {
+      onOpenSessionInChat(sessionId);
+    }
+    setShowAISessions(false);
+  };
+
   // Format relative time
   const formatRelativeTime = (timestamp: number): string => {
     const now = Date.now();
@@ -651,19 +670,19 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
                           {isInWorktree ? 'This worktree' : 'This project'}
                         </div>
                         {currentWorkspaceSessions.map((session) => (
-                          <SessionItem key={session.id} session={session} onClick={onSwitchToAgentMode ? handleLoadSessionInAgentMode : undefined} formatTime={formatRelativeTime} />
+                          <SessionItem key={session.id} session={session} onClick={onSwitchToAgentMode ? handleLoadSessionInAgentMode : undefined} onOpenChat={onOpenSessionInChat ? handleLoadSessionInChat : undefined} formatTime={formatRelativeTime} />
                         ))}
                         {/* Other sessions */}
                         <div className="ai-sessions-group-header px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--nim-text-faint)] bg-[var(--nim-bg-secondary)]">
                           Other sessions
                         </div>
                         {otherSessions.map((session) => (
-                          <SessionItem key={session.id} session={session} isLast onClick={onSwitchToAgentMode ? handleLoadSessionInAgentMode : undefined} formatTime={formatRelativeTime} />
+                          <SessionItem key={session.id} session={session} isLast onClick={onSwitchToAgentMode ? handleLoadSessionInAgentMode : undefined} onOpenChat={onOpenSessionInChat ? handleLoadSessionInChat : undefined} formatTime={formatRelativeTime} />
                         ))}
                       </>
                     ) : (
                       aiSessions.map((session) => (
-                        <SessionItem key={session.id} session={session} isLast onClick={onSwitchToAgentMode ? handleLoadSessionInAgentMode : undefined} formatTime={formatRelativeTime} />
+                        <SessionItem key={session.id} session={session} isLast onClick={onSwitchToAgentMode ? handleLoadSessionInAgentMode : undefined} onOpenChat={onOpenSessionInChat ? handleLoadSessionInChat : undefined} formatTime={formatRelativeTime} />
                       ))
                     )}
                   </div>
