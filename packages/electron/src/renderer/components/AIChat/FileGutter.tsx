@@ -375,25 +375,25 @@ export function FileGutter({ sessionId, workspacePath, type, onFileClick, pendin
     return <MaterialSymbol icon="edit_document" size={14} className="file-gutter__section-icon w-4 h-4" />;
   };
 
-  const renderDirectoryNode = (node: DirectoryNode, isNested: boolean = false): React.ReactNode => {
+  const renderDirectoryNode = (node: DirectoryNode): React.ReactNode => {
     const isExpanded = expandedFolders.has(node.path);
     const hasContent = node.files.length > 0 || node.subdirectories.size > 0;
 
     return (
-      <div key={node.path} className={`file-gutter__directory-node mb-0.5 ${isNested ? 'file-gutter__directory-node--nested ml-3' : ''}`}>
+      <div key={node.path} className="file-gutter__directory-node mb-0.5">
         {node.displayPath && (
           <button
             onClick={() => toggleFolder(node.path)}
-            className="file-gutter__directory-header w-full flex items-center gap-1 py-1 px-2 text-xs font-medium text-[var(--nim-text-muted)] bg-transparent border-none rounded cursor-pointer transition-all duration-200 text-left hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)]"
+            className="file-gutter__directory-header w-full flex items-center gap-1 px-2 py-0.5 text-[0.8125rem] font-medium text-[var(--nim-text-muted)] bg-transparent border border-transparent rounded cursor-pointer transition-all duration-200 text-left hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)]"
           >
             <MaterialSymbol
               icon={isExpanded ? "expand_more" : "chevron_right"}
-              size={14}
+              size={16}
               className="file-gutter__directory-chevron shrink-0 transition-transform duration-200 text-[var(--nim-text-faint)]"
             />
             <MaterialSymbol
               icon={isExpanded ? "folder_open" : "folder"}
-              size={14}
+              size={16}
               className="file-gutter__directory-icon shrink-0 text-[var(--nim-text-muted)]"
             />
             <span className="file-gutter__directory-path flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{node.displayPath}</span>
@@ -402,9 +402,9 @@ export function FileGutter({ sessionId, workspacePath, type, onFileClick, pendin
         )}
 
         {(isExpanded || !node.displayPath) && hasContent && (
-          <div className="file-gutter__directory-children mt-0.5">
+          <div className={node.displayPath ? "file-gutter__directory-children mt-0.5 pl-4" : "file-gutter__directory-children mt-0.5"}>
             {Array.from(node.subdirectories.values()).map(subdir =>
-              renderDirectoryNode(subdir, true)
+              renderDirectoryNode(subdir)
             )}
 
             {node.files.map((file) => {
@@ -416,7 +416,7 @@ export function FileGutter({ sessionId, workspacePath, type, onFileClick, pendin
                 <button
                   key={file.filePath}
                   onClick={() => handleFileClick(file.filePath)}
-                  className={`file-gutter__file w-full text-left py-1.5 px-2 rounded-md border border-transparent transition-all duration-200 mb-0.5 bg-transparent hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-border)] ${hasPendingReview ? 'file-gutter__file--pending bg-[rgba(251,191,36,0.08)] border-[rgba(251,191,36,0.2)] hover:bg-[rgba(251,191,36,0.15)] hover:border-[rgba(251,191,36,0.3)]' : ''}`}
+                  className={`file-gutter__file w-full text-left px-2 py-0.5 rounded border border-transparent transition-all duration-200 bg-transparent hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-border)] ${hasPendingReview ? 'file-gutter__file--pending bg-[rgba(251,191,36,0.08)] border-[rgba(251,191,36,0.2)] hover:bg-[rgba(251,191,36,0.15)] hover:border-[rgba(251,191,36,0.3)]' : ''}`}
                   title={getRelativePath(file.filePath)}
                 >
                   <div className="file-gutter__file-content flex items-center gap-1.5">
@@ -510,7 +510,7 @@ export function FileGutter({ sessionId, workspacePath, type, onFileClick, pendin
       </div>
 
       {isExpanded && (
-        <div className="file-gutter__files mt-1 pr-1 pb-1 pl-2 overflow-y-auto flex-1 min-h-0">
+        <div className="file-gutter__files p-1 overflow-y-auto flex-1 min-h-0">
           {groupByDirectory ? (
             renderDirectoryNode(buildDirectoryTree(groupedFiles))
           ) : (
@@ -523,7 +523,7 @@ export function FileGutter({ sessionId, workspacePath, type, onFileClick, pendin
                 <button
                   key={file.filePath}
                   onClick={() => handleFileClick(file.filePath)}
-                  className={`file-gutter__file w-full text-left py-1.5 px-2 rounded-md border border-transparent transition-all duration-200 mb-0.5 bg-transparent hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-border)] ${hasPendingReview ? 'file-gutter__file--pending bg-[rgba(251,191,36,0.08)] border-[rgba(251,191,36,0.2)] hover:bg-[rgba(251,191,36,0.15)] hover:border-[rgba(251,191,36,0.3)]' : ''}`}
+                  className={`file-gutter__file w-full text-left px-2 py-0.5 rounded border border-transparent transition-all duration-200 bg-transparent hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-border)] ${hasPendingReview ? 'file-gutter__file--pending bg-[rgba(251,191,36,0.08)] border-[rgba(251,191,36,0.2)] hover:bg-[rgba(251,191,36,0.15)] hover:border-[rgba(251,191,36,0.3)]' : ''}`}
                   title={getRelativePath(file.filePath)}
                 >
                   <div className="file-gutter__file-content flex items-center gap-1.5">
