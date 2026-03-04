@@ -33,6 +33,9 @@ class ErrorNotificationService {
   private listeners: Set<ErrorListener> = new Set();
   private notifications: ErrorNotification[] = [];
   private nextId = 1;
+  // Deduplication: track recent error keys to suppress duplicates
+  private recentErrorKeys = new Map<string, { count: number; firstSeen: number }>();
+  private static DEDUP_WINDOW_MS = 5000; // Suppress identical errors within 5s
 
   /**
    * Register a listener for error notifications
@@ -130,6 +133,27 @@ class ErrorNotificationService {
     duration?: number;
     action?: NotificationAction;
   }): string {
+    // Deduplicate: suppress identical title+message within the dedup window
+    const dedupKey = `${options.severity}:${options.title}:${options.message}`;
+    const now = Date.now();
+    const existing = this.recentErrorKeys.get(dedupKey);
+    if (existing && (now - existing.firstSeen) < ErrorNotificationService.DEDUP_WINDOW_MS) {
+      existing.count++;
+      // Still log to console so devs can see the repeat count
+      console.debug(`[ErrorNotificationService] Suppressed duplicate (x${existing.count}): ${options.title}: ${options.message}`);
+      return ''; // Suppressed
+    }
+    // Track this error for dedup
+    this.recentErrorKeys.set(dedupKey, { count: 1, firstSeen: now });
+    // Clean up old entries periodically
+    if (this.recentErrorKeys.size > 50) {
+      for (const [key, entry] of this.recentErrorKeys) {
+        if (now - entry.firstSeen > ErrorNotificationService.DEDUP_WINDOW_MS) {
+          this.recentErrorKeys.delete(key);
+        }
+      }
+    }
+
     const notification: ErrorNotification = {
       id: `error-${this.nextId++}`,
       timestamp: Date.now(),
