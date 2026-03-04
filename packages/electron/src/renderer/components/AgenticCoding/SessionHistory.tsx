@@ -1627,6 +1627,19 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
       }
     }
 
+    // Also pick up blitz children that have no worktreeId (e.g., analysis sessions)
+    for (const session of sessions) {
+      if (session.sessionType === 'blitz') continue; // Skip blitz parent
+      if (session.worktreeId) continue; // Already handled via worktreeGroupsData
+      if (!session.parentSessionId) continue;
+      if (!blitzCache.has(session.parentSessionId)) continue;
+
+      const blitzId = session.parentSessionId;
+      const existing = blitzWorktrees.get(blitzId) || [];
+      existing.push({ worktreeId: `analysis-${session.id}`, sessions: [session] });
+      blitzWorktrees.set(blitzId, existing);
+    }
+
     // Sort blitz worktrees by creation time (oldest first) for stable ordering
     for (const worktrees of blitzWorktrees.values()) {
       worktrees.sort((a, b) => {

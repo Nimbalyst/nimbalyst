@@ -31,6 +31,7 @@ export const BlitzDialog: React.FC<BlitzDialogProps> = ({
 }) => {
   const [prompt, setPrompt] = useState('');
   const [modelSelections, setModelSelections] = useState<ModelSelection[]>([]);
+  const [analysisModel, setAnalysisModel] = useState<string>('claude-code:opus');
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -68,6 +69,10 @@ export const BlitzDialog: React.FC<BlitzDialogProps> = ({
           }
 
           setModelSelections(selections);
+
+          // Default analysis model to opus if available, otherwise first model
+          const opusModel = selections.find(s => s.id.includes('opus'));
+          setAnalysisModel(opusModel?.id || selections[0]?.id || 'claude-code:opus');
         }
       } catch (err) {
         console.error('[BlitzDialog] Failed to load models:', err);
@@ -134,6 +139,7 @@ export const BlitzDialog: React.FC<BlitzDialogProps> = ({
         workspacePath,
         prompt: prompt.trim(),
         modelConfig,
+        analysisModel,
       });
 
       if (result.success) {
@@ -147,7 +153,7 @@ export const BlitzDialog: React.FC<BlitzDialogProps> = ({
     } finally {
       setCreating(false);
     }
-  }, [isValid, creating, selectedModels, workspacePath, prompt, onCreated, onClose]);
+  }, [isValid, creating, selectedModels, workspacePath, prompt, analysisModel, onCreated, onClose]);
 
   // Handle Cmd+Enter for submit within the modal
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -290,6 +296,26 @@ export const BlitzDialog: React.FC<BlitzDialogProps> = ({
             <div className="text-[11px] text-nim-faint">
               Choose up to 5 sessions per model.
             </div>
+          </div>
+
+          {/* Analysis Model */}
+          <div className="flex flex-col gap-2 rounded-xl border border-nim bg-nim-secondary p-4">
+            <label className="text-[13px] font-medium text-nim">Analysis Model</label>
+            <p className="m-0 text-[11px] text-nim-muted">
+              When all sessions complete, an analysis session compares the results.
+            </p>
+            <select
+              className="w-full px-3 py-2 text-[13px] bg-nim border border-nim rounded-lg text-nim outline-none focus:border-nim-focus transition-colors cursor-pointer"
+              value={analysisModel}
+              onChange={(e) => setAnalysisModel(e.target.value)}
+              disabled={creating || loading}
+            >
+              {modelSelections.map(model => (
+                <option key={model.id} value={model.id}>
+                  {getModelDisplayName(model)}
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* Error */}

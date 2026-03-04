@@ -603,6 +603,49 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
     }
   }, [workspacePath, addSession, setSelectedWorkstream, defaultModel, refreshSessions]);
 
+  // Listen for blitz analysis session creation events.
+  // When all blitz children complete, the main process creates an analysis session
+  // and emits this event so we can register it and trigger queue processing.
+  useEffect(() => {
+    const cleanup = window.electronAPI?.on?.('blitz:analysis-created', (data: {
+      blitzId: string;
+      analysisSessionId: string;
+      analysisProvider?: string;
+      analysisModel?: string;
+      workspacePath: string;
+    }) => {
+      if (data.workspacePath !== workspacePath) return;
+
+      addSession({
+        id: data.analysisSessionId,
+        title: 'Analysis',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        provider: data.analysisProvider || 'claude-code',
+        model: data.analysisModel || 'claude-code:opus',
+        sessionType: 'session',
+        messageCount: 0,
+        workspaceId: workspacePath,
+        isArchived: false,
+        isPinned: false,
+        worktreeId: null,
+        parentSessionId: data.blitzId,
+        childCount: 0,
+        uncommittedCount: 0,
+      });
+
+      // Trigger queue processing to start the analysis
+      window.electronAPI.invoke('ai:triggerQueueProcessing', data.analysisSessionId, workspacePath)
+        .catch((error: Error) => {
+          console.error('[AgentMode] Failed to trigger analysis session queue processing:', error);
+        });
+
+      refreshSessions();
+    });
+
+    return () => cleanup?.();
+  }, [workspacePath, addSession, refreshSessions]);
+
   // Open session by ID
   const openSessionInTab = useCallback(async (sessionId: string) => {
     console.log('[AgentMode] openSessionInTab called with:', sessionId);

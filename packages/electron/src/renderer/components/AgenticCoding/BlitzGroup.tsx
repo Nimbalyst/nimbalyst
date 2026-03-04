@@ -123,6 +123,7 @@ const BlitzSessionRow: React.FC<{
   hasSessionTitle: boolean;
   isActive: boolean;
   isRenaming: boolean;
+  isAnalysis?: boolean;
   renameInputRef: React.RefObject<HTMLInputElement>;
   renameValue: string;
   onRenameChange: (value: string) => void;
@@ -130,7 +131,7 @@ const BlitzSessionRow: React.FC<{
   onRenameBlur: () => void;
   onSelect: () => void;
   onContextMenu: (e: React.MouseEvent) => void;
-}> = memo(({ session, sessionTitle, isActive, isRenaming, renameInputRef, renameValue, onRenameChange, onRenameKeyDown, onRenameBlur, onSelect, onContextMenu }) => (
+}> = memo(({ session, sessionTitle, isActive, isRenaming, isAnalysis, renameInputRef, renameValue, onRenameChange, onRenameKeyDown, onRenameBlur, onSelect, onContextMenu }) => (
   <div
     className={`blitz-session-item flex items-center gap-2 py-1.5 px-3 mr-2 mb-0.5 cursor-pointer rounded transition-colors duration-150 select-none ${
       isActive ? 'bg-[var(--nim-bg-selected)]' : 'hover:bg-[var(--nim-bg-hover)]'
@@ -146,13 +147,17 @@ const BlitzSessionRow: React.FC<{
     <div className={`shrink-0 flex items-center justify-center ${
       isActive ? 'text-[var(--nim-primary)]' : 'text-[var(--nim-text-muted)]'
     }`}>
-      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <rect x="3" y="2" width="3" height="3" rx="0.5" stroke="currentColor" strokeWidth="1.5" fill="none"/>
-        <rect x="10" y="2" width="3" height="3" rx="0.5" stroke="currentColor" strokeWidth="1.5" fill="none"/>
-        <rect x="3" y="11" width="3" height="3" rx="0.5" stroke="currentColor" strokeWidth="1.5" fill="none"/>
-        <path d="M4.5 5v3.5a1.5 1.5 0 0 0 1.5 1.5h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-        <path d="M11.5 5v5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-      </svg>
+      {isAnalysis ? (
+        <MaterialSymbol icon="compare_arrows" size={14} />
+      ) : (
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="2" width="3" height="3" rx="0.5" stroke="currentColor" strokeWidth="1.5" fill="none"/>
+          <rect x="10" y="2" width="3" height="3" rx="0.5" stroke="currentColor" strokeWidth="1.5" fill="none"/>
+          <rect x="3" y="11" width="3" height="3" rx="0.5" stroke="currentColor" strokeWidth="1.5" fill="none"/>
+          <path d="M4.5 5v3.5a1.5 1.5 0 0 0 1.5 1.5h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+          <path d="M11.5 5v5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+        </svg>
+      )}
     </div>
     {isRenaming ? (
       <input
@@ -542,7 +547,8 @@ export const BlitzGroup: React.FC<BlitzGroupProps> = memo(({
       {isExpanded && (
         <div className="blitz-group-children pt-1 pb-1 pl-10 animate-[blitzSlideDown_0.2s_ease-out]">
           {worktrees.map(({ worktreeId, sessions }) => {
-            const wtData = worktreeCache.get(worktreeId);
+            const isAnalysisEntry = worktreeId.startsWith('analysis-');
+            const wtData = !isAnalysisEntry ? worktreeCache.get(worktreeId) : undefined;
             // Use the oldest session's title as the worktree group name (e.g. "Session 1")
             // This keeps the original numbered name when additional sessions are added
             const oldestSession = [...sessions].sort((a, b) => a.createdAt - b.createdAt)[0];
@@ -563,6 +569,7 @@ export const BlitzGroup: React.FC<BlitzGroupProps> = memo(({
                   sessionTitle={sessionTitle}
                   hasSessionTitle={hasSessionTitle}
                   isActive={sessionIsActive}
+                  isAnalysis={isAnalysisEntry}
                   isRenaming={isRenamingThis}
                   renameInputRef={worktreeRenameInputRef}
                   renameValue={renameItemValue}
@@ -715,56 +722,59 @@ export const BlitzGroup: React.FC<BlitzGroupProps> = memo(({
       )}
 
       {/* Session/Worktree-level Context Menu */}
-      {showSessionContextMenu && (
-        <div
-          className="workstream-group-context-menu fixed z-[1000] min-w-[140px] bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-md shadow-[0_4px_12px_rgba(0,0,0,0.15)] p-1"
-          style={{
-            left: sessionContextMenuPosition.x,
-            top: sessionContextMenuPosition.y
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {(onWorktreeRename || onSessionRename) && (
-            <button
-              className="workstream-group-context-menu-item flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
-              onClick={handleSessionWorktreeRename}
-            >
-              <MaterialSymbol icon="edit" size={14} />
-              Rename
-            </button>
-          )}
-          {onArchiveOtherWorktrees && worktrees.length > 1 && (
-            <button
-              className="workstream-group-context-menu-item flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
-              onClick={handleArchiveOtherWorktrees}
-            >
-              <MaterialSymbol icon="archive" size={14} />
-              Archive Other Worktrees in Blitz
-            </button>
-          )}
-          {onWorktreeCleanGitignored && (
-            <button
-              className="workstream-group-context-menu-item flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
-              onClick={handleSessionWorktreeCleanGitignored}
-            >
-              <MaterialSymbol icon="delete_sweep" size={14} />
-              Clear Gitignored Files
-            </button>
-          )}
-          {onWorktreeArchive && (
-            <>
-              <div className="workstream-group-context-menu-divider h-px my-1 bg-[var(--nim-border)]" />
+      {showSessionContextMenu && (() => {
+        const isAnalysisContextMenu = sessionContextMenuWorktreeId?.startsWith('analysis-');
+        return (
+          <div
+            className="workstream-group-context-menu fixed z-[1000] min-w-[140px] bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-md shadow-[0_4px_12px_rgba(0,0,0,0.15)] p-1"
+            style={{
+              left: sessionContextMenuPosition.x,
+              top: sessionContextMenuPosition.y
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {(onWorktreeRename || onSessionRename) && (
               <button
-                className="workstream-group-context-menu-item destructive flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-error)] text-left rounded transition-colors duration-150 hover:bg-[rgba(239,68,68,0.1)]"
-                onClick={handleSessionWorktreeArchive}
+                className="workstream-group-context-menu-item flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
+                onClick={handleSessionWorktreeRename}
+              >
+                <MaterialSymbol icon="edit" size={14} />
+                Rename
+              </button>
+            )}
+            {!isAnalysisContextMenu && onArchiveOtherWorktrees && worktrees.length > 1 && (
+              <button
+                className="workstream-group-context-menu-item flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
+                onClick={handleArchiveOtherWorktrees}
               >
                 <MaterialSymbol icon="archive" size={14} />
-                Archive Worktree
+                Archive Other Worktrees in Blitz
               </button>
-            </>
-          )}
-        </div>
-      )}
+            )}
+            {!isAnalysisContextMenu && onWorktreeCleanGitignored && (
+              <button
+                className="workstream-group-context-menu-item flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
+                onClick={handleSessionWorktreeCleanGitignored}
+              >
+                <MaterialSymbol icon="delete_sweep" size={14} />
+                Clear Gitignored Files
+              </button>
+            )}
+            {!isAnalysisContextMenu && onWorktreeArchive && (
+              <>
+                <div className="workstream-group-context-menu-divider h-px my-1 bg-[var(--nim-border)]" />
+                <button
+                  className="workstream-group-context-menu-item destructive flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-error)] text-left rounded transition-colors duration-150 hover:bg-[rgba(239,68,68,0.1)]"
+                  onClick={handleSessionWorktreeArchive}
+                >
+                  <MaterialSymbol icon="archive" size={14} />
+                  Archive Worktree
+                </button>
+              </>
+            )}
+          </div>
+        );
+      })()}
 
       <style>{`
         @keyframes blitzSlideDown {

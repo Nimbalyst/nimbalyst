@@ -44,6 +44,10 @@ import { workstreamActiveChildAtom, workstreamStateAtom } from './atoms/workstre
 import { setWindowModeAtom } from './atoms/windowMode';
 import { triggerWorktreeRefreshAtom } from './atoms/gitOperations';
 
+// Track blitz IDs for which an analysis session creation has already been triggered.
+// Prevents duplicate IPC calls when multiple children complete near-simultaneously.
+const blitzAnalysisTriggered = new Set<string>();
+
 // Per-session debounce timers for reloadSessionDataAtom.
 // During active streaming, message-logged fires on every chunk, which would
 // trigger a full DB reload of ALL messages each time. Debouncing collapses
@@ -191,6 +195,43 @@ export function initSessionStateListeners(): () => void {
 
           if (worktreeId) {
             store.set(triggerWorktreeRefreshAtom, worktreeId);
+          }
+        }
+
+        // Check if this session is part of a blitz and all siblings are done.
+        // If so, trigger creation of an analysis session.
+        {
+          const registry = store.get(sessionRegistryAtom);
+          const sessionMeta = registry.get(sessionId);
+          if (sessionMeta?.parentSessionId) {
+            const parentMeta = registry.get(sessionMeta.parentSessionId);
+            if (parentMeta?.sessionType === 'blitz') {
+              const blitzId = parentMeta.id;
+              if (!blitzAnalysisTriggered.has(blitzId)) {
+                // Find all child sessions of this blitz
+                const childSessionIds: string[] = [];
+                for (const [id, meta] of registry) {
+                  if (meta.parentSessionId === blitzId && id !== blitzId) {
+                    childSessionIds.push(id);
+                  }
+                }
+                // Check if ALL children are done (not processing)
+                const allDone = childSessionIds.every(
+                  id => !store.get(sessionProcessingAtom(id))
+                );
+                if (allDone) {
+                  blitzAnalysisTriggered.add(blitzId);
+                  const wsPath = sessionMeta.workspaceId;
+                  if (wsPath) {
+                    window.electronAPI.invoke('blitz:create-analysis-session', blitzId, wsPath)
+                      .catch((err: Error) => {
+                        console.error('[sessionStateListeners] Failed to trigger blitz analysis:', err);
+                        blitzAnalysisTriggered.delete(blitzId);
+                      });
+                  }
+                }
+              }
+            }
           }
         }
         break;
@@ -619,6 +660,8 @@ export function initSessionStateListeners(): () => void {
       clearTimeout(timer);
     }
     readStateSyncTimers.clear();
+
+    blitzAnalysisTriggered.clear();
 
     window.electronAPI.sessionState?.removeStateChangeListener?.(handleStateChange);
     window.electronAPI.sessionState?.unsubscribe?.();

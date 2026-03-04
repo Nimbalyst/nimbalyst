@@ -7,6 +7,9 @@
  * Blitzes are modeled as ai_sessions with session_type='blitz'. The blitz
  * session stores the prompt and model config in its metadata JSONB column.
  * Child worktree sessions point back via parent_session_id.
+ *
+ * When all child sessions complete, an analysis session is automatically
+ * created to compare the results using session context MCP tools.
  */
 
 import { ipcMain, BrowserWindow } from 'electron';
@@ -71,6 +74,52 @@ function emitBlitzCreated(blitzId: string, workspacePath: string): void {
 }
 
 /**
+ * Build the prompt for the blitz analysis session.
+ * Instructs the AI to use session context MCP tools to compare all child sessions.
+ */
+function buildAnalysisPrompt(
+  originalPrompt: string,
+  childSessionList: string,
+  childSessionIds: string[]
+): string {
+  const sessionSummarySteps = childSessionIds.map(id =>
+    `- Use the get_session_summary tool with sessionId "${id}"`
+  ).join('\n');
+
+  return `You are analyzing the results of a blitz -- a parallel execution of the same prompt across multiple AI sessions, each using potentially different models or approaches.
+
+## Original Prompt
+${originalPrompt}
+
+## Sessions to Analyze
+${childSessionList}
+
+## Your Task
+
+1. First, retrieve the summary of each session:
+${sessionSummarySteps}
+
+2. Then, use get_workstream_edited_files with workstreamId set to the blitz parent session and groupBySession=true to see all files edited across all sessions.
+
+3. Finally, provide a structured comparison:
+
+### Comparison
+For each session, summarize:
+- The approach taken
+- Key code changes made
+- Any errors or issues encountered
+- Whether the prompt was fully addressed
+
+### Recommendation
+Based on your analysis:
+- Which session produced the best result and why
+- Any notable differences in approach between models
+- If applicable, which changes could be combined for an even better result
+
+Be concise but thorough. Focus on substantive differences in approach and code quality rather than cosmetic differences.`;
+}
+
+/**
  * Register blitz IPC handlers
  */
 export function registerBlitzHandlers(): void {
@@ -85,12 +134,13 @@ export function registerBlitzHandlers(): void {
       workspacePath: string;
       prompt: string;
       modelConfig: BlitzModelConfig[];
+      analysisModel?: string;
     }
   ): Promise<BlitzCreateResult> => {
     const startTime = Date.now();
 
     try {
-      const { workspacePath, prompt, modelConfig } = payload;
+      const { workspacePath, prompt, modelConfig, analysisModel } = payload;
 
       if (!workspacePath) {
         throw new Error('workspacePath is required');
@@ -124,7 +174,7 @@ export function registerBlitzHandlers(): void {
         sessionType: 'blitz',
         title: 'New blitz',
         workspaceId: workspacePath,
-        metadata: { prompt: prompt.trim(), modelConfig },
+        metadata: { prompt: prompt.trim(), modelConfig, ...(analysisModel ? { analysisModel } : {}) },
       } as any);
 
       logger.info('Blitz session created', { blitzId, totalWorktrees });
@@ -427,6 +477,114 @@ export function registerBlitzHandlers(): void {
     } catch (error) {
       logger.error('Failed to update blitz pinned status:', error);
       return { success: false, error: String(error) };
+    }
+  });
+
+  /**
+   * Create an analysis session when all blitz children have completed.
+   * Uses an atomic DB guard to prevent duplicate creation.
+   */
+  ipcMain.handle('blitz:create-analysis-session', async (
+    _event,
+    blitzId: string,
+    workspacePath: string
+  ): Promise<{ success: boolean; analysisSessionId?: string; alreadyCreated?: boolean; error?: string }> => {
+    try {
+      if (!blitzId || !workspacePath) {
+        throw new Error('blitzId and workspacePath are required');
+      }
+
+      const db = getDatabase();
+      if (!db) throw new Error('Database not initialized');
+
+      // Atomic guard: set analysisSessionCreated in metadata, only if not already set.
+      // If 0 rows updated, either the blitz doesn't exist or analysis was already created.
+      const { rows: updated } = await db.query<any>(
+        `UPDATE ai_sessions
+         SET metadata = jsonb_set(COALESCE(metadata, '{}'::jsonb), '{analysisSessionCreated}', 'true'::jsonb),
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1
+           AND session_type = 'blitz'
+           AND (metadata->>'analysisSessionCreated' IS NULL OR metadata->>'analysisSessionCreated' != 'true')
+         RETURNING id`,
+        [blitzId]
+      );
+
+      if (updated.length === 0) {
+        return { success: true, alreadyCreated: true };
+      }
+
+      // Fetch child sessions for the prompt
+      const { rows: childSessions } = await db.query<any>(
+        `SELECT id, title, model, provider FROM ai_sessions
+         WHERE parent_session_id = $1 AND workspace_id = $2 AND session_type = 'session'
+         ORDER BY created_at ASC`,
+        [blitzId, workspacePath]
+      );
+
+      if (childSessions.length === 0) {
+        logger.warn('Blitz has no child sessions, skipping analysis', { blitzId });
+        return { success: false, error: 'No child sessions found' };
+      }
+
+      // Fetch the blitz metadata to get the original prompt and analysis model preference
+      const blitzSession = await AISessionsRepository.get(blitzId);
+      const blitzMetadata = (blitzSession?.metadata ?? {}) as any;
+      const originalPrompt = blitzMetadata.prompt ?? '';
+
+      // Use configured analysis model, falling back to claude-code:opus
+      const analysisModelId = blitzMetadata.analysisModel || 'claude-code:opus';
+      const parsedModel = ModelIdentifier.tryParse(analysisModelId);
+      const analysisProvider = parsedModel?.provider || 'claude-code';
+
+      // Create the analysis session
+      const analysisSessionId = crypto.randomUUID();
+
+      await AISessionsRepository.create({
+        id: analysisSessionId,
+        provider: analysisProvider,
+        model: analysisModelId,
+        sessionType: 'session',
+        title: 'Analysis',
+        workspaceId: workspacePath,
+        parentSessionId: blitzId,
+        metadata: { isAnalysisSession: true },
+      } as any);
+
+      // Build and queue the analysis prompt
+      const childSessionList = childSessions.map((c: any, i: number) =>
+        `${i + 1}. Session "${c.title}" (ID: ${c.id}) - Model: ${c.model || c.provider}`
+      ).join('\n');
+      const childSessionIds = childSessions.map((c: any) => c.id);
+      const analysisPrompt = buildAnalysisPrompt(originalPrompt, childSessionList, childSessionIds);
+
+      const queueStore = getQueuedPromptsStore();
+      await queueStore.create({
+        id: `blitz-analysis-${blitzId}`,
+        sessionId: analysisSessionId,
+        prompt: analysisPrompt,
+      });
+
+      logger.info('Blitz analysis session created', { blitzId, analysisSessionId, analysisModelId, childCount: childSessions.length });
+
+      // Emit event to all renderer windows
+      const windows = BrowserWindow.getAllWindows();
+      for (const window of windows) {
+        if (!window.isDestroyed()) {
+          window.webContents.send('blitz:analysis-created', {
+            blitzId,
+            analysisSessionId,
+            analysisProvider,
+            analysisModel: analysisModelId,
+            workspacePath,
+          });
+        }
+      }
+
+      return { success: true, analysisSessionId };
+    } catch (error) {
+      logger.error('Failed to create blitz analysis session:', error);
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
     }
   });
 
