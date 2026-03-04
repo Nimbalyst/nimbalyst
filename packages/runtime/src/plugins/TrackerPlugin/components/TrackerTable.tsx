@@ -253,7 +253,7 @@ function formatDate(date: Date): string {
  * Returns merged data with top-level fields as canonical and embedded fields as fallback.
  * Returns null if the document doesn't match this tracker type.
  */
-function resolveTrackerFrontmatter(frontmatter: Record<string, any> | undefined, trackerType: string): Record<string, any> | null {
+export function resolveTrackerFrontmatter(frontmatter: Record<string, any> | undefined, trackerType: string): Record<string, any> | null {
   if (!frontmatter) return null;
 
   // Check type-specific key first (e.g. 'planStatus', 'decisionStatus')
@@ -275,7 +275,7 @@ function resolveTrackerFrontmatter(frontmatter: Record<string, any> | undefined,
   return null;
 }
 
-function convertFullDocumentToTrackerItems(metadata: any[], trackerType: TrackerItemType): TrackerItem[] {
+export function convertFullDocumentToTrackerItems(metadata: any[], trackerType: TrackerItemType): TrackerItem[] {
   return metadata
     .filter(doc => {
       // Only include documents that have matching tracker frontmatter
@@ -368,13 +368,9 @@ export function TrackerTable({
   const atomItems = useAtomValue(trackerItemsByTypeAtom(activeTypeFilter));
   const dataLoaded = useAtomValue(trackerDataLoadedAtom);
 
-  // Full-document items from frontmatter (loaded locally, not in atoms yet)
-  const [frontmatterItems, setFrontmatterItems] = useState<TrackerItem[]>([]);
-
-  // Merge atom items + frontmatter items into final items list
+  // Items from atom (PGLite + frontmatter, merged by trackerSyncListeners)
   const items = useMemo(() => {
-    // Normalize PGLite items: use updated/created for lastIndexed
-    const normalizedAtomItems = atomItems.map((item: TrackerItem) => {
+    return atomItems.map((item: TrackerItem) => {
       const dateSource = item.updated || item.created;
       let actualDate: Date | null = null;
       if (dateSource) {
@@ -389,11 +385,10 @@ export function TrackerTable({
       }
       return {
         ...item,
-        lastIndexed: actualDate || new Date(0),
+        lastIndexed: item.lastIndexed instanceof Date ? item.lastIndexed : (actualDate || new Date(0)),
       };
     });
-    return [...normalizedAtomItems, ...frontmatterItems];
-  }, [atomItems, frontmatterItems]);
+  }, [atomItems]);
 
   const loading = !dataLoaded && items.length === 0;
   const [error, setError] = useState<string | null>(null);
@@ -445,52 +440,6 @@ export function TrackerTable({
   useEffect(() => {
     setStatusFilter('all');
     setCustomFieldFilters({});
-  }, [activeTypeFilter]);
-
-  // Load full-document tracker items from frontmatter (not stored in PGLite atoms)
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadFrontmatterItems() {
-      const documentService = (window as any).documentService;
-      if (!documentService?.listDocumentMetadata) return;
-
-      try {
-        const metadata = await documentService.listDocumentMetadata();
-        const trackerTypes = globalRegistry.getAll();
-        const fullDocumentTrackers = trackerTypes.filter(t => t.modes.fullDocument);
-
-        let fmItems: TrackerItem[] = [];
-        for (const tracker of fullDocumentTrackers) {
-          if (activeTypeFilter === 'all' || activeTypeFilter === tracker.type) {
-            const converted = convertFullDocumentToTrackerItems(metadata || [], tracker.type as TrackerItemType);
-            fmItems = [...fmItems, ...converted];
-          }
-        }
-
-        if (!cancelled) {
-          setFrontmatterItems(fmItems);
-        }
-      } catch (err) {
-        console.error('[TrackerTable] Failed to load frontmatter items:', err);
-      }
-    }
-
-    loadFrontmatterItems();
-
-    // Watch for metadata changes to reload frontmatter items
-    const documentService = (window as any).documentService;
-    let unsubscribe: (() => void) | null = null;
-    if (documentService?.watchDocumentMetadata) {
-      unsubscribe = documentService.watchDocumentMetadata(() => {
-        loadFrontmatterItems();
-      });
-    }
-
-    return () => {
-      cancelled = true;
-      if (unsubscribe) unsubscribe();
-    };
   }, [activeTypeFilter]);
 
   const sortItems = useCallback((itemsToSort: TrackerItem[], sortColumn: SortColumn, sortDir: SortDirection) => {

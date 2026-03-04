@@ -957,7 +957,7 @@ export { globalRegistry } from './models/TrackerDataModel';
 
 // Export components
 export { StatusBar } from './components/StatusBar';
-export { TrackerTable } from './components/TrackerTable';
+export { TrackerTable, convertFullDocumentToTrackerItems, resolveTrackerFrontmatter } from './components/TrackerTable';
 export type { SortColumn, SortDirection } from './components/TrackerTable';
 export { TrackerFieldEditor } from './components/TrackerFieldEditor';
 export type { TrackerFieldEditorProps } from './components/TrackerFieldEditor';

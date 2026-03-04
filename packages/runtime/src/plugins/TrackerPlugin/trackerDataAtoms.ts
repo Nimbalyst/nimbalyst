@@ -54,15 +54,11 @@ export const trackerItemsByTypeAtom = atomFamily((type: TrackerItemType | 'all')
 );
 
 /**
- * Count of items per type (excludes done/completed).
+ * Count of items per type.
  */
 export const trackerItemCountByTypeAtom = atomFamily((type: TrackerItemType) =>
   atom((get) => {
-    const items = get(trackerItemsByTypeAtom(type));
-    return items.filter(item => {
-      const status = (item.status || '').toLowerCase();
-      return status !== 'done' && status !== 'completed';
-    }).length;
+    return get(trackerItemsByTypeAtom(type)).length;
   })
 );
 

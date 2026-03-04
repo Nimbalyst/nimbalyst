@@ -27,18 +27,58 @@ import {
   removeTrackerItemAtom,
   trackerDataLoadedAtom,
 } from '@nimbalyst/runtime';
-import type { TrackerItem, TrackerItemChangeEvent } from '@nimbalyst/runtime';
+import type { TrackerItem, TrackerItemChangeEvent, TrackerItemType, TrackerItemStatus, TrackerItemPriority } from '@nimbalyst/runtime';
+import {
+  globalRegistry,
+  convertFullDocumentToTrackerItems,
+} from '@nimbalyst/runtime/plugins/TrackerPlugin';
 
 /**
- * Fetch all tracker items from PGLite via IPC and load into atoms.
+ * Load full-document tracker items from frontmatter metadata.
+ * These are items like plans, decisions, blog posts where the entire
+ * document IS the tracker item (identified by frontmatter, not inline syntax).
+ */
+async function loadFrontmatterTrackerItems(): Promise<TrackerItem[]> {
+  try {
+    const metadata = await window.electronAPI.invoke('document-service:metadata-list');
+    if (!metadata?.length) return [];
+
+    const trackerTypes = globalRegistry.getAll();
+    const fullDocumentTrackers = trackerTypes.filter(t => t.modes.fullDocument);
+
+    let items: TrackerItem[] = [];
+    for (const tracker of fullDocumentTrackers) {
+      const converted = convertFullDocumentToTrackerItems(metadata, tracker.type as TrackerItemType);
+      items = [...items, ...converted];
+    }
+
+    // Ensure each frontmatter item has a stable ID (keyed by doc path + type)
+    // so they can be stored in the atom Map without duplicates
+    return items.map(item => ({
+      ...item,
+      id: item.id || `fm:${item.type}:${item.module}`,
+    }));
+  } catch (err) {
+    console.error('[trackerSyncListeners] Failed to load frontmatter items:', err);
+    return [];
+  }
+}
+
+/**
+ * Fetch all tracker items from PGLite via IPC and frontmatter metadata,
+ * then merge and load into atoms.
  */
 async function loadAllTrackerItems(): Promise<void> {
   try {
-    const items: TrackerItem[] = await window.electronAPI.invoke(
-      'document-service:tracker-items-list'
-    );
-    // console.log('[trackerSyncListeners] Initial load:', items?.length || 0, 'items');
-    store.set(replaceAllTrackerItemsAtom, items || []);
+    const [pgliteItems, frontmatterItems] = await Promise.all([
+      window.electronAPI.invoke('document-service:tracker-items-list') as Promise<TrackerItem[]>,
+      loadFrontmatterTrackerItems(),
+    ]);
+
+    // Merge: PGLite items take priority over frontmatter items (by ID)
+    const allItems = [...(pgliteItems || []), ...frontmatterItems];
+    // console.log('[trackerSyncListeners] Loaded:', pgliteItems?.length || 0, 'PGLite +', frontmatterItems.length, 'frontmatter items');
+    store.set(replaceAllTrackerItemsAtom, allItems);
   } catch (err) {
     console.error('[trackerSyncListeners] Failed to load tracker items:', err);
     // Mark as loaded even on error so UI doesn't stay in loading state
@@ -72,7 +112,7 @@ export function initTrackerSyncListeners(): () => void {
 
   // console.log('[trackerSyncListeners] Initializing tracker data listeners');
 
-  // Initial load from PGLite (shows cached data from previous session)
+  // Initial load from PGLite + frontmatter (shows cached data from previous session)
   loadAllTrackerItems();
 
   // Trigger a workspace scan to index new/changed files into PGLite.
@@ -121,8 +161,7 @@ export function initTrackerSyncListeners(): () => void {
   cleanups.push(
     window.electronAPI.on('document-service:metadata-changed', () => {
       // Full-document tracker items come from frontmatter metadata.
-      // The simplest approach: re-fetch all items when metadata changes.
-      // This handles plans/decisions that use frontmatter-based tracking.
+      // Re-fetch all items (PGLite + frontmatter) when metadata changes.
       loadAllTrackerItems();
     })
   );
