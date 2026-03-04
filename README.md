@@ -1,33 +1,37 @@
-# Nimbalyst - The Best Way to Work With Claude Code
+# Nimbalyst - The agent-native visual workspace for builders
 
-[Nimbalyst](https://nimbalyst.com) is a free, local, interactive visual editor & session manager.
-- Iterate with Claude Code on your sessions, markdown, mockups, diagrams, csv, Excalidraw, data models, MCP, and code. Approve CC's changes in red/green WYSIWYG, edit, annotate, iterate visually. 
-- Manage multiple sessions in parallel, search, resume, link sessions to files and files to sessions. For developers we include git management, AI commit, workstreams, worktrees, and terminal. 
+[Nimbalyst](https://nimbalyst.com) is a free, local, interactive visual editor & session manager where builders maximize speed, bandwidth, and context with Codex and Claude Code by collaborating visually on files, sessions, and tasks:
+- Iterate with Codex and Claude Code on your sessions, markdown, mockups, diagrams, csv, Excalidraw, data models, MCP, and code. Approve the coding agent's changes in red/green WYSIWYG, edit, annotate, iterate visually. 
+- Manage multiple sessions in parallel and in kanban. Search, resume, link sessions to files and files to sessions. For developers we include git management, AI commit, workstreams, worktrees, and terminal.
+- Manage tasks. Keep track of your plans, bugs, todos, etc..  Have agent edit tasks and items, add them, move them, and execute them. Human see and edit this as well. 
 
 ![Version](https://img.shields.io/github/v/release/nimbalyst/nimbalyst)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)
 
 
 ## Features
-- Files Mode: Visual Editor with Claude Code
-  - Edit markdown in a local, WYSIWIG, agentic editor powered by Claude Code. Review AI changes as red/green diffs.
-  - Iterate with AI on html mockups. Annotate, edit, embed, & use to code.
-  - Use Claude Code to build excalidraw drawings and Mermaid diagrams. Visually edit yourself. Ask AI to edit them.
-  - View CSV file, work with Claude Code in the CSV file, track changes.
+- Files Mode: Visual Editor with Codex and Claude Code
+  - Edit markdown in a local, WYSIWIG, agentic editor powered by Codex and Claude Code. Review AI changes as red/green diffs.
+  - Iterate with coding agents on html mockups. Annotate, edit, embed, & use to code.
+  - Use coding agents to build excalidraw drawings and Mermaid diagrams. Visually edit yourself. Ask AI to edit them.
+  - View CSV file, work with coding agents in the CSV file, track changes.
   - Build your data model with AI based on your code and docs. Use it to write better code.
   - Work in a Monaco code editor, see changes, approve them
-- Agents Mode: Manage agents' work across parallel Claude Code sessions in a UI
+- Agents Mode: Manage coding agents' work across parallel sessions in a UI
   - Link sessions to files and files to sessions
   - Open files in your sessions. Group files touched by a session
   - Run parallel sessions
   - Search and resume sessions
-- Task Mode: Track items and to dos
+  - Manage in a Kanban board
+- Task Mode: Keep track of your plans, bugs, todos etc..
+  - Have agent edit tasks, add them, move them, and execute them
+  - Human view and edit them too
 - For developers
   - Manage git state
   - Use AI to git commit
   - Use embedded ghostty terminal
   - Leverage workstrees
-- Open storage of content and status in markdown, workflow in Claude Code / commands, and plain files on disk or in git
+- Open storage of content and status in markdown, workflow in / commands, and plain files on disk or in git
 
 ## ScreenShots
 ![Nimbalyst File](https://github.com/Nimbalyst/nimbalyst/blob/main/Nimbalyst%20Hero%20Files%20Dev%20Dark-%20Social.png)
