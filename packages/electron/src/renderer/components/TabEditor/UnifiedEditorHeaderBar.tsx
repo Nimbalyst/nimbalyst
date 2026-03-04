@@ -72,7 +72,7 @@ const SessionItem: React.FC<{
     <div className="ai-session-header flex flex-col gap-1">
       <div className="ai-session-title text-sm font-medium whitespace-nowrap overflow-hidden text-ellipsis text-[var(--nim-text)]">{session.title}</div>
       <div className="ai-session-meta text-xs text-[var(--nim-text-muted)]">
-        {session.provider} &bull; {formatTime(session.updatedAt)} &bull; {session.messageCount} turns
+        {session.provider} &bull; {formatTime(session.updatedAt)}
       </div>
     </div>
     {hasActions && (
