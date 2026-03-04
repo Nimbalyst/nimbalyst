@@ -826,7 +826,9 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
 
     // Drag and drop handlers
     const handleDragOver = useCallback((e: React.DragEvent) => {
-      if (!onAttachmentAdd) return;
+      // Accept file mention drags (from files-edited sidebar) even without attachment support
+      const hasFileMention = e.dataTransfer.types.includes('application/x-nimbalyst-file-mention');
+      if (!onAttachmentAdd && !hasFileMention) return;
       e.preventDefault();
       e.stopPropagation();
       setDragActive(true);
@@ -839,16 +841,41 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
     }, []);
 
     const handleDrop = useCallback(async (e: React.DragEvent) => {
-      if (!onAttachmentAdd) return;
       e.preventDefault();
       e.stopPropagation();
       setDragActive(false);
 
+      // Handle file mention drops from the files-edited sidebar
+      const fileMentionPath = e.dataTransfer.getData('application/x-nimbalyst-file-mention');
+      if (fileMentionPath) {
+        const mention = `@${fileMentionPath}`;
+        // Insert at cursor position, or append with space separator
+        const textarea = textareaRef.current;
+        const cursorPos = textarea?.selectionStart ?? value.length;
+        const before = value.substring(0, cursorPos);
+        const after = value.substring(cursorPos);
+        // Add space before if needed (not at start and no trailing space)
+        const needsSpaceBefore = before.length > 0 && !before.endsWith(' ') && !before.endsWith('\n');
+        const newValue = before + (needsSpaceBefore ? ' ' : '') + mention + ' ' + after;
+        onChange(newValue);
+        // Focus textarea and set cursor after the inserted mention
+        const newCursorPos = cursorPos + (needsSpaceBefore ? 1 : 0) + mention.length + 1;
+        setTimeout(() => {
+          if (textareaRef.current) {
+            textareaRef.current.focus();
+            textareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
+          }
+        }, 0);
+        return;
+      }
+
+      // Handle OS file drops as attachments
+      if (!onAttachmentAdd) return;
       const files = Array.from(e.dataTransfer.files);
       for (const file of files) {
         await handleFileAttachment(file);
       }
-    }, [onAttachmentAdd, handleFileAttachment]);
+    }, [onAttachmentAdd, handleFileAttachment, value, onChange]);
 
     // Threshold for converting large text pastes to attachments (25 lines or 2000 characters)
     const LARGE_PASTE_LINE_THRESHOLD = 25;

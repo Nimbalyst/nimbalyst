@@ -586,9 +586,17 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
       onSelectionChange?.(filePath, !isSelected);
     };
 
+    // Drag handler to enable dropping file as @-mention in AI input
+    const handleDragStart = (e: React.DragEvent) => {
+      e.dataTransfer.setData('application/x-nimbalyst-file-mention', relativePath);
+      e.dataTransfer.effectAllowed = 'copy';
+    };
+
     return (
       <button
         key={filePath}
+        draggable
+        onDragStart={handleDragStart}
         onClick={() => {
           // Don't open deleted files - they don't exist anymore
           if (!isDeleted) {
