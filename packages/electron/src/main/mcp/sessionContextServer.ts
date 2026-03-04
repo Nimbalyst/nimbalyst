@@ -512,6 +512,24 @@ async function handleListRecentSessions(
     // Fall back to empty counts
   }
 
+  // Fetch running status from database (idle, running, error, interrupted)
+  let statusMap = new Map<string, string>();
+  if (sessionIds.length > 0) {
+    try {
+      const { getDatabase } = await import("../database/initialize");
+      const db = getDatabase();
+      const { rows: statusRows } = await db.query<{ id: string; status: string }>(
+        `SELECT id, status FROM ai_sessions WHERE id = ANY($1)`,
+        [sessionIds]
+      );
+      for (const row of statusRows) {
+        statusMap.set(row.id, row.status);
+      }
+    } catch {
+      // Non-critical -- continue without status
+    }
+  }
+
   const lines: string[] = [];
   const totalLabel = query ? `matching "${query}"` : "total";
   const offsetLabel = offset > 0 ? `, offset ${offset}` : "";
@@ -524,8 +542,16 @@ async function handleListRecentSessions(
     const s = limited[i];
     const isCurrentSession = s.id === currentSessionId;
     const msgCount = messageCounts.get(s.id) || 0;
+    const status = statusMap.get(s.id) || "idle";
 
     let line = `${i + 1}. "${s.title}" (${s.id}) - ${formatRelativeTime(s.updatedAt)}, ${msgCount} messages`;
+    if (status === "running") {
+      line += " [RUNNING]";
+    } else if (status === "error") {
+      line += " [ERROR]";
+    } else if (status === "interrupted") {
+      line += " [INTERRUPTED]";
+    }
     if (isCurrentSession) {
       line += " [CURRENT]";
     }

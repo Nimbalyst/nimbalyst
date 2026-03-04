@@ -74,6 +74,8 @@ export class RealtimeAPIClient {
   private onPauseListeningCallback: (() => void) | null = null;
   private onSpeechStoppedCallback: (() => void) | null = null;
   private onRespondToPromptCallback: ((params: { sessionId: string; promptId: string; promptType: string; answer: string }) => Promise<{ success: boolean; error?: string }>) | null = null;
+  private onListSessionsCallback: ((query?: string) => Promise<{ success: boolean; sessions?: Array<{ id: string; title: string; status: string }>; error?: string }>) | null = null;
+  private onNavigateToSessionCallback: ((sessionId: string) => Promise<{ success: boolean; title?: string; error?: string }>) | null = null;
   private claudeCodeSessionId: string;
   private workspacePath: string | null;
   private window: Electron.BrowserWindow;
@@ -230,6 +232,20 @@ export class RealtimeAPIClient {
    */
   setOnRespondToPrompt(callback: (params: { sessionId: string; promptId: string; promptType: string; answer: string }) => Promise<{ success: boolean; error?: string }>): void {
     this.onRespondToPromptCallback = callback;
+  }
+
+  /**
+   * Set callback for listing AI sessions
+   */
+  setOnListSessions(callback: (query?: string) => Promise<{ success: boolean; sessions?: Array<{ id: string; title: string; status: string }>; error?: string }>): void {
+    this.onListSessionsCallback = callback;
+  }
+
+  /**
+   * Set callback for navigating to a specific AI session
+   */
+  setOnNavigateToSession(callback: (sessionId: string) => Promise<{ success: boolean; title?: string; error?: string }>): void {
+    this.onNavigateToSessionCallback = callback;
   }
 
   /**
@@ -432,7 +448,7 @@ Tools:
 
 Guidelines:
 - Be terse. One short sentence per response. No filler phrases.
-- When the user says "shut up", "stop talking", "be quiet", "stop listening", "shh", or anything similar: IMMEDIATELY call pause_listening. Say NOTHING -- not even "ok". Just call the tool silently.
+- When the user says "shut up", "stop talking", "be quiet", "stop listening", "shh", or anything similar: IMMEDIATELY call pause_listening. Say ABSOLUTELY NOTHING before or after calling the tool -- not "ok", not "pausing", not any acknowledgment at all. Do not describe what will happen with the mic. Just call the tool silently.
 - For coding tasks: use submit_agent_prompt, say what you did in ~5 words (e.g. "Submitted."), then STOP. Do NOT say anything about waiting, timing out, or checking back. The microphone will go dormant automatically. You will be woken up with an "[INTERNAL: Task complete...]" message when the coding agent finishes. There is NO timeout -- tasks can take minutes. You do NOT need to monitor, wait, or follow up.
 - For questions about this project: use ask_coding_agent. The answer will come back as the tool result. Summarize it conversationally for the user.
 - Only answer directly for truly general knowledge questions unrelated to this project.
@@ -533,7 +549,7 @@ Your job is to be a voice relay, not to interpret or improve the user's requests
         {
           type: 'function',
           name: 'pause_listening',
-          description: 'Pause listening for voice input. The voice session stays active but the microphone goes to sleep. Use when the user says to stop listening, go to sleep, be quiet, or pause. The mic will wake up automatically when you next speak to the user (e.g. when a task completes).',
+          description: 'Pause listening for voice input. The voice session stays active but the microphone goes to sleep. Use when the user says to stop listening, go to sleep, be quiet, or pause. The mic will reactivate automatically when a coding task completes or another event requires your attention. Do NOT tell the user the mic will reactivate when they speak -- they cannot trigger it by speaking while paused.',
           parameters: {
             type: 'object',
             properties: {},
@@ -561,6 +577,36 @@ Your job is to be a voice relay, not to interpret or improve the user's requests
               },
             },
             required: ['promptId', 'promptType', 'answer'],
+          },
+        },
+        {
+          type: 'function',
+          name: 'list_sessions',
+          description: 'List recent AI sessions in this workspace. Returns session IDs, titles, and running status. Use this when the user asks about their sessions, wants to find a session by name, or before navigating to one.',
+          parameters: {
+            type: 'object',
+            properties: {
+              query: {
+                type: 'string',
+                description: 'Optional search string to filter sessions by title.',
+              },
+            },
+            required: [],
+          },
+        },
+        {
+          type: 'function',
+          name: 'navigate_to_session',
+          description: 'Switch the Nimbalyst UI to a specific AI session, bringing it into focus. Use this when the user asks to switch to, open, or go to a particular session. Call list_sessions first to find the session ID.',
+          parameters: {
+            type: 'object',
+            properties: {
+              sessionId: {
+                type: 'string',
+                description: 'The session ID to navigate to.',
+              },
+            },
+            required: ['sessionId'],
           },
         },
       ],
@@ -815,7 +861,7 @@ Your job is to be a voice relay, not to interpret or improve the user's requests
           }
           this.sendFunctionCallResult(callId, {
             success: true,
-            message: 'Listening paused. The mic will wake up when you next speak to the user.',
+            message: 'Listening paused. The mic will reactivate automatically when a task completes or an event needs attention.',
           });
         } catch (error) {
           console.error('[RealtimeAPIClient] Failed to pause listening:', error);
@@ -856,6 +902,60 @@ Your job is to be a voice relay, not to interpret or improve the user's requests
           }
         } catch (error) {
           console.error('[RealtimeAPIClient] Failed to respond to prompt:', error);
+          this.sendFunctionCallResult(callId, {
+            success: false,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+        break;
+      }
+
+      case 'list_sessions': {
+        try {
+          const args = argsJson ? JSON.parse(argsJson) : {};
+          if (this.onListSessionsCallback) {
+            const result = await this.onListSessionsCallback(args.query);
+            this.sendFunctionCallResult(callId, result);
+          } else {
+            this.sendFunctionCallResult(callId, {
+              success: false,
+              error: 'List sessions callback not registered',
+            });
+          }
+        } catch (error) {
+          console.error('[RealtimeAPIClient] Failed to list sessions:', error);
+          this.sendFunctionCallResult(callId, {
+            success: false,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+        break;
+      }
+
+      case 'navigate_to_session': {
+        try {
+          const args = JSON.parse(argsJson);
+          const { sessionId } = args;
+
+          if (!sessionId) {
+            this.sendFunctionCallResult(callId, {
+              success: false,
+              error: 'sessionId parameter is required',
+            });
+            break;
+          }
+
+          if (this.onNavigateToSessionCallback) {
+            const result = await this.onNavigateToSessionCallback(sessionId);
+            this.sendFunctionCallResult(callId, result);
+          } else {
+            this.sendFunctionCallResult(callId, {
+              success: false,
+              error: 'Navigate to session callback not registered',
+            });
+          }
+        } catch (error) {
+          console.error('[RealtimeAPIClient] Failed to navigate to session:', error);
           this.sendFunctionCallResult(callId, {
             success: false,
             error: error instanceof Error ? error.message : String(error),

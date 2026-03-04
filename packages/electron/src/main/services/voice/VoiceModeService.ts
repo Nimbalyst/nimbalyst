@@ -7,6 +7,8 @@ import { RealtimeAPIClient } from './RealtimeAPIClient';
 import { safeHandle } from '../../utils/ipcRegistry';
 import Store from 'electron-store';
 import { AnalyticsService } from '../analytics/AnalyticsService';
+import { AISessionsRepository } from '@nimbalyst/runtime';
+import { getDatabase } from '../../database/initialize';
 
 // Store active voice session info
 interface VoiceSession {
@@ -535,6 +537,80 @@ export function initVoiceModeService() {
           return { success: true };
         } catch (error) {
           console.error('[VoiceModeService] Failed to respond to prompt:', error);
+          return { success: false, error: error instanceof Error ? error.message : String(error) };
+        }
+      });
+
+      // List sessions in this workspace
+      poc.setOnListSessions(async (query?: string) => {
+        try {
+          const wp = activeVoiceSession?.workspacePath;
+          if (!wp) {
+            return { success: false, error: 'No workspace path available' };
+          }
+
+          let sessions;
+          if (query && query.trim().length > 0) {
+            sessions = await AISessionsRepository.search(wp, query.trim());
+          } else {
+            sessions = await AISessionsRepository.list(wp);
+          }
+
+          // Fetch running status from database
+          const ids = sessions.slice(0, 20).map(s => s.id);
+          let statusMap = new Map<string, string>();
+          if (ids.length > 0) {
+            try {
+              const db = getDatabase();
+              const { rows } = await db.query<{ id: string; status: string }>(
+                `SELECT id, status FROM ai_sessions WHERE id = ANY($1)`,
+                [ids],
+              );
+              for (const row of rows) {
+                statusMap.set(row.id, row.status);
+              }
+            } catch {
+              // Non-critical
+            }
+          }
+
+          const results = sessions.slice(0, 20).map(s => ({
+            id: s.id,
+            title: s.title,
+            status: statusMap.get(s.id) || 'idle',
+          }));
+
+          return { success: true, sessions: results };
+        } catch (error) {
+          return { success: false, error: error instanceof Error ? error.message : String(error) };
+        }
+      });
+
+      // Navigate to a specific session
+      poc.setOnNavigateToSession(async (sessionId: string) => {
+        try {
+          const session = await AISessionsRepository.get(sessionId);
+          if (!session) {
+            return { success: false, error: `Session not found: ${sessionId}` };
+          }
+
+          const wp = activeVoiceSession?.workspacePath;
+          if (!wp) {
+            return { success: false, error: 'No workspace path available' };
+          }
+
+          // Send navigation IPC to renderer (same channel the tray uses)
+          if (window && !window.isDestroyed()) {
+            window.show();
+            window.focus();
+            window.webContents.send('tray:navigate-to-session', {
+              sessionId,
+              workspacePath: wp,
+            });
+          }
+
+          return { success: true, title: session.title || sessionId };
+        } catch (error) {
           return { success: false, error: error instanceof Error ? error.message : String(error) };
         }
       });

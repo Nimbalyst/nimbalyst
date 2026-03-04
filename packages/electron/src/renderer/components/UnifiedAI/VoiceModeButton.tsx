@@ -168,6 +168,46 @@ function registerVoiceCallbacks() {
 // Register callbacks immediately on module load
 registerVoiceCallbacks();
 
+/**
+ * Play a soft "bing" activation sound using the Web Audio API.
+ * Two layered sine tones with a quick attack and gentle decay.
+ */
+function playActivationSound(): void {
+  try {
+    const ctx = new AudioContext();
+    const now = ctx.currentTime;
+
+    // Primary tone (E6 ~1319Hz) - bright and clear
+    const osc1 = ctx.createOscillator();
+    const gain1 = ctx.createGain();
+    osc1.type = 'sine';
+    osc1.frequency.setValueAtTime(1319, now);
+    gain1.gain.setValueAtTime(0, now);
+    gain1.gain.linearRampToValueAtTime(0.15, now + 0.01);
+    gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+    osc1.connect(gain1).connect(ctx.destination);
+    osc1.start(now);
+    osc1.stop(now + 0.4);
+
+    // Harmonic overtone (octave up ~2637Hz) - adds shimmer
+    const osc2 = ctx.createOscillator();
+    const gain2 = ctx.createGain();
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(2637, now);
+    gain2.gain.setValueAtTime(0, now);
+    gain2.gain.linearRampToValueAtTime(0.06, now + 0.01);
+    gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+    osc2.connect(gain2).connect(ctx.destination);
+    osc2.start(now);
+    osc2.stop(now + 0.25);
+
+    // Clean up context after sounds finish
+    setTimeout(() => ctx.close(), 500);
+  } catch {
+    // Audio playback is best-effort
+  }
+}
+
 interface VoiceModeButtonProps {
   workspacePath?: string | null;
 }
@@ -291,6 +331,7 @@ export function VoiceModeButton({ workspacePath }: VoiceModeButtonProps) {
 
         activeVoiceSessionId = sessionId;
         setVoiceActiveSession(sessionId, workspacePath);
+        playActivationSound();
         setIsVoiceActive(true);
       } catch (err) {
         console.error('[VoiceModeButton] Failed to start voice mode:', err);
