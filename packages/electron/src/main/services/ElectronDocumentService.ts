@@ -61,7 +61,7 @@ export class ElectronDocumentService implements DocumentService {
       // Check for YAML frontmatter with plan/bug/tracker content
       // Look for patterns like planStatus:, or inline tracker items like #bug[, #task[, etc.
       const hasPlanStatus = /^---[\s\S]*?planStatus:/m.test(content);
-      const hasInlineTracker = /#(bug|task|plan|idea|decision)\[/.test(content);
+      const hasInlineTracker = /#([a-z][\w-]*)\[/.test(content);
 
       return hasPlanStatus || hasInlineTracker;
     } catch {
@@ -773,6 +773,7 @@ export class ElectronDocumentService implements DocumentService {
   async listTrackerItems(): Promise<TrackerItem[]> {
     try {
       // console.log(`[DocumentService] listTrackerItems called for workspace: ${this.workspacePath}`);
+      // Returns all items including archived - filtering happens in the UI layer
       const result = await database.query<any>(
         `SELECT * FROM tracker_items WHERE workspace = $1 ORDER BY last_indexed DESC`,
         [this.workspacePath]
@@ -845,6 +846,14 @@ export class ElectronDocumentService implements DocumentService {
       updated: data.updated || row.updated || undefined,
       dueDate: data.dueDate || undefined,
       lastIndexed: new Date(row.last_indexed),
+      // Rich content (Lexical editor state)
+      content: row.content || undefined,
+      // Archive state
+      archived: row.archived ?? false,
+      archivedAt: row.archived_at ? new Date(row.archived_at).toISOString() : undefined,
+      // Source tracking
+      source: row.source || (row.document_path ? 'inline' : 'native'),
+      sourceRef: row.source_ref || undefined,
       // Collaborative fields from JSONB data
       assigneeId: data.assigneeId || undefined,
       reporterId: data.reporterId || undefined,
@@ -926,6 +935,278 @@ export class ElectronDocumentService implements DocumentService {
   }
 
   /**
+   * Update the rich content (Lexical editor state) of a tracker item.
+   */
+  async updateTrackerItemContent(itemId: string, content: any): Promise<void> {
+    const contentJson = content ? JSON.stringify(content) : null;
+    await database.query(
+      `UPDATE tracker_items SET content = $1, updated = NOW() WHERE id = $2`,
+      [contentJson, itemId]
+    );
+
+    const result = await database.query<any>(
+      `SELECT * FROM tracker_items WHERE id = $1`,
+      [itemId]
+    );
+    if (result.rows.length > 0) {
+      const item = this.rowToTrackerItem(result.rows[0]);
+      const changeEvent: TrackerItemChangeEvent = {
+        added: [],
+        updated: [item],
+        removed: [],
+        timestamp: new Date(),
+      };
+      this.trackerItemWatchers.forEach(callback => callback(changeEvent));
+    }
+  }
+
+  /**
+   * Get the rich content (Lexical editor state) of a tracker item.
+   */
+  async getTrackerItemContent(itemId: string): Promise<any | null> {
+    const result = await database.query<any>(
+      `SELECT content FROM tracker_items WHERE id = $1`,
+      [itemId]
+    );
+    if (result.rows.length === 0) return null;
+    return result.rows[0].content || null;
+  }
+
+  /**
+   * Archive or unarchive a tracker item.
+   */
+  async archiveTrackerItem(itemId: string, archive: boolean): Promise<TrackerItem> {
+    if (archive) {
+      await database.query(
+        `UPDATE tracker_items SET archived = TRUE, archived_at = NOW(), updated = NOW() WHERE id = $1`,
+        [itemId]
+      );
+    } else {
+      await database.query(
+        `UPDATE tracker_items SET archived = FALSE, archived_at = NULL, updated = NOW() WHERE id = $1`,
+        [itemId]
+      );
+    }
+
+    const result = await database.query<any>(
+      `SELECT * FROM tracker_items WHERE id = $1`,
+      [itemId]
+    );
+    if (result.rows.length === 0) {
+      throw new Error(`Tracker item not found: ${itemId}`);
+    }
+    const item = this.rowToTrackerItem(result.rows[0]);
+
+    const changeEvent: TrackerItemChangeEvent = {
+      added: [],
+      updated: [item],
+      removed: [],
+      timestamp: new Date(),
+    };
+    this.trackerItemWatchers.forEach(callback => callback(changeEvent));
+
+    return item;
+  }
+
+  /**
+   * Import a single markdown file as a native tracker item.
+   * Reads frontmatter for metadata and the markdown body as content.
+   * Returns the created item or null if the file has no tracker frontmatter.
+   */
+  async importTrackerItemFromFile(relativePath: string, options?: {
+    skipDuplicates?: boolean;
+  }): Promise<{ item: TrackerItem | null; skipped: boolean; error?: string }> {
+    const fullPath = path.join(this.workspacePath, relativePath);
+
+    // Check for duplicate by source_ref
+    if (options?.skipDuplicates !== false) {
+      const existing = await database.query<any>(
+        `SELECT id FROM tracker_items WHERE workspace = $1 AND source = 'frontmatter' AND source_ref = $2`,
+        [this.workspacePath, relativePath]
+      );
+      if (existing.rows.length > 0) {
+        return { item: null, skipped: true };
+      }
+    }
+
+    // Read the full file
+    let fileContent: string;
+    try {
+      fileContent = await fs.readFile(fullPath, 'utf-8');
+    } catch (err) {
+      return { item: null, skipped: false, error: `Failed to read file: ${err instanceof Error ? err.message : String(err)}` };
+    }
+
+    // Parse frontmatter
+    const { data: frontmatter } = await extractFrontmatter(fullPath);
+    if (!frontmatter) {
+      return { item: null, skipped: false, error: 'No valid frontmatter found' };
+    }
+
+    // Resolve tracker-specific frontmatter (planStatus, decisionStatus, etc.)
+    let trackerData: Record<string, any> | null = null;
+    let trackerType = 'plan'; // default
+
+    const typeKeys = ['plan', 'decision', 'bug', 'task', 'idea'];
+    for (const type of typeKeys) {
+      const specificKey = `${type}Status`;
+      if (frontmatter[specificKey] && typeof frontmatter[specificKey] === 'object') {
+        trackerData = frontmatter[specificKey] as Record<string, any>;
+        trackerType = type;
+        break;
+      }
+    }
+
+    // Also check generic trackerStatus
+    if (!trackerData && frontmatter.trackerStatus && typeof frontmatter.trackerStatus === 'object') {
+      trackerData = frontmatter.trackerStatus as Record<string, any>;
+      trackerType = (trackerData.type as string) || 'plan';
+    }
+
+    if (!trackerData) {
+      return { item: null, skipped: false, error: 'No tracker frontmatter found (expected planStatus, decisionStatus, etc.)' };
+    }
+
+    // Extract markdown body (everything after frontmatter)
+    const bodyMatch = fileContent.match(/^---\s*\n[\s\S]*?\n---\s*\n([\s\S]*)$/);
+    const markdownBody = bodyMatch ? bodyMatch[1].trim() : '';
+
+    // Build item metadata
+    const title = (trackerData.title as string)
+      || (frontmatter.title as string)
+      || relativePath.split('/').pop()?.replace(/\.md$/, '') || 'Untitled';
+    const status = ((trackerData.status as string) || 'to-do').toLowerCase();
+    const priority = ((trackerData.priority as string) || 'medium').toLowerCase();
+    const owner = (trackerData.owner as string) || undefined;
+    const tags = (trackerData.tags as string[]) || (frontmatter.tags as string[]) || undefined;
+    const progress = trackerData.progress as number | undefined;
+    const dueDate = (trackerData.dueDate as string) || undefined;
+
+    // Generate stable ID from file path
+    const prefix = trackerType.substring(0, 3);
+    const hash = crypto.createHash('md5').update(relativePath).digest('hex').substring(0, 10);
+    const id = `${prefix}_imp_${hash}`;
+
+    // Build JSONB data
+    const data: Record<string, any> = {
+      title,
+      status,
+      priority,
+    };
+    if (trackerData.description) data.description = trackerData.description;
+    if (owner) data.owner = owner;
+    if (tags && tags.length > 0) data.tags = tags;
+    if (progress !== undefined) data.progress = progress;
+    if (dueDate) data.dueDate = dueDate;
+    if (trackerData.created) data.created = trackerData.created;
+
+    // Collect custom fields
+    const builtinFields = new Set(['title', 'status', 'priority', 'owner', 'tags', 'progress', 'dueDate', 'created', 'updated', 'planId', 'planType', 'type', 'description', 'startDate', 'stakeholders', 'agentSessions']);
+    for (const [key, value] of Object.entries(trackerData)) {
+      if (!builtinFields.has(key) && value !== undefined && value !== null) {
+        data[key] = value;
+      }
+    }
+
+    const contentJson = markdownBody ? JSON.stringify(markdownBody) : null;
+
+    // Insert into database
+    await database.query(
+      `INSERT INTO tracker_items (
+        id, type, data, workspace, document_path, line_number,
+        created, updated, last_indexed, sync_status,
+        content, archived, source, source_ref
+      ) VALUES ($1, $2, $3, $4, '', NULL, NOW(), NOW(), NOW(), 'local', $5, FALSE, 'frontmatter', $6)
+      ON CONFLICT (id) DO UPDATE SET
+        data = $3, content = $5, source = 'frontmatter', source_ref = $6, updated = NOW()`,
+      [id, trackerType, JSON.stringify(data), this.workspacePath, contentJson, relativePath]
+    );
+
+    const result = await database.query<any>(
+      `SELECT * FROM tracker_items WHERE id = $1`,
+      [id]
+    );
+    if (result.rows.length === 0) {
+      return { item: null, skipped: false, error: 'Failed to read back created item' };
+    }
+
+    const created = this.rowToTrackerItem(result.rows[0]);
+
+    // Notify watchers
+    const changeEvent: TrackerItemChangeEvent = {
+      added: [created],
+      updated: [],
+      removed: [],
+      timestamp: new Date(),
+    };
+    this.trackerItemWatchers.forEach(callback => callback(changeEvent));
+
+    return { item: created, skipped: false };
+  }
+
+  /**
+   * Bulk import markdown files from a directory as native tracker items.
+   * Scans for files with tracker frontmatter and imports them.
+   */
+  async bulkImportTrackerItems(directory: string, options?: {
+    skipDuplicates?: boolean;
+    recursive?: boolean;
+  }): Promise<{ imported: number; skipped: number; errors: string[] }> {
+    const fullDir = path.join(this.workspacePath, directory);
+    const skipDuplicates = options?.skipDuplicates ?? true;
+    const recursive = options?.recursive ?? true;
+
+    let imported = 0;
+    let skipped = 0;
+    const errors: string[] = [];
+
+    // Scan directory for markdown files
+    const scanDir = async (dir: string) => {
+      let entries: string[];
+      try {
+        entries = await fs.readdir(dir);
+      } catch {
+        errors.push(`Cannot read directory: ${dir}`);
+        return;
+      }
+
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry);
+        let stat;
+        try {
+          stat = await fs.stat(fullPath);
+        } catch {
+          continue;
+        }
+
+        if (stat.isDirectory() && recursive) {
+          await scanDir(fullPath);
+        } else if (stat.isFile()) {
+          const ext = path.extname(entry).toLowerCase();
+          if (ext !== '.md' && ext !== '.markdown') continue;
+
+          const relativePath = path.relative(this.workspacePath, fullPath);
+          const result = await this.importTrackerItemFromFile(relativePath, { skipDuplicates });
+
+          if (result.skipped) {
+            skipped++;
+          } else if (result.item) {
+            imported++;
+          } else if (result.error) {
+            // Only report real errors, not "no frontmatter" which is expected for non-tracker files
+            if (!result.error.includes('No tracker frontmatter') && !result.error.includes('No valid frontmatter')) {
+              errors.push(`${relativePath}: ${result.error}`);
+            }
+          }
+        }
+      }
+    };
+
+    await scanDir(fullDir);
+    return { imported, skipped, errors };
+  }
+
+  /**
    * Create a tracker item directly in PGLite (not from markdown parsing).
    * Used for proper collaborative tracked items created from the UI.
    * These items have empty document_path and don't correspond to any file.
@@ -941,6 +1222,9 @@ export class ElectronDocumentService implements DocumentService {
     owner?: string;
     tags?: string[];
     customFields?: Record<string, any>;
+    content?: any;
+    source?: string;
+    sourceRef?: string;
   }): Promise<TrackerItem> {
     const data: Record<string, any> = {
       title: payload.title,
@@ -955,12 +1239,16 @@ export class ElectronDocumentService implements DocumentService {
       Object.assign(data, payload.customFields);
     }
 
+    const source = payload.source || 'native';
+    const contentJson = payload.content ? JSON.stringify(payload.content) : null;
+
     await database.query(
       `INSERT INTO tracker_items (
         id, type, data, workspace, document_path, line_number,
-        created, updated, last_indexed, sync_status
-      ) VALUES ($1, $2, $3, $4, '', NULL, NOW(), NOW(), NOW(), 'pending')`,
-      [payload.id, payload.type, JSON.stringify(data), payload.workspace]
+        created, updated, last_indexed, sync_status,
+        content, archived, source, source_ref
+      ) VALUES ($1, $2, $3, $4, '', NULL, NOW(), NOW(), NOW(), 'pending', $5, FALSE, $6, $7)`,
+      [payload.id, payload.type, JSON.stringify(data), payload.workspace, contentJson, source, payload.sourceRef || null]
     );
 
     const result = await database.query<any>(
@@ -1663,6 +1951,82 @@ export function setupDocumentServiceHandlers(resolver: DocumentServiceResolver) 
       return { success: true, item };
     } catch (error) {
       console.error('[DocumentService] update-tracker-item failed:', error);
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+
+  // Update tracker item content (Lexical editor state)
+  safeHandle('document-service:tracker-item-update-content', async (event, payload: {
+    itemId: string;
+    content: any;
+  }) => {
+    try {
+      await requireDocumentService(event).updateTrackerItemContent(payload.itemId, payload.content);
+      return { success: true };
+    } catch (error) {
+      console.error('[DocumentService] tracker-item-update-content failed:', error);
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+
+  // Get tracker item content (Lexical editor state)
+  safeHandle('document-service:tracker-item-get-content', async (event, payload: {
+    itemId: string;
+  }) => {
+    try {
+      const content = await requireDocumentService(event).getTrackerItemContent(payload.itemId);
+      return { success: true, content };
+    } catch (error) {
+      console.error('[DocumentService] tracker-item-get-content failed:', error);
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+
+  // Archive/unarchive tracker item
+  safeHandle('document-service:tracker-item-archive', async (event, payload: {
+    itemId: string;
+    archive: boolean;
+  }) => {
+    try {
+      const item = await requireDocumentService(event).archiveTrackerItem(payload.itemId, payload.archive);
+      return { success: true, item };
+    } catch (error) {
+      console.error('[DocumentService] tracker-item-archive failed:', error);
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+
+  // Import tracker item from file
+  safeHandle('document-service:tracker-item-import-file', async (event, payload: {
+    relativePath: string;
+    skipDuplicates?: boolean;
+  }) => {
+    try {
+      const result = await requireDocumentService(event).importTrackerItemFromFile(
+        payload.relativePath,
+        { skipDuplicates: payload.skipDuplicates }
+      );
+      return { success: true, ...result };
+    } catch (error) {
+      console.error('[DocumentService] tracker-item-import-file failed:', error);
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+
+  // Bulk import tracker items from directory
+  safeHandle('document-service:tracker-item-bulk-import', async (event, payload: {
+    directory: string;
+    skipDuplicates?: boolean;
+    recursive?: boolean;
+  }) => {
+    try {
+      const result = await requireDocumentService(event).bulkImportTrackerItems(
+        payload.directory,
+        { skipDuplicates: payload.skipDuplicates, recursive: payload.recursive }
+      );
+      return { success: true, ...result };
+    } catch (error) {
+      console.error('[DocumentService] tracker-item-bulk-import failed:', error);
       return { success: false, error: error instanceof Error ? error.message : String(error) };
     }
   });

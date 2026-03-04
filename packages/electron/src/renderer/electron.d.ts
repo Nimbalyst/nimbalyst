@@ -338,12 +338,35 @@ interface ElectronAPI {
       tags?: string[];
       customFields?: Record<string, any>;
       syncMode?: string;
+      content?: any;
+      source?: string;
+      sourceRef?: string;
     }) => Promise<{ success: boolean; item?: any; error?: string }>;
     updateTrackerItem: (payload: {
       itemId: string;
       updates: Record<string, any>;
       syncMode?: string;
     }) => Promise<{ success: boolean; item?: any; error?: string }>;
+    updateTrackerItemContent: (payload: {
+      itemId: string;
+      content: any;
+    }) => Promise<{ success: boolean; error?: string }>;
+    getTrackerItemContent: (payload: {
+      itemId: string;
+    }) => Promise<{ success: boolean; content?: any; error?: string }>;
+    archiveTrackerItem: (payload: {
+      itemId: string;
+      archive: boolean;
+    }) => Promise<{ success: boolean; item?: any; error?: string }>;
+    importTrackerItemFromFile: (payload: {
+      relativePath: string;
+      skipDuplicates?: boolean;
+    }) => Promise<{ success: boolean; item?: any; skipped?: boolean; error?: string }>;
+    bulkImportTrackerItems: (payload: {
+      directory: string;
+      skipDuplicates?: boolean;
+      recursive?: boolean;
+    }) => Promise<{ success: boolean; imported?: number; skipped?: number; errors?: string[]; error?: string }>;
   };
 
   // analytics

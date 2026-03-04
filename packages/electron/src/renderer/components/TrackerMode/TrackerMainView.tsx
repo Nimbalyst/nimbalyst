@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import type { TrackerItem } from '@nimbalyst/runtime';
@@ -8,7 +8,7 @@ import {
   SortDirection as TrackerSortDirection,
   type TrackerItemType,
 } from '@nimbalyst/runtime/plugins/TrackerPlugin';
-import { trackerItemsByTypeAtom } from '@nimbalyst/runtime/plugins/TrackerPlugin';
+import { trackerItemsByTypeAtom, archivedTrackerItemsAtom } from '@nimbalyst/runtime/plugins/TrackerPlugin';
 import type { TrackerDataModel } from '@nimbalyst/runtime/plugins/TrackerPlugin/models';
 import { KanbanBoard } from './KanbanBoard';
 import { TrackerItemDetail } from './TrackerItemDetail';
@@ -48,14 +48,21 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
   const setModeLayout = useSetAtom(setTrackerModeLayoutAtom);
   const selectedItemId = modeLayout.selectedItemId;
 
-  // Get all items for the current filter type to look up selected item
-  const atomItems = useAtomValue(trackerItemsByTypeAtom(filterType));
+  // Get items for the current filter type (active + archived)
+  const activeItems = useAtomValue(trackerItemsByTypeAtom(filterType));
+  const archivedItems = useAtomValue(archivedTrackerItemsAtom(filterType));
+  const selectedView = modeLayout.selectedView;
 
-  // Find the selected item from atoms
+  // Use archived items when viewing the archived view, otherwise active items
+  const atomItems = selectedView === 'archived' ? archivedItems : activeItems;
+
+  // Find the selected item from both active and archived (so detail panel stays open across view switches)
   const selectedItem: TrackerItem | null = useMemo(() => {
     if (!selectedItemId) return null;
-    return atomItems.find((item: TrackerItem) => item.id === selectedItemId) || null;
-  }, [selectedItemId, atomItems]);
+    return activeItems.find((item: TrackerItem) => item.id === selectedItemId)
+      || archivedItems.find((item: TrackerItem) => item.id === selectedItemId)
+      || null;
+  }, [selectedItemId, activeItems, archivedItems]);
 
   const handleItemSelect = useCallback((itemId: string) => {
     setModeLayout({ selectedItemId: itemId });
@@ -64,6 +71,17 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
   const handleCloseDetail = useCallback(() => {
     setModeLayout({ selectedItemId: null });
   }, [setModeLayout]);
+
+  const handleArchiveItem = useCallback(async (itemId: string, archive: boolean) => {
+    try {
+      const result = await window.electronAPI.documentService.archiveTrackerItem({ itemId, archive });
+      if (!result.success) {
+        console.error('[TrackerMainView] Failed to archive item:', result.error);
+      }
+    } catch (error) {
+      console.error('[TrackerMainView] Failed to archive item:', error);
+    }
+  }, []);
 
   const handleNewItem = useCallback((type: string) => {
     setQuickAddType(type);
@@ -109,6 +127,49 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
       console.error('[TrackerMainView] Failed to create tracker item:', error);
     }
   }, [workspacePath, quickAddType, trackerTypes]);
+
+  // Import state
+  const [importMenuOpen, setImportMenuOpen] = useState(false);
+  const [importStatus, setImportStatus] = useState<string | null>(null);
+  const importMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close import menu on outside click
+  useEffect(() => {
+    if (!importMenuOpen) return;
+    const handleClick = (e: MouseEvent) => {
+      if (importMenuRef.current && !importMenuRef.current.contains(e.target as Node)) {
+        setImportMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [importMenuOpen]);
+
+  const handleBulkImport = useCallback(async (directory: string) => {
+    setImportMenuOpen(false);
+    setImportStatus('Importing...');
+    try {
+      const result = await window.electronAPI.documentService.bulkImportTrackerItems({
+        directory,
+        skipDuplicates: true,
+        recursive: true,
+      });
+      if (result.success) {
+        const parts: string[] = [];
+        if (result.imported) parts.push(`${result.imported} imported`);
+        if (result.skipped) parts.push(`${result.skipped} skipped`);
+        if (result.errors?.length) parts.push(`${result.errors.length} errors`);
+        setImportStatus(parts.join(', ') || 'No items found');
+      } else {
+        setImportStatus(`Failed: ${result.error}`);
+      }
+    } catch (error) {
+      setImportStatus('Import failed');
+      console.error('[TrackerMainView] Bulk import failed:', error);
+    }
+    // Clear status after 4 seconds
+    setTimeout(() => setImportStatus(null), 4000);
+  }, []);
 
   // Get display name for the current filter
   const activeTracker = filterType !== 'all'
@@ -177,6 +238,50 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
           </div>
         )}
 
+        {/* Import button */}
+        <div className="relative" ref={importMenuRef}>
+          <button
+            className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-nim-muted border border-nim rounded hover:bg-nim-tertiary hover:text-nim transition-colors"
+            onClick={() => setImportMenuOpen(!importMenuOpen)}
+            title="Import from files"
+          >
+            <MaterialSymbol icon="upload_file" size={14} />
+            Import
+          </button>
+          {importMenuOpen && (
+            <div className="absolute right-0 top-full mt-1 w-[220px] bg-nim border border-nim rounded-md shadow-lg z-50 py-1">
+              <button
+                className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-nim-muted hover:bg-nim-tertiary hover:text-nim text-left"
+                onClick={() => handleBulkImport('nimbalyst-local/plans')}
+              >
+                <MaterialSymbol icon="folder_open" size={14} />
+                Import from nimbalyst-local/plans
+              </button>
+              <button
+                className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-nim-muted hover:bg-nim-tertiary hover:text-nim text-left"
+                onClick={() => handleBulkImport('plans')}
+              >
+                <MaterialSymbol icon="folder_open" size={14} />
+                Import from plans/
+              </button>
+              <button
+                className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-nim-muted hover:bg-nim-tertiary hover:text-nim text-left"
+                onClick={() => handleBulkImport('design')}
+              >
+                <MaterialSymbol icon="folder_open" size={14} />
+                Import from design/
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Import status toast */}
+        {importStatus && (
+          <span className="text-[11px] text-nim-muted bg-nim-secondary px-2 py-0.5 rounded">
+            {importStatus}
+          </span>
+        )}
+
         {/* New item button */}
         <button
           className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-white bg-[var(--nim-primary)] rounded hover:opacity-90 transition-opacity"
@@ -205,6 +310,7 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
               onNewItem={handleNewItem}
               onItemSelect={handleItemSelect}
               selectedItemId={selectedItemId}
+              overrideItems={selectedView === 'archived' ? archivedItems : undefined}
             />
           ) : (
             <KanbanBoard
@@ -234,6 +340,7 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
               item={selectedItem}
               onClose={handleCloseDetail}
               onSwitchToFilesMode={onSwitchToFilesMode}
+              onArchive={handleArchiveItem}
             />
           </div>
         )}

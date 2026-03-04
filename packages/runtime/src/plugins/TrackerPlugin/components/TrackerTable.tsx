@@ -31,6 +31,8 @@ interface TrackerTableProps {
   onItemSelect?: (itemId: string) => void;
   /** Currently selected item ID for row highlighting */
   selectedItemId?: string | null;
+  /** Override items instead of reading from atoms (used for archived view) */
+  overrideItems?: TrackerItem[];
 }
 
 /**
@@ -359,6 +361,7 @@ export function TrackerTable({
   onNewItem,
   onItemSelect,
   selectedItemId,
+  overrideItems,
 }: TrackerTableProps): JSX.Element {
   // Type filter: use prop filterType when hideTypeTabs is true, otherwise use internal state
   const [internalTypeFilter, setInternalTypeFilter] = useState<TrackerItemType | 'all'>('all');
@@ -368,9 +371,12 @@ export function TrackerTable({
   const atomItems = useAtomValue(trackerItemsByTypeAtom(activeTypeFilter));
   const dataLoaded = useAtomValue(trackerDataLoadedAtom);
 
-  // Items from atom (PGLite + frontmatter, merged by trackerSyncListeners)
+  // Use override items if provided (e.g., for archived view), otherwise atom items
+  const sourceItems = overrideItems ?? atomItems;
+
+  // Items from source (atom or override)
   const items = useMemo(() => {
-    return atomItems.map((item: TrackerItem) => {
+    return sourceItems.map((item: TrackerItem) => {
       const dateSource = item.updated || item.created;
       let actualDate: Date | null = null;
       if (dateSource) {
@@ -388,7 +394,7 @@ export function TrackerTable({
         lastIndexed: item.lastIndexed instanceof Date ? item.lastIndexed : (actualDate || new Date(0)),
       };
     });
-  }, [atomItems]);
+  }, [sourceItems]);
 
   const loading = !dataLoaded && items.length === 0;
   const [error, setError] = useState<string | null>(null);

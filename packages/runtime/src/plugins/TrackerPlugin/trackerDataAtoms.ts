@@ -42,19 +42,34 @@ export const trackerItemsArrayAtom = atom((get) => {
 });
 
 /**
- * Tracker items filtered by type.
- * Returns all items when type is 'all'.
+ * Tracker items filtered by type (excludes archived).
+ * Returns all non-archived items when type is 'all'.
  */
 export const trackerItemsByTypeAtom = atomFamily((type: TrackerItemType | 'all') =>
   atom((get) => {
     const map = get(trackerItemsMapAtom);
-    if (type === 'all') return Array.from(map.values());
-    return Array.from(map.values()).filter(item => item.type === type);
+    const all = Array.from(map.values());
+    const active = all.filter(item => !item.archived);
+    if (type === 'all') return active;
+    return active.filter(item => item.type === type);
   })
 );
 
 /**
- * Count of items per type.
+ * Archived tracker items, optionally filtered by type.
+ */
+export const archivedTrackerItemsAtom = atomFamily((type: TrackerItemType | 'all') =>
+  atom((get) => {
+    const map = get(trackerItemsMapAtom);
+    const all = Array.from(map.values());
+    const archived = all.filter(item => item.archived);
+    if (type === 'all') return archived;
+    return archived.filter(item => item.type === type);
+  })
+);
+
+/**
+ * Count of non-archived items per type.
  */
 export const trackerItemCountByTypeAtom = atomFamily((type: TrackerItemType) =>
   atom((get) => {

@@ -281,7 +281,7 @@ export interface TrackerModeLayout {
   /** Selected type filter in sidebar ('all' or specific type) */
   selectedType: string;
   /** Active view in sidebar */
-  selectedView: 'all' | 'high-priority' | 'recently-updated';
+  selectedView: 'all' | 'high-priority' | 'recently-updated' | 'archived';
   /** Table or kanban display */
   viewMode: 'table' | 'kanban';
   /** Currently selected tracker item ID (opens detail panel when non-null) */

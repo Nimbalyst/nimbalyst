@@ -2,10 +2,14 @@
  * TrackerItemDetail - Detail/edit panel for a selected tracker item.
  * Shows all model-defined fields with real editors, description area,
  * and metadata. Appears as a right-side panel in TrackerMainView.
+ *
+ * For native (database-stored) items, includes an embedded Lexical editor
+ * for rich content editing with debounced saves to PGLite.
  */
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { MaterialSymbol } from '@nimbalyst/runtime';
+import { StravuEditor, MaterialSymbol } from '@nimbalyst/runtime';
+import type { EditorConfig } from '@nimbalyst/runtime/editor';
 import type { TrackerItem, TrackerItemType } from '@nimbalyst/runtime';
 import { globalRegistry } from '@nimbalyst/runtime/plugins/TrackerPlugin/models';
 import type { FieldDefinition } from '@nimbalyst/runtime/plugins/TrackerPlugin/models/TrackerDataModel';
@@ -15,6 +19,7 @@ interface TrackerItemDetailProps {
   item: TrackerItem;
   onClose: () => void;
   onSwitchToFilesMode?: () => void;
+  onArchive?: (itemId: string, archive: boolean) => void;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -69,10 +74,20 @@ function isDbItem(item: TrackerItem): boolean {
   return !item.module;
 }
 
+/** Source label for display */
+function getSourceLabel(item: TrackerItem): string | null {
+  if (!item.source || item.source === 'native') return null;
+  if (item.source === 'inline') return `From inline marker${item.sourceRef ? ` in ${item.sourceRef}` : ''}`;
+  if (item.source === 'frontmatter') return `From frontmatter${item.sourceRef ? ` in ${item.sourceRef}` : ''}`;
+  if (item.source === 'import') return `Imported${item.sourceRef ? ` from ${item.sourceRef}` : ''}`;
+  return null;
+}
+
 export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
   item,
   onClose,
   onSwitchToFilesMode,
+  onArchive,
 }) => {
   const model = useMemo(() => globalRegistry.get(item.type), [item.type]);
   const typeColor = TYPE_COLORS[item.type] || '#6b7280';
@@ -85,6 +100,12 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const editable = isDbItem(item);
 
+  // Rich content editor state
+  const [contentMarkdown, setContentMarkdown] = useState<string | null>(null);
+  const [contentLoaded, setContentLoaded] = useState(false);
+  const getContentFnRef = useRef<(() => string) | null>(null);
+  const contentSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Sync local state from atom-driven item prop.
   // Skip the sync while a debounced save is pending - the user is actively editing
   // and resetting local state would clobber their in-progress text.
@@ -94,6 +115,42 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
     setLocalDescription(item.description || '');
     setLocalCustomFields(item.customFields || {});
   }, [item.id, item.title, item.description, item.customFields]);
+
+  // Load rich content from PGLite when item changes
+  useEffect(() => {
+    if (!editable) {
+      setContentLoaded(true);
+      return;
+    }
+
+    let cancelled = false;
+    setContentLoaded(false);
+    setContentMarkdown(null);
+    getContentFnRef.current = null;
+
+    window.electronAPI.documentService.getTrackerItemContent({ itemId: item.id })
+      .then((result) => {
+        if (cancelled) return;
+        if (result.success && result.content) {
+          // Content is stored as markdown string in JSONB
+          const markdown = typeof result.content === 'string'
+            ? result.content
+            : result.content?.markdown ?? '';
+          setContentMarkdown(markdown);
+        } else {
+          setContentMarkdown('');
+        }
+        setContentLoaded(true);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error('[TrackerItemDetail] Failed to load content:', err);
+        setContentMarkdown('');
+        setContentLoaded(true);
+      });
+
+    return () => { cancelled = true; };
+  }, [item.id, editable]);
 
   // Escape to close
   useEffect(() => {
@@ -112,14 +169,13 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
   /** Save a field update to PGLite via IPC */
   const saveField = useCallback(async (updates: Record<string, any>) => {
     if (!editable) return;
-    console.log('[TrackerItemDetail] saveField called:', { itemId: item.id, syncMode, updates: Object.keys(updates) });
+    // console.log('[TrackerItemDetail] saveField called:', { itemId: item.id, syncMode, updates: Object.keys(updates) });
     try {
-      const result = await window.electronAPI.documentService.updateTrackerItem({
+      await window.electronAPI.documentService.updateTrackerItem({
         itemId: item.id,
         updates,
         syncMode,
       });
-      console.log('[TrackerItemDetail] saveField result:', result);
     } catch (err) {
       console.error('[TrackerItemDetail] Failed to save field:', err);
     }
@@ -131,12 +187,43 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
     debounceTimerRef.current = setTimeout(() => saveField(updates), 500);
   }, [saveField]);
 
-  // Cleanup debounce timer
+  /** Debounced save for rich content */
+  const saveContent = useCallback((markdown: string) => {
+    if (contentSaveTimerRef.current) clearTimeout(contentSaveTimerRef.current);
+    contentSaveTimerRef.current = setTimeout(async () => {
+      try {
+        await window.electronAPI.documentService.updateTrackerItemContent({
+          itemId: item.id,
+          content: markdown,
+        });
+      } catch (err) {
+        console.error('[TrackerItemDetail] Failed to save content:', err);
+      }
+    }, 800);
+  }, [item.id]);
+
+  // Cleanup timers
   useEffect(() => {
     return () => {
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      if (contentSaveTimerRef.current) clearTimeout(contentSaveTimerRef.current);
     };
   }, []);
+
+  // Flush pending content save when item changes or component unmounts
+  useEffect(() => {
+    return () => {
+      if (contentSaveTimerRef.current && getContentFnRef.current) {
+        clearTimeout(contentSaveTimerRef.current);
+        const markdown = getContentFnRef.current();
+        // Fire-and-forget final save
+        window.electronAPI.documentService.updateTrackerItemContent({
+          itemId: item.id,
+          content: markdown,
+        }).catch(() => {});
+      }
+    };
+  }, [item.id]);
 
   /** Handle immediate field change (selects, checkboxes) */
   const handleImmediateFieldChange = useCallback((fieldName: string, value: any) => {
@@ -214,6 +301,31 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
     }
   }, [handleTextFieldChange, handleImmediateFieldChange]);
 
+  /** Editor config for embedded Lexical editor */
+  const editorConfig = useMemo((): EditorConfig | null => {
+    if (!editable || !contentLoaded) return null;
+    return {
+      isRichText: true,
+      editable: true,
+      showToolbar: false,
+      isCodeHighlighted: true,
+      hasLinkAttributes: true,
+      markdownOnly: true,
+      initialContent: contentMarkdown || '',
+      onGetContent: (getContentFn: () => string) => {
+        getContentFnRef.current = getContentFn;
+      },
+      onDirtyChange: (isDirty: boolean) => {
+        if (isDirty && getContentFnRef.current) {
+          const markdown = getContentFnRef.current();
+          saveContent(markdown);
+        }
+      },
+    };
+  }, [editable, contentLoaded, contentMarkdown, saveContent]);
+
+  const sourceLabel = getSourceLabel(item);
+
   return (
     <div
       className="tracker-item-detail flex flex-col h-full bg-nim overflow-hidden"
@@ -251,15 +363,31 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
             {item.id && (
               <span className="text-[10px] text-nim-faint font-mono">{item.id}</span>
             )}
+            {item.archived && (
+              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-[#6b728020] text-nim-faint">
+                Archived
+              </span>
+            )}
           </div>
         </div>
-        <button
-          className="p-1 rounded hover:bg-nim-tertiary text-nim-muted shrink-0"
-          onClick={onClose}
-          title="Close (Esc)"
-        >
-          <MaterialSymbol icon="close" size={18} />
-        </button>
+        <div className="flex items-center gap-1 shrink-0">
+          {editable && onArchive && (
+            <button
+              className="p-1 rounded hover:bg-nim-tertiary text-nim-muted"
+              onClick={() => onArchive(item.id, !item.archived)}
+              title={item.archived ? 'Unarchive' : 'Archive'}
+            >
+              <MaterialSymbol icon={item.archived ? 'unarchive' : 'archive'} size={18} />
+            </button>
+          )}
+          <button
+            className="p-1 rounded hover:bg-nim-tertiary text-nim-muted"
+            onClick={onClose}
+            title="Close (Esc)"
+          >
+            <MaterialSymbol icon="close" size={18} />
+          </button>
+        </div>
       </div>
 
       {/* Content */}
@@ -308,20 +436,20 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
           </div>
         )}
 
-        {/* Description */}
+        {/* Rich Content Editor / Description */}
         <div className="pt-1 border-t border-nim">
           <label className="text-[11px] font-medium text-nim-muted uppercase tracking-[0.5px] block mb-1">
-            Description
+            Content
           </label>
-          {editable ? (
-            <textarea
-              value={localDescription}
-              onChange={(e) => handleTextFieldChange('description', e.target.value)}
-              onKeyDown={(e) => e.stopPropagation()}
-              className="w-full min-h-[120px] py-2 px-2 border border-nim rounded bg-nim text-nim text-[13px] resize-y focus:outline-none focus:border-[var(--nim-primary)]"
-              placeholder="Add a description..."
-              data-testid="tracker-detail-description"
-            />
+          {editable && editorConfig ? (
+            <div
+              className="tracker-content-editor border border-nim rounded bg-nim min-h-[200px] overflow-hidden"
+              data-testid="tracker-detail-content-editor"
+            >
+              <StravuEditor key={item.id} config={editorConfig} />
+            </div>
+          ) : editable && !contentLoaded ? (
+            <div className="text-sm text-nim-faint py-4 text-center">Loading...</div>
           ) : item.module ? (
             <div className="flex items-center gap-2 py-2">
               <span className="text-sm text-nim-muted flex-1 truncate font-mono">
@@ -336,7 +464,7 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
               </button>
             </div>
           ) : (
-            <p className="text-sm text-nim-faint m-0">No description</p>
+            <p className="text-sm text-nim-faint m-0">No content</p>
           )}
         </div>
 
@@ -367,7 +495,13 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
                 </div>
               </div>
             )}
-            {item.module && (
+            {sourceLabel && (
+              <div className="col-span-2">
+                <span className="text-nim-faint">Source</span>
+                <div className="text-nim-muted truncate">{sourceLabel}</div>
+              </div>
+            )}
+            {item.module && !sourceLabel && (
               <div className="col-span-2">
                 <span className="text-nim-faint">Source</span>
                 <div className="text-nim-muted font-mono truncate">{item.module}</div>

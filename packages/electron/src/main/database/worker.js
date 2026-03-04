@@ -869,6 +869,48 @@ class PGLiteWorker {
           // Non-fatal - new column defaults are safe
       }
 
+    // Migration: Add content, archived, source columns for unified tracker system
+    try {
+      const unifiedCheck = await this.db.query(`
+        SELECT
+          EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tracker_items' AND column_name = 'content') as has_content,
+          EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tracker_items' AND column_name = 'archived') as has_archived,
+          EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tracker_items' AND column_name = 'source') as has_source
+      `);
+      const { has_content, has_archived, has_source } = unifiedCheck.rows[0] || {};
+      if (!has_content) {
+        console.log('[PGLite Worker] Adding unified tracker columns to tracker_items...');
+        await this.db.exec(`
+          ALTER TABLE tracker_items ADD COLUMN content JSONB;
+          ALTER TABLE tracker_items ADD COLUMN archived BOOLEAN DEFAULT FALSE;
+          ALTER TABLE tracker_items ADD COLUMN archived_at TIMESTAMPTZ;
+          ALTER TABLE tracker_items ADD COLUMN source TEXT DEFAULT 'inline';
+          ALTER TABLE tracker_items ADD COLUMN source_ref TEXT;
+          CREATE INDEX IF NOT EXISTS idx_tracker_archived ON tracker_items(archived);
+          CREATE INDEX IF NOT EXISTS idx_tracker_source ON tracker_items(source);
+        `);
+        console.log('[PGLite Worker] Added unified tracker columns to tracker_items');
+      } else {
+        // Individual column checks for partial migrations
+        if (!has_archived) {
+          await this.db.exec(`
+            ALTER TABLE tracker_items ADD COLUMN archived BOOLEAN DEFAULT FALSE;
+            ALTER TABLE tracker_items ADD COLUMN archived_at TIMESTAMPTZ;
+            CREATE INDEX IF NOT EXISTS idx_tracker_archived ON tracker_items(archived);
+          `);
+        }
+        if (!has_source) {
+          await this.db.exec(`
+            ALTER TABLE tracker_items ADD COLUMN source TEXT DEFAULT 'inline';
+            ALTER TABLE tracker_items ADD COLUMN source_ref TEXT;
+            CREATE INDEX IF NOT EXISTS idx_tracker_source ON tracker_items(source);
+          `);
+        }
+      }
+    } catch (error) {
+      console.error('[PGLite Worker] Failed to add unified tracker columns:', error);
+      // Non-fatal
+    }
 
     // AI Agent Messages table - write-only raw storage for AI interactions
     console.log('[PGLite Worker] Creating ai_agent_messages table...');

@@ -206,7 +206,7 @@ async function convertToPlan(editor: LexicalEditor, onContentChange?: (content: 
   };
 
   // Get current content as markdown (proper export)
-  
+
   editor.getEditorState().read(() => {
     try {
       const transformers = getEditorTransformers();
@@ -251,7 +251,7 @@ async function convertToDecision(editor: LexicalEditor, onContentChange?: (conte
   };
 
   // Get current content as markdown (proper export)
-  
+
   editor.getEditorState().read(() => {
     try {
       const transformers = getEditorTransformers();
@@ -968,6 +968,7 @@ export {
   trackerDataLoadedAtom,
   trackerItemsArrayAtom,
   trackerItemsByTypeAtom,
+  archivedTrackerItemsAtom,
   trackerItemCountByTypeAtom,
   upsertTrackerItemAtom,
   removeTrackerItemAtom,

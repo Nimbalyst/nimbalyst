@@ -52,6 +52,7 @@ export { FileChangeWidget } from './FileChangeWidget';
 export { SuperProgressSnapshotWidget } from './SuperProgressSnapshotWidget';
 export { SuperLoopProgressWidget } from './SuperLoopProgressWidget';
 export { UpdateSessionMetaWidget } from './UpdateSessionMetaWidget';
+export { TrackerToolWidget } from './TrackerToolWidget';
 
 // Re-export host types (for use in SessionTranscript to set the host)
 export type { InteractiveWidgetHost, PermissionScope, ToolPermissionResponse } from './InteractiveWidgetHost';
@@ -118,6 +119,7 @@ import { FileChangeWidget } from './FileChangeWidget';
 import { SuperProgressSnapshotWidget } from './SuperProgressSnapshotWidget';
 import { SuperLoopProgressWidget } from './SuperLoopProgressWidget';
 import { UpdateSessionMetaWidget } from './UpdateSessionMetaWidget';
+import { TrackerToolWidget } from './TrackerToolWidget';
 
 /**
  * Registry of custom tool widgets
@@ -175,6 +177,13 @@ export const CUSTOM_TOOL_WIDGETS: CustomToolWidgetRegistry = {
   'mcp__nimbalyst-session-naming__name_session': UpdateSessionMetaWidget,
   'update_tags': UpdateSessionMetaWidget,
   'mcp__nimbalyst-session-naming__update_tags': UpdateSessionMetaWidget,
+
+  // Tracker tools - list, get, create, update, link
+  'tracker_list': TrackerToolWidget,
+  'tracker_get': TrackerToolWidget,
+  'tracker_create': TrackerToolWidget,
+  'tracker_update': TrackerToolWidget,
+  'tracker_link_session': TrackerToolWidget,
 };
 
 /**

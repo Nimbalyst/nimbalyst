@@ -4,7 +4,7 @@ import { MaterialSymbol } from '@nimbalyst/runtime';
 import type { TrackerItemType } from '@nimbalyst/runtime';
 import { trackerItemCountByTypeAtom } from '@nimbalyst/runtime/plugins/TrackerPlugin';
 import type { TrackerDataModel } from '@nimbalyst/runtime/plugins/TrackerPlugin/models';
-export type TrackerView = 'all' | 'high-priority' | 'recently-updated';
+export type TrackerView = 'all' | 'high-priority' | 'recently-updated' | 'archived';
 
 interface TrackerSidebarProps {
   trackerTypes: TrackerDataModel[];
@@ -18,6 +18,7 @@ const VIEWS: { id: TrackerView; label: string; icon: string }[] = [
   { id: 'all', label: 'All Items', icon: 'list' },
   { id: 'high-priority', label: 'High Priority', icon: 'priority_high' },
   { id: 'recently-updated', label: 'Recently Updated', icon: 'schedule' },
+  { id: 'archived', label: 'Archived', icon: 'archive' },
 ];
 
 /** Small component so each sidebar row subscribes to its own atom */

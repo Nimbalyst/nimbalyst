@@ -51,6 +51,9 @@ export type TrackerItemStatus = 'to-do' | 'in-progress' | 'in-review' | 'done' |
 export type TrackerItemPriority = 'low' | 'medium' | 'high' | 'critical';
 export type TrackerItemSyncStatus = 'local' | 'synced' | 'pending';
 
+/** Source of a tracker item: how it was created */
+export type TrackerItemSource = 'native' | 'inline' | 'frontmatter' | 'import';
+
 /**
  * Tracker item entry in the database cache
  */
@@ -73,6 +76,18 @@ export interface TrackerItem {
   lastIndexed: Date;
   /** Extra fields from frontmatter defined by the tracker model */
   customFields?: Record<string, any>;
+
+  // Rich content (Lexical editor state stored in PGLite)
+  /** Lexical editor state JSON for rich body content */
+  content?: any;
+  /** Whether the item is archived */
+  archived?: boolean;
+  /** When the item was archived */
+  archivedAt?: string;
+  /** How the item was created */
+  source?: TrackerItemSource;
+  /** Origin reference: file path for inline/frontmatter, 'linear:NIM-123' for imports */
+  sourceRef?: string;
 
   // Collaborative fields (populated when item is synced via TrackerRoom)
   /** Assignee org member ID */

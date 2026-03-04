@@ -76,14 +76,14 @@ export const TRACKER_ITEM_ELEMENT_TRANSFORMER: ElementTransformer = {
 export const TRACKER_ITEM_TEXT_TRANSFORMER: TextMatchTransformer = {
   dependencies: [TrackerItemNode],
   export: () => null,  // Export handled by ElementTransformer
-  importRegExp: /^(.+?)\s+#(bug|task|plan|idea|decision)\[.+?\]$/,
-  regExp: /^(.+?)\s+#(bug|task|plan|idea|decision)\[.+?\]$/,
+  importRegExp: /^(.+?)\s+#([a-z][\w-]*)\[.+?\]$/,
+  regExp: /^(.+?)\s+#([a-z][\w-]*)\[.+?\]$/,
   replace: (textNode: TextNode, match: RegExpMatchArray) => {
     // console.log('TrackerItem transformer matched:', match[0]);
     const fullMatch = match[0];
 
     // Extract text content and metadata
-    const contentMatch = fullMatch.match(/^(.+?)\s+#(bug|task|plan|idea|decision)\[(.+?)\]$/);
+    const contentMatch = fullMatch.match(/^(.+?)\s+#([a-z][\w-]*)\[(.+?)\]$/);
     if (!contentMatch) {
       console.log('No content match found');
       return;

@@ -704,6 +704,26 @@ contextBridge.exposeInMainWorld('electronAPI', {
       updates: Record<string, any>;
       syncMode?: string;
     }) => ipcRenderer.invoke('document-service:update-tracker-item', payload) as Promise<{ success: boolean; item?: any; error?: string }>,
+    updateTrackerItemContent: (payload: {
+      itemId: string;
+      content: any;
+    }) => ipcRenderer.invoke('document-service:tracker-item-update-content', payload) as Promise<{ success: boolean; error?: string }>,
+    getTrackerItemContent: (payload: {
+      itemId: string;
+    }) => ipcRenderer.invoke('document-service:tracker-item-get-content', payload) as Promise<{ success: boolean; content?: any; error?: string }>,
+    archiveTrackerItem: (payload: {
+      itemId: string;
+      archive: boolean;
+    }) => ipcRenderer.invoke('document-service:tracker-item-archive', payload) as Promise<{ success: boolean; item?: any; error?: string }>,
+    importTrackerItemFromFile: (payload: {
+      relativePath: string;
+      skipDuplicates?: boolean;
+    }) => ipcRenderer.invoke('document-service:tracker-item-import-file', payload) as Promise<{ success: boolean; item?: any; skipped?: boolean; error?: string }>,
+    bulkImportTrackerItems: (payload: {
+      directory: string;
+      skipDuplicates?: boolean;
+      recursive?: boolean;
+    }) => ipcRenderer.invoke('document-service:tracker-item-bulk-import', payload) as Promise<{ success: boolean; imported?: number; skipped?: number; errors?: string[]; error?: string }>,
   },
 
   // Tracker Sync
