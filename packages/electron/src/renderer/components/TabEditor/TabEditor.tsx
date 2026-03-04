@@ -944,10 +944,13 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
     fileWatcherRegisteredRef.current = true;
 
+    // Normalize a file path for comparison (trailing slashes, separators)
+    const normalizePath = (p: string) => p.replace(/\\/g, '/').replace(/\/+$/, '');
+
     // Create a stable handler function that we can properly clean up
     const handleFileChanged = async (data: { path: string }) => {
       // Only handle changes for this file
-      if (data.path !== filePath) {
+      if (normalizePath(data.path) !== normalizePath(filePath)) {
         return;
       }
 
@@ -1395,9 +1398,11 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       return;
     }
 
+    const normalizeForCompare = (p: string) => p.replace(/\\/g, '/').replace(/\/+$/, '');
     const unsubscribe = window.electronAPI.history.onPendingCleared((data: { workspacePath: string; clearedFiles: string[] }) => {
       // Check if this file was in the list of cleared files
-      if (data.clearedFiles.includes(filePath)) {
+      const normalizedFilePath = normalizeForCompare(filePath);
+      if (data.clearedFiles.some(f => normalizeForCompare(f) === normalizedFilePath)) {
         logger.ui.info('[TabEditor] Pending tag cleared for this file, exiting diff mode:', filePath);
 
         // Clear pending tag ref
