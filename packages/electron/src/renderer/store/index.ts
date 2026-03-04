@@ -371,6 +371,12 @@ export {
   type FileMentionReference,
 } from './atoms/fileMention';
 
+// Session mention atoms (for @@ session mentions in AIInput)
+export {
+  sessionMentionOptionsAtom,
+  searchSessionMentionAtom,
+} from './atoms/sessionMention';
+
 // Unified navigation history (cross-mode back/forward)
 export {
   pushNavigationEntryAtom,

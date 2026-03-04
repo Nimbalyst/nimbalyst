@@ -65,7 +65,7 @@ export function extractTriggerMatch(
     // - "/ " (completed folder mention -- no filename starts with a space)
     // - ".ext " (completed file mention -- file extension followed by space)
     // Single spaces are otherwise allowed to support files with spaces in names.
-    if (/\s{2}|[\n\r]|\/\s|\.[a-zA-Z0-9]+\s/.test(query)) {
+    if (/\s{2}|[\n\r]|\/\s|\.[a-zA-Z0-9]+\s|\)\s/.test(query)) {
       continue;
     }
 

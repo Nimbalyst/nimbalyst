@@ -26,6 +26,8 @@ import { HelpTooltip } from '../../help';
 import {
   fileMentionOptionsAtom,
   searchFileMentionAtom,
+  sessionMentionOptionsAtom,
+  searchSessionMentionAtom,
 } from '../../store';
 
 export interface AIInputRef {
@@ -174,6 +176,12 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
       fileMentionOptionsAtom(workspacePath || '')
     );
     const searchFileMention = useSetAtom(searchFileMentionAtom);
+
+    // Session mention state via Jotai atoms (for @@ trigger)
+    const sessionMentionOptions = useAtomValue(
+      sessionMentionOptionsAtom(workspacePath || '')
+    );
+    const searchSessionMention = useSetAtom(searchSessionMentionAtom);
 
     // Pending voice command atom
     const setPendingVoiceCommand = useSetAtom(pendingVoiceCommandAtom);
@@ -465,7 +473,9 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
 
       // Build trigger list based on enabled features
       // File mentions are enabled when workspacePath is provided
+      // @@ (session mentions) must be checked alongside @ (file mentions)
       const triggers: string[] = [];
+      if (workspacePath) triggers.push('@@');
       if (workspacePath) triggers.push('@');
       if (enableSlashCommands) triggers.push('/');
 
@@ -484,7 +494,9 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
 
         // Debounce the expensive filtering operations
         const timerId = setTimeout(() => {
-          if (match.trigger === '@' && workspacePath) {
+          if (match.trigger === '@@' && workspacePath) {
+            searchSessionMention({ workspacePath, query: match.query, excludeSessionId: sessionId });
+          } else if (match.trigger === '@' && workspacePath) {
             searchFileMention({ workspacePath, query: match.query });
           } else if (match.trigger === '/' && enableSlashCommands) {
             filterSlashCommands(match.query);
@@ -499,14 +511,17 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
         setSelectedOption(null);
       }
       return undefined;
-    }, [value, workspacePath, searchFileMention, filterSlashCommands, enableSlashCommands]);
+    }, [value, workspacePath, searchFileMention, searchSessionMention, sessionId, filterSlashCommands, enableSlashCommands]);
 
-    // Auto-select first option when file mention results arrive
+    // Auto-select first option when file/session mention results arrive
     useEffect(() => {
       if (typeaheadMatch?.trigger === '@' && fileMentionOptions.length > 0) {
         setSelectedIndex(0);
       }
-    }, [fileMentionOptions.length, typeaheadMatch]);
+      if (typeaheadMatch?.trigger === '@@' && sessionMentionOptions.length > 0) {
+        setSelectedIndex(0);
+      }
+    }, [fileMentionOptions.length, sessionMentionOptions.length, typeaheadMatch]);
 
     // Update cursor position on selection change (click/select)
     // This triggers re-evaluation of typeahead trigger for cursor repositioning
@@ -596,7 +611,10 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
 
       let insertText: string;
 
-      if (typeaheadMatch.trigger === '@') {
+      if (typeaheadMatch.trigger === '@@') {
+        const session = option.data;
+        insertText = `@@[${session.title}](${session.shortId})`;
+      } else if (typeaheadMatch.trigger === '@') {
         const doc = option.data;
         const isDirectory = doc?.type === 'directory';
         const mentionPath = doc?.path || option.label;
@@ -632,7 +650,9 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
     }, [typeaheadMatch, value, onChange]);
 
     const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-      const currentOptions = typeaheadMatch?.trigger === '@' ? fileMentionOptions : slashCommandOptions;
+      const currentOptions = typeaheadMatch?.trigger === '@@' ? sessionMentionOptions
+        : typeaheadMatch?.trigger === '@' ? fileMentionOptions
+        : slashCommandOptions;
 
       // Handle typeahead navigation
       if (typeaheadMatch && currentOptions.length > 0) {
@@ -1176,14 +1196,17 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
           )}
         </div>
 
-        {/* Typeahead for file mentions and slash commands - only show if focused */}
+        {/* Typeahead for session mentions, file mentions, and slash commands - only show if focused */}
         {isFocused && typeaheadMatch && (
+          (typeaheadMatch.trigger === '@@' && sessionMentionOptions.length > 0) ||
           (typeaheadMatch.trigger === '@' && fileMentionOptions.length > 0) ||
           (typeaheadMatch.trigger === '/' && slashCommandOptions.length > 0)
         ) && (
           <GenericTypeahead
             anchorElement={textareaRef.current}
-            options={typeaheadMatch.trigger === '@' ? fileMentionOptions : slashCommandOptions}
+            options={typeaheadMatch.trigger === '@@' ? sessionMentionOptions
+              : typeaheadMatch.trigger === '@' ? fileMentionOptions
+              : slashCommandOptions}
             selectedIndex={selectedIndex}
             onSelectedIndexChange={setSelectedIndex}
             onSelectedOptionChange={setSelectedOption}
