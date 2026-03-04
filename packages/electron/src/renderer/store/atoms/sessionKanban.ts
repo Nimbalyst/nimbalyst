@@ -52,6 +52,15 @@ export const SESSION_PHASE_COLUMNS: { value: SessionPhase; label: string; color:
 
 const VALID_PHASES = new Set<string>(SESSION_PHASE_COLUMNS.map(c => c.value));
 
+/** Phase priority for deriving workstream phase from children (lower = more active) */
+const PHASE_PRIORITY: Record<string, number> = {
+  implementing: 0,
+  validating: 1,
+  planning: 2,
+  backlog: 3,
+  complete: 4,
+};
+
 // ============================================================
 // Helpers
 // ============================================================
@@ -61,6 +70,29 @@ export function getCardType(meta: SessionMeta): KanbanCardType {
   if (meta.worktreeId) return 'worktree';
   if (meta.sessionType === 'workstream' || meta.childCount > 0) return 'workstream';
   return 'session';
+}
+
+/**
+ * Derive the effective phase for a workstream parent from its children's phases.
+ * Returns the "most active" child phase (implementing > validating > planning > backlog > complete).
+ * Returns undefined if no children have a phase.
+ */
+function derivePhaseFromChildren(parentId: string, registry: Map<string, SessionMeta>): string | undefined {
+  let bestPhase: string | undefined;
+  let bestPriority = Infinity;
+
+  for (const [_id, meta] of registry) {
+    if (meta.parentSessionId !== parentId) continue;
+    if (meta.phase && VALID_PHASES.has(meta.phase)) {
+      const priority = PHASE_PRIORITY[meta.phase] ?? Infinity;
+      if (priority < bestPriority) {
+        bestPriority = priority;
+        bestPhase = meta.phase;
+      }
+    }
+  }
+
+  return bestPhase;
 }
 
 // ============================================================
@@ -102,7 +134,9 @@ export const sessionsByPhaseAtom = atom((get) => {
     // Only show root sessions (not children of workstreams)
     if (meta.parentSessionId) continue;
 
-    const phase = meta.phase;
+    // For workstream parents without an explicit phase, derive from children
+    const phase = meta.phase
+      ?? (meta.childCount > 0 ? derivePhaseFromChildren(meta.id, registry) : undefined);
 
     // Skip complete if filter says hide
     if (!filter.showComplete && phase === 'complete') continue;
