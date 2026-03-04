@@ -20,6 +20,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.55.10] - 2026-03-04
+
+
+### Added
+- Track new user creation with user_created analytics event
+- Button to open memory file from memory prompt indicator
+- Worktree archiving auto-skips confirmation dialog when branch is clean and merged
+- Session meta tool shows tag/phase/name transitions in rich widget
+- Kanban drag-to-archive cleans up worktree on last session
+- Windows code signing via DigiCert KeyLocker
+
+### Changed
+- Densified AI sessions dropdown in editor header bar
+- Merged name_session and update_tags into single update_session_meta tool
+- Split test signing into fast credential check and full build steps
+
+### Fixed
+- Removed broken message count from document session history display
+- Fixed history dialog session link click target
+- Tracker sidebar counts now include frontmatter-based items
+- Restored selected session on app restart and page refresh
+- Prevented error toast flooding from repeated identical errors
+- Prevented tracker items from leaking across workspaces
+- Restored runtime prompt build parsing
+- Persisted selected workstream immediately to survive app restart
+- Used config.userId for sync room routing instead of JWT sub claim
+- Fixed signtool.exe discovery by searching Windows SDK directory
+- Merged duplicate "overrides" keys in root package.json
+- Fixed electron-builder invocation in test signing workflow
+- Prevented test signing workflow from publishing to GitHub Releases
+
 ## [0.55.9] - 2026-03-03
 
 
