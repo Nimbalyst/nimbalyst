@@ -26,7 +26,7 @@ import {
   type TrackerTypeInfo,
 } from '@nimbalyst/runtime';
 import { $generateHtmlFromNodes } from '@lexical/html';
-import { copyToClipboard } from '@nimbalyst/runtime';
+import { copyToClipboard, ProviderIcon } from '@nimbalyst/runtime';
 import { revealFolderAtom, revealFileAtom, openFileRequestAtom, setWindowModeAtom } from '../../store';
 import { getDocumentService } from '../../services/RendererDocumentService';
 import { isWorktreePath } from '../../../shared/pathUtils';
@@ -63,40 +63,16 @@ interface AISession {
 const SessionItem: React.FC<{
   session: AISession;
   isLast?: boolean;
-  hasActions?: boolean;
-  onLoadAgent?: (id: string) => void;
-  onLoadChat?: (id: string) => void;
+  onClick?: (id: string) => void;
   formatTime: (ts: number) => string;
-}> = ({ session, isLast, hasActions = true, onLoadAgent, onLoadChat, formatTime }) => (
-  <div className={`ai-session-item py-3 px-4 flex flex-col gap-2 border-b border-[var(--nim-border)] ${isLast ? 'last:border-b-0' : ''} hover:bg-[var(--nim-bg-hover)]`}>
-    <div className="ai-session-header flex flex-col gap-1">
-      <div className="ai-session-title text-sm font-medium whitespace-nowrap overflow-hidden text-ellipsis text-[var(--nim-text)]">{session.title}</div>
-      <div className="ai-session-meta text-xs text-[var(--nim-text-muted)]">
-        {session.provider} &bull; {formatTime(session.updatedAt)}
-      </div>
-    </div>
-    {hasActions && (
-      <div className="ai-session-actions flex gap-1.5">
-        {onLoadAgent && (
-          <button
-            className="ai-session-action-button flex-1 py-1.5 px-2.5 text-xs font-medium rounded cursor-pointer transition-all duration-150 bg-[var(--nim-bg)] text-[var(--nim-text)] border border-[var(--nim-border)] hover:bg-[var(--nim-bg-secondary)] hover:border-[var(--nim-primary)]"
-            onClick={() => onLoadAgent(session.id)}
-            title="Open in Agent mode"
-          >
-            Agent
-          </button>
-        )}
-        {onLoadChat && (
-          <button
-            className="ai-session-action-button flex-1 py-1.5 px-2.5 text-xs font-medium rounded cursor-pointer transition-all duration-150 bg-[var(--nim-bg)] text-[var(--nim-text)] border border-[var(--nim-border)] hover:bg-[var(--nim-bg-secondary)] hover:border-[var(--nim-primary)]"
-            onClick={() => onLoadChat(session.id)}
-            title="Open in Chat panel"
-          >
-            Chat
-          </button>
-        )}
-      </div>
-    )}
+}> = ({ session, isLast, onClick, formatTime }) => (
+  <div
+    className={`ai-session-item py-2 px-3 flex items-center gap-2 ${isLast ? 'last:border-b-0' : ''} hover:bg-[var(--nim-bg-hover)] cursor-pointer`}
+    onClick={() => onClick?.(session.id)}
+  >
+    <span className="shrink-0 text-[var(--nim-text-muted)]"><ProviderIcon provider={session.provider} size={14} /></span>
+    <div className="ai-session-title text-sm font-medium whitespace-nowrap overflow-hidden text-ellipsis text-[var(--nim-text)] flex-1 min-w-0">{session.title}</div>
+    <div className="ai-session-time text-xs text-[var(--nim-text-faint)] shrink-0">{formatTime(session.updatedAt)}</div>
   </div>
 );
 
@@ -563,13 +539,6 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
     setShowAISessions(false);
   };
 
-  const handleLoadSessionInChat = (sessionId: string) => {
-    if (onOpenSessionInChat) {
-      onOpenSessionInChat(sessionId);
-    }
-    setShowAISessions(false);
-  };
-
   // Format relative time
   const formatRelativeTime = (timestamp: number): string => {
     const now = Date.now();
@@ -587,8 +556,6 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
 
   // Determine if we should show AI button (shown in both editor and agent modes)
   const showAIButton = Boolean(workspaceId);
-  const hasSessionActions = Boolean(onSwitchToAgentMode || onOpenSessionInChat);
-
   // Group sessions: current workspace first, then others
   const isInWorktree = workspaceId ? isWorktreePath(workspaceId) : false;
   const currentWorkspaceSessions = useMemo(() => aiSessions.filter(s => s.isCurrentWorkspace), [aiSessions]);
@@ -684,19 +651,19 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
                           {isInWorktree ? 'This worktree' : 'This project'}
                         </div>
                         {currentWorkspaceSessions.map((session) => (
-                          <SessionItem key={session.id} session={session} hasActions={hasSessionActions} onLoadAgent={onSwitchToAgentMode ? handleLoadSessionInAgentMode : undefined} onLoadChat={onOpenSessionInChat ? handleLoadSessionInChat : undefined} formatTime={formatRelativeTime} />
+                          <SessionItem key={session.id} session={session} onClick={onSwitchToAgentMode ? handleLoadSessionInAgentMode : undefined} formatTime={formatRelativeTime} />
                         ))}
                         {/* Other sessions */}
                         <div className="ai-sessions-group-header px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--nim-text-faint)] bg-[var(--nim-bg-secondary)]">
                           Other sessions
                         </div>
                         {otherSessions.map((session) => (
-                          <SessionItem key={session.id} session={session} isLast hasActions={hasSessionActions} onLoadAgent={onSwitchToAgentMode ? handleLoadSessionInAgentMode : undefined} onLoadChat={onOpenSessionInChat ? handleLoadSessionInChat : undefined} formatTime={formatRelativeTime} />
+                          <SessionItem key={session.id} session={session} isLast onClick={onSwitchToAgentMode ? handleLoadSessionInAgentMode : undefined} formatTime={formatRelativeTime} />
                         ))}
                       </>
                     ) : (
                       aiSessions.map((session) => (
-                        <SessionItem key={session.id} session={session} isLast hasActions={hasSessionActions} onLoadAgent={onSwitchToAgentMode ? handleLoadSessionInAgentMode : undefined} onLoadChat={onOpenSessionInChat ? handleLoadSessionInChat : undefined} formatTime={formatRelativeTime} />
+                        <SessionItem key={session.id} session={session} isLast onClick={onSwitchToAgentMode ? handleLoadSessionInAgentMode : undefined} formatTime={formatRelativeTime} />
                       ))
                     )}
                   </div>
