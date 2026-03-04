@@ -1004,6 +1004,7 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
             target={memoryTarget}
             onTargetChange={setMemoryTarget}
             isSaving={isSaving}
+            workspacePath={workspacePath}
           />
         )}
 

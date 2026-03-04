@@ -39,10 +39,23 @@ export function MemoryPromptIndicator({
   target,
   onTargetChange,
   isSaving,
-}: Pick<MemoryPromptProps, 'target' | 'onTargetChange' | 'isSaving'>) {
+  workspacePath,
+}: Pick<MemoryPromptProps, 'target' | 'onTargetChange' | 'isSaving' | 'workspacePath'>) {
   const toggleTarget = useCallback(() => {
     onTargetChange(target === 'user' ? 'project' : 'user');
   }, [target, onTargetChange]);
+
+  const openMemoryFile = useCallback(async () => {
+    if (!workspacePath && target === 'project') return;
+    try {
+      const { filePath } = await window.electronAPI.invoke('memory:get-path', { target, workspacePath });
+      if (filePath) {
+        await window.electronAPI.invoke('workspace:open-file', { workspacePath, filePath });
+      }
+    } catch {
+      // File may not exist yet
+    }
+  }, [target, workspacePath]);
 
   return (
     <div className="memory-prompt-indicator flex items-center justify-between gap-2 px-2.5 py-1.5 mb-2 rounded-md border border-[var(--nim-primary)] bg-[var(--nim-bg-secondary)]">
@@ -65,6 +78,14 @@ export function MemoryPromptIndicator({
           <span className="memory-target-hint flex items-center text-[var(--nim-text-faint)]">
             <ArrowsIcon />
           </span>
+        </button>
+        <button
+          className="memory-prompt-open-button flex items-center justify-center p-1 rounded text-[var(--nim-text-faint)] hover:text-[var(--nim-text)] hover:bg-[var(--nim-bg-tertiary)] transition-colors"
+          onClick={openMemoryFile}
+          title="Open memory file in editor"
+          aria-label="Open memory file"
+        >
+          <OpenFileIcon />
         </button>
       </div>
       <div className="memory-prompt-shortcuts flex items-center gap-1 text-[11px] text-[var(--nim-text-faint)]">
@@ -215,6 +236,16 @@ function MemoryIcon() {
       <path d="M6 14H10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
       <path d="M8 5V8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
       <path d="M6.5 6.5L8 8L9.5 6.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  );
+}
+
+function OpenFileIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M9 2H3.5C2.672 2 2 2.672 2 3.5V12.5C2 13.328 2.672 14 3.5 14H12.5C13.328 14 14 13.328 14 12.5V7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M12 2L14 2L14 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M14 2L8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
     </svg>
   );
 }

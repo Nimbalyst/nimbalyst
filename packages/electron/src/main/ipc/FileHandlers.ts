@@ -561,6 +561,16 @@ export function registerFileHandlers() {
         }
     });
 
+    // Get the resolved path for a memory file
+    safeHandle('memory:get-path', async (_event, { target, workspacePath }: { target: 'user' | 'project'; workspacePath?: string }) => {
+        if (target === 'user') {
+            return { filePath: join(homedir(), '.claude', 'CLAUDE.md') };
+        } else {
+            if (!workspacePath) return { filePath: null };
+            return { filePath: join(workspacePath, 'CLAUDE.md') };
+        }
+    });
+
     // Start watching a file (when tab is opened)
     safeHandle('start-watching-file', async (event, filePath: string) => {
         const window = BrowserWindow.fromWebContents(event.sender);
