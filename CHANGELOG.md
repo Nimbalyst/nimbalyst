@@ -20,6 +20,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.55.11] - 2026-03-04
+
+
+### Added
+- Voice agent session navigation and activation sound
+- Drag files from file tree into AI input as @-mentions
+- Drag files from edited sidebar into AI input as @-mentions
+
+### Changed
+- Densified AI sessions dropdown into single-row menu items
+- Removed click-to-copy on inline code blocks in transcripts
+
+### Fixed
+- Enforced Claude Agent key separation and refresh auth config
+- Gitignore bypass only registers for write tools, not Bash
+- AI file edits in gitignored directories now detected
+- AI file edits now detected regardless of path format
+- Persisted unread=false to database when tray session is clicked
+- Matched FileGutter vertical spacing to FileEditsSidebar
+- Workstream parents inherit phase from children on kanban board
+
 ## [0.55.10] - 2026-03-04
 
 
