@@ -670,11 +670,39 @@ export class TrayManager {
       }
     }
 
-    // Clear unread flag when user clicks
+    // Clear unread flag when user clicks (in-memory + database)
     const session = this.sessionCache.get(sessionId);
     if (session) {
       session.hasUnread = false;
       this.scheduleMenuRebuild();
+      this.clearUnreadInDatabase(sessionId);
+    }
+  }
+
+  /**
+   * Persist hasUnread = false to the database so it survives restarts.
+   */
+  private async clearUnreadInDatabase(sessionId: string): Promise<void> {
+    if (!this.database) return;
+
+    try {
+      // Clear both the nested and legacy flat paths
+      await this.database.query(
+        `UPDATE ai_sessions
+         SET metadata = jsonb_set(
+           jsonb_set(
+             COALESCE(metadata, '{}'::jsonb),
+             '{metadata,hasUnread}',
+             'false'::jsonb
+           ),
+           '{hasUnread}',
+           'false'::jsonb
+         )
+         WHERE id = $1`,
+        [sessionId]
+      );
+    } catch (error) {
+      logger.main.error('[TrayManager] Failed to clear unread in database:', error);
     }
   }
 
