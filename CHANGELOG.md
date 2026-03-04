@@ -20,6 +20,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.55.12] - 2026-03-04
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- Claude Agent API key test no longer returns 404 (updated discontinued model ID)
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.55.11] - 2026-03-04
 
 
