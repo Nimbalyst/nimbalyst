@@ -28,6 +28,7 @@ import {
   searchFileMentionAtom,
   sessionMentionOptionsAtom,
   searchSessionMentionAtom,
+  sessionRegistryAtom,
 } from '../../store';
 
 export interface AIInputRef {
@@ -182,6 +183,9 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
       sessionMentionOptionsAtom(workspacePath || '')
     );
     const searchSessionMention = useSetAtom(searchSessionMentionAtom);
+
+    // Session registry for drag-and-drop session mention insertion
+    const sessionRegistry = useAtomValue(sessionRegistryAtom);
 
     // Pending voice command atom
     const setPendingVoiceCommand = useSetAtom(pendingVoiceCommandAtom);
@@ -846,9 +850,10 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
 
     // Drag and drop handlers
     const handleDragOver = useCallback((e: React.DragEvent) => {
-      // Accept file mention drags (from files-edited sidebar) even without attachment support
+      // Accept file mention and session mention drags even without attachment support
       const hasFileMention = e.dataTransfer.types.includes('application/x-nimbalyst-file-mention');
-      if (!onAttachmentAdd && !hasFileMention) return;
+      const hasSessionMention = e.dataTransfer.types.includes('application/x-nimbalyst-session');
+      if (!onAttachmentAdd && !hasFileMention && !hasSessionMention) return;
       e.preventDefault();
       e.stopPropagation();
       setDragActive(true);
@@ -864,6 +869,37 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
       e.preventDefault();
       e.stopPropagation();
       setDragActive(false);
+
+      // Handle session mention drops from session history list
+      const sessionDataStr = e.dataTransfer.getData('application/x-nimbalyst-session');
+      if (sessionDataStr) {
+        try {
+          const dragData = JSON.parse(sessionDataStr);
+          const session = sessionRegistry.get(dragData.sessionId);
+          const title = session?.title || 'Untitled';
+          const shortId = dragData.sessionId.substring(0, 5);
+          const mention = `@@[${title}](${shortId})`;
+
+          const textarea = textareaRef.current;
+          const cursorPos = textarea?.selectionStart ?? value.length;
+          const before = value.substring(0, cursorPos);
+          const after = value.substring(cursorPos);
+          const needsSpaceBefore = before.length > 0 && !before.endsWith(' ') && !before.endsWith('\n');
+          const newValue = before + (needsSpaceBefore ? ' ' : '') + mention + ' ' + after;
+          onChange(newValue);
+
+          const newCursorPos = cursorPos + (needsSpaceBefore ? 1 : 0) + mention.length + 1;
+          setTimeout(() => {
+            if (textareaRef.current) {
+              textareaRef.current.focus();
+              textareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
+            }
+          }, 0);
+        } catch (err) {
+          console.error('[AIInput] Failed to parse session drag data:', err);
+        }
+        return;
+      }
 
       // Handle file mention drops from file tree or files-edited sidebar
       const fileMentionPath = e.dataTransfer.getData('application/x-nimbalyst-file-mention');
@@ -901,7 +937,7 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
       for (const file of files) {
         await handleFileAttachment(file);
       }
-    }, [onAttachmentAdd, handleFileAttachment, value, onChange, workspacePath]);
+    }, [onAttachmentAdd, handleFileAttachment, value, onChange, workspacePath, sessionRegistry]);
 
     // Threshold for converting large text pastes to attachments (25 lines or 2000 characters)
     const LARGE_PASTE_LINE_THRESHOLD = 25;
