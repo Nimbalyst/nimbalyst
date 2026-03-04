@@ -4664,7 +4664,7 @@ export class AIService {
           const testProvider = new (await import('@nimbalyst/runtime/ai/server/providers/ClaudeProvider')).ClaudeProvider();
           const config: any = {
             apiKey,
-            model: 'claude-3-5-sonnet-20241022'
+            model: 'claude-haiku-4-5-20251001'
           };
 
           await testProvider.initialize(config);
