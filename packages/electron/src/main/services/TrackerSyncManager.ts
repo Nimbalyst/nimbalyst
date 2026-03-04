@@ -64,6 +64,25 @@ function sendToAllWindows(channel: string, data?: unknown): void {
   });
 }
 
+/**
+ * Send an IPC message only to windows that belong to a specific workspace.
+ * Prevents tracker items from leaking across workspaces in the renderer.
+ */
+function sendToWorkspaceWindows(workspacePath: string, channel: string, data?: unknown): void {
+  // Import lazily to avoid circular dependency
+  const { windows: windowMap, windowStates } = require('../window/WindowManager');
+  let sent = 0;
+  for (const [windowId, browserWindow] of windowMap as Map<number, BrowserWindow>) {
+    if (browserWindow.isDestroyed()) continue;
+    const state = windowStates.get(windowId);
+    if (state?.workspacePath === workspacePath) {
+      browserWindow.webContents.send(channel, data);
+      sent++;
+    }
+  }
+  logger.main.debug(`[TrackerSyncManager] sendToWorkspaceWindows(${channel}, ${workspacePath}) sent to ${sent} window(s)`);
+}
+
 // ============================================================================
 // Project Identity
 // ============================================================================
@@ -270,7 +289,7 @@ export async function initializeTrackerSync(workspacePath: string): Promise<void
       },
 
       onItemDeleted: (itemId: string) => {
-        removeTrackerItem(itemId)
+        removeTrackerItem(itemId, workspacePath)
           .catch(err => logger.main.error('[TrackerSyncManager] Failed to remove deleted item:', err));
       },
     });
@@ -434,13 +453,14 @@ async function hydrateTrackerItem(
 
   // Notify renderer of item change via the document-service channel
   // that TrackerTable's watchTrackerItems is already subscribed to.
-  // Also send the tracker-sync specific event for any other listeners.
-  sendToAllWindows('document-service:tracker-items-changed', {
+  // Only send to windows for this workspace to prevent cross-project item leakage.
+  sendToWorkspaceWindows(workspacePath, 'document-service:tracker-items-changed', {
     added: [],
     updated: [item],
     removed: [],
     timestamp: new Date(),
   });
+  // Status events can go to all windows (they include workspace context)
   sendToAllWindows('tracker-sync:item-upserted', {
     itemId: payload.itemId,
     type: payload.type,
@@ -452,14 +472,14 @@ async function hydrateTrackerItem(
 /**
  * Remove a tracker item from PGLite when deleted remotely.
  */
-async function removeTrackerItem(itemId: string): Promise<void> {
+async function removeTrackerItem(itemId: string, workspacePath: string): Promise<void> {
   await database.query(
     `DELETE FROM tracker_items WHERE id = $1 AND sync_status = 'synced'`,
     [itemId]
   );
 
-  // Notify renderer via the document-service channel for TrackerTable reactivity
-  sendToAllWindows('document-service:tracker-items-changed', {
+  // Only notify windows for this workspace to prevent cross-project leakage
+  sendToWorkspaceWindows(workspacePath, 'document-service:tracker-items-changed', {
     added: [],
     updated: [],
     removed: [itemId],
@@ -642,7 +662,7 @@ export function registerTrackerSyncHandlers(): void {
           },
 
           onItemDeleted: (itemId: string) => {
-            removeTrackerItem(itemId)
+            removeTrackerItem(itemId, payload.workspacePath)
               .catch(err => logger.main.error('[TrackerSyncManager] Test: Failed to remove deleted item:', err));
           },
         });
