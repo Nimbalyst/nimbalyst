@@ -166,8 +166,8 @@ export function registerExportHandlers() {
           title: chatSession.title ?? 'New conversation',
         };
 
-        // Generate HTML
-        const html = exportSessionToHtml(session);
+        // Generate HTML (async to avoid blocking main process on large sessions)
+        const html = await exportSessionToHtml(session);
         const defaultFilename = getExportFilename(session);
 
         // Show save dialog

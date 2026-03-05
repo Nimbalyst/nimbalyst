@@ -27,11 +27,21 @@ const renderer = new marked.Renderer();
 
 renderer.code = function (this: unknown, token: Tokens.Code) {
   const { text, lang } = token;
+  // Skip syntax highlighting for very large code blocks to avoid freezing
+  const MAX_HIGHLIGHT_LENGTH = 50_000;
+  if (text.length > MAX_HIGHLIGHT_LENGTH) {
+    const langAttr = lang ? ` class="language-${escapeHtml(lang)}"` : '';
+    return `<pre class="hljs"><code${langAttr}>${escapeHtml(text)}</code></pre>`;
+  }
   if (lang && hljs.getLanguage(lang)) {
     const highlighted = hljs.highlight(text, { language: lang }).value;
     return `<pre class="hljs"><code class="language-${escapeHtml(lang)}">${highlighted}</code></pre>`;
   }
-  // Auto-detect when no language is specified
+  // Auto-detect when no language is specified -- skip for moderately large blocks
+  // since highlightAuto tries every grammar and is O(n * grammars)
+  if (text.length > 10_000) {
+    return `<pre class="hljs"><code>${escapeHtml(text)}</code></pre>`;
+  }
   const auto = hljs.highlightAuto(text);
   return `<pre class="hljs"><code>${auto.value}</code></pre>`;
 };
@@ -85,7 +95,7 @@ function stripAbsolutePaths(content: string, workspacePath: string): string {
   if (!workspacePath) return content;
   const normalized = workspacePath.replace(/\\/g, '/');
   // Strip with trailing slash first, then without
-  return content.split(normalized + '/').join('').split(normalized).join('');
+  return content.replaceAll(normalized + '/', '').replaceAll(normalized, '');
 }
 
 function formatTimestamp(ts: number): string {
@@ -118,7 +128,9 @@ function getNimbalystIconSvg(): string {
 }
 
 function renderMarkdown(raw: string, workspacePath: string): string {
-  const stripped = stripAbsolutePaths(raw, workspacePath);
+  // Truncate before processing to avoid freezing on huge messages
+  const capped = raw.length > 200_000 ? raw.slice(0, 200_000) + '\n\n*... (content truncated for export)*' : raw;
+  const stripped = stripAbsolutePaths(capped, workspacePath);
   return marked.parse(stripped) as string;
 }
 
@@ -139,22 +151,24 @@ function toolStatus(message: Message): { didFail: boolean; label: string } {
   return { didFail, label: didFail ? 'Failed' : 'Succeeded' };
 }
 
+function truncateForExport(text: string, maxLength: number = 100_000): string {
+  if (text.length <= maxLength) return text;
+  const truncated = text.slice(0, maxLength);
+  return `${truncated}\n\n... (truncated ${(text.length - maxLength).toLocaleString()} characters)`;
+}
+
 function renderToolResult(result: unknown, workspacePath: string): string {
   if (result === undefined || result === null) return '';
   if (typeof result === 'string') {
-    const stripped = stripAbsolutePaths(result, workspacePath);
-    // If it looks like it might be a long output, wrap in a scrollable pre
-    if (stripped.length > 500) {
-      return `<pre class="tool-result-pre">${escapeHtml(stripped)}</pre>`;
-    }
+    const stripped = truncateForExport(stripAbsolutePaths(result, workspacePath));
     return `<pre class="tool-result-pre">${escapeHtml(stripped)}</pre>`;
   }
   try {
     const json = JSON.stringify(result, null, 2);
-    const stripped = stripAbsolutePaths(json, workspacePath);
+    const stripped = truncateForExport(stripAbsolutePaths(json, workspacePath));
     return `<pre class="tool-result-pre">${escapeHtml(stripped)}</pre>`;
   } catch {
-    return `<pre class="tool-result-pre">${escapeHtml(String(result))}</pre>`;
+    return `<pre class="tool-result-pre">${escapeHtml(truncateForExport(String(result)))}</pre>`;
   }
 }
 
@@ -162,7 +176,7 @@ function renderToolArguments(args: unknown, workspacePath: string): string {
   if (!args) return '';
   try {
     const json = JSON.stringify(args, null, 2);
-    const stripped = stripAbsolutePaths(json, workspacePath);
+    const stripped = truncateForExport(stripAbsolutePaths(json, workspacePath));
     return `<pre class="tool-args-pre">${escapeHtml(stripped)}</pre>`;
   } catch {
     return '';
@@ -174,7 +188,7 @@ function renderToolArguments(args: unknown, workspacePath: string): string {
 // ---------------------------------------------------------------------------
 
 function renderDiffLines(content: string, workspacePath: string): string {
-  const stripped = stripAbsolutePaths(content, workspacePath);
+  const stripped = stripAbsolutePaths(truncateForExport(content), workspacePath);
   const lines = stripped.split('\n');
   const htmlLines = lines.map((line) => {
     const escaped = escapeHtml(line);
@@ -199,6 +213,10 @@ function renderDiffLines(content: string, workspacePath: string): string {
 function renderToolCard(message: Message, workspacePath: string, depth: number = 0): string {
   const tc = message.toolCall;
   if (!tc) return '';
+
+  // Prevent infinite recursion and limit nesting depth
+  const MAX_DEPTH = 5;
+  if (depth > MAX_DEPTH) return '<div class="tool-card"><em>(nested tools omitted)</em></div>';
 
   const displayName = formatToolDisplayName(tc.name) || tc.name;
   const { didFail, label } = toolStatus(message);
@@ -1099,10 +1117,17 @@ function copyTranscript() {
 // Public API
 // ---------------------------------------------------------------------------
 
+/** Yield to the event loop so the main process stays responsive. */
+function yieldToEventLoop(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
 /**
  * Render a SessionData object to a self-contained HTML string.
+ * Async to yield back to the event loop between message batches,
+ * preventing the main process from freezing on large sessions.
  */
-export function exportSessionToHtml(session: SessionData): string {
+export async function exportSessionToHtml(session: SessionData): Promise<string> {
   const workspacePath = session.workspacePath || '';
 
   // Filter out messages we don't want in the export
@@ -1112,9 +1137,21 @@ export function exportSessionToHtml(session: SessionData): string {
     return true;
   });
 
-  const messagesHtml = exportMessages.map((msg) => renderMessage(msg, workspacePath)).join('\n');
+  // Process messages in batches, yielding between batches to keep the app responsive
+  const BATCH_SIZE = 20;
+  const htmlParts: string[] = [];
+  for (let i = 0; i < exportMessages.length; i += BATCH_SIZE) {
+    const batch = exportMessages.slice(i, i + BATCH_SIZE);
+    for (const msg of batch) {
+      htmlParts.push(renderMessage(msg, workspacePath));
+    }
+    // Yield after each batch so the main process can handle UI events
+    if (i + BATCH_SIZE < exportMessages.length) {
+      await yieldToEventLoop();
+    }
+  }
 
-  return buildHtmlDocument(session, messagesHtml);
+  return buildHtmlDocument(session, htmlParts.join('\n'));
 }
 
 /**

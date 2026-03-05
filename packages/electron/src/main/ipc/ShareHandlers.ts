@@ -179,7 +179,7 @@ export function registerShareHandlers() {
           title: chatSession.title ?? 'New conversation',
         };
 
-        const html = exportSessionToHtml(session);
+        const html = await exportSessionToHtml(session);
 
         // Encrypt the HTML content
         const shareKey = getOrCreateShareKey(sessionId);
