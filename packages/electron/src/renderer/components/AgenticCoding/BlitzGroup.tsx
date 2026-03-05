@@ -32,7 +32,9 @@ interface BlitzGroupProps {
   isActive: boolean;
   isPinned?: boolean;
   isArchived?: boolean;
+  isSelected?: boolean;
   onToggle: () => void;
+  onMultiSelect?: (e: React.MouseEvent) => void;
   worktrees: BlitzWorktreeEntry[];
   activeSessionId: string | null;
   onSessionSelect: (sessionId: string) => void;
@@ -197,7 +199,9 @@ export const BlitzGroup: React.FC<BlitzGroupProps> = memo(({
   isActive,
   isPinned,
   isArchived,
+  isSelected,
   onToggle,
+  onMultiSelect,
   worktrees,
   activeSessionId,
   onSessionSelect,
@@ -253,12 +257,16 @@ export const BlitzGroup: React.FC<BlitzGroupProps> = memo(({
 
   const handleHeaderClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
+    if ((e.metaKey || e.ctrlKey) && onMultiSelect) {
+      onMultiSelect(e);
+      return;
+    }
     // Select the first session in the blitz
     const firstSession = worktrees[0]?.sessions[0];
     if (firstSession) {
       onSessionSelect(firstSession.id);
     }
-  }, [worktrees, onSessionSelect]);
+  }, [worktrees, onSessionSelect, onMultiSelect]);
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -459,14 +467,14 @@ export const BlitzGroup: React.FC<BlitzGroupProps> = memo(({
 
   return (
     <div
-      className={`blitz-group mb-1 ${isArchived ? 'archived' : ''} ${isActive ? 'active' : ''}`}
+      className={`blitz-group mb-1 ${isArchived ? 'archived' : ''} ${isActive ? 'active' : ''} ${isSelected ? 'selected' : ''}`}
       data-testid={`blitz-group-${blitzId}`}
       onMouseLeave={handleGroupMouseLeave}
     >
       {/* Header - matches WorkstreamGroup header structure */}
       <div
         className={`blitz-group-header flex items-center gap-0 text-[0.8125rem] text-[var(--nim-text)] transition-colors duration-150 rounded-md mx-2 w-[calc(100%-1rem)] ${
-          isActive ? 'bg-[var(--nim-bg-selected)]' : 'hover:bg-[var(--nim-bg-hover)]'
+          isSelected ? 'bg-[var(--nim-bg-selected)]' : isActive ? 'bg-[var(--nim-bg-selected)]' : 'hover:bg-[var(--nim-bg-hover)]'
         }`}
         onContextMenu={handleContextMenu}
       >

@@ -312,6 +312,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   const showArchived = showArchivedAtom;
   const setShowArchived = setShowArchivedAtom;
   const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(new Set());
+  const [selectedGroupIds, setSelectedGroupIds] = useState<Set<string>>(new Set()); // Format: "blitz:id", "worktree:id", "workstream:id", "superloop:id"
   const [lastSelectedId, setLastSelectedId] = useState<string | null>(null); // For shift+click range selection
   const [worktreeCache, setWorktreeCache] = useState<Map<string, WorktreeWithStatus>>(new Map()); // Cache worktree data
   const [workstreamChildrenCache, setWorkstreamChildrenCache] = useState<Map<string, SessionItem[]>>(new Map()); // Cache workstream children
@@ -361,6 +362,22 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     closeDialog: closeArchiveWorktreeDialog,
     confirmArchive: confirmArchiveWorktree,
   } = useArchiveWorktreeDialog();
+
+  // Bulk archive dialog state (for multi-select worktree archive)
+  const [bulkArchiveState, setBulkArchiveState] = useState<{
+    worktreeIds: string[];
+    regularSessionIds: string[];
+    blitzIds: string[];
+    superLoopIds: string[];
+    workstreamIds: string[];
+    totalWorktreeCount: number; // Total affected worktrees (including from blitzes/superloops)
+    hasUncommittedChanges: boolean;
+    uncommittedFileCount: number;
+    uncommittedWorktreeCount: number;
+    hasUnmergedChanges: boolean;
+    unmergedCommitCount: number;
+    unmergedWorktreeCount: number;
+  } | null>(null);
 
   // Track scroll position to restore after refresh
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
@@ -882,6 +899,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   // Clear selection when clicking elsewhere
   const clearSelection = useCallback(() => {
     setSelectedSessionIds(new Set());
+    setSelectedGroupIds(new Set());
     setLastSelectedId(null);
   }, []);
 
@@ -894,6 +912,11 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
       // Cmd/Ctrl+click: toggle selection
       setSelectedSessionIds(prev => {
         const next = new Set(prev);
+        // When starting multi-select from empty, include the currently active session
+        // so the user doesn't lose the visually-highlighted active session from the selection
+        if (prev.size === 0 && activeSessionId && activeSessionId !== sessionId) {
+          next.add(activeSessionId);
+        }
         if (next.has(sessionId)) {
           next.delete(sessionId);
         } else {
@@ -937,23 +960,323 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     }
   }, [sessions, lastSelectedId, activeSessionId, sortBy, clearSelection, onSessionSelect]);
 
-  // Bulk archive selected sessions
-  const handleBulkArchive = async () => {
-    const promises = Array.from(selectedSessionIds).map(sessionId =>
-      window.electronAPI.invoke('sessions:update-metadata', sessionId, { isArchived: true })
-    );
-    await Promise.all(promises);
-    // Update atom state for each archived session
-    selectedSessionIds.forEach(sessionId => {
-      updateSessionStore({ sessionId, updates: { isArchived: true } });
-    });
-    setSessions(prev => prev.filter(s => !selectedSessionIds.has(s.id)));
-    // Notify parent to close tabs for all archived sessions
-    if (onSessionArchive) {
-      selectedSessionIds.forEach(sessionId => onSessionArchive(sessionId));
+  // Determine the group key that the currently active session belongs to.
+  // Used to auto-include the "focused" group when starting multi-select from empty.
+  const activeGroupKey = useMemo(() => {
+    if (!activeSessionId) return null;
+    const activeSession = allSessions.find(s => s.id === activeSessionId);
+    if (!activeSession) return null;
+
+    if (activeSession.worktreeId) {
+      // Check if this worktree belongs to a blitz by looking at ALL sessions in the worktree
+      // (the active session itself may not have parentSessionId, e.g. a later session in the worktree)
+      const blitzParentId = allSessions.find(
+        s => s.worktreeId === activeSession.worktreeId && s.parentSessionId && blitzCache.has(s.parentSessionId)
+      )?.parentSessionId;
+      if (blitzParentId) {
+        return `blitz:${blitzParentId}`;
+      }
+
+      // Super loop
+      const superLoop = superLoops.find(l => l.worktreeId === activeSession.worktreeId);
+      if (superLoop) {
+        return `superloop:${superLoop.id}`;
+      }
+
+      // Multi-session worktree group (single-session worktrees are flat items, not groups)
+      const siblingCount = sessions.filter(s => s.worktreeId === activeSession.worktreeId).length;
+      if (siblingCount > 1) {
+        return `worktree:${activeSession.worktreeId}`;
+      }
     }
+
+    // Non-worktree blitz child (e.g. analysis sessions without worktreeId)
+    if (activeSession.parentSessionId && blitzCache.has(activeSession.parentSessionId)) {
+      return `blitz:${activeSession.parentSessionId}`;
+    }
+
+    // Workstream (has children, no worktreeId)
+    if (!activeSession.worktreeId && (activeSession.childCount ?? 0) > 0) {
+      return `workstream:${activeSession.id}`;
+    }
+
+    return null;
+  }, [activeSessionId, allSessions, blitzCache, superLoops, sessions]);
+
+  // Handle Cmd+click on group headers (blitz, worktree, workstream, superloop)
+  const handleGroupMultiSelect = useCallback((groupKey: string) => {
+    setSelectedGroupIds(prev => {
+      const next = new Set(prev);
+      // When starting multi-select from empty, include the currently active group
+      // so the user doesn't lose the visually-highlighted active group from the selection
+      if (prev.size === 0 && activeGroupKey && activeGroupKey !== groupKey) {
+        next.add(activeGroupKey);
+      }
+      if (next.has(groupKey)) {
+        next.delete(groupKey);
+      } else {
+        next.add(groupKey);
+      }
+      return next;
+    });
+  }, [activeGroupKey]);
+
+  // Perform the actual bulk archive (called directly or after dialog confirmation)
+  const performBulkArchive = useCallback(async (params: {
+    worktreeIds: string[];
+    regularSessionIds: string[];
+    blitzIds: string[];
+    superLoopIds: string[];
+    workstreamIds: string[];
+  }) => {
+    const { worktreeIds, regularSessionIds, blitzIds, superLoopIds, workstreamIds } = params;
+
+    // Archive blitz groups via blitz:archive
+    for (const blitzId of blitzIds) {
+      try {
+        // Find all worktrees belonging to this blitz
+        const blitzWorktreeIds = new Set<string>();
+        for (const session of allSessions) {
+          if (session.parentSessionId === blitzId && session.worktreeId) {
+            blitzWorktreeIds.add(session.worktreeId);
+          }
+        }
+
+        await window.electronAPI.invoke('blitz:archive', blitzId, workspacePath);
+
+        // Optimistic UI cleanup
+        const allBlitzWorktreeSessions = allSessions.filter(
+          s => s.worktreeId && blitzWorktreeIds.has(s.worktreeId)
+        );
+        allBlitzWorktreeSessions.forEach(session => removeSessionFromAtom(session.id));
+        removeSessionFromAtom(blitzId);
+        setSessions(prev => prev.filter(s =>
+          s.id !== blitzId && s.parentSessionId !== blitzId && !(s.worktreeId && blitzWorktreeIds.has(s.worktreeId))
+        ));
+        allBlitzWorktreeSessions.forEach(session => {
+          if (onSessionArchive) onSessionArchive(session.id);
+        });
+        setWorktreeCache(prev => {
+          const newCache = new Map(prev);
+          for (const wId of blitzWorktreeIds) newCache.delete(wId);
+          return newCache;
+        });
+        for (const wId of blitzWorktreeIds) {
+          const superLoop = superLoops.find(loop => loop.worktreeId === wId);
+          if (superLoop) removeSuperLoop(superLoop.id);
+        }
+        setBlitzCache(prev => {
+          const updated = new Map(prev);
+          const blitz = updated.get(blitzId);
+          if (blitz) updated.set(blitzId, { ...blitz, isArchived: true });
+          return updated;
+        });
+      } catch (error) {
+        console.error('[SessionHistory] Failed to archive blitz:', error);
+      }
+    }
+
+    // Archive super loops via worktree:archive (they own a dedicated worktree)
+    for (const loopId of superLoopIds) {
+      const loop = superLoops.find(l => l.id === loopId);
+      if (loop) {
+        try {
+          const result = await window.electronAPI.worktreeArchive(loop.worktreeId, workspacePath);
+          if (result.success) {
+            cleanupAfterWorktreeArchive(loop.worktreeId);
+          }
+        } catch (error) {
+          console.error('[SessionHistory] Failed to archive super loop:', error);
+        }
+      }
+    }
+
+    // Archive worktree sessions via worktree:archive (proper cleanup path)
+    for (const worktreeId of worktreeIds) {
+      try {
+        const result = await window.electronAPI.worktreeArchive(worktreeId, workspacePath);
+        if (result.success) {
+          cleanupAfterWorktreeArchive(worktreeId);
+        } else {
+          console.error('[SessionHistory] Failed to archive worktree:', result.error);
+        }
+      } catch (error) {
+        console.error('[SessionHistory] Failed to archive worktree:', error);
+      }
+    }
+
+    // Archive workstream sessions and regular sessions via metadata update
+    const allSessionIds = [...regularSessionIds, ...workstreamIds];
+    if (allSessionIds.length > 0) {
+      const promises = allSessionIds.map(id =>
+        window.electronAPI.invoke('sessions:update-metadata', id, { isArchived: true })
+      );
+      await Promise.all(promises);
+      allSessionIds.forEach(id => {
+        updateSessionStore({ sessionId: id, updates: { isArchived: true } });
+      });
+      setSessions(prev => prev.filter(s => !allSessionIds.includes(s.id)));
+      if (onSessionArchive) {
+        allSessionIds.forEach(id => onSessionArchive(id));
+      }
+    }
+
     clearSelection();
+  }, [workspacePath, cleanupAfterWorktreeArchive, updateSessionStore, onSessionArchive, clearSelection, allSessions, removeSessionFromAtom, superLoops, removeSuperLoop]);
+
+  // Collect all worktree IDs from selected items (sessions, groups, blitzes, super loops)
+  const collectAllWorktreeIds = useCallback((params: {
+    worktreeIds: string[];
+    blitzIds: string[];
+    superLoopIds: string[];
+  }): string[] => {
+    const allIds = new Set(params.worktreeIds);
+
+    // Blitzes have child worktrees
+    for (const blitzId of params.blitzIds) {
+      for (const session of allSessions) {
+        if (session.parentSessionId === blitzId && session.worktreeId) {
+          allIds.add(session.worktreeId);
+        }
+      }
+    }
+
+    // Super loops own a dedicated worktree
+    for (const loopId of params.superLoopIds) {
+      const loop = superLoops.find(l => l.id === loopId);
+      if (loop) {
+        allIds.add(loop.worktreeId);
+      }
+    }
+
+    return Array.from(allIds);
+  }, [allSessions, superLoops]);
+
+  // Bulk archive all selected items (sessions + groups)
+  const handleBulkArchive = async () => {
+    const selectedSessions = sessions.filter(s => selectedSessionIds.has(s.id));
+
+    // Separate worktree and regular sessions from selectedSessionIds
+    const worktreeIds = new Set<string>();
+    const regularSessionIds: string[] = [];
+
+    for (const session of selectedSessions) {
+      if (session.worktreeId) {
+        worktreeIds.add(session.worktreeId);
+      } else {
+        regularSessionIds.push(session.id);
+      }
+    }
+
+    // Collect group IDs by type from selectedGroupIds
+    const blitzIds: string[] = [];
+    const superLoopIds: string[] = [];
+    const workstreamIds: string[] = [];
+    const groupWorktreeIds: string[] = [];
+
+    for (const key of selectedGroupIds) {
+      const [type, id] = key.split(':');
+      switch (type) {
+        case 'blitz': blitzIds.push(id); break;
+        case 'superloop': superLoopIds.push(id); break;
+        case 'workstream': workstreamIds.push(id); break;
+        case 'worktree': groupWorktreeIds.push(id); break;
+      }
+    }
+
+    // Merge worktree IDs from sessions and from group selection
+    for (const id of groupWorktreeIds) {
+      worktreeIds.add(id);
+    }
+
+    const archiveParams = {
+      worktreeIds: Array.from(worktreeIds),
+      regularSessionIds,
+      blitzIds,
+      superLoopIds,
+      workstreamIds,
+    };
+
+    // Collect all worktree IDs that will be archived (including from blitzes and super loops)
+    const allWorktreeIds = collectAllWorktreeIds(archiveParams);
+
+    // If no worktrees involved, archive directly without worktree status check
+    if (allWorktreeIds.length === 0) {
+      await performBulkArchive(archiveParams);
+      return;
+    }
+
+    // Fetch status for each worktree to check for warnings
+    const worktreeStatuses = await Promise.all(
+      allWorktreeIds.map(async worktreeId => {
+        const worktreeData = worktreeCache.get(worktreeId);
+        if (!worktreeData?.path) {
+          return { worktreeId, clean: true, hasUncommittedChanges: false, uncommittedFileCount: 0, hasUnmergedChanges: false, unmergedCommitCount: 0 };
+        }
+
+        try {
+          const result = await window.electronAPI.worktreeGetStatus(worktreeData.path, { fetchFirst: true });
+          if (result.success && result.status) {
+            const isMerged = result.status.isMerged ?? false;
+            const hasUncommitted = result.status.hasUncommittedChanges;
+            const hasUnmerged = !isMerged;
+            return {
+              worktreeId,
+              clean: !hasUncommitted && !hasUnmerged,
+              hasUncommittedChanges: hasUncommitted,
+              uncommittedFileCount: result.status.modifiedFileCount || 0,
+              hasUnmergedChanges: hasUnmerged,
+              unmergedCommitCount: result.status.uniqueCommitsAhead ?? result.status.commitsAhead ?? 0,
+            };
+          }
+        } catch (error) {
+          console.error('[SessionHistory] Failed to get worktree status:', error);
+        }
+
+        // Conservative: treat as dirty on error so dialog shows
+        return { worktreeId, clean: false, hasUncommittedChanges: false, uncommittedFileCount: 0, hasUnmergedChanges: true, unmergedCommitCount: 0 };
+      })
+    );
+
+    const dirtyWorktrees = worktreeStatuses.filter(s => !s.clean);
+
+    if (dirtyWorktrees.length === 0) {
+      // All clean, auto-archive without dialog
+      await performBulkArchive(archiveParams);
+      return;
+    }
+
+    // Aggregate warnings and show one dialog
+    const totalUncommittedFiles = worktreeStatuses.reduce((sum, s) => sum + s.uncommittedFileCount, 0);
+    const uncommittedCount = worktreeStatuses.filter(s => s.hasUncommittedChanges).length;
+    const totalUnmergedCommits = worktreeStatuses.reduce((sum, s) => sum + s.unmergedCommitCount, 0);
+    const unmergedCount = worktreeStatuses.filter(s => s.hasUnmergedChanges).length;
+
+    setBulkArchiveState({
+      ...archiveParams,
+      totalWorktreeCount: allWorktreeIds.length,
+      hasUncommittedChanges: uncommittedCount > 0,
+      uncommittedFileCount: totalUncommittedFiles,
+      uncommittedWorktreeCount: uncommittedCount,
+      hasUnmergedChanges: unmergedCount > 0,
+      unmergedCommitCount: totalUnmergedCommits,
+      unmergedWorktreeCount: unmergedCount,
+    });
   };
+
+  // Handle confirmation from bulk archive dialog
+  const handleConfirmBulkArchive = useCallback(async () => {
+    if (!bulkArchiveState) return;
+    const { hasUncommittedChanges: _, uncommittedFileCount: _1, uncommittedWorktreeCount: _2,
+            hasUnmergedChanges: _3, unmergedCommitCount: _4, unmergedWorktreeCount: _5,
+            totalWorktreeCount: _6, ...archiveParams } = bulkArchiveState;
+    await performBulkArchive(archiveParams);
+    setBulkArchiveState(null);
+  }, [bulkArchiveState, performBulkArchive]);
+
+  const handleCancelBulkArchive = useCallback(() => {
+    setBulkArchiveState(null);
+  }, []);
 
   // Bulk unarchive selected sessions
   const handleBulkUnarchive = async () => {
@@ -2373,9 +2696,9 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
           )}
         </div>
       </div>
-      {selectedSessionIds.size > 0 && (
+      {(selectedSessionIds.size > 0 || selectedGroupIds.size > 0) && (
         <div className="session-history-bulk-actions flex items-center justify-between px-3 py-2 bg-[var(--nim-bg-selected)] border-b border-[var(--nim-border)] gap-2">
-          <span className="session-history-bulk-count text-xs font-medium text-[var(--nim-text)]">{selectedSessionIds.size} selected</span>
+          <span className="session-history-bulk-count text-xs font-medium text-[var(--nim-text)]">{selectedSessionIds.size + selectedGroupIds.size} selected</span>
           <div className="session-history-bulk-buttons flex gap-1.5">
             {showArchived ? (
               <button className="session-history-bulk-button flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded border border-[var(--nim-border)] bg-[var(--nim-bg)] text-[var(--nim-text)] cursor-pointer transition-all duration-150 hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-primary)] [&_svg]:shrink-0" onClick={handleBulkUnarchive} title="Unarchive selected">
@@ -2680,7 +3003,9 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                       isActive={isBlitzActive}
                       isPinned={blitzData?.isPinned}
                       isArchived={blitzData?.isArchived}
+                      isSelected={selectedGroupIds.has(`blitz:${item.blitzId}`)}
                       onToggle={() => handleToggleGroup(`blitz:${item.blitzId}`)}
+                      onMultiSelect={() => handleGroupMultiSelect(`blitz:${item.blitzId}`)}
                       worktrees={item.worktrees.map(w => ({
                         worktreeId: w.worktreeId,
                         sessions: w.sessions,
@@ -2713,7 +3038,9 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                       title={worktreeData?.displayName || worktreeData?.name || 'Loading...'}
                       isExpanded={isWorktreeExpanded}
                       isActive={item.sessions.some(s => s.id === activeSessionId)}
+                      isSelected={selectedGroupIds.has(`worktree:${item.worktreeId}`)}
                       onToggle={() => handleToggleGroup(`worktree:${item.worktreeId}`)}
+                      onMultiSelect={() => handleGroupMultiSelect(`worktree:${item.worktreeId}`)}
                       onSelect={() => {
                         const lastActiveSessionId = store.get(worktreeActiveSessionAtom(item.worktreeId));
                         const sessionToSelect = lastActiveSessionId
@@ -2761,7 +3088,9 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                       title={session.title || 'Untitled Workstream'}
                       isExpanded={isWorkstreamExpanded}
                       isActive={isWorkstreamActive}
+                      isSelected={selectedGroupIds.has(`workstream:${session.id}`)}
                       onToggle={() => handleToggleGroup(`workstream:${session.id}`)}
+                      onMultiSelect={() => handleGroupMultiSelect(`workstream:${session.id}`)}
                       onSelect={() => onSessionSelect(session.id)}
                       sessions={item.sessions}
                       sortBy={sortBy}
@@ -2797,7 +3126,9 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                       loop={item.loop}
                       isExpanded={isSuperExpanded}
                       isActive={isSuperActive}
+                      isSelected={selectedGroupIds.has(`superloop:${item.loop.id}`)}
                       onToggle={() => handleToggleGroup(`super-loop:${item.loop.id}`)}
+                      onMultiSelect={() => handleGroupMultiSelect(`superloop:${item.loop.id}`)}
                       activeSessionId={activeSessionId}
                       onSessionSelect={onSessionSelect}
                       onArchive={() => handleSuperLoopArchive(item.loop)}
@@ -3017,7 +3348,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
         onSkip={handleSkipIndex}
       />
 
-      {/* Archive worktree confirmation dialog */}
+      {/* Archive worktree confirmation dialog (single) */}
       {archiveWorktreeDialogState && (
         <ArchiveWorktreeDialog
           worktreeName={archiveWorktreeDialogState.worktreeName}
@@ -3027,6 +3358,26 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
           uncommittedFileCount={archiveWorktreeDialogState.uncommittedFileCount}
           hasUnmergedChanges={archiveWorktreeDialogState.hasUnmergedChanges}
           unmergedCommitCount={archiveWorktreeDialogState.unmergedCommitCount}
+        />
+      )}
+
+      {/* Bulk archive worktree confirmation dialog */}
+      {bulkArchiveState && (
+        <ArchiveWorktreeDialog
+          worktreeCount={bulkArchiveState.totalWorktreeCount}
+          worktreeName={bulkArchiveState.totalWorktreeCount === 1 && bulkArchiveState.worktreeIds.length === 1
+            ? (worktreeCache.get(bulkArchiveState.worktreeIds[0])?.displayName
+              || worktreeCache.get(bulkArchiveState.worktreeIds[0])?.name
+              || 'worktree')
+            : undefined}
+          onArchive={handleConfirmBulkArchive}
+          onKeep={handleCancelBulkArchive}
+          hasUncommittedChanges={bulkArchiveState.hasUncommittedChanges}
+          uncommittedFileCount={bulkArchiveState.uncommittedFileCount}
+          uncommittedWorktreeCount={bulkArchiveState.uncommittedWorktreeCount}
+          hasUnmergedChanges={bulkArchiveState.hasUnmergedChanges}
+          unmergedCommitCount={bulkArchiveState.unmergedCommitCount}
+          unmergedWorktreeCount={bulkArchiveState.unmergedWorktreeCount}
         />
       )}
 

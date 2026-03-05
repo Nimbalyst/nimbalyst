@@ -97,8 +97,10 @@ interface WorkstreamGroupProps {
   title: string;
   isExpanded: boolean;
   isActive: boolean;
+  isSelected?: boolean;
   onToggle: () => void;
   onSelect: () => void;
+  onMultiSelect?: (e: React.MouseEvent) => void;
 
   // Common props
   sessions: SessionItem[];
@@ -146,8 +148,10 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
   title,
   isExpanded,
   isActive,
+  isSelected,
   onToggle,
   onSelect,
+  onMultiSelect,
   sessions,
   sortBy = 'updated',
   activeSessionId,
@@ -468,8 +472,12 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
 
   const handleHeaderClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
+    if ((e.metaKey || e.ctrlKey) && onMultiSelect) {
+      onMultiSelect(e);
+      return;
+    }
     onSelect();
-  }, [onSelect]);
+  }, [onSelect, onMultiSelect]);
 
   const handleChevronClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -513,14 +521,14 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
 
   return (
     <div
-      className={`workstream-group mb-1 ${displayIsArchived ? 'archived' : ''} ${isActive ? 'active' : ''}`}
+      className={`workstream-group mb-1 ${displayIsArchived ? 'archived' : ''} ${isActive ? 'active' : ''} ${isSelected ? 'selected' : ''}`}
       data-testid={type === 'worktree' ? 'worktree-group' : 'workstream-group'}
       onMouseLeave={handleCloseContextMenu}
     >
       {/* Header */}
       <div
         className={`workstream-group-header flex items-center gap-0 text-[0.8125rem] text-[var(--nim-text)] transition-colors duration-150 rounded-md mx-2 w-[calc(100%-1rem)] ${
-          isActive ? 'bg-[var(--nim-bg-selected)]' : 'hover:bg-[var(--nim-bg-hover)]'
+          isSelected ? 'bg-[var(--nim-bg-selected)]' : isActive ? 'bg-[var(--nim-bg-selected)]' : 'hover:bg-[var(--nim-bg-hover)]'
         } ${isValidDropTarget ? 'bg-[rgba(83,89,93,0.4)] border-2 border-dashed border-[var(--nim-primary)]' : ''}`}
         onContextMenu={handleContextMenu}
         onDragOver={handleDragOver}

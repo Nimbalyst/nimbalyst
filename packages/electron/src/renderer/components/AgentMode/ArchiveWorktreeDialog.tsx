@@ -2,31 +2,42 @@ import React, { useEffect, useRef } from 'react';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 
 interface ArchiveWorktreeDialogProps {
-  worktreeName: string;
+  /** Single worktree name (singular mode) */
+  worktreeName?: string;
+  /** Number of worktrees being archived (bulk mode, >1 shows bulk messaging) */
+  worktreeCount?: number;
   onArchive: () => void;
   onKeep: () => void;
   /** Optional message to show (e.g., "Merge successful!" after a merge) */
   contextMessage?: string;
-  /** Whether the worktree has uncommitted changes that will be lost */
+  /** Whether any worktree has uncommitted changes that will be lost */
   hasUncommittedChanges?: boolean;
   /** Number of uncommitted files (for display) */
   uncommittedFileCount?: number;
-  /** Whether the branch has unmerged commits */
+  /** How many worktrees have uncommitted changes (bulk mode) */
+  uncommittedWorktreeCount?: number;
+  /** Whether any branch has unmerged commits */
   hasUnmergedChanges?: boolean;
   /** Number of unmerged commits */
   unmergedCommitCount?: number;
+  /** How many worktrees have unmerged changes (bulk mode) */
+  unmergedWorktreeCount?: number;
 }
 
 export function ArchiveWorktreeDialog({
   worktreeName,
+  worktreeCount,
   onArchive,
   onKeep,
   contextMessage,
   hasUncommittedChanges,
   uncommittedFileCount,
+  uncommittedWorktreeCount,
   hasUnmergedChanges,
   unmergedCommitCount,
+  unmergedWorktreeCount,
 }: ArchiveWorktreeDialogProps) {
+  const isBulk = (worktreeCount ?? 1) > 1;
   const dialogRef = useRef<HTMLDivElement>(null);
 
   // Close on escape key
@@ -58,13 +69,18 @@ export function ArchiveWorktreeDialog({
       >
         <div className="archive-worktree-dialog-header flex items-center gap-3 px-6 pt-5 pb-4 text-[var(--nim-text)]">
           <MaterialSymbol icon="archive" size={24} />
-          <h2 className="m-0 text-lg font-semibold">Archive Worktree</h2>
+          <h2 className="m-0 text-lg font-semibold">
+            {isBulk ? `Archive ${worktreeCount} Worktrees` : 'Archive Worktree'}
+          </h2>
         </div>
 
         <div className="archive-worktree-dialog-body px-6 pb-5">
           <p className="mb-4 text-sm leading-relaxed text-[var(--nim-text-muted)]">
-            {contextMessage ? `${contextMessage} ` : ''}Are you sure you want to archive{' '}
-            <strong className="font-medium text-[var(--nim-text)]">{worktreeName}</strong>?
+            {contextMessage ? `${contextMessage} ` : ''}
+            {isBulk
+              ? <>Are you sure you want to archive <strong className="font-medium text-[var(--nim-text)]">{worktreeCount} worktrees</strong>?</>
+              : <>Are you sure you want to archive{' '}<strong className="font-medium text-[var(--nim-text)]">{worktreeName}</strong>?</>
+            }
           </p>
 
           {hasUncommittedChanges && (
@@ -75,8 +91,10 @@ export function ArchiveWorktreeDialog({
                   Uncommitted changes will be lost
                 </p>
                 <p className="m-0 mt-1 text-[0.8125rem] text-[var(--nim-text-muted)]">
-                  This worktree has {uncommittedFileCount === 1 ? '1 file' : `${uncommittedFileCount} files`} with uncommitted changes.
-                  These changes will be permanently deleted.
+                  {isBulk
+                    ? <>{uncommittedWorktreeCount} {uncommittedWorktreeCount === 1 ? 'worktree has' : 'worktrees have'} uncommitted changes ({uncommittedFileCount} {uncommittedFileCount === 1 ? 'file' : 'files'} total). These changes will be permanently deleted.</>
+                    : <>This worktree has {uncommittedFileCount === 1 ? '1 file' : `${uncommittedFileCount} files`} with uncommitted changes. These changes will be permanently deleted.</>
+                  }
                 </p>
               </div>
             </div>
@@ -90,10 +108,12 @@ export function ArchiveWorktreeDialog({
                   Unmerged commits will be lost
                 </p>
                 <p className="m-0 mt-1 text-[0.8125rem] text-[var(--nim-text-muted)]">
-                  {(unmergedCommitCount ?? 0) > 0
-                    ? <>This branch has {unmergedCommitCount === 1 ? '1 commit' : `${unmergedCommitCount} commits`} that
-                      {unmergedCommitCount === 1 ? " hasn't" : " haven't"} been merged to the base branch.</>
-                    : <>This branch hasn&apos;t been merged to the base branch.</>
+                  {isBulk
+                    ? <>{unmergedWorktreeCount} {unmergedWorktreeCount === 1 ? 'worktree has' : 'worktrees have'} unmerged commits{(unmergedCommitCount ?? 0) > 0 ? ` (${unmergedCommitCount} ${unmergedCommitCount === 1 ? 'commit' : 'commits'} total)` : ''}.</>
+                    : (unmergedCommitCount ?? 0) > 0
+                      ? <>This branch has {unmergedCommitCount === 1 ? '1 commit' : `${unmergedCommitCount} commits`} that
+                        {unmergedCommitCount === 1 ? " hasn't" : " haven't"} been merged to the base branch.</>
+                      : <>This branch hasn&apos;t been merged to the base branch.</>
                   }
                 </p>
               </div>
@@ -101,7 +121,10 @@ export function ArchiveWorktreeDialog({
           )}
 
           <p className="archive-worktree-dialog-info m-0 text-[0.8125rem] text-[var(--nim-text-faint)]">
-            Archiving will remove the worktree from disk and mark all associated sessions as archived.
+            {isBulk
+              ? 'Archiving will remove all worktrees from disk and mark their associated sessions as archived.'
+              : 'Archiving will remove the worktree from disk and mark all associated sessions as archived.'
+            }
           </p>
         </div>
 
@@ -111,7 +134,7 @@ export function ArchiveWorktreeDialog({
             className="nim-btn-secondary"
             onClick={onKeep}
           >
-            Keep Worktree
+            {isBulk ? 'Cancel' : 'Keep Worktree'}
           </button>
           <button
             type="button"
@@ -119,7 +142,7 @@ export function ArchiveWorktreeDialog({
             onClick={onArchive}
           >
             <MaterialSymbol icon="archive" size={16} />
-            <span>Archive</span>
+            <span>{isBulk ? 'Archive All' : 'Archive'}</span>
           </button>
         </div>
       </div>

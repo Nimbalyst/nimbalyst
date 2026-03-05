@@ -33,7 +33,9 @@ interface SuperLoopGroupProps {
   loop: SuperLoop;
   isExpanded: boolean;
   isActive: boolean;
+  isSelected?: boolean;
   onToggle: () => void;
+  onMultiSelect?: (e: React.MouseEvent) => void;
   activeSessionId: string | null;
   onSessionSelect: (sessionId: string) => void;
   onArchive?: () => void;
@@ -237,7 +239,9 @@ export const SuperLoopGroup: React.FC<SuperLoopGroupProps> = memo(({
   loop,
   isExpanded,
   isActive,
+  isSelected,
   onToggle,
+  onMultiSelect,
   activeSessionId,
   onSessionSelect,
   onArchive,
@@ -368,11 +372,15 @@ export const SuperLoopGroup: React.FC<SuperLoopGroupProps> = memo(({
   // Select the most recent iteration's session when clicking the header
   const handleHeaderClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
+    if ((e.metaKey || e.ctrlKey) && onMultiSelect) {
+      onMultiSelect(e);
+      return;
+    }
     if (iterations.length > 0) {
       const latestIteration = iterations[iterations.length - 1];
       onSessionSelect(latestIteration.sessionId);
     }
-  }, [iterations, onSessionSelect]);
+  }, [iterations, onSessionSelect, onMultiSelect]);
 
   // Context menu handlers
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
@@ -467,14 +475,14 @@ export const SuperLoopGroup: React.FC<SuperLoopGroupProps> = memo(({
 
   return (
     <div
-      className={`super-loop-group mb-1 ${loop.isArchived ? 'archived' : ''} ${isActive ? 'active' : ''}`}
+      className={`super-loop-group mb-1 ${loop.isArchived ? 'archived' : ''} ${isActive ? 'active' : ''} ${isSelected ? 'selected' : ''}`}
       data-testid={`super-loop-group-${loopId}`}
       onMouseLeave={handleCloseContextMenu}
     >
       {/* Header - matches BlitzGroup/WorkstreamGroup header structure */}
       <div
         className={`super-loop-group-header flex items-center gap-0 text-[0.8125rem] text-[var(--nim-text)] transition-colors duration-150 rounded-md mx-2 w-[calc(100%-1rem)] ${
-          isActive ? 'bg-[var(--nim-bg-selected)]' : 'hover:bg-[var(--nim-bg-hover)]'
+          isSelected ? 'bg-[var(--nim-bg-selected)]' : isActive ? 'bg-[var(--nim-bg-selected)]' : 'hover:bg-[var(--nim-bg-hover)]'
         }`}
         onContextMenu={handleContextMenu}
       >
