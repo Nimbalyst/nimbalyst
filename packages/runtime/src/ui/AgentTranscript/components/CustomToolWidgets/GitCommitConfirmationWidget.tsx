@@ -372,10 +372,24 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
   }
 
   // Parse files - can be strings or objects with path and status
-  // Ensure rawFiles is always an array even if args.filesToStage is malformed
+  // The model sometimes sends filesToStage as a JSON-encoded string instead of an array
   // Memoize to prevent infinite loop - args.filesToStage reference is stable
   const rawFiles: FileInput[] = useMemo(
-    () => Array.isArray(args.filesToStage) ? args.filesToStage : [],
+    () => {
+      let files = args.filesToStage;
+      if (typeof files === 'string') {
+        console.warn('[GitCommitWidget] filesToStage received as string instead of array, parsing JSON:', files.substring(0, 200));
+        try { files = JSON.parse(files); } catch (e) {
+          console.error('[GitCommitWidget] Failed to parse filesToStage string as JSON:', e);
+          return [];
+        }
+      }
+      if (!Array.isArray(files)) {
+        console.error('[GitCommitWidget] filesToStage is not an array after parsing, got:', typeof files, files);
+        return [];
+      }
+      return files;
+    },
     [args.filesToStage]
   );
   const filesWithStatus: FileWithStatus[] = useMemo(

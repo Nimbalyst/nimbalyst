@@ -2651,13 +2651,45 @@ The commit message should follow these guidelines:
         type FileToStage =
           | string
           | { path: string; status: "added" | "modified" | "deleted" };
-        const proposalArgs = args as
+        const rawProposalArgs = args as
           | {
-              filesToStage?: FileToStage[];
+              filesToStage?: FileToStage[] | string;
               commitMessage?: string;
               reasoning?: string;
             }
           | undefined;
+
+        // The model sometimes sends filesToStage as a JSON-encoded string instead of an array
+        let parsedFilesToStage = rawProposalArgs?.filesToStage;
+        if (typeof parsedFilesToStage === "string") {
+          console.warn(
+            "[MCP Server] developer_git_commit_proposal: filesToStage received as string instead of array, parsing JSON"
+          );
+          try {
+            parsedFilesToStage = JSON.parse(parsedFilesToStage);
+          } catch (e) {
+            console.error(
+              "[MCP Server] developer_git_commit_proposal: Failed to parse filesToStage string as JSON:",
+              e
+            );
+            parsedFilesToStage = undefined;
+          }
+        }
+        if (parsedFilesToStage && !Array.isArray(parsedFilesToStage)) {
+          console.error(
+            "[MCP Server] developer_git_commit_proposal: filesToStage is not an array after parsing, got:",
+            typeof parsedFilesToStage
+          );
+          parsedFilesToStage = undefined;
+        }
+        const proposalArgs = rawProposalArgs
+          ? {
+              ...rawProposalArgs,
+              filesToStage: Array.isArray(parsedFilesToStage)
+                ? parsedFilesToStage
+                : undefined,
+            }
+          : undefined;
 
         if (!proposalArgs?.filesToStage || !proposalArgs?.commitMessage) {
           return {
