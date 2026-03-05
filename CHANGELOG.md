@@ -20,6 +20,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.55.13] - 2026-03-05
+
+
+### Added
+- Unified tracker system with database-first storage, file import, and MCP tools
+- @@ session mention typeahead in chat input
+- Drag-and-drop session mentions onto chat input
+
+### Changed
+- Update claude-agent-sdk 0.2.63 -> 0.2.69, codex-sdk 0.106.0 -> 0.107.0
+
+### Fixed
+- Resolve TypeScript errors in tracker MCP tools and DiffState
+- Session provider icon uses correct provider and updates on model change
+- Keep session history metadata in sync (provider, model, title changes broadcast to renderer)
+- Push provisional first-message titles to avoid stale "New Session" labels
+- Checkbox state changes silently lost in diff mode
+- Consolidate E2E tests to minimize app launches for CI
+
 ## [0.55.12] - 2026-03-04
 
 
