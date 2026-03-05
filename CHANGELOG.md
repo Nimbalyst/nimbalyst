@@ -20,56 +20,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
-## [0.55.15] - 2026-03-05
-
-
-### Added
-<!-- New features go here -->
-
-### Changed
-<!-- Changes to existing functionality go here -->
-
-### Fixed
-- Prevent session export/share from freezing on large sessions
-- Deduplicate concurrent usage API refresh calls to prevent redundant network requests
-- Reduce usage API polling frequency to prevent 429 rate limiting
-- Add ToolSearch to SDK_NATIVE_TOOLS to prevent tool execution failure
-- Stabilize unit test execution and CI coverage with deterministic vitest run mode
-- Correct Codex token accounting and context usage display (treat turn usage as cumulative snapshots)
-- Add Codex usage indicator re-enable toggle
-- Scope AI session-state updates to the owning workspace window to prevent cross-workspace interference
-- Resolve claude-agent-sdk path for non-hoisted npm workspace layout
-
-### Removed
-<!-- Removed features go here -->
-
-## [0.55.14] - 2026-03-05
-
-
-### Added
-- MCP servers can be enabled per-provider (Claude/Codex)
-- Auto-compare blitz sessions when all sessions finish
-
-### Changed
-- Remove beta label and warning from OpenAI Codex
-
-## [0.55.13] - 2026-03-05
+## [0.55.16] - 2026-03-05
 
 
 ### Added
 - Unified tracker system with database-first storage, file import, and MCP tools
 - @@ session mention typeahead in chat input
 - Drag-and-drop session mentions onto chat input
+- MCP servers can be enabled per-provider (Claude/Codex)
+- Auto-compare blitz sessions when all sessions finish
+- Codex usage indicator re-enable toggle
 
 ### Changed
 - Update claude-agent-sdk 0.2.63 -> 0.2.69, codex-sdk 0.106.0 -> 0.107.0
+- Remove beta label and warning from OpenAI Codex
 
 ### Fixed
-- Resolve TypeScript errors in tracker MCP tools and DiffState
+- Checkbox state changes silently lost in diff mode
 - Session provider icon uses correct provider and updates on model change
 - Keep session history metadata in sync (provider, model, title changes broadcast to renderer)
-- Push provisional first-message titles to avoid stale "New Session" labels
-- Checkbox state changes silently lost in diff mode
+- Prevent session export/share from freezing on large sessions
+- Deduplicate concurrent usage API refresh calls to prevent redundant network requests
+- Reduce usage API polling frequency to prevent 429 rate limiting
+- Add ToolSearch to SDK_NATIVE_TOOLS to prevent tool execution failure
+- Correct Codex token accounting and context usage display (treat turn usage as cumulative snapshots)
+- Scope AI session-state updates to the owning workspace window to prevent cross-workspace interference
+- Resolve claude-agent-sdk path for non-hoisted npm workspace layout
+- Stabilize unit test execution and CI coverage with deterministic vitest run mode
 - Consolidate E2E tests to minimize app launches for CI
 
 ## [0.55.12] - 2026-03-04
