@@ -20,6 +20,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.55.15] - 2026-03-05
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- Prevent session export/share from freezing on large sessions
+- Deduplicate concurrent usage API refresh calls to prevent redundant network requests
+- Reduce usage API polling frequency to prevent 429 rate limiting
+- Add ToolSearch to SDK_NATIVE_TOOLS to prevent tool execution failure
+- Stabilize unit test execution and CI coverage with deterministic vitest run mode
+- Correct Codex token accounting and context usage display (treat turn usage as cumulative snapshots)
+- Add Codex usage indicator re-enable toggle
+- Scope AI session-state updates to the owning workspace window to prevent cross-workspace interference
+- Resolve claude-agent-sdk path for non-hoisted npm workspace layout
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.55.14] - 2026-03-05
 
 
