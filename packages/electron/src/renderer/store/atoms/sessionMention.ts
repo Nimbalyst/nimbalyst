@@ -9,6 +9,7 @@
  * - searchSessionMentionAtom: write-only atom that filters sessionRegistryAtom
  */
 
+import React from 'react';
 import { atom } from 'jotai';
 import { atomFamily } from 'jotai/utils';
 import type { TypeaheadOption } from '../../components/Typeahead/GenericTypeahead';
@@ -47,13 +48,13 @@ function relativeTime(timestamp: number): string {
 }
 
 /**
- * Chat bubble icon as a React element for session typeahead options.
+ * Small chat bubble icon for session typeahead options.
+ * Uses a React element to control size (string icons render at text-lg in GenericTypeahead).
  */
-function chatBubbleIcon(): string {
-  // Using a simple SVG string that GenericTypeahead can render
-  // GenericTypeahead supports string icons (rendered as text) and ReactElement icons
-  return '\u{1F4AC}';
-}
+const SESSION_ICON = React.createElement('span', {
+  className: 'material-symbols-outlined text-nim-muted',
+  style: { fontSize: '14px' },
+}, 'chat_bubble_outline');
 
 // ============================================================
 // Action Atoms
@@ -88,12 +89,11 @@ export const searchSessionMentionAtom = atom(
     sessions = sessions.slice(0, 10);
 
     const options: TypeaheadOption[] = sessions.map(s => {
-      const phaseTag = s.phase ? ` [${s.phase}]` : '';
       return {
         id: s.id,
         label: s.title || 'Untitled',
-        description: `${relativeTime(s.updatedAt)}${phaseTag}`,
-        icon: chatBubbleIcon(),
+        description: `${relativeTime(s.updatedAt)}${s.phase ? ` - ${s.phase}` : ''}`,
+        icon: SESSION_ICON,
         data: {
           id: s.id,
           title: s.title || 'Untitled',

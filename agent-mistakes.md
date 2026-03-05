@@ -77,3 +77,11 @@ Lesson: ALWAYS use static top-level imports in Electron main process files. Neve
 The `/release patch auto` instructions explicitly say "Get commits since last SUCCESSFUL release (check github actions!)". I skipped the GitHub Actions check entirely and just used the latest git tag (v0.55.14). Both v0.55.13 and v0.55.14 release builds had failed -- the last successful release was v0.55.12. As a result, v0.55.15's changelog only includes commits since v0.55.14, missing all the v0.55.13 and v0.55.14 changes that users never received.
 
 Lesson: In the release workflow, ALWAYS check GitHub Actions to find the last SUCCESSFUL release build before generating release notes. The latest git tag is not necessarily the latest shipped version.
+
+## Used emoji as typeahead icon despite explicit no-emoji instructions
+
+**Date**: 2026-03-04
+
+When creating the `@@` session mention typeahead, used `\u{1F4AC}` (speech balloon emoji) as the icon for session options in `sessionMention.ts`. Both CLAUDE.md and the user's global instructions explicitly say "Never use emojis." Additionally, the GenericTypeahead component renders string icons via the `material-symbols-outlined` font, so the correct value was a Material Symbols icon name like `chat_bubble_outline`, not an emoji character.
+
+Lesson: The no-emoji rule applies everywhere -- icons, code, UI elements, not just text output. When a component expects a specific icon system (Material Symbols), use that system's identifiers.
