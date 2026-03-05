@@ -51,6 +51,7 @@ class ClaudeUsageServiceImpl {
   private lastActivityTime: number = 0;
   private isPolling: boolean = false;
   private isSleeping: boolean = true;
+  private inflightRefresh: Promise<ClaudeUsageData> | null = null;
 
   /**
    * Initialize the service. Does not start polling until activity is detected.
@@ -84,8 +85,22 @@ class ClaudeUsageServiceImpl {
 
   /**
    * Force a refresh of usage data from the API.
+   * Deduplicates concurrent calls — if a refresh is already in flight, returns the same promise.
    */
   async refresh(): Promise<ClaudeUsageData> {
+    if (this.inflightRefresh) {
+      return this.inflightRefresh;
+    }
+
+    this.inflightRefresh = this.doRefresh();
+    try {
+      return await this.inflightRefresh;
+    } finally {
+      this.inflightRefresh = null;
+    }
+  }
+
+  private async doRefresh(): Promise<ClaudeUsageData> {
     try {
       const token = this.getAccessTokenFromKeychain();
       if (!token) {
