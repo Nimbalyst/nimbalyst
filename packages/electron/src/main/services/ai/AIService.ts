@@ -1990,6 +1990,13 @@ export class AIService {
           force: true,
           markAsNamed: false,
         });
+
+        // Keep session-history UI in sync with provisional title updates without forcing a full refresh.
+        for (const window of BrowserWindow.getAllWindows()) {
+          if (!window.isDestroyed()) {
+            window.webContents.send('sessions:session-updated', session.id, { title });
+          }
+        }
       }
 
       // Get or create provider for this session

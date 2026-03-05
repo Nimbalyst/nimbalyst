@@ -61,6 +61,14 @@ export function initSessionListListeners(): () => void {
         ...(updates.phase !== undefined && { phase: updates.phase as string }),
         ...(updates.tags !== undefined && { tags: updates.tags as string[] }),
         ...(updates.title !== undefined && { title: updates.title as string }),
+        ...(updates.provider !== undefined && { provider: updates.provider as string }),
+        ...(updates.model !== undefined && { model: updates.model as string }),
+        ...(updates.sessionType !== undefined && {
+          sessionType: updates.sessionType as 'session' | 'workstream' | 'blitz' | 'voice'
+        }),
+        ...(updates.parentSessionId !== undefined && { parentSessionId: updates.parentSessionId as string | null }),
+        ...(updates.worktreeId !== undefined && { worktreeId: updates.worktreeId as string | null }),
+        ...(updates.updatedAt !== undefined && { updatedAt: updates.updatedAt as number }),
         ...(updates.isArchived !== undefined && { isArchived: updates.isArchived as boolean }),
         ...(updates.isPinned !== undefined && { isPinned: updates.isPinned as boolean }),
       });

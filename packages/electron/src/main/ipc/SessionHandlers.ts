@@ -4,6 +4,7 @@ import { ModelIdentifier, type AIProviderType } from '@nimbalyst/runtime/ai/serv
 import type { UpdateSessionMetadataPayload } from '@nimbalyst/runtime/ai/adapters/sessionStore';
 import path from "path";
 import { existsSync } from "fs";
+import { BrowserWindow } from 'electron';
 import { safeHandle, safeOn } from '../utils/ipcRegistry';
 import type { SessionCreateResult } from '../../shared/ipc/types';
 import { TrayManager } from '../tray/TrayManager';
@@ -380,6 +381,26 @@ export async function registerSessionHandlers() {
                 }
             }
             await AISessionsRepository.updateMetadata(sessionId, updates);
+
+            // Notify renderer windows so session list state stays in sync without waiting for full refresh.
+            // This covers model/provider/title updates from SessionTranscript and similar paths.
+            const rendererUpdate: Record<string, unknown> = {};
+            if (updates.title !== undefined) rendererUpdate.title = updates.title;
+            if (updates.provider !== undefined) rendererUpdate.provider = updates.provider;
+            if (updates.model !== undefined) rendererUpdate.model = updates.model;
+            if ((updates as any).sessionType !== undefined) rendererUpdate.sessionType = (updates as any).sessionType;
+            if ((updates as any).parentSessionId !== undefined) rendererUpdate.parentSessionId = (updates as any).parentSessionId;
+            if ((updates as any).worktreeId !== undefined) rendererUpdate.worktreeId = (updates as any).worktreeId;
+            if ((updates as any).isPinned !== undefined) rendererUpdate.isPinned = (updates as any).isPinned;
+            if (updates.isArchived !== undefined) rendererUpdate.isArchived = updates.isArchived;
+
+            if (Object.keys(rendererUpdate).length > 0) {
+                for (const window of BrowserWindow.getAllWindows()) {
+                    if (!window.isDestroyed()) {
+                        window.webContents.send('sessions:session-updated', sessionId, rendererUpdate);
+                    }
+                }
+            }
             return { success: true };
         } catch (error) {
             console.error('[SessionHandlers] Failed to update session metadata:', error);
