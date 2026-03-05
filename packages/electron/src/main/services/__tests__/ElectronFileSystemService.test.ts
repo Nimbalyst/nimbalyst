@@ -230,7 +230,7 @@ describe('ElectronFileSystemService', () => {
     });
 
     it('should exclude binary files', async () => {
-      const result = await service.readFile('image.jpg', {});
+      const result = await service.readFile('archive.zip', {});
 
       expect(result.success).toBe(false);
       expect(result.error).toBe('File type is not supported for reading');
