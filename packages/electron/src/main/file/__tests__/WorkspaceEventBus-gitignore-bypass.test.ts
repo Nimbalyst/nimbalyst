@@ -15,7 +15,11 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 // Hoisted mocks — must run before vi.mock() factories
 // ---------------------------------------------------------------------------
 
-const { mockFsWatch, mockWatcherCallbacks, mockFsAccess } = vi.hoisted(() => {
+const { mockFsWatch, mockWatcherCallbacks, mockFsAccess, originalPlatform } = vi.hoisted(() => {
+  // Force fs.watch recursive path (macOS/Windows) even on Linux CI,
+  // since this test mocks fs.watch, not chokidar.
+  const originalPlatform = process.platform;
+  Object.defineProperty(process, 'platform', { value: 'darwin', writable: true });
   const mockWatcherCallbacks: Array<(eventType: string, filename: string | null) => void> = [];
   const mockFsWatch = vi.fn((_path: string, _opts: any, callback: any) => {
     mockWatcherCallbacks.push(callback);
@@ -27,7 +31,7 @@ const { mockFsWatch, mockWatcherCallbacks, mockFsAccess } = vi.hoisted(() => {
 
   const mockFsAccess = vi.fn(() => Promise.resolve());
 
-  return { mockFsWatch, mockWatcherCallbacks, mockFsAccess };
+  return { mockFsWatch, mockWatcherCallbacks, mockFsAccess, originalPlatform };
 });
 
 // Mock fs module
@@ -158,6 +162,10 @@ describe('WorkspaceEventBus gitignore bypass', () => {
     mockFsAccess.mockReset();
     mockFsAccess.mockResolvedValue(undefined);
     resetBus();
+  });
+
+  afterAll(() => {
+    Object.defineProperty(process, 'platform', { value: originalPlatform, writable: true });
   });
 
   afterEach(() => {

@@ -469,7 +469,7 @@ describe('OpenAICodexProvider', () => {
         'nimbalyst-session-naming',
         'nimbalyst-extension-dev',
         'custom_stdio',
-        'customer-io',
+        'customer_io',
         'custom_http',
         'Customer_io',
         'Customer_io_2',
@@ -488,8 +488,8 @@ describe('OpenAICodexProvider', () => {
       args: ['-y', '@acme/mcp'],
       env: { API_TOKEN: 'token-value' },
     });
-    // Dots in server names are replaced with hyphens to prevent TOML parsing errors
-    expect(mcpServers['customer-io']).toEqual({
+    // Dots in server names are replaced with underscores to prevent TOML parsing errors
+    expect(mcpServers['customer_io']).toEqual({
       command: 'npx',
       args: ['-y', '@customerio/mcp'],
     });
