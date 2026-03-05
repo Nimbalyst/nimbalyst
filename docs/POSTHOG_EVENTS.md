@@ -381,6 +381,14 @@ Events from the iOS companion app. These events share the same PostHog project a
 - **Voice Mode**: 3 events
 - **System/Infrastructure**: 12 events
 
+## Super Properties (on every event)
+
+These properties are attached to every event automatically.
+
+| Property | Type | Set By | Description |
+| --- | --- | --- | --- |
+| `nimbalyst_version` | `string` | `AnalyticsService.ts` (main), `index.tsx` (renderer via `register()`) | App version (e.g., `0.53.1`). Available on all events from both processes. |
+
 ## Person Properties
 
 Person properties are attached to user profiles in PostHog via `posthog.people.set()`. These persist across sessions and allow segmentation and filtering.

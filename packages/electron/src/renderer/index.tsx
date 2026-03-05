@@ -142,6 +142,7 @@ const root = ReactDOM.createRoot(rootElement);
 
 const analyticsId = await window.electronAPI.analytics?.getDistinctId() ?? '';
 const analyticsAllowed = await window.electronAPI.analytics?.allowedToSendAnalytics() ?? false;
+const nimbalystVersion = await window.electronAPI.getAppVersion?.() ?? '';
 const isDevInstallation = process.env.NODE_ENV?.toLowerCase() === 'development';
 const isDevMode = process.env.IS_DEV_MODE === 'true';
 const isOfficialBuild = process.env.OFFICIAL_BUILD === 'true';
@@ -166,6 +167,8 @@ const posthogClient = posthog.init(
     session_idle_timeout_seconds: 30 * 60, // 30 minutes
     loaded: (posthog) => {
       console.log(`[RENDERER] PostHog loaded (analytics ID: ${posthog.get_distinct_id()}, session: ${posthog.get_session_id()}, official build: ${isOfficialBuild})`);
+
+      posthog.register({ nimbalyst_version: nimbalystVersion });
 
       // Mark users as dev users if they've ever used a non-official build
       // This property persists across all future events for this user

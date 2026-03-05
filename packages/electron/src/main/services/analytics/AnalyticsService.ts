@@ -81,6 +81,7 @@ export class AnalyticsService {
     // Send event
     const eventProperties: Record<string | number, any> = {
       '$session_id': this.sessionId,
+      'nimbalyst_version': app.getVersion(),
       ...properties,
     }
 
