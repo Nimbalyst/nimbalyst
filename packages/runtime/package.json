@@ -149,7 +149,7 @@
     "@lexical/dragon": "^0.34.0",
     "@lexical/history": "^0.34.0",
     "@monaco-editor/react": "^4.7.0",
-    "@openai/codex-sdk": "^0.107.0",
+    "@openai/codex-sdk": "^0.110.0",
     "@types/js-yaml": "^4.0.9",
     "@types/react-syntax-highlighter": "^15.5.13",
     "@types/shell-quote": "^1.7.5",

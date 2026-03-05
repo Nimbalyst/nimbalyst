@@ -57,7 +57,7 @@
     "@modelcontextprotocol/sdk": "^1.27.1",
     "@monaco-editor/react": "^4.7.0",
     "@nimbalyst/runtime": "*",
-    "@openai/codex-sdk": "^0.107.0",
+    "@openai/codex-sdk": "^0.110.0",
     "@stytch/vanilla-js": "^5.42.0",
     "@types/glob": "^8.1.0",
     "@types/js-yaml": "^4.0.9",
