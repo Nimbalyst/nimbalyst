@@ -8,9 +8,11 @@ import { BrowserWindow } from 'electron';
 import { safeHandle, safeOn } from '../utils/ipcRegistry';
 import type { SessionCreateResult } from '../../shared/ipc/types';
 import { TrayManager } from '../tray/TrayManager';
+import { AnalyticsService } from '../services/analytics/AnalyticsService';
 
 // Initialize session manager
 const sessionManager = new SessionManager();
+const analyticsService = AnalyticsService.getInstance();
 
 // Track if handlers are registered to prevent double registration
 let handlersRegistered = false;
@@ -44,6 +46,17 @@ const SESSION_FILES_CACHE_TTL_MS = 5000; // 5 second cache
 
 interface ParsedCodexToolLookupId {
     itemId: string;
+}
+
+function trackCreateAISession(provider: AIProviderType, options?: {
+    worktreeId?: string | null;
+    parentSessionId?: string | null;
+}): void {
+    analyticsService.sendEvent('create_ai_session', {
+        provider,
+        is_worktree_session: !!options?.worktreeId,
+        is_workstream_child: !!options?.parentSessionId,
+    });
 }
 
 /**
@@ -308,6 +321,10 @@ export async function registerSessionHandlers() {
             // console.log('[SessionHandlers] Creating session with payload:', JSON.stringify(createPayload));
 
             await AISessionsRepository.create(createPayload);
+            trackCreateAISession(provider, {
+                worktreeId: createPayload.worktreeId,
+                parentSessionId: (session.parentSessionId as string | null | undefined) ?? null,
+            });
 
             // Update with full metadata
             if (session.metadata) {
@@ -653,6 +670,10 @@ export async function registerSessionHandlers() {
             };
 
             await AISessionsRepository.create(createPayload as any);
+            trackCreateAISession(provider as AIProviderType, {
+                worktreeId: createPayload.worktreeId,
+                parentSessionId,
+            });
             console.log(`[SessionHandlers] Child session ${sessionId} created successfully with model: ${model}`);
 
             return { success: true, sessionId };
