@@ -127,7 +127,7 @@ Best for complex coding tasks.`,
         },
         {
           id: 'openai-codex',
-          name: 'OpenAI Codex (BETA)',
+          name: 'OpenAI Codex',
           icon: getProviderIcon('openai', { size: 16 }),
           statusDot: getStatusDot('openai-codex'),
         },

@@ -138,7 +138,7 @@ export function ModelSelector({
       case 'claude': return 'Claude Chat';
       case 'claude-code': return 'Claude Agent (Claude Code Based)';
       case 'openai': return 'OpenAI';
-      case 'openai-codex': return 'OpenAI Codex (BETA)';
+      case 'openai-codex': return 'OpenAI Codex';
       case 'lmstudio': return 'LMStudio';
       default: return provider;
     }

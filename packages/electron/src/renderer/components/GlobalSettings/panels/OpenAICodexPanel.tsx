@@ -24,14 +24,11 @@ export function OpenAICodexPanel({
   return (
     <div className="provider-panel flex flex-col">
       <div className="provider-panel-header mb-6 pb-4 border-b border-[var(--nim-border)]">
-        <h3 className="provider-panel-title text-xl font-semibold leading-tight mb-2 text-[var(--nim-text)]">OpenAI Codex (BETA)</h3>
+        <h3 className="provider-panel-title text-xl font-semibold leading-tight mb-2 text-[var(--nim-text)]">OpenAI Codex</h3>
         <p className="provider-panel-description text-sm leading-relaxed text-[var(--nim-text-muted)]">
           Advanced code generation and completion powered by OpenAI Codex models.
           Provides intelligent code suggestions and automated programming assistance.
         </p>
-        <div className="mt-3 px-3 py-2 rounded-md bg-[var(--nim-warning-bg,rgba(234,179,8,0.1))] border border-[var(--nim-warning,#eab308)] text-[13px] text-[var(--nim-text-muted)] leading-relaxed">
-          <strong className="text-[var(--nim-warning,#eab308)]">Beta:</strong> Red/green diffs and file edit tracking may not work for every change made by Codex sessions.
-        </div>
       </div>
 
       <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)]">
