@@ -20,6 +20,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.55.21] - 2026-03-05
+
+
+### Fixed
+- Replace emoji with Material Symbols icon in session mention typeahead
+- Git commit proposal widget disabled when model sends filesToStage as string instead of array
+- Update Claude Haiku version label from 3.5 to 4.5 in model picker
+- CI test failures on Linux
+
 ## [0.55.20] - 2026-03-05
 
 
