@@ -13,7 +13,7 @@ interface Query extends AsyncGenerator<SDKMessage, void> {
   streamInput(stream: AsyncIterable<any>): Promise<void>;
 }
 import { parse as parseShellCommand } from 'shell-quote';
-import type { MessageParam, ImageBlockParam, TextBlockParam, ContentBlockParam, DocumentBlockParam } from '@anthropic-ai/sdk/resources';
+import type { MessageParam, TextBlockParam, ContentBlockParam } from '@anthropic-ai/sdk/resources';
 import { BaseAgentProvider } from './BaseAgentProvider';
 import {
   DocumentContext,
@@ -24,18 +24,14 @@ import {
   Message,
   PermissionRequestContent,
   PermissionResponseContent,
-  AskUserQuestionRequestContent,
-  AskUserQuestionResponseContent,
-  getPatternDisplayName,
   CLAUDE_CODE_VARIANTS,
   ModelIdentifier,
   resolveClaudeCodeModelVariant,
 } from '../types';
 import { isBedrockToolSearchError } from '../utils/errorDetection';
 import { AgentMessagesRepository } from '../../../storage/repositories/AgentMessagesRepository';
-import { TeammateManager } from './TeammateManager';
+import { TeammateManager, type TeammateToLeadMessage } from './TeammateManager';
 import path from 'path';
-import fs from 'fs';
 import os from 'os';
 import { app } from 'electron';
 import { buildClaudeCodeSystemPrompt } from '../../prompt';
@@ -44,10 +40,44 @@ import { SessionManager } from '../SessionManager';
 import { parseBashForFileOps, hasShellChainingOperators, splitOnShellOperators } from '../permissions/BashCommandAnalyzer';
 import { DEFAULT_EFFORT_LEVEL } from '../effortLevels';
 import { ToolPermissionService } from '../permissions/ToolPermissionService';
-import { buildToolDescription, generateToolPattern } from '../permissions/toolPermissionHelpers';
 import { AgentToolHooks } from '../permissions/AgentToolHooks';
 import { McpConfigService } from '../services/McpConfigService';
 import { historyManager } from '../../../../../electron/src/main/HistoryManager';
+import {
+  appendLargeAttachmentInstructions,
+  buildMessageWithDocumentContext,
+  prepareClaudeCodeAttachments,
+} from './claudeCode/messagePreparation';
+import {
+  applyToolResultToToolCall,
+  buildToolResultMessage,
+  buildToolUseMessage,
+  isSearchableAssistantChunk,
+} from './claudeCode/toolChunkUtils';
+import {
+  DEFAULT_PLANNING_TOOLS,
+  INTERNAL_MCP_TOOLS,
+  TEAM_TOOLS,
+} from './claudeCode/toolPolicy';
+import {
+  buildBedrockToolErrorGuidance,
+  detectResultChunkErrorFlags,
+  extractResultChunkErrorMessage,
+  isAuthenticationSummary,
+} from './claudeCode/resultChunkUtils';
+import { resolveClaudeAgentCliPath } from './claudeCode/cliPathResolver';
+import {
+  handleAskUserQuestionTool,
+  pollForAskUserQuestionResponse,
+  type PendingAskUserQuestionEntry,
+} from './claudeCode/askUserQuestion';
+import {
+  resolveImmediateToolDecision as resolveImmediateToolDecisionHelper,
+} from './claudeCode/immediateToolDecision';
+import {
+  handleToolPermissionFallback as handleToolPermissionFallbackHelper,
+  handleToolPermissionWithService as handleToolPermissionWithServiceHelper,
+} from './claudeCode/toolAuthorization';
 
 /**
  * SDK-native tools that are executed by the Claude Code SDK itself (not by Nimbalyst).
@@ -236,8 +266,17 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
     permissionsPath: string | undefined,
     isTeammateSession: boolean
   ): AgentToolHooks {
+    return this.createToolHooksService(workspacePath, sessionId, permissionsPath, isTeammateSession);
+  }
+
+  private createToolHooksService(
+    workspacePath: string,
+    sessionId: string | undefined,
+    permissionsPath: string | undefined,
+    isTeammateSession: boolean
+  ): AgentToolHooks {
     return new AgentToolHooks({
-      workspacePath,
+      workspacePath: workspacePath,
       sessionId,
       emit: this.emit.bind(this),
       logAgentMessage: this.logAgentMessage.bind(this),
@@ -253,34 +292,38 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
       getPendingToolPermissions: () => this.permissions.pendingToolPermissions,
       teammatePreToolHandler: async (toolName, toolInput, toolUseID, sessionId) =>
         this.teammateManager.handlePreToolUse(toolName, toolInput, toolUseID, sessionId),
-      isTeammateSession,
+      isTeammateSession: !!isTeammateSession,
       permissionsPath,
-      historyManager: {
-        createSnapshot: async (filePath: string, content: string, snapshotType: string, message: string, metadata?: any) => {
-          await historyManager.createSnapshot(filePath, content, snapshotType as any, message, metadata);
-        },
-        getPendingTags: async (filePath: string) => {
-          const tags = await historyManager.getPendingTags(filePath);
-          return tags.map(tag => ({
-            id: tag.id,
-            createdAt: tag.createdAt,
-            sessionId: tag.sessionId
-          }));
-        },
-        tagFile: async (filePath: string, tagId: string, content: string, metadata?: any) => {
-          await historyManager.createTag(
-            filePath,
-            tagId,
-            content,
-            metadata?.sessionId || 'unknown',
-            metadata?.toolUseId || ''
-          );
-        },
-        updateTagStatus: async (filePath: string, tagId: string, status: string) => {
-          await historyManager.updateTagStatus(filePath, tagId, status as any);
-        }
-      },
+      historyManager: this.createHistoryManagerAdapter(),
     });
+  }
+
+  private createHistoryManagerAdapter() {
+    return {
+      createSnapshot: async (filePath: string, content: string, snapshotType: string, message: string, metadata?: any) => {
+        await historyManager.createSnapshot(filePath, content, snapshotType as any, message, metadata);
+      },
+      getPendingTags: async (filePath: string) => {
+        const tags = await historyManager.getPendingTags(filePath);
+        return tags.map(tag => ({
+          id: tag.id,
+          createdAt: tag.createdAt,
+          sessionId: tag.sessionId
+        }));
+      },
+      tagFile: async (filePath: string, tagId: string, content: string, metadata?: any) => {
+        await historyManager.createTag(
+          filePath,
+          tagId,
+          content,
+          metadata?.sessionId || 'unknown',
+          metadata?.toolUseId || ''
+        );
+      },
+      updateTagStatus: async (filePath: string, tagId: string, status: string) => {
+        await historyManager.updateTagStatus(filePath, tagId, status as any);
+      }
+    };
   }
 
   // ExitPlanMode confirmation response type
@@ -291,16 +334,7 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
 
   // AskUserQuestion tool - stores pending question resolvers
   // When Claude calls AskUserQuestion, we block until the UI provides answers via IPC
-  private pendingAskUserQuestions: Map<string, {
-    resolve: (answers: Record<string, string>) => void;
-    reject: (error: Error) => void;
-    questions: Array<{
-      question: string;
-      header: string;
-      options: Array<{ label: string; description: string }>;
-      multiSelect: boolean;
-    }>;
-  }> = new Map();
+  private pendingAskUserQuestions: Map<string, PendingAskUserQuestionEntry> = new Map();
 
   // Shared MCP server port (injected from electron main process)
   // This server provides capture_editor_screenshot tool only.
@@ -584,102 +618,15 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
     // This reduces initial token usage for very large attachments
     const LARGE_ATTACHMENT_CHAR_THRESHOLD = 10000;
 
-    // Build content blocks for attachments (sent directly to Claude, not via file paths)
-    const imageContentBlocks: ImageBlockParam[] = [];
-    const documentContentBlocks: DocumentBlockParam[] = [];
-    // Track large text attachments that will be written to /tmp and referenced in the system message
-    const largeAttachmentFilePaths: { filename: string; filepath: string }[] = [];
-    // Debug logging - uncomment if needed for attachment troubleshooting
-    if (attachments && attachments.length > 0) {
-
-      for (const attachment of attachments) {
-        if (attachment.type === 'image' && attachment.filepath) {
-          try {
-            // Read image file
-            let imageData = await fs.promises.readFile(attachment.filepath);
-            let mimeType = attachment.mimeType || 'image/png';
-
-            // Compress if needed to fit within API limits (5MB base64)
-            if (ClaudeCodeProvider.imageCompressor) {
-              const compressed = await ClaudeCodeProvider.imageCompressor(imageData, mimeType);
-              imageData = Buffer.from(compressed.buffer);
-              mimeType = compressed.mimeType;
-            }
-
-            const base64Data = imageData.toString('base64');
-
-            // Determine media type for API
-            let mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' = 'image/png';
-            const normalizedMime = mimeType.toLowerCase();
-            if (normalizedMime === 'image/jpeg' || normalizedMime === 'image/jpg') {
-              mediaType = 'image/jpeg';
-            } else if (normalizedMime === 'image/gif') {
-              mediaType = 'image/gif';
-            } else if (normalizedMime === 'image/webp') {
-              mediaType = 'image/webp';
-            } else if (normalizedMime === 'image/png') {
-              mediaType = 'image/png';
-            }
-
-            imageContentBlocks.push({
-              type: 'image',
-              source: {
-                type: 'base64',
-                media_type: mediaType,
-                data: base64Data
-              }
-            });
-          } catch (error) {
-            console.error(`[CLAUDE-CODE] Failed to read image attachment:`, error);
-          }
-        } else if (attachment.type === 'pdf' && attachment.filepath) {
-          // Read PDF files and send as document content blocks with base64 encoding
-          try {
-            const pdfData = await fs.promises.readFile(attachment.filepath);
-            const base64Data = pdfData.toString('base64');
-            const filename = attachment.filename || path.basename(attachment.filepath);
-            documentContentBlocks.push({
-              type: 'document',
-              source: {
-                type: 'base64',
-                media_type: 'application/pdf',
-                data: base64Data
-              },
-              title: filename
-            } as DocumentBlockParam);
-          } catch (error) {
-            console.error(`[CLAUDE-CODE] Failed to read PDF attachment:`, error);
-          }
-        } else if (attachment.type === 'document' && attachment.filepath) {
-          // Read text/document files - small ones sent inline, large ones written to /tmp
-          try {
-            const textContent = await fs.promises.readFile(attachment.filepath, 'utf-8');
-            const filename = attachment.filename || path.basename(attachment.filepath);
-
-            if (textContent.length > LARGE_ATTACHMENT_CHAR_THRESHOLD) {
-              // Large attachment - write to /tmp and reference in system message
-              // Claude can use the Read tool to access the content when needed
-              const tmpFilePath = path.join('/tmp', `nimbalyst-attachment-${Date.now()}-${filename}`);
-              await fs.promises.writeFile(tmpFilePath, textContent, 'utf-8');
-              largeAttachmentFilePaths.push({ filename, filepath: tmpFilePath });
-            } else {
-              // Small attachment - send inline as document content block
-              documentContentBlocks.push({
-                type: 'document',
-                source: {
-                  type: 'text',
-                  media_type: 'text/plain',
-                  data: textContent
-                },
-                title: filename
-              });
-            }
-          } catch (error) {
-            console.error(`[CLAUDE-CODE] Failed to read document attachment:`, error);
-          }
-        }
-      }
-    }
+    const {
+      imageContentBlocks,
+      documentContentBlocks,
+      largeAttachmentFilePaths,
+    } = await prepareClaudeCodeAttachments({
+      attachments,
+      largeAttachmentCharThreshold: LARGE_ATTACHMENT_CHAR_THRESHOLD,
+      imageCompressor: ClaudeCodeProvider.imageCompressor || undefined,
+    });
 
     // Abort any existing request before starting a new one
     if (this.abortController) {
@@ -695,51 +642,12 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
 
     // Create tool hooks service for this turn
     // This service manages pre/post hooks, file tagging, and snapshot creation
-    this.toolHooksService = new AgentToolHooks({
-      workspacePath: workspacePath!,
+    this.toolHooksService = this.createToolHooksService(
+      workspacePath!,
       sessionId,
-      emit: this.emit.bind(this),
-      logAgentMessage: this.logAgentMessage.bind(this),
-      logSecurity: this.logSecurity.bind(this),
-      trustChecker: BaseAgentProvider.trustChecker || undefined,
-      patternChecker: ClaudeCodeProvider.claudeSettingsPatternChecker || undefined,
-      patternSaver: ClaudeCodeProvider.claudeSettingsPatternSaver || undefined,
-      extensionFileTypesLoader: ClaudeCodeProvider.extensionFileTypesLoader || undefined,
-      getCurrentMode: () => this.currentMode,
-      setCurrentMode: (mode) => { this.currentMode = mode; },
-      getPendingExitPlanModeConfirmations: () => this.pendingExitPlanModeConfirmations,
-      getSessionApprovedPatterns: () => this.permissions.sessionApprovedPatterns,
-      getPendingToolPermissions: () => this.permissions.pendingToolPermissions,
-      teammatePreToolHandler: async (toolName, toolInput, toolUseID, sessionId) =>
-        this.teammateManager.handlePreToolUse(toolName, toolInput, toolUseID, sessionId),
-      isTeammateSession: false,
       permissionsPath,
-      historyManager: {
-        createSnapshot: async (filePath: string, content: string, snapshotType: string, message: string, metadata?: any) => {
-          await historyManager.createSnapshot(filePath, content, snapshotType as any, message, metadata);
-        },
-        getPendingTags: async (filePath: string) => {
-          const tags = await historyManager.getPendingTags(filePath);
-          return tags.map(tag => ({
-            id: tag.id,
-            createdAt: tag.createdAt,
-            sessionId: tag.sessionId
-          }));
-        },
-        tagFile: async (filePath: string, tagId: string, content: string, metadata?: any) => {
-          await historyManager.createTag(
-            filePath,
-            tagId,
-            content,
-            metadata?.sessionId || 'unknown',
-            metadata?.toolUseId || ''
-          );
-        },
-        updateTagStatus: async (filePath: string, tagId: string, status: string) => {
-          await historyManager.updateTagStatus(filePath, tagId, status as any);
-        }
-      },
-    });
+      false
+    );
 
     // Clear edited files tracker for new turn
     this.toolHooksService.clearEditedFiles();
@@ -750,48 +658,18 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
       const isSlashCommand = message.trimStart().startsWith('/');
       const documentContextPrompt = (documentContext as any)?.documentContextPrompt;
       const editingInstructions = (documentContext as any)?.editingInstructions;
-
-      // Build user message addition from pre-built prompts
-      let userMessageAddition: string | null = null;
-      if (!isSlashCommand) {
-        const parts: string[] = [];
-
-        // Add document context prompt (file path, cursor, selection, content/diff, transitions)
-        if (documentContextPrompt) {
-          parts.push(documentContextPrompt);
-        }
-
-        // Add one-time editing instructions (only on first message with document open)
-        if (editingInstructions) {
-          parts.push(editingInstructions);
-        }
-
-        if (parts.length > 0) {
-          userMessageAddition = parts.join('\n\n');
-          message = `${message}\n\n<NIMBALYST_SYSTEM_MESSAGE>\n${userMessageAddition}\n</NIMBALYST_SYSTEM_MESSAGE>`;
-        }
-      }
+      const messageWithContext = buildMessageWithDocumentContext({
+        message,
+        isSlashCommand,
+        documentContextPrompt,
+        editingInstructions,
+      });
+      let userMessageAddition = messageWithContext.userMessageAddition;
+      message = messageWithContext.messageWithContext;
 
       // Add large attachment file paths to system message
       // These are text attachments over 10k chars that were written to /tmp
-      if (largeAttachmentFilePaths.length > 0) {
-        const attachmentSection = largeAttachmentFilePaths.map(
-          ({ filename, filepath }) => `- ${filename}: ${filepath}`
-        ).join('\n');
-
-        const attachmentInstructions = `<LARGE_ATTACHMENTS>\nThe following attached files are too large to include inline. Use the Read tool to access their contents:\n${attachmentSection}\n</LARGE_ATTACHMENTS>`;
-
-        if (message.includes('</NIMBALYST_SYSTEM_MESSAGE>')) {
-          // Insert before closing tag
-          message = message.replace(
-            '</NIMBALYST_SYSTEM_MESSAGE>',
-            `\n\n${attachmentInstructions}\n</NIMBALYST_SYSTEM_MESSAGE>`
-          );
-        } else {
-          // No existing system message - create one
-          message = `${message}\n\n<NIMBALYST_SYSTEM_MESSAGE>\n${attachmentInstructions}\n</NIMBALYST_SYSTEM_MESSAGE>`;
-        }
-      }
+      message = appendLargeAttachmentInstructions(message, largeAttachmentFilePaths);
 
       // Load env vars from ~/.claude/settings.json early so they're available for both
       // system prompt building (agent teams flag) and SDK environment setup
@@ -890,7 +768,7 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
 
       const options: any = {
         // Custom path takes priority over bundled CLI
-        pathToClaudeCodeExecutable: ClaudeCodeProvider.customClaudeCodePath || await this.findCliPath().catch(() => undefined),
+        pathToClaudeCodeExecutable: ClaudeCodeProvider.customClaudeCodePath || await resolveClaudeAgentCliPath().catch(() => undefined),
         // BREAKING CHANGE: Claude Agent SDK requires explicit system prompt preset
         systemPrompt: {
           type: 'preset',
@@ -966,12 +844,6 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
 
       // Apply tool restrictions based on session mode
       // Planning mode: restrict to read-only tools + Write/Edit/MultiEdit for markdown files
-      const DEFAULT_PLANNING_TOOLS = [
-        'Read', 'Write', 'Edit', 'MultiEdit', 'Glob', 'Grep', 'LS',
-        'WebFetch', 'WebSearch',
-        'TodoRead', 'Task', 'Agent',
-        'ExitPlanMode', 'EnterPlanMode'
-      ];
       // In planning mode, enforce read-only toolset
       // In agent mode, we do NOT set allowedTools so that tools flow through to canUseTool
       // where our permission system can prompt the user
@@ -1292,15 +1164,7 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
 
             // Determine if this chunk should be searchable (assistant text without tool content)
             // Only assistant messages with text content (no tool_use/tool_result) are searchable
-            let isSearchable = false;
-            if (typeof chunk === 'object' && chunk.type === 'assistant' && chunk.message?.content) {
-              const content = chunk.message.content;
-              if (Array.isArray(content)) {
-                const hasText = content.some((block: any) => block.type === 'text');
-                const hasTool = content.some((block: any) => block.type === 'tool_use' || block.type === 'tool_result');
-                isSearchable = hasText && !hasTool;
-              }
-            }
+            const isSearchable = isSearchableAssistantChunk(chunk);
 
             this.logAgentMessageNonBlocking(sessionId, 'claude-code', 'output', rawChunkJson, undefined, hideMessages, providerMessageId, isSearchable);
           }
@@ -1405,17 +1269,12 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
                     // MCP tools are handled by the SDK, but we need to log the tool_use for reconstruction
                     // The result will come later in a tool_result block (non-blocking for streaming)
                     if (sessionId) {
-                      this.logAgentMessageNonBlocking(sessionId, 'claude-code', 'output', JSON.stringify({
-                        type: 'assistant',
-                        message: {
-                          content: [{
-                            type: 'tool_use',
-                            id: toolId,
-                            name: toolName,
-                            input: toolArgs
-                          }]
-                        }
-                      }));
+                      this.logAgentMessageNonBlocking(
+                        sessionId,
+                        'claude-code',
+                        'output',
+                        buildToolUseMessage(toolId, toolName, toolArgs)
+                      );
                     }
                   } else if (isSdkNativeTool) {
                     // SDK executes these tools itself, result will come in a tool_result block
@@ -1463,30 +1322,24 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
                     // Log tool call and result to database in format that UI can reconstruct (non-blocking for streaming)
                     if (sessionId) {
                       // Log the tool_use block
-                      this.logAgentMessageNonBlocking(sessionId, 'claude-code', 'output', JSON.stringify({
-                        type: 'assistant',
-                        message: {
-                          content: [{
-                            type: 'tool_use',
-                            id: toolId,
-                            name: toolName || 'unknown',
-                            input: toolArgs
-                          }]
-                        }
-                      }), undefined, hideMessages);
+                      this.logAgentMessageNonBlocking(
+                        sessionId,
+                        'claude-code',
+                        'output',
+                        buildToolUseMessage(toolId, toolName || 'unknown', toolArgs),
+                        undefined,
+                        hideMessages
+                      );
 
                       // Log the tool_result block
-                      this.logAgentMessageNonBlocking(sessionId, 'claude-code', 'output', JSON.stringify({
-                        type: 'assistant',
-                        message: {
-                          content: [{
-                            type: 'tool_result',
-                            tool_use_id: toolId,
-                            content: executionResult,
-                            is_error: false
-                          }]
-                        }
-                      }), undefined, hideMessages);
+                      this.logAgentMessageNonBlocking(
+                        sessionId,
+                        'claude-code',
+                        'output',
+                        buildToolResultMessage(toolId, executionResult, false),
+                        undefined,
+                        hideMessages
+                      );
                     }
 
                     yield {
@@ -1509,37 +1362,13 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
                   // Find the corresponding tool call and update it with result
                   const toolCall = toolCallsById.get(toolResultId);
                   if (toolCall) {
-                    // Check if tool already has a result - if so, skip duplicate
-                    if (toolCall.result !== undefined) {
+                    const toolResultApplication = applyToolResultToToolCall(
+                      toolCall,
+                      toolResult,
+                      isError
+                    );
+                    if (toolResultApplication.isDuplicate) {
                       continue; // Skip this tool_result block
-                    }
-
-                    toolCall.result = toolResult;
-
-                    // Check if this is an error - either explicit is_error flag or error in content
-                    const hasErrorFlag = isError === true;
-                    const hasErrorContent = typeof toolResult === 'string' &&
-                      (toolResult.includes('<tool_use_error>') || toolResult.startsWith('Error:'));
-
-                    if (hasErrorFlag || hasErrorContent) {
-                      toolCall.isError = true;
-                    }
-
-                    // CRITICAL FIX: For Edit tools, ensure diff information is preserved in the result
-                    // The UI extraction function needs old_string/new_string to show red/green diffs
-                    // The SDK returns a simple success message, but we need to preserve the original arguments
-                    if (toolCall.name === 'Edit' && toolCall.arguments && !toolCall.isError) {
-                      const args = toolCall.arguments as any;
-                      if (args.old_string !== undefined || args.new_string !== undefined) {
-                        // Ensure result is an object that includes both the success message and diff fields
-                        const resultMessage = typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult);
-                        toolCall.result = {
-                          message: resultMessage,
-                          file_path: args.file_path,
-                          old_string: args.old_string,
-                          new_string: args.new_string
-                        };
-                      }
                     }
 
                     // Teammate side-effects (shutdown detection, team context tracking)
@@ -1548,17 +1377,14 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
                     // Log ONLY the tool_result block to database (non-blocking for streaming)
                     // The tool_use block was already logged by raw chunk logging at line 264
                     if (sessionId) {
-                      this.logAgentMessageNonBlocking(sessionId, 'claude-code', 'output', JSON.stringify({
-                        type: 'assistant',
-                        message: {
-                          content: [{
-                            type: 'tool_result',
-                            tool_use_id: toolCall.id,
-                            content: toolCall.result,
-                            is_error: toolCall.isError || false
-                          }]
-                        }
-                      }), undefined, hideMessages);
+                      this.logAgentMessageNonBlocking(
+                        sessionId,
+                        'claude-code',
+                        'output',
+                        buildToolResultMessage(toolCall.id, toolCall.result, toolCall.isError || false),
+                        undefined,
+                        hideMessages
+                      );
                     }
 
                     // Re-emit the tool call with the result
@@ -1595,17 +1421,12 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
               // The result will come later in a tool_result block (non-blocking for streaming)
               if (sessionId) {
                 const mcpToolId = toolChunk.id || `tool-${toolCallCount}`;
-                this.logAgentMessageNonBlocking(sessionId, 'claude-code', 'output', JSON.stringify({
-                  type: 'assistant',
-                  message: {
-                    content: [{
-                      type: 'tool_use',
-                      id: mcpToolId,
-                      name: toolName,
-                      input: toolArgs
-                    }]
-                  }
-                }));
+                this.logAgentMessageNonBlocking(
+                  sessionId,
+                  'claude-code',
+                  'output',
+                  buildToolUseMessage(mcpToolId, toolName, toolArgs)
+                );
               }
             } else if (isSdkNativeTool) {
               // SDK executes these tools itself, we just observe them
@@ -1654,30 +1475,24 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
               // Log tool call and result to database in format that UI can reconstruct (non-blocking for streaming)
               if (sessionId) {
                 // Log the tool_use block
-                this.logAgentMessageNonBlocking(sessionId, 'claude-code', 'output', JSON.stringify({
-                  type: 'assistant',
-                  message: {
-                    content: [{
-                      type: 'tool_use',
-                      id: toolId,
-                      name: toolName,
-                      input: toolArgs
-                    }]
-                  }
-                }), undefined, hideMessages);
+                this.logAgentMessageNonBlocking(
+                  sessionId,
+                  'claude-code',
+                  'output',
+                  buildToolUseMessage(toolId, toolName, toolArgs),
+                  undefined,
+                  hideMessages
+                );
 
                 // Log the tool_result block
-                this.logAgentMessageNonBlocking(sessionId, 'claude-code', 'output', JSON.stringify({
-                  type: 'assistant',
-                  message: {
-                    content: [{
-                      type: 'tool_result',
-                      tool_use_id: toolId,
-                      content: executionResult,
-                      is_error: false
-                    }]
-                  }
-                }), undefined, hideMessages);
+                this.logAgentMessageNonBlocking(
+                  sessionId,
+                  'claude-code',
+                  'output',
+                  buildToolResultMessage(toolId, executionResult, false),
+                  undefined,
+                  hideMessages
+                );
               }
 
               yield {
@@ -1709,47 +1524,8 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
             if (chunk.is_error) {
               console.error('[CLAUDE-CODE] Result error:', chunk);
 
-              // Extract the actual error message from the result field
-              let errorMessage = chunk.result || chunk.error || chunk.message || chunk.error_message;
-
-              // If we have a result string, use it directly
-              if (typeof errorMessage === 'string') {
-                // Check if it contains API Error
-                if (errorMessage.includes('API Error:')) {
-                  // Extract just the relevant part
-                  const apiErrorMatch = errorMessage.match(/API Error: \d+ (.*?)(?:\s*·|$)/);
-                  if (apiErrorMatch) {
-                    try {
-                      const errorJson = JSON.parse(apiErrorMatch[1]);
-                      if (errorJson.error?.message) {
-                        errorMessage = errorJson.error.message;
-                      }
-                    } catch {
-                      // If parsing fails, use the original message
-                    }
-                  }
-                }
-              } else {
-                // Fallback to JSON stringify
-                errorMessage = JSON.stringify(chunk, null, 2);
-              }
-
-              // Check if this is an authentication error
-              const lowerError = (typeof errorMessage === 'string' ? errorMessage : '').toLowerCase();
-              const isAuthError = (
-                lowerError.includes('invalid api key') ||
-                lowerError.includes('authentication') ||
-                lowerError.includes('unauthorized') ||
-                lowerError.includes('401')
-              );
-
-              // Check if this is an expired/missing session error
-              // This happens when trying to resume an old session that Claude Code SDK has purged
-              const isExpiredSessionError = (
-                lowerError.includes('no conversation found') ||
-                lowerError.includes('session not found') ||
-                lowerError.includes('conversation not found')
-              );
+              let errorMessage = extractResultChunkErrorMessage(chunk);
+              const { isAuthError, isExpiredSessionError, isServerError } = detectResultChunkErrorFlags(errorMessage);
 
               // If it's an expired session error, clear the stored session ID and provide guidance
               if (isExpiredSessionError && sessionId) {
@@ -1758,13 +1534,6 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
                 // Provide user-friendly error message
                 errorMessage = 'Your previous conversation session has expired and can no longer be resumed. Please send a new message to start a fresh conversation - your chat history is still visible but the AI will start with a clean context.';
               }
-
-              // Check if this is a 500/internal server error (Claude may be down)
-              const isServerError = (
-                lowerError.includes('internal server error') ||
-                lowerError.includes('500') ||
-                (typeof errorMessage === 'string' && errorMessage.includes('"type":"api_error"'))
-              );
 
               // Check if this is a Bedrock tool search incompatibility error
               const isBedrockToolError = isBedrockToolSearchError(errorMessage);
@@ -1776,21 +1545,7 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
 
               // If it's a Bedrock tool error, provide helpful guidance
               if (isBedrockToolError) {
-                const settingsShortcut = process.platform === 'darwin' ? 'Cmd+,' : 'Ctrl+,';
-                errorMessage = [
-                  `MCP Tool Error: ${errorMessage}`,
-                  '',
-                  'This error occurs because some alternative AI providers don\'t fully support deferred tool loading (tool search).',
-                  '',
-                  'To fix this:',
-                  `1. Open Settings (${settingsShortcut})`,
-                  '2. Go to "Claude Code" panel',
-                  '3. In the "Environment Variables" section, add:',
-                  '   ENABLE_TOOL_SEARCH = false',
-                  '4. Save and retry your request',
-                  '',
-                  'This will load all MCP tools upfront instead of deferring them.'
-                ].join('\n');
+                errorMessage = buildBedrockToolErrorGuidance(errorMessage);
               }
 
               // Log error to database (as 'output' since errors are provider responses)
@@ -2010,37 +1765,13 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
                   // Find the corresponding tool call and update it with result
                   const toolCall = toolCallsById.get(toolResultId);
                   if (toolCall) {
-                    // Check if tool already has a result - if so, skip duplicate
-                    if (toolCall.result !== undefined) {
+                    const toolResultApplication = applyToolResultToToolCall(
+                      toolCall,
+                      toolResult,
+                      isError
+                    );
+                    if (toolResultApplication.isDuplicate) {
                       continue; // Skip this tool_result
-                    }
-
-                    toolCall.result = toolResult;
-
-                    // Check if this is an error - either explicit is_error flag or error in content
-                    const hasErrorFlag = isError === true;
-                    const hasErrorContent = typeof toolResult === 'string' &&
-                      (toolResult.includes('<tool_use_error>') || toolResult.startsWith('Error:'));
-
-                    if (hasErrorFlag || hasErrorContent) {
-                      toolCall.isError = true;
-                    }
-
-                    // CRITICAL FIX: For Edit tools, ensure diff information is preserved in the result
-                    // The UI extraction function needs old_string/new_string to show red/green diffs
-                    // The SDK returns a simple success message, but we need to preserve the original arguments
-                    if (toolCall.name === 'Edit' && toolCall.arguments && !toolCall.isError) {
-                      const args = toolCall.arguments as any;
-                      if (args.old_string !== undefined || args.new_string !== undefined) {
-                        // Ensure result is an object that includes both the success message and diff fields
-                        const resultMessage = typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult);
-                        toolCall.result = {
-                          message: resultMessage,
-                          file_path: args.file_path,
-                          old_string: args.old_string,
-                          new_string: args.new_string
-                        };
-                      }
                     }
 
                     // Check if this tool result completes a tracked sub-agent task.
@@ -2064,17 +1795,14 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
                     // Log ONLY the tool_result block to database (non-blocking for streaming)
                     // The tool_use block was already logged when the tool was first called
                     if (sessionId) {
-                      this.logAgentMessageNonBlocking(sessionId, 'claude-code', 'output', JSON.stringify({
-                        type: 'assistant',
-                        message: {
-                          content: [{
-                            type: 'tool_result',
-                            tool_use_id: toolCall.id,
-                            content: toolCall.result,
-                            is_error: toolCall.isError || false
-                          }]
-                        }
-                      }), undefined, hideMessages);
+                      this.logAgentMessageNonBlocking(
+                        sessionId,
+                        'claude-code',
+                        'output',
+                        buildToolResultMessage(toolCall.id, toolCall.result, toolCall.isError || false),
+                        undefined,
+                        hideMessages
+                      );
                     }
 
                     // Re-emit the tool call with the result
@@ -2128,26 +1856,7 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
             // Handle summary messages from Claude Code
             const summary = chunk.summary || '';
 
-            // Check if this is an authentication-related error summary
-            // IMPORTANT: Only match specific authentication error patterns, NOT generic words like 'error' or 'failed'
-            // Those broad patterns were causing false positives (e.g., "I fixed the error" would trigger login widget)
-            const lowerSummary = summary.toLowerCase();
-            const isAuthenticationError = (
-              lowerSummary.includes('invalid api key') ||
-              lowerSummary.includes('please run /login') ||
-              // Match "401 unauthorized" or "unauthorized error" but not just "unauthorized" alone
-              lowerSummary.includes('401 unauthorized') ||
-              lowerSummary.includes('unauthorized error') ||
-              lowerSummary.includes('oauth token has expired') ||
-              lowerSummary.includes('token has expired') ||
-              lowerSummary.includes('expired token') ||
-              lowerSummary.includes('please obtain a new token') ||
-              lowerSummary.includes('refresh your existing token') ||
-              lowerSummary.includes('authentication_error') ||
-              lowerSummary.includes('authentication required') ||
-              // Match "/login" only at word boundary (not in URLs like "example.com/login-page")
-              /\b\/login\b/.test(lowerSummary)
-            );
+            const isAuthenticationError = isAuthenticationSummary(summary);
 
             if (isAuthenticationError) {
               console.error('[CLAUDE-CODE] Authentication error detected in summary:', summary);
@@ -2565,86 +2274,7 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
       this.interruptResolve = null;
       // Note: markMessagesAsHidden is reset at the START of sendMessage to prevent race conditions
 
-      // If teammate messages are still queued (e.g. streamInput failed for a drained
-      // message), re-trigger delivery now that leadQuery is null. This mirrors the
-      // "lead is idle" path in interruptWithMessage.
-      if (this.teammateManager.hasPendingTeammateMessages()) {
-        // Drain ALL pending messages into a single formatted prompt
-        const messages: Array<{teammateName: string; content: string; summary: string}> = [];
-        while (this.teammateManager.hasPendingTeammateMessages()) {
-          const msg = this.teammateManager.drainNextTeammateMessage();
-          if (msg) messages.push(msg);
-          else break;
-        }
-        if (messages.length > 0) {
-          const formatted = messages
-            .map(msg => `[Teammate message from "${msg.teammateName}"]\n\n${msg.content}`)
-            .join('\n\n---\n\n');
-          const summaries = messages.map(msg => msg.summary).join(', ');
-          console.log(`[CLAUDE-CODE] Re-triggering ${messages.length} teammate message(s) after sendMessage exit: "${summaries}"`);
-          this.teammateIdleMessagePending = true;
-          this.emit('teammate:messageWhileIdle', {
-            sessionId: this.teammateManager.lastUsedSessionId,
-            message: formatted,
-          });
-        }
-      } else if (this.transportDied) {
-        // Transport died and no pending messages to re-trigger.
-        // Abandon idle teammates since they can't be resumed.
-        this.teammateManager.abandonIdleTeammates(sessionId);
-      } else if (this.teammateManager.hasActiveTeammates() && !hideMessages) {
-        // Skip for hidden commands (e.g., /context auto-fetch) — those are internal
-        // bookkeeping calls that shouldn't drive teammate lifecycle.
-        if (this.teammateManager.hasOnlyBackgroundAgents()) {
-          // Only background agents (sub-agents) remain — no idle teammates to manage.
-          // Don't trigger a continuation; the lead can't do anything useful for sub-agents.
-          // The session stays deferred; teammates:allCompleted will fire when they finish
-          // and deliverMessageToLead will restart the lead if there are results to deliver.
-          console.log(`[CLAUDE-CODE] Lead turn ended with ${this.teammateManager.getActiveAgentCount()} background agent(s) still running, waiting for completion`);
-          this.continuationCount = 0;
-        } else if (this.teammateManager.hasPendingTeammateMessages()) {
-          // Messages arrived while we were in the finally block (race between
-          // streaming loop exit and interruptWithMessage). Drain and deliver them
-          // instead of triggering a continuation or abandoning.
-          const messages: Array<{teammateName: string; content: string; summary: string}> = [];
-          while (this.teammateManager.hasPendingTeammateMessages()) {
-            const msg = this.teammateManager.drainNextTeammateMessage();
-            if (msg) messages.push(msg);
-            else break;
-          }
-          if (messages.length > 0) {
-            const formatted = messages
-              .map(msg => `[Teammate message from "${msg.teammateName}"]\n\n${msg.content}`)
-              .join('\n\n---\n\n');
-            const summaries = messages.map(msg => msg.summary).join(', ');
-            console.log(`[CLAUDE-CODE] Finally block found ${messages.length} pending teammate message(s), delivering: "${summaries}"`);
-            this.continuationCount = 0;
-            this.teammateIdleMessagePending = true;
-            this.emit('teammate:messageWhileIdle', {
-              sessionId: this.teammateManager.lastUsedSessionId,
-              message: formatted,
-            });
-          }
-        } else if (this.continuationCount < ClaudeCodeProvider.MAX_CONTINUATIONS) {
-          // The lead's turn ended naturally but idle teammates exist that need managing.
-          // Trigger a continuation so the lead gets another turn.
-          // Guard: continuationCount prevents infinite loops if the lead's
-          // continuation turns keep ending without resolving agents.
-          console.log(`[CLAUDE-CODE] Lead turn ended with active agents, triggering continuation (${this.continuationCount + 1}/${ClaudeCodeProvider.MAX_CONTINUATIONS})`);
-          this.continuationCount++;
-          this.teammateIdleMessagePending = true;
-          this.emit('teammate:messageWhileIdle', {
-            sessionId: this.teammateManager.lastUsedSessionId,
-            message: '[System: Your previous turn ended but you still have active agents. Wait for their results, or take other actions as needed.]',
-          });
-        } else {
-          // Max continuations exhausted and the lead still didn't resolve teammates.
-          // Abandon idle teammates to unstick the session.
-          console.log(`[CLAUDE-CODE] Lead exhausted ${ClaudeCodeProvider.MAX_CONTINUATIONS} continuations without resolving teammates, abandoning idle teammates`);
-          this.teammateManager.abandonIdleTeammates(sessionId);
-          this.continuationCount = 0;
-        }
-      }
+      this.handlePostLeadTurnTeammateState(sessionId, hideMessages);
 
       this.transportDied = false;
     }
@@ -2698,25 +2328,11 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
         return;
       }
 
-      // Drain ALL pending messages into a single formatted prompt
-      const messages: Array<{teammateName: string; content: string; summary: string; teammateAgentId: string}> = [];
-      while (this.teammateManager.hasPendingTeammateMessages()) {
-        const msg = this.teammateManager.drainNextTeammateMessage();
-        if (msg) messages.push(msg);
-        else break;
-      }
-      if (messages.length === 0) return;
+      const pendingMessageBatch = this.drainAndFormatPendingTeammateMessages();
+      if (!pendingMessageBatch) return;
 
-      const formatted = messages
-        .map(msg => `[Teammate message from "${msg.teammateName}"]\n\n${msg.content}`)
-        .join('\n\n---\n\n');
-      const summaries = messages.map(msg => msg.summary).join(', ');
-      console.log(`[CLAUDE-CODE] interruptWithMessage: lead is idle, triggering sendMessage for ${messages.length} message(s): "${summaries}"`);
-      this.teammateIdleMessagePending = true;
-      this.emit('teammate:messageWhileIdle', {
-        sessionId: this.teammateManager.lastUsedSessionId,
-        message: formatted,
-      });
+      console.log(`[CLAUDE-CODE] interruptWithMessage: lead is idle, triggering sendMessage for ${pendingMessageBatch.count} message(s): "${pendingMessageBatch.summaries}"`);
+      this.emitTeammateMessageWhileIdle(pendingMessageBatch.formattedMessage);
       return;
     }
 
@@ -2740,6 +2356,90 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
     } catch (err) {
       console.warn('[CLAUDE-CODE] interruptWithMessage: interrupt() failed (transport may be closed):', err);
     }
+  }
+
+  private handlePostLeadTurnTeammateState(sessionId: string | undefined, hideMessages: boolean): void {
+    // If teammate messages are still queued (e.g. streamInput failed for a drained
+    // message), re-trigger delivery now that leadQuery is null. This mirrors the
+    // "lead is idle" path in interruptWithMessage.
+    if (this.teammateManager.hasPendingTeammateMessages()) {
+      const pendingMessageBatch = this.drainAndFormatPendingTeammateMessages();
+      if (pendingMessageBatch) {
+        console.log(`[CLAUDE-CODE] Re-triggering ${pendingMessageBatch.count} teammate message(s) after sendMessage exit: "${pendingMessageBatch.summaries}"`);
+        this.emitTeammateMessageWhileIdle(pendingMessageBatch.formattedMessage);
+      }
+    } else if (this.transportDied) {
+      // Transport died and no pending messages to re-trigger.
+      // Abandon idle teammates since they can't be resumed.
+      this.teammateManager.abandonIdleTeammates(sessionId);
+    } else if (this.teammateManager.hasActiveTeammates() && !hideMessages) {
+      // Skip for hidden commands (e.g., /context auto-fetch) — those are internal
+      // bookkeeping calls that shouldn't drive teammate lifecycle.
+      if (this.teammateManager.hasOnlyBackgroundAgents()) {
+        // Only background agents (sub-agents) remain — no idle teammates to manage.
+        // Don't trigger a continuation; the lead can't do anything useful for sub-agents.
+        // The session stays deferred; teammates:allCompleted will fire when they finish
+        // and deliverMessageToLead will restart the lead if there are results to deliver.
+        console.log(`[CLAUDE-CODE] Lead turn ended with ${this.teammateManager.getActiveAgentCount()} background agent(s) still running, waiting for completion`);
+        this.continuationCount = 0;
+      } else if (this.teammateManager.hasPendingTeammateMessages()) {
+        // Messages arrived while we were in the finally block (race between
+        // streaming loop exit and interruptWithMessage). Drain and deliver them
+        // instead of triggering a continuation or abandoning.
+        const pendingMessageBatch = this.drainAndFormatPendingTeammateMessages();
+        if (pendingMessageBatch) {
+          console.log(`[CLAUDE-CODE] Finally block found ${pendingMessageBatch.count} pending teammate message(s), delivering: "${pendingMessageBatch.summaries}"`);
+          this.continuationCount = 0;
+          this.emitTeammateMessageWhileIdle(pendingMessageBatch.formattedMessage);
+        }
+      } else if (this.continuationCount < ClaudeCodeProvider.MAX_CONTINUATIONS) {
+        // The lead's turn ended naturally but idle teammates exist that need managing.
+        // Trigger a continuation so the lead gets another turn.
+        // Guard: continuationCount prevents infinite loops if the lead's
+        // continuation turns keep ending without resolving agents.
+        console.log(`[CLAUDE-CODE] Lead turn ended with active agents, triggering continuation (${this.continuationCount + 1}/${ClaudeCodeProvider.MAX_CONTINUATIONS})`);
+        this.continuationCount++;
+        this.emitTeammateMessageWhileIdle('[System: Your previous turn ended but you still have active agents. Wait for their results, or take other actions as needed.]');
+      } else {
+        // Max continuations exhausted and the lead still didn't resolve teammates.
+        // Abandon idle teammates to unstick the session.
+        console.log(`[CLAUDE-CODE] Lead exhausted ${ClaudeCodeProvider.MAX_CONTINUATIONS} continuations without resolving teammates, abandoning idle teammates`);
+        this.teammateManager.abandonIdleTeammates(sessionId);
+        this.continuationCount = 0;
+      }
+    }
+  }
+
+  private drainAndFormatPendingTeammateMessages(): { formattedMessage: string; summaries: string; count: number } | null {
+    const pendingMessages: TeammateToLeadMessage[] = [];
+    while (this.teammateManager.hasPendingTeammateMessages()) {
+      const message = this.teammateManager.drainNextTeammateMessage();
+      if (message) {
+        pendingMessages.push(message);
+      } else {
+        break;
+      }
+    }
+
+    if (pendingMessages.length === 0) {
+      return null;
+    }
+
+    return {
+      formattedMessage: pendingMessages
+        .map(message => `[Teammate message from "${message.teammateName}"]\n\n${message.content}`)
+        .join('\n\n---\n\n'),
+      summaries: pendingMessages.map(message => message.summary).join(', '),
+      count: pendingMessages.length,
+    };
+  }
+
+  private emitTeammateMessageWhileIdle(message: string): void {
+    this.teammateIdleMessagePending = true;
+    this.emit('teammate:messageWhileIdle', {
+      sessionId: this.teammateManager.lastUsedSessionId,
+      message,
+    });
   }
 
   /**
@@ -3262,65 +2962,33 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
     questionId: string,
     signal: AbortSignal
   ): Promise<void> {
-    const pollInterval = 500; // ms
-    const maxPollTime = 10 * 60 * 1000; // 10 minutes max
-    const startTime = Date.now();
-
-    while (!signal.aborted && Date.now() - startTime < maxPollTime) {
-      // Check if request was already resolved (e.g., via IPC)
-      if (!this.pendingAskUserQuestions.has(questionId)) {
-        return; // Already resolved, stop polling
+    return pollForAskUserQuestionResponse(
+      {
+        pendingAskUserQuestions: this.pendingAskUserQuestions,
+        listRecentMessages: async (resolvedSessionId, limit) =>
+          AgentMessagesRepository.list(resolvedSessionId, { limit }),
+        logTimeout: (resolvedQuestionId) =>
+          this.logSecurity('[pollForAskUserQuestionResponse] Polling timed out:', { questionId: resolvedQuestionId }),
+        logResolved: (resolvedQuestionId, answersCount, respondedBy) =>
+          this.logSecurity('[pollForAskUserQuestionResponse] Found response message:', {
+            questionId: resolvedQuestionId,
+            answersCount,
+            respondedBy
+          }),
+        logCancelled: (resolvedQuestionId, respondedBy) =>
+          this.logSecurity('[pollForAskUserQuestionResponse] Question cancelled:', {
+            questionId: resolvedQuestionId,
+            respondedBy
+          }),
+        logError: (error) =>
+          console.error('[CLAUDE-CODE] Error polling for AskUserQuestion response:', error),
+      },
+      {
+        sessionId,
+        questionId,
+        signal,
       }
-
-      try {
-        // Get recent messages for this session
-        const messages = await AgentMessagesRepository.list(sessionId, { limit: 50 });
-
-        // Look for an ask_user_question_response that matches our questionId
-        for (const msg of messages) {
-          try {
-            const content = JSON.parse(msg.content);
-            if (content.type === 'ask_user_question_response' && content.questionId === questionId) {
-              // Found a response
-              const response: AskUserQuestionResponseContent = content;
-              const pending = this.pendingAskUserQuestions.get(questionId);
-              if (pending) {
-                if (response.cancelled) {
-                  // User cancelled - reject the promise
-                  pending.reject(new Error('User cancelled the question'));
-                  this.pendingAskUserQuestions.delete(questionId);
-                  this.logSecurity('[pollForAskUserQuestionResponse] Question cancelled:', {
-                    questionId,
-                    respondedBy: response.respondedBy
-                  });
-                } else {
-                  // Normal response - resolve with answers
-                  pending.resolve(response.answers);
-                  this.pendingAskUserQuestions.delete(questionId);
-                  this.logSecurity('[pollForAskUserQuestionResponse] Found response message:', {
-                    questionId,
-                    answersCount: Object.keys(response.answers).length,
-                    respondedBy: response.respondedBy
-                  });
-                }
-              }
-              return;
-            }
-          } catch {
-            // Not valid JSON, skip
-          }
-        }
-      } catch (error) {
-        // Log but continue polling
-        console.error('[CLAUDE-CODE] Error polling for AskUserQuestion response:', error);
-      }
-
-      // Wait before polling again
-      await new Promise(resolve => setTimeout(resolve, pollInterval));
-    }
-
-    // Timeout - don't reject, let IPC path handle it or let it stay pending
-    this.logSecurity('[pollForAskUserQuestionResponse] Polling timed out:', { questionId });
+    );
   }
 
 
@@ -3353,97 +3021,15 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
       //   permissionsPath: permissionsPath?.slice(-30),
       // });
 
-      // Internal Nimbalyst MCP tools that should always be allowed without permission prompts.
-      // These are either read-only, display-only, or interactive widgets where the user
-      // confirms/denies the action within the widget itself (e.g., commit proposal).
-      const internalMcpTools = [
-        'mcp__nimbalyst-session-naming__update_session_meta',
-        'mcp__nimbalyst-mcp__capture_editor_screenshot',
-        'mcp__nimbalyst-mcp__display_to_user',
-        'mcp__nimbalyst-mcp__voice_agent_speak',
-        'mcp__nimbalyst-mcp__voice_agent_stop',
-        'mcp__nimbalyst-mcp__get_session_edited_files',
-        'mcp__nimbalyst-mcp__developer_git_commit_proposal',
-        'mcp__nimbalyst-mcp__developer_git_log',
-        'mcp__nimbalyst-session-context__get_session_summary',
-        'mcp__nimbalyst-session-context__get_workstream_overview',
-        'mcp__nimbalyst-session-context__list_recent_sessions',
-        'mcp__nimbalyst-session-context__get_workstream_edited_files',
-      ];
-
-      if (internalMcpTools.includes(toolName)) {
-        // this.logSecurity('[canUseTool] Auto-allowing internal MCP tool:', { toolName });
-        return { behavior: 'allow', updatedInput: input };
-      }
-
-      // Handle AskUserQuestion separately - it's about getting user input, not permission
-      if (toolName === 'AskUserQuestion') {
-        return this.handleAskUserQuestion(sessionId, input, options, options.toolUseID);
-      }
-
-      // ExitPlanMode is handled by our PreToolUse hook with a custom widget.
-      // Auto-allow here to prevent the SDK from showing a generic permission dialog
-      // if our hook times out or the SDK falls back to canUseTool.
-      if (toolName === 'ExitPlanMode') {
-        return { behavior: 'allow', updatedInput: input };
-      }
-
-      // Agent Teams tools should always be allowed without prompts
-      // These are SDK-native tools for team coordination and task management
-      const teamTools = ['SendMessage', 'TaskCreate', 'TaskList', 'TaskUpdate', 'TaskGet', 'TeamCreate', 'TeamDelete', 'TeammateTool', 'TodoRead', 'TodoWrite'];
-      if (teamTools.includes(toolName)) {
-        if (toolName === 'TeamDelete') {
-          const hasExplicitTeam =
-            typeof input?.team_name === 'string' && input.team_name.trim().length > 0;
-
-          // TeamDelete can be called without args and relies on ambient team context.
-          // Rehydrate context and inject team_name when available to avoid no-op deletes.
-          if (!hasExplicitTeam) {
-            const inferredTeam = await this.teammateManager.resolveTeamContext(sessionId);
-            if (inferredTeam) {
-              return {
-                behavior: 'allow',
-                updatedInput: {
-                  ...input,
-                  team_name: inferredTeam,
-                }
-              };
-            }
-          }
-        }
-
-        // this.logSecurity('[canUseTool] Auto-allowing team tool:', { toolName });
-        return { behavior: 'allow', updatedInput: input };
-      }
-
-      // Check workspace trust before allowing any tools
-      // Use permissionsPath (parent project for worktrees) for trust checks
-      if (pathForTrust && BaseAgentProvider.trustChecker) {
-        const trustStatus = BaseAgentProvider.trustChecker(pathForTrust);
-        if (!trustStatus.trusted) {
-          this.logSecurity('[canUseTool] Workspace not trusted, denying tool:', { toolName });
-          return {
-            behavior: 'deny',
-            message: 'Workspace is not trusted. Please trust the workspace to use AI tools.'
-          };
-        }
-
-        // Bypass-all mode: auto-approve everything without prompting
-        // This is dangerous and should only be used for testing or trusted environments
-        if (trustStatus.mode === 'bypass-all') {
-          // this.logSecurity('[canUseTool] Bypass-all mode, auto-approving:', { toolName });
-          return { behavior: 'allow', updatedInput: input };
-        }
-
-        // Allow-all mode: auto-approve file edit operations without prompting
-        // Bash commands and web requests still require approval
-        if (trustStatus.mode === 'allow-all') {
-          const fileEditTools = ['Edit', 'Write', 'MultiEdit', 'Read', 'Glob', 'Grep', 'LS', 'NotebookEdit'];
-          if (fileEditTools.includes(toolName)) {
-            this.logSecurity('[canUseTool] Allow-all mode, auto-approving file tool:', { toolName });
-            return { behavior: 'allow', updatedInput: input };
-          }
-        }
+      const immediateDecision = await this.resolveImmediateToolDecision(
+        toolName,
+        input,
+        options,
+        sessionId,
+        pathForTrust
+      );
+      if (immediateDecision) {
+        return immediateDecision;
       }
 
       // The SDK has already evaluated settings.json rules.
@@ -3451,243 +3037,105 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
 
       // Use ToolPermissionService if available, otherwise fall back to inline logic
       if (this.permissionService && sessionId && workspacePath) {
-        try {
-          const requestId = `tool-${sessionId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-          const pattern = generateToolPattern(toolName, input);
-          const toolDescription = buildToolDescription(toolName, input);
-          const isDestructive = ['Write', 'Edit', 'MultiEdit', 'Bash'].includes(toolName);
-          const patternDisplay = getPatternDisplayName(pattern);
-
-          this.logSecurity('[canUseTool] Requesting permission via ToolPermissionService:', {
-            toolName,
-            pattern,
-            requestId,
-          });
-
-          // Log as nimbalyst_tool_use for UI widget rendering
-          await this.logAgentMessage(
-            sessionId,
-            'claude-code',
-            'output',
-            JSON.stringify({
-              type: 'nimbalyst_tool_use',
-              id: requestId,
-              name: 'ToolPermission',
-              input: {
-                requestId,
-                toolName,
-                rawCommand: toolName === 'Bash' ? input?.command || '' : toolDescription,
-                pattern,
-                patternDisplayName: patternDisplay,
-                isDestructive,
-                warnings: [],
-                workspacePath,
-                ...(teammateName && { teammateName }),
-              }
-            })
-          );
-
-          // Request permission via service
-          const response = await this.permissionService.requestToolPermission({
-            requestId,
-            sessionId,
-            workspacePath,
-            permissionsPath: permissionsPath || workspacePath,
-            toolName,
-            toolInput: input,
-            pattern,
-            patternDisplayName: patternDisplay,
-            toolDescription,
-            isDestructive,
-            warnings: [],
-            signal: options.signal,
-            teammateName,
-          });
-
-          if (response.decision === 'allow') {
-            return { behavior: 'allow', updatedInput: input };
-          } else {
-            return {
-              behavior: 'deny',
-              message: 'Tool call denied by user'
-            };
-          }
-        } catch (error) {
-          this.logSecurity('[canUseTool] Permission request failed:', {
-            toolName,
-            error: error instanceof Error ? error.message : 'Unknown error',
-          });
-          return {
-            behavior: 'deny',
-            message: error instanceof Error ? error.message : 'Permission request cancelled'
-          };
-        }
-      }
-
-      // Fallback: inline permission logic (for tests or when service not available)
-      // This path is kept for backwards compatibility and testing
-      const pattern = generateToolPattern(toolName, input);
-      if (this.permissions.sessionApprovedPatterns.has(pattern)) {
-        this.logSecurity('[canUseTool] Pattern already approved this session:', { pattern, toolName });
-        return { behavior: 'allow', updatedInput: input };
-      }
-      if (toolName === 'WebFetch' && this.permissions.sessionApprovedPatterns.has('WebFetch')) {
-        this.logSecurity('[canUseTool] WebFetch wildcard approved this session:', { toolName });
-        return { behavior: 'allow', updatedInput: input };
-      }
-
-      const requestId = `tool-${sessionId || 'unknown'}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      const toolDescription = buildToolDescription(toolName, input);
-      const isDestructive = ['Write', 'Edit', 'MultiEdit', 'Bash'].includes(toolName);
-      const rawCommand = toolName === 'Bash' ? input?.command || '' : toolDescription;
-      const patternDisplay = getPatternDisplayName(pattern);
-
-      this.logSecurity('[canUseTool] Showing permission prompt (fallback):', {
-        toolName,
-        toolDescription: toolDescription.slice(0, 100),
-        requestId,
-      });
-
-      if (sessionId) {
-        await this.logAgentMessage(
+        return this.handleToolPermissionWithService(
+          toolName,
+          input,
+          options,
           sessionId,
-          'claude-code',
-          'output',
-          JSON.stringify({
-            type: 'nimbalyst_tool_use',
-            id: requestId,
-            name: 'ToolPermission',
-            input: {
-              requestId,
-              toolName,
-              rawCommand,
-              pattern,
-              patternDisplayName: patternDisplay,
-              isDestructive,
-              warnings: [],
-              workspacePath,
-            }
-          })
+          workspacePath,
+          permissionsPath,
+          teammateName
         );
       }
 
-      const request = {
-        id: requestId,
+      return this.handleToolPermissionFallback(toolName, input, options, sessionId, workspacePath);
+    };
+  }
+
+  private async resolveImmediateToolDecision(
+    toolName: string,
+    input: any,
+    options: { signal: AbortSignal; suggestions?: any[]; toolUseID?: string },
+    sessionId: string | undefined,
+    pathForTrust: string | undefined
+  ): Promise<{ behavior: 'allow' | 'deny'; updatedInput?: any; message?: string } | null> {
+    return resolveImmediateToolDecisionHelper(
+      {
+        internalMcpTools: INTERNAL_MCP_TOOLS,
+        teamTools: TEAM_TOOLS,
+        trustChecker: BaseAgentProvider.trustChecker ?? undefined,
+        resolveTeamContext: (resolvedSessionId) => this.teammateManager.resolveTeamContext(resolvedSessionId),
+        handleAskUserQuestion: (resolvedSessionId, resolvedInput, resolvedOptions, resolvedToolUseId) =>
+          this.handleAskUserQuestion(resolvedSessionId, resolvedInput, resolvedOptions, resolvedToolUseId),
+        logSecurity: (message, data) => this.logSecurity(message, data),
+      },
+      {
         toolName,
-        rawCommand,
-        actionsNeedingApproval: [{
-          action: {
-            pattern,
-            displayName: toolDescription,
-            command: toolName === 'Bash' ? input?.command || '' : '',
-            isDestructive,
-            referencedPaths: [],
-            hasRedirection: false,
-          },
-          decision: 'ask' as const,
-          reason: 'Tool requires user approval',
-          isDestructive,
-          isRisky: toolName === 'Bash',
-          warnings: [],
-          outsidePaths: [],
-          sensitivePaths: [],
-        }],
-        hasDestructiveActions: isDestructive,
-        createdAt: Date.now(),
-      };
-
-      const responsePromise = new Promise<{ decision: 'allow' | 'deny'; scope: 'once' | 'session' | 'always' | 'always-all' }>((resolve, reject) => {
-        this.permissions.pendingToolPermissions.set(requestId, {
-          resolve,
-          reject,
-          request
-        });
-
-        if (options.signal) {
-          options.signal.addEventListener('abort', () => {
-            this.permissions.pendingToolPermissions.delete(requestId);
-            reject(new Error('Request aborted'));
-          }, { once: true });
-        }
-      });
-
-      if (sessionId) {
-        this.pollForPermissionResponse(sessionId, requestId, options.signal).catch(() => {});
+        input,
+        options,
+        sessionId,
+        pathForTrust,
       }
+    );
+  }
 
-      this.emit('toolPermission:pending', {
-        requestId,
+  private async handleToolPermissionWithService(
+    toolName: string,
+    input: any,
+    options: { signal: AbortSignal; suggestions?: any[]; toolUseID?: string },
+    sessionId: string,
+    workspacePath: string,
+    permissionsPath: string | undefined,
+    teammateName: string | undefined
+  ): Promise<{ behavior: 'allow' | 'deny'; updatedInput?: any; message?: string }> {
+    return handleToolPermissionWithServiceHelper(
+      {
+        logSecurity: (message, data) => this.logSecurity(message, data),
+        logAgentMessage: (resolvedSessionId, content) =>
+          this.logAgentMessage(resolvedSessionId, 'claude-code', 'output', content),
+        requestToolPermission: (request) => this.permissionService!.requestToolPermission(request),
+      },
+      {
+        toolName,
+        input,
+        options,
         sessionId,
         workspacePath,
-        request,
-        timestamp: Date.now()
-      });
-
-      try {
-        const response = await responsePromise;
-
-        this.logSecurity('[canUseTool] User response received (fallback):', {
-          toolName,
-          decision: response.decision,
-          scope: response.scope,
-        });
-
-        const isCompoundCommand = pattern.startsWith('Bash:compound:');
-        if (response.decision === 'allow' && response.scope !== 'once' && !isCompoundCommand) {
-          if (response.scope === 'always-all' && toolName === 'WebFetch') {
-            this.permissions.sessionApprovedPatterns.add('WebFetch');
-            this.logSecurity('[canUseTool] Added wildcard pattern to session cache:', { pattern: 'WebFetch', scope: response.scope });
-          } else {
-            this.permissions.sessionApprovedPatterns.add(pattern);
-            this.logSecurity('[canUseTool] Added pattern to session cache:', { pattern, scope: response.scope });
-          }
-        }
-
-        if (response.decision === 'allow' && (response.scope === 'always' || response.scope === 'always-all') && workspacePath && !isCompoundCommand) {
-          if (ClaudeCodeProvider.claudeSettingsPatternSaver) {
-            try {
-              const patternToSave = (response.scope === 'always-all' && toolName === 'WebFetch') ? 'WebFetch' : pattern;
-              await ClaudeCodeProvider.claudeSettingsPatternSaver(workspacePath, patternToSave);
-              this.logSecurity('[canUseTool] Saved pattern to Claude settings:', { pattern: patternToSave });
-            } catch (saveError) {
-              console.error('[CLAUDE-CODE] Failed to save pattern:', saveError);
-            }
-          }
-        }
-
-        this.emit('toolPermission:resolved', {
-          requestId,
-          sessionId,
-          response,
-          timestamp: Date.now()
-        });
-
-        if (response.decision === 'allow') {
-          return { behavior: 'allow', updatedInput: input };
-        } else {
-          return {
-            behavior: 'deny',
-            message: 'Tool call denied by user'
-          };
-        }
-      } catch (error) {
-        // Emit resolved event on error path so the "waiting for input" indicator is cleared
-        this.emit('toolPermission:resolved', {
-          requestId,
-          sessionId,
-          response: { decision: 'deny', scope: 'once' },
-          timestamp: Date.now()
-        });
-        this.logSecurity('[canUseTool] Permission request failed (fallback):', {
-          toolName,
-          error: error instanceof Error ? error.message : 'Unknown error',
-        });
-        return {
-          behavior: 'deny',
-          message: error instanceof Error ? error.message : 'Permission request cancelled'
-        };
+        permissionsPath,
+        teammateName
       }
-    };
+    );
+  }
+
+  private async handleToolPermissionFallback(
+    toolName: string,
+    input: any,
+    options: { signal: AbortSignal; suggestions?: any[]; toolUseID?: string },
+    sessionId: string | undefined,
+    workspacePath: string | undefined
+  ): Promise<{ behavior: 'allow' | 'deny'; updatedInput?: any; message?: string }> {
+    return handleToolPermissionFallbackHelper(
+      {
+        permissions: this.permissions,
+        logSecurity: (message, data) => this.logSecurity(message, data),
+        logAgentMessage: (resolvedSessionId, content) =>
+          this.logAgentMessage(resolvedSessionId, 'claude-code', 'output', content),
+        emit: (event, payload) => this.emit(event, payload),
+        pollForPermissionResponse: (resolvedSessionId, requestId, signal) =>
+          this.pollForPermissionResponse(resolvedSessionId, requestId, signal),
+        savePattern: ClaudeCodeProvider.claudeSettingsPatternSaver
+          ? (path, pattern) => ClaudeCodeProvider.claudeSettingsPatternSaver!(path, pattern)
+          : undefined,
+        logError: (message, error) => console.error(message, error),
+      },
+      {
+        toolName,
+        input,
+        options,
+        sessionId,
+        workspacePath,
+      }
+    );
   }
 
   /**
@@ -3703,166 +3151,27 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
     options: { signal: AbortSignal },
     toolUseID?: string
   ): Promise<{ behavior: 'allow' | 'deny'; updatedInput?: any; message?: string }> {
-      // Debug logging - uncomment if needed
-
-      const questions = input?.questions || [];
-      if (questions.length === 0) {
-        console.warn('[CLAUDE-CODE] AskUserQuestion called with no questions');
-        return {
-          behavior: 'allow',
-          updatedInput: {
-            ...input,
-            answers: {}
-          }
-        };
-      }
-
-      // Use the SDK's tool_use ID so our message can correlate with SDK events
-      const questionId = toolUseID || `ask-${sessionId || 'unknown'}-${Date.now()}`;
-
-      // Log as nimbalyst_tool_use - our own message type that won't conflict with SDK messages
-      // SessionManager recognizes this type and creates a toolCall property for widget rendering
-      // The widget will show interactive UI while !toolCall.result, completed UI when answered
-      if (sessionId) {
-        await this.logAgentMessage(
-          sessionId,
-          'claude-code',
-          'output',
-          JSON.stringify({
-            type: 'nimbalyst_tool_use',
-            id: questionId,
-            name: 'AskUserQuestion',
-            input: { questions }
-          })
-        );
-      }
-
-      // Create promise that will be resolved when user provides answers
-      const answersPromise = new Promise<Record<string, string>>((resolve, reject) => {
-        this.pendingAskUserQuestions.set(questionId, {
-          resolve,
-          reject,
-          questions
-        });
-
-        // Set up abort handler
-        if (options.signal) {
-          options.signal.addEventListener('abort', () => {
-            this.pendingAskUserQuestions.delete(questionId);
-            reject(new Error('Request aborted'));
-          }, { once: true });
-        }
-      });
-
-      // Start polling for message-based responses in parallel with IPC
-      // This enables mobile/cross-session responses
-      if (sessionId) {
-        this.pollForAskUserQuestionResponse(sessionId, questionId, options.signal).catch(() => {
-          // Polling error - IPC path may still work
-        });
-      }
-
-      // Emit event to notify renderer to show question UI (legacy IPC path)
-      // The widget will be rendered when the tool_use block is processed
-      // We store the questionId so the widget knows which pending question to resolve
-      this.emit('askUserQuestion:pending', {
-        questionId,
+    return handleAskUserQuestionTool(
+      {
         sessionId,
-        questions,
-        timestamp: Date.now()
-      });
-
-      try {
-        // Wait for user to provide answers
-        const answers = await answersPromise;
-
-        // Debug logging - uncomment if needed
-
-        // Emit event with answers so UI can update the tool call display
-        this.emit('askUserQuestion:answered', {
-          questionId,
-          sessionId,
-          questions,
-          answers,
-          timestamp: Date.now()
-        });
-
-        // Return with answers populated
-        return {
-          behavior: 'allow',
-          updatedInput: {
-            ...input,
-            answers
-          }
-        };
-      } catch (error) {
-        console.error('[CLAUDE-CODE] AskUserQuestion failed:', error);
-
-        // On abort/error, deny the tool use
-        return {
-          behavior: 'deny',
-          message: error instanceof Error ? error.message : 'Question cancelled'
-        };
+        pendingAskUserQuestions: this.pendingAskUserQuestions,
+        pollForResponse: (resolvedSessionId, questionId, signal) =>
+          this.pollForAskUserQuestionResponse(resolvedSessionId, questionId, signal),
+        emit: (event, payload) => this.emit(event, payload),
+        logAgentMessage: async (resolvedSessionId, content) =>
+          this.logAgentMessage(resolvedSessionId, 'claude-code', 'output', content),
+        onError: (error) => {
+          console.error('[CLAUDE-CODE] AskUserQuestion failed:', error);
+        },
+      },
+      {
+        input,
+        signal: options.signal,
+        toolUseID,
       }
+    );
   }
 
-
-  private async findCliPath(): Promise<string> {
-    try {
-      const claudeAgentPath = require.resolve('@anthropic-ai/claude-agent-sdk');
-      const claudeAgentDir = path.dirname(claudeAgentPath);
-      let cliPath = path.join(claudeAgentDir, 'cli.js');
-
-      // CRITICAL FIX: Use unpacked CLI path in production
-      // System Node.js cannot read from .asar archives
-      if (app.isPackaged && cliPath.includes('app.asar')) {
-        // Use regex to replace app.asar more safely (handles path separators)
-        const unpackedCliPath = cliPath.replace(/app\.asar(?=[\/\\]|$)/, 'app.asar.unpacked');
-
-        if (!fs.existsSync(unpackedCliPath)) {
-          const error = `Unpacked CLI not found at: ${unpackedCliPath}. ` +
-                       `This indicates a build configuration issue. The Claude Agent SDK must be unpacked during the build process.`;
-          console.error(`[CLAUDE-CODE] ✗ CRITICAL ERROR: ${error}`);
-          throw new Error(error);
-        }
-
-
-        // Verify the unpacked node_modules directory exists
-        const appPath = app.getAppPath();
-        const unpackedAppPath = appPath.includes('app.asar')
-          ? appPath.replace(/app\.asar(?=[\/\\]|$)/, 'app.asar.unpacked')
-          : appPath;
-        const unpackedNodeModules = path.join(unpackedAppPath, 'node_modules');
-
-        if (!fs.existsSync(unpackedNodeModules)) {
-          const error = `Unpacked node_modules not found at: ${unpackedNodeModules}. ` +
-                       `Build configuration must unpack node_modules for Claude Agent SDK.`;
-          console.error(`[CLAUDE-CODE] ✗ CRITICAL ERROR: ${error}`);
-          throw new Error(error);
-        }
-
-        // Verify the SDK directory specifically
-        const unpackedSdkDir = path.join(unpackedNodeModules, '@anthropic-ai', 'claude-agent-sdk');
-        if (!fs.existsSync(unpackedSdkDir)) {
-          const error = `SDK directory not found at: ${unpackedSdkDir}. ` +
-                       `Build must unpack @anthropic-ai/claude-agent-sdk package.`;
-          console.error(`[CLAUDE-CODE] ✗ CRITICAL ERROR: ${error}`);
-          throw new Error(error);
-        }
-
-        cliPath = unpackedCliPath;
-      }
-
-      if (!fs.existsSync(cliPath)) {
-        throw new Error(`CLI not found at expected path: ${cliPath}`);
-      }
-
-      return cliPath;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      throw new Error(`Could not find claude-agent-sdk CLI: ${message}`);
-    }
-  }
 
   protected buildSystemPrompt(documentContext?: DocumentContext, enableAgentTeams?: boolean): string {
     const hasSessionNaming = ClaudeCodeProvider.sessionNamingServerPort !== null;
@@ -3880,36 +3189,6 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
 
     // console.log('[CLAUDE-CODE] Built system prompt - length:', prompt.length, 'characters');
     return prompt;
-  }
-
-  /**
-   * Ensure node is available in PATH for production builds
-   */
-  private ensureNodeInPath(): void {
-    if (!app.isPackaged) {
-      return; // In development, node is already available
-    }
-
-    // In production, add Electron's internal node to PATH
-    const electronPath = process.execPath;
-    const electronDir = path.dirname(electronPath);
-
-    if (!process.env.PATH?.includes(electronDir)) {
-      process.env.PATH = `${electronDir}:${process.env.PATH}`;
-    }
-  }
-
-  /**
-   * Get the node executable path for claude-code to use
-   */
-  private getNodeExecutable(): string | undefined {
-    if (!app.isPackaged) {
-      return undefined; // Use system node in development
-    }
-
-    // In production, use Electron's node binary
-    // Note: This is now handled directly in the options setup
-    return process.execPath;
   }
 
   /**
