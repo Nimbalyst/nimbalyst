@@ -7,10 +7,17 @@
 import type { ConfigTheme } from '../editor';
 
 /**
- * Map of extension theme IDs to their Monaco theme names.
+ * Map of theme IDs to their Monaco theme names.
+ * Includes both current built-in IDs and legacy namespaced extension IDs.
  * These must match the themes defined in monacoConfig.ts.
  */
 const EXTENSION_THEME_TO_MONACO: Record<string, string> = {
+  // Current built-in theme IDs
+  'solarized-light': 'solarized-light',
+  'solarized-dark': 'solarized-dark',
+  'monokai': 'monokai',
+
+  // Legacy IDs used when these themes shipped as an extension
   'sample-themes:solarized-light': 'solarized-light',
   'sample-themes:solarized-dark': 'solarized-dark',
   'sample-themes:monokai': 'monokai',
