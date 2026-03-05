@@ -696,11 +696,11 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
               setShowArchiveDialog(true);
             }
           } else {
-            // Clean after merge - auto-archive directly
+            // Clean after merge - show archive confirmation dialog
             if (isBlitz) {
               setShowArchiveBlitzDialog(true);
             } else {
-              handleArchiveWorktree();
+              setShowArchiveDialog(true);
             }
           }
         } else {
