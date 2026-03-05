@@ -86,6 +86,16 @@ const isDev = process.env.NODE_ENV !== 'production';
 const isOfficialBuild = process.env.OFFICIAL_BUILD === 'true';
 // IS_DEV_MODE is true only when running `npm run dev`, not for any packaged builds
 const isDevMode = isDev;
+
+// Read Claude Agent SDK version at build time for display in settings
+const claudeAgentSdkVersion = (() => {
+  try {
+    const pkgPath = resolve(__dirname, 'node_modules/@anthropic-ai/claude-agent-sdk/package.json');
+    return JSON.parse(fs.readFileSync(pkgPath, 'utf-8')).version;
+  } catch {
+    return 'unknown';
+  }
+})();
 const runtimeSrcDir = resolve(__dirname, '../runtime/src');
 const runtimeDistDir = resolve(__dirname, '../runtime/dist');
 
@@ -179,6 +189,7 @@ export default defineConfig({
       'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development'),
       'process.env.OFFICIAL_BUILD': JSON.stringify(isOfficialBuild ? 'true' : 'false'),
       'process.env.IS_DEV_MODE': JSON.stringify(isDevMode ? 'true' : 'false'),
+      '__CLAUDE_AGENT_SDK_VERSION__': JSON.stringify(claudeAgentSdkVersion),
     },
     plugins: [
       // Process polyfill for packaged builds - handles dependencies that access process globals.

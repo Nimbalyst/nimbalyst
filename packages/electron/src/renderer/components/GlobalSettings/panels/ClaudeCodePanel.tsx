@@ -1,9 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { ProviderConfig, Model } from '../../Settings/SettingsView';
-// Import the actual SDK package.json to get the exact installed version
-// @ts-ignore - importing json
-import sdkPackageJson from '@anthropic-ai/claude-agent-sdk/package.json';
 import {ClaudeForWindowsInstallation} from "../../../../main/services/CLIManager.ts";
 import {usePostHog} from "posthog-js/react";
 import {
@@ -11,8 +8,9 @@ import {
   setClaudeUsageIndicatorEnabledAtom,
 } from '../../../store/atoms/claudeUsageAtoms';
 
-// Built-in SDK version (dynamically from the SDK's package.json)
-const BUNDLED_SDK_VERSION = sdkPackageJson.version || 'unknown';
+// Built-in SDK version (injected at build time via electron.vite.config.ts define)
+declare const __CLAUDE_AGENT_SDK_VERSION__: string;
+const BUNDLED_SDK_VERSION = typeof __CLAUDE_AGENT_SDK_VERSION__ !== 'undefined' ? __CLAUDE_AGENT_SDK_VERSION__ : 'unknown';
 
 interface ClaudeCodePanelProps {
   config: ProviderConfig;
