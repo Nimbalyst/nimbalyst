@@ -20,6 +20,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.55.17] - 2026-03-05
+
+
+### Added
+- GPT-5.4 Codex model support
+
+### Changed
+- Update @openai/codex-sdk 0.107.0 -> 0.110.0
+- Update iOS App Store link with correct Apple ID and remove Coming Soon badge
+
+### Fixed
+- Show archive confirmation dialog after clean worktree merge
+- Regenerate lock file to fix corrupted Codex binary integrity hashes
+- Session HTML export typecheck failure on ES2020 target
+- Bulk archive now correctly archives all selected sessions
+
 ## [0.55.16] - 2026-03-05
 
 
