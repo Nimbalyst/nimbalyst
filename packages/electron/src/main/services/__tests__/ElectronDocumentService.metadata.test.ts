@@ -45,9 +45,6 @@ aiSummary: This is an AI generated summary
 
       service = new ElectronDocumentService(tempDir);
 
-      // Wait for initial scan
-      await new Promise(resolve => setTimeout(resolve, 100));
-
       const metadata = await service.listDocumentMetadata();
 
       expect(metadata).toHaveLength(2);
@@ -68,9 +65,6 @@ aiSummary: This is an AI generated summary
       await createTestFile('no-frontmatter.md', '# Just content\n\nNo frontmatter here');
 
       service = new ElectronDocumentService(tempDir);
-
-      // Wait for initial scan
-      await new Promise(resolve => setTimeout(resolve, 100));
 
       const metadata = await service.listDocumentMetadata();
 
@@ -107,7 +101,7 @@ version: 1
 # Updated content but same frontmatter`);
 
       // Trigger refresh
-      await new Promise(resolve => setTimeout(resolve, 2100));
+      await service.refreshWorkspaceData();
 
       const metadata2 = await service.listDocumentMetadata();
       const hash2 = metadata2[0].hash;
@@ -123,7 +117,7 @@ version: 2
 # Content`);
 
       // Trigger refresh
-      await new Promise(resolve => setTimeout(resolve, 2100));
+      await service.refreshWorkspaceData();
 
       const metadata3 = await service.listDocumentMetadata();
       const hash3 = metadata3[0].hash;
@@ -145,8 +139,7 @@ Content`);
 
       service = new ElectronDocumentService(tempDir);
 
-      // Wait for initial scan
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await service.listDocumentMetadata();
     });
 
     it('should get metadata by document ID', async () => {
@@ -186,8 +179,10 @@ Content`);
 
       service = new ElectronDocumentService(tempDir);
 
-      // Wait for initial scan
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Prime metadata cache before programmatic updates
+      const seededMetadata = await service.listDocumentMetadata();
+      expect(seededMetadata).toHaveLength(1);
+      const notifyPath = seededMetadata[0].path;
 
       const changeEvents: MetadataChangeEvent[] = [];
       const unsubscribe = service.watchDocumentMetadata((change) => {
@@ -195,7 +190,7 @@ Content`);
       });
 
       // Programmatically update frontmatter
-      service.notifyFrontmatterChanged('notify-test.md', {
+      service.notifyFrontmatterChanged(notifyPath, {
         title: 'Updated via API',
         status: 'published',
         aiSummary: 'New AI summary'
@@ -224,8 +219,8 @@ title: New File
 
 Content`);
 
-      // Wait for polling to detect the change
-      await new Promise(resolve => setTimeout(resolve, 2100));
+      // Trigger refresh to detect the change
+      await service.refreshWorkspaceData();
 
       const addEvent = changeEvents.find(e => e.added.length > 0);
       expect(addEvent).toBeTruthy();
@@ -234,8 +229,8 @@ Content`);
       // Remove the file
       await fs.unlink(path.join(tempDir, 'new-file.md'));
 
-      // Wait for polling to detect the removal
-      await new Promise(resolve => setTimeout(resolve, 2100));
+      // Trigger refresh to detect the removal
+      await service.refreshWorkspaceData();
 
       const removeEvent = changeEvents.find(e => e.removed.length > 0);
       expect(removeEvent).toBeTruthy();

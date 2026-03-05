@@ -9,12 +9,13 @@ import type { DocumentContext } from '../../server/types';
 
 describe('OpenAI Provider - Tool Usage', () => {
   const apiKey = process.env.OPENAI_API_KEY;
+  const runOpenAiIntegration = process.env.RUN_OPENAI_INTEGRATION === '1';
   
   afterEach(() => {
     ProviderFactory.destroyAll();
   });
 
-  it.skipIf(!apiKey)('should use applyDiff tool to edit document', async () => {
+  it.skipIf(!apiKey || !runOpenAiIntegration)('should use applyDiff tool to edit document', async () => {
     // The document we're going to edit
     const testDocument: DocumentContext = {
       filePath: '/test/document.md',
@@ -80,7 +81,7 @@ describe('OpenAI Provider - Tool Usage', () => {
     console.log('✅ Edit verification passed!');
   }, 10000); // 10 second timeout for API call
 
-  it.skipIf(!apiKey)('should test GPT-5 response time', async () => {
+  it.skipIf(!apiKey || !runOpenAiIntegration)('should test GPT-5 response time', async () => {
     const testDocument: DocumentContext = {
       filePath: '/test/document.md',
       fileType: 'markdown',
@@ -127,7 +128,7 @@ describe('OpenAI Provider - Tool Usage', () => {
     expect(totalTime).toBeLessThan(5000); // Should be way faster than 15-30 seconds
   }, 40000);
 
-  it.skipIf(!apiKey)('should use streamContent tool to insert content', async () => {
+  it.skipIf(!apiKey || !runOpenAiIntegration)('should use streamContent tool to insert content', async () => {
     // Document where we'll insert content
     const testDocument: DocumentContext = {
       filePath: '/test/document.md',

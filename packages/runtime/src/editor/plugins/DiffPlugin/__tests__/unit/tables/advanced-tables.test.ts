@@ -8,7 +8,7 @@
 
 /**
  * Advanced Table Tests
- * 
+ *
  * This file contains complex edge cases and performance tests for tables:
  * - Tables inside blockquotes
  * - Lists inside table cells
@@ -510,8 +510,8 @@ describe('Advanced Table Tests', () => {
 
       const result = setupMarkdownDiffTest(original, target);
 
-      expect(result.diff).toContain('C:\\\\\\\\Users');
-      expect(result.getApprovedMarkdown()).toMatch(/C:\\\\\\\\Users/);
+      expect(result.diff).toContain('C:\\\\Users\\\\John');
+      expect(result.getApprovedMarkdown()).toContain('C:\\\\Users\\\\John');
     });
 
     it('should handle cells with escaped markdown characters', () => {

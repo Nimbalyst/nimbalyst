@@ -104,9 +104,10 @@ describe('RuntimeToolExecutor', () => {
     executor.on('execution:complete', complete);
 
     const replacements = [{ oldText: 'foo', newText: 'bar' }];
-    const result = await executor.execute('applyDiff', { replacements });
+    const filePath = '/test/document.md';
+    const result = await executor.execute('applyDiff', { replacements, filePath });
 
-    expect(bridge.applyReplacements).toHaveBeenCalledWith(replacements);
+    expect(bridge.applyReplacements).toHaveBeenCalledWith(filePath, replacements);
     expect(result).toEqual({ success: true });
     expect(start).toHaveBeenCalledTimes(1);
     expect(complete).toHaveBeenCalledTimes(1);
@@ -114,7 +115,7 @@ describe('RuntimeToolExecutor', () => {
     expect(mockDispatchEvent).toHaveBeenCalledTimes(1);
     const eventArg = mockDispatchEvent.mock.calls[0][0] as { detail: any };
     expect(eventArg.detail.name).toBe('applyDiff');
-    expect(eventArg.detail.args).toEqual({ replacements });
+    expect(eventArg.detail.args).toEqual({ replacements, filePath });
   });
 
   it('executes streamContent via the editor bridge', async () => {

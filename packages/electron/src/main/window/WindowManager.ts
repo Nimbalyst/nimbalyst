@@ -19,10 +19,10 @@ import { AnalyticsService } from '../services/analytics/AnalyticsService';
 import { FeatureTrackingService } from '../services/analytics/FeatureTrackingService';
 import { ExtensionLogService } from '../services/ExtensionLogService';
 import { getMcpConfigService } from '../index';
+import { windows, windowStates } from './windowState';
 
 // Window management
-export const windows = new Map<number, BrowserWindow>();
-export const windowStates = new Map<number, WindowState>();
+export { windows, windowStates };
 export const savingWindows = new Set<number>();
 export const recentlyDeletedFiles = new Set<string>(); // Tracks files deleted via UI to prevent autosave from recreating them
 export const windowFocusOrder = new Map<number, number>(); // Track focus order for each window
@@ -719,4 +719,3 @@ safeOn('close-window-discard', (event) => {
         window.destroy();
     }
 });
-

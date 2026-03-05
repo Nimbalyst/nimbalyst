@@ -349,6 +349,23 @@ export function getCellDiffClass(
   const rowKey = isPinned ? `pinned:${rowIndex}` : `data:${rowIndex}`;
   const cellDiff = diffState.cells.get(`${rowKey}:${colProp}`);
   if (!cellDiff) {
+    // Fallback for phantom rows: deleted rows are stored separately and rendered
+    // by position rather than by regular cell map keys.
+    if (!isPinned) {
+      const phantomIdx = diffState.phantomRowPositions.findIndex(
+        (pos) => pos === rowIndex,
+      );
+      if (phantomIdx >= 0) {
+        const colIndex = colProp
+          .toUpperCase()
+          .split('')
+          .reduce((acc, ch) => acc * 26 + (ch.charCodeAt(0) - 64), 0) - 1;
+        const phantomCell = diffState.phantomRows[phantomIdx]?.[colIndex];
+        if (phantomCell && phantomCell.raw !== '') {
+          return 'cell-diff-deleted';
+        }
+      }
+    }
     return '';
   }
 
@@ -385,7 +402,24 @@ export function getCellPreviousValue(
 
   const rowKey = isPinned ? `pinned:${rowIndex}` : `data:${rowIndex}`;
   const cellDiff = diffState.cells.get(`${rowKey}:${colProp}`);
-  return cellDiff?.previousValue;
+  if (cellDiff?.previousValue !== undefined) {
+    return cellDiff.previousValue;
+  }
+
+  if (!isPinned) {
+    const phantomIdx = diffState.phantomRowPositions.findIndex(
+      (pos) => pos === rowIndex,
+    );
+    if (phantomIdx >= 0) {
+      const colIndex = colProp
+        .toUpperCase()
+        .split('')
+        .reduce((acc, ch) => acc * 26 + (ch.charCodeAt(0) - 64), 0) - 1;
+      return diffState.phantomRows[phantomIdx]?.[colIndex]?.raw;
+    }
+  }
+
+  return undefined;
 }
 
 /**

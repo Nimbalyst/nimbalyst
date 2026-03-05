@@ -9,14 +9,17 @@ import {createHeadlessEditor} from '@lexical/headless';
 import EditorNodes from '../../../../nodes/EditorNodes';
 
 // Import transformers from the project
-import { CORE_TRANSFORMERS } from '../../../../markdown/core-transformers';
+import { getEditorTransformers } from '../../../../markdown';
+import { registerBuiltinPlugins } from '../../../../plugins/registerBuiltinPlugins';
+
+// Ensure built-in plugin transformers (tables, mermaid, etc.) are available in tests.
+registerBuiltinPlugins();
 
 /**
  * Test transformers for diff plugin testing.
- * Uses core transformers for testing.
- * Note: In production code, use getEditorTransformers() to get both core and plugin transformers.
+ * Uses the same transformer set as the editor (core + built-in plugin transformers).
  */
-export const MARKDOWN_TEST_TRANSFORMERS: Transformer[] = CORE_TRANSFORMERS;
+export const MARKDOWN_TEST_TRANSFORMERS: Transformer[] = getEditorTransformers();
 
 /**
  * Test nodes for diff plugin testing.
@@ -45,12 +48,12 @@ export function createTestEditor(
     }),
     nodes: TEST_NODES.concat(customNodes as any),
   };
-  
+
   const editor = createEditor(editorConfig);
-  
+
   // Store the config so createHeadlessEditorFromEditor can access it
   (editor as any)._createEditorArgs = editorConfig;
-  
+
   return editor;
 }
 

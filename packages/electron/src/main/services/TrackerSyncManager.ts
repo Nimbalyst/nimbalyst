@@ -20,6 +20,7 @@ import { getSessionSyncConfig } from '../utils/store';
 import { getStytchUserId, isAuthenticated } from './StytchAuthService';
 import { findTeamForWorkspace, getOrgScopedJwt, autoWrapForNewMembers } from './TeamService';
 import { getOrgKey, fetchAndUnwrapOrgKey, getOrCreateIdentityKeyPair, uploadIdentityKeyToOrg } from './OrgKeyService';
+import { windows as windowMap, windowStates } from '../window/windowState';
 import type { TrackerSyncStatus, TrackerItemPayload } from '@nimbalyst/runtime/sync';
 import * as syncModule from '@nimbalyst/runtime/sync';
 
@@ -69,8 +70,6 @@ function sendToAllWindows(channel: string, data?: unknown): void {
  * Prevents tracker items from leaking across workspaces in the renderer.
  */
 function sendToWorkspaceWindows(workspacePath: string, channel: string, data?: unknown): void {
-  // Import lazily to avoid circular dependency
-  const { windows: windowMap, windowStates } = require('../window/WindowManager');
   let sent = 0;
   for (const [windowId, browserWindow] of windowMap as Map<number, BrowserWindow>) {
     if (browserWindow.isDestroyed()) continue;

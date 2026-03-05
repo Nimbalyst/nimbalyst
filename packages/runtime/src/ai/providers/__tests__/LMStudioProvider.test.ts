@@ -7,7 +7,9 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { ProviderFactory } from '../../server/ProviderFactory';
 import type { DocumentContext } from '../../server/types';
 
-describe('LMStudio Provider - Tool Usage', () => {
+const runLmStudioIntegration = process.env.RUN_LMSTUDIO_INTEGRATION === '1';
+
+describe.skipIf(!runLmStudioIntegration)('LMStudio Provider - Tool Usage', () => {
   afterEach(() => {
     ProviderFactory.destroyAll();
   });

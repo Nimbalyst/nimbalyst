@@ -1,4 +1,5 @@
-import { ipcMain, IpcMainInvokeEvent } from 'electron';
+import * as electron from 'electron';
+import type { IpcMainInvokeEvent } from 'electron';
 
 /**
  * IPC Registry - Prevents duplicate IPC handler registration
@@ -18,6 +19,22 @@ import { ipcMain, IpcMainInvokeEvent } from 'electron';
 const registeredHandlers = new Set<string>();
 const registeredListeners = new Map<string, Set<Function>>();
 
+function getIpcMain(): any {
+  try {
+    return (electron as any)?.ipcMain;
+  } catch (error: any) {
+    // Vitest's strict ESM mock throws when an export is missing.
+    // Treat missing ipcMain as unavailable so unit tests can provide partial mocks.
+    if (
+      typeof error?.message === 'string' &&
+      error.message.includes('No "ipcMain" export is defined on the "electron" mock')
+    ) {
+      return undefined;
+    }
+    throw error;
+  }
+}
+
 /**
  * Safe ipcMain.handle() - prevents duplicate registration
  *
@@ -28,6 +45,11 @@ export function safeHandle(
   channel: string,
   handler: (event: IpcMainInvokeEvent, ...args: any[]) => any
 ): void {
+  const ipcMain = getIpcMain();
+  if (!ipcMain?.handle) {
+    return;
+  }
+
   if (registeredHandlers.has(channel)) {
     console.warn(`[IPC] Handler already registered, skipping: ${channel}`);
     return;
@@ -67,6 +89,11 @@ export function safeOn(
   channel: string,
   handler: (event: Electron.IpcMainEvent, ...args: any[]) => void
 ): void {
+  const ipcMain = getIpcMain();
+  if (!ipcMain?.on) {
+    return;
+  }
+
   if (!registeredListeners.has(channel)) {
     registeredListeners.set(channel, new Set());
   }
@@ -90,6 +117,11 @@ export function safeOnce(
   channel: string,
   handler: (event: Electron.IpcMainEvent, ...args: any[]) => void
 ): void {
+  const ipcMain = getIpcMain();
+  if (!ipcMain?.once) {
+    return;
+  }
+
   if (!registeredListeners.has(channel)) {
     registeredListeners.set(channel, new Set());
   }
@@ -112,6 +144,11 @@ export function safeOnce(
  * Remove a handler (for cleanup or replacement)
  */
 export function removeHandler(channel: string): void {
+  const ipcMain = getIpcMain();
+  if (!ipcMain?.removeHandler) {
+    return;
+  }
+
   if (registeredHandlers.has(channel)) {
     registeredHandlers.delete(channel);
     ipcMain.removeHandler(channel);
@@ -122,6 +159,11 @@ export function removeHandler(channel: string): void {
  * Remove all listeners for a channel
  */
 export function removeAllListeners(channel: string): void {
+  const ipcMain = getIpcMain();
+  if (!ipcMain?.removeAllListeners) {
+    return;
+  }
+
   registeredListeners.delete(channel);
   ipcMain.removeAllListeners(channel);
 }

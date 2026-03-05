@@ -102,8 +102,9 @@ describe('ElectronFileSystemService', () => {
       });
 
       expect(mockExecAsync).toHaveBeenCalledWith(
-        expect.stringContaining('-g "*.ts"'),
-        expect.any(Object)
+        'rg',
+        expect.arrayContaining(['-g', '*.ts']),
+        expect.any(Object),
       );
     });
 
@@ -216,7 +217,7 @@ describe('ElectronFileSystemService', () => {
       const result = await service.readFile('/etc/passwd', {});
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe('Path must be relative to workspace');
+      expect(result.error).toBe('Path contains dangerous patterns');
       expect(fs.readFile).not.toHaveBeenCalled();
     });
 
@@ -224,7 +225,7 @@ describe('ElectronFileSystemService', () => {
       const result = await service.readFile('../../../etc/passwd', {});
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe('Path must be within workspace');
+      expect(result.error).toBe('Path contains dangerous patterns');
       expect(fs.readFile).not.toHaveBeenCalled();
     });
 

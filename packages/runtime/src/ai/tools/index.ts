@@ -298,6 +298,18 @@ export class RuntimeToolExecutor {
     // If filePath is provided, use editorRegistry to apply to specific file
     if (args.filePath) {
       result = await editorRegistry.applyReplacements(args.filePath, args.replacements);
+
+      // Backward compatibility for tests/legacy runtime wiring where edits are
+      // executed through the global bridge instead of EditorRegistry.
+      if (
+        !result?.success &&
+        (globalThis as any).aiChatBridge?.applyReplacements
+      ) {
+        result = await (globalThis as any).aiChatBridge.applyReplacements(
+          args.filePath,
+          args.replacements,
+        );
+      }
     } else {
       throw Error("Document path not provided in applyDiff");
     }

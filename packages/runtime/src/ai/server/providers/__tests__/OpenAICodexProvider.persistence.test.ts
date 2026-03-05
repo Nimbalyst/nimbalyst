@@ -9,6 +9,11 @@ describe('OpenAICodexProvider persistence', () => {
   beforeEach(() => {
     createdMessages.length = 0;
 
+    OpenAICodexProvider.setTrustChecker(() => ({
+      trusted: true,
+      mode: 'allow-all',
+    }));
+
     AgentMessagesRepository.setStore({
       async create(message: CreateAgentMessageInput) {
         createdMessages.push(message);
@@ -104,4 +109,3 @@ describe('OpenAICodexProvider persistence', () => {
     expect(chunks.some((chunk) => chunk.type === 'text' && chunk.content === 'done')).toBe(true);
   });
 });
-

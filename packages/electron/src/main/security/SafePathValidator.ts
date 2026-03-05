@@ -24,8 +24,11 @@ export class SafePathValidator {
     /\.\./,                    // Parent directory traversal
     /^\//,                     // Absolute path (Unix)
     /^[A-Za-z]:\\/,           // Absolute path (Windows)
+    /^\\\\/,                  // UNC/network share paths
     /\0/,                      // Null bytes
     /[<>"|?*]/,               // Invalid/dangerous characters
+    /[;&]/,                   // Shell command separators
+    /&&|\|\|/,                // Shell logical operators
     /\$\{.*\}/,               // Template injection
     /\$\(.*\)/,               // Command substitution
     /`.*`/,                    // Backtick command substitution
@@ -55,6 +58,13 @@ export class SafePathValidator {
     '.sqlite', '.db', '.sqlite3',              // Databases
     '.keychain', '.keystore',                  // Key stores
     '.wallet',                                  // Cryptocurrency wallets
+  ]);
+
+  // Dotfiles without extensions that still contain secrets.
+  private static readonly BLOCKED_BASENAMES = new Set([
+    '.env',
+    '.env.local',
+    '.env.production',
   ]);
 
   constructor(workspacePath: string) {
@@ -147,7 +157,12 @@ export class SafePathValidator {
 
     // Check for blocked file extensions
     const parsed = parse(fullPath);
-    if (SafePathValidator.BLOCKED_EXTENSIONS.has(parsed.ext.toLowerCase())) {
+    const lowerExt = parsed.ext.toLowerCase();
+    const lowerBase = parsed.base.toLowerCase();
+    if (
+      SafePathValidator.BLOCKED_EXTENSIONS.has(lowerExt) ||
+      SafePathValidator.BLOCKED_BASENAMES.has(lowerBase)
+    ) {
       violations.push(`blocked_extension:${parsed.ext}`);
       return {
         isValid: false,

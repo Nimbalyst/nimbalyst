@@ -14,7 +14,8 @@ export const EXCLUDED_EXTENSIONS = new Set([
   '.zip', '.tar', '.gz', '.rar', '.7z',
   '.exe', '.dll', '.so', '.dylib',
   '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
-  '.db', '.sqlite', '.lock'
+  '.db', '.sqlite', '.lock',
+  '.pem', '.key', '.wallet'
 ]);
 
 // Directories to exclude from scanning and search

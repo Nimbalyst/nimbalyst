@@ -7,6 +7,10 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'jsdom',
+    environmentMatchGlobs: [
+      ['packages/electron/src/main/**/*.{test,spec}.{ts,tsx}', 'node'],
+      ['packages/runtime/src/ai/**/*.{test,spec}.{ts,tsx}', 'node']
+    ],
     setupFiles: './test-utils/setup.ts',
     include: [
       'packages/**/__tests__/**/*.test.{ts,tsx}',
@@ -35,6 +39,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './packages/runtime/src/editor'),
+      '@nimbalyst/runtime': path.resolve(__dirname, './packages/runtime/src'),
       'lexical': path.resolve(__dirname, './node_modules/lexical'),
       '@lexical': path.resolve(__dirname, './node_modules/@lexical')
     }

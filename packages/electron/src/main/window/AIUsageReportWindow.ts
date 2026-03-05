@@ -1,11 +1,12 @@
-import { app, BrowserWindow } from 'electron';
+import electron from 'electron';
 import { join } from 'path';
 import { getPreloadPath } from '../utils/appPaths';
-import { is } from '@electron-toolkit/utils';
 
-let usageReportWindow: BrowserWindow | null = null;
+const { app, BrowserWindow } = electron;
 
-export function createAIUsageReportWindow(): BrowserWindow {
+let usageReportWindow: electron.BrowserWindow | null = null;
+
+export function createAIUsageReportWindow(): electron.BrowserWindow {
   // If window already exists, focus it
   if (usageReportWindow && !usageReportWindow.isDestroyed()) {
     usageReportWindow.focus();
@@ -35,7 +36,7 @@ export function createAIUsageReportWindow(): BrowserWindow {
   });
 
   // Load the usage report page
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+  if (!app.isPackaged && process.env['ELECTRON_RENDERER_URL']) {
     usageReportWindow.loadURL(`${process.env['ELECTRON_RENDERER_URL']}?mode=usage-report`);
   } else {
     // Note: Due to code splitting, __dirname is out/main/chunks/, not out/main/
@@ -57,7 +58,7 @@ export function createAIUsageReportWindow(): BrowserWindow {
   return usageReportWindow;
 }
 
-export function getAIUsageReportWindow(): BrowserWindow | null {
+export function getAIUsageReportWindow(): electron.BrowserWindow | null {
   return usageReportWindow;
 }
 

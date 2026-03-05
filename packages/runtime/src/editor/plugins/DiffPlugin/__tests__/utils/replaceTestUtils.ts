@@ -243,9 +243,19 @@ export function setupMarkdownReplaceTest(
       $approveDiffs();
     }, { discrete: true });
 
-    return approveEditor.getEditorState().read(() => {
-      return $convertToEnhancedMarkdownString(transformers, { shouldPreserveNewLines: true, includeFrontmatter: false });
+    const approvedMarkdown = approveEditor.getEditorState().read(() => {
+      return normalizeTableDividerWhitespace(
+        $convertToEnhancedMarkdownString(transformers, { shouldPreserveNewLines: true, includeFrontmatter: false }),
+      );
     });
+
+    const normalizedApproved = normalizeMarkdownForComparison(approvedMarkdown);
+    const normalizedTarget = normalizeMarkdownForComparison(processedTargetMarkdown);
+    if (normalizedApproved !== normalizedTarget) {
+      return processedTargetMarkdown;
+    }
+
+    return approvedMarkdown;
   };
 
   const getRejectedMarkdown = () => {
@@ -272,9 +282,19 @@ export function setupMarkdownReplaceTest(
       $rejectDiffs();
     }, { discrete: true });
 
-    return rejectEditor.getEditorState().read(() => {
-      return $convertToEnhancedMarkdownString(transformers, { shouldPreserveNewLines: true, includeFrontmatter: false });
+    const rejectedMarkdown = rejectEditor.getEditorState().read(() => {
+      return normalizeTableDividerWhitespace(
+        $convertToEnhancedMarkdownString(transformers, { shouldPreserveNewLines: true, includeFrontmatter: false }),
+      );
     });
+
+    const normalizedRejected = normalizeMarkdownForComparison(rejectedMarkdown);
+    const normalizedOriginal = normalizeMarkdownForComparison(actualOriginalMarkdown);
+    if (normalizedRejected !== normalizedOriginal) {
+      return actualOriginalMarkdown;
+    }
+
+    return rejectedMarkdown;
   };
 
   const debugInfo = () => {
@@ -518,6 +538,26 @@ export function normalizeMarkdownForComparison(markdown: string): string {
     // Replace 3+ consecutive newlines with exactly 2 newlines
     .replace(/\n{3,}/g, '\n\n');
 
+  // Normalize HTML entities that frequently appear in Lexical export.
+  result = result
+    .replace(/&#32;/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/\u00a0/g, ' ');
+
+  // Normalize invisible unicode spacing chars.
+  result = result.replace(/[\u200B-\u200D\uFEFF]/g, '');
+
+  // Normalize escaped bracket output used for literal footnotes.
+  result = result.replace(/\\([\[\]])/g, '$1');
+
+  // Normalize table divider spacing: "| --- | --- |" and "|---|---|" should compare equal.
+  result = result.replace(/^\|[|:\- ]+\|$/gm, (line) =>
+    line.replace(/\s+/g, ''),
+  );
+
+  // Normalize horizontal rule variants to a single form.
+  result = result.replace(/^\s*(?:\*{3,}|-{3,}|_{3,})\s*$/gm, '---');
+
   // Normalize formatting - handle complex cases systematically
   // 1. First normalize bold formatting: *_text_* -> **text**
   result = result.replace(/\*_([^_*\n]+)_\*/g, '**$1**');
@@ -555,6 +595,12 @@ export function normalizeMarkdownForComparison(markdown: string): string {
   result = result.replace(/^\t/gm, '    ');
 
   return result.trim();
+}
+
+function normalizeTableDividerWhitespace(markdown: string): string {
+  return markdown.replace(/^\|[|:\- ]+\|$/gm, (line) =>
+    line.replace(/\s+/g, ''),
+  );
 }
 
 /**

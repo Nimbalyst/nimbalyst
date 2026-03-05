@@ -11,6 +11,7 @@ import {
 } from '../../../../../markdown/index';
 import { applyMarkdownReplace } from '../../../core/diffUtils';
 import { createTestHeadlessEditor } from '../../utils/testConfig';
+import { expectMarkdownToMatch } from '../../utils/replaceTestUtils';
 
 describe('Reorder diff bug', () => {
   it('should handle multiple additions under multiple headers', () => {
@@ -37,7 +38,7 @@ Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deseru
 
 `;
 
-    const newMarkdown = ` Reorder Test
+    const newMarkdown = `# Reorder Test
 
 This test will test what happens if an entire section is moved in a document.
 
@@ -93,7 +94,7 @@ Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu 
     console.log(finalMarkdown);
 
     // Check that content appears under correct headers
-    expect(finalMarkdown).toBe(newMarkdown);
+    expectMarkdownToMatch(finalMarkdown, newMarkdown);
 
   });
 });

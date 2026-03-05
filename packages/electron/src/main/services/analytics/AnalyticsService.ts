@@ -21,7 +21,15 @@ type AnalyticsSettings = {
  */
 export class AnalyticsService {
 
-  private log = logger.analytics;
+  private log =
+    logger.analytics ??
+    logger.ai ??
+    ({
+      info: () => {},
+      warn: () => {},
+      error: () => {},
+      debug: () => {},
+    } as const);
 
   private static instance: AnalyticsService = new AnalyticsService();
 

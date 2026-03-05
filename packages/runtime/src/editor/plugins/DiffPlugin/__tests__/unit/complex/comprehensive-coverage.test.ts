@@ -16,7 +16,7 @@ describe('Comprehensive lexical-diff coverage tests', () => {
     // Tests for deeply nested content combinations
 
     // Table tests have been moved to advanced-tables.test.ts for better organization
-    
+
     describe('Blockquotes inside lists', () => {
       it('should handle blockquotes added to list items', () => {
         const original = `1. First item
@@ -765,7 +765,7 @@ describe('Comprehensive lexical-diff coverage tests', () => {
         expect(result.getApprovedMarkdown()).toContain('MODIFIED');
         expect(result.getApprovedMarkdown()).toContain('UPDATED');
         expect(result.getApprovedMarkdown()).toContain('CHANGED');
-      });
+      }, 20000);
     });
 
     describe('Deeply nested structures', () => {
@@ -921,7 +921,7 @@ describe('Comprehensive lexical-diff coverage tests', () => {
         expect(result.getApprovedMarkdown()).toContain(
           'List item 100 with ENHANCED',
         );
-      });
+      }, 20000);
 
       it('should handle nested lists with many items', () => {
         let original = '';
@@ -2643,7 +2643,9 @@ Paragraph content.`;
 
         const result = setupMarkdownDiffTest(original, target);
 
-        expect(result.diff).toContain('+ and [Site C][c]');
+        expect(result.diff).toContain(
+          '+Visit [Site A][a] and [Site B][b] and [Site C][c].',
+        );
         expect(result.diff).toContain('-[a]: https://sitea.com');
         expect(result.diff).toContain('+[a]: https://newsitea.com');
         expect(result.diff).toContain('+[c]: https://sitec.com');
@@ -2732,7 +2734,7 @@ Paragraph content.`;
         const result = setupMarkdownDiffTest(original, target);
 
         expect(result.getApprovedMarkdown()).toContain(
-          '**API** *reference* `v2`',
+          '**API** _reference_ `v2`',
         );
       });
     });

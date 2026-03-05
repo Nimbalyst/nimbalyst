@@ -10,7 +10,7 @@ const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL;
 
 const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
-const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-latest';
+const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6';
 const ANTHROPIC_BASE_URL = process.env.ANTHROPIC_BASE_URL;
 
 const LMSTUDIO_BASE_URL = process.env.LMSTUDIO_BASE_URL;
@@ -30,8 +30,8 @@ const RUN_CONFIG = (() => {
   const raw = process.env.RUN_AI_PROVIDER_TESTS;
   if (!raw) {
     return {
-      enabled: AVAILABLE_DEFAULTS.size > 0,
-      providers: new Set<ProviderId>(AVAILABLE_DEFAULTS),
+      enabled: false,
+      providers: new Set<ProviderId>(),
     };
   }
   const normalized = raw.toLowerCase().trim();
@@ -106,12 +106,12 @@ describe('AI provider integration', () => {
   });
 
   const baseDocument: DocumentContext = {
-    filePath: 'doc.md',
+    filePath: '/tmp/doc.md',
     fileType: 'markdown',
     content: '# Notes\n\nThis is teh test document.\n',
   };
   const streamingDocument: DocumentContext = {
-    filePath: 'streaming.md',
+    filePath: '/tmp/streaming.md',
     fileType: 'markdown',
     content: '# Changelog\n\n- Initial entry.\n',
   };

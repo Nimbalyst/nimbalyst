@@ -67,8 +67,8 @@ describe('Mermaid Import', () => {
 
     // Check for any undefined array properties
     const problemElements = result.elements.filter((el: any) => {
-      return el.boundElements === undefined ||
-             el.groupIds === undefined ||
+      return (el.boundElements !== undefined && !Array.isArray(el.boundElements)) ||
+             !Array.isArray(el.groupIds) ||
              (el.type === 'arrow' && el.points === undefined);
     });
 

@@ -168,11 +168,13 @@ describe('McpConfigService', () => {
         workspacePath: '/test/workspace'
       });
 
-      expect(config['nimbalyst-mcp']).toEqual({
-        type: 'sse',
-        transport: 'sse',
-        url: 'http://127.0.0.1:3000/mcp?workspacePath=%2Ftest%2Fworkspace&sessionId=session123'
-      });
+      expect(config['nimbalyst-mcp']).toEqual(
+        expect.objectContaining({
+          type: 'sse',
+          transport: 'sse',
+          url: 'http://127.0.0.1:3000/mcp?workspacePath=%2Ftest%2Fworkspace&sessionId=session123'
+        }),
+      );
     });
 
     it('should include session-naming server when port is set and session ID exists', async () => {

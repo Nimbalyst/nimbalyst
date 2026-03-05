@@ -75,9 +75,9 @@ export class ElectronDocumentService implements DocumentService {
     console.log(`[DocumentService] Constructor called for workspace: ${workspacePath}`);
     console.log(`[DocumentService] SKIPPING initial scan - scan will happen on-demand only`);
 
-    // DON'T scan on startup - it freezes the app for large projects
-    // Scanning will happen lazily when documents are actually requested
-    this.initializationPromise = Promise.resolve();
+    // DON'T scan on startup - it freezes the app for large projects.
+    // Metadata initialization runs lazily when metadata APIs are first called.
+    this.initializationPromise = null;
 
     // Disable automatic background scanning - only scan on-demand
     // Background scanning was causing performance issues with large projects
@@ -100,9 +100,10 @@ export class ElectronDocumentService implements DocumentService {
   }
 
   private async ensureInitialized(): Promise<void> {
-    if (this.initializationPromise) {
-      await this.initializationPromise;
+    if (!this.initializationPromise) {
+      this.initializationPromise = this.initializeAsync();
     }
+    await this.initializationPromise;
   }
 
   // Public method to trigger a full refresh (for tracker panel initialization, etc.)

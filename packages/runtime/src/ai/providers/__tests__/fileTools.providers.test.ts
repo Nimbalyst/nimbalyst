@@ -19,6 +19,7 @@ import {
 } from '../../../core/FileSystemService';
 
 describe.skipIf(typeof window !== 'undefined')('File Tools with Real AI Providers', () => {
+  const runProviderTests = process.env.RUN_AI_PROVIDER_TESTS === 'true';
   const openAIKey = process.env.OPENAI_API_KEY;
   const anthropicKey = process.env.ANTHROPIC_API_KEY;
   let mockFileSystemService: FileSystemService;
@@ -122,7 +123,7 @@ root.render(<App />);`
     clearFileSystemService();
   });
 
-  it.skipIf(!openAIKey)('should use file tools through OpenAI function calling', async () => {
+  it.skipIf(!runProviderTests || !openAIKey)('should use file tools through OpenAI function calling', async () => {
     const provider = ProviderFactory.createProvider('openai', 'test-file-tools-openai');
     await provider.initialize({
       apiKey: openAIKey!,
@@ -185,7 +186,7 @@ root.render(<App />);`
     expect(fullResponse.toLowerCase()).toMatch(/react|typescript|package|dependencies|files?/);
   }, 30000); // Increase timeout for API calls
 
-  it.skipIf(!anthropicKey)('should use file tools through Claude tool use', async () => {
+  it.skipIf(!runProviderTests || !anthropicKey)('should use file tools through Claude tool use', async () => {
     const provider = ProviderFactory.createProvider('claude', 'test-file-tools-claude');
     await provider.initialize({
       apiKey: anthropicKey!,

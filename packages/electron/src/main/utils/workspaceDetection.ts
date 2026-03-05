@@ -82,13 +82,13 @@ export function resolveProjectPath(workspacePath: string): string {
   }
 
   // Normalize the path to remove trailing slashes for consistent matching
-  const normalizedPath = path.normalize(workspacePath);
+  const normalizedPath = normalizeWorkspacePath(workspacePath);
 
   // Match pattern: /{project}_worktrees/{name}
   // This matches our worktree creation pattern in GitWorktreeService
   // Use [\\/] to match both forward and backslash (Windows and Unix)
   const match = normalizedPath.match(/^(.+)_worktrees[\\/][^\\/]+$/);
-  return match ? match[1] : workspacePath;
+  return match ? match[1] : normalizedPath;
 }
 
 /**
@@ -102,9 +102,34 @@ export function isWorktreePath(workspacePath: string): boolean {
     return false;
   }
 
-  const normalizedPath = path.normalize(workspacePath);
+  const normalizedPath = normalizeWorkspacePath(workspacePath);
   // Use [\\/] to match both forward and backslash (Windows and Unix)
   return /_worktrees[\\/][^\\/]+$/.test(normalizedPath);
+}
+
+/**
+ * Normalize workspace paths for matching while preserving filesystem roots.
+ * Example: "C:\\" must stay "C:\\" (not "C:").
+ */
+function normalizeWorkspacePath(workspacePath: string): string {
+  const normalizedPath = path.normalize(workspacePath);
+
+  // Preserve Windows roots (drive and UNC) even when running on non-Windows hosts.
+  const windowsRoot = path.win32.parse(normalizedPath).root;
+  if (
+    windowsRoot &&
+    normalizedPath.replace(/[\\/]/g, '/') === windowsRoot.replace(/[\\/]/g, '/')
+  ) {
+    return windowsRoot;
+  }
+
+  // Preserve POSIX root.
+  const posixRoot = path.posix.parse(normalizedPath).root;
+  if (normalizedPath === posixRoot) {
+    return posixRoot;
+  }
+
+  return normalizedPath.replace(/[\\/]+$/, '');
 }
 
 /**

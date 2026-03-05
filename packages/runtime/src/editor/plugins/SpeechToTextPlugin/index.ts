@@ -42,8 +42,11 @@ const VOICE_COMMANDS: Readonly<
   },
 };
 
+const HAS_WINDOW = typeof window !== 'undefined';
+
 export const SUPPORT_SPEECH_RECOGNITION: boolean =
-  'SpeechRecognition' in window || 'webkitSpeechRecognition' in window;
+  HAS_WINDOW &&
+  ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window);
 
 function SpeechToTextPlugin(): null {
   const [editor] = useLexicalComposerContext();

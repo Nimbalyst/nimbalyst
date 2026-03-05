@@ -7,11 +7,17 @@ import { ElectronFileSystemService } from '../ElectronFileSystemService';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'fs';
-import * as child_process from 'child_process';
+
+const { execFileMock } = vi.hoisted(() => ({
+  execFileMock: vi.fn(),
+}));
 
 // Mock child_process to test command injection prevention
 vi.mock('child_process', () => ({
-  execFile: vi.fn(),
+  execFile: execFileMock,
+  default: {
+    execFile: execFileMock,
+  },
 }));
 
 // Mock promisify to work with our mocked execFile
@@ -20,7 +26,7 @@ vi.mock('util', async () => {
   return {
     ...actual,
     promisify: (fn: any) => {
-      if (fn === child_process.execFile) {
+      if (fn === execFileMock) {
         return vi.fn(async (cmd: string, args: string[]) => {
           // Simulate ripgrep output
           return { stdout: '' };
