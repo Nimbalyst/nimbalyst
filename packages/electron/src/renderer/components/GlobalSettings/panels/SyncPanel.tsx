@@ -769,7 +769,7 @@ export function SyncPanel() {
               </div>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => window.electronAPI.openExternal('https://apps.apple.com/app/nimbalyst')}
+                  onClick={() => window.electronAPI.openExternal('https://apps.apple.com/app/id6756393105')}
                   className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white rounded text-[11px] font-medium text-gray-900 border-none cursor-pointer hover:bg-gray-100"
                 >
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
@@ -777,9 +777,6 @@ export function SyncPanel() {
                   </svg>
                   App Store
                 </button>
-                <span className="inline-flex items-center px-2 py-0.5 bg-nim-primary/15 border border-nim-primary/30 rounded-full text-[10px] font-medium text-nim-primary">
-                  Coming Soon
-                </span>
               </div>
             </div>
             {/* Pair Device button - right side of card */}
