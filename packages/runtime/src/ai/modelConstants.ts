@@ -104,6 +104,6 @@ export const DEFAULT_MODELS = {
   claude: 'claude:claude-sonnet-4-6',
   openai: 'openai:gpt-5',
   'claude-code': 'claude-code:sonnet',
-  'openai-codex': 'openai-codex:gpt-5.3-codex',
+  'openai-codex': 'openai-codex:gpt-5.4-codex',
   lmstudio: 'lmstudio:local-model',
 };

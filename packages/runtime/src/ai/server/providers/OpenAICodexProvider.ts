@@ -48,6 +48,7 @@ export class OpenAICodexProvider extends BaseAgentProvider {
     contextWindow: number;
     maxTokens: number;
   }> = [
+    { id: 'gpt-5.4-codex', name: 'GPT-5.4 Codex', contextWindow: 400000, maxTokens: 128000 },
     { id: 'gpt-5.3-codex', name: 'GPT-5.3 Codex', contextWindow: 400000, maxTokens: 128000 },
     { id: 'gpt-5.2-codex', name: 'GPT-5.2 Codex', contextWindow: 400000, maxTokens: 128000 },
     { id: 'gpt-5.1-codex-max', name: 'GPT-5.1 Codex Max', contextWindow: 400000, maxTokens: 128000 },
@@ -55,6 +56,7 @@ export class OpenAICodexProvider extends BaseAgentProvider {
     { id: 'gpt-5.1-codex-mini', name: 'GPT-5.1 Codex Mini', contextWindow: 400000, maxTokens: 128000 },
   ];
   private static readonly MODEL_FALLBACK_PRIORITY: ReadonlyArray<string> = [
+    'gpt-5.4-codex',
     'gpt-5.3-codex',
     'gpt-5.2-codex',
     'gpt-5.1-codex-max',
@@ -259,12 +261,14 @@ export class OpenAICodexProvider extends BaseAgentProvider {
   ]);
   private static readonly MODEL_REPLACEMENTS = new Map<string, string>([
     ['gpt-5', 'gpt-5.2'],
-    ['gpt-5-codex', 'gpt-5.2-codex'],
+    ['gpt-5-codex', 'gpt-5.4-codex'],
     ['gpt-5-codex-mini', 'gpt-5.1-codex-mini'],
     ['gpt-5.2-codex-mini', 'gpt-5.2-codex'],
     ['gpt-5.2-codex-max', 'gpt-5.2-codex'],
     ['gpt-5-codex-max', 'gpt-5.1-codex-max'],
     ['gpt-5.1-codex', 'gpt-5.2-codex'],
+    ['gpt-5.3-codex-mini', 'gpt-5.3-codex'],
+    ['gpt-5.3-codex-max', 'gpt-5.3-codex'],
     ['codex-mini-latest', 'gpt-5.1-codex-mini'],
   ]);
 
@@ -274,7 +278,7 @@ export class OpenAICodexProvider extends BaseAgentProvider {
   static normalizeModelSelection(modelId: string): string {
     const normalized = modelId.trim().toLowerCase();
     if (OpenAICodexProvider.LEGACY_MODEL_ALIASES.has(normalized)) {
-      return 'openai-codex:gpt-5.3-codex';
+      return 'openai-codex:gpt-5.4-codex';
     }
 
     const parsed = ModelIdentifier.tryParse(modelId);
@@ -951,7 +955,7 @@ export class OpenAICodexProvider extends BaseAgentProvider {
     const resolved = parsed ? parsed.model : configured.replace(/^openai-codex:/, '');
     const normalized = resolved.toLowerCase();
     if (normalized === 'openai-codex-cli' || normalized === 'default' || normalized === 'cli') {
-      return 'gpt-5.3-codex';
+      return 'gpt-5.4-codex';
     }
 
     const normalizedModel = OpenAICodexProvider.MODEL_REPLACEMENTS.get(normalized) || resolved;

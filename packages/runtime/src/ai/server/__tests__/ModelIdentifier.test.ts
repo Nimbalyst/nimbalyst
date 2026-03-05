@@ -250,7 +250,7 @@ describe('ModelIdentifier', () => {
     it('returns default ModelIdentifier for openai-codex', () => {
       const id = ModelIdentifier.getDefaultForProvider('openai-codex');
       expect(id.provider).toBe('openai-codex');
-      expect(id.combined).toBe('openai-codex:gpt-5.3-codex');
+      expect(id.combined).toBe('openai-codex:gpt-5.4-codex');
     });
 
     it('returns default ModelIdentifier for lmstudio', () => {
@@ -265,7 +265,7 @@ describe('ModelIdentifier', () => {
       expect(ModelIdentifier.getDefaultModelId('claude')).toBe('claude:claude-sonnet-4-6');
       expect(ModelIdentifier.getDefaultModelId('claude-code')).toBe('claude-code:sonnet');
       expect(ModelIdentifier.getDefaultModelId('openai')).toBe('openai:gpt-5');
-      expect(ModelIdentifier.getDefaultModelId('openai-codex')).toBe('openai-codex:gpt-5.3-codex');
+      expect(ModelIdentifier.getDefaultModelId('openai-codex')).toBe('openai-codex:gpt-5.4-codex');
       expect(ModelIdentifier.getDefaultModelId('lmstudio')).toBe('lmstudio:local-model');
     });
   });

@@ -37,7 +37,7 @@ describe('OpenAICodexProvider', () => {
   });
 
   it('returns fallback models when SDK model discovery is unavailable', async () => {
-    expect(OpenAICodexProvider.DEFAULT_MODEL).toBe('openai-codex:gpt-5.3-codex');
+    expect(OpenAICodexProvider.DEFAULT_MODEL).toBe('openai-codex:gpt-5.4-codex');
 
     const models = await OpenAICodexProvider.getModels(undefined, {
       loadSdkModule: async () => {
@@ -48,11 +48,11 @@ describe('OpenAICodexProvider', () => {
     expect(models.length).toBeGreaterThan(1);
     expect(models).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        id: 'openai-codex:gpt-5.3-codex',
+        id: 'openai-codex:gpt-5.4-codex',
         provider: 'openai-codex',
       }),
       expect.objectContaining({
-        id: 'openai-codex:gpt-5.2-codex',
+        id: 'openai-codex:gpt-5.3-codex',
         provider: 'openai-codex',
       }),
     ]));
@@ -92,6 +92,10 @@ describe('OpenAICodexProvider', () => {
     expect(listModels).toHaveBeenCalledTimes(1);
     expect(models).toEqual(expect.arrayContaining([
       expect.objectContaining({
+        id: 'openai-codex:gpt-5.4-codex',
+        provider: 'openai-codex',
+      }),
+      expect.objectContaining({
         id: 'openai-codex:gpt-5.3-codex',
         provider: 'openai-codex',
       }),
@@ -113,7 +117,7 @@ describe('OpenAICodexProvider', () => {
         provider: 'openai-codex',
       }),
     ]));
-    expect(models).toHaveLength(5);
+    expect(models).toHaveLength(6);
   });
 
   it('streams text and completion usage from Codex SDK events', async () => {
@@ -667,7 +671,7 @@ describe('OpenAICodexProvider', () => {
     expect(errorChunk?.error).toContain('permission mode');
   });
 
-  it('maps legacy codex model ids to gpt-5.3-codex when starting a thread', async () => {
+  it('maps legacy codex model ids to gpt-5.4-codex when starting a thread', async () => {
     const startThread = vi.fn((config: { model: string }) => ({
       id: 'thread-legacy',
       runStreamed: async () => ({
@@ -707,7 +711,7 @@ describe('OpenAICodexProvider', () => {
 
     expect(startThread).toHaveBeenCalledTimes(1);
     const startArgs = (startThread.mock.calls as unknown as [Record<string, unknown>][])[0][0];
-    expect(startArgs.model).toBe('gpt-5.3-codex');
+    expect(startArgs.model).toBe('gpt-5.4-codex');
   });
 
   it('maps removed codex aliases to supported model ids', async () => {
