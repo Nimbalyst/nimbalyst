@@ -27,7 +27,11 @@ Update the Anthropic Agent SDK, MCP library, and OpenAI Codex SDK to their lates
   - Update `@modelcontextprotocol/sdk` version in `packages/electron/package.json` (use caret prefix)
   - Update `@openai/codex-sdk` version in `packages/runtime/package.json` (use caret prefix)
 6. **Run npm install** at the repository root to update package-lock.json
-7. **Verify** the updates were successful by checking the installed versions
+7. **Verify** the updates were successful by running `npm ls <package-name>` for each updated package. If npm reports `invalid` (lock file still resolves the old version despite the package.json change), you must:
+  - Remove the stale package directories from `node_modules/` (including transitive deps like `@openai/codex` for `@openai/codex-sdk`)
+  - Use `npm view <package>@<version> --json` to get the new `integrity`, `resolved` URL, and `dependencies`
+  - Edit `package-lock.json` to update the `version`, `resolved`, `integrity`, and `dependencies` for the package AND its transitive deps
+  - Re-run `npm install` and verify again with `npm ls`
 8. **Commit the changes** - Create a git commit with the updated dependencies. The commit message should summarize which packages were updated and their version changes (e.g., "deps: update claude-agent-sdk 1.0.0 -> 1.1.0, mcp-sdk 2.0.0 -> 2.1.0"). Stage only the relevant files: `package.json`, `packages/electron/package.json`, `packages/runtime/package.json`, and `package-lock.json`.
 
 ## Output Format
