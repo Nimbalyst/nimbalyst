@@ -37,7 +37,7 @@ describe('OpenAICodexProvider', () => {
   });
 
   it('returns fallback models when SDK model discovery is unavailable', async () => {
-    expect(OpenAICodexProvider.DEFAULT_MODEL).toBe('openai-codex:gpt-5.4-codex');
+    expect(OpenAICodexProvider.DEFAULT_MODEL).toBe('openai-codex:gpt-5.4');
 
     const models = await OpenAICodexProvider.getModels(undefined, {
       loadSdkModule: async () => {
@@ -48,7 +48,7 @@ describe('OpenAICodexProvider', () => {
     expect(models.length).toBeGreaterThan(1);
     expect(models).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        id: 'openai-codex:gpt-5.4-codex',
+        id: 'openai-codex:gpt-5.4',
         provider: 'openai-codex',
       }),
       expect.objectContaining({
@@ -92,7 +92,7 @@ describe('OpenAICodexProvider', () => {
     expect(listModels).toHaveBeenCalledTimes(1);
     expect(models).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        id: 'openai-codex:gpt-5.4-codex',
+        id: 'openai-codex:gpt-5.4',
         provider: 'openai-codex',
       }),
       expect.objectContaining({
@@ -671,7 +671,7 @@ describe('OpenAICodexProvider', () => {
     expect(errorChunk?.error).toContain('permission mode');
   });
 
-  it('maps legacy codex model ids to gpt-5.4-codex when starting a thread', async () => {
+  it('maps legacy codex model ids to gpt-5.4 when starting a thread', async () => {
     const startThread = vi.fn((config: { model: string }) => ({
       id: 'thread-legacy',
       runStreamed: async () => ({
@@ -711,7 +711,7 @@ describe('OpenAICodexProvider', () => {
 
     expect(startThread).toHaveBeenCalledTimes(1);
     const startArgs = (startThread.mock.calls as unknown as [Record<string, unknown>][])[0][0];
-    expect(startArgs.model).toBe('gpt-5.4-codex');
+    expect(startArgs.model).toBe('gpt-5.4');
   });
 
   it('maps removed codex aliases to supported model ids', async () => {

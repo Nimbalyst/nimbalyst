@@ -48,7 +48,7 @@ export class OpenAICodexProvider extends BaseAgentProvider {
     contextWindow: number;
     maxTokens: number;
   }> = [
-    { id: 'gpt-5.4-codex', name: 'GPT-5.4 Codex', contextWindow: 400000, maxTokens: 128000 },
+    { id: 'gpt-5.4', name: 'GPT-5.4', contextWindow: 400000, maxTokens: 128000 },
     { id: 'gpt-5.3-codex', name: 'GPT-5.3 Codex', contextWindow: 400000, maxTokens: 128000 },
     { id: 'gpt-5.2-codex', name: 'GPT-5.2 Codex', contextWindow: 400000, maxTokens: 128000 },
     { id: 'gpt-5.1-codex-max', name: 'GPT-5.1 Codex Max', contextWindow: 400000, maxTokens: 128000 },
@@ -56,7 +56,7 @@ export class OpenAICodexProvider extends BaseAgentProvider {
     { id: 'gpt-5.1-codex-mini', name: 'GPT-5.1 Codex Mini', contextWindow: 400000, maxTokens: 128000 },
   ];
   private static readonly MODEL_FALLBACK_PRIORITY: ReadonlyArray<string> = [
-    'gpt-5.4-codex',
+    'gpt-5.4',
     'gpt-5.3-codex',
     'gpt-5.2-codex',
     'gpt-5.1-codex-max',
@@ -72,8 +72,6 @@ export class OpenAICodexProvider extends BaseAgentProvider {
   private static readonly MODEL_ID_CACHE_DURATION_MS = 5 * 60 * 1000;
   private static readonly MODEL_ID_CACHE_MAX_SIZE = 100;
   private static readonly MODEL_ID_CACHE = new Map<string, { fetchedAt: number; ids: Set<string> }>();
-  private static readonly CONFIGURED_MODEL_CACHE = new Map<string, { cachedAt: number; model: string }>();
-  private static readonly CONFIGURED_MODEL_CACHE_TTL_MS = 60 * 1000;
 
   private readonly apiKey: string;
   private readonly protocol: CodexSDKProtocol;
@@ -261,7 +259,8 @@ export class OpenAICodexProvider extends BaseAgentProvider {
   ]);
   private static readonly MODEL_REPLACEMENTS = new Map<string, string>([
     ['gpt-5', 'gpt-5.2'],
-    ['gpt-5-codex', 'gpt-5.4-codex'],
+    ['gpt-5-codex', 'gpt-5.4'],
+    ['gpt-5.4-codex', 'gpt-5.4'],
     ['gpt-5-codex-mini', 'gpt-5.1-codex-mini'],
     ['gpt-5.2-codex-mini', 'gpt-5.2-codex'],
     ['gpt-5.2-codex-max', 'gpt-5.2-codex'],
@@ -278,7 +277,7 @@ export class OpenAICodexProvider extends BaseAgentProvider {
   static normalizeModelSelection(modelId: string): string {
     const normalized = modelId.trim().toLowerCase();
     if (OpenAICodexProvider.LEGACY_MODEL_ALIASES.has(normalized)) {
-      return 'openai-codex:gpt-5.4-codex';
+      return 'openai-codex:gpt-5.4';
     }
 
     const parsed = ModelIdentifier.tryParse(modelId);
@@ -955,56 +954,14 @@ export class OpenAICodexProvider extends BaseAgentProvider {
     const resolved = parsed ? parsed.model : configured.replace(/^openai-codex:/, '');
     const normalized = resolved.toLowerCase();
     if (normalized === 'openai-codex-cli' || normalized === 'default' || normalized === 'cli') {
-      return 'gpt-5.4-codex';
+      return 'gpt-5.4';
     }
 
-    const normalizedModel = OpenAICodexProvider.MODEL_REPLACEMENTS.get(normalized) || resolved;
-    const apiKey = this.config?.apiKey || this.apiKey || process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-      return normalizedModel;
-    }
-    if (process.env.NODE_ENV === 'test' || process.env.VITEST === 'true') {
-      return normalizedModel;
-    }
-
-    // Check cache first
-    const cacheKey = `${OpenAICodexProvider.hashApiKey(apiKey)}:${normalizedModel}`;
-    const cached = OpenAICodexProvider.CONFIGURED_MODEL_CACHE.get(cacheKey);
-    if (cached && Date.now() - cached.cachedAt < OpenAICodexProvider.CONFIGURED_MODEL_CACHE_TTL_MS) {
-      return cached.model;
-    }
-
-    try {
-      const availableIds = await OpenAICodexProvider.getAvailableModelIds(apiKey);
-      let resultModel = normalizedModel;
-
-      if (availableIds.size > 0 && !availableIds.has(normalizedModel)) {
-        for (const preferredModelId of OpenAICodexProvider.MODEL_FALLBACK_PRIORITY) {
-          if (availableIds.has(preferredModelId)) {
-            resultModel = preferredModelId;
-            break;
-          }
-        }
-        if (resultModel === normalizedModel) {
-          const firstCodex = Array.from(availableIds).find((modelId) => modelId.toLowerCase().includes('codex'));
-          if (firstCodex) {
-            resultModel = firstCodex;
-          }
-        }
-      }
-
-      // Cache the result
-      OpenAICodexProvider.CONFIGURED_MODEL_CACHE.set(cacheKey, {
-        cachedAt: Date.now(),
-        model: resultModel,
-      });
-
-      return resultModel;
-    } catch {
-      // Best-effort model validation only.
-    }
-
-    return normalizedModel;
+    // Pass the model directly to the Codex SDK without pre-validation.
+    // The openai.models.list() API does not include all Codex-available models
+    // (e.g., gpt-5.4 works via the SDK but isn't listed in the API).
+    // The SDK itself will fail with a proper error if the model doesn't exist.
+    return OpenAICodexProvider.MODEL_REPLACEMENTS.get(normalized) || resolved;
   }
 
   private buildCodexPrompt(options: {
