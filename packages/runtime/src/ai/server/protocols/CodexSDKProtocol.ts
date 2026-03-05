@@ -365,18 +365,25 @@ export class CodexSDKProtocol implements AgentProtocol {
       ? 'danger-full-access'
       : 'workspace-write';
 
+    // Map effort level to Codex SDK ModelReasoningEffort.
+    // Codex SDK supports: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
+    // Our EffortLevel uses: 'low' | 'medium' | 'high' | 'max'
+    // Map 'max' → 'xhigh', rest map directly.
+    const effortLevel = options.raw?.effortLevel as string | undefined;
+    const reasoningEffort = effortLevel === 'max' ? 'xhigh' : (effortLevel || 'high');
+
     const baseOptions = {
       model: options.model || 'gpt-5',
       workingDirectory: options.workspacePath,
       skipGitRepoCheck: true,
       approvalPolicy: 'never', // Nimbalyst handles approvals
       sandboxMode,
-      modelReasoningEffort: 'high',
+      modelReasoningEffort: reasoningEffort,
     };
 
     // Extract systemPrompt from raw options and pass it as developer_instructions
     // This is the proper Codex SDK way to add custom instructions
-    const { systemPrompt, codexConfigOverrides: _codexConfigOverrides, ...otherRawOptions } = options.raw || {};
+    const { systemPrompt, codexConfigOverrides: _codexConfigOverrides, effortLevel: _effortLevel, ...otherRawOptions } = options.raw || {};
 
     return {
       ...baseOptions,

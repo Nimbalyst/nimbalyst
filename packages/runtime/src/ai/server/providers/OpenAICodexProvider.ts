@@ -793,6 +793,7 @@ export class OpenAICodexProvider extends BaseAgentProvider {
           abortSignal: abortController.signal,
           codexConfigOverrides: this.buildCodexConfigOverrides(mcpServers),
           ...(codexEnv ? { codexEnv } : {}),
+          ...(this.config?.effortLevel ? { effortLevel: this.config.effortLevel } : {}),
         },
       };
 

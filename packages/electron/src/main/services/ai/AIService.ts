@@ -1837,6 +1837,13 @@ export class AIService {
         }
       }
 
+      // Pass effort level for OpenAI Codex
+      if (provider === 'openai-codex') {
+        if ((session.metadata as any)?.effortLevel) {
+          initConfig.effortLevel = parseEffortLevel((session.metadata as any).effortLevel);
+        }
+      }
+
       await providerInstance.initialize(initConfig);
 
       // Register tool handler - targetFilePath will be determined dynamically per tool call

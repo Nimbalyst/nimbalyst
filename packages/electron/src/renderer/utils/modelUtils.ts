@@ -231,13 +231,18 @@ export function getModelShortName(provider: string, modelId: string): string {
 }
 
 /**
- * Check if a model supports effort level configuration (Opus 4.6 and Sonnet 4.6).
- * Excludes the Sonnet 4.5 1M variant.
+ * Check if a model supports effort level configuration.
+ * Supported: Claude Code Opus 4.6 and Sonnet 4.6 (excludes 4.5 1M variant), and OpenAI Codex models.
  */
 export function supportsEffortLevel(modelId?: string): boolean {
+  if (!modelId) return false;
   if (modelId === 'claude-code:sonnet-4.5-1m') return false;
   const variant = extractClaudeCodeVariant(modelId);
   if (variant === 'opus') return true;
   if (variant === 'sonnet') return true;
+  // OpenAI Codex models support reasoning effort
+  const parsed = ModelIdentifier.tryParse(modelId);
+  if (parsed?.provider === 'openai-codex') return true;
+  if (modelId.startsWith('openai-codex:')) return true;
   return false;
 }
