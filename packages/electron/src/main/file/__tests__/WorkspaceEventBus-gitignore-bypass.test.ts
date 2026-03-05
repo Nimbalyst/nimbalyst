@@ -9,7 +9,7 @@
  * - OptimizedWorkspaceWatcher ignores bypassed events
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from 'vitest';
 
 // ---------------------------------------------------------------------------
 // Hoisted mocks — must run before vi.mock() factories
