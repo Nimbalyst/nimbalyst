@@ -20,6 +20,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.55.19] - 2026-03-05
+
+
+### Added
+- Configurable thinking level for OpenAI Codex sessions
+- `nimbalyst_version` super property added to all PostHog events
+
+### Fixed
+- Sanitize dotted MCP server names for Codex TOML config (e.g., `@scope/name` no longer produces invalid TOML keys)
+- Correct binary file exclusion test to use actually excluded extension
+
 ## [0.55.18] - 2026-03-05
 
 
