@@ -69,3 +69,11 @@ Lesson: NEVER hardcode CSS class selectors in test files. Always use `PLAYWRIGHT
 Used `await import('@nimbalyst/runtime')` and `await import('../../database/initialize')` inside voice agent callbacks in VoiceModeService.ts. This caused the `__ELECTRON_LOG__` double-registration crash when the voice agent tried to call `list_sessions`. The CLAUDE.md, the memory file, and the project rules ALL explicitly warn against this. This is the same mistake that has been made multiple times before.
 
 Lesson: ALWAYS use static top-level imports in Electron main process files. Never use `await import()` for `@nimbalyst/runtime` or any module that triggers side effects. Check imports FIRST before writing new code in main process files.
+
+## Release: skipped GitHub Actions check, missed two failed releases
+
+**Date**: 2026-03-05
+
+The `/release patch auto` instructions explicitly say "Get commits since last SUCCESSFUL release (check github actions!)". I skipped the GitHub Actions check entirely and just used the latest git tag (v0.55.14). Both v0.55.13 and v0.55.14 release builds had failed -- the last successful release was v0.55.12. As a result, v0.55.15's changelog only includes commits since v0.55.14, missing all the v0.55.13 and v0.55.14 changes that users never received.
+
+Lesson: In the release workflow, ALWAYS check GitHub Actions to find the last SUCCESSFUL release build before generating release notes. The latest git tag is not necessarily the latest shipped version.

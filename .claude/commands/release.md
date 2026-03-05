@@ -10,21 +10,24 @@ Prepare a release following this workflow:
 ## AUTO MODE DETECTION
 
 If `{{arg1}}` contains "auto" (e.g., "patch auto"), run the entire process without stopping for approval:
-1. Get commits since last release
-2. Generate release notes (both developer and public versions)
-3. Update CHANGELOG.md
-4. Run `./scripts/release.sh [type]` (extract just patch/minor/major from arg1)
-5. Push to private repo automatically
-6. Show the public release notes at the end for reference
-7. Provide link to GitHub Actions
+1. Find the last SUCCESSFUL release (see step 1 below -- you MUST check GitHub Actions)
+2. Get ALL commits since that successful release
+3. Generate release notes (both developer and public versions)
+4. Update CHANGELOG.md
+5. Run `./scripts/release.sh [type]` (extract just patch/minor/major from arg1)
+6. Push to private repo automatically
+7. Show the public release notes at the end for reference
+8. Provide link to GitHub Actions
 
 Otherwise, follow the interactive workflow below:
 
 ## INTERNAL RELEASE WORKFLOW
 
-1. **Get commits since last release**:
-  - Find the last git tag: `git describe --tags --abbrev=0`
-  - Get commits since that tag: `git log [last-tag]..HEAD --oneline`
+1. **Find the last SUCCESSFUL release** (NOT just the latest tag!):
+  - Run: `gh run list --limit=20 --json headBranch,conclusion,displayTitle,event | jq '[.[] | select(.event == "push" and (.headBranch | startswith("v0.")))]'`
+  - Find the most recent release tag where `conclusion` is `"success"` -- this is the last version that actually shipped
+  - The latest git tag may point to a FAILED build that never shipped. If v0.55.14 failed but v0.55.12 succeeded, the release notes must cover everything since v0.55.12
+  - Get commits since that successful tag: `git log [successful-tag]..HEAD --oneline`
 
 2. **Generate release notes**:
   - Create TWO versions of release notes:
