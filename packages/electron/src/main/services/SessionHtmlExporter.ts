@@ -95,7 +95,7 @@ function stripAbsolutePaths(content: string, workspacePath: string): string {
   if (!workspacePath) return content;
   const normalized = workspacePath.replace(/\\/g, '/');
   // Strip with trailing slash first, then without
-  return content.replaceAll(normalized + '/', '').replaceAll(normalized, '');
+  return content.split(normalized + '/').join('').split(normalized).join('');
 }
 
 function formatTimestamp(ts: number): string {
