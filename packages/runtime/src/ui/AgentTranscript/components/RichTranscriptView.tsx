@@ -1293,7 +1293,7 @@ export const RichTranscriptView = React.forwardRef<
                 <details className="rich-transcript-tool-details my-2">
                   <summary className="rich-transcript-tool-details-summary text-xs text-[var(--nim-text-faint)] cursor-pointer py-1 select-none hover:text-[var(--nim-text-muted)]">View full prompt</summary>
                   <div className="rich-transcript-tool-details-content mt-1 text-sm">
-                    <MarkdownRenderer content={prompt} isUser={false} />
+                    <MarkdownRenderer content={prompt} isUser={false} onOpenFile={onOpenFile} />
                   </div>
                 </details>
               )}
@@ -1337,9 +1337,9 @@ export const RichTranscriptView = React.forwardRef<
                   </summary>
                   <div className="rich-transcript-tool-details-content mt-1 text-sm">
                     {resultText ? (
-                      <MarkdownRenderer content={resultText} isUser={false} />
+                      <MarkdownRenderer content={resultText} isUser={false} onOpenFile={onOpenFile} />
                     ) : typeof tool.result === 'string' ? (
-                      <MarkdownRenderer content={tool.result} isUser={false} />
+                      <MarkdownRenderer content={tool.result} isUser={false} onOpenFile={onOpenFile} />
                     ) : (
                       <JSONViewer data={tool.result} maxHeight="16rem" />
                     )}
@@ -1540,6 +1540,7 @@ export const RichTranscriptView = React.forwardRef<
                               workspacePath={workspacePath}
                               readFile={readFile}
                               getToolCallDiffs={getToolCallDiffs}
+                              onOpenFile={onOpenFile}
                             />
                           </div>
 
@@ -1687,7 +1688,7 @@ export const RichTranscriptView = React.forwardRef<
                                 <span className="text-[10px] shrink-0">{formatMessageTime(message.timestamp)}</span>
                               </summary>
                               <div className="teammate-content ml-5 mt-1 mb-0.5">
-                                <MarkdownRenderer content={content} isUser={false} />
+                                <MarkdownRenderer content={content} isUser={false} onOpenFile={onOpenFile} />
                               </div>
                             </details>
                           ) : (

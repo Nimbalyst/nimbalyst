@@ -190,6 +190,7 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
           content={displayContent}
           isUser={isUser}
           isSystemMessage={isSystemMessage}
+          onOpenFile={onOpenFile}
         />
         {isCollapsed && (
           <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-[var(--nim-bg-secondary)] to-transparent pointer-events-none" />

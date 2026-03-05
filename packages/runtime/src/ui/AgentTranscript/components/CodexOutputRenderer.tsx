@@ -25,6 +25,8 @@ interface CodexOutputRendererProps {
   isCollapsed?: boolean;
   sessionId: string;
   workspacePath?: string;
+  /** Optional: Open local file paths in the editor */
+  onOpenFile?: (filePath: string) => void;
   readFile?: (filePath: string) => Promise<{ success: boolean; content?: string; error?: string }>;
   /** Optional: Fetch file diffs caused by a specific tool call */
   getToolCallDiffs?: (
@@ -392,6 +394,7 @@ export const CodexOutputRenderer: React.FC<CodexOutputRendererProps> = ({
   isCollapsed = false,
   sessionId,
   workspacePath,
+  onOpenFile,
   readFile,
   getToolCallDiffs,
 }) => {
@@ -537,6 +540,7 @@ export const CodexOutputRenderer: React.FC<CodexOutputRendererProps> = ({
                 getToolCallDiffs={getToolCallDiffs}
                 isExpanded={isExpanded}
                 workspacePath={workspacePath}
+                onOpenFile={onOpenFile}
               />
             )}
           </div>
@@ -577,7 +581,7 @@ export const CodexOutputRenderer: React.FC<CodexOutputRendererProps> = ({
           <div className="border-t border-[var(--nim-border)] p-3 space-y-3 max-h-96 overflow-y-auto">
             {blocks.map((block, blockIndex) => (
               <div key={blockIndex} className="codex-thinking-block text-sm text-[var(--nim-text-muted)] leading-relaxed">
-                <MarkdownRenderer content={block} isUser={false} />
+                <MarkdownRenderer content={block} isUser={false} onOpenFile={onOpenFile} />
               </div>
             ))}
           </div>
@@ -601,7 +605,11 @@ export const CodexOutputRenderer: React.FC<CodexOutputRendererProps> = ({
   if (isPlainOutput) {
     return (
       <div className={isCollapsed ? 'max-h-20 overflow-hidden relative' : ''}>
-        <MarkdownRenderer content={(sections[0] as { type: 'output'; content: string }).content} isUser={false} />
+        <MarkdownRenderer
+          content={(sections[0] as { type: 'output'; content: string }).content}
+          isUser={false}
+          onOpenFile={onOpenFile}
+        />
         {isCollapsed && (
           <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-[var(--nim-bg)] to-transparent pointer-events-none" />
         )}
@@ -628,7 +636,7 @@ export const CodexOutputRenderer: React.FC<CodexOutputRendererProps> = ({
               key={`output-${sectionIndex}`}
               className={`codex-answer ${isLastSection && isCollapsed ? 'max-h-20 overflow-hidden relative' : ''}`}
             >
-              <MarkdownRenderer content={section.content} isUser={false} />
+              <MarkdownRenderer content={section.content} isUser={false} onOpenFile={onOpenFile} />
               {isLastSection && isCollapsed && (
                 <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-[var(--nim-bg)] to-transparent pointer-events-none" />
               )}

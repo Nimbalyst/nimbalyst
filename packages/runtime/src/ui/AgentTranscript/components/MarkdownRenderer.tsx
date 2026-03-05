@@ -183,12 +183,90 @@ interface MarkdownRendererProps {
   content: string;
   isUser?: boolean;
   isSystemMessage?: boolean;
+  /** Optional: Open local file links directly in the editor */
+  onOpenFile?: (filePath: string) => void;
+}
+
+function safeDecodeURIComponent(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function stripQueryAndHash(value: string): string {
+  let result = value;
+  const hashIndex = result.indexOf('#');
+  if (hashIndex >= 0) {
+    result = result.slice(0, hashIndex);
+  }
+  const queryIndex = result.indexOf('?');
+  if (queryIndex >= 0) {
+    result = result.slice(0, queryIndex);
+  }
+  return result;
+}
+
+function stripLineAndColumnSuffix(filePath: string): string {
+  // Supports /path/file.ts:42 and /path/file.ts:42:7 references.
+  return filePath.replace(/:(\d+)(?::(\d+))?$/, '');
+}
+
+function isAbsoluteFilePath(filePath: string): boolean {
+  return (
+    filePath.startsWith('/') ||
+    /^[A-Za-z]:[\\/]/.test(filePath) ||
+    filePath.startsWith('\\\\')
+  );
+}
+
+/**
+ * Resolve href to an openable local file path when it looks like a filesystem link.
+ * Returns null for non-file/external links.
+ */
+export function resolveTranscriptFilePathFromHref(href?: string): string | null {
+  if (!href) return null;
+
+  const trimmedHref = href.trim();
+  if (!trimmedHref || trimmedHref.startsWith('#')) {
+    return null;
+  }
+
+  let candidate = trimmedHref;
+
+  if (/^file:\/\//i.test(trimmedHref)) {
+    try {
+      const parsedUrl = new URL(trimmedHref);
+      candidate = safeDecodeURIComponent(stripQueryAndHash(parsedUrl.pathname));
+      // file:///C:/Users/... => /C:/Users/... (normalize for Windows absolute path)
+      if (/^\/[A-Za-z]:[\\/]/.test(candidate)) {
+        candidate = candidate.slice(1);
+      }
+    } catch {
+      return null;
+    }
+  } else {
+    // Keep web links (https:, mailto:, etc.) as external links.
+    if (/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(trimmedHref)) {
+      return null;
+    }
+    candidate = safeDecodeURIComponent(stripQueryAndHash(trimmedHref));
+  }
+
+  const cleanedPath = stripLineAndColumnSuffix(candidate);
+  if (!cleanedPath) {
+    return null;
+  }
+
+  return isAbsoluteFilePath(cleanedPath) ? cleanedPath : null;
 }
 
 export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
   content,
   isUser = false,
-  isSystemMessage = false
+  isSystemMessage = false,
+  onOpenFile
 }) => {
   return (
     <div
@@ -362,20 +440,28 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
             </p>
           ),
           // Links
-          a: ({ href, children }) => (
-            <a
-              href={href}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                color: 'var(--nim-primary)',
-                textDecoration: 'underline',
-                cursor: 'pointer'
-              }}
-            >
-              {children}
-            </a>
-          ),
+          a: ({ href, children }) => {
+            const filePath = onOpenFile ? resolveTranscriptFilePathFromHref(href) : null;
+            return (
+              <a
+                href={href}
+                target={filePath ? undefined : '_blank'}
+                rel={filePath ? undefined : 'noopener noreferrer'}
+                onClick={(event) => {
+                  if (!filePath || !onOpenFile) return;
+                  event.preventDefault();
+                  onOpenFile(filePath);
+                }}
+                style={{
+                  color: 'var(--nim-primary)',
+                  textDecoration: 'underline',
+                  cursor: 'pointer'
+                }}
+              >
+                {children}
+              </a>
+            );
+          },
           // Lists
           ul: ({ children }) => (
             <ul style={{
