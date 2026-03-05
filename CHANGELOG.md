@@ -20,6 +20,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.55.14] - 2026-03-05
+
+
+### Added
+- MCP servers can be enabled per-provider (Claude/Codex)
+- Auto-compare blitz sessions when all sessions finish
+
+### Changed
+- Remove beta label and warning from OpenAI Codex
+
 ## [0.55.13] - 2026-03-05
 
 
