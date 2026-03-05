@@ -20,6 +20,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.55.18] - 2026-03-05
+
+
+### Fixed
+- Correct GPT-5.4 model ID (renamed from gpt-5.4-codex to gpt-5.4) with migration alias for existing users
+- Remove silent model fallback that masked invalid model errors by switching to a different model
+
 ## [0.55.17] - 2026-03-05
 
 
