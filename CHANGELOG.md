@@ -20,16 +20,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
-## [0.55.19] - 2026-03-05
+## [0.55.20] - 2026-03-05
 
 
 ### Added
 - Configurable thinking level for OpenAI Codex sessions
 - `nimbalyst_version` super property added to all PostHog events
+- Open transcript file links directly in the editor instead of the browser
+- AskUserQuestion support in Codex agent flow
+- First-turn reminder for Codex session metadata tool usage
+
+### Changed
+- Split ClaudeCodeProvider into focused workflow modules
 
 ### Fixed
+- Harden Codex MCP prompt routing, server config, and broken startup
+- Isolate git commit proposal responses per session
 - Sanitize dotted MCP server names for Codex TOML config (e.g., `@scope/name` no longer produces invalid TOML keys)
-- Correct binary file exclusion test to use actually excluded extension
+- Restore Configure Models navigation from model selector
+- Restore Monaco background for Monokai theme with built-in theme ID mapping
+- Prevent table resizer crash on stale cell refs
 
 ## [0.55.18] - 2026-03-05
 
