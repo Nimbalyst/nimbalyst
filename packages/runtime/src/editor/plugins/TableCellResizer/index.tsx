@@ -139,19 +139,26 @@ function TableCellResizer({editor}: {editor: LexicalEditor}): JSX.Element {
                     editor.getEditorState().read(
                         () => {
                             const tableCellNode = $getNearestNodeFromDOMNode(cell.elem);
-                            if (!tableCellNode) {
-                                throw new Error('TableCellResizer: Table cell node not found.');
+                            if (!$isTableCellNode(tableCellNode)) {
+                                resetState();
+                                return;
                             }
 
-                            const tableNode =
-                                $getTableNodeFromLexicalNodeOrThrow(tableCellNode);
+                            let tableNode: TableNode;
+                            try {
+                                tableNode = $getTableNodeFromLexicalNodeOrThrow(tableCellNode);
+                            } catch {
+                                resetState();
+                                return;
+                            }
                             const tableElement = getTableElement(
                                 tableNode,
                                 editor.getElementByKey(tableNode.getKey()),
                             );
 
                             if (!tableElement) {
-                                throw new Error('TableCellResizer: Table element not found.');
+                                resetState();
+                                return;
                             }
 
                             targetRef.current = target as HTMLElement;
@@ -203,14 +210,16 @@ function TableCellResizer({editor}: {editor: LexicalEditor}): JSX.Element {
     const updateRowHeight = useCallback(
         (heightChange: number) => {
             if (!activeCell) {
-                throw new Error('TableCellResizer: Expected active cell.');
+                return;
             }
 
+            let shouldResetState = false;
             editor.update(
                 () => {
                     const tableCellNode = $getNearestNodeFromDOMNode(activeCell.elem);
                     if (!$isTableCellNode(tableCellNode)) {
-                        throw new Error('TableCellResizer: Table cell node not found.');
+                        shouldResetState = true;
+                        return;
                     }
 
                     const tableNode = $getTableNodeFromLexicalNodeOrThrow(tableCellNode);
@@ -252,8 +261,11 @@ function TableCellResizer({editor}: {editor: LexicalEditor}): JSX.Element {
                 },
                 {tag: SKIP_SCROLL_INTO_VIEW_TAG},
             );
+            if (shouldResetState) {
+                resetState();
+            }
         },
-        [activeCell, editor],
+        [activeCell, editor, resetState],
     );
 
     const getCellNodeHeight = (
@@ -306,13 +318,15 @@ function TableCellResizer({editor}: {editor: LexicalEditor}): JSX.Element {
     const updateColumnWidth = useCallback(
         (widthChange: number) => {
             if (!activeCell) {
-                throw new Error('TableCellResizer: Expected active cell.');
+                return;
             }
+            let shouldResetState = false;
             editor.update(
                 () => {
                     const tableCellNode = $getNearestNodeFromDOMNode(activeCell.elem);
                     if (!$isTableCellNode(tableCellNode)) {
-                        throw new Error('TableCellResizer: Table cell node not found.');
+                        shouldResetState = true;
+                        return;
                     }
 
                     const tableNode = $getTableNodeFromLexicalNodeOrThrow(tableCellNode);
@@ -323,7 +337,8 @@ function TableCellResizer({editor}: {editor: LexicalEditor}): JSX.Element {
                     );
                     const columnIndex = getCellColumnIndex(tableCellNode, tableMap);
                     if (columnIndex === undefined) {
-                        throw new Error('TableCellResizer: Table column not found.');
+                        shouldResetState = true;
+                        return;
                     }
 
                     let colWidths = tableNode.getColWidths();
@@ -355,8 +370,11 @@ function TableCellResizer({editor}: {editor: LexicalEditor}): JSX.Element {
                 },
                 {tag: SKIP_SCROLL_INTO_VIEW_TAG},
             );
+            if (shouldResetState) {
+                resetState();
+            }
         },
-        [activeCell, editor],
+        [activeCell, editor, resetState],
     );
 
     const pointerUpHandler = useCallback(
@@ -366,7 +384,9 @@ function TableCellResizer({editor}: {editor: LexicalEditor}): JSX.Element {
                 event.stopPropagation();
 
                 if (!activeCell) {
-                    throw new Error('TableCellResizer: Expected active cell.');
+                    resetState();
+                    document.removeEventListener('pointerup', handler);
+                    return;
                 }
 
                 if (pointerStartPosRef.current) {
@@ -403,7 +423,7 @@ function TableCellResizer({editor}: {editor: LexicalEditor}): JSX.Element {
                 event.stopPropagation();
 
                 if (!activeCell) {
-                    throw new Error('TableCellResizer: Expected active cell.');
+                    return;
                 }
 
                 pointerStartPosRef.current = {
