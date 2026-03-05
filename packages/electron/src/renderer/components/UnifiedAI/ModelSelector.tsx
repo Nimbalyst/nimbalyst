@@ -1,9 +1,12 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { useAtomValue } from 'jotai';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { MaterialSymbol, getProviderIcon } from '@nimbalyst/runtime';
 import { getClaudeCodeModelLabel } from '../../utils/modelUtils';
 import { providersAtom } from '../../store/atoms/appSettings';
+import { setWindowModeAtom } from '../../store/atoms/windowMode';
+import { navigateToSettingsAtom } from '../../store/atoms/settingsNavigation';
+import type { SettingsCategory } from '../Settings/SettingsSidebar';
 
 interface Model {
   id: string;
@@ -33,6 +36,8 @@ export function ModelSelector({
   const dropdownRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const providers = useAtomValue(providersAtom);
+  const setWindowMode = useSetAtom(setWindowModeAtom);
+  const navigateToSettings = useSetAtom(navigateToSettingsAtom);
 
   // Compute fixed position for the dropdown when it opens
   const openDropdown = useCallback(() => {
@@ -111,9 +116,27 @@ export function ModelSelector({
     setIsOpen(false);
   };
 
+  const getSettingsCategoryForModel = (modelId: string): SettingsCategory => {
+    const provider = modelId.split(':')[0];
+    switch (provider) {
+      case 'claude':
+      case 'claude-code':
+      case 'openai':
+      case 'openai-codex':
+      case 'lmstudio':
+        return provider;
+      default:
+        return 'claude-code';
+    }
+  };
+
   const handleConfigureModels = () => {
     setIsOpen(false);
-    window.electronAPI.send('set-content-mode', 'settings');
+    navigateToSettings({
+      category: getSettingsCategoryForModel(currentModel),
+      scope: 'user',
+    });
+    setWindowMode('settings');
   };
 
   const getCurrentModelName = () => {
