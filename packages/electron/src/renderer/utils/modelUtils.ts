@@ -21,7 +21,7 @@ type ClaudeCodeVariant = 'opus' | 'sonnet' | 'haiku';
 const CLAUDE_CODE_VARIANT_VERSIONS: Record<ClaudeCodeVariant, string> = {
   opus: '4.6',
   sonnet: '4.6',
-  haiku: '3.5'
+  haiku: '4.5'
 };
 
 /**

@@ -113,7 +113,7 @@ type ClaudeCodeVariant = typeof CLAUDE_CODE_VARIANTS[number];
 const CLAUDE_CODE_VARIANT_VERSIONS: Record<ClaudeCodeVariant, string> = {
   opus: '4.6',
   sonnet: '4.6',
-  haiku: '3.5'
+  haiku: '4.5'
 };
 
 const CLAUDE_CODE_MODEL_LABELS: Record<ClaudeCodeVariant, string> = {
