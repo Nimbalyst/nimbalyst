@@ -90,6 +90,8 @@ import { codexUsageService } from './services/CodexUsageService';
 import { registerExtensionHandlers, getClaudePluginPaths, initializeExtensionFileTypes } from './ipc/ExtensionHandlers';
 import { getRegisteredExtensions } from './extensions/RegisteredFileTypes';
 import { ClaudeCodeProvider, OpenAICodexProvider } from '@nimbalyst/runtime/ai/server';
+import { isMCPServerEnabledForProvider, MCP_PROVIDER_IDS } from '@nimbalyst/runtime/types/MCPServerConfig';
+import type { MCPServerConfig } from '@nimbalyst/runtime/types/MCPServerConfig';
 import { logger, overrideConsole } from './utils/logger';
 import { startPerformanceMonitoring, stopPerformanceMonitoring } from './utils/performanceMonitor';
 import { setupForceQuit } from './utils/forceQuit';
@@ -920,11 +922,11 @@ app.whenReady().then(async () => {
         const mergedConfig = await mcpConfigService.getMergedConfig(workspacePath);
         const allServers = mergedConfig.mcpServers || {};
 
-        // Filter out disabled servers and process for runtime
+        // Filter to servers enabled for Claude Agent and process for runtime
         // (On Windows, converts npm/npx/etc commands to .cmd equivalents)
         const enabledServers: Record<string, any> = {};
         for (const [name, config] of Object.entries(allServers)) {
-            if (!(config as any).disabled) {
+            if (isMCPServerEnabledForProvider(config as MCPServerConfig, MCP_PROVIDER_IDS.CLAUDE_AGENT)) {
                 enabledServers[name] = mcpConfigService.processServerConfigForRuntime(config as any);
             }
         }
@@ -937,9 +939,10 @@ app.whenReady().then(async () => {
         const mergedConfig = await mcpConfigService.getMergedConfig(workspacePath);
         const allServers = mergedConfig.mcpServers || {};
 
+        // Filter to servers enabled for Codex and process for runtime
         const enabledServers: Record<string, any> = {};
         for (const [name, config] of Object.entries(allServers)) {
-            if (!(config as any).disabled) {
+            if (isMCPServerEnabledForProvider(config as MCPServerConfig, MCP_PROVIDER_IDS.CODEX)) {
                 enabledServers[name] = mcpConfigService.processServerConfigForRuntime(config as any);
             }
         }

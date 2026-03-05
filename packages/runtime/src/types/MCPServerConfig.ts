@@ -41,8 +41,47 @@ export interface MCPServerConfig {
   /** Environment variables to set (supports ${VAR} and ${VAR:-default} syntax) */
   env?: MCPServerEnv;
 
-  /** Whether this server is disabled (default: false/enabled) */
+  /** Whether this server is disabled (default: false/enabled). @deprecated Use enabledForProviders instead. */
   disabled?: boolean;
+
+  /**
+   * Which AI agent providers this server is enabled for.
+   * - undefined/absent: enabled for all providers (backward compatible default)
+   * - ['claude-agent', 'codex']: enabled for all providers (explicit)
+   * - ['claude-agent']: Claude Agent only
+   * - ['codex']: Codex only
+   * - []: disabled for all providers (equivalent to disabled: true)
+   *
+   * When both `disabled` and `enabledForProviders` are present, `enabledForProviders` takes priority.
+   */
+  enabledForProviders?: string[];
+}
+
+/** Provider IDs for enabledForProviders field */
+export const MCP_PROVIDER_IDS = {
+  CLAUDE_AGENT: 'claude-agent',
+  CODEX: 'codex',
+} as const;
+
+export type MCPProviderId = typeof MCP_PROVIDER_IDS[keyof typeof MCP_PROVIDER_IDS];
+
+export const ALL_MCP_PROVIDER_IDS: MCPProviderId[] = [
+  MCP_PROVIDER_IDS.CLAUDE_AGENT,
+  MCP_PROVIDER_IDS.CODEX,
+];
+
+/**
+ * Determine if an MCP server is enabled for a given provider.
+ * Handles backward compatibility with the legacy `disabled` field.
+ */
+export function isMCPServerEnabledForProvider(
+  config: MCPServerConfig,
+  providerId: MCPProviderId,
+): boolean {
+  if (config.enabledForProviders !== undefined) {
+    return config.enabledForProviders.includes(providerId);
+  }
+  return !config.disabled;
 }
 
 /**

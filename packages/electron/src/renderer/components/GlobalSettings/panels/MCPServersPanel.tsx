@@ -1,8 +1,10 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { usePostHog } from 'posthog-js/react';
+import { useAtomValue } from 'jotai';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import { ErrorBoundary } from '../../ErrorBoundary';
 import { useTheme } from '../../../hooks/useTheme';
+import { enabledProvidersAtom } from '../../../store/atoms/appSettings';
 
 interface MCPServerConfig {
   command?: string;
@@ -12,6 +14,36 @@ interface MCPServerConfig {
   headers?: Record<string, string>;
   env?: Record<string, string>;
   disabled?: boolean;
+  enabledForProviders?: string[];
+}
+
+const MCP_PROVIDER_IDS = {
+  CLAUDE_AGENT: 'claude-agent',
+  CODEX: 'codex',
+} as const;
+
+const ALL_MCP_PROVIDER_IDS = [MCP_PROVIDER_IDS.CLAUDE_AGENT, MCP_PROVIDER_IDS.CODEX] as const;
+
+const PROVIDER_LABELS: Record<string, string> = {
+  'claude-agent': 'Claude',
+  'codex': 'Codex',
+};
+
+/** Maps MCP provider IDs to app settings provider IDs */
+const MCP_TO_APP_PROVIDER: Record<string, string> = {
+  'claude-agent': 'claude-code',
+  'codex': 'openai-codex',
+};
+
+function getEffectiveProviders(config: MCPServerConfig): string[] {
+  if (config.enabledForProviders !== undefined) {
+    return config.enabledForProviders;
+  }
+  return config.disabled ? [] : [...ALL_MCP_PROVIDER_IDS];
+}
+
+function isFullyDisabled(config: MCPServerConfig): boolean {
+  return getEffectiveProviders(config).length === 0;
 }
 
 interface MCPServerWithName extends MCPServerConfig {
@@ -551,6 +583,17 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
   const posthog = usePostHog();
   const { theme } = useTheme();
   const isDark = theme === 'dark' || theme === 'crystal-dark';
+  const appEnabledProviders = useAtomValue(enabledProvidersAtom);
+
+  // Only show MCP provider columns for providers that are enabled in app settings
+  const visibleMcpProviders = useMemo(() =>
+    ALL_MCP_PROVIDER_IDS.filter((mcpId) => {
+      const appId = MCP_TO_APP_PROVIDER[mcpId];
+      return appId ? appEnabledProviders.includes(appId) : true;
+    }),
+    [appEnabledProviders],
+  );
+
   const [servers, setServers] = useState<MCPServerWithName[]>([]);
   const [selectedServer, setSelectedServer] = useState<MCPServerWithName | null>(null);
   const [viewState, setViewState] = useState<ViewState>('list');
@@ -1087,6 +1130,16 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
         ? await window.electronAPI.invoke('mcp-config:read-workspace', workspacePath)
         : await window.electronAPI.invoke('mcp-config:read-user');
 
+      // Preserve provider settings from existing config (managed by handleProviderToggle, not the form)
+      const existingName = selectedServer?.name || formName.trim();
+      const existingServerConfig = config.mcpServers[existingName];
+      if (existingServerConfig?.enabledForProviders !== undefined) {
+        serverConfig.enabledForProviders = existingServerConfig.enabledForProviders;
+      }
+      if (existingServerConfig?.disabled !== undefined) {
+        serverConfig.disabled = existingServerConfig.disabled;
+      }
+
       if (selectedServer && selectedServer.name !== formName.trim()) {
         delete config.mcpServers[selectedServer.name];
       }
@@ -1203,7 +1256,7 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
     }
   };
 
-  const handleToggleDisabled = async (serverName: string, disabled: boolean) => {
+  const handleProviderToggle = async (serverName: string, providers: string[]) => {
     try {
       // Mark as local change to ignore file watcher updates
       isLocalChangeRef.current = true;
@@ -1213,10 +1266,19 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
         : await window.electronAPI.invoke('mcp-config:read-user');
 
       if (config.mcpServers[serverName]) {
-        if (disabled) {
-          config.mcpServers[serverName].disabled = true;
+        const serverConfig = config.mcpServers[serverName];
+        if (providers.length === ALL_MCP_PROVIDER_IDS.length) {
+          // All enabled: remove both fields for clean JSON
+          delete serverConfig.enabledForProviders;
+          delete serverConfig.disabled;
+        } else if (providers.length === 0) {
+          // None enabled: set both for backward compat
+          serverConfig.enabledForProviders = [];
+          serverConfig.disabled = true;
         } else {
-          delete config.mcpServers[serverName].disabled;
+          // Partial: set specific providers
+          serverConfig.enabledForProviders = [...providers];
+          delete serverConfig.disabled;
         }
       }
 
@@ -1225,7 +1287,7 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
         : await window.electronAPI.invoke('mcp-config:write-user', config);
 
       if (!result.success) {
-        console.error('Failed to toggle server:', result.error);
+        console.error('Failed to toggle server providers:', result.error);
         isLocalChangeRef.current = false;
         return;
       }
@@ -1237,8 +1299,8 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
         isLocalChangeRef.current = false;
       }, 2000);
     } catch (err: unknown) {
-      const errorMsg = err instanceof Error ? err.message : 'Failed to toggle server';
-      console.error('Failed to toggle server:', errorMsg);
+      const errorMsg = err instanceof Error ? err.message : 'Failed to toggle server providers';
+      console.error('Failed to toggle server providers:', errorMsg);
       alert(`Error: ${errorMsg}`);
       isLocalChangeRef.current = false;
     }
@@ -2126,6 +2188,19 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
               </button>
             </div>
 
+            {servers.length > 0 && visibleMcpProviders.length > 0 && (
+              <div className="mcp-provider-columns flex items-center px-4 py-1.5 border-b border-[var(--nim-border)] bg-[var(--nim-bg-secondary)]">
+                <div className="shrink-0 flex">
+                  {visibleMcpProviders.length > 1 && (
+                    <span className="w-9 text-center text-[10px] font-medium text-[var(--nim-text-faint)]">All</span>
+                  )}
+                  {visibleMcpProviders.map((id) => (
+                    <span key={id} className="w-9 text-center text-[10px] font-medium text-[var(--nim-text-faint)]">{PROVIDER_LABELS[id]}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="mcp-servers-list flex-1 overflow-y-auto" role="list">
               {servers.length === 0 ? (
                 <div className="mcp-empty-state px-4 py-8 text-center text-[var(--nim-text-faint)] text-sm flex flex-col items-center gap-4" role="status">
@@ -2141,7 +2216,13 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
               ) : (
                 servers.map((server) => {
                   const isActive = selectedServer?.name === server.name;
-                  const isDisabled = server.disabled;
+                  const effectiveProviders = getEffectiveProviders(server);
+                  const visibleChecked = visibleMcpProviders.filter((id) => effectiveProviders.includes(id));
+                  const allChecked = visibleChecked.length === visibleMcpProviders.length;
+                  const someChecked = visibleChecked.length > 0 && !allChecked;
+                  const isDisabled = visibleMcpProviders.length > 0
+                    ? visibleChecked.length === 0
+                    : isFullyDisabled(server);
                   return (
                     <div
                       key={server.name}
@@ -2155,23 +2236,49 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
                       }}
                       role="listitem button"
                       tabIndex={0}
-                      aria-label={`${server.name} server - ${server.disabled ? 'disabled' : 'enabled'} - ${server.command || server.url}`}
+                      aria-label={`${server.name} server - ${isDisabled ? 'disabled' : 'enabled'} - ${server.command || server.url}`}
                       aria-current={selectedServer?.name === server.name ? 'true' : undefined}
                     >
-                      <label
-                        className="mcp-server-toggle relative inline-block shrink-0 cursor-pointer"
-                        onClick={(e) => e.stopPropagation()}
-                        aria-label={`Toggle ${server.name} server ${server.disabled ? 'on' : 'off'}`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={!server.disabled}
-                          onChange={(e) => handleToggleDisabled(server.name, !e.target.checked)}
-                          aria-label={`${server.name} enabled`}
-                          className="hidden peer"
-                        />
-                        <span className={`mcp-toggle-slider relative block w-8 h-[18px] rounded-[9px] transition-colors duration-200 before:content-[''] before:absolute before:top-0.5 before:left-0.5 before:w-3.5 before:h-3.5 before:bg-white before:rounded-full before:transition-transform before:duration-200 before:shadow-[0_1px_2px_rgba(0,0,0,0.2)] peer-checked:before:translate-x-3.5 ${isActive ? (server.disabled ? 'bg-white/30' : 'bg-white/90 peer-checked:before:bg-[var(--nim-primary)]') : (server.disabled ? 'bg-[var(--nim-bg-tertiary)]' : 'bg-[var(--nim-primary)]')}`} aria-hidden="true"></span>
-                      </label>
+                      {visibleMcpProviders.length > 0 && (
+                        <div
+                          className="mcp-provider-checkboxes shrink-0 flex"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {visibleMcpProviders.length > 1 && (
+                            <div className="w-9 flex justify-center" title="All providers">
+                              <input
+                                type="checkbox"
+                                checked={allChecked}
+                                ref={(el) => {
+                                  if (el) el.indeterminate = someChecked;
+                                }}
+                                onChange={(e) => {
+                                  handleProviderToggle(
+                                    server.name,
+                                    e.target.checked ? [...visibleMcpProviders] : [],
+                                  );
+                                }}
+                                className="w-3.5 h-3.5 accent-[var(--nim-primary)] cursor-pointer"
+                              />
+                            </div>
+                          )}
+                          {visibleMcpProviders.map((providerId) => (
+                            <div key={providerId} className="w-9 flex justify-center" title={PROVIDER_LABELS[providerId]}>
+                              <input
+                                type="checkbox"
+                                checked={effectiveProviders.includes(providerId)}
+                                onChange={(e) => {
+                                  const next = e.target.checked
+                                    ? [...effectiveProviders, providerId]
+                                    : effectiveProviders.filter((p) => p !== providerId);
+                                  handleProviderToggle(server.name, next);
+                                }}
+                                className="w-3.5 h-3.5 accent-[var(--nim-primary)] cursor-pointer"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      )}
                       <div className="mcp-server-item-info flex-1 min-w-0">
                         <div className={`mcp-server-item-name font-medium text-sm mb-0.5 ${isActive ? 'text-white' : ''} ${isDisabled ? 'line-through' : ''}`}>{server.name}</div>
                         <div className={`mcp-server-item-command text-xs overflow-hidden text-ellipsis whitespace-nowrap ${isActive ? 'text-white/80' : 'text-[var(--nim-text-faint)]'}`}>{server.command || server.url}</div>

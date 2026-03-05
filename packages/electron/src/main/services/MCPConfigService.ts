@@ -823,6 +823,17 @@ export class MCPConfigService {
       if (serverConfig.env && typeof serverConfig.env !== 'object') {
         throw new Error(`Invalid MCP config for server "${serverName}": env must be an object`);
       }
+
+      if (serverConfig.enabledForProviders !== undefined) {
+        if (!Array.isArray(serverConfig.enabledForProviders)) {
+          throw new Error(`Invalid MCP config for server "${serverName}": enabledForProviders must be an array`);
+        }
+        for (const provider of serverConfig.enabledForProviders) {
+          if (typeof provider !== 'string') {
+            throw new Error(`Invalid MCP config for server "${serverName}": enabledForProviders must contain only strings`);
+          }
+        }
+      }
     }
   }
 
