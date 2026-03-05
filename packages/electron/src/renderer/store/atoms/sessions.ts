@@ -17,7 +17,7 @@
 import { atom } from 'jotai';
 import { atomFamily } from 'jotai/utils';
 import { store } from '@nimbalyst/runtime/store';
-import type { ChatAttachment, Message } from '@nimbalyst/runtime/ai/server/types';
+import { ModelIdentifier, type ChatAttachment, type Message } from '@nimbalyst/runtime/ai/server/types';
 import type { SessionMeta } from '@nimbalyst/runtime';
 import { workstreamStateAtom, setWorkstreamActiveChildAtom } from './workstreamState';
 
@@ -604,7 +604,26 @@ export const sessionModelAtom = atomFamily((sessionId: string) =>
     (get, set, newModel: string) => {
       const current = get(sessionStoreAtom(sessionId));
       if (current) {
-        set(sessionStoreAtom(sessionId), { ...current, model: newModel });
+        // Extract provider from model ID so provider stays in sync
+        const parsed = ModelIdentifier.tryParse(newModel);
+        const updates: Partial<SessionData> = { model: newModel };
+        if (parsed) {
+          updates.provider = parsed.provider;
+        }
+        set(sessionStoreAtom(sessionId), { ...current, ...updates });
+
+        // Also update registry so sidebar list item updates immediately
+        // (don't wait for the IPC roundtrip broadcast)
+        const registry = new Map(get(sessionRegistryAtom));
+        const meta = registry.get(sessionId);
+        if (meta) {
+          registry.set(sessionId, {
+            ...meta,
+            model: newModel,
+            ...(parsed && { provider: parsed.provider }),
+          });
+          set(sessionRegistryAtom, registry);
+        }
       }
     }
   )

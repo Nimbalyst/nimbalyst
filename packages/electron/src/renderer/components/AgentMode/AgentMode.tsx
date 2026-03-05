@@ -14,6 +14,7 @@
 import React, { forwardRef, useImperativeHandle, useEffect, useCallback, useMemo, useRef, useState } from 'react';
 import { atom, useAtomValue, useSetAtom } from 'jotai';
 import { defaultAgentModelAtom, worktreesFeatureAvailableAtom, alphaFeatureEnabledAtom } from '../../store/atoms/appSettings';
+import { ModelIdentifier } from '@nimbalyst/runtime/ai/server/types';
 import { ResizablePanel } from '../AgenticCoding/ResizablePanel';
 import { SessionHistory } from '../AgenticCoding/SessionHistory';
 import { SessionKanbanBoard } from '../TrackerMode/SessionKanbanBoard';
@@ -281,11 +282,14 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
 
     try {
       const sessionId = crypto.randomUUID();
-      console.log('[AgentMode] Creating new session with defaultModel:', defaultModel);
+      // Parse provider from defaultModel using ModelIdentifier
+      const parsedModel = defaultModel ? ModelIdentifier.tryParse(defaultModel) : null;
+      const provider = parsedModel?.provider || 'claude-code';
+      console.log('[AgentMode] Creating new session with defaultModel:', defaultModel, 'provider:', provider);
       const result = await window.electronAPI.invoke('sessions:create', {
         session: {
           id: sessionId,
-          provider: 'claude-code',
+          provider,
           model: defaultModel,
           title: 'New Session',
         },
@@ -299,7 +303,7 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
           title: 'New Session',
           createdAt: Date.now(),
           updatedAt: Date.now(),
-          provider: 'claude-code',
+          provider,
           model: defaultModel,
           sessionType: 'session',
           messageCount: 0,
@@ -368,10 +372,12 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
 
       // Create session with worktree association
       const sessionId = crypto.randomUUID();
+      const parsedWorktreeModel = defaultModel ? ModelIdentifier.tryParse(defaultModel) : null;
+      const worktreeProvider = parsedWorktreeModel?.provider || 'claude-code';
       const result: SessionCreateResult = await window.electronAPI.invoke('sessions:create', {
         session: {
           id: sessionId,
-          provider: 'claude-code',
+          provider: worktreeProvider,
           model: defaultModel,
           title: `Worktree: ${worktree.name}`,
           worktreeId: worktree.id,
@@ -386,7 +392,7 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
           title: `Worktree: ${worktree.name}`,
           createdAt: Date.now(),
           updatedAt: Date.now(),
-          provider: 'claude-code',
+          provider: worktreeProvider,
           model: defaultModel,
           sessionType: 'session',
           messageCount: 0,
@@ -431,10 +437,12 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
 
     // Create session with worktree association (no parentSessionId - this is NOT a workstream)
     const sessionId = crypto.randomUUID();
+    const parsedCoreModel = defaultModel ? ModelIdentifier.tryParse(defaultModel) : null;
+    const coreProvider = parsedCoreModel?.provider || 'claude-code';
     const result = await window.electronAPI.invoke('sessions:create', {
       session: {
         id: sessionId,
-        provider: 'claude-code',
+        provider: coreProvider,
         model: defaultModel,
         title: 'New Session',
         worktreeId: worktree.id,
@@ -449,7 +457,7 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
         title: 'New Session',
         createdAt: Date.now(),
         updatedAt: Date.now(),
-        provider: 'claude-code',
+        provider: coreProvider,
         model: defaultModel,
         sessionType: 'session',
         messageCount: 0,

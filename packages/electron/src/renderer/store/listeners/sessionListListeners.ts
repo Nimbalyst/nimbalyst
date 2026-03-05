@@ -53,6 +53,7 @@ export function initSessionListListeners(): () => void {
   // Handle targeted session metadata updates (e.g., phase/tags from MCP tools)
   // Updates the registry entry directly without a full refresh
   const handleSessionUpdated = (sessionId: string, updates: Record<string, unknown>) => {
+    // console.log('[sessionListListeners] session-updated received:', sessionId, updates);
     const registry = new Map(store.get(sessionRegistryAtom));
     const meta = registry.get(sessionId);
     if (meta) {
