@@ -42,6 +42,21 @@ function toTimestampMillis(value: unknown): number {
   return Number.isNaN(time) ? Date.now() : time;
 }
 
+function isSystemReminderMessage(
+  content: string,
+  metadata?: Record<string, unknown>
+): boolean {
+  return metadata?.promptType === 'system_reminder' ||
+    /<SYSTEM_REMINDER>[\s\S]*<\/SYSTEM_REMINDER>/.test(content);
+}
+
+function stripSystemReminderTags(content: string): string {
+  return content
+    .replace(/^\s*<SYSTEM_REMINDER>/, '')
+    .replace(/<\/SYSTEM_REMINDER>\s*$/, '')
+    .trim();
+}
+
 function chatMessageFromServerMessage(msg: any): Message {
   return {
     role: msg.role,
@@ -218,13 +233,16 @@ export function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
                 });
               }
             } else {
+              const isSystemReminder = isSystemReminderMessage(parsed.prompt, agentMsg.metadata);
               uiMessages.push({
-                role: 'user',
-                content: parsed.prompt,
+                role: isSystemReminder ? 'system' : 'user',
+                content: isSystemReminder ? stripSystemReminderTags(parsed.prompt) : parsed.prompt,
                 timestamp,
                 mode,
-                isUserInput: true,
-                attachments: attachments && attachments.length > 0 ? attachments : undefined
+                isUserInput: !isSystemReminder,
+                isSystem: isSystemReminder || undefined,
+                attachments: attachments && attachments.length > 0 ? attachments : undefined,
+                metadata: agentMsg.metadata,
               });
             }
           } else if (parsed.type === 'user' && parsed.message) {
@@ -261,15 +279,18 @@ export function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
             } else {
               // Regular user message with string content
               let content = typeof msg.content === 'string' ? msg.content : '';
+              const isSystemReminder = isSystemReminderMessage(content, agentMsg.metadata);
 
               // Extract attachments from metadata if present
               const attachments = agentMsg.metadata?.attachments;
               uiMessages.push({
-                role: msg.role || 'user',
-                content: content,
+                role: isSystemReminder ? 'system' : (msg.role || 'user'),
+                content: isSystemReminder ? stripSystemReminderTags(content) : content,
                 timestamp,
-                isUserInput: true,
-                attachments: attachments && attachments.length > 0 ? attachments : undefined
+                isUserInput: !isSystemReminder,
+                isSystem: isSystemReminder || undefined,
+                attachments: attachments && attachments.length > 0 ? attachments : undefined,
+                metadata: agentMsg.metadata,
               });
             }
           }
@@ -277,12 +298,16 @@ export function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
           // Not JSON - treat as raw text (regular Claude SDK format)
           // Extract attachments from metadata if present
           const attachments = agentMsg.metadata?.attachments;
+          const content = String(agentMsg.content ?? '');
+          const isSystemReminder = isSystemReminderMessage(content, agentMsg.metadata);
           uiMessages.push({
-            role: 'user',
-            content: agentMsg.content,
+            role: isSystemReminder ? 'system' : 'user',
+            content: isSystemReminder ? stripSystemReminderTags(content) : content,
             attachments: attachments && attachments.length > 0 ? attachments : undefined,
-            isUserInput: true,
-            timestamp
+            isUserInput: !isSystemReminder,
+            isSystem: isSystemReminder || undefined,
+            timestamp,
+            metadata: agentMsg.metadata,
           });
         }
       } else if (agentMsg.direction === 'output') {

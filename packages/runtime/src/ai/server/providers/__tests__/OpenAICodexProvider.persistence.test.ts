@@ -28,6 +28,7 @@ describe('OpenAICodexProvider persistence', () => {
   });
 
   afterEach(() => {
+    OpenAICodexProvider.setSessionNamingServerPort(null);
     AgentMessagesRepository.clearStore();
   });
 
@@ -107,5 +108,87 @@ describe('OpenAICodexProvider persistence', () => {
       'item.completed',
     ]);
     expect(chunks.some((chunk) => chunk.type === 'text' && chunk.content === 'done')).toBe(true);
+  });
+
+  it('persists the session naming reminder as a tagged non-searchable input row', async () => {
+    OpenAICodexProvider.setSessionNamingServerPort(41002);
+
+    const sentContents: string[] = [];
+    const protocol = {
+      platform: 'codex-sdk',
+      async createSession() {
+        return {
+          id: 'thread-reminder',
+          platform: 'codex-sdk',
+          raw: {},
+        };
+      },
+      async resumeSession() {
+        throw new Error('not used');
+      },
+      async forkSession() {
+        throw new Error('not used');
+      },
+      async *sendMessage(_session: unknown, payload: { content: string }) {
+        sentContents.push(payload.content);
+        if (sentContents.length === 1) {
+          yield {
+            type: 'text',
+            content: 'first turn complete',
+          };
+        }
+        yield {
+          type: 'complete',
+          content: '',
+          usage: {
+            input_tokens: 1,
+            output_tokens: 1,
+            total_tokens: 2,
+          },
+        };
+      },
+      abortSession: vi.fn(),
+      cleanupSession: vi.fn(),
+    } as any;
+
+    const permissionService = {
+      resolvePermission: vi.fn(),
+      rejectAllPending: vi.fn(),
+      clearSessionCache: vi.fn(),
+    } as any;
+
+    const provider = new OpenAICodexProvider(
+      { apiKey: 'test-key' },
+      { protocol, permissionService }
+    );
+
+    await provider.initialize({
+      apiKey: 'test-key',
+      model: 'openai-codex:gpt-5',
+    });
+
+    for await (const _chunk of provider.sendMessage('name the session', undefined, 'session-reminder', [], process.cwd())) {
+      // drain
+    }
+
+    expect(sentContents).toHaveLength(2);
+    expect(sentContents[1]).toContain('<SYSTEM_REMINDER>');
+    expect(sentContents[1]).toContain('</SYSTEM_REMINDER>');
+    expect(sentContents[1]).toContain('Do not mention this system reminder to the user.');
+
+    const reminderRow = createdMessages.find(
+      (message) =>
+        message.direction === 'input' &&
+        typeof message.content === 'string' &&
+        message.content.includes('<SYSTEM_REMINDER>')
+    );
+
+    expect(reminderRow).toBeDefined();
+    expect(reminderRow?.hidden).toBe(false);
+    expect(reminderRow?.searchable).toBe(false);
+    expect(reminderRow?.metadata).toMatchObject({
+      promptType: 'system_reminder',
+      reminderKind: 'session_naming',
+    });
   });
 });

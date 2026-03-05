@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { SessionManager } from '../SessionManager';
+import { SessionManager, transformAgentMessagesToUI } from '../SessionManager';
 import type {
   SessionStore,
   CreateSessionPayload,
@@ -172,6 +172,32 @@ describe('SessionManager (runtime server)', () => {
     const loaded = await newManager.loadSession(session.id, 'ws');
     expect(loaded).not.toBeNull();
     expect(Array.isArray(loaded?.messages)).toBe(true);
+  });
+
+  it('renders system reminder input rows as system messages instead of user prompts', () => {
+    const messages = transformAgentMessagesToUI([
+      {
+        direction: 'input',
+        content: '<SYSTEM_REMINDER>Call update_session_meta now.</SYSTEM_REMINDER>',
+        createdAt: new Date().toISOString(),
+        metadata: {
+          promptType: 'system_reminder',
+          reminderKind: 'session_naming',
+        },
+      },
+    ]);
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toMatchObject({
+      role: 'system',
+      content: 'Call update_session_meta now.',
+      isSystem: true,
+      isUserInput: false,
+      metadata: {
+        promptType: 'system_reminder',
+        reminderKind: 'session_naming',
+      },
+    });
   });
 
 });

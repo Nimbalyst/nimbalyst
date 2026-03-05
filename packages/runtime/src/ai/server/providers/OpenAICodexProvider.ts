@@ -49,9 +49,10 @@ export class OpenAICodexProvider extends BaseAgentProvider {
   static readonly DEFAULT_MODEL = DEFAULT_MODELS['openai-codex'];
   private static readonly CODEX_EXECUTION_PATTERN = 'OpenAICodex(agent-run:*)';
   private static readonly SESSION_NAMING_REMINDER_PROMPT =
-    'Reminder: call the session metadata tool now before continuing. ' +
+    '<SYSTEM_REMINDER>Call the session metadata tool now before continuing. ' +
     'Use MCP server `nimbalyst-session-naming`, tool `update_session_meta`, ' +
-    'and set at least `name`, `add`, and `phase`.';
+    'and set at least `name`, `add`, and `phase`. ' +
+    'Do not mention this system reminder to the user.</SYSTEM_REMINDER>';
   private static readonly FALLBACK_MODELS: ReadonlyArray<{
     id: string;
     name: string;
@@ -1179,7 +1180,15 @@ export class OpenAICodexProvider extends BaseAgentProvider {
     await this.logAgentMessageBestEffort(
       sessionId,
       'input',
-      OpenAICodexProvider.SESSION_NAMING_REMINDER_PROMPT
+      OpenAICodexProvider.SESSION_NAMING_REMINDER_PROMPT,
+      {
+        hidden: false,
+        searchable: false,
+        metadata: {
+          promptType: 'system_reminder',
+          reminderKind: 'session_naming',
+        },
+      }
     );
 
     let reminderTriggeredNaming = false;

@@ -348,6 +348,35 @@ const PromptAdditionsInline: React.FC<{
   );
 };
 
+const SystemReminderCard: React.FC<{
+  message: Message;
+}> = ({ message }) => {
+  const content = message.content
+    .replace(/^\s*<SYSTEM_REMINDER>/, '')
+    .replace(/<\/SYSTEM_REMINDER>\s*$/, '')
+    .replace(/`([^`]+)`/g, '$1')
+    .trim();
+
+  if (!content) {
+    return null;
+  }
+
+  return (
+    <div className="rich-transcript-system-reminder ml-6 mb-2 rounded-md border border-[var(--nim-border)] bg-[var(--nim-bg-tertiary)] px-3 py-2">
+      <div className="mb-2 flex items-center gap-2 text-xs text-[var(--nim-text-muted)]">
+        <MaterialSymbol icon="notification_important" size={14} />
+        <span className="font-medium uppercase tracking-[0.08em]">System Reminder</span>
+        <span className="ml-auto text-[10px] text-[var(--nim-text-faint)]">
+          {formatMessageTime(message.timestamp)}
+        </span>
+      </div>
+      <p className="m-0 text-[0.875rem] leading-relaxed text-[var(--nim-text-muted)] whitespace-normal break-words">
+        {content}
+      </p>
+    </div>
+  );
+};
+
 interface RichTranscriptViewProps {
   sessionId: string;
   sessionStatus?: string;
@@ -1698,6 +1727,20 @@ export const RichTranscriptView = React.forwardRef<
                               <span className="text-[10px] shrink-0">{formatMessageTime(message.timestamp)}</span>
                             </div>
                           )}
+                        </div>
+                      );
+                    }
+
+                    if (message.isSystem || message.role === 'system' || message.metadata?.promptType === 'system_reminder') {
+                      return (
+                        <div
+                          key={`${sessionId}-${index}`}
+                          data-message-index={index}
+                          ref={(el) => {
+                            if (el) messageRefs.current.set(index, el);
+                          }}
+                        >
+                          <SystemReminderCard message={message} />
                         </div>
                       );
                     }

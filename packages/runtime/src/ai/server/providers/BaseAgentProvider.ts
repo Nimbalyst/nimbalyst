@@ -263,7 +263,12 @@ export abstract class BaseAgentProvider extends BaseAIProvider {
   protected async logAgentMessageBestEffort(
     sessionId: string,
     direction: 'input' | 'output',
-    content: string
+    content: string,
+    options?: {
+      metadata?: Record<string, unknown>;
+      hidden?: boolean;
+      searchable?: boolean;
+    }
   ): Promise<void> {
     try {
       // Check if database is available
@@ -278,10 +283,10 @@ export abstract class BaseAgentProvider extends BaseAIProvider {
         this.getProviderName(),
         direction,
         content,
+        options?.metadata,
+        options?.hidden ?? false,
         undefined,
-        false,
-        undefined,
-        true
+        options?.searchable ?? true
       );
     } catch {
       // Best-effort - don't crash on log failures
