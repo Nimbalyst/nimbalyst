@@ -1,15 +1,18 @@
 /**
- * Tab Management E2E Tests (Consolidated)
+ * Tab Management and Find/Replace E2E Tests (Consolidated)
  *
- * Tests for tab management functionality including:
+ * Tests for tab management and find/replace bar including:
  * - Content isolation between tabs
  * - Tab reordering
  * - Tab navigation shortcuts
  * - Autosave on tab switch
+ * - Find/Replace bar open/close and search functionality
  *
- * IMPORTANT: These tests share a single Electron app instance for performance.
- * Each test uses a separate file to avoid interference, and closes its tab at the end.
- * The test suite is configured for serial execution.
+ * Consolidated from:
+ * - tabs.spec.ts (tab management)
+ * - plugins/find-replace-bar.spec.ts (find/replace bar)
+ *
+ * All tests share a single Electron app instance for performance.
  */
 
 import { test, expect, ElectronApplication, Page } from '@playwright/test';
@@ -74,6 +77,10 @@ test.beforeAll(async () => {
   await fs.writeFile(path.join(workspaceDir, TEST_FILES.navFile2), '# Nav File 2\n\nContent 2\n', 'utf8');
   await fs.writeFile(path.join(workspaceDir, TEST_FILES.autosaveAlpha), '# Autosave Alpha\n\nThis is the autosave alpha file.\n', 'utf8');
   await fs.writeFile(path.join(workspaceDir, TEST_FILES.autosaveBeta), '# Autosave Beta\n\nThis is the autosave beta file.\n', 'utf8');
+
+  // Find/Replace test files
+  await fs.writeFile(path.join(workspaceDir, 'find-test-1.md'), '# Test Document 1\n\nThis is a test document with some searchable content.\n\nThe word "test" appears multiple times.\n\nAnother test here.\n', 'utf8');
+  await fs.writeFile(path.join(workspaceDir, 'find-test-2.md'), '# Test Document 2\n\nThis is a test document with some searchable content.\n\nThe word "test" appears multiple times.\n\nAnother test here.\n', 'utf8');
 
   electronApp = await launchElectronApp({ workspace: workspaceDir });
   page = await electronApp.firstWindow();
@@ -336,4 +343,76 @@ test.skip('should auto-save on tab switch to prevent data loss', async () => {
   // Close tabs for cleanup
   await closeTabByFileName(page, TEST_FILES.autosaveAlpha);
   await closeTabByFileName(page, TEST_FILES.autosaveBeta);
+});
+
+// ============================================================================
+// FIND/REPLACE BAR TESTS (from plugins/find-replace-bar.spec.ts)
+// ============================================================================
+
+test('should open search/replace bar with Cmd+F and close with Escape', async () => {
+  await page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeItem, { hasText: 'find-test-1.md' }).click();
+  await expect(
+    page.locator(PLAYWRIGHT_TEST_SELECTORS.tab).filter({ hasText: 'find-test-1.md' })
+  ).toBeVisible({ timeout: TEST_TIMEOUTS.TAB_SWITCH });
+  await page.waitForSelector(PLAYWRIGHT_TEST_SELECTORS.contentEditable, {
+    timeout: TEST_TIMEOUTS.EDITOR_LOAD,
+  });
+
+  await expect(page.locator(PLAYWRIGHT_TEST_SELECTORS.searchReplaceBar)).not.toBeVisible();
+
+  await electronApp.evaluate(({ BrowserWindow }) => {
+    const focused = BrowserWindow.getFocusedWindow();
+    if (focused) {
+      focused.webContents.send('menu:find');
+    }
+  });
+
+  await expect(page.locator(PLAYWRIGHT_TEST_SELECTORS.searchReplaceBar)).toBeVisible({
+    timeout: 1000,
+  });
+
+  const searchInput = page.locator(PLAYWRIGHT_TEST_SELECTORS.searchInput);
+  await expect(searchInput).toBeFocused();
+
+  await searchInput.press('Escape');
+
+  await expect(page.locator(PLAYWRIGHT_TEST_SELECTORS.searchReplaceBar)).not.toBeVisible({
+    timeout: 1000,
+  });
+
+  await closeTabByFileName(page, 'find-test-1.md');
+});
+
+test('should allow typing multiple characters in search box without losing focus', async () => {
+  await page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeItem, { hasText: 'find-test-2.md' }).click();
+  await expect(
+    page.locator(PLAYWRIGHT_TEST_SELECTORS.tab).filter({ hasText: 'find-test-2.md' })
+  ).toBeVisible({ timeout: TEST_TIMEOUTS.TAB_SWITCH });
+  await page.waitForSelector(PLAYWRIGHT_TEST_SELECTORS.contentEditable, {
+    timeout: TEST_TIMEOUTS.EDITOR_LOAD,
+  });
+
+  await electronApp.evaluate(({ BrowserWindow }) => {
+    const focused = BrowserWindow.getFocusedWindow();
+    if (focused) {
+      focused.webContents.send('menu:find');
+    }
+  });
+
+  await expect(page.locator(PLAYWRIGHT_TEST_SELECTORS.searchReplaceBar)).toBeVisible();
+
+  const searchInput = page.locator(PLAYWRIGHT_TEST_SELECTORS.searchInput);
+  await expect(searchInput).toBeFocused();
+
+  await searchInput.type('test');
+
+  await expect(searchInput).toHaveValue('test');
+  await expect(searchInput).toBeFocused();
+
+  const matchCounter = page.locator(PLAYWRIGHT_TEST_SELECTORS.matchCounter);
+  await expect(matchCounter).toContainText('of');
+
+  await searchInput.press('Escape');
+
+  await closeTabByFileName(page, 'find-test-2.md');
 });

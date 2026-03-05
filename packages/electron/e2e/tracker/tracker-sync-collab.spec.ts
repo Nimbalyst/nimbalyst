@@ -20,7 +20,9 @@
  * Requires: npm run dev (Vite on 5273) + wrangler dev started by this test
  */
 
+// Skip in CI - requires wrangler dev running locally and launches 2 Electron instances
 import { test, expect } from '@playwright/test';
+test.skip(() => !process.env.RUN_COLLAB_TESTS, 'Requires RUN_COLLAB_TESTS=1 and wrangler dev - not for CI');
 import type { ElectronApplication, Page } from '@playwright/test';
 import { webcrypto } from 'crypto';
 import {

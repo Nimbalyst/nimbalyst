@@ -1,3 +1,12 @@
+/**
+ * Permission Dialog Screenshots
+ *
+ * EXCLUDED FROM CI: These tests send real AI prompts to capture screenshots
+ * of permission dialogs. Run manually when updating permission UI.
+ *
+ * Usage: ANTHROPIC_API_KEY=... npx playwright test e2e/permissions/permission-screenshots.spec.ts
+ */
+
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from 'playwright';
 import { launchElectronApp, createTempWorkspace } from '../helpers';
@@ -8,6 +17,9 @@ import {
   switchToAgentMode,
   submitChatPrompt,
 } from '../utils/testHelpers';
+
+// Skip entire file in CI - requires real AI API
+test.skip(() => !process.env.ANTHROPIC_API_KEY, 'Requires ANTHROPIC_API_KEY - not for CI');
 import * as fs from 'fs/promises';
 import * as path from 'path';
 

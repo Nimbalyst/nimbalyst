@@ -1,10 +1,11 @@
 /**
- * E2E test: expanding a directory in the file tree should NOT cause the
- * scroll position to jump back to the currently-open file.
+ * File tree behavior tests: scroll stability and breadcrumb reveal.
  *
- * Reproduces the bug where the reveal effect (revealRequestAtom) was never
- * cleared after its initial scroll, causing every subsequent visibleNodes
- * change (e.g. expanding a directory) to re-trigger scrollToIndex.
+ * Consolidated from:
+ * - file-tree-scroll.spec.ts (expanding directories should not cause scroll jumps)
+ * - breadcrumb-reveal.spec.ts (breadcrumb click clears filter and reveals file)
+ *
+ * All tests share a single app instance with beforeAll/afterAll.
  */
 
 import { test, expect } from '@playwright/test';
@@ -85,6 +86,10 @@ async function getTreeScroller(p: Page) {
     : p.locator('.file-tree-container').first();
 }
 
+// ========================================================================
+// File Tree Scroll Stability (from file-tree-scroll.spec.ts)
+// ========================================================================
+
 test('expanding a directory after opening a file does not scroll back', async () => {
   test.setTimeout(30000);
 
@@ -130,9 +135,6 @@ test('expanding a directory after opening a file does not scroll back', async ()
 test('expanding a directory after breadcrumb reveal does not scroll back', async () => {
   test.setTimeout(30000);
 
-  // This test specifically targets the revealRequestAtom bug: breadcrumb click
-  // sets revealRequest which should be cleared after the initial scroll.
-
   // 1. Open src/app.ts via the tree so it has a breadcrumb
   await page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeItem, { hasText: 'src' }).click();
   await page.waitForTimeout(500);
@@ -146,8 +148,6 @@ test('expanding a directory after breadcrumb reveal does not scroll back', async
   const breadcrumbFilename = page.locator('.breadcrumb-filename', { hasText: 'app.ts' });
   const breadcrumbExists = await breadcrumbFilename.count();
   if (breadcrumbExists === 0) {
-    // If breadcrumb isn't available, skip this test (the first test covers
-    // the basic scenario; this one is specifically for the reveal path)
     test.skip();
     return;
   }
@@ -176,4 +176,51 @@ test('expanding a directory after breadcrumb reveal does not scroll back', async
   await expect(
     page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeItem, { hasText: 'aaa-top.md' })
   ).toBeVisible({ timeout: 1000 });
+});
+
+// ========================================================================
+// Breadcrumb Reveal (from breadcrumb-reveal.spec.ts)
+// ========================================================================
+
+test('breadcrumb reveal clears filter and scrolls to file', async () => {
+  test.setTimeout(30000);
+
+  // 1. Ensure filter is set to "All Files" first (clean state)
+  await page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeFilterButton).click();
+  await page.locator(PLAYWRIGHT_TEST_SELECTORS.filterMenuAllFiles).click();
+  await page.waitForTimeout(500);
+
+  // 2. Open src/app.ts
+  await page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeItem, { hasText: 'src' }).click();
+  await page.waitForTimeout(500);
+  await openFileFromTree(page, 'app.ts');
+
+  // 3. Set filter to "Markdown Only" (hides .ts files)
+  await page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeFilterButton).click();
+  await page.locator(PLAYWRIGHT_TEST_SELECTORS.filterMenuMarkdownOnly).click();
+  await page.waitForTimeout(500);
+
+  // src folder and app.ts should be hidden by the filter
+  await expect(
+    page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeItem, { hasText: 'app.ts' })
+  ).toHaveCount(0, { timeout: 2000 });
+
+  // 4. Click the breadcrumb filename to trigger reveal
+  const breadcrumbFilename = page.locator('.breadcrumb-filename', { hasText: 'app.ts' });
+  await expect(breadcrumbFilename).toBeVisible({ timeout: 2000 });
+  await breadcrumbFilename.click({ force: true });
+
+  // 5. Filter should clear and file should become visible in tree
+  await expect(
+    page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeItem, { hasText: 'app.ts' })
+  ).toBeVisible({ timeout: 5000 });
+
+  // 6. Filter indicator should be gone (filter cleared to "all")
+  const filterButton = page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeFilterButton);
+  await expect(filterButton.locator('.filter-active-indicator')).toHaveCount(0, { timeout: 2000 });
+
+  // Reset filter to All Files for subsequent tests
+  await page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeFilterButton).click();
+  await page.locator(PLAYWRIGHT_TEST_SELECTORS.filterMenuAllFiles).click();
+  await page.waitForTimeout(300);
 });

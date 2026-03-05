@@ -1,19 +1,15 @@
 /**
- * AI Features E2E Tests
- *
- * Consolidated tests for miscellaneous AI feature UI:
- * - Claude Code session creation via electronAPI
- * - Context usage display visibility
- * - Slash command error handling (non-crash verification)
+ * AI Core E2E Tests
  *
  * Consolidated from:
- *   claude-code-basic.spec.ts (kept session creation test)
- *   context-usage-display.spec.ts (kept UI display test; removed real-AI tests)
- *   slash-command-error.spec.ts (kept non-crash verification)
- *   model-switching.spec.ts (deleted - entirely skipped, visibility issues in test env)
+ *   ai-features.spec.ts (session creation, context usage, mode switching)
+ *
+ * Tests share a single Electron app instance.
+ * No real AI API calls - all tests use IPC-level simulation.
  */
 
-import { test, expect, type ElectronApplication, type Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
+import type { ElectronApplication, Page } from '@playwright/test';
 import {
   launchElectronApp,
   createTempWorkspace,
@@ -27,22 +23,24 @@ import {
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
-// Use serial mode to share a single app instance
 test.describe.configure({ mode: 'serial' });
 
 let electronApp: ElectronApplication;
 let page: Page;
-let workspaceDir: string;
+let workspacePath: string;
 
 test.beforeAll(async () => {
-  workspaceDir = await createTempWorkspace();
+  workspacePath = await createTempWorkspace();
   await fs.writeFile(
-    path.join(workspaceDir, 'test.md'),
-    '# Test\n\nTest content.\n',
+    path.join(workspacePath, 'test.md'),
+    '# Test Document\n\nHello world.\n',
     'utf8'
   );
 
-  electronApp = await launchElectronApp({ workspace: workspaceDir });
+  electronApp = await launchElectronApp({
+    workspace: workspacePath,
+    permissionMode: 'allow-all',
+  });
   page = await electronApp.firstWindow();
   await waitForAppReady(page);
   await dismissProjectTrustToast(page);
@@ -50,8 +48,12 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   await electronApp?.close();
-  await fs.rm(workspaceDir, { recursive: true, force: true }).catch(() => undefined);
+  await fs.rm(workspacePath, { recursive: true, force: true }).catch(() => undefined);
 });
+
+// ============================================================================
+// AI Features (from ai-features.spec.ts)
+// ============================================================================
 
 test('should create Claude Code session via electronAPI', async () => {
   const providerTest = await page.evaluate(async () => {
@@ -133,3 +135,4 @@ test('should switch to agent mode without errors', async () => {
     await expect(chatInput).toBeVisible({ timeout: 3000 });
   }
 });
+

@@ -6,6 +6,7 @@
  * - plan-status-header.spec.ts (plan status document header)
  * - tracker-comprehensive.spec.ts (tracker creation and loading)
  * - tracker-inline-behavior.spec.ts (inline tracker behavior)
+ * - tracker-sync-reactivity.spec.ts (reactive UI updates on programmatic item creation)
  *
  * All tests share a single app instance with beforeAll/afterAll.
  */
@@ -360,6 +361,55 @@ test('inline tracker should survive text deletion and allow Enter for new item',
   const listItems = editor.locator('li');
   const count = await listItems.count();
   expect(count).toBeGreaterThanOrEqual(2);
+});
+
+test('programmatically created tracker item appears in table reactively', async () => {
+  // Open a file to ensure the workspace is loaded
+  await openFileFromTree(page, 'tracker-create.md');
+  const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
+  await expect(editor).toBeVisible({ timeout: TEST_TIMEOUTS.EDITOR_LOAD });
+
+  // Switch to Tracker mode (Cmd+T)
+  await page.keyboard.press('Meta+t');
+
+  // Wait for the tracker sidebar
+  const trackerSidebar = page.locator('.tracker-sidebar');
+  await trackerSidebar.waitFor({ state: 'visible', timeout: 10000 });
+
+  // Select "Bugs" in the sidebar
+  const bugsSidebarButton = trackerSidebar.locator('button', { hasText: 'Bugs' });
+  await bugsSidebarButton.click();
+
+  // Wait for table to finish initial load
+  await page.waitForTimeout(2000);
+
+  // Verify no items with our test title exist yet
+  const syncedRow = page.locator('.tracker-table-row', { hasText: 'Synced bug from remote' });
+  await expect(syncedRow).not.toBeVisible();
+
+  // Create a tracker item via IPC (simulates what TrackerSyncManager.hydrateTrackerItem does)
+  const itemId = `sync_test_${Date.now()}`;
+  await page.evaluate(
+    async ({ itemId, workspacePath }) => {
+      await (window as any).electronAPI.invoke('document-service:create-tracker-item', {
+        id: itemId,
+        type: 'bug',
+        title: 'Synced bug from remote',
+        description: 'This item was synced from another client',
+        status: 'open',
+        priority: 'high',
+        workspace: workspacePath,
+      });
+    },
+    { itemId, workspacePath: workspaceDir }
+  );
+
+  // The item should appear in the tracker table reactively (no navigate away needed)
+  await expect(syncedRow).toBeVisible({ timeout: 5000 });
+
+  // Switch back to Files mode for subsequent tests
+  await page.keyboard.press('Meta+1');
+  await page.waitForTimeout(500);
 });
 
 test('Enter at end of pre-existing tracker should create new list item', async () => {

@@ -19,6 +19,9 @@ import * as os from 'os';
  * a file outside the workspace directory, a permission confirmation dialog appears.
  */
 
+// Skip entire file in CI - requires real AI API
+test.skip(() => !process.env.ANTHROPIC_API_KEY, 'Requires ANTHROPIC_API_KEY - not for CI');
+
 // Increase timeout for AI-related tests
 test.setTimeout(60000);
 
