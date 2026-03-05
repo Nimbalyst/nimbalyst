@@ -13,6 +13,11 @@ export interface ParsedCodexUsage {
   total_tokens: number;
 }
 
+export interface ParsedCodexContextSnapshot {
+  contextFillTokens: number;
+  contextWindow: number;
+}
+
 /**
  * Base shape of Codex SDK events
  *
@@ -39,6 +44,7 @@ export interface ParsedCodexEvent {
   error?: string;
   toolCall?: ParsedCodexToolCall;
   usage?: ParsedCodexUsage;
+  contextSnapshot?: ParsedCodexContextSnapshot;
   threadId?: string; // Thread ID from thread.started event
   rawEvent?: CodexSdkEvent; // Preserve original Codex SDK event for storage
 }
@@ -81,6 +87,82 @@ function getUsageFromRecord(record: Record<string, unknown> | null | undefined):
     input_tokens: input,
     output_tokens: output,
     total_tokens: total,
+  };
+}
+
+function getTokenCountPayload(record: Record<string, unknown>): Record<string, unknown> | undefined {
+  if (record.type === 'event_msg' && record.payload && typeof record.payload === 'object') {
+    const payload = record.payload as Record<string, unknown>;
+    if (payload.type === 'token_count') {
+      return payload;
+    }
+  }
+
+  if (record.type === 'token_count') {
+    return record;
+  }
+
+  return undefined;
+}
+
+function getUsageFromTokenCountPayload(payload: Record<string, unknown> | undefined): ParsedCodexUsage | undefined {
+  if (!payload) return undefined;
+
+  const info = payload.info as Record<string, unknown> | undefined;
+  if (!info) {
+    return getUsageFromRecord(payload);
+  }
+
+  const lastTokenUsage = info.last_token_usage;
+  if (lastTokenUsage && typeof lastTokenUsage === 'object') {
+    const usage = getUsageFromRecord(lastTokenUsage as Record<string, unknown>);
+    if (usage) {
+      return usage;
+    }
+  }
+
+  const flatUsage = getUsageFromRecord(info);
+  if (flatUsage) {
+    return flatUsage;
+  }
+
+  const totalTokenUsage = info.total_token_usage;
+  if (totalTokenUsage && typeof totalTokenUsage === 'object') {
+    return getUsageFromRecord(totalTokenUsage as Record<string, unknown>);
+  }
+
+  return undefined;
+}
+
+function getContextSnapshotFromTokenCountPayload(
+  payload: Record<string, unknown> | undefined
+): ParsedCodexContextSnapshot | undefined {
+  if (!payload) return undefined;
+
+  const info = payload.info as Record<string, unknown> | undefined;
+  if (!info) return undefined;
+
+  const contextWindow = info.model_context_window;
+  if (typeof contextWindow !== 'number' || !Number.isFinite(contextWindow) || contextWindow <= 0) {
+    return undefined;
+  }
+
+  const lastTokenUsage = info.last_token_usage as Record<string, unknown> | undefined;
+  const usage = getUsageFromRecord(lastTokenUsage) ?? getUsageFromTokenCountPayload(payload);
+  if (!usage) return undefined;
+
+  const contextFillTokens =
+    typeof usage.input_tokens === 'number' && usage.input_tokens > 0
+      ? usage.input_tokens
+      : usage.total_tokens;
+
+  if (!Number.isFinite(contextFillTokens) || contextFillTokens <= 0) {
+    return undefined;
+  }
+
+  return {
+    contextFillTokens,
+    contextWindow,
   };
 }
 
@@ -200,12 +282,19 @@ export function parseCodexEvent(event: unknown): ParsedCodexEvent[] {
     parsed.push({ toolCall: rootToolCall, rawEvent: event });
   }
 
+  const tokenCountPayload = getTokenCountPayload(record);
   const usage =
+    getUsageFromTokenCountPayload(tokenCountPayload) ??
     getUsageFromRecord(record.usage as Record<string, unknown> | undefined) ??
     getUsageFromRecord(record.info as Record<string, unknown> | undefined) ??
     getUsageFromRecord(record.token_count as Record<string, unknown> | undefined);
-  if (usage) {
-    parsed.push({ usage, rawEvent: event });
+  const contextSnapshot = getContextSnapshotFromTokenCountPayload(tokenCountPayload);
+  if (usage || contextSnapshot) {
+    parsed.push({
+      ...(usage ? { usage } : {}),
+      ...(contextSnapshot ? { contextSnapshot } : {}),
+      rawEvent: event,
+    });
   }
 
   return parsed;

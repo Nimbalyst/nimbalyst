@@ -162,6 +162,8 @@ export class CodexSDKProtocol implements AgentProtocol {
     let lastCumulativeText = '';
     let fullText = '';
     let usage: { input_tokens: number; output_tokens: number; total_tokens: number } | undefined;
+    let contextFillTokens: number | undefined;
+    let contextWindow: number | undefined;
 
     try {
       // Run the thread with streaming
@@ -208,6 +210,10 @@ export class CodexSDKProtocol implements AgentProtocol {
           // Usage tracking
           if (parsedEvent.usage) {
             usage = parsedEvent.usage;
+          }
+          if (parsedEvent.contextSnapshot) {
+            contextFillTokens = parsedEvent.contextSnapshot.contextFillTokens;
+            contextWindow = parsedEvent.contextSnapshot.contextWindow;
           }
 
           // Tool call event
@@ -271,6 +277,8 @@ export class CodexSDKProtocol implements AgentProtocol {
           output_tokens: 0,
           total_tokens: 0,
         },
+        ...(contextFillTokens !== undefined ? { contextFillTokens } : {}),
+        ...(contextWindow !== undefined ? { contextWindow } : {}),
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);

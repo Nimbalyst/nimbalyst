@@ -165,6 +165,12 @@ export interface ProtocolEvent {
     total_tokens: number;
   };
 
+  /** Current context fill tokens for this turn (provider-reported snapshot) */
+  contextFillTokens?: number;
+
+  /** Maximum context window for the active model */
+  contextWindow?: number;
+
   /** Additional metadata */
   metadata?: Record<string, unknown>;
 }

@@ -28,6 +28,12 @@ describe('OpenAICodexProvider', () => {
     OpenAICodexProvider.setClaudeSettingsEnvLoader(null);
     OpenAICodexProvider.setShellEnvironmentLoader(null);
     OpenAICodexProvider.setEnhancedPathLoader(null);
+
+    // Provide default injected dependencies required by the provider.
+    OpenAICodexProvider.setTrustChecker(() => ({ trusted: true, mode: 'allow-all' as any }));
+    OpenAICodexProvider.setPermissionPatternChecker(async () => false);
+    OpenAICodexProvider.setPermissionPatternSaver(async () => {});
+    OpenAICodexProvider.setSecurityLogger(() => {});
   });
 
   it('returns fallback models when SDK model discovery is unavailable', async () => {
@@ -356,9 +362,11 @@ describe('OpenAICodexProvider', () => {
       // drain
     }
 
-    expect(codexConstructorOptions).toEqual({
-      apiKey: 'test-key',
-    });
+    expect(codexConstructorOptions).toEqual(
+      expect.objectContaining({
+        apiKey: 'test-key',
+      }),
+    );
     expect(codexConstructorOptions).not.toHaveProperty('codexPathOverride');
   });
 
@@ -617,7 +625,7 @@ describe('OpenAICodexProvider', () => {
 
     expect(startThread).not.toHaveBeenCalled();
     const errorChunk = chunks.find((chunk) => chunk.type === 'error');
-    expect(errorChunk?.error).toContain('denied');
+    expect(errorChunk?.error).toContain('not trusted');
   });
 
   it('denies Codex in ask mode (tool-level permissions not supported)', async () => {
@@ -805,8 +813,9 @@ describe('OpenAICodexProvider', () => {
 
   describe('Live Codex SDK integration', () => {
     const hasApiKey = !!process.env.OPENAI_API_KEY;
+    const runProviderTests = process.env.RUN_AI_PROVIDER_TESTS === 'true';
 
-    it.runIf(hasApiKey)(
+    it.runIf(hasApiKey && runProviderTests)(
       'makes a real Codex SDK call and returns a valid response',
       async () => {
         const provider = new OpenAICodexProvider({

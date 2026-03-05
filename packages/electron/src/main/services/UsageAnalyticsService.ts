@@ -54,6 +54,72 @@ export interface DocumentEditStats {
 export class UsageAnalyticsService {
   constructor(private db: PGLiteDatabaseWorker) {}
 
+  private readonly SESSION_TOKEN_USAGE_CTE = `
+    WITH session_token_usage AS (
+      SELECT
+        s.id,
+        s.provider,
+        s.model,
+        s.workspace_id,
+        s.created_at,
+        s.updated_at,
+        CASE
+          WHEN s.provider = 'openai-codex' THEN
+            COALESCE(
+              codex_usage.input_tokens,
+              (s.metadata->'tokenUsage'->>'inputTokens')::bigint,
+              0
+            )
+          ELSE
+            COALESCE((s.metadata->'tokenUsage'->>'inputTokens')::bigint, 0)
+        END AS input_tokens,
+        CASE
+          WHEN s.provider = 'openai-codex' THEN
+            COALESCE(
+              codex_usage.output_tokens,
+              (s.metadata->'tokenUsage'->>'outputTokens')::bigint,
+              0
+            )
+          ELSE
+            COALESCE((s.metadata->'tokenUsage'->>'outputTokens')::bigint, 0)
+        END AS output_tokens,
+        CASE
+          WHEN s.provider = 'openai-codex' THEN
+            COALESCE(
+              codex_usage.input_tokens,
+              (s.metadata->'tokenUsage'->>'inputTokens')::bigint,
+              0
+            ) +
+            COALESCE(
+              codex_usage.output_tokens,
+              (s.metadata->'tokenUsage'->>'outputTokens')::bigint,
+              0
+            )
+          ELSE
+            COALESCE(
+              (s.metadata->'tokenUsage'->>'totalTokens')::bigint,
+              COALESCE((s.metadata->'tokenUsage'->>'inputTokens')::bigint, 0) +
+              COALESCE((s.metadata->'tokenUsage'->>'outputTokens')::bigint, 0),
+              0
+            )
+        END AS total_tokens
+      FROM ai_sessions s
+      LEFT JOIN LATERAL (
+        SELECT
+          (m.content::jsonb->'usage'->>'input_tokens')::bigint AS input_tokens,
+          (m.content::jsonb->'usage'->>'output_tokens')::bigint AS output_tokens
+        FROM ai_agent_messages m
+        WHERE m.session_id = s.id
+          AND m.source = 'openai-codex'
+          AND m.direction = 'output'
+          AND m.metadata->>'eventType' = 'turn.completed'
+        ORDER BY m.created_at DESC
+        LIMIT 1
+      ) codex_usage ON TRUE
+      WHERE s.metadata->'tokenUsage' IS NOT NULL
+    )
+  `;
+
   /**
    * Get total count of all AI sessions (including those without token data)
    */
@@ -75,18 +141,17 @@ export class UsageAnalyticsService {
    * Get overall token usage statistics across all sessions
    */
   async getOverallTokenUsage(workspaceId?: string): Promise<TokenUsageStats> {
-    const whereClause = workspaceId
-      ? `WHERE workspace_id = $1 AND metadata->>'tokenUsage' IS NOT NULL`
-      : `WHERE metadata->>'tokenUsage' IS NOT NULL`;
+    const whereClause = workspaceId ? `WHERE workspace_id = $1` : '';
     const params = workspaceId ? [workspaceId] : [];
 
     const result = await this.db.query(
-      `SELECT
-        COALESCE(SUM(((metadata->>'tokenUsage')::jsonb->>'inputTokens')::text::int), 0) as total_input_tokens,
-        COALESCE(SUM(((metadata->>'tokenUsage')::jsonb->>'outputTokens')::text::int), 0) as total_output_tokens,
-        COALESCE(SUM(((metadata->>'tokenUsage')::jsonb->>'totalTokens')::text::int), 0) as total_tokens,
+      `${this.SESSION_TOKEN_USAGE_CTE}
+      SELECT
+        COALESCE(SUM(input_tokens), 0) as total_input_tokens,
+        COALESCE(SUM(output_tokens), 0) as total_output_tokens,
+        COALESCE(SUM(total_tokens), 0) as total_tokens,
         COUNT(DISTINCT id) as session_count
-      FROM ai_sessions
+      FROM session_token_usage
       ${whereClause}`,
       params
     );
@@ -106,20 +171,19 @@ export class UsageAnalyticsService {
    * Get token usage broken down by provider and model
    */
   async getUsageByProvider(workspaceId?: string): Promise<ProviderUsageStats[]> {
-    const whereClause = workspaceId
-      ? `WHERE workspace_id = $1 AND metadata->>'tokenUsage' IS NOT NULL`
-      : `WHERE metadata->>'tokenUsage' IS NOT NULL`;
+    const whereClause = workspaceId ? `WHERE workspace_id = $1` : '';
     const params = workspaceId ? [workspaceId] : [];
 
     const result = await this.db.query(
-      `SELECT
+      `${this.SESSION_TOKEN_USAGE_CTE}
+      SELECT
         provider,
         model,
         COUNT(DISTINCT id) as session_count,
-        COALESCE(SUM(((metadata->>'tokenUsage')::jsonb->>'inputTokens')::text::int), 0) as total_input_tokens,
-        COALESCE(SUM(((metadata->>'tokenUsage')::jsonb->>'outputTokens')::text::int), 0) as total_output_tokens,
-        COALESCE(SUM(((metadata->>'tokenUsage')::jsonb->>'totalTokens')::text::int), 0) as total_tokens
-      FROM ai_sessions
+        COALESCE(SUM(input_tokens), 0) as total_input_tokens,
+        COALESCE(SUM(output_tokens), 0) as total_output_tokens,
+        COALESCE(SUM(total_tokens), 0) as total_tokens
+      FROM session_token_usage
       ${whereClause}
       GROUP BY provider, model
       ORDER BY total_tokens DESC`,
@@ -141,13 +205,13 @@ export class UsageAnalyticsService {
    */
   async getUsageByProject(): Promise<ProjectUsageStats[]> {
     const result = await this.db.query(
-      `SELECT
+      `${this.SESSION_TOKEN_USAGE_CTE}
+      SELECT
         workspace_id,
         COUNT(DISTINCT id) as session_count,
-        COALESCE(SUM(((metadata->>'tokenUsage')::jsonb->>'totalTokens')::text::int), 0) as total_tokens,
+        COALESCE(SUM(total_tokens), 0) as total_tokens,
         MAX(EXTRACT(EPOCH FROM updated_at) * 1000) as last_activity
-      FROM ai_sessions
-      WHERE metadata->>'tokenUsage' IS NOT NULL
+      FROM session_token_usage
       GROUP BY workspace_id
       ORDER BY total_tokens DESC`,
       []
@@ -180,25 +244,22 @@ export class UsageAnalyticsService {
       month: 'month',
     }[granularity];
 
+    const params = workspaceId ? [startDate, endDate, workspaceId] : [startDate, endDate];
+
     const whereClause = workspaceId
       ? `WHERE workspace_id = $3 AND created_at >= to_timestamp($1 / 1000.0) AND created_at <= to_timestamp($2 / 1000.0)`
       : `WHERE created_at >= to_timestamp($1 / 1000.0) AND created_at <= to_timestamp($2 / 1000.0)`;
 
-    const params = workspaceId ? [startDate, endDate, workspaceId] : [startDate, endDate];
-
-    const whereClauseWithToken = workspaceId
-      ? `WHERE workspace_id = $3 AND created_at >= to_timestamp($1 / 1000.0) AND created_at <= to_timestamp($2 / 1000.0) AND metadata->>'tokenUsage' IS NOT NULL`
-      : `WHERE created_at >= to_timestamp($1 / 1000.0) AND created_at <= to_timestamp($2 / 1000.0) AND metadata->>'tokenUsage' IS NOT NULL`;
-
     const result = await this.db.query(
-      `SELECT
+      `${this.SESSION_TOKEN_USAGE_CTE}
+      SELECT
         EXTRACT(EPOCH FROM DATE_TRUNC('${truncFunc}', created_at)) * 1000 as timestamp,
-        COALESCE(SUM(((metadata->>'tokenUsage')::jsonb->>'inputTokens')::text::int), 0) as input_tokens,
-        COALESCE(SUM(((metadata->>'tokenUsage')::jsonb->>'outputTokens')::text::int), 0) as output_tokens,
-        COALESCE(SUM(((metadata->>'tokenUsage')::jsonb->>'totalTokens')::text::int), 0) as total_tokens,
+        COALESCE(SUM(input_tokens), 0) as input_tokens,
+        COALESCE(SUM(output_tokens), 0) as output_tokens,
+        COALESCE(SUM(total_tokens), 0) as total_tokens,
         COUNT(DISTINCT id) as session_count
-      FROM ai_sessions
-      ${whereClauseWithToken}
+      FROM session_token_usage
+      ${whereClause}
       GROUP BY DATE_TRUNC('${truncFunc}', created_at)
       ORDER BY timestamp ASC`,
       params

@@ -841,6 +841,8 @@ export class OpenAICodexProvider extends BaseAgentProvider {
             content: event.content,
             isComplete: true,
             usage: event.usage,
+            ...(event.contextFillTokens !== undefined ? { contextFillTokens: event.contextFillTokens } : {}),
+            ...(event.contextWindow !== undefined ? { contextWindow: event.contextWindow } : {}),
           };
         }
       }

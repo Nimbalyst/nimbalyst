@@ -361,6 +361,8 @@ export interface StreamChunk {
   // Actual tokens in context window from last assistant message (input + cacheRead + cacheCreation).
   // Unlike modelUsage which is cumulative, this reflects the real context fill level per turn.
   contextFillTokens?: number;
+  // Model context window for context fill calculations (when provider emits a per-turn snapshot).
+  contextWindow?: number;
   // Set to true when context was compacted this turn. Signals AIService to clear stale currentContext.
   contextCompacted?: boolean;
 }
