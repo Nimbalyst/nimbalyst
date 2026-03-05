@@ -64,6 +64,7 @@ const SDK_NATIVE_TOOLS: readonly string[] = [
   'EnterPlanMode', 'EnterWorktree', 'Skill',
   'NotebookRead', 'NotebookEdit',
   'TodoRead', 'TodoWrite',
+  'ToolSearch',
   // Task management tools (SDK-internal)
   'TaskCreate', 'TaskGet', 'TaskUpdate', 'TaskList',
   // Agent Teams tools (SDK-internal, executed by CLI subprocess)
