@@ -4,12 +4,23 @@ import type { DocumentContext } from './types';
  * Build session naming instructions section
  * Used by both coding and chat sessions
  */
-function buildSessionNamingSection(): string {
+type ToolReferenceStyle = 'claude' | 'codex';
+
+function formatMcpToolReference(server: string, tool: string, style: ToolReferenceStyle): string {
+  if (style === 'codex') {
+    return `\`${tool}\` (server: \`${server}\`)`;
+  }
+  return `\`mcp__${server}__${tool}\``;
+}
+
+function buildSessionNamingSection(style: ToolReferenceStyle = 'claude'): string {
+  const toolReference = formatMcpToolReference('nimbalyst-session-naming', 'update_session_meta', style);
+
   return `
 
 ## Session Metadata
 
-You have one tool for managing session metadata: \`mcp__nimbalyst-session-naming__update_session_meta\`
+You have one tool for managing session metadata: ${toolReference}
 
 This tool sets the session name, tags, and phase. It always returns the full current metadata in its response.
 
@@ -66,6 +77,9 @@ Bad examples: "Fix null check in handleAuth" (too specific), "Update code" (too 
  */
 export interface ClaudeCodePromptOptions {
   hasSessionNaming?: boolean;
+  /** @deprecated Use toolReferenceStyle instead */
+  sessionNamingInstructionStyle?: ToolReferenceStyle;
+  toolReferenceStyle?: ToolReferenceStyle;
   worktreePath?: string;
   isVoiceMode?: boolean;
   voiceModeCodingAgentPrompt?: {
@@ -92,10 +106,16 @@ export interface ClaudeCodePromptOptions {
 export function buildClaudeCodeSystemPrompt(options: ClaudeCodePromptOptions): string {
   const {
     hasSessionNaming = false,
+    sessionNamingInstructionStyle,
+    toolReferenceStyle = 'claude',
     worktreePath,
     isVoiceMode = false,
     voiceModeCodingAgentPrompt,
   } = options;
+  const effectiveToolReferenceStyle = sessionNamingInstructionStyle ?? toolReferenceStyle;
+  const displayToUserTool = formatMcpToolReference('nimbalyst-mcp', 'display_to_user', effectiveToolReferenceStyle);
+  const captureEditorScreenshotTool = formatMcpToolReference('nimbalyst-mcp', 'capture_editor_screenshot', effectiveToolReferenceStyle);
+  const gitCommitProposalTool = formatMcpToolReference('nimbalyst-mcp', 'developer_git_commit_proposal', effectiveToolReferenceStyle);
 
   let prompt = `The following is an addendum to the above. Anything in the addendum supersedes the above.
 <addendum>
@@ -111,10 +131,10 @@ Nimbalyst provides visual tools for communicating with users. **Use these proact
 
 You have two tools to show content directly in the conversation. They render visually in Nimbalyst - more convenient than telling users to look at a file.
 
-- \`mcp__nimbalyst-mcp__display_to_user\` - Show charts and images inline
+- ${displayToUserTool} - Show charts and images inline
   - **Charts**: bar, line, pie, area, scatter (with optional error bars)
   - **Images**: Display local screenshots or generated images
-- \`mcp__nimbalyst-mcp__capture_editor_screenshot\` - Show rendered content of any open file, including diagrams
+- ${captureEditorScreenshotTool} - Show rendered content of any open file, including diagrams
 
 **Always prefer charts over text tables** when presenting data. Include error bars (95% CI) when statistical data is available.
 - Use bash with standard tools (awk, bc) or Python to calculate error bars - do NOT attempt to calculate statistics manually
@@ -158,11 +178,11 @@ IMPORTANT: You are working in a git worktree at ${worktreePath}. This is an isol
 
 ## Git Commits
 
-When asked to commit your work, use the \`mcp__nimbalyst-mcp__developer_git_commit_proposal\` tool instead of using git commit from the command line. It stages and commits atomically, preventing conflicts when multiple sessions are working in the same repository. You may do other git operations from the command line as usual.`;
+When asked to commit your work, use the ${gitCommitProposalTool} tool instead of using git commit from the command line. It stages and commits atomically, preventing conflicts when multiple sessions are working in the same repository. You may do other git operations from the command line as usual.`;
 
   // Add session naming if available
   if (hasSessionNaming) {
-    prompt += buildSessionNamingSection();
+    prompt += buildSessionNamingSection(effectiveToolReferenceStyle);
   }
 
   // Add voice mode context if applicable
@@ -393,11 +413,16 @@ ALWAYS use applyDiff for table modifications - it's more reliable than streaming
  * Legacy wrapper for buildClaudeCodeSystemPrompt
  * @deprecated Use buildClaudeCodeSystemPrompt instead
  */
-export function buildClaudeCodeSystemPromptAddendum(documentContext?: DocumentContext, hasSessionNaming?: boolean): string {
+export function buildClaudeCodeSystemPromptAddendum(
+  documentContext?: DocumentContext,
+  hasSessionNaming?: boolean,
+  toolReferenceStyle: ToolReferenceStyle = 'claude'
+): string {
   const sessionType = (documentContext as any)?.sessionType;
   return buildClaudeCodeSystemPrompt({
     sessionType: sessionType || 'chat',
     hasSessionNaming,
+    toolReferenceStyle,
     documentContext
   });
 }

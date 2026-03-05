@@ -18,7 +18,7 @@ import {
   ChatAttachment,
 } from '../types';
 import { CodexSDKProtocol } from '../protocols/CodexSDKProtocol';
-import { ProtocolEvent } from '../protocols/ProtocolInterface';
+import { ProtocolEvent, ProtocolSession } from '../protocols/ProtocolInterface';
 import { ToolPermissionService } from '../permissions/ToolPermissionService';
 import { PermissionMode, TrustChecker, PermissionPatternSaver, PermissionPatternChecker, SecurityLogger } from './ProviderPermissionMixin';
 import { CodexSdkModuleLike, loadCodexSdkModule } from './codex/codexSdkLoader';
@@ -48,6 +48,10 @@ interface PendingAskUserQuestionEntry {
 export class OpenAICodexProvider extends BaseAgentProvider {
   static readonly DEFAULT_MODEL = DEFAULT_MODELS['openai-codex'];
   private static readonly CODEX_EXECUTION_PATTERN = 'OpenAICodex(agent-run:*)';
+  private static readonly SESSION_NAMING_REMINDER_PROMPT =
+    'Reminder: call the session metadata tool now before continuing. ' +
+    'Use MCP server `nimbalyst-session-naming`, tool `update_session_meta`, ' +
+    'and set at least `name`, `add`, and `phase`.';
   private static readonly FALLBACK_MODELS: ReadonlyArray<{
     id: string;
     name: string;
@@ -782,6 +786,8 @@ export class OpenAICodexProvider extends BaseAgentProvider {
       });
 
       const mcpServers = await this.mcpConfigService.getMcpServersConfig({ sessionId, workspacePath });
+      const hasSessionNamingServer = Object.prototype.hasOwnProperty.call(mcpServers, 'nimbalyst-session-naming');
+      let usedSessionNamingToolThisTurn = false;
 
       // Build environment for the Codex CLI binary.
       // Electron GUI apps have a minimal process.env (missing docker, homebrew, nvm, etc.).
@@ -846,6 +852,9 @@ export class OpenAICodexProvider extends BaseAgentProvider {
           yield { type: 'text', content: event.content };
         } else if (event.type === 'tool_call') {
           if (event.toolCall) {
+            if (OpenAICodexProvider.isSessionNamingToolCall(event.toolCall.name)) {
+              usedSessionNamingToolThisTurn = true;
+            }
             this.handleAskUserQuestionToolCall(event.toolCall, sessionId);
             yield { type: 'tool_call', toolCall: event.toolCall };
           }
@@ -875,6 +884,16 @@ export class OpenAICodexProvider extends BaseAgentProvider {
         }
       } else if (sessionId && !session.id) {
         console.error('[CODEX] WARNING: Stream completed but thread ID was never captured!');
+      }
+
+      if (
+        sessionId &&
+        !isResumedThread &&
+        hasSessionNamingServer &&
+        !usedSessionNamingToolThisTurn &&
+        !abortController.signal.aborted
+      ) {
+        await this.sendSessionNamingReminder(session, sessionId);
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -1146,6 +1165,43 @@ export class OpenAICodexProvider extends BaseAgentProvider {
     return toolName.replace(/^mcp__.+?__/, '');
   }
 
+  private static isSessionNamingToolCall(toolName: string): boolean {
+    const normalized = OpenAICodexProvider.normalizeMcpToolName(toolName);
+    return normalized === 'update_session_meta' || normalized === 'name_session';
+  }
+
+  private async sendSessionNamingReminder(
+    session: ProtocolSession,
+    sessionId: string
+  ): Promise<void> {
+    console.log('[CODEX] First turn completed without session naming; sending reminder instruction');
+
+    await this.logAgentMessageBestEffort(
+      sessionId,
+      'input',
+      OpenAICodexProvider.SESSION_NAMING_REMINDER_PROMPT
+    );
+
+    let reminderTriggeredNaming = false;
+
+    for await (const reminderEvent of this.protocol.sendMessage(session, {
+      content: OpenAICodexProvider.SESSION_NAMING_REMINDER_PROMPT,
+    })) {
+      await this.storeRawEventIfPresent(reminderEvent, sessionId);
+
+      if (reminderEvent.type === 'tool_call' && reminderEvent.toolCall) {
+        if (OpenAICodexProvider.isSessionNamingToolCall(reminderEvent.toolCall.name)) {
+          reminderTriggeredNaming = true;
+        }
+        this.handleAskUserQuestionToolCall(reminderEvent.toolCall, sessionId);
+      }
+    }
+
+    if (!reminderTriggeredNaming) {
+      console.warn('[CODEX] Session naming reminder turn completed without update_session_meta call');
+    }
+  }
+
   abort(): void {
     this.pendingAskUserQuestions.clear();
     // Reject all pending permissions via service
@@ -1184,6 +1240,7 @@ export class OpenAICodexProvider extends BaseAgentProvider {
 
     return buildClaudeCodeSystemPrompt({
       hasSessionNaming,
+      toolReferenceStyle: 'codex',
       worktreePath,
       isVoiceMode,
       voiceModeCodingAgentPrompt,
