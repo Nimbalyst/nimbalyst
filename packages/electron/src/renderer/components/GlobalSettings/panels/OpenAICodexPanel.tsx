@@ -1,5 +1,10 @@
 import React from 'react';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { ProviderConfig, Model } from '../../Settings/SettingsView';
+import {
+  codexUsageIndicatorEnabledAtom,
+  setCodexUsageIndicatorEnabledAtom,
+} from '../../../store/atoms/codexUsageAtoms';
 
 interface OpenAICodexPanelProps {
   config: ProviderConfig;
@@ -21,6 +26,9 @@ export function OpenAICodexPanel({
   onApiKeyChange,
   onTestConnection,
 }: OpenAICodexPanelProps) {
+  const usageIndicatorEnabled = useAtomValue(codexUsageIndicatorEnabledAtom);
+  const setUsageIndicatorEnabled = useSetAtom(setCodexUsageIndicatorEnabledAtom);
+
   return (
     <div className="provider-panel flex flex-col">
       <div className="provider-panel-header mb-6 pb-4 border-b border-[var(--nim-border)]">
@@ -60,6 +68,24 @@ export function OpenAICodexPanel({
             className="opacity-0 w-0 h-0 absolute"
           />
           <span className="provider-toggle-slider absolute cursor-pointer inset-0 rounded-full transition-all bg-[var(--nim-bg-tertiary)]"></span>
+        </label>
+      </div>
+
+      <div className="provider-enable flex items-center justify-between gap-4 py-4 mb-4 border-b border-[var(--nim-border)]">
+        <div>
+          <span className="provider-enable-label text-sm font-medium text-[var(--nim-text)]">Show Usage Indicator</span>
+          <p className="text-xs text-[var(--nim-text-muted)] mt-1">
+            Display Codex usage limits in the navigation gutter
+          </p>
+        </div>
+        <label className="provider-toggle relative inline-block w-11 h-6 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={usageIndicatorEnabled}
+            onChange={(e) => setUsageIndicatorEnabled(e.target.checked)}
+            className="hidden peer"
+          />
+          <span className="provider-toggle-slider absolute cursor-pointer inset-0 rounded-full transition-all bg-[var(--nim-bg-tertiary)] before:absolute before:content-[''] before:h-5 before:w-5 before:left-0.5 before:bottom-0.5 before:rounded-full before:transition-all before:bg-white before:shadow-sm peer-checked:bg-[var(--nim-primary)] peer-checked:before:translate-x-5"></span>
         </label>
       </div>
 
