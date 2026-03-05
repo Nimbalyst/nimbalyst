@@ -2788,7 +2788,7 @@ The commit message should follow these guidelines:
         try {
           const { getDatabase } = await import("../database/initialize");
           const db = getDatabase();
-          const args = toolArgs as {
+          const typedArgs = args as {
             type?: string;
             status?: string;
             priority?: string;
@@ -2911,7 +2911,7 @@ The commit message should follow these guidelines:
         try {
           const { getDatabase } = await import("../database/initialize");
           const db = getDatabase();
-          const args = toolArgs as { id: string };
+          const typedArgs = args as { id: string };
 
           const result = await db.query<any>(
             `SELECT * FROM tracker_items WHERE id = $1`,
@@ -3001,7 +3001,7 @@ The commit message should follow these guidelines:
         try {
           const { getDatabase } = await import("../database/initialize");
           const db = getDatabase();
-          const args = toolArgs as {
+          const typedArgs = args as {
             type: string;
             title: string;
             description?: string;
@@ -3083,7 +3083,7 @@ The commit message should follow these guidelines:
         try {
           const { getDatabase } = await import("../database/initialize");
           const db = getDatabase();
-          const args = toolArgs as {
+          const typedArgs = args as {
             id: string;
             title?: string;
             status?: string;
@@ -3207,7 +3207,7 @@ The commit message should follow these guidelines:
         try {
           const { getDatabase } = await import("../database/initialize");
           const db = getDatabase();
-          const args = toolArgs as { trackerId: string };
+          const typedArgs = args as { trackerId: string };
 
           if (!sessionId) {
             return {

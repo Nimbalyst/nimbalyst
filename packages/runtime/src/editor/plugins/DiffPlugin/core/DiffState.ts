@@ -109,7 +109,7 @@ export function $clearOriginalMarkdown(node: LexicalNode): void {
  * Used during diff to restore the original checked state when rejecting changes.
  * Uses Lexical's NodeState API so the value survives node cloning via getWritable().
  */
-export const OriginalCheckedState = createState<boolean | null>('originalChecked', {
+export const OriginalCheckedState = createState('originalChecked', {
   parse: (value): boolean | null => {
     return typeof value === 'boolean' ? value : null;
   },
