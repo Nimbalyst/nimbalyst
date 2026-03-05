@@ -37,8 +37,8 @@ interface KeychainCredentials {
 
 const USAGE_API_URL = 'https://api.anthropic.com/api/oauth/usage';
 const KEYCHAIN_SERVICES = ['Claude Code-credentials', 'Claude Code']; // Primary and fallback
-const POLL_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
-const IDLE_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes before going to sleep
+const POLL_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
+const IDLE_TIMEOUT_MS = 60 * 60 * 1000; // 60 minutes before going to sleep
 const KEYCHAIN_RETRY_DELAY_MS = 2000; // Retry delay for keychain errors (post-unlock)
 const KEYCHAIN_MAX_RETRIES = 3;
 const NETWORK_RETRY_DELAY_MS = 3000; // Retry delay for network errors
@@ -138,7 +138,7 @@ class ClaudeUsageServiceImpl {
       this.pollTick();
     }, POLL_INTERVAL_MS);
 
-    logger.main.info('[ClaudeUsageService] Started polling (every 5 minutes)');
+    logger.main.info('[ClaudeUsageService] Started polling (every 30 minutes)');
   }
 
   private stopPolling(): void {
@@ -250,6 +250,15 @@ class ClaudeUsageServiceImpl {
             );
           }
 
+          if (response.status === 429) {
+            // Non-retryable: rate limited. Don't make it worse by retrying.
+            logger.main.warn(
+              '[ClaudeUsageService] Usage API returned 429 (rate limited). Will retry at next poll interval.' +
+              (errorBody ? ` Response body: ${errorBody}` : '')
+            );
+            throw new Error('Rate limited (429). Will retry later.');
+          }
+
           logger.main.warn(
             `[ClaudeUsageService] Usage API error response: ${response.status} ${response.statusText}` +
             (errorBody ? ` Response body: ${errorBody}` : '')
@@ -277,8 +286,10 @@ class ClaudeUsageServiceImpl {
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
 
-        // Don't retry auth errors
-        if (lastError.message.includes('Authentication expired')) {
+        // Don't retry auth errors or rate limits
+        if (lastError.message.includes('Authentication expired') ||
+            lastError.message.includes('Rate limited') ||
+            lastError.message.includes('access forbidden')) {
           throw lastError;
         }
 

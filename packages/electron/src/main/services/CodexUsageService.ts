@@ -72,8 +72,8 @@ interface CodexUsageSnapshot {
 }
 
 const CODEX_SESSIONS_DIR = join(homedir(), '.codex', 'sessions');
-const POLL_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
-const IDLE_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes before going to sleep
+const POLL_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
+const IDLE_TIMEOUT_MS = 60 * 60 * 1000; // 60 minutes before going to sleep
 const MAX_FILES_TO_CHECK = 5; // Check up to N recent session files for rate_limits
 
 class CodexUsageServiceImpl {
