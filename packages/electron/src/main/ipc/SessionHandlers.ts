@@ -82,6 +82,13 @@ function parseCodexToolLookupId(promptId: string): ParsedCodexToolLookupId | nul
     }
 }
 
+function getGitCommitProposalResponseChannel(
+    sessionId: string,
+    proposalId: string
+): string {
+    return `git-commit-proposal-response:${sessionId || 'unknown'}:${proposalId}`;
+}
+
 /**
  * Resolve a git commit proposal prompt ID to the canonical proposalId stored in DB.
  *
@@ -1548,11 +1555,12 @@ export async function registerSessionHandlers() {
                 }
             }
 
-            // For git_commit_proposal, also emit to httpServer's legacy listener
+            // For git_commit_proposal, emit to the session-scoped MCP waiter channel
             // and notify renderer to clear the pending interactive prompt indicator
             if (promptType === 'git_commit_proposal_request') {
                 const { ipcMain } = await import('electron');
-                ipcMain.emit(canonicalPromptId, null, response);
+                const responseChannel = getGitCommitProposalResponseChannel(sessionId, canonicalPromptId);
+                ipcMain.emit(responseChannel, null, response);
                 event.sender.send('ai:gitCommitProposalResolved', { sessionId, proposalId: canonicalPromptId });
                 TrayManager.getInstance().onPromptResolved(sessionId);
             }

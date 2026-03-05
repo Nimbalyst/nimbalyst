@@ -765,6 +765,10 @@ function createSharedMcpServer(
   workspacePath: string | undefined,
   sessionId: string | undefined
 ): Server {
+  function getGitCommitProposalResponseChannel(proposalId: string): string {
+    return `git-commit-proposal-response:${sessionId || "unknown"}:${proposalId}`;
+  }
+
   function extractToolUseIdFromMcpRequest(request: any): string | undefined {
     const requestMeta =
       request?.params && typeof request.params._meta === "object"
@@ -2962,8 +2966,10 @@ The commit message should follow these guidelines:
             typeof f === "string" ? f : f.path;
 
           // Listen for response via unified handler (SessionHandlers persists to DB)
+          const responseChannel =
+            getGitCommitProposalResponseChannel(proposalId);
           ipcMain.once(
-            proposalId,
+            responseChannel,
             async (
               _event,
               result: {
