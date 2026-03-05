@@ -192,9 +192,9 @@ interface ElectronAPI {
     getActiveSessionIds: () => Promise<{ success: boolean; sessionIds: string[]; error?: string }>;
     getSessionState: (sessionId: string) => Promise<any>;
     isSessionActive: (sessionId: string) => Promise<boolean>;
-    subscribe: () => Promise<void>;
+    subscribe: (workspacePath?: string) => Promise<void>;
     unsubscribe: () => Promise<void>;
-    startSession: (sessionId: string) => Promise<void>;
+    startSession: (sessionId: string, workspacePath?: string) => Promise<void>;
     updateActivity: (sessionId: string, status?: string, isStreaming?: boolean) => Promise<void>;
     endSession: (sessionId: string) => Promise<void>;
     interruptSession: (sessionId: string) => Promise<void>;

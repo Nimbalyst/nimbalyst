@@ -19,6 +19,7 @@ export type SessionStatus =
  */
 export interface SessionState {
   sessionId: string;
+  workspacePath?: string;
   status: SessionStatus;
   lastActivity: Date;
   isStreaming: boolean;
@@ -28,13 +29,13 @@ export interface SessionState {
  * Events emitted by the SessionStateManager
  */
 export type SessionStateEvent =
-  | { type: 'session:started'; sessionId: string; timestamp: Date }
-  | { type: 'session:streaming'; sessionId: string; timestamp: Date }
-  | { type: 'session:waiting'; sessionId: string; timestamp: Date }
-  | { type: 'session:completed'; sessionId: string; timestamp: Date }
-  | { type: 'session:error'; sessionId: string; error: string; timestamp: Date }
-  | { type: 'session:interrupted'; sessionId: string; timestamp: Date }
-  | { type: 'session:activity'; sessionId: string; timestamp: Date };
+  | { type: 'session:started'; sessionId: string; workspacePath?: string; timestamp: Date }
+  | { type: 'session:streaming'; sessionId: string; workspacePath?: string; timestamp: Date }
+  | { type: 'session:waiting'; sessionId: string; workspacePath?: string; timestamp: Date }
+  | { type: 'session:completed'; sessionId: string; workspacePath?: string; timestamp: Date }
+  | { type: 'session:error'; sessionId: string; workspacePath?: string; error: string; timestamp: Date }
+  | { type: 'session:interrupted'; sessionId: string; workspacePath?: string; timestamp: Date }
+  | { type: 'session:activity'; sessionId: string; workspacePath?: string; timestamp: Date };
 
 /**
  * Event listener function type
@@ -70,6 +71,7 @@ export interface AISessionRow {
  */
 export interface StartSessionOptions {
   sessionId: string;
+  workspacePath?: string;
   initialStatus?: SessionStatus;
 }
 

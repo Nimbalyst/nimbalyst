@@ -66,7 +66,7 @@ export async function registerSessionStateHandlers() {
   });
 
   // Subscribe to state changes
-  safeHandle('ai-session-state:subscribe', async (event) => {
+  safeHandle('ai-session-state:subscribe', async (event, workspacePath?: string) => {
     try {
       const window = BrowserWindow.fromWebContents(event.sender);
       if (!window) {
@@ -83,6 +83,14 @@ export async function registerSessionStateHandlers() {
 
       // Create new subscription
       const unsubscribe = stateManager.subscribe((stateEvent: SessionStateEvent) => {
+        // Workspace-scoped subscription: only send events for the window's workspace.
+        // This prevents foreign session lifecycle events from triggering cross-workspace reloads.
+        if (workspacePath) {
+          if (!stateEvent.workspacePath || stateEvent.workspacePath !== workspacePath) {
+            return;
+          }
+        }
+
         // Send event to renderer
         if (!window.isDestroyed()) {
           window.webContents.send('ai-session-state:event', stateEvent);
@@ -132,9 +140,9 @@ export async function registerSessionStateHandlers() {
   });
 
   // Start tracking a session (called when AI starts processing)
-  safeHandle('ai-session-state:start', async (_event, sessionId: string) => {
+  safeHandle('ai-session-state:start', async (_event, sessionId: string, workspacePath?: string) => {
     try {
-      await stateManager.startSession({ sessionId });
+      await stateManager.startSession({ sessionId, workspacePath });
       return { success: true };
     } catch (error) {
       console.error('[SessionStateHandlers] Error starting session:', error);

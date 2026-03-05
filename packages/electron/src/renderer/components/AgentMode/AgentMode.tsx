@@ -53,7 +53,7 @@ import {
 } from '../../store';
 import { errorNotificationService } from '../../services/ErrorNotificationService';
 import { initWorkstreamState, loadWorkstreamStates, workstreamStateAtom, workstreamActiveChildAtom, setWorkstreamActiveChildAtom, setWorktreeActiveSessionAtom } from '../../store/atoms/workstreamState';
-import { initSessionStateListeners } from '../../store/sessionStateListeners';
+import { initSessionStateListeners, updateSessionStateListenerWorkspace } from '../../store/sessionStateListeners';
 import { initFileStateListeners } from '../../store/listeners/fileStateListeners';
 import { initFileTreeListeners } from '../../store/listeners/fileTreeListeners';
 import { initSessionListListeners } from '../../store/listeners/sessionListListeners';
@@ -176,9 +176,15 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
 
   // Initialize session state listeners (global, runs once)
   useEffect(() => {
+    console.log("[AgentMode] initing session state listeners SHOULD ONLY HAPPEN ONCE")
     const cleanup = initSessionStateListeners();
     return cleanup;
   }, []);
+
+  // Keep workspace routing in sync without re-registering listeners.
+  useEffect(() => {
+    updateSessionStateListenerWorkspace(workspacePath);
+  }, [workspacePath]);
 
   // Initialize session list listeners (global, runs once)
   useEffect(() => {

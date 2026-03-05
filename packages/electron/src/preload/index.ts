@@ -16,6 +16,10 @@ interface ArchiveTask {
   error?: string;
 }
 
+// Keep stable wrapper references so sessionState.removeStateChangeListener()
+// can actually detach listeners registered via onStateChange().
+const sessionStateEventListenerMap = new WeakMap<(event: any) => void, (_event: any, data: any) => void>();
+
 // Expose PLAYWRIGHT flag to renderer for test detection
 if (process.env.PLAYWRIGHT === '1') {
   contextBridge.exposeInMainWorld('PLAYWRIGHT', true);
@@ -431,22 +435,33 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('ai-session-state:get-state', sessionId),
     isSessionActive: (sessionId: string) =>
       ipcRenderer.invoke('ai-session-state:is-active', sessionId),
-    subscribe: () =>
-      ipcRenderer.invoke('ai-session-state:subscribe'),
+    subscribe: (workspacePath?: string) =>
+      ipcRenderer.invoke('ai-session-state:subscribe', workspacePath),
     unsubscribe: () =>
       ipcRenderer.invoke('ai-session-state:unsubscribe'),
-    startSession: (sessionId: string) =>
-      ipcRenderer.invoke('ai-session-state:start', sessionId),
+    startSession: (sessionId: string, workspacePath?: string) =>
+      ipcRenderer.invoke('ai-session-state:start', sessionId, workspacePath),
     updateActivity: (sessionId: string, status?: string, isStreaming?: boolean) =>
       ipcRenderer.invoke('ai-session-state:update-activity', sessionId, status, isStreaming),
     endSession: (sessionId: string) =>
       ipcRenderer.invoke('ai-session-state:end', sessionId),
     interruptSession: (sessionId: string) =>
       ipcRenderer.invoke('ai-session-state:interrupt', sessionId),
-    onStateChange: (callback: (event: any) => void) =>
-      ipcRenderer.on('ai-session-state:event', (_event, data) => callback(data)),
-    removeStateChangeListener: (callback: (event: any) => void) =>
-      ipcRenderer.removeListener('ai-session-state:event', callback),
+    onStateChange: (callback: (event: any) => void) => {
+      const existing = sessionStateEventListenerMap.get(callback);
+      if (existing) {
+        ipcRenderer.removeListener('ai-session-state:event', existing);
+      }
+      const handler = (_event: any, data: any) => callback(data);
+      sessionStateEventListenerMap.set(callback, handler);
+      ipcRenderer.on('ai-session-state:event', handler);
+    },
+    removeStateChangeListener: (callback: (event: any) => void) => {
+      const handler = sessionStateEventListenerMap.get(callback);
+      if (!handler) return;
+      ipcRenderer.removeListener('ai-session-state:event', handler);
+      sessionStateEventListenerMap.delete(callback);
+    },
   },
 
   // AI operations (new unified interface)

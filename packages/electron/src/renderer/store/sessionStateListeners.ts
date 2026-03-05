@@ -71,6 +71,33 @@ const VERIFICATION_RELOAD_DELAY_MS = 2000;
 const readStateSyncTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const READ_STATE_SYNC_DEBOUNCE_MS = 5000;
 
+// Active workspace-scoped subscription in main process.
+// Kept module-level so we can update routing without re-registering all IPC listeners.
+let subscribedWorkspacePath: string | undefined;
+
+function subscribeToSessionStateWorkspace(workspacePath?: string): void {
+  if (!window.electronAPI?.sessionState) return;
+
+  if (subscribedWorkspacePath === workspacePath) {
+    return;
+  }
+
+  subscribedWorkspacePath = workspacePath;
+  window.electronAPI.sessionState.subscribe(workspacePath)
+    .then((result: any) => {
+      if (!result.success) {
+        console.error('[sessionStateListeners] Failed to subscribe to session state manager:', result.error);
+      }
+    })
+    .catch((error: any) => {
+      console.error('[sessionStateListeners] Error subscribing to session state manager:', error);
+    });
+}
+
+export function updateSessionStateListenerWorkspace(workspacePath: string): void {
+  subscribeToSessionStateWorkspace(workspacePath || undefined);
+}
+
 /**
  * Initialize global session state listeners.
  * Should be called once at app startup (or when AgentMode mounts).
@@ -90,9 +117,21 @@ export function initSessionStateListeners(): () => void {
   const handleStateChange = (event: {
     type: string;
     sessionId: string;
+    workspacePath?: string;
     [key: string]: any;
   }) => {
-    const { type, sessionId } = event;
+    const { type, sessionId, workspacePath: eventWorkspacePath } = event;
+    if (!sessionId) return;
+
+    const currentWorkspacePath = store.get(sessionListWorkspaceAtom);
+    const registry = store.get(sessionRegistryAtom);
+    const sessionMeta = registry.get(sessionId);
+    const resolvedWorkspacePath = eventWorkspacePath || sessionMeta?.workspaceId || currentWorkspacePath || null;
+
+    // Ignore lifecycle events for sessions owned by a different workspace window.
+    if (currentWorkspacePath && resolvedWorkspacePath && resolvedWorkspacePath !== currentWorkspacePath) {
+      return;
+    }
 
     switch (type) {
       // Session is actively running
@@ -127,18 +166,9 @@ export function initSessionStateListeners(): () => void {
         // a race between listener init and session list init). This final reload
         // on session:completed ensures all messages are loaded regardless.
         {
-          let workspacePath = store.get(sessionListWorkspaceAtom);
-          // Fallback: get workspace path from session registry if the global atom is null
-          if (!workspacePath) {
-            const registry = store.get(sessionRegistryAtom);
-            const sessionMeta = registry.get(sessionId);
-            if (sessionMeta?.workspaceId) {
-              workspacePath = sessionMeta.workspaceId;
-            }
-          }
-          if (workspacePath) {
+          if (resolvedWorkspacePath) {
             // Immediate reload
-            store.set(reloadSessionDataAtom, { sessionId, workspacePath });
+            store.set(reloadSessionDataAtom, { sessionId, workspacePath: resolvedWorkspacePath });
 
             // Schedule a verification reload after a short delay.
             // This is a safety net that catches multiple failure modes:
@@ -147,7 +177,7 @@ export function initSessionStateListeners(): () => void {
             // 3. The IPC call failed silently
             // 4. Non-blocking writes hadn't flushed despite the provider's flush call
             // The cost is one extra DB read per session completion - negligible.
-            const verificationWorkspacePath = workspacePath;
+            const verificationWorkspacePath = resolvedWorkspacePath;
             const existingVerification = verificationReloadTimers.get(sessionId);
             if (existingVerification) {
               clearTimeout(existingVerification);
@@ -255,17 +285,14 @@ export function initSessionStateListeners(): () => void {
    */
   const handleMessageLogged = (data: { sessionId: string; direction: string }) => {
     const { sessionId, direction } = data;
-    let workspacePath = store.get(sessionListWorkspaceAtom);
+    const currentWorkspacePath = store.get(sessionListWorkspaceAtom);
+    const registry = store.get(sessionRegistryAtom);
+    const sessionMeta = registry.get(sessionId);
+    const workspacePath = sessionMeta?.workspaceId || currentWorkspacePath;
 
-    // Fallback: get workspace path from session registry if the global atom is null
-    // This can happen after HMR re-evaluates the sessions module, or during
-    // a race between listener init and session list init.
-    if (!workspacePath) {
-      const registry = store.get(sessionRegistryAtom);
-      const sessionMeta = registry.get(sessionId);
-      if (sessionMeta?.workspaceId) {
-        workspacePath = sessionMeta.workspaceId;
-      }
+    // Guard against any cross-window leakage: only process events for this window's workspace.
+    if (currentWorkspacePath && sessionMeta?.workspaceId && sessionMeta.workspaceId !== currentWorkspacePath) {
+      return;
     }
 
     if (!workspacePath || !sessionId) {
@@ -583,16 +610,9 @@ export function initSessionStateListeners(): () => void {
     }
   };
 
-  // First, subscribe to the session state manager (IPC call to register this window)
-  window.electronAPI.sessionState.subscribe()
-    .then((result: any) => {
-      if (!result.success) {
-        console.error('[sessionStateListeners] Failed to subscribe to session state manager:', result.error);
-      }
-    })
-    .catch((error: any) => {
-      console.error('[sessionStateListeners] Error subscribing to session state manager:', error);
-    });
+  // First, subscribe to the session state manager (IPC call to register this window).
+  // Workspace can change during app lifetime; this is updated via updateSessionStateListenerWorkspace().
+  subscribeToSessionStateWorkspace(store.get(sessionListWorkspaceAtom) || undefined);
 
   // Fetch currently active sessions and restore their processing state
   // This handles the case where the renderer refreshes while sessions are running
@@ -665,6 +685,7 @@ export function initSessionStateListeners(): () => void {
 
     window.electronAPI.sessionState?.removeStateChangeListener?.(handleStateChange);
     window.electronAPI.sessionState?.unsubscribe?.();
+    subscribedWorkspacePath = undefined;
     cleanupMessageLogged?.();
     cleanupTitleUpdated?.();
     cleanupAskUserQuestion?.();

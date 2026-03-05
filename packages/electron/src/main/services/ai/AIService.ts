@@ -2340,7 +2340,10 @@ export class AIService {
           // Ensure the session is marked as running so the UI shows the stop button.
           // sendMessageHandler also calls startSession, but there can be a gap between
           // the setImmediate and when that runs. Re-calling startSession is safe (idempotent).
-          await sessionStateManager.startSession({ sessionId: data.sessionId });
+          await sessionStateManager.startSession({
+            sessionId: data.sessionId,
+            workspacePath: effectiveWorkspacePath,
+          });
 
           const targetWindow = findWindowByWorkspace(effectiveWorkspacePath);
           if (targetWindow && !targetWindow.isDestroyed()) {
@@ -2440,7 +2443,10 @@ export class AIService {
 
       // Mark session as running/active
       const stateManager = getSessionStateManager();
-      await stateManager.startSession({ sessionId: session.id });
+      await stateManager.startSession({
+        sessionId: session.id,
+        workspacePath: session.workspacePath || effectiveWorkspacePath,
+      });
 
       // Mark session as executing for mobile sync (shows "Running" indicator)
       const syncProvider = getSyncProvider();
@@ -3122,6 +3128,8 @@ export class AIService {
               const modelUsage = chunk.modelUsage;
               // Context fill from last assistant message (actual tokens in context window)
               const contextFillTokens: number | undefined = chunk.contextFillTokens;
+              // Context window for providers that emit per-turn context snapshots (e.g., OpenAI Codex)
+              const contextWindowFromChunk: number | undefined = chunk.contextWindow;
               // Whether context was compacted this turn (clear stale currentContext)
               const contextCompacted: boolean = chunk.contextCompacted === true;
 
@@ -3266,15 +3274,61 @@ export class AIService {
                 const newInputTokens = (tokenUsage.input_tokens || 0);
                 const newOutputTokens = tokenUsage.output_tokens || 0;
                 const newTotalTokens = newInputTokens + newOutputTokens;
+                const isCodexProvider = session.provider === 'openai-codex';
 
-                const updatedUsage = {
-                  inputTokens: currentUsage.inputTokens + newInputTokens,
-                  outputTokens: currentUsage.outputTokens + newOutputTokens,
-                  totalTokens: currentUsage.totalTokens + newTotalTokens,
-                  contextWindow: currentUsage.contextWindow
+                const codexContextWindow =
+                  isCodexProvider
+                    ? (contextWindowFromChunk || currentUsage.contextWindow)
+                    : currentUsage.contextWindow;
+
+                // Codex SDK turn.completed usage is cumulative for the provider thread.
+                // Other non-claude providers report per-turn deltas, so those are accumulated.
+                const nextInputTokens = isCodexProvider
+                  ? (tokenUsage.input_tokens ?? currentUsage.inputTokens)
+                  : currentUsage.inputTokens + newInputTokens;
+                const nextOutputTokens = isCodexProvider
+                  ? (tokenUsage.output_tokens ?? currentUsage.outputTokens)
+                  : currentUsage.outputTokens + newOutputTokens;
+
+                const updatedUsage: NonNullable<SessionData['tokenUsage']> = {
+                  inputTokens: nextInputTokens,
+                  outputTokens: nextOutputTokens,
+                  totalTokens: isCodexProvider
+                    ? nextInputTokens + nextOutputTokens
+                    : currentUsage.totalTokens + newTotalTokens,
+                  contextWindow: codexContextWindow,
+                  currentContext:
+                    isCodexProvider && !contextCompacted
+                      ? (contextFillTokens !== undefined && codexContextWindow
+                        ? { tokens: contextFillTokens, contextWindow: codexContextWindow }
+                        : currentUsage.currentContext)
+                      : currentUsage.currentContext,
                 };
 
                 await this.sessionManager.updateSessionTokenUsage(session.id, updatedUsage);
+
+                // Send IPC event to update UI immediately
+                safeSend(event, 'ai:tokenUsageUpdated', {
+                  sessionId: session.id,
+                  tokenUsage: updatedUsage
+                });
+
+                // Push context usage to mobile sync for Codex sessions
+                if (isCodexProvider && contextFillTokens !== undefined && codexContextWindow) {
+                  const syncProvider = getSyncProvider();
+                  if (syncProvider) {
+                    syncProvider.pushChange(session.id, {
+                      type: 'metadata_updated',
+                      metadata: {
+                        currentContext: {
+                          tokens: contextFillTokens,
+                          contextWindow: codexContextWindow,
+                        },
+                        updatedAt: Date.now(),
+                      } as any,
+                    });
+                  }
+                }
 
                 // Update local session reference for next iteration
                 session.tokenUsage = updatedUsage;

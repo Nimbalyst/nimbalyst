@@ -63,10 +63,11 @@ export class SessionStateManager extends EventEmitter {
    * Start tracking a session
    */
   async startSession(options: StartSessionOptions): Promise<void> {
-    const { sessionId, initialStatus = 'running' } = options;
+    const { sessionId, workspacePath, initialStatus = 'running' } = options;
 
     const state: SessionState = {
       sessionId,
+      workspacePath,
       status: initialStatus,
       lastActivity: new Date(),
       isStreaming: false,
@@ -81,6 +82,7 @@ export class SessionStateManager extends EventEmitter {
     this.emitEvent({
       type: 'session:started',
       sessionId,
+      workspacePath: state.workspacePath,
       timestamp: new Date(),
     });
   }
@@ -119,18 +121,21 @@ export class SessionStateManager extends EventEmitter {
       this.emitEvent({
         type: isStreaming ? 'session:streaming' : 'session:started',
         sessionId,
+        workspacePath: state.workspacePath,
         timestamp: new Date(),
       });
     } else if (status === 'waiting_for_input') {
       this.emitEvent({
         type: 'session:waiting',
         sessionId,
+        workspacePath: state.workspacePath,
         timestamp: new Date(),
       });
     } else if (status === 'error') {
       this.emitEvent({
         type: 'session:error',
         sessionId,
+        workspacePath: state.workspacePath,
         error: 'Session encountered an error',
         timestamp: new Date(),
       });
@@ -138,6 +143,7 @@ export class SessionStateManager extends EventEmitter {
       this.emitEvent({
         type: 'session:activity',
         sessionId,
+        workspacePath: state.workspacePath,
         timestamp: new Date(),
       });
     }
@@ -170,6 +176,7 @@ export class SessionStateManager extends EventEmitter {
     this.emitEvent({
       type: 'session:completed',
       sessionId,
+      workspacePath: state.workspacePath,
       timestamp: new Date(),
     });
   }
@@ -190,6 +197,7 @@ export class SessionStateManager extends EventEmitter {
     this.emitEvent({
       type: 'session:interrupted',
       sessionId,
+      workspacePath: state?.workspacePath,
       timestamp: new Date(),
     });
   }
@@ -221,24 +229,39 @@ export class SessionStateManager extends EventEmitter {
   subscribe(listener: SessionStateListener): () => void {
     const handler = (event: SessionStateEvent) => listener(event);
 
+    const onStarted = (data: Omit<Extract<SessionStateEvent, { type: 'session:started' }>, 'type'>) =>
+      handler({ ...data, type: 'session:started' });
+    const onStreaming = (data: Omit<Extract<SessionStateEvent, { type: 'session:streaming' }>, 'type'>) =>
+      handler({ ...data, type: 'session:streaming' });
+    const onWaiting = (data: Omit<Extract<SessionStateEvent, { type: 'session:waiting' }>, 'type'>) =>
+      handler({ ...data, type: 'session:waiting' });
+    const onCompleted = (data: Omit<Extract<SessionStateEvent, { type: 'session:completed' }>, 'type'>) =>
+      handler({ ...data, type: 'session:completed' });
+    const onError = (data: Omit<Extract<SessionStateEvent, { type: 'session:error' }>, 'type'>) =>
+      handler({ ...data, type: 'session:error' });
+    const onInterrupted = (data: Omit<Extract<SessionStateEvent, { type: 'session:interrupted' }>, 'type'>) =>
+      handler({ ...data, type: 'session:interrupted' });
+    const onActivity = (data: Omit<Extract<SessionStateEvent, { type: 'session:activity' }>, 'type'>) =>
+      handler({ ...data, type: 'session:activity' });
+
     // Listen to all event types
-    this.on('session:started', (data) => handler({ ...data, type: 'session:started' }));
-    this.on('session:streaming', (data) => handler({ ...data, type: 'session:streaming' }));
-    this.on('session:waiting', (data) => handler({ ...data, type: 'session:waiting' }));
-    this.on('session:completed', (data) => handler({ ...data, type: 'session:completed' }));
-    this.on('session:error', (data) => handler({ ...data, type: 'session:error' }));
-    this.on('session:interrupted', (data) => handler({ ...data, type: 'session:interrupted' }));
-    this.on('session:activity', (data) => handler({ ...data, type: 'session:activity' }));
+    this.on('session:started', onStarted);
+    this.on('session:streaming', onStreaming);
+    this.on('session:waiting', onWaiting);
+    this.on('session:completed', onCompleted);
+    this.on('session:error', onError);
+    this.on('session:interrupted', onInterrupted);
+    this.on('session:activity', onActivity);
 
     // Return unsubscribe function
     return () => {
-      this.removeListener('session:started', handler);
-      this.removeListener('session:streaming', handler);
-      this.removeListener('session:waiting', handler);
-      this.removeListener('session:completed', handler);
-      this.removeListener('session:error', handler);
-      this.removeListener('session:interrupted', handler);
-      this.removeListener('session:activity', handler);
+      this.removeListener('session:started', onStarted);
+      this.removeListener('session:streaming', onStreaming);
+      this.removeListener('session:waiting', onWaiting);
+      this.removeListener('session:completed', onCompleted);
+      this.removeListener('session:error', onError);
+      this.removeListener('session:interrupted', onInterrupted);
+      this.removeListener('session:activity', onActivity);
     };
   }
 
