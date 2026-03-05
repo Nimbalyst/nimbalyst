@@ -15,7 +15,12 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ELECTRON_DIR="$SCRIPT_DIR/.."
 PROJECT_ROOT="$ELECTRON_DIR/../.."
-SDK_DIR="$PROJECT_ROOT/node_modules/@anthropic-ai/claude-agent-sdk"
+# Resolve SDK location - may be hoisted to root or in packages/electron/node_modules
+if [ -d "$ELECTRON_DIR/node_modules/@anthropic-ai/claude-agent-sdk" ]; then
+    SDK_DIR="$ELECTRON_DIR/node_modules/@anthropic-ai/claude-agent-sdk"
+else
+    SDK_DIR="$PROJECT_ROOT/node_modules/@anthropic-ai/claude-agent-sdk"
+fi
 OUTPUT_DIR="$ELECTRON_DIR/resources/claude-helper-bin"
 
 # Check for bun
