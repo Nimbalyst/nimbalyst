@@ -1044,7 +1044,11 @@ export class OpenAICodexProvider extends BaseAgentProvider {
     for (const [serverName, serverConfig] of Object.entries(mcpServers)) {
       const converted = this.convertServerConfigToCodex(serverConfig as Record<string, unknown>);
       if (converted) {
-        codexMcpServers[serverName] = converted;
+        // Sanitize server names: dots in TOML keys are interpreted as nested tables
+        // (e.g., "customer.io" becomes [mcp_servers.customer.io] -> nested "customer" -> "io")
+        // Replace dots with hyphens to prevent TOML parsing errors
+        const safeServerName = serverName.replace(/\./g, '-');
+        codexMcpServers[safeServerName] = converted;
       }
     }
 

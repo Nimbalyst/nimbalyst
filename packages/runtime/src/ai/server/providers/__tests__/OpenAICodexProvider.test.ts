@@ -391,6 +391,10 @@ describe('OpenAICodexProvider', () => {
         args: ['-y', '@acme/mcp'],
         env: { API_TOKEN: 'token-value' },
       },
+      'customer.io': {
+        command: 'npx',
+        args: ['-y', '@customerio/mcp'],
+      },
       custom_http: {
         type: 'http',
         url: 'https://mcp.example.com',
@@ -457,6 +461,7 @@ describe('OpenAICodexProvider', () => {
         'nimbalyst-session-naming',
         'nimbalyst-extension-dev',
         'custom_stdio',
+        'customer-io',
         'custom_http',
       ])
     );
@@ -472,6 +477,11 @@ describe('OpenAICodexProvider', () => {
       command: 'npx',
       args: ['-y', '@acme/mcp'],
       env: { API_TOKEN: 'token-value' },
+    });
+    // Dots in server names are replaced with hyphens to prevent TOML parsing errors
+    expect(mcpServers['customer-io']).toEqual({
+      command: 'npx',
+      args: ['-y', '@customerio/mcp'],
     });
     expect(mcpServers.custom_http).toEqual({
       url: 'https://mcp.example.com',
