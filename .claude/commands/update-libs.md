@@ -32,7 +32,11 @@ Update the Anthropic Agent SDK, MCP library, and OpenAI Codex SDK to their lates
   - Use `npm view <package>@<version> --json` to get the new `integrity`, `resolved` URL, and `dependencies`
   - Edit `package-lock.json` to update the `version`, `resolved`, `integrity`, and `dependencies` for the package AND its transitive deps
   - Re-run `npm install` and verify again with `npm ls`
-8. **Commit the changes** - Create a git commit with the updated dependencies. The commit message should summarize which packages were updated and their version changes (e.g., "deps: update claude-agent-sdk 1.0.0 -> 1.1.0, mcp-sdk 2.0.0 -> 2.1.0"). Stage only the relevant files: `package.json`, `packages/electron/package.json`, `packages/runtime/package.json`, and `package-lock.json`.
+8. **Verify Codex platform binaries installed** - The `@openai/codex-sdk` depends on `@openai/codex`, which has optional platform-specific binary packages (e.g., `@openai/codex-darwin-arm64`). npm silently skips these if their integrity hashes are wrong. Check:
+  - Run `ls node_modules/@openai/codex-darwin-arm64/vendor/` (or the appropriate platform) to confirm the binary exists
+  - If missing, the integrity hashes in `package-lock.json` are likely stale. Run `npm install @openai/codex-sdk@<version> --workspace=packages/electron --workspace=packages/runtime` to regenerate them
+  - Verify again that the platform binary directory exists after reinstall
+9. **Commit the changes** - Create a git commit with the updated dependencies. The commit message should summarize which packages were updated and their version changes (e.g., "deps: update claude-agent-sdk 1.0.0 -> 1.1.0, mcp-sdk 2.0.0 -> 2.1.0"). Stage only the relevant files: `package.json`, `packages/electron/package.json`, `packages/runtime/package.json`, and `package-lock.json`.
 
 ## Output Format
 
