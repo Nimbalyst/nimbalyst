@@ -765,6 +765,10 @@ function createSharedMcpServer(
   workspacePath: string | undefined,
   sessionId: string | undefined
 ): Server {
+  function getAskUserQuestionResponseChannel(questionId: string): string {
+    return `ask-user-question-response:${sessionId || "unknown"}:${questionId}`;
+  }
+
   function getGitCommitProposalResponseChannel(proposalId: string): string {
     return `git-commit-proposal-response:${sessionId || "unknown"}:${proposalId}`;
   }
@@ -2493,6 +2497,8 @@ The commit message should follow these guidelines:
         const questionId =
           extractToolUseIdFromMcpRequest(request) ||
           `ask-${sessionId || "unknown"}-${Date.now()}`;
+        const questionResponseChannel =
+          getAskUserQuestionResponseChannel(questionId);
         const fallbackSessionChannel = `ask-user-question:${sessionId || "unknown"}`;
 
         return new Promise((resolve) => {
@@ -2504,7 +2510,7 @@ The commit message should follow these guidelines:
           }) => {
             if (settled) return;
             settled = true;
-            ipcMain.removeListener(questionId, onQuestionIdResponse);
+            ipcMain.removeListener(questionResponseChannel, onQuestionIdResponse);
             ipcMain.removeListener(
               fallbackSessionChannel,
               onSessionFallbackResponse
@@ -2570,7 +2576,7 @@ The commit message should follow these guidelines:
             settle(result);
           };
 
-          ipcMain.once(questionId, onQuestionIdResponse);
+          ipcMain.once(questionResponseChannel, onQuestionIdResponse);
           ipcMain.once(fallbackSessionChannel, onSessionFallbackResponse);
         });
       }

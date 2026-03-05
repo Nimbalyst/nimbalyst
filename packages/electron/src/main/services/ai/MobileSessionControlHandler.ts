@@ -392,7 +392,8 @@ async function handleGitCommitResponse(
     commitMessage?: string;
   }) => {
     const { ipcMain } = await import('electron');
-    ipcMain.emit(promptId, null, result);
+    const responseChannel = `git-commit-proposal-response:${sessionId || 'unknown'}:${promptId}`;
+    ipcMain.emit(responseChannel, null, result);
     // Notify renderer to clear the pending interactive prompt indicator
     notifyAllWindows('ai:gitCommitProposalResolved', { sessionId, proposalId: promptId });
     TrayManager.getInstance().onPromptResolved(sessionId);

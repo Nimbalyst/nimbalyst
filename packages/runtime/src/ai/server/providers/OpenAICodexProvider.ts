@@ -1339,15 +1339,13 @@ export class OpenAICodexProvider extends BaseAgentProvider {
     mcpServers: Record<string, unknown>
   ): Record<string, unknown> | undefined {
     const codexMcpServers: Record<string, Record<string, unknown>> = {};
+    const usedServerNames = new Set<string>();
 
     for (const [serverName, serverConfig] of Object.entries(mcpServers)) {
       const converted = this.convertServerConfigToCodex(serverConfig as Record<string, unknown>);
       if (converted) {
-        // Sanitize server names: dots in TOML keys are interpreted as nested tables
-        // (e.g., "customer.io" becomes [mcp_servers.customer.io] -> nested "customer" -> "io")
-        // Replace dots with hyphens to prevent TOML parsing errors
-        const safeServerName = serverName.replace(/\./g, '-');
-        codexMcpServers[safeServerName] = converted;
+        const codexServerName = this.toCodexServerName(serverName, usedServerNames);
+        codexMcpServers[codexServerName] = converted;
       }
     }
 
@@ -1358,6 +1356,26 @@ export class OpenAICodexProvider extends BaseAgentProvider {
     return {
       mcp_servers: codexMcpServers,
     };
+  }
+
+  private toCodexServerName(serverName: string, usedServerNames: Set<string>): string {
+    // Codex serializes config to TOML; keys with "." become nested path segments.
+    // Keep names TOML-bare-key safe to avoid invalid transport parsing errors.
+    const base = serverName
+      .trim()
+      .replace(/[^A-Za-z0-9_-]+/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_+|_+$/g, '') || 'server';
+
+    let candidate = base;
+    let suffix = 2;
+    while (usedServerNames.has(candidate)) {
+      candidate = `${base}_${suffix}`;
+      suffix += 1;
+    }
+
+    usedServerNames.add(candidate);
+    return candidate;
   }
 
   private convertServerConfigToCodex(serverConfig: Record<string, unknown>): Record<string, unknown> | null {

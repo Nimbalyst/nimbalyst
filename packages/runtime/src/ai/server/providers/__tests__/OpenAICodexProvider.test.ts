@@ -403,6 +403,14 @@ describe('OpenAICodexProvider', () => {
           'X-Tenant': 'nimbalyst',
         },
       },
+      'Customer.io': {
+        type: 'http',
+        url: 'https://mcp.customer.io/mcp',
+      },
+      'Customer io': {
+        type: 'http',
+        url: 'https://mcp.customer.io/alternate',
+      },
     }));
 
     const runStreamed = vi.fn(async () => ({
@@ -463,6 +471,8 @@ describe('OpenAICodexProvider', () => {
         'custom_stdio',
         'customer-io',
         'custom_http',
+        'Customer_io',
+        'Customer_io_2',
       ])
     );
 
@@ -489,6 +499,12 @@ describe('OpenAICodexProvider', () => {
         Authorization: 'Bearer abc123',
         'X-Tenant': 'nimbalyst',
       },
+    });
+    expect(mcpServers.Customer_io).toEqual({
+      url: 'https://mcp.customer.io/mcp',
+    });
+    expect(mcpServers.Customer_io_2).toEqual({
+      url: 'https://mcp.customer.io/alternate',
     });
   });
 

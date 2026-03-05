@@ -4271,12 +4271,13 @@ export class AIService {
         ? provider.resolveAskUserQuestion(questionId, answers, resolvedSessionId, 'desktop')
         : false;
 
-      // MCP interactive tools (Codex path) wait on an ipcMain channel keyed by questionId.
+      // MCP interactive tools (Codex path) wait on a session-scoped channel.
       // Emit best-effort so pending MCP calls can resolve even if provider-level pending map
       // is unavailable (e.g., after restart/recovery).
-      const hasMcpWaiter = ipcMain.listenerCount(questionId) > 0;
+      const mcpQuestionResponseChannel = `ask-user-question-response:${resolvedSessionId || 'unknown'}:${questionId}`;
+      const hasMcpWaiter = ipcMain.listenerCount(mcpQuestionResponseChannel) > 0;
       if (hasMcpWaiter) {
-        ipcMain.emit(questionId, event, {
+        ipcMain.emit(mcpQuestionResponseChannel, event, {
           questionId,
           answers,
           cancelled: false,
@@ -4344,9 +4345,10 @@ export class AIService {
         (provider as any).rejectAskUserQuestion(questionId, new Error('User cancelled'));
       }
 
-      const hasMcpWaiter = ipcMain.listenerCount(questionId) > 0;
+      const mcpQuestionResponseChannel = `ask-user-question-response:${resolvedSessionId || 'unknown'}:${questionId}`;
+      const hasMcpWaiter = ipcMain.listenerCount(mcpQuestionResponseChannel) > 0;
       if (hasMcpWaiter) {
-        ipcMain.emit(questionId, event, {
+        ipcMain.emit(mcpQuestionResponseChannel, event, {
           questionId,
           answers: {},
           cancelled: true,
