@@ -18,7 +18,7 @@ import { AgentMessagesRepository } from '../../storage/repositories/AgentMessage
 
 /**
  * Interface for providers that support the AskUserQuestion tool
- * Currently only ClaudeCodeProvider implements this
+ * Implemented by agent providers that can pause for user input.
  */
 export interface AskUserQuestionProvider {
   /**

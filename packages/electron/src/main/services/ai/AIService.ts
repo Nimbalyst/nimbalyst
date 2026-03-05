@@ -2,7 +2,7 @@
  * Main AI service that coordinates providers and sessions
  */
 
-import { BrowserWindow } from 'electron';
+import { BrowserWindow, ipcMain } from 'electron';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { safeHandle } from '../../utils/ipcRegistry';
@@ -4267,16 +4267,42 @@ export class AIService {
         return { success: false, error: 'Provider not found' };
       }
 
-      // Check if this is a provider that supports AskUserQuestion (e.g., ClaudeCodeProvider)
-      if (isAskUserQuestionProvider(provider)) {
-        // Pass sessionId for response message persistence
-        // Provider logs warning if question not found - no need to duplicate here
-        const resolved = provider.resolveAskUserQuestion(questionId, answers, resolvedSessionId, 'desktop');
-        return resolved ? { success: true } : { success: false, error: 'Question not found' };
-      } else {
-        logger.main.warn(`[AIService] Provider does not support AskUserQuestion: ${session.provider}`);
-        return { success: false, error: 'Provider does not support AskUserQuestion' };
+      const providerResolved = isAskUserQuestionProvider(provider)
+        ? provider.resolveAskUserQuestion(questionId, answers, resolvedSessionId, 'desktop')
+        : false;
+
+      // MCP interactive tools (Codex path) wait on an ipcMain channel keyed by questionId.
+      // Emit best-effort so pending MCP calls can resolve even if provider-level pending map
+      // is unavailable (e.g., after restart/recovery).
+      const hasMcpWaiter = ipcMain.listenerCount(questionId) > 0;
+      if (hasMcpWaiter) {
+        ipcMain.emit(questionId, event, {
+          questionId,
+          answers,
+          cancelled: false,
+          respondedBy: 'desktop',
+          sessionId: resolvedSessionId,
+        });
       }
+
+      const sessionFallbackChannel = `ask-user-question:${resolvedSessionId}`;
+      const hasSessionFallbackWaiter = ipcMain.listenerCount(sessionFallbackChannel) > 0;
+      if (hasSessionFallbackWaiter) {
+        ipcMain.emit(sessionFallbackChannel, event, {
+          questionId,
+          answers,
+          cancelled: false,
+          respondedBy: 'desktop',
+          sessionId: resolvedSessionId,
+        });
+      }
+
+      if (providerResolved || hasMcpWaiter || hasSessionFallbackWaiter) {
+        return { success: true };
+      }
+
+      logger.main.warn(`[AIService] Question not found for provider/session: ${resolvedSessionId}`);
+      return { success: false, error: 'Question not found' };
     });
 
     // Handle AskUserQuestion cancel from renderer
@@ -4313,16 +4339,48 @@ export class AIService {
         return { success: false, error: 'Provider not found' };
       }
 
-      // Check if this is a ClaudeCodeProvider with the reject method
-      if (typeof (provider as any).rejectAskUserQuestion === 'function') {
+      const providerSupportsCancel = typeof (provider as any).rejectAskUserQuestion === 'function';
+      if (providerSupportsCancel) {
         (provider as any).rejectAskUserQuestion(questionId, new Error('User cancelled'));
-        // Also abort the provider to stop the AI request
-        provider.abort();
-        return { success: true };
-      } else {
-        logger.main.warn(`[AIService] Provider does not support AskUserQuestion cancel: ${resolvedSessionId}`);
-        return { success: false, error: 'Provider does not support AskUserQuestion cancel' };
       }
+
+      const hasMcpWaiter = ipcMain.listenerCount(questionId) > 0;
+      if (hasMcpWaiter) {
+        ipcMain.emit(questionId, event, {
+          questionId,
+          answers: {},
+          cancelled: true,
+          respondedBy: 'desktop',
+          sessionId: resolvedSessionId,
+        });
+      }
+
+      const sessionFallbackChannel = `ask-user-question:${resolvedSessionId}`;
+      const hasSessionFallbackWaiter = ipcMain.listenerCount(sessionFallbackChannel) > 0;
+      if (hasSessionFallbackWaiter) {
+        ipcMain.emit(sessionFallbackChannel, event, {
+          questionId,
+          answers: {},
+          cancelled: true,
+          respondedBy: 'desktop',
+          sessionId: resolvedSessionId,
+        });
+      }
+
+      if (!providerSupportsCancel && !hasMcpWaiter && !hasSessionFallbackWaiter) {
+        logger.main.warn(`[AIService] Question cancel target not found: ${resolvedSessionId}`);
+        return { success: false, error: 'Question not found' };
+      }
+
+      // For MCP-backed AskUserQuestion (Codex), let the MCP tool call resolve with
+      // a cancelled result instead of force-aborting the provider. Immediate abort can
+      // interrupt the in-flight MCP request before the cancellation result is delivered.
+      if (!hasMcpWaiter && !hasSessionFallbackWaiter) {
+        // Provider-backed AskUserQuestion path (Claude Code): abort active turn.
+        provider.abort();
+      }
+
+      return { success: true };
     });
 
     // Handle tool permission response from renderer

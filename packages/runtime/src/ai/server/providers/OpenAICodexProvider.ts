@@ -26,6 +26,7 @@ import { resolvePackagedCodexBinaryPath } from './codex/codexBinaryPath';
 import { McpConfigService } from '../services/McpConfigService';
 import { MCPServerConfig } from '../../../types/MCPServerConfig';
 import { safeJSONSerialize } from '../../../utils/serialization';
+import { AskUserQuestionPrompt, AskUserQuestionPromptOption } from './shared/askUserQuestionTypes';
 
 interface OpenAICodexProviderDeps {
   protocol?: CodexSDKProtocol;
@@ -37,6 +38,11 @@ interface OpenAICodexProviderDeps {
 
 interface OpenAICodexModelDiscoveryDeps {
   loadSdkModule?: () => Promise<CodexSdkModuleLike>;
+}
+
+interface PendingAskUserQuestionEntry {
+  questions: AskUserQuestionPrompt[];
+  sessionId: string;
 }
 
 export class OpenAICodexProvider extends BaseAgentProvider {
@@ -77,6 +83,7 @@ export class OpenAICodexProvider extends BaseAgentProvider {
   private readonly protocol: CodexSDKProtocol;
   private readonly permissionService: ToolPermissionService;
   private readonly mcpConfigService: McpConfigService;
+  private readonly pendingAskUserQuestions = new Map<string, PendingAskUserQuestionEntry>();
 
   // Analytics initialization data, captured during first sendMessage call
   private _initData: {
@@ -838,7 +845,10 @@ export class OpenAICodexProvider extends BaseAgentProvider {
           fullText += event.content;
           yield { type: 'text', content: event.content };
         } else if (event.type === 'tool_call') {
-          yield { type: 'tool_call', toolCall: event.toolCall };
+          if (event.toolCall) {
+            this.handleAskUserQuestionToolCall(event.toolCall, sessionId);
+            yield { type: 'tool_call', toolCall: event.toolCall };
+          }
         } else if (event.type === 'complete') {
           yield {
             type: 'complete',
@@ -905,7 +915,239 @@ export class OpenAICodexProvider extends BaseAgentProvider {
     }
   }
 
+  public resolveAskUserQuestion(
+    questionId: string,
+    answers: Record<string, string>,
+    sessionId?: string,
+    respondedBy: 'desktop' | 'mobile' = 'desktop'
+  ): boolean {
+    const pending = this.pendingAskUserQuestions.get(questionId);
+    if (!pending) {
+      return false;
+    }
+
+    this.pendingAskUserQuestions.delete(questionId);
+    this.emit('askUserQuestion:answered', {
+      questionId,
+      sessionId: sessionId ?? pending.sessionId,
+      questions: pending.questions,
+      answers,
+      respondedBy,
+      timestamp: Date.now(),
+    });
+    return true;
+  }
+
+  public rejectAskUserQuestion(questionId: string, _error: Error): void {
+    const pending = this.pendingAskUserQuestions.get(questionId);
+    if (!pending) {
+      return;
+    }
+
+    this.pendingAskUserQuestions.delete(questionId);
+    this.emit('askUserQuestion:answered', {
+      questionId,
+      sessionId: pending.sessionId,
+      questions: pending.questions,
+      answers: {},
+      cancelled: true,
+      timestamp: Date.now(),
+    });
+  }
+
+  private handleAskUserQuestionToolCall(
+    toolCall: { id?: string; name: string; arguments?: Record<string, unknown>; result?: unknown },
+    sessionId?: string
+  ): void {
+    const normalizedName = OpenAICodexProvider.normalizeMcpToolName(toolCall.name);
+    if (normalizedName !== 'AskUserQuestion') {
+      return;
+    }
+
+    if (!toolCall.id) {
+      return;
+    }
+
+    const questionId = toolCall.id;
+    const questions = OpenAICodexProvider.parseAskUserQuestionQuestions(toolCall.arguments);
+    const hasResult = toolCall.result !== undefined && toolCall.result !== null;
+
+    if (!hasResult) {
+      if (this.pendingAskUserQuestions.has(questionId)) {
+        return;
+      }
+
+      this.pendingAskUserQuestions.set(questionId, {
+        questions,
+        sessionId: sessionId ?? 'unknown',
+      });
+      this.emit('askUserQuestion:pending', {
+        questionId,
+        sessionId: sessionId ?? 'unknown',
+        questions,
+        timestamp: Date.now(),
+      });
+      return;
+    }
+
+    const pending = this.pendingAskUserQuestions.get(questionId);
+    if (!pending) {
+      return;
+    }
+
+    this.pendingAskUserQuestions.delete(questionId);
+    this.emit('askUserQuestion:answered', {
+      questionId,
+      sessionId: sessionId ?? pending.sessionId,
+      questions: pending.questions,
+      answers: OpenAICodexProvider.extractAskUserQuestionAnswers(toolCall.result),
+      cancelled: OpenAICodexProvider.isCancelledAskUserQuestionResult(toolCall.result),
+      timestamp: Date.now(),
+    });
+  }
+
+  private static parseAskUserQuestionQuestions(input: unknown): AskUserQuestionPrompt[] {
+    if (!input || typeof input !== 'object' || Array.isArray(input)) {
+      return [];
+    }
+
+    const rawQuestions = (input as Record<string, unknown>).questions;
+    if (!Array.isArray(rawQuestions)) {
+      return [];
+    }
+
+    const parsed: AskUserQuestionPrompt[] = [];
+    for (const question of rawQuestions) {
+      if (!question || typeof question !== 'object' || Array.isArray(question)) {
+        continue;
+      }
+
+      const record = question as Record<string, unknown>;
+      const header = typeof record.header === 'string' ? record.header : '';
+      const text = typeof record.question === 'string' ? record.question : '';
+      const multiSelect = record.multiSelect === true;
+      const rawOptions = Array.isArray(record.options) ? record.options : [];
+
+      if (!header || !text || rawOptions.length === 0) {
+        continue;
+      }
+
+      const options: AskUserQuestionPromptOption[] = [];
+      for (const option of rawOptions) {
+        if (!option || typeof option !== 'object' || Array.isArray(option)) {
+          continue;
+        }
+        const optionRecord = option as Record<string, unknown>;
+        const label = typeof optionRecord.label === 'string' ? optionRecord.label : '';
+        const description =
+          typeof optionRecord.description === 'string' ? optionRecord.description : '';
+        if (!label) {
+          continue;
+        }
+        options.push({ label, description });
+      }
+
+      if (options.length === 0) {
+        continue;
+      }
+
+      parsed.push({
+        question: text,
+        header,
+        options,
+        multiSelect,
+      });
+    }
+
+    return parsed;
+  }
+
+  private static extractAskUserQuestionAnswers(result: unknown): Record<string, string> {
+    if (!result) {
+      return {};
+    }
+
+    if (typeof result === 'string') {
+      try {
+        return OpenAICodexProvider.extractAskUserQuestionAnswers(JSON.parse(result));
+      } catch {
+        return {};
+      }
+    }
+
+    if (typeof result !== 'object' || Array.isArray(result)) {
+      return {};
+    }
+
+    const record = result as Record<string, unknown>;
+    if (record.answers && typeof record.answers === 'object' && !Array.isArray(record.answers)) {
+      const parsedAnswers: Record<string, string> = {};
+      for (const [key, value] of Object.entries(record.answers as Record<string, unknown>)) {
+        if (typeof value === 'string') {
+          parsedAnswers[key] = value;
+        }
+      }
+      if (Object.keys(parsedAnswers).length > 0) {
+        return parsedAnswers;
+      }
+    }
+
+    if (record.result !== undefined) {
+      const nested = OpenAICodexProvider.extractAskUserQuestionAnswers(record.result);
+      if (Object.keys(nested).length > 0) {
+        return nested;
+      }
+    }
+
+    if (record.content !== undefined) {
+      const nested = OpenAICodexProvider.extractAskUserQuestionAnswers(record.content);
+      if (Object.keys(nested).length > 0) {
+        return nested;
+      }
+    }
+
+    return {};
+  }
+
+  private static isCancelledAskUserQuestionResult(result: unknown): boolean {
+    if (!result) {
+      return false;
+    }
+
+    if (typeof result === 'string') {
+      try {
+        return OpenAICodexProvider.isCancelledAskUserQuestionResult(JSON.parse(result));
+      } catch {
+        return /cancelled|canceled/i.test(result);
+      }
+    }
+
+    if (typeof result !== 'object' || Array.isArray(result)) {
+      return false;
+    }
+
+    const record = result as Record<string, unknown>;
+    if (record.cancelled === true || record.canceled === true) {
+      return true;
+    }
+
+    if (record.result !== undefined && OpenAICodexProvider.isCancelledAskUserQuestionResult(record.result)) {
+      return true;
+    }
+
+    if (record.content !== undefined && OpenAICodexProvider.isCancelledAskUserQuestionResult(record.content)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  private static normalizeMcpToolName(toolName: string): string {
+    return toolName.replace(/^mcp__.+?__/, '');
+  }
+
   abort(): void {
+    this.pendingAskUserQuestions.clear();
     // Reject all pending permissions via service
     this.permissionService.rejectAllPending();
     // Call base class abort (handles abortController)

@@ -137,6 +137,8 @@ export const CUSTOM_TOOL_WIDGETS: CustomToolWidgetRegistry = {
 
   // AskUserQuestion tool - displays questions from Claude for user input
   'AskUserQuestion': AskUserQuestionWidget,
+  'mcp__nimbalyst__AskUserQuestion': AskUserQuestionWidget,
+  'mcp__nimbalyst-mcp__AskUserQuestion': AskUserQuestionWidget,
 
   // ExitPlanMode tool - interactive confirmation widget for exiting planning mode
   'ExitPlanMode': ExitPlanModeWidget,

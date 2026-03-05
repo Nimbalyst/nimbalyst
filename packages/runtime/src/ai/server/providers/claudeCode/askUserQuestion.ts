@@ -1,14 +1,4 @@
-export interface AskUserQuestionPromptOption {
-  label: string;
-  description: string;
-}
-
-export interface AskUserQuestionPrompt {
-  question: string;
-  header: string;
-  options: AskUserQuestionPromptOption[];
-  multiSelect: boolean;
-}
+import { AskUserQuestionPrompt } from '../shared/askUserQuestionTypes';
 
 export interface PendingAskUserQuestionEntry {
   resolve: (answers: Record<string, string>) => void;

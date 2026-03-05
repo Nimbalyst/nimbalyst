@@ -46,33 +46,106 @@ function parseAnswers(args: any, result: any): Record<string, string> {
     return args.answers;
   }
 
-  // Check result
-  if (result) {
-    if (typeof result === 'string') {
+  const parseFromUnknown = (value: unknown): Record<string, string> => {
+    if (!value) return {};
+
+    if (typeof value === 'string') {
       try {
-        const parsed = JSON.parse(result);
-        if (parsed?.answers && typeof parsed.answers === 'object') {
-          return parsed.answers;
-        }
+        return parseFromUnknown(JSON.parse(value));
       } catch {
         // Try SDK string format: "question"="answer"
         const answers: Record<string, string> = {};
         const regex = /"([^"]+)"="([^"]+)"/g;
         let match;
-        while ((match = regex.exec(result)) !== null) {
+        while ((match = regex.exec(value)) !== null) {
           answers[match[1]] = match[2];
         }
-        if (Object.keys(answers).length > 0) {
-          return answers;
-        }
+        return answers;
       }
     }
-    if (typeof result === 'object' && result.answers) {
-      return result.answers;
+
+    if (Array.isArray(value) || typeof value !== 'object') {
+      return {};
     }
+
+    const record = value as Record<string, unknown>;
+    if (record.answers && typeof record.answers === 'object' && !Array.isArray(record.answers)) {
+      const answers: Record<string, string> = {};
+      for (const [key, rawValue] of Object.entries(record.answers as Record<string, unknown>)) {
+        if (typeof rawValue === 'string') {
+          answers[key] = rawValue;
+        }
+      }
+      if (Object.keys(answers).length > 0) {
+        return answers;
+      }
+    }
+
+    if (record.result !== undefined) {
+      const nested = parseFromUnknown(record.result);
+      if (Object.keys(nested).length > 0) {
+        return nested;
+      }
+    }
+
+    if (record.content !== undefined) {
+      const nested = parseFromUnknown(record.content);
+      if (Object.keys(nested).length > 0) {
+        return nested;
+      }
+    }
+
+    if (record.text !== undefined) {
+      const nested = parseFromUnknown(record.text);
+      if (Object.keys(nested).length > 0) {
+        return nested;
+      }
+    }
+
+    return {};
+  };
+
+  const parsed = parseFromUnknown(result);
+  if (Object.keys(parsed).length > 0) {
+    return parsed;
   }
 
   return {};
+}
+
+function parseCancelledResult(result: unknown): boolean {
+  if (!result) return false;
+
+  if (typeof result === 'string') {
+    try {
+      return parseCancelledResult(JSON.parse(result));
+    } catch {
+      return result.toLowerCase().includes('cancelled') || result.toLowerCase().includes('canceled');
+    }
+  }
+
+  if (Array.isArray(result) || typeof result !== 'object') {
+    return false;
+  }
+
+  const record = result as Record<string, unknown>;
+  if (record.cancelled === true || record.canceled === true) {
+    return true;
+  }
+
+  if (record.result !== undefined && parseCancelledResult(record.result)) {
+    return true;
+  }
+
+  if (record.content !== undefined && parseCancelledResult(record.content)) {
+    return true;
+  }
+
+  if (record.text !== undefined && parseCancelledResult(record.text)) {
+    return true;
+  }
+
+  return false;
 }
 
 // ============================================================
@@ -99,15 +172,7 @@ export const AskUserQuestionWidget: React.FC<CustomToolWidgetProps> = ({
 
   // Check if cancelled
   const isCancelled = useMemo(() => {
-    if (typeof rawResult === 'string') {
-      try {
-        const parsed = JSON.parse(rawResult);
-        return parsed?.cancelled === true;
-      } catch {
-        return rawResult.toLowerCase().includes('cancelled') || rawResult.toLowerCase().includes('canceled');
-      }
-    }
-    return false;
+    return parseCancelledResult(rawResult);
   }, [rawResult]);
 
   const isCompleted = hasResult;

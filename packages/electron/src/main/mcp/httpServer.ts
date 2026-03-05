@@ -765,6 +765,26 @@ function createSharedMcpServer(
   workspacePath: string | undefined,
   sessionId: string | undefined
 ): Server {
+  function extractToolUseIdFromMcpRequest(request: any): string | undefined {
+    const requestMeta =
+      request?.params && typeof request.params._meta === "object"
+        ? (request.params._meta as Record<string, unknown>)
+        : undefined;
+    return [
+      requestMeta?.["claudecode/toolUseId"],
+      requestMeta?.["openai/toolUseId"],
+      requestMeta?.["openai/toolCallId"],
+      requestMeta?.["toolUseId"],
+      requestMeta?.["tool_use_id"],
+      requestMeta?.["toolCallId"],
+      typeof request?.id === "string" || typeof request?.id === "number"
+        ? String(request.id)
+        : undefined,
+    ].find(
+      (value): value is string => typeof value === "string" && value.length > 0
+    );
+  }
+
   // Create a new MCP server instance for this connection
   const server = new Server(
     {
@@ -1001,6 +1021,62 @@ function createSharedMcpServer(
 
     // Add session files tool if sessionId is available
     if (sessionId) {
+      builtInTools.push({
+        name: "AskUserQuestion",
+        description:
+          "Prompt the user with one or more multiple-choice questions and wait for their response before continuing. Use this when you need explicit confirmation or disambiguation.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            questions: {
+              type: "array",
+              minItems: 1,
+              description:
+                "List of questions to ask the user. Each question should provide 2-3 options.",
+              items: {
+                type: "object",
+                properties: {
+                  header: {
+                    type: "string",
+                    description:
+                      "Short label shown above the question (12 chars or fewer)",
+                  },
+                  question: {
+                    type: "string",
+                    description: "The question to show the user",
+                  },
+                  options: {
+                    type: "array",
+                    minItems: 2,
+                    items: {
+                      type: "object",
+                      properties: {
+                        label: {
+                          type: "string",
+                          description: "User-facing option label",
+                        },
+                        description: {
+                          type: "string",
+                          description: "Short sentence describing this option",
+                        },
+                      },
+                      required: ["label", "description"],
+                    },
+                  },
+                  multiSelect: {
+                    type: "boolean",
+                    description:
+                      "Whether multiple options can be selected for this question",
+                  },
+                },
+                required: ["header", "question", "options"],
+              },
+            },
+          },
+          required: ["questions"],
+        },
+      });
+
       builtInTools.push({
         name: "get_session_edited_files",
         description:
@@ -2315,6 +2391,184 @@ The commit message should follow these guidelines:
             isError: false, // Not a hard error - just means no session was active
           };
         }
+      }
+
+      case "AskUserQuestion": {
+        const typedArgs = args as
+          | {
+              questions?: Array<{
+                header?: string;
+                question?: string;
+                options?: Array<{ label?: string; description?: string }>;
+                multiSelect?: boolean;
+              }>;
+            }
+          | undefined;
+
+        const rawQuestions = Array.isArray(typedArgs?.questions)
+          ? typedArgs.questions
+          : [];
+
+        if (rawQuestions.length === 0) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: "Error: questions is required and must be a non-empty array",
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        const normalizedQuestions = rawQuestions
+          .map((question) => {
+            if (!question || typeof question !== "object") {
+              return null;
+            }
+
+            const header = typeof question.header === "string" ? question.header : "";
+            const prompt = typeof question.question === "string" ? question.question : "";
+            const rawOptions = Array.isArray(question.options) ? question.options : [];
+            if (!header || !prompt || rawOptions.length === 0) {
+              return null;
+            }
+
+            const options = rawOptions
+              .map((option) => {
+                const label =
+                  option && typeof option.label === "string" ? option.label : "";
+                const description =
+                  option && typeof option.description === "string"
+                    ? option.description
+                    : "";
+                if (!label || !description) {
+                  return null;
+                }
+                return { label, description };
+              })
+              .filter(
+                (option): option is { label: string; description: string } =>
+                  option !== null
+              );
+
+            if (options.length === 0) {
+              return null;
+            }
+
+            return {
+              header,
+              question: prompt,
+              options,
+              multiSelect: question.multiSelect === true,
+            };
+          })
+          .filter(
+            (
+              question
+            ): question is {
+              header: string;
+              question: string;
+              options: Array<{ label: string; description: string }>;
+              multiSelect: boolean;
+            } => question !== null
+          );
+
+        if (normalizedQuestions.length === 0) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: "Error: No valid questions found in request",
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        const questionId =
+          extractToolUseIdFromMcpRequest(request) ||
+          `ask-${sessionId || "unknown"}-${Date.now()}`;
+        const fallbackSessionChannel = `ask-user-question:${sessionId || "unknown"}`;
+
+        return new Promise((resolve) => {
+          let settled = false;
+          const settle = (result: {
+            answers?: Record<string, string>;
+            cancelled?: boolean;
+            respondedBy?: "desktop" | "mobile";
+          }) => {
+            if (settled) return;
+            settled = true;
+            ipcMain.removeListener(questionId, onQuestionIdResponse);
+            ipcMain.removeListener(
+              fallbackSessionChannel,
+              onSessionFallbackResponse
+            );
+
+            const cancelled = result?.cancelled === true;
+            const answers =
+              result?.answers && typeof result.answers === "object"
+                ? result.answers
+                : {};
+            const respondedBy = result?.respondedBy || "desktop";
+
+            if (cancelled) {
+              resolve({
+                content: [
+                  {
+                    type: "text",
+                    text: JSON.stringify({
+                      cancelled: true,
+                      respondedBy,
+                      respondedAt: Date.now(),
+                    }),
+                  },
+                ],
+                isError: true,
+              });
+              return;
+            }
+
+            resolve({
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify({
+                    answers,
+                    respondedBy,
+                    respondedAt: Date.now(),
+                  }),
+                },
+              ],
+              isError: false,
+            });
+          };
+
+          const onQuestionIdResponse = (
+            _event: unknown,
+            result: {
+              answers?: Record<string, string>;
+              cancelled?: boolean;
+              respondedBy?: "desktop" | "mobile";
+            }
+          ) => settle(result);
+
+          const onSessionFallbackResponse = (
+            _event: unknown,
+            result: {
+              questionId?: string;
+              answers?: Record<string, string>;
+              cancelled?: boolean;
+              respondedBy?: "desktop" | "mobile";
+            }
+          ) => {
+            settle(result);
+          };
+
+          ipcMain.once(questionId, onQuestionIdResponse);
+          ipcMain.once(fallbackSessionChannel, onSessionFallbackResponse);
+        });
       }
 
       case "get_session_edited_files": {
