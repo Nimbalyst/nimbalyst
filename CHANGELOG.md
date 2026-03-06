@@ -20,6 +20,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.55.22] - 2026-03-06
+
+
+### Added
+- Folder-based navigation for shared collab docs with create folder/document flows, drag-and-drop reordering, and persisted tree UI state
+
+### Changed
+- CollabV3 0.1.32 with improved team vs personal org tracking
+
+### Fixed
+- Restore shared link ownership and labels by classifying Stytch orgs with explicit personal/team metadata
+- Keep AI input typeahead selection in sync
+- Show Codex web search calls in session transcripts
+- Restore Codex image attachments in session transcripts
+- Deduplicate repeated transcript edit previews
+- Render Codex session reminders as system cards instead of raw text
+- Restore AI session creation tracking in modern flows (PostHog `create_ai_session` events)
+
 ## [0.55.21] - 2026-03-05
 
 
