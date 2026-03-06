@@ -112,12 +112,97 @@ jobs:
           cd NimbalystApp
           xcodegen generate
 
+      - name: Prepare iOS simulator
+        run: |
+          set -euo pipefail
+
+          SIMULATOR_INFO=$(python3 - <<'PY'
+          import json
+          import subprocess
+
+          data = json.loads(
+              subprocess.check_output(
+                  ["xcrun", "simctl", "list", "-j", "devicetypes", "runtimes", "devices", "available"],
+                  text=True,
+              )
+          )
+
+          runtimes = [runtime for runtime in data["runtimes"] if runtime.get("isAvailable") and runtime.get("platform") == "iOS"]
+          if not runtimes:
+              raise SystemExit("No available iOS simulator runtimes found")
+
+          def version_key(runtime):
+              return tuple(int(part) for part in runtime["version"].split("."))
+
+          runtimes.sort(key=version_key)
+          runtime = runtimes[-1]
+
+          preferred_device_types = [
+              "com.apple.CoreSimulator.SimDeviceType.iPhone-16",
+              "com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro",
+              "com.apple.CoreSimulator.SimDeviceType.iPhone-15",
+              "com.apple.CoreSimulator.SimDeviceType.iPhone-15-Pro",
+          ]
+
+          device_types = {device_type["identifier"]: device_type for device_type in data["devicetypes"]}
+          device_type = next((device_types[identifier] for identifier in preferred_device_types if identifier in device_types), None)
+          if device_type is None:
+              iphone_device_types = sorted(
+                  (device_type for device_type in data["devicetypes"] if device_type.get("productFamily") == "iPhone"),
+                  key=lambda device_type: device_type["name"],
+              )
+              if not iphone_device_types:
+                  raise SystemExit("No iPhone simulator device types found")
+              device_type = iphone_device_types[0]
+
+          existing_devices = data["devices"].get(runtime["identifier"], [])
+          existing_device = next(
+              (
+                  device
+                  for device in existing_devices
+                  if device.get("isAvailable") and device.get("deviceTypeIdentifier") == device_type["identifier"]
+              ),
+              None,
+          )
+
+          if existing_device is not None:
+              simulator_udid = existing_device["udid"]
+          else:
+              simulator_udid = subprocess.check_output(
+                  [
+                      "xcrun",
+                      "simctl",
+                      "create",
+                      "CI iPhone Simulator",
+                      device_type["identifier"],
+                      runtime["identifier"],
+                  ],
+                  text=True,
+              ).strip()
+
+          print(f"SIMULATOR_UDID={simulator_udid}")
+          print(f"SIMULATOR_NAME={device_type['name']}")
+          print(f"SIMULATOR_RUNTIME={runtime['name']}")
+          PY
+          )
+
+          echo "$SIMULATOR_INFO" >> "$GITHUB_ENV"
+
+          SIMULATOR_UDID=$(printf '%s\n' "$SIMULATOR_INFO" | sed -n 's/^SIMULATOR_UDID=//p')
+          SIMULATOR_NAME=$(printf '%s\n' "$SIMULATOR_INFO" | sed -n 's/^SIMULATOR_NAME=//p')
+          SIMULATOR_RUNTIME=$(printf '%s\n' "$SIMULATOR_INFO" | sed -n 's/^SIMULATOR_RUNTIME=//p')
+
+          echo "Using simulator: $SIMULATOR_NAME on $SIMULATOR_RUNTIME ($SIMULATOR_UDID)"
+          xcrun simctl boot "$SIMULATOR_UDID" || true
+          xcrun simctl bootstatus "$SIMULATOR_UDID" -b
+          echo "IOS_SIMULATOR_DESTINATION=platform=iOS Simulator,id=$SIMULATOR_UDID" >> "$GITHUB_ENV"
+
       - name: Build NimbalystNative package
         run: |
           cd NimbalystNative
           xcodebuild build \
             -scheme NimbalystNative \
-            -destination 'platform=iOS Simulator,name=iPhone 16,OS=26.2' \
+            -destination "$IOS_SIMULATOR_DESTINATION" \
             -skipPackagePluginValidation
 
       - name: Run NimbalystNative tests
@@ -125,7 +210,7 @@ jobs:
           cd NimbalystNative
           xcodebuild test \
             -scheme NimbalystNative \
-            -destination 'platform=iOS Simulator,name=iPhone 16,OS=26.2' \
+            -destination "$IOS_SIMULATOR_DESTINATION" \
             -skipPackagePluginValidation \
             -enableCodeCoverage YES
 
@@ -135,7 +220,7 @@ jobs:
           xcodebuild \
             -project NimbalystApp.xcodeproj \
             -scheme NimbalystApp \
-            -destination 'platform=iOS Simulator,name=iPhone 16,OS=26.2' \
+            -destination "$IOS_SIMULATOR_DESTINATION" \
             -configuration Debug \
             clean build
 
@@ -146,7 +231,7 @@ jobs:
             xcodebuild test \
               -project NimbalystApp.xcodeproj \
               -scheme NimbalystApp \
-              -destination 'platform=iOS Simulator,name=iPhone 16,OS=26.2' \
+              -destination "$IOS_SIMULATOR_DESTINATION" \
               -configuration Debug
           else
             echo "No UI test plans found, skipping"
@@ -186,6 +271,91 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
 
+      - name: Prepare iOS simulator
+        run: |
+          set -euo pipefail
+
+          SIMULATOR_INFO=$(python3 - <<'PY'
+          import json
+          import subprocess
+
+          data = json.loads(
+              subprocess.check_output(
+                  ["xcrun", "simctl", "list", "-j", "devicetypes", "runtimes", "devices", "available"],
+                  text=True,
+              )
+          )
+
+          runtimes = [runtime for runtime in data["runtimes"] if runtime.get("isAvailable") and runtime.get("platform") == "iOS"]
+          if not runtimes:
+              raise SystemExit("No available iOS simulator runtimes found")
+
+          def version_key(runtime):
+              return tuple(int(part) for part in runtime["version"].split("."))
+
+          runtimes.sort(key=version_key)
+          runtime = runtimes[-1]
+
+          preferred_device_types = [
+              "com.apple.CoreSimulator.SimDeviceType.iPhone-16",
+              "com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro",
+              "com.apple.CoreSimulator.SimDeviceType.iPhone-15",
+              "com.apple.CoreSimulator.SimDeviceType.iPhone-15-Pro",
+          ]
+
+          device_types = {device_type["identifier"]: device_type for device_type in data["devicetypes"]}
+          device_type = next((device_types[identifier] for identifier in preferred_device_types if identifier in device_types), None)
+          if device_type is None:
+              iphone_device_types = sorted(
+                  (device_type for device_type in data["devicetypes"] if device_type.get("productFamily") == "iPhone"),
+                  key=lambda device_type: device_type["name"],
+              )
+              if not iphone_device_types:
+                  raise SystemExit("No iPhone simulator device types found")
+              device_type = iphone_device_types[0]
+
+          existing_devices = data["devices"].get(runtime["identifier"], [])
+          existing_device = next(
+              (
+                  device
+                  for device in existing_devices
+                  if device.get("isAvailable") and device.get("deviceTypeIdentifier") == device_type["identifier"]
+              ),
+              None,
+          )
+
+          if existing_device is not None:
+              simulator_udid = existing_device["udid"]
+          else:
+              simulator_udid = subprocess.check_output(
+                  [
+                      "xcrun",
+                      "simctl",
+                      "create",
+                      "CI iPhone Simulator",
+                      device_type["identifier"],
+                      runtime["identifier"],
+                  ],
+                  text=True,
+              ).strip()
+
+          print(f"SIMULATOR_UDID={simulator_udid}")
+          print(f"SIMULATOR_NAME={device_type['name']}")
+          print(f"SIMULATOR_RUNTIME={runtime['name']}")
+          PY
+          )
+
+          echo "$SIMULATOR_INFO" >> "$GITHUB_ENV"
+
+          SIMULATOR_UDID=$(printf '%s\n' "$SIMULATOR_INFO" | sed -n 's/^SIMULATOR_UDID=//p')
+          SIMULATOR_NAME=$(printf '%s\n' "$SIMULATOR_INFO" | sed -n 's/^SIMULATOR_NAME=//p')
+          SIMULATOR_RUNTIME=$(printf '%s\n' "$SIMULATOR_INFO" | sed -n 's/^SIMULATOR_RUNTIME=//p')
+
+          echo "Using simulator: $SIMULATOR_NAME on $SIMULATOR_RUNTIME ($SIMULATOR_UDID)"
+          xcrun simctl boot "$SIMULATOR_UDID" || true
+          xcrun simctl bootstatus "$SIMULATOR_UDID" -b
+          echo "IOS_SIMULATOR_DESTINATION=platform=iOS Simulator,id=$SIMULATOR_UDID" >> "$GITHUB_ENV"
+
       - name: Full build and test
         run: |
           # Copy transcript
@@ -201,7 +371,7 @@ jobs:
           xcodebuild \
             -project NimbalystApp.xcodeproj \
             -scheme NimbalystApp \
-            -destination 'platform=iOS Simulator,name=iPhone 16,OS=26.2' \
+            -destination "$IOS_SIMULATOR_DESTINATION" \
             -configuration Debug \
             clean build
 
