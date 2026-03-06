@@ -254,7 +254,7 @@ export async function initializeTrackerSync(workspacePath: string): Promise<void
 
     // Fire-and-forget: wrap org key for any new team members missing envelopes
     autoWrapForNewMembers(orgId).catch(err => {
-      logger.main.warn('[TrackerSyncManager] Auto-wrap for new members failed:', err);
+      logger.main.warn(`[TrackerSyncManager] Auto-wrap for new members of ${projectId} failed:`, err);
     });
 
     const provider = new TrackerSyncProvider({

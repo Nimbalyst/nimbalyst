@@ -838,7 +838,7 @@ export async function autoMatchTeamForWorkspace(workspacePath: string): Promise<
       // If we have the org key, auto-wrap for any members missing envelopes
       if (result.hasKey) {
         autoWrapForNewMembers(result.team.orgId).catch(err => {
-          logger.main.warn('[TeamService] Auto-wrap for new members failed:', err);
+          logger.main.warn(`[TeamService] Auto-wrap for new members of ${result.team?.orgId} failed:`, err);
         });
         // Start background polling to catch members who upload their key later
         startAutoWrapPolling(result.team.orgId);
