@@ -20,6 +20,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.55.24] - 2026-03-06
+
+
+### Added
+- "Other" freetext option in AskUserQuestion widget for custom responses
+
+### Changed
+- CollabV3 updated to 0.1.35
+
+### Fixed
+- Prevent sign-out on network errors and persist sync identity across restarts
+
 ## [0.55.23] - 2026-03-06
 
 
