@@ -18,7 +18,7 @@ import { isCodexSdkEvent } from '../../../ai/server/providers/codex/codexEventPa
  * Tool item types that can be rendered as tool calls.
  * These represent different categories of tool-like items in Codex SDK events.
  */
-const TOOL_ITEM_TYPES = new Set(['mcp_tool_call', 'command_execution', 'file_change']);
+const TOOL_ITEM_TYPES = new Set(['mcp_tool_call', 'command_execution', 'file_change', 'web_search']);
 
 interface CodexOutputRendererProps {
   rawEvents: Message[];
@@ -96,8 +96,8 @@ function getToolDisplayName(item: Record<string, unknown>, itemType: string): st
     return (server && tool) ? `mcp__${server}__${tool}` : (tool || 'Unknown Tool');
   }
 
-  // Command execution and file changes: return type name
-  if (itemType === 'command_execution' || itemType === 'file_change') {
+  // Command execution, file changes, and web search: return type name
+  if (itemType === 'command_execution' || itemType === 'file_change' || itemType === 'web_search') {
     return itemType;
   }
 
@@ -119,6 +119,13 @@ function getToolArguments(item: Record<string, unknown>, itemType: string): Reco
   // File changes: extract changes property
   if (itemType === 'file_change') {
     return { changes: item.changes };
+  }
+
+  if (itemType === 'web_search') {
+    return {
+      query: extractStringField(item, 'query') ?? '',
+      ...(item.action !== undefined ? { action: item.action } : {}),
+    };
   }
 
   // Default: use arguments or args property
@@ -170,6 +177,14 @@ function getToolResult(
       success: status !== 'failed',
       status,
       changes: item.changes,
+    };
+  }
+
+  if (itemType === 'web_search') {
+    return {
+      success: true,
+      query: extractStringField(item, 'query') ?? '',
+      ...(item.action !== undefined ? { action: item.action } : {}),
     };
   }
 

@@ -173,6 +173,60 @@ describe('parseCodexRawEvents', () => {
     });
   });
 
+  it('renders web_search started and completed events as a tool call', () => {
+    const events: Message[] = [
+      buildRawMessage(
+        {
+          type: 'item.started',
+          item: {
+            id: 'ws-1',
+            type: 'web_search',
+            query: '',
+            action: { type: 'other' },
+          },
+        },
+        1
+      ),
+      buildRawMessage(
+        {
+          type: 'item.completed',
+          item: {
+            id: 'ws-1',
+            type: 'web_search',
+            query: 'site:github.com/openai/codex web_search',
+            action: {
+              type: 'search',
+              query: 'site:github.com/openai/codex web_search',
+              queries: ['site:github.com/openai/codex web_search'],
+            },
+          },
+        },
+        2
+      ),
+    ];
+
+    const parsed = parseCodexRawEvents(events);
+
+    expect(parsed.sections).toHaveLength(1);
+    expect(parsed.sections[0].type).toBe('tool_call');
+
+    const webSearchSection = parsed.sections[0] as Extract<CodexSection, { type: 'tool_call' }>;
+    expect(webSearchSection.toolCall.name).toBe('web_search');
+    expect(webSearchSection.toolCall.arguments).toEqual({
+      query: '',
+      action: { type: 'other' },
+    });
+    expect(webSearchSection.toolCall.result).toEqual({
+      success: true,
+      query: 'site:github.com/openai/codex web_search',
+      action: {
+        type: 'search',
+        query: 'site:github.com/openai/codex web_search',
+        queries: ['site:github.com/openai/codex web_search'],
+      },
+    });
+  });
+
   it('preserves interleaved order of reasoning, tools, and output', () => {
     const events: Message[] = [
       // Reasoning block 1
