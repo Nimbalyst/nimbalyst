@@ -522,7 +522,34 @@ const looksLikeJson = (value: string) => {
   return (trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'));
 };
 
-const extractEditsFromToolMessage = (message: Message): any[] => {
+const stableSerialize = (value: unknown): string => {
+  if (value === null || value === undefined) return String(value);
+  if (typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) {
+    return `[${value.map(item => stableSerialize(item)).join(',')}]`;
+  }
+
+  const entries = Object.entries(value as Record<string, unknown>)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, child]) => `${JSON.stringify(key)}:${stableSerialize(child)}`);
+
+  return `{${entries.join(',')}}`;
+};
+
+const buildEditSignature = (edit: Record<string, any>): string => {
+  const resolvedPath = edit.filePath || edit.file_path || edit.targetFilePath || '';
+  return stableSerialize({
+    filePath: resolvedPath,
+    replacements: edit.replacements,
+    oldString: edit.old_string ?? edit.oldText,
+    newString: edit.new_string ?? edit.newText,
+    content: edit.content,
+    applied: edit.applied,
+    type: edit.type,
+  });
+};
+
+export const extractEditsFromToolMessage = (message: Message): any[] => {
   const tool = message.toolCall;
   if (!tool) return [];
 
@@ -535,6 +562,7 @@ const extractEditsFromToolMessage = (message: Message): any[] => {
 
   const edits: any[] = [];
   const visited = new WeakSet<object>();
+  const seenEditSignatures = new Set<string>();
 
   const pushEdit = (raw: any, fallback?: string) => {
     if (!raw || typeof raw !== 'object') return;
@@ -564,6 +592,11 @@ const extractEditsFromToolMessage = (message: Message): any[] => {
       normalized.filePath = fallback;
     }
 
+    const signature = buildEditSignature(normalized);
+    if (seenEditSignatures.has(signature)) {
+      return;
+    }
+    seenEditSignatures.add(signature);
     edits.push(normalized);
   };
 
@@ -632,7 +665,7 @@ const extractEditsFromToolMessage = (message: Message): any[] => {
     }
 
     Object.entries(candidate).forEach(([key, child]) => {
-      if (key === 'edit' || key === 'edits') {
+      if (key === 'edit' || key === 'edits' || key === 'replacements') {
         return;
       }
 
