@@ -129,6 +129,39 @@ export async function registerDocumentInIndex(
   }
 }
 
+/**
+ * Update a shared document title/path in the server-side index and local atom.
+ * Used for rename and tree move operations.
+ */
+export async function updateSharedDocumentTitle(
+  documentId: string,
+  title: string
+): Promise<void> {
+  const now = Date.now();
+
+  store.set(sharedDocumentsAtom, (current) => {
+    const existing = current.find(doc => doc.documentId === documentId);
+    if (!existing) {
+      return current;
+    }
+
+    const filtered = current.filter(doc => doc.documentId !== documentId);
+    return [{
+      ...existing,
+      title,
+      updatedAt: now,
+    }, ...filtered];
+  });
+
+  if (activeProvider) {
+    try {
+      await activeProvider.updateDocumentTitle(documentId, title);
+    } catch (err) {
+      console.error('[collabDocuments] Failed to update document title:', err);
+    }
+  }
+}
+
 // ============================================================
 // Removal
 // ============================================================

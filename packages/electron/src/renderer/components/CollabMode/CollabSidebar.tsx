@@ -1,28 +1,81 @@
-/**
- * CollabSidebar - Sidebar for the Shared Documents mode.
- *
- * Shows the list of documents that have been shared to the team,
- * synced in real-time from the TeamRoom Durable Object.
- * Clicking an item opens it as a collaborative tab in the main area.
- */
-
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAtomValue } from 'jotai';
 import { MaterialSymbol } from '@nimbalyst/runtime';
-import { sharedDocumentsAtom, removeSharedDocument, type SharedDocument } from '../../store/atoms/collabDocuments';
+import { InputModal } from '../InputModal';
+import {
+  sharedDocumentsAtom,
+  removeSharedDocument,
+  updateSharedDocumentTitle,
+  type SharedDocument,
+} from '../../store/atoms/collabDocuments';
+import {
+  buildCollabTree,
+  getCollabDocumentPath,
+  getCollabNodeName,
+  getCollabParentPath,
+  joinCollabPath,
+  normalizeCollabPath,
+  type CollabTreeNode,
+} from './collabTree';
+import { registerDocumentInIndex } from '../../store/atoms/collabDocuments';
 
 interface CollabSidebarProps {
+  workspacePath: string;
   onDocumentSelect: (doc: SharedDocument) => void;
-  selectedDocumentId?: string | null;
+  activeDocumentId?: string | null;
 }
 
 export const CollabSidebar: React.FC<CollabSidebarProps> = ({
+  workspacePath,
   onDocumentSelect,
-  selectedDocumentId,
+  activeDocumentId,
 }) => {
   const sharedDocuments = useAtomValue(sharedDocumentsAtom);
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; doc: SharedDocument } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    node: CollabTreeNode;
+  } | null>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
+  const [customFolders, setCustomFolders] = useState<string[]>([]);
+  const [selectedFolderPath, setSelectedFolderPath] = useState<string | null>(null);
+  const [isCreateDocumentOpen, setIsCreateDocumentOpen] = useState(false);
+  const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
+  const [hasLoadedState, setHasLoadedState] = useState(false);
+  const [loadedWorkspacePath, setLoadedWorkspacePath] = useState<string | null>(null);
+  const [draggedDocument, setDraggedDocument] = useState<{
+    documentId: string;
+    sourcePath: string;
+    name: string;
+  } | null>(null);
+  const [dropTargetPath, setDropTargetPath] = useState<string | null>(null);
+
+  const tree = useMemo(
+    () => buildCollabTree(sharedDocuments, customFolders),
+    [sharedDocuments, customFolders]
+  );
+
+  const existingPaths = useMemo(() => {
+    const paths = new Set<string>();
+
+    const collect = (nodes: CollabTreeNode[]) => {
+      for (const node of nodes) {
+        paths.add(node.path);
+        if (node.type === 'folder') {
+          collect(node.children);
+        }
+      }
+    };
+
+    collect(tree);
+    return paths;
+  }, [tree]);
+
+  const activeDocument = useMemo(
+    () => sharedDocuments.find(document => document.documentId === activeDocumentId) ?? null,
+    [activeDocumentId, sharedDocuments]
+  );
 
   // Close context menu on click outside or Escape
   useEffect(() => {
@@ -43,48 +96,341 @@ export const CollabSidebar: React.FC<CollabSidebarProps> = ({
     };
   }, [contextMenu]);
 
-  const handleContextMenu = useCallback((e: React.MouseEvent, doc: SharedDocument) => {
+  useEffect(() => {
+    setHasLoadedState(false);
+    setLoadedWorkspacePath(null);
+    setContextMenu(null);
+    setSelectedFolderPath(null);
+    setExpandedFolders(new Set());
+    setCustomFolders([]);
+
+    if (!workspacePath || !window.electronAPI?.invoke) {
+      setHasLoadedState(true);
+      return;
+    }
+
+    let cancelled = false;
+    window.electronAPI.invoke('workspace:get-state', workspacePath)
+      .then((state) => {
+        if (cancelled) return;
+
+        const nextExpanded = Array.isArray(state?.collabTree?.expandedFolders)
+          ? state.collabTree.expandedFolders.map((folder: string) => normalizeCollabPath(folder)).filter(Boolean)
+          : [];
+        const nextFolders = Array.isArray(state?.collabTree?.customFolders)
+          ? state.collabTree.customFolders.map((folder: string) => normalizeCollabPath(folder)).filter(Boolean)
+          : [];
+
+        setExpandedFolders(new Set(nextExpanded));
+        setCustomFolders(Array.from(new Set(nextFolders)));
+        setHasLoadedState(true);
+        setLoadedWorkspacePath(workspacePath);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setHasLoadedState(true);
+        setLoadedWorkspacePath(workspacePath);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [workspacePath]);
+
+  useEffect(() => {
+    if (!hasLoadedState || loadedWorkspacePath !== workspacePath || !workspacePath || !window.electronAPI?.invoke) return;
+
+    const payload = {
+      collabTree: {
+        expandedFolders: Array.from(expandedFolders),
+        customFolders,
+      },
+    };
+
+    window.electronAPI.invoke('workspace:update-state', workspacePath, payload).catch((error) => {
+      console.warn('[CollabSidebar] Failed to persist tree state:', error);
+    });
+  }, [customFolders, expandedFolders, hasLoadedState, loadedWorkspacePath, workspacePath]);
+
+  useEffect(() => {
+    if (!activeDocument) return;
+    const path = getCollabDocumentPath(activeDocument);
+    const parents: string[] = [];
+    let current = getCollabParentPath(path);
+    while (current) {
+      parents.unshift(current);
+      current = getCollabParentPath(current);
+    }
+
+    if (parents.length === 0) return;
+
+    setExpandedFolders((currentFolders) => {
+      const next = new Set(currentFolders);
+      let changed = false;
+      for (const folderPath of parents) {
+        if (!next.has(folderPath)) {
+          next.add(folderPath);
+          changed = true;
+        }
+      }
+      return changed ? next : currentFolders;
+    });
+  }, [activeDocument]);
+
+  const handleContextMenu = useCallback((e: React.MouseEvent, node: CollabTreeNode) => {
     e.preventDefault();
     e.stopPropagation();
-    setContextMenu({ x: e.clientX, y: e.clientY, doc });
+    if (node.type === 'folder') {
+      setSelectedFolderPath(node.path);
+    }
+    setContextMenu({ x: e.clientX, y: e.clientY, node });
   }, []);
 
   const handleDelete = useCallback(() => {
-    if (!contextMenu) return;
-    const { doc } = contextMenu;
-    if (window.confirm(`Delete shared document "${doc.title}"?`)) {
-      removeSharedDocument(doc.documentId);
+    if (!contextMenu || contextMenu.node.type !== 'document') return;
+    const { document } = contextMenu.node;
+    if (window.confirm(`Delete shared document "${document.title}"?`)) {
+      removeSharedDocument(document.documentId);
     }
     setContextMenu(null);
   }, [contextMenu]);
 
-  const formatDate = useCallback((timestamp: number) => {
-    try {
-      const date = new Date(timestamp);
-      const now = new Date();
-      const diffMs = now.getTime() - date.getTime();
-      const diffMins = Math.floor(diffMs / 60000);
-      const diffHours = Math.floor(diffMs / 3600000);
-      const diffDays = Math.floor(diffMs / 86400000);
-
-      if (diffMins < 1) return 'Just now';
-      if (diffMins < 60) return `${diffMins}m ago`;
-      if (diffHours < 24) return `${diffHours}h ago`;
-      if (diffDays < 7) return `${diffDays}d ago`;
-      return date.toLocaleDateString();
-    } catch {
-      return '';
-    }
+  const toggleFolder = useCallback((folderPath: string) => {
+    setExpandedFolders((currentFolders) => {
+      const next = new Set(currentFolders);
+      if (next.has(folderPath)) {
+        next.delete(folderPath);
+      } else {
+        next.add(folderPath);
+      }
+      return next;
+    });
   }, []);
 
-  const iconForType = useCallback((documentType: string) => {
-    switch (documentType) {
-      case 'spreadsheet': return 'table_chart';
-      case 'diagram': return 'draw';
-      case 'code': return 'code';
-      default: return 'description';
+  const getCreationBaseFolder = useCallback(() => {
+    return contextMenu?.node.type === 'folder'
+      ? contextMenu.node.path
+      : selectedFolderPath;
+  }, [contextMenu, selectedFolderPath]);
+
+  const handleCreateFolder = useCallback((folderName: string) => {
+    const nextPath = joinCollabPath(getCreationBaseFolder(), folderName);
+    if (!nextPath) return;
+
+    if (existingPaths.has(nextPath)) {
+      window.alert(`A document or folder named "${nextPath}" already exists.`);
+      return;
     }
-  }, []);
+
+    setCustomFolders((currentFolders) => Array.from(new Set([...currentFolders, nextPath])));
+    setExpandedFolders((currentFolders) => {
+      const next = new Set(currentFolders);
+      next.add(nextPath);
+      const parent = getCollabParentPath(nextPath);
+      if (parent) {
+        next.add(parent);
+      }
+      return next;
+    });
+    setSelectedFolderPath(nextPath);
+    setIsCreateFolderOpen(false);
+    setContextMenu(null);
+  }, [existingPaths, getCreationBaseFolder]);
+
+  const handleCreateDocument = useCallback(async (documentName: string) => {
+    const title = joinCollabPath(getCreationBaseFolder(), documentName);
+    if (!title) return;
+
+    if (existingPaths.has(title)) {
+      window.alert(`A document or folder named "${title}" already exists.`);
+      return;
+    }
+
+    const now = Date.now();
+    const documentId = crypto.randomUUID();
+    const document: SharedDocument = {
+      documentId,
+      title,
+      documentType: 'markdown',
+      createdBy: '',
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    await registerDocumentInIndex(documentId, title, 'markdown');
+
+    const parent = getCollabParentPath(title);
+    if (parent) {
+      setExpandedFolders((currentFolders) => {
+        const next = new Set(currentFolders);
+        next.add(parent);
+        return next;
+      });
+    }
+
+    setSelectedFolderPath(parent);
+    setIsCreateDocumentOpen(false);
+    setContextMenu(null);
+    onDocumentSelect(document);
+  }, [existingPaths, getCreationBaseFolder, onDocumentSelect]);
+
+  const moveDraggedDocument = useCallback(async (targetFolderPath: string | null) => {
+    if (!draggedDocument) return;
+
+    const nextPath = joinCollabPath(targetFolderPath, draggedDocument.name);
+    if (!nextPath || nextPath === draggedDocument.sourcePath) {
+      setDropTargetPath(null);
+      setDraggedDocument(null);
+      return;
+    }
+
+    if (existingPaths.has(nextPath) && nextPath !== draggedDocument.sourcePath) {
+      window.alert(`A document or folder named "${nextPath}" already exists.`);
+      setDropTargetPath(null);
+      setDraggedDocument(null);
+      return;
+    }
+
+    await updateSharedDocumentTitle(draggedDocument.documentId, nextPath);
+
+    if (targetFolderPath) {
+      setExpandedFolders((currentFolders) => {
+        const next = new Set(currentFolders);
+        next.add(targetFolderPath);
+        return next;
+      });
+      setSelectedFolderPath(targetFolderPath);
+    } else {
+      setSelectedFolderPath(null);
+    }
+
+    setDropTargetPath(null);
+    setDraggedDocument(null);
+  }, [draggedDocument, existingPaths]);
+
+  const canDropDocument = useCallback((targetFolderPath: string | null) => {
+    if (!draggedDocument) return false;
+
+    const nextPath = joinCollabPath(targetFolderPath, draggedDocument.name);
+    if (!nextPath || nextPath === draggedDocument.sourcePath) {
+      return false;
+    }
+
+    return !existingPaths.has(nextPath) || nextPath === draggedDocument.sourcePath;
+  }, [draggedDocument, existingPaths]);
+
+  const renderTree = useCallback((nodes: CollabTreeNode[], depth = 0): React.ReactNode => {
+    return nodes.map((node) => {
+      const indent = depth * 16 + 8;
+
+      if (node.type === 'folder') {
+        const isExpanded = expandedFolders.has(node.path);
+        const isSelected = selectedFolderPath === node.path;
+        const isDropTarget = dropTargetPath === node.path;
+
+        return (
+          <div key={node.id}>
+            <button
+              className={`w-full flex items-center text-left file-tree-directory${isSelected ? ' selected' : ''}${isDropTarget ? ' drag-over' : ''}`}
+              style={{ paddingLeft: indent }}
+              onClick={() => {
+                toggleFolder(node.path);
+                setSelectedFolderPath(node.path);
+              }}
+              onContextMenu={(event) => handleContextMenu(event, node)}
+              onDragOver={(event) => {
+                if (!canDropDocument(node.path)) return;
+                event.preventDefault();
+                event.stopPropagation();
+                event.dataTransfer.dropEffect = 'move';
+                if (dropTargetPath !== node.path) {
+                  setDropTargetPath(node.path);
+                }
+              }}
+              onDragLeave={(event) => {
+                event.stopPropagation();
+                const relatedTarget = event.relatedTarget as Node | null;
+                if (relatedTarget && event.currentTarget.contains(relatedTarget)) {
+                  return;
+                }
+                if (dropTargetPath === node.path) {
+                  setDropTargetPath(null);
+                }
+              }}
+              onDrop={(event) => {
+                if (!canDropDocument(node.path)) return;
+                event.preventDefault();
+                event.stopPropagation();
+                void moveDraggedDocument(node.path);
+              }}
+              title={node.path}
+            >
+              <span className="file-tree-chevron">
+                <MaterialSymbol
+                  icon={isExpanded ? 'keyboard_arrow_down' : 'keyboard_arrow_right'}
+                  size={16}
+                />
+              </span>
+              <span className="file-tree-icon">
+                <MaterialSymbol icon={isExpanded ? 'folder_open' : 'folder'} size={18} />
+              </span>
+              <span className="file-tree-name">{node.name}</span>
+            </button>
+            {isExpanded ? renderTree(node.children, depth + 1) : null}
+          </div>
+        );
+      }
+
+      const isActive = node.document.documentId === activeDocumentId;
+
+      return (
+        <button
+          key={node.id}
+          className={`w-full flex items-center text-left file-tree-file${isActive ? ' active' : ''}`}
+          style={{ paddingLeft: indent }}
+          onClick={() => {
+            setSelectedFolderPath(getCollabParentPath(node.path));
+            onDocumentSelect(node.document);
+          }}
+          onContextMenu={(event) => handleContextMenu(event, node)}
+          draggable
+          onDragStart={(event) => {
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData('text/plain', node.document.documentId);
+            setDraggedDocument({
+              documentId: node.document.documentId,
+              sourcePath: node.path,
+              name: node.name,
+            });
+          }}
+          onDragEnd={() => {
+            setDraggedDocument(null);
+            setDropTargetPath(null);
+          }}
+          title={node.path}
+        >
+          <span className="file-tree-spacer" />
+          <span className="file-tree-icon">
+            <MaterialSymbol icon="description" size={16} />
+          </span>
+          <span className="file-tree-name">{node.name}</span>
+        </button>
+      );
+    });
+  }, [
+    activeDocumentId,
+    canDropDocument,
+    dropTargetPath,
+    expandedFolders,
+    handleContextMenu,
+    moveDraggedDocument,
+    onDocumentSelect,
+    selectedFolderPath,
+    toggleFolder,
+  ]);
+
+  const selectedFolderLabel = selectedFolderPath ? getCollabNodeName(selectedFolderPath) : 'Shared Docs';
+  const contextDocument = contextMenu?.node.type === 'document' ? contextMenu.node.document : null;
 
   return (
     <div
@@ -93,45 +439,86 @@ export const CollabSidebar: React.FC<CollabSidebarProps> = ({
     >
       {/* Header */}
       <div className="px-3 py-2 border-b border-nim">
-        <h2 className="text-xs font-semibold text-nim-muted uppercase tracking-wider m-0">
-          Shared Documents
-        </h2>
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <h2 className="text-xs font-semibold text-nim-muted uppercase tracking-wider m-0">
+              Shared Documents
+            </h2>
+            <p className="m-0 mt-1 text-[11px] text-nim-faint truncate">
+              {selectedFolderLabel}
+            </p>
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              className="h-7 w-7 rounded-md border border-nim bg-nim hover:bg-nim-tertiary text-nim-muted hover:text-nim"
+              title="New document"
+              onClick={() => {
+                setIsCreateDocumentOpen(true);
+                setContextMenu(null);
+              }}
+            >
+              <MaterialSymbol icon="note_add" size={16} />
+            </button>
+            <button
+              type="button"
+              className="h-7 w-7 rounded-md border border-nim bg-nim hover:bg-nim-tertiary text-nim-muted hover:text-nim"
+              title="New folder"
+              onClick={() => {
+                setIsCreateFolderOpen(true);
+                setContextMenu(null);
+              }}
+            >
+              <MaterialSymbol icon="create_new_folder" size={16} />
+            </button>
+          </div>
+        </div>
       </div>
 
-      {/* Document list */}
-      <div className="flex-1 overflow-y-auto px-1.5 py-2">
-        {sharedDocuments.length === 0 ? (
+      {/* Document tree */}
+      <div
+        className={`flex-1 overflow-y-auto px-1.5 py-2 transition-colors ${dropTargetPath === '__root__' ? 'bg-nim-hover' : ''}`}
+        onDragOver={(event) => {
+          if (!canDropDocument(null)) return;
+          const target = event.target as HTMLElement;
+          if (target.closest('.file-tree-directory, .file-tree-file')) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = 'move';
+          if (dropTargetPath !== '__root__') {
+            setDropTargetPath('__root__');
+          }
+        }}
+        onDragLeave={(event) => {
+          const target = event.target as HTMLElement;
+          if (target.closest('.file-tree-directory, .file-tree-file')) return;
+          const relatedTarget = event.relatedTarget as Node | null;
+          if (relatedTarget && event.currentTarget.contains(relatedTarget)) {
+            return;
+          }
+          if (dropTargetPath === '__root__') {
+            setDropTargetPath(null);
+          }
+        }}
+        onDrop={(event) => {
+          if (!canDropDocument(null)) return;
+          const target = event.target as HTMLElement;
+          if (target.closest('.file-tree-directory, .file-tree-file')) return;
+          event.preventDefault();
+          void moveDraggedDocument(null);
+        }}
+      >
+        {tree.length === 0 ? (
           <div className="px-2 py-4 text-center">
             <MaterialSymbol icon="cloud_sync" size={32} className="text-nim-faint mb-2" />
             <p className="text-xs text-nim-faint m-0">
               No shared documents yet.
             </p>
             <p className="text-xs text-nim-faint mt-1 m-0">
-              Right-click a file and select "Share to Team" to collaborate.
+              Create one here or share a local file to collaborate.
             </p>
           </div>
         ) : (
-          sharedDocuments.map((doc) => (
-            <button
-              key={doc.documentId}
-              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition-colors text-left ${
-                selectedDocumentId === doc.documentId
-                  ? 'bg-nim-active text-nim'
-                  : 'text-nim-muted hover:bg-nim-tertiary hover:text-nim'
-              }`}
-              onClick={() => onDocumentSelect(doc)}
-              onContextMenu={(e) => handleContextMenu(e, doc)}
-              title={doc.title}
-            >
-              <MaterialSymbol icon={iconForType(doc.documentType)} size={16} className="shrink-0" />
-              <div className="flex-1 min-w-0">
-                <div className="truncate">{doc.title}</div>
-                <div className="text-[10px] text-nim-faint truncate">
-                  {formatDate(doc.updatedAt)}
-                </div>
-              </div>
-            </button>
-          ))
+          <div>{renderTree(tree)}</div>
         )}
       </div>
 
@@ -139,23 +526,81 @@ export const CollabSidebar: React.FC<CollabSidebarProps> = ({
       {contextMenu && (
         <div
           ref={contextMenuRef}
-          className="fixed p-1 min-w-[160px] rounded-md z-[10000] text-[13px] backdrop-blur-[10px] shadow-[0_4px_12px_rgba(0,0,0,0.15)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.5)]"
+          className="fixed min-w-[160px] rounded-md z-[10000] text-[13px] p-1 bg-nim-secondary border border-nim text-nim backdrop-blur-[10px] shadow-lg"
           style={{
             left: contextMenu.x,
             top: contextMenu.y,
-            background: 'var(--nim-bg)',
-            border: '1px solid var(--nim-border)',
           }}
         >
-          <div
-            className="flex items-center gap-2.5 px-3 py-1.5 rounded cursor-pointer transition-colors text-[var(--nim-error)] hover:bg-[var(--nim-error-subtle)]"
-            onClick={handleDelete}
-          >
-            <MaterialSymbol icon="delete" size={18} />
-            <span>Delete</span>
-          </div>
+          {contextMenu.node.type === 'folder' ? (
+            <>
+              <button
+                type="button"
+                className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded border-none bg-transparent cursor-pointer transition-colors text-left text-nim hover:bg-nim-hover"
+                onClick={() => setIsCreateDocumentOpen(true)}
+              >
+                <MaterialSymbol icon="note_add" size={18} />
+                <span>New Document</span>
+              </button>
+              <button
+                type="button"
+                className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded border-none bg-transparent cursor-pointer transition-colors text-left text-nim hover:bg-nim-hover"
+                onClick={() => setIsCreateFolderOpen(true)}
+              >
+                <MaterialSymbol icon="create_new_folder" size={18} />
+                <span>New Folder</span>
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded border-none bg-transparent cursor-pointer transition-colors text-left text-nim hover:bg-nim-hover"
+                onClick={() => {
+                  if (!contextDocument) return;
+                  onDocumentSelect(contextDocument);
+                  setContextMenu(null);
+                }}
+              >
+                <MaterialSymbol icon="open_in_new" size={18} />
+                <span>Open</span>
+              </button>
+              <button
+                type="button"
+                className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded border-none bg-transparent cursor-pointer transition-colors text-left text-nim-error hover:bg-nim-hover"
+                onClick={handleDelete}
+              >
+                <MaterialSymbol icon="delete" size={18} />
+                <span>Delete</span>
+              </button>
+            </>
+          )}
         </div>
       )}
+
+      <InputModal
+        isOpen={isCreateDocumentOpen}
+        title="New Shared Document"
+        placeholder="Document name"
+        defaultValue=""
+        onConfirm={handleCreateDocument}
+        onCancel={() => {
+          setIsCreateDocumentOpen(false);
+          setContextMenu(null);
+        }}
+      />
+
+      <InputModal
+        isOpen={isCreateFolderOpen}
+        title="New Shared Folder"
+        placeholder="Folder name"
+        defaultValue=""
+        onConfirm={handleCreateFolder}
+        onCancel={() => {
+          setIsCreateFolderOpen(false);
+          setContextMenu(null);
+        }}
+      />
     </div>
   );
 };

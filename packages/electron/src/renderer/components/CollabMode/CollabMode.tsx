@@ -8,7 +8,7 @@
  * EditorMode, AgentMode, and TrackerMode.
  */
 
-import React, { useCallback, useState, useEffect, useRef } from 'react';
+import React, { useCallback, useState, useEffect, useRef, useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import { store } from '@nimbalyst/runtime/store';
 import { CollabSidebar } from './CollabSidebar';
@@ -20,6 +20,7 @@ import { openCollabDocumentViaIPC } from '../../utils/collabDocumentOpener';
 import { initSharedDocuments, destroyTeamSync, pendingCollabDocumentAtom, sharedDocumentsAtom, type SharedDocument } from '../../store/atoms/collabDocuments';
 import { isCollabUri, parseCollabUri } from '../../utils/collabUri';
 import { MaterialSymbol } from '@nimbalyst/runtime';
+import { getCollabNodeName } from './collabTree';
 
 interface CollabModeProps {
   workspacePath: string;
@@ -133,8 +134,8 @@ const CollabModeInner: React.FC<CollabModeProps> = ({
 }) => {
   const tabsActions = useTabsActions();
   const { tabs, activeTabId } = useTabs();
-  const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
   const pendingDoc = useAtomValue(pendingCollabDocumentAtom);
+  const sharedDocuments = useAtomValue(sharedDocumentsAtom);
   const [restored, setRestored] = useState(false);
 
   // --- Resizable panel state ---
@@ -192,26 +193,69 @@ const CollabModeInner: React.FC<CollabModeProps> = ({
   }, [workspacePath, sidebarWidth]);
 
   const handleDocumentSelect = useCallback(async (doc: SharedDocument, initialContent?: string) => {
-    setSelectedDocId(doc.documentId);
-
     // Check if already open as a tab
-    const existingTab = tabs.find(
-      t => t.filePath.includes(doc.documentId)
-    );
+    const existingTab = tabs.find((tab) => {
+      if (!isCollabUri(tab.filePath)) return false;
+      try {
+        return parseCollabUri(tab.filePath).documentId === doc.documentId;
+      } catch {
+        return false;
+      }
+    });
     if (existingTab) {
       tabsActions.switchTab(existingTab.id);
+      const nextName = getCollabNodeName(doc.title || doc.documentId);
+      if (existingTab.fileName !== nextName) {
+        tabsActions.updateTab(existingTab.id, { fileName: nextName });
+      }
       return;
     }
 
     // Open as collab tab
-    await openCollabDocumentViaIPC({
+    const tabId = await openCollabDocumentViaIPC({
       workspacePath,
       documentId: doc.documentId,
       title: doc.title,
       initialContent,
       addTab: tabsActions.addTab,
     });
+    if (tabId) {
+      tabsActions.updateTab(tabId, { fileName: getCollabNodeName(doc.title || doc.documentId) });
+    }
   }, [workspacePath, tabs, tabsActions]);
+
+  const activeCollabDocumentId = useMemo(() => {
+    if (!activeTabId) return null;
+    const activeTab = tabs.find(tab => tab.id === activeTabId);
+    if (!activeTab || !isCollabUri(activeTab.filePath)) return null;
+
+    try {
+      return parseCollabUri(activeTab.filePath).documentId;
+    } catch {
+      return null;
+    }
+  }, [activeTabId, tabs]);
+
+  useEffect(() => {
+    for (const tab of tabs) {
+      if (!isCollabUri(tab.filePath)) continue;
+
+      let documentId: string;
+      try {
+        documentId = parseCollabUri(tab.filePath).documentId;
+      } catch {
+        continue;
+      }
+
+      const document = sharedDocuments.find(doc => doc.documentId === documentId);
+      if (!document) continue;
+
+      const nextName = getCollabNodeName(document.title || document.documentId);
+      if (tab.fileName !== nextName) {
+        tabsActions.updateTab(tab.id, { fileName: nextName });
+      }
+    }
+  }, [sharedDocuments, tabs, tabsActions]);
 
   // Persist open document IDs whenever tabs change
   useEffect(() => {
@@ -283,8 +327,9 @@ const CollabModeInner: React.FC<CollabModeProps> = ({
       {/* Left: Document sidebar (resizable) */}
       <div style={{ width: sidebarWidth, minWidth: COLLAB_SIDEBAR_MIN, maxWidth: COLLAB_SIDEBAR_MAX }} className="shrink-0">
         <CollabSidebar
+          workspacePath={workspacePath}
           onDocumentSelect={handleDocumentSelect}
-          selectedDocumentId={selectedDocId}
+          activeDocumentId={activeCollabDocumentId}
         />
       </div>
 
