@@ -12,7 +12,7 @@
  * - Submitting responses that sync to the provider
  */
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import type {
   PermissionRequestContent,
   PermissionResponseContent,
@@ -228,8 +228,14 @@ const AskUserQuestionWidgetInteractive: React.FC<AskUserQuestionWidgetProps> = (
   isSubmitting,
 }) => {
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [otherSelected, setOtherSelected] = useState<Record<string, boolean>>({});
+  const [otherText, setOtherText] = useState<Record<string, string>>({});
+  const otherInputRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
 
   const handleOptionSelect = useCallback((questionText: string, optionLabel: string, multiSelect: boolean) => {
+    if (!multiSelect) {
+      setOtherSelected(prev => ({ ...prev, [questionText]: false }));
+    }
     setAnswers(prev => {
       if (multiSelect) {
         const current = prev[questionText] || '';
@@ -243,11 +249,43 @@ const AskUserQuestionWidgetInteractive: React.FC<AskUserQuestionWidgetProps> = (
     });
   }, []);
 
-  const handleSubmit = useCallback(() => {
-    onSubmit(answers);
-  }, [answers, onSubmit]);
+  const handleOtherToggle = useCallback((questionText: string, multiSelect: boolean) => {
+    const isCurrentlyOther = otherSelected[questionText];
+    if (!multiSelect) {
+      setAnswers(prev => ({ ...prev, [questionText]: '' }));
+    }
+    setOtherSelected(prev => ({ ...prev, [questionText]: !isCurrentlyOther }));
+    if (!isCurrentlyOther) {
+      setTimeout(() => {
+        otherInputRefs.current[questionText]?.focus();
+      }, 0);
+    }
+  }, [otherSelected]);
 
-  const allAnswered = content.questions.every(q => answers[q.question]);
+  const handleSubmit = useCallback(() => {
+    // Build final answers incorporating "Other" text
+    const finalAnswers: Record<string, string> = {};
+    for (const q of content.questions) {
+      const key = q.question;
+      if (otherSelected[key] && otherText[key]?.trim()) {
+        const custom = otherText[key].trim();
+        if (q.multiSelect && answers[key]) {
+          finalAnswers[key] = [answers[key], custom].join(', ');
+        } else {
+          finalAnswers[key] = custom;
+        }
+      } else {
+        finalAnswers[key] = answers[key] || '';
+      }
+    }
+    onSubmit(finalAnswers);
+  }, [answers, otherSelected, otherText, content.questions, onSubmit]);
+
+  const allAnswered = content.questions.every(q => {
+    const hasAnswer = !!answers[q.question];
+    const hasOther = otherSelected[q.question] && otherText[q.question]?.trim();
+    return hasAnswer || hasOther;
+  });
 
   if (content.status !== 'pending') {
     return (
@@ -319,6 +357,52 @@ const AskUserQuestionWidgetInteractive: React.FC<AskUserQuestionWidgetProps> = (
                   </button>
                 );
               })}
+              {/* "Other" option with inline text input */}
+              <div className={`interactive-prompt__option ${otherSelected[question.question] ? 'interactive-prompt__option--selected' : ''}`}
+                style={{ flexDirection: 'column', alignItems: 'stretch', cursor: 'default' }}
+              >
+                <button
+                  style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', width: '100%', background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left' }}
+                  onClick={() => handleOtherToggle(question.question, question.multiSelect)}
+                  disabled={isSubmitting}
+                >
+                  <div className={`interactive-prompt__option-indicator ${otherSelected[question.question] ? 'interactive-prompt__option-indicator--selected' : ''}`}>
+                    {otherSelected[question.question] && (
+                      <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M8.5 2.5L3.75 7.25L1.5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    )}
+                  </div>
+                  <span className="interactive-prompt__option-label">Other</span>
+                </button>
+                {otherSelected[question.question] && (
+                  <textarea
+                    ref={(el) => { otherInputRefs.current[question.question] = el; }}
+                    value={otherText[question.question] || ''}
+                    onChange={(e) => setOtherText(prev => ({ ...prev, [question.question]: e.target.value }))}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey && allAnswered) {
+                        e.preventDefault();
+                        handleSubmit();
+                      }
+                    }}
+                    placeholder="Type your answer..."
+                    disabled={isSubmitting}
+                    rows={2}
+                    style={{
+                      width: '100%',
+                      padding: '8px 10px',
+                      marginTop: '6px',
+                      borderRadius: '4px',
+                      border: '1px solid var(--nim-border)',
+                      background: 'var(--nim-bg-secondary)',
+                      color: 'var(--nim-text)',
+                      fontSize: '13px',
+                      resize: 'vertical',
+                    }}
+                  />
+                )}
+              </div>
             </div>
           </div>
         ))}

@@ -8,7 +8,7 @@
  * The host is read from interactiveWidgetHostAtom(sessionId) - no prop drilling needed.
  */
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { useAtomValue } from 'jotai';
 import type { CustomToolWidgetProps } from './index';
 import { interactiveWidgetHostAtom } from '../../../../store/atoms/interactiveWidgetHost';
@@ -64,7 +64,18 @@ function parseAnswers(args: any, result: any): Record<string, string> {
       }
     }
 
-    if (Array.isArray(value) || typeof value !== 'object') {
+    // Handle MCP content arrays: [{ type: "text", text: "..." }]
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (item && typeof item === 'object' && (item as any).type === 'text' && typeof (item as any).text === 'string') {
+          const nested = parseFromUnknown((item as any).text);
+          if (Object.keys(nested).length > 0) return nested;
+        }
+      }
+      return {};
+    }
+
+    if (typeof value !== 'object') {
       return {};
     }
 
@@ -124,7 +135,17 @@ function parseCancelledResult(result: unknown): boolean {
     }
   }
 
-  if (Array.isArray(result) || typeof result !== 'object') {
+  // Handle MCP content arrays: [{ type: "text", text: "..." }]
+  if (Array.isArray(result)) {
+    for (const item of result) {
+      if (item && typeof item === 'object' && (item as any).type === 'text' && typeof (item as any).text === 'string') {
+        if (parseCancelledResult((item as any).text)) return true;
+      }
+    }
+    return false;
+  }
+
+  if (typeof result !== 'object') {
     return false;
   }
 
@@ -195,10 +216,18 @@ export const AskUserQuestionWidget: React.FC<CustomToolWidgetProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasResponded, setHasResponded] = useState(false);
   const [localResult, setLocalResult] = useState<{ answers: Record<string, string>; cancelled?: boolean } | null>(null);
+  const [otherSelected, setOtherSelected] = useState<Record<string, boolean>>({});
+  const [otherText, setOtherText] = useState<Record<string, string>>({});
+  const otherInputRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
 
   // Handle option toggle
   const handleOptionToggle = useCallback((question: Question, optionLabel: string) => {
     if (!isPending || hasResponded) return;
+
+    // Deselect "Other" when picking a regular option (single-select only)
+    if (!question.multiSelect) {
+      setOtherSelected(prev => ({ ...prev, [question.question]: false }));
+    }
 
     setSelections(prev => {
       const current = prev[question.question] || [];
@@ -214,6 +243,28 @@ export const AskUserQuestionWidget: React.FC<CustomToolWidgetProps> = ({
     });
   }, [isPending, hasResponded]);
 
+  // Handle "Other" toggle
+  const handleOtherToggle = useCallback((question: Question) => {
+    if (!isPending || hasResponded) return;
+
+    const questionKey = question.question;
+    const isCurrentlyOther = otherSelected[questionKey];
+
+    if (!question.multiSelect) {
+      // Single-select: clear regular selections when picking Other
+      setSelections(prev => ({ ...prev, [questionKey]: [] }));
+    }
+
+    setOtherSelected(prev => ({ ...prev, [questionKey]: !isCurrentlyOther }));
+
+    // Focus the input after toggling on
+    if (!isCurrentlyOther) {
+      setTimeout(() => {
+        otherInputRefs.current[questionKey]?.focus();
+      }, 0);
+    }
+  }, [isPending, hasResponded, otherSelected]);
+
   // Handle submit
   const handleSubmit = useCallback(async () => {
     if (!host || hasResponded || !isPending) return;
@@ -221,9 +272,21 @@ export const AskUserQuestionWidget: React.FC<CustomToolWidgetProps> = ({
     // Build answers object
     const answers: Record<string, string> = {};
     for (const q of questions) {
-      const selected = selections[q.question] || [];
-      if (selected.length > 0) {
-        answers[q.question] = q.multiSelect ? selected.join(', ') : selected[0];
+      const questionKey = q.question;
+      if (otherSelected[questionKey] && otherText[questionKey]?.trim()) {
+        // "Other" is selected with text — use the custom text
+        const customAnswer = otherText[questionKey].trim();
+        const selected = selections[questionKey] || [];
+        if (q.multiSelect && selected.length > 0) {
+          answers[questionKey] = [...selected, customAnswer].join(', ');
+        } else {
+          answers[questionKey] = customAnswer;
+        }
+      } else {
+        const selected = selections[questionKey] || [];
+        if (selected.length > 0) {
+          answers[questionKey] = q.multiSelect ? selected.join(', ') : selected[0];
+        }
       }
     }
 
@@ -247,7 +310,7 @@ export const AskUserQuestionWidget: React.FC<CustomToolWidgetProps> = ({
     } finally {
       setIsSubmitting(false);
     }
-  }, [host, questionId, questions, selections, hasResponded, isPending]);
+  }, [host, questionId, questions, selections, otherSelected, otherText, hasResponded, isPending]);
 
   // Handle cancel
   const handleCancel = useCallback(async () => {
@@ -277,7 +340,11 @@ export const AskUserQuestionWidget: React.FC<CustomToolWidgetProps> = ({
   const displayCancelled = displayResult?.cancelled || false;
 
   // Check if all questions have selections (for enabling submit button)
-  const allAnswered = questions.every(q => (selections[q.question] || []).length > 0);
+  const allAnswered = questions.every(q => {
+    const hasSelection = (selections[q.question] || []).length > 0;
+    const hasOther = otherSelected[q.question] && otherText[q.question]?.trim();
+    return hasSelection || hasOther;
+  });
 
   // Show completed state
   if (displayResult || hasResponded) {
@@ -487,6 +554,56 @@ export const AskUserQuestionWidget: React.FC<CustomToolWidgetProps> = ({
                     </button>
                   );
                 })}
+                {/* "Other" option with inline text input */}
+                <div
+                  data-testid="ask-user-question-other"
+                  data-selected={otherSelected[question.question] || false}
+                  className={`rounded border transition-all duration-150 ${
+                    otherSelected[question.question]
+                      ? 'border-nim-primary bg-[color-mix(in_srgb,var(--nim-primary)_8%,var(--nim-bg-secondary))]'
+                      : 'border-nim bg-nim-secondary hover:bg-nim-hover'
+                  } ${isSubmitting ? 'opacity-50' : ''}`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => handleOtherToggle(question)}
+                    disabled={isSubmitting}
+                    className="flex items-start gap-2 py-2 px-2.5 w-full cursor-pointer text-left bg-transparent disabled:cursor-not-allowed"
+                  >
+                    <div className={`w-4 h-4 mt-0.5 shrink-0 border rounded-sm flex items-center justify-center transition-colors ${
+                      otherSelected[question.question]
+                        ? 'bg-nim-primary border-nim-primary text-white'
+                        : 'bg-nim border-nim text-nim-primary'
+                    }`}>
+                      {otherSelected[question.question] && (
+                        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M8.5 2.5L3.75 7.25L1.5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      )}
+                    </div>
+                    <span className="text-[0.8125rem] font-medium text-nim leading-snug">Other</span>
+                  </button>
+                  {otherSelected[question.question] && (
+                    <div className="px-2.5 pb-2">
+                      <textarea
+                        ref={(el) => { otherInputRefs.current[question.question] = el; }}
+                        data-testid="ask-user-question-other-input"
+                        value={otherText[question.question] || ''}
+                        onChange={(e) => setOtherText(prev => ({ ...prev, [question.question]: e.target.value }))}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey && allAnswered) {
+                            e.preventDefault();
+                            handleSubmit();
+                          }
+                        }}
+                        placeholder="Type your answer..."
+                        disabled={isSubmitting}
+                        rows={2}
+                        className="w-full px-2.5 py-2 rounded border border-nim bg-nim text-sm text-nim placeholder-nim-faint resize-y focus:outline-none focus:border-nim-primary disabled:opacity-50"
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           );
