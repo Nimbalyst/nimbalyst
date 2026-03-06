@@ -16,7 +16,7 @@ type PanelState = 'loading' | 'loaded' | 'unauthenticated' | 'error';
 
 /**
  * Shared Links settings panel.
- * Displays and manages all shared session links for the current user.
+ * Displays and manages all shared file and session links for the current user.
  * Self-contained - fetches data via IPC, no props needed.
  */
 export const SharedLinksPanel: React.FC = () => {
@@ -59,7 +59,10 @@ export const SharedLinksPanel: React.FC = () => {
   const handleDelete = async (share: SharedLink) => {
     setDeletingId(share.shareId);
     try {
-      const result = await (window as any).electronAPI?.deleteShare({ shareId: share.shareId, sessionId: share.sessionId });
+      const result = await (window as any).electronAPI?.deleteShare({
+        shareId: share.shareId,
+        sessionId: typeof share.sessionId === 'string' ? share.sessionId : undefined,
+      });
       if (result?.success) {
         setShares(prev => prev.filter(s => s.shareId !== share.shareId));
       }
@@ -71,7 +74,7 @@ export const SharedLinksPanel: React.FC = () => {
   };
 
   const handleCopyLink = (share: SharedLink) => {
-    const key = shareKeys[share.sessionId];
+    const key = typeof share.sessionId === 'string' ? shareKeys[share.sessionId] : undefined;
     const url = buildShareUrl(share.shareId, key);
     copyToClipboard(url);
     setCopiedId(share.shareId);
@@ -104,13 +107,16 @@ export const SharedLinksPanel: React.FC = () => {
     return `Expires in ${days}d`;
   };
 
+  const getShareKindLabel = (share: SharedLink) =>
+    typeof share.sessionId === 'string' && share.sessionId.startsWith('file:') ? 'File' : 'Session';
+
   return (
     <div className="provider-panel max-w-2xl">
       <div className="provider-panel-header flex items-center justify-between mb-4">
         <div>
           <h3 className="text-lg font-semibold text-[var(--nim-text)] m-0">Shared Links</h3>
           <p className="text-[0.8125rem] text-[var(--nim-text-muted)] mt-1 mb-0">
-            Manage links you've shared. Anyone with a link can view the content.
+            Manage links you've shared for files and sessions. Anyone with a link can view the content.
           </p>
         </div>
         {state === 'loaded' && shares.length > 0 && (
@@ -137,7 +143,7 @@ export const SharedLinksPanel: React.FC = () => {
         <div className="flex flex-col items-center justify-center py-12 text-center">
           <MaterialSymbol icon="account_circle" size={32} className="text-[var(--nim-text-faint)] mb-3" />
           <p className="text-[0.8125rem] text-[var(--nim-text-muted)] mb-2">
-            Sign in to share sessions.
+            Sign in to share files and sessions.
           </p>
           <p className="text-[0.75rem] text-[var(--nim-text-faint)]">
             Go to Account & Sync to set up your account.
@@ -170,7 +176,7 @@ export const SharedLinksPanel: React.FC = () => {
             No shared links yet.
           </p>
           <p className="text-[0.75rem] text-[var(--nim-text-faint)]">
-            Right-click a session and select "Share link" to create one.
+            Right-click a file or session and select "Share link" to create one.
           </p>
         </div>
       )}
@@ -187,6 +193,9 @@ export const SharedLinksPanel: React.FC = () => {
                 <div className="flex items-center gap-2 mb-1">
                   <span className="text-[0.8125rem] font-medium text-[var(--nim-text)] truncate">
                     {share.title || 'Untitled'}
+                  </span>
+                  <span className="shrink-0 px-1.5 py-0.5 rounded bg-[var(--nim-bg-hover)] text-[0.625rem] uppercase tracking-[0.04em] text-[var(--nim-text-faint)]">
+                    {getShareKindLabel(share)}
                   </span>
                   <span className="shrink-0 text-[0.6875rem] text-[var(--nim-text-faint)]">
                     {share.viewCount} {share.viewCount === 1 ? 'view' : 'views'}

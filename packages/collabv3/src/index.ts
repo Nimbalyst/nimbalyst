@@ -41,6 +41,7 @@ import {
   handleDeleteAllKeyEnvelopes,
 } from './teamKeyEnvelopes';
 import { teamRoomPost, teamRoomGet } from './teamRoomHelpers';
+import { NIMBALYST_ORG_TYPE_KEY, resolveDiscoveredOrgType, selectPreferredPersonalOrg } from './personalOrg';
 import { setLogEnvironment, createLogger } from './logger';
 
 const log = createLogger('sync');
@@ -996,7 +997,7 @@ interface B2BAuthResult {
  * Discovery flow:
  * 1. Authenticate the intermediate token
  * 2. List discovered organizations
- * 3. If user has orgs, exchange for org-scoped session (auto-select first org)
+ * 3. If user has orgs, exchange for org-scoped session (prefer personal org)
  * 4. If user has no orgs, create a personal organization first
  */
 async function authenticateB2BToken(
@@ -1087,6 +1088,7 @@ async function authenticateB2BToken(
       organization?: {
         organization_id: string;
         organization_name: string;
+        trusted_metadata?: Record<string, unknown>;
       };
       membership?: { type: string };
     }>;
@@ -1105,7 +1107,15 @@ async function authenticateB2BToken(
   let targetOrgId: string;
 
   if (discoveredOrgs.length > 0) {
-    targetOrgId = discoveredOrgs[0].organization?.organization_id || '';
+    const orgsWithTypes = await Promise.all(
+      discoveredOrgs.map(async (org) => ({
+        ...org,
+        orgType: await resolveDiscoveredOrgType(org, env),
+      }))
+    );
+
+    const preferredOrg = selectPreferredPersonalOrg(orgsWithTypes);
+    targetOrgId = preferredOrg?.organization?.organization_id || '';
   } else {
     // New user with no orgs - create a personal organization
     const createOrgResponse = await fetch(`${b2bApiBase}/discovery/organizations/create`, {
@@ -1133,6 +1143,23 @@ async function authenticateB2BToken(
       session_token?: string;
       session_jwt?: string;
     };
+
+    if (createData.organization?.organization_id) {
+      await fetch(`${b2bApiBase}/organizations/${createData.organization.organization_id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': b2bAuth,
+        },
+        body: JSON.stringify({
+          trusted_metadata: {
+            [NIMBALYST_ORG_TYPE_KEY]: 'personal',
+          },
+        }),
+      }).catch((error) => {
+        log.warn('Failed to set personal org metadata on create:', createData.organization?.organization_id, error);
+      });
+    }
 
     return {
       ok: true,

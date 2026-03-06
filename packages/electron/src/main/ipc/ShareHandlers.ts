@@ -1,6 +1,7 @@
-import { net } from 'electron';
+import { app, net, safeStorage } from 'electron';
 import { randomBytes, createCipheriv, createHash } from 'crypto';
-import { promises as fs } from 'fs';
+import { existsSync, promises as fs, readFileSync, unlinkSync, writeFileSync } from 'fs';
+import * as path from 'path';
 import { safeHandle } from '../utils/ipcRegistry';
 import { logger } from '../utils/logger';
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
@@ -13,6 +14,7 @@ import { store } from '../utils/store';
 
 const SHARE_SERVER_URL = 'https://sync.nimbalyst.com';
 const DEFAULT_SHARE_EXPIRATION_DAYS = 7;
+const SHARE_METADATA_FILE = 'share-metadata.enc';
 
 // --- Encryption utilities ---
 
@@ -39,15 +41,23 @@ function encryptContent(html: string, keyBase64: string): Buffer {
   return Buffer.concat([iv, encrypted, tag]);
 }
 
-/** Get or create the encryption key for a session. */
-function getOrCreateShareKey(sessionId: string): string {
+/** Get a previously stored encryption key for a share target, if one exists. */
+function getStoredShareKey(sessionId: string): string | null {
   const keys = store.get('shareKeys') ?? {};
   if (keys[sessionId]) {
     return keys[sessionId];
   }
-  const newKey = generateShareKey();
+  return null;
+}
+
+/** Persist the encryption key for a share target after a successful upload. */
+function storeShareKey(sessionId: string, key: string): void {
+  const keys = store.get('shareKeys') ?? {};
+  if (keys[sessionId] === key) {
+    return;
+  }
+  const newKey = key ?? generateShareKey();
   store.set('shareKeys', { ...keys, [sessionId]: newKey });
-  return newKey;
 }
 
 /** Remove a stored share key when a share is deleted. */
@@ -57,6 +67,90 @@ function removeShareKey(sessionId: string): void {
     const { [sessionId]: _, ...rest } = keys;
     store.set('shareKeys', rest);
   }
+}
+
+interface ShareDisplayMetadata {
+  contentType: 'session' | 'file';
+  title: string;
+}
+
+let shareMetadataCache: Record<string, ShareDisplayMetadata> | null = null;
+
+function getShareMetadataPath(): string {
+  return path.join(app.getPath('userData'), SHARE_METADATA_FILE);
+}
+
+function isSafeStorageAvailable(): boolean {
+  try {
+    return safeStorage.isEncryptionAvailable();
+  } catch {
+    return false;
+  }
+}
+
+function loadShareMetadata(): Record<string, ShareDisplayMetadata> {
+  if (shareMetadataCache) {
+    return shareMetadataCache;
+  }
+
+  const filePath = getShareMetadataPath();
+  if (!existsSync(filePath)) {
+    shareMetadataCache = {};
+    return shareMetadataCache;
+  }
+
+  try {
+    const fileData = readFileSync(filePath);
+    const jsonData = isSafeStorageAvailable()
+      ? safeStorage.decryptString(fileData)
+      : fileData.toString('utf8');
+
+    const parsed = JSON.parse(jsonData) as Record<string, ShareDisplayMetadata>;
+    shareMetadataCache = parsed && typeof parsed === 'object' ? parsed : {};
+  } catch (error) {
+    logger.main.error('[ShareHandlers] Failed to load share metadata:', error);
+    shareMetadataCache = {};
+  }
+
+  return shareMetadataCache;
+}
+
+function saveShareMetadata(metadata: Record<string, ShareDisplayMetadata>): void {
+  shareMetadataCache = metadata;
+
+  const filePath = getShareMetadataPath();
+  if (Object.keys(metadata).length === 0) {
+    if (existsSync(filePath)) {
+      unlinkSync(filePath);
+    }
+    return;
+  }
+
+  const jsonData = JSON.stringify(metadata);
+  if (isSafeStorageAvailable()) {
+    writeFileSync(filePath, safeStorage.encryptString(jsonData));
+  } else {
+    logger.main.warn('[ShareHandlers] safeStorage unavailable, saving share metadata without encryption');
+    writeFileSync(filePath, jsonData, 'utf8');
+  }
+}
+
+function setShareMetadata(sessionId: string, metadata: ShareDisplayMetadata): void {
+  const current = loadShareMetadata();
+  saveShareMetadata({
+    ...current,
+    [sessionId]: metadata,
+  });
+}
+
+function removeShareMetadata(sessionId: string): void {
+  const current = loadShareMetadata();
+  if (!current[sessionId]) {
+    return;
+  }
+
+  const { [sessionId]: _, ...rest } = current;
+  saveShareMetadata(rest);
 }
 
 /**
@@ -182,7 +276,7 @@ export function registerShareHandlers() {
         const html = await exportSessionToHtml(session);
 
         // Encrypt the HTML content
-        const shareKey = getOrCreateShareKey(sessionId);
+        const shareKey = getStoredShareKey(sessionId) ?? generateShareKey();
         const encrypted = encryptContent(html, shareKey);
         const urlSafeKey = keyToUrlSafe(shareKey);
 
@@ -218,6 +312,12 @@ export function registerShareHandlers() {
         const fullUrl = `${data.url}#key=${urlSafeKey}`;
 
         logger.file.info(`[ShareHandlers] Session ${data.isUpdate ? 'updated' : 'shared'}: ${data.url}`);
+
+        storeShareKey(sessionId, shareKey);
+        setShareMetadata(sessionId, {
+          contentType: 'session',
+          title: chatSession.title ?? 'New conversation',
+        });
 
         // Track successful session share
         AnalyticsService.getInstance().sendEvent('content_shared', {
@@ -273,7 +373,32 @@ export function registerShareHandlers() {
         }
 
         const data = await response.json() as { shares: ShareInfo[] };
-        return { success: true, shares: data.shares };
+        const shareMetadata = loadShareMetadata();
+
+        const shares = await Promise.all(
+          data.shares.map(async (share) => {
+            const shareKeyId = typeof share.sessionId === 'string' ? share.sessionId : '';
+            const localMetadata = shareKeyId ? shareMetadata[shareKeyId] : undefined;
+            if (localMetadata?.title) {
+              return { ...share, title: localMetadata.title };
+            }
+
+            if (shareKeyId && !shareKeyId.startsWith('file:')) {
+              try {
+                const session = await AISessionsRepository.get(shareKeyId);
+                if (session?.title) {
+                  return { ...share, title: session.title };
+                }
+              } catch (error) {
+                logger.main.warn('[ShareHandlers] Failed to resolve shared session title:', shareKeyId, error);
+              }
+            }
+
+            return share;
+          })
+        );
+
+        return { success: true, shares };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         logger.file.error(`[ShareHandlers] List shares failed: ${errorMessage}`);
@@ -321,6 +446,7 @@ export function registerShareHandlers() {
         // Clean up local encryption key
         if (sessionId) {
           removeShareKey(sessionId);
+          removeShareMetadata(sessionId);
         }
 
         logger.file.info(`[ShareHandlers] Share deleted: ${shareId}`);
@@ -377,7 +503,7 @@ export function registerShareHandlers() {
         const keyId = `file:${createHash('sha256').update(filePath).digest('hex').slice(0, 16)}`;
 
         // Encrypt the HTML content
-        const shareKey = getOrCreateShareKey(keyId);
+        const shareKey = getStoredShareKey(keyId) ?? generateShareKey();
         const encrypted = encryptContent(html, shareKey);
         const urlSafeKey = keyToUrlSafe(shareKey);
 
@@ -413,6 +539,12 @@ export function registerShareHandlers() {
         const fullUrl = `${data.url}#key=${urlSafeKey}`;
 
         logger.file.info(`[ShareHandlers] File ${data.isUpdate ? 'updated' : 'shared'}: ${data.url}`);
+
+        storeShareKey(keyId, shareKey);
+        setShareMetadata(keyId, {
+          contentType: 'file',
+          title: path.basename(filePath),
+        });
 
         // Track successful file share
         AnalyticsService.getInstance().sendEvent('content_shared', {

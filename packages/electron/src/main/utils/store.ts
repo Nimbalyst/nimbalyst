@@ -340,6 +340,11 @@ export interface WorkspaceState {
   workstreamStates?: Record<string, unknown>;
   // Agent mode file scope mode (shared across all sessions in workspace)
   agentFileScopeMode?: AgentFileScopeMode;
+  // Collab mode tree state (expanded folders and local placeholder folders)
+  collabTree?: {
+    expandedFolders: string[];
+    customFolders: string[];
+  };
   // Account identity bound to this workspace (personalOrgId).
   // Set once when the workspace is first synced. Different workspaces can use different accounts.
   // Defaults to the primary account if not set.
@@ -487,6 +492,10 @@ function createDefaultWorkspaceState(workspacePath: string): WorkspaceState {
     agentWorktreeSessionModes: undefined,
     diffTreeGroupByDirectory: undefined,
     workstreamStates: undefined,
+    collabTree: {
+      expandedFolders: [],
+      customFolders: [],
+    },
     lastUpdated: Date.now(),
   };
 }

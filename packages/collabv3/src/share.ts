@@ -217,10 +217,15 @@ export async function handleShareView(
       return new Response('This shared link has expired', { status: 410 });
     }
 
-    // Increment view count (fire-and-forget, don't block response)
-    env.DB.prepare(
-      `UPDATE shared_sessions SET view_count = view_count + 1 WHERE id = ?`
-    ).bind(shareId).run();
+    // Best-effort increment before responding. Un-awaited writes can be dropped
+    // when the worker returns early, so explicitly await and swallow failures.
+    try {
+      await env.DB.prepare(
+        `UPDATE shared_sessions SET view_count = view_count + 1 WHERE id = ?`
+      ).bind(shareId).run();
+    } catch (err) {
+      log.warn('Failed to increment share view count:', shareId, err);
+    }
 
     return new Response(getDecryptionViewerHtml(shareId), {
       headers: {

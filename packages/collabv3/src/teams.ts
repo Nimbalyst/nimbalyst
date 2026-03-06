@@ -18,6 +18,7 @@ import type { Env } from './types';
 import type { AuthResult } from './auth';
 import { teamRoomPost, teamRoomGet, requireAdminViaTeamRoom, getTeamRoomStub } from './teamRoomHelpers';
 import { createLogger } from './logger';
+import { NIMBALYST_ORG_TYPE_KEY, resolveDiscoveredOrgType } from './personalOrg';
 
 const log = createLogger('teams');
 
@@ -84,6 +85,9 @@ export async function handleCreateTeam(
       body: JSON.stringify({
         organization_name: `Team-${opaqueId}`,
         organization_slug: `team-${opaqueId}`,
+        trusted_metadata: {
+          [NIMBALYST_ORG_TYPE_KEY]: 'team',
+        },
         // Allow all auth methods so session exchange works regardless of how the user signed in
         // (magic_link, google_oauth, etc.). Without this, Stytch rejects session exchange with
         // "Unknown token type: multi_tenant_magic_links".
@@ -260,6 +264,7 @@ export async function handleListTeams(
         organization?: {
           organization_id: string;
           organization_name: string;
+          trusted_metadata?: Record<string, unknown>;
         };
         membership?: {
           type: string;
@@ -272,20 +277,22 @@ export async function handleListTeams(
 
     const callerEmail = discoveryData.email_address || '';
 
-    // Filter to team orgs only, exclude personal orgs.
-    // Include active_member, pending_member, and invited_member so that
-    // invited users see pending invites in the UI and can join directly.
-    // We cannot use auth.orgId to identify the personal org because the JWT
-    // may be scoped to a team org (e.g., after accepting an invite deep link).
-    // Instead, filter by organization name -- personal orgs are named "Personal-<userId>".
+    // Filter to team orgs only, based on explicit Stytch org metadata.
+    // For old orgs without metadata, resolveDiscoveredOrgType() backfills from TeamRoom:
+    // orgs with TeamRoom metadata are teams; everything else is personal.
     const allowedMembershipTypes = new Set(['active_member', 'pending_member', 'invited_member']);
-    const teamOrgs = (discoveryData.discovered_organizations || [])
-      .filter(d =>
-        d.organization?.organization_id &&
-        !d.organization.organization_name?.startsWith('Personal-') &&
-        d.membership?.type &&
-        allowedMembershipTypes.has(d.membership.type)
-      );
+    const discoveredOrgsWithTypes = await Promise.all(
+      (discoveryData.discovered_organizations || []).map(async (org) => ({
+        ...org,
+        orgType: await resolveDiscoveredOrgType(org, env),
+      }))
+    );
+    const teamOrgs = discoveredOrgsWithTypes.filter((org) =>
+      org.organization?.organization_id &&
+      org.orgType === 'team' &&
+      org.membership?.type &&
+      allowedMembershipTypes.has(org.membership.type)
+    );
 
     if (teamOrgs.length === 0) {
       log.info('listTeams result: 0 team(s) for email:', callerEmail);
