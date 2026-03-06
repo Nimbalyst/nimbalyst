@@ -46,6 +46,7 @@ export function AgenticInput({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [typeaheadMatch, setTypeaheadMatch] = useState<TriggerMatch | null>(null);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const [selectedOption, setSelectedOption] = useState<TypeaheadOption | null>(null);
   const [cursorPosition, setCursorPosition] = useState(0);
   const [slashCommandOptions, setSlashCommandOptions] = useState<TypeaheadOption[]>([]);
   const [allSlashCommands, setAllSlashCommands] = useState<any[]>([]);
@@ -203,6 +204,7 @@ export function AgenticInput({
     } else {
       setTypeaheadMatch(null);
       setSelectedIndex(null);
+      setSelectedOption(null);
     }
   }, [value, cursorPosition, onFileMentionSearch, filterSlashCommands, allSlashCommands]);
 
@@ -270,6 +272,7 @@ export function AgenticInput({
     // Close typeahead
     setTypeaheadMatch(null);
     setSelectedIndex(null);
+    setSelectedOption(null);
   }, [typeaheadMatch, value, onChange, onFileMentionSelect]);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -298,8 +301,8 @@ export function AgenticInput({
 
       if (e.key === 'Enter' || e.key === 'Tab') {
         e.preventDefault();
-        if (selectedIndex !== null && currentOptions[selectedIndex]) {
-          handleTypeaheadSelect(currentOptions[selectedIndex]);
+        if (selectedOption) {
+          handleTypeaheadSelect(selectedOption);
         }
         return;
       }
@@ -308,6 +311,7 @@ export function AgenticInput({
         e.preventDefault();
         setTypeaheadMatch(null);
         setSelectedIndex(null);
+        setSelectedOption(null);
         return;
       }
     }
@@ -513,10 +517,12 @@ export function AgenticInput({
           options={typeaheadMatch.trigger === '@' ? fileMentionOptions : slashCommandOptions}
           selectedIndex={selectedIndex}
           onSelectedIndexChange={setSelectedIndex}
+          onSelectedOptionChange={setSelectedOption}
           onSelect={handleTypeaheadSelect}
           onClose={() => {
             setTypeaheadMatch(null);
             setSelectedIndex(null);
+            setSelectedOption(null);
           }}
           cursorPosition={cursorPosition}
         />
