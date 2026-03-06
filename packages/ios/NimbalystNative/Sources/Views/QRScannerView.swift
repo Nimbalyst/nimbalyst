@@ -19,6 +19,10 @@ public struct QRPairingData: Equatable {
     public let userId: String
     /// Desktop's PostHog analytics ID for cross-device identity linking.
     public let analyticsId: String?
+    /// Desktop's personalOrgId for room routing (v5+). Ensures mobile uses the same index room.
+    public let personalOrgId: String?
+    /// Desktop's personalUserId for room routing (v5+). Ensures mobile uses the same index room.
+    public let personalUserId: String?
 
     /// Parse QR code string into pairing data.
     /// Supports three formats:
@@ -90,8 +94,10 @@ public struct QRPairingData: Equatable {
         }
 
         let analyticsId = json["analyticsId"] as? String
+        let personalOrgId = json["personalOrgId"] as? String
+        let personalUserId = json["personalUserId"] as? String
 
-        return QRPairingData(seed: seed, serverUrl: serverUrl, userId: userId, analyticsId: analyticsId)
+        return QRPairingData(seed: seed, serverUrl: serverUrl, userId: userId, analyticsId: analyticsId, personalOrgId: personalOrgId, personalUserId: personalUserId)
     }
 }
 

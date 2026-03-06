@@ -61,26 +61,39 @@ export async function resolveDiscoveredOrgType(
   discoveredOrg: DiscoveredOrganizationLike,
   env: Env
 ): Promise<NimbalystOrgType> {
-  const explicitType = getExplicitOrgType(discoveredOrg.organization?.trusted_metadata);
-  if (explicitType) {
-    return explicitType;
-  }
-
   const orgId = discoveredOrg.organization?.organization_id;
-  if (!orgId) {
-    return 'personal';
+  const explicitType = getExplicitOrgType(discoveredOrg.organization?.trusted_metadata);
+
+  // TeamRoom presence is the definitive signal for team orgs.
+  // Always check it, even if explicit metadata exists -- the previous deploy
+  // could have incorrectly tagged a team org as 'personal' due to a transient
+  // TeamRoom check failure. TeamRoom presence overrides stale metadata.
+  if (orgId) {
+    let hasTeamRoom = false;
+    try {
+      hasTeamRoom = (await teamRoomGet(orgId, 'get-metadata', env)).ok;
+    } catch (error) {
+      log.warn('TeamRoom check failed for org:', orgId, error);
+    }
+
+    if (hasTeamRoom) {
+      // Backfill or correct metadata to 'team'
+      if (explicitType !== 'team') {
+        try {
+          await updateOrgTypeMetadata(orgId, 'team', env);
+          log.info('Backfilled org type: team for org:', orgId, explicitType ? `(was ${explicitType})` : '(no prior metadata)');
+        } catch (error) {
+          log.warn('Failed to backfill team metadata for org:', orgId, error);
+        }
+      }
+      return 'team';
+    }
   }
 
-  const hasTeamRoom = (await teamRoomGet(orgId, 'get-metadata', env)).ok;
-  const resolvedType: NimbalystOrgType = hasTeamRoom ? 'team' : 'personal';
-
-  try {
-    await updateOrgTypeMetadata(orgId, resolvedType, env);
-  } catch (error) {
-    log.warn('Failed to backfill org type metadata for org:', orgId, error);
-  }
-
-  return resolvedType;
+  // No TeamRoom -- use explicit metadata if available, otherwise assume personal.
+  // Don't backfill 'personal' to Stytch -- absence of TeamRoom is not definitive
+  // (could be transient failure), and incorrect 'personal' tags are destructive.
+  return explicitType ?? 'personal';
 }
 
 export function selectPreferredPersonalOrg<T extends DiscoveredOrganizationLike & { orgType: NimbalystOrgType }>(

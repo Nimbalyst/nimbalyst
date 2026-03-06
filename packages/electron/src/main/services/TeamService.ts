@@ -446,11 +446,11 @@ export async function findTeamForWorkspace(workspacePath: string): Promise<TeamD
     // invited or pending teams without explicit user consent.
     const activeTeams = teams.filter(t => !t.membershipType || t.membershipType === 'active_member');
     const match = activeTeams.find(t => t.gitRemoteHash === remoteHash) || null;
-    // if (match) {
-    //   logger.main.info('[TeamService] findTeamForWorkspace: matched team:', match.name, 'orgId:', match.orgId, 'for workspace:', workspacePath);
-    // } else if (teams.length > 0) {
-    //   logger.main.info('[TeamService] findTeamForWorkspace: no hash match. workspace hash:', remoteHash, 'team hashes:', teams.map(t => ({ orgId: t.orgId, name: t.name, hash: t.gitRemoteHash, membership: t.membershipType })));
-    // }
+    if (match) {
+      logger.main.info('[TeamService] findTeamForWorkspace: matched team:', match.name, 'orgId:', match.orgId, 'for workspace:', workspacePath);
+    } else if (teams.length > 0) {
+      logger.main.info('[TeamService] findTeamForWorkspace: no hash match. workspace hash:', remoteHash, 'team hashes:', teams.map(t => ({ orgId: t.orgId, name: t.name, hash: t.gitRemoteHash, membership: t.membershipType })));
+    }
     return match;
   } catch (err) {
     logger.main.error('[TeamService] findTeamForWorkspace error:', err);

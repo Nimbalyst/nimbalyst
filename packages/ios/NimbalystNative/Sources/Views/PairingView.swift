@@ -162,7 +162,9 @@ public struct PairingView: View {
                 with: pairingData.seed,
                 serverUrl: pairingData.serverUrl,
                 userId: pairingData.userId,
-                analyticsId: pairingData.analyticsId
+                analyticsId: pairingData.analyticsId,
+                personalOrgId: pairingData.personalOrgId,
+                personalUserId: pairingData.personalUserId
             )
             isScanning = false
         } catch {

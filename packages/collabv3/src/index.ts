@@ -41,7 +41,7 @@ import {
   handleDeleteAllKeyEnvelopes,
 } from './teamKeyEnvelopes';
 import { teamRoomPost, teamRoomGet } from './teamRoomHelpers';
-import { NIMBALYST_ORG_TYPE_KEY, resolveDiscoveredOrgType, selectPreferredPersonalOrg } from './personalOrg';
+import { NIMBALYST_ORG_TYPE_KEY, getExplicitOrgType, resolveDiscoveredOrgType, selectPreferredPersonalOrg } from './personalOrg';
 import { setLogEnvironment, createLogger } from './logger';
 
 const log = createLogger('sync');
@@ -1107,6 +1107,9 @@ async function authenticateB2BToken(
   let targetOrgId: string;
 
   if (discoveredOrgs.length > 0) {
+    // Resolve org types for all discovered orgs. This backfills nimbalyst_org_type
+    // metadata on orgs that don't have it yet (using TeamRoom presence as heuristic).
+    // Once backfilled, future auth calls use the explicit metadata directly.
     const orgsWithTypes = await Promise.all(
       discoveredOrgs.map(async (org) => ({
         ...org,
@@ -1116,6 +1119,9 @@ async function authenticateB2BToken(
 
     const preferredOrg = selectPreferredPersonalOrg(orgsWithTypes);
     targetOrgId = preferredOrg?.organization?.organization_id || '';
+    log.info('Auth org selection:', discoveredOrgs.length, 'orgs,',
+      'types:', orgsWithTypes.map(o => `${o.organization?.organization_id?.slice(-8)}=${o.orgType}`).join(', '),
+      'selected:', targetOrgId.slice(-8));
   } else {
     // New user with no orgs - create a personal organization
     const createOrgResponse = await fetch(`${b2bApiBase}/discovery/organizations/create`, {

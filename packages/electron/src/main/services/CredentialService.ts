@@ -215,7 +215,9 @@ export function isUsingSecureStorage(): boolean {
  */
 export function generateQRPairingPayload(
   serverUrl: string,
-  syncEmail?: string
+  syncEmail?: string,
+  personalOrgId?: string,
+  personalUserId?: string,
 ): {
   version: number;
   serverUrl: string;
@@ -223,6 +225,8 @@ export function generateQRPairingPayload(
   expiresAt: number;
   analyticsId: string;
   syncEmail?: string;
+  personalOrgId?: string;
+  personalUserId?: string;
 } {
   const credentials = getCredentials();
 
@@ -233,11 +237,13 @@ export function generateQRPairingPayload(
   const analyticsId = AnalyticsService.getInstance().getDistinctId();
 
   return {
-    version: 4, // Version 4 = includes syncEmail for email validation
+    version: 5, // Version 5 = includes personalOrgId/personalUserId for room routing
     serverUrl,
     encryptionKeySeed: credentials.encryptionKeySeed,
     expiresAt,
     analyticsId,
     syncEmail,
+    personalOrgId,
+    personalUserId,
   };
 }

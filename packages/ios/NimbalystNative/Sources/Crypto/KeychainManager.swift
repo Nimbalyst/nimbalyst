@@ -18,6 +18,8 @@ enum KeychainManager {
         case authOrgId = "stytch_org_id"
         case openAIApiKey = "openai_api_key"
         case analyticsId = "analytics_id"
+        case pairingPersonalOrgId = "pairing_personal_org_id"
+        case pairingPersonalUserId = "pairing_personal_user_id"
     }
 
     // MARK: - Encryption Key
@@ -134,6 +136,24 @@ enum KeychainManager {
         delete(key: .analyticsId)
     }
 
+    // MARK: - Pairing Personal Org/User (for room routing)
+
+    static func storePairingPersonalOrgId(_ orgId: String) throws {
+        try store(key: .pairingPersonalOrgId, value: orgId)
+    }
+
+    static func getPairingPersonalOrgId() -> String? {
+        retrieve(key: .pairingPersonalOrgId)
+    }
+
+    static func storePairingPersonalUserId(_ userId: String) throws {
+        try store(key: .pairingPersonalUserId, value: userId)
+    }
+
+    static func getPairingPersonalUserId() -> String? {
+        retrieve(key: .pairingPersonalUserId)
+    }
+
     // MARK: - Cleanup
 
     static func deleteAll() {
@@ -143,6 +163,8 @@ enum KeychainManager {
         deleteAuthSession()
         deleteOpenAIApiKey()
         deleteAnalyticsId()
+        delete(key: .pairingPersonalOrgId)
+        delete(key: .pairingPersonalUserId)
     }
 
     // MARK: - Generic Keychain Operations

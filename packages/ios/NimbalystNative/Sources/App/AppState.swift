@@ -80,7 +80,7 @@ public final class AppState: ObservableObject {
     /// The QR code provides the encryption seed and server URL.
     /// The userId parameter is informational only (e.g., syncEmail from QR) -- the actual
     /// user ID for crypto and routing comes from Stytch auth.
-    public func pair(with seed: String, serverUrl: String, userId: String, analyticsId: String? = nil) throws {
+    public func pair(with seed: String, serverUrl: String, userId: String, analyticsId: String? = nil, personalOrgId: String? = nil, personalUserId: String? = nil) throws {
         // Delete any leftover database from a previous pairing.
         // This ensures stale decrypted data from a different account doesn't survive
         // into the new pairing (e.g., if unpair() couldn't delete the locked file).
@@ -90,7 +90,15 @@ public final class AppState: ObservableObject {
         try KeychainManager.storeServerUrl(serverUrl)
         // Store the QR userId as a fallback identifier (not used for crypto or routing)
         try KeychainManager.storeUserId(userId)
-        logger.info("Paired with userId=\(userId), contains @: \(userId.contains("@"))")
+        // Store desktop's personalOrgId/personalUserId for room routing (v5+).
+        // This ensures the mobile connects to the same index room as the desktop.
+        if let personalOrgId, !personalOrgId.isEmpty {
+            try KeychainManager.storePairingPersonalOrgId(personalOrgId)
+        }
+        if let personalUserId, !personalUserId.isEmpty {
+            try KeychainManager.storePairingPersonalUserId(personalUserId)
+        }
+        logger.info("Paired with userId=\(userId), personalOrgId=\(personalOrgId ?? "nil"), personalUserId=\(personalUserId ?? "nil")")
         isPaired = true
 
         // Link mobile analytics to desktop's PostHog identity
@@ -218,12 +226,22 @@ public final class AppState: ObservableObject {
             return
         }
 
-        // Get orgId from keychain, or extract from JWT's organization claim
+        // Get orgId for room routing. Prefer pairing's personalOrgId (from desktop QR v5+)
+        // over the auth callback's orgId, because the desktop uses personalOrgId for its
+        // sync room IDs and they must match for cross-device sync to work.
         let orgId: String
-        if let stored = authManager.orgId {
+        let effectiveAuthUserId: String
+        if let pairingOrgId = KeychainManager.getPairingPersonalOrgId(),
+           let pairingUserId = KeychainManager.getPairingPersonalUserId() {
+            orgId = pairingOrgId
+            effectiveAuthUserId = pairingUserId
+            logger.info("connectIfReady: using pairing personalOrgId=\(pairingOrgId), personalUserId=\(pairingUserId)")
+        } else if let stored = authManager.orgId {
             orgId = stored
+            effectiveAuthUserId = authUserId
         } else if let extracted = extractOrgIdFromJWT(jwt) {
             orgId = extracted
+            effectiveAuthUserId = authUserId
             // Backfill keychain so we don't need to extract again
             try? KeychainManager.storeAuthSession(
                 sessionToken: KeychainManager.getSessionToken() ?? "",
@@ -240,7 +258,7 @@ public final class AppState: ObservableObject {
         }
 
         logger.info("Connecting to sync server")
-        sync.connect(authToken: jwt, authUserId: authUserId, orgId: orgId)
+        sync.connect(authToken: jwt, authUserId: effectiveAuthUserId, orgId: orgId)
         startJWTRefreshTimer()
     }
 

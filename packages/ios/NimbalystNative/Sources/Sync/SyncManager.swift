@@ -79,8 +79,25 @@ public final class SyncManager: ObservableObject {
 
     /// Update whether the app is in the foreground.
     /// Coming to foreground counts as user activity.
+    /// When returning to foreground, reconnects WebSockets if they were dropped while backgrounded.
     public func setAppInForeground(_ inForeground: Bool) {
         indexClient.setAppInForeground(inForeground)
+        if inForeground {
+            reconnectIfNeeded()
+        }
+    }
+
+    /// Reconnect the index WebSocket if it was dropped (e.g., by iOS suspending the app).
+    /// Also reconnects the active session room if one was open.
+    private func reconnectIfNeeded() {
+        if !indexClient.isConnected {
+            logger.info("[Reconnect] Index client disconnected, reconnecting...")
+            indexClient.reconnect()
+        }
+        if activeSessionId != nil && !sessionClient.isConnected {
+            logger.info("[Reconnect] Session client disconnected, reconnecting...")
+            sessionClient.reconnect()
+        }
     }
 
     // MARK: - Connection

@@ -797,10 +797,16 @@ export function registerSettingsHandlers() {
         if (!serverUrl) {
             throw new Error('serverUrl is required for QR pairing');
         }
-        // Include the sync email so mobile can validate it matches their login
+        // Include the sync email so mobile can validate it matches their login.
+        // Include personalOrgId/personalUserId so mobile uses the same room IDs as desktop.
         const authState = StytchAuth.getAuthState();
         const syncEmail = authState.user?.emails?.[0]?.email;
-        return generateQRPairingPayload(serverUrl, syncEmail);
+        return generateQRPairingPayload(
+            serverUrl,
+            syncEmail,
+            StytchAuth.getPersonalOrgId() ?? undefined,
+            StytchAuth.getPersonalUserId() ?? undefined,
+        );
     });
 
     // Check if secure storage (keychain) is available

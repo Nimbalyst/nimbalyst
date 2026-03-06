@@ -531,15 +531,21 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
             sessionsNeedingIndexUpdate.push(localSession);
             sessionsNeedingMessageSync.push(localSession.id);
           } else {
-            // Compare timestamps - if local is newer than server's last sync, we have new messages
+            // Compare timestamps AND message counts to detect sessions needing sync.
+            // The real-time pushChange sends updatedAt=Date.now() after DB write, so
+            // the server's updatedAt is often ahead of local. Message count comparison
+            // catches sessions with new messages that timestamps miss.
             const serverUpdatedAt = serverSession.updatedAt || 0;
             const localUpdatedAt = localSession.updatedAt || 0;
+            const serverMessageCount = serverSession.messageCount || 0;
+            const localMessageCount = localSession.messageCount || 0;
 
             if (localUpdatedAt > serverUpdatedAt) {
-              // We have changes the server doesn't have
               sessionsNeedingIndexUpdate.push(localSession);
               sessionsNeedingMessageSync.push(localSession.id);
-              // logger.main.info(`[SyncManager] Session ${localSession.id} needs sync: local=${localUpdatedAt} server=${serverUpdatedAt}`);
+            } else if (localMessageCount > serverMessageCount) {
+              sessionsNeedingIndexUpdate.push(localSession);
+              sessionsNeedingMessageSync.push(localSession.id);
             } else if (
               // Detect stale server metadata: desktop has fields the server doesn't.
               // This happens after server schema migrations add new columns -- existing
@@ -550,7 +556,6 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
             ) {
               sessionsNeedingIndexUpdate.push(localSession);
             }
-            // If server has same or newer timestamp, we're in sync
           }
         }
 
@@ -839,14 +844,24 @@ export async function triggerIncrementalSync(): Promise<void> {
         sessionsNeedingIndexUpdate.push(localSession);
         sessionsNeedingMessageSync.push(localSession.id);
       } else {
-        // Compare timestamps - if local is newer than server's last sync, we have new messages
+        // Compare timestamps AND message counts to detect sessions that need syncing.
+        // Note: The real-time pushChange path sends updatedAt=Date.now() AFTER the DB write,
+        // so the server's updatedAt is often slightly ahead of the local DB updated_at.
+        // Timestamp comparison alone misses sessions with new messages. Message count
+        // comparison catches these cases reliably.
         const serverUpdatedAt = serverSession.updatedAt || 0;
         const localUpdatedAt = localSession.updatedAt || 0;
+        const serverMessageCount = serverSession.messageCount || 0;
+        const localMessageCount = localSession.messageCount || 0;
 
         if (localUpdatedAt > serverUpdatedAt) {
           sessionsNeedingIndexUpdate.push(localSession);
           sessionsNeedingMessageSync.push(localSession.id);
-          logger.main.info(`[SyncManager] Session ${localSession.id} needs sync: local=${localUpdatedAt} server=${serverUpdatedAt}`);
+          logger.main.info(`[SyncManager] Session ${localSession.id} needs sync (timestamp): local=${localUpdatedAt} server=${serverUpdatedAt}`);
+        } else if (localMessageCount > serverMessageCount) {
+          sessionsNeedingIndexUpdate.push(localSession);
+          sessionsNeedingMessageSync.push(localSession.id);
+          logger.main.info(`[SyncManager] Session ${localSession.id} needs sync (messages): local=${localMessageCount} server=${serverMessageCount}`);
         }
       }
     }
