@@ -21,6 +21,7 @@ import {
 } from './ProtocolInterface';
 import {
   CodexClientLike,
+  CodexInput,
   CodexSdkModuleLike,
   CodexThreadLike,
   getEventsIterable,
@@ -156,7 +157,7 @@ export class CodexSDKProtocol implements AgentProtocol {
     const rawOptions = session.raw?.options as { abortSignal?: AbortSignal } | undefined;
 
     // Build the prompt (system prompt is now in thread options as developer_instructions)
-    const prompt = this.buildPrompt(message);
+    const input = this.buildInput(message);
 
     // Track cumulative text for delta extraction
     let lastCumulativeText = '';
@@ -167,7 +168,7 @@ export class CodexSDKProtocol implements AgentProtocol {
 
     try {
       // Run the thread with streaming
-      const runResult = await thread.runStreamed(prompt, {
+      const runResult = await thread.runStreamed(input, {
         signal: (session.raw?.options as { abortSignal?: AbortSignal })?.abortSignal,
       });
 
@@ -401,14 +402,25 @@ export class CodexSDKProtocol implements AgentProtocol {
   }
 
   /**
-   * Build prompt from message content
+   * Build thread input from message content and supported attachments.
    *
    * NOTE: System prompts are now passed via developer_instructions in thread options,
    * not injected into the user message. This is the proper Codex SDK approach.
    */
-  private buildPrompt(message: ProtocolMessage): string {
-    // Just return the message content - no wrapping or injection needed
-    // The system prompt is handled via developer_instructions config option
-    return message.content;
+  private buildInput(message: ProtocolMessage): CodexInput {
+    const imageAttachments = (message.attachments || [])
+      .filter((attachment) => attachment.type === 'image' && attachment.filepath);
+
+    if (imageAttachments.length === 0) {
+      return message.content;
+    }
+
+    return [
+      { type: 'text', text: message.content },
+      ...imageAttachments.map((attachment) => ({
+        type: 'local_image' as const,
+        path: attachment.filepath,
+      })),
+    ];
   }
 }

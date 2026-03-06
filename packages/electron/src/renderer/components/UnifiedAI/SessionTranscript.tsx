@@ -774,6 +774,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
       content: message,
       timestamp: Date.now(),
       mode: overrideMode,
+      attachments: attachments.length > 0 ? attachments : undefined,
     };
     updateSessionStore({
       sessionId,

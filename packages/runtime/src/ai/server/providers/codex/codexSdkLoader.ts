@@ -1,7 +1,19 @@
+export type CodexTextInput = {
+  type: 'text';
+  text: string;
+};
+
+export type CodexLocalImageInput = {
+  type: 'local_image';
+  path: string;
+};
+
+export type CodexInput = string | Array<CodexTextInput | CodexLocalImageInput>;
+
 export interface CodexThreadLike {
   id?: string;
   runStreamed(
-    prompt: string,
+    input: CodexInput,
     options?: Record<string, unknown>
   ): Promise<{ events?: AsyncIterable<any>; threadId?: string; thread_id?: string } | AsyncIterable<any>>;
 }

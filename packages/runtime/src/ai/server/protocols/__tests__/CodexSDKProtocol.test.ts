@@ -98,5 +98,58 @@ describe('CodexSDKProtocol', () => {
     expect(session.id).toBe('thread-from-stream');
     expect(emitted.some((event) => event.type === 'text' && event.content === '')).toBe(false);
   });
-});
 
+  it('passes image attachments as structured local_image inputs', async () => {
+    const runStreamed = vi.fn(async () => ({
+      events: createAsyncEventStream([
+        {
+          type: 'item.completed',
+          item: {
+            type: 'agent_message',
+            text: 'described image',
+          },
+        },
+      ]),
+    }));
+
+    const startThread = vi.fn(() => ({
+      id: 'thread-image-input',
+      runStreamed,
+    }));
+
+    const protocol = new CodexSDKProtocol(
+      'test-key',
+      async () =>
+        ({
+          Codex: class {
+            startThread = startThread;
+            resumeThread = vi.fn();
+          },
+        }) as any
+    );
+
+    const session = await protocol.createSession({ workspacePath: process.cwd() });
+
+    for await (const _event of protocol.sendMessage(session, {
+      content: 'Describe this image',
+      attachments: [
+        {
+          id: 'img-1',
+          filename: 'ui.png',
+          filepath: '/tmp/ui.png',
+          mimeType: 'image/png',
+          size: 1234,
+          type: 'image',
+          addedAt: Date.now(),
+        },
+      ],
+    })) {
+      // drain
+    }
+
+    expect(runStreamed).toHaveBeenCalledWith([
+      { type: 'text', text: 'Describe this image' },
+      { type: 'local_image', path: '/tmp/ui.png' },
+    ], expect.any(Object));
+  });
+});

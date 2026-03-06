@@ -188,6 +188,146 @@ describe('OpenAICodexProvider', () => {
     });
   });
 
+  it('forwards image attachments to the protocol without reducing them to prompt hints', async () => {
+    const createSession = vi.fn(async () => ({
+      id: 'thread-image-forward',
+      platform: 'codex-sdk',
+      raw: { thread: { runStreamed: vi.fn() } },
+    }));
+    const sendMessage = vi.fn((_session, _message) => createAsyncEventStream([
+      {
+        type: 'complete',
+        content: 'done',
+        usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+      },
+    ]));
+    const protocol = {
+      platform: 'codex-sdk',
+      createSession,
+      resumeSession: vi.fn(),
+      forkSession: vi.fn(),
+      sendMessage,
+      abortSession: vi.fn(),
+      cleanupSession: vi.fn(),
+    } as any;
+
+    const provider = new OpenAICodexProvider(
+      { apiKey: 'test-key' },
+      {
+        protocol,
+      }
+    );
+
+    await provider.initialize({
+      apiKey: 'test-key',
+      model: 'openai-codex:gpt-5',
+    });
+
+    const attachments = [
+      {
+        id: 'img-1',
+        filename: 'mockup.png',
+        filepath: '/tmp/mockup.png',
+        mimeType: 'image/png',
+        size: 2048,
+        type: 'image' as const,
+        addedAt: Date.now(),
+      },
+    ];
+
+    for await (const _chunk of provider.sendMessage(
+      'Review this screenshot',
+      undefined,
+      'session-image-forward',
+      [],
+      process.cwd(),
+      attachments
+    )) {
+      // drain
+    }
+
+    expect(createSession).toHaveBeenCalledTimes(1);
+    expect(sendMessage).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        content: expect.not.stringContaining('Attached files:'),
+        attachments,
+        sessionId: 'session-image-forward',
+        mode: 'agent',
+      })
+    );
+  });
+
+  it('persists Codex input attachments in logged message metadata for transcript restoration', async () => {
+    const createSession = vi.fn(async () => ({
+      id: 'thread-image-metadata',
+      platform: 'codex-sdk',
+      raw: { thread: { runStreamed: vi.fn() } },
+    }));
+    const sendMessage = vi.fn((_session, _message) => createAsyncEventStream([
+      {
+        type: 'complete',
+        content: 'done',
+        usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+      },
+    ]));
+    const protocol = {
+      platform: 'codex-sdk',
+      createSession,
+      resumeSession: vi.fn(),
+      forkSession: vi.fn(),
+      sendMessage,
+      abortSession: vi.fn(),
+      cleanupSession: vi.fn(),
+    } as any;
+
+    const provider = new OpenAICodexProvider(
+      { apiKey: 'test-key' },
+      {
+        protocol,
+      }
+    );
+    const logSpy = vi.spyOn(provider as any, 'logAgentMessageBestEffort').mockResolvedValue(undefined);
+
+    await provider.initialize({
+      apiKey: 'test-key',
+      model: 'openai-codex:gpt-5',
+    });
+
+    const attachments = [
+      {
+        id: 'img-1',
+        filename: 'mockup.png',
+        filepath: '/tmp/mockup.png',
+        mimeType: 'image/png',
+        size: 2048,
+        type: 'image' as const,
+        addedAt: Date.now(),
+      },
+    ];
+
+    for await (const _chunk of provider.sendMessage(
+      'Review this screenshot',
+      { mode: 'agent' },
+      'session-image-metadata',
+      [],
+      process.cwd(),
+      attachments
+    )) {
+      // drain
+    }
+
+    expect(logSpy).toHaveBeenCalledWith(
+      'session-image-metadata',
+      'input',
+      expect.any(String),
+      {
+        attachments,
+        mode: 'agent',
+      }
+    );
+  });
+
   it('passes packaged codexPathOverride into SDK construction when available', async () => {
     let codexConstructorOptions: Record<string, unknown> | undefined;
 

@@ -722,7 +722,8 @@ export class OpenAICodexProvider extends BaseAgentProvider {
 
     const systemPrompt = this.buildSystemPrompt(documentContext);
     const { userMessageAddition, messageWithContext } = buildUserMessageAddition(message, documentContext);
-    const messageWithAttachmentHints = this.appendAttachmentHints(messageWithContext, attachments);
+    const unsupportedAttachmentHints = attachments?.filter((attachment) => attachment.type !== 'image');
+    const messageWithAttachmentHints = this.appendAttachmentHints(messageWithContext, unsupportedAttachmentHints);
 
     // Emit prompt additions for UI
     if (sessionId && (systemPrompt || userMessageAddition || (attachments?.length ?? 0) > 0)) {
@@ -752,7 +753,19 @@ export class OpenAICodexProvider extends BaseAgentProvider {
     });
 
     if (sessionId) {
-      await this.logAgentMessageBestEffort(sessionId, 'input', prompt);
+      const metadataToLog: Record<string, unknown> = {};
+      if (attachments && attachments.length > 0) {
+        metadataToLog.attachments = attachments;
+      }
+      if (documentContext?.mode) {
+        metadataToLog.mode = documentContext.mode;
+      }
+      await this.logAgentMessageBestEffort(
+        sessionId,
+        'input',
+        prompt,
+        Object.keys(metadataToLog).length > 0 ? { metadata: metadataToLog } : undefined
+      );
     }
 
     const permissionsPath = documentContext?.permissionsPath || workspacePath;
@@ -831,7 +844,12 @@ export class OpenAICodexProvider extends BaseAgentProvider {
       });
 
       // Send message using protocol
-      for await (const event of this.protocol.sendMessage(session, { content: prompt })) {
+      for await (const event of this.protocol.sendMessage(session, {
+        content: prompt,
+        attachments,
+        sessionId,
+        mode: documentContext?.mode || 'agent',
+      })) {
         if (abortController.signal.aborted) {
           throw new Error('Operation cancelled');
         }
