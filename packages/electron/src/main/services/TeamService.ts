@@ -267,7 +267,12 @@ async function fetchTeamApi(path: string, method: string, body?: unknown, orgId?
       }
     } else if (!orgId) {
       logger.main.info('[TeamService] Got 401 on personal JWT, refreshing session...');
-      const refreshed = await refreshSession();
+      let refreshed = false;
+      try {
+        refreshed = await refreshSession();
+      } catch {
+        // Network error -- can't retry
+      }
       if (refreshed) {
         const freshJwt = getSessionJwt();
         if (freshJwt) {

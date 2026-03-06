@@ -522,6 +522,41 @@ export function registerSettingsHandlers() {
         }
     });
 
+    // Switch which account's personalOrgId is used for session sync.
+    // This persists the choice and reinitializes sync to connect to the new index room.
+    safeHandle('sync:switch-sync-account', async (_event, personalOrgId: string) => {
+        ensureStytchInitialized();
+        const accounts = StytchAuth.getAccounts();
+        const account = accounts.find(a => a.personalOrgId === personalOrgId);
+        if (!account) {
+            return { success: false, error: 'Account not found' };
+        }
+
+        const currentConfig = getSessionSyncConfig();
+        if (!currentConfig) {
+            return { success: false, error: 'Sync not configured' };
+        }
+
+        // Update the persisted sync identity
+        setSessionSyncConfig({
+            ...currentConfig,
+            personalOrgId: account.personalOrgId,
+            personalUserId: account.personalUserId ?? undefined,
+        });
+        logger.store.info('[SettingsHandlers] Switched sync account to:', account.email, account.personalOrgId);
+
+        // Reinitialize sync with the new identity
+        try {
+            const { repositoryManager } = await import('../services/RepositoryManager');
+            await repositoryManager.reinitializeSyncWithNewConfig();
+        } catch (error) {
+            logger.store.error('[SettingsHandlers] Failed to reinitialize sync after account switch:', error);
+            return { success: false, error: 'Failed to reinitialize sync' };
+        }
+
+        return { success: true };
+    });
+
     safeHandle('sync:test-connection', async (_event, config: SessionSyncConfig) => {
         // Simple test - try to connect to the health endpoint
         if (!config.serverUrl) {
@@ -801,11 +836,28 @@ export function registerSettingsHandlers() {
         // Include personalOrgId/personalUserId so mobile uses the same room IDs as desktop.
         const authState = StytchAuth.getAuthState();
         const syncEmail = authState.user?.emails?.[0]?.email;
+        const personalOrgId = StytchAuth.getPersonalOrgId() ?? undefined;
+        const personalUserId = StytchAuth.getPersonalUserId() ?? undefined;
+
+        // Persist the sync identity at pairing time -- this is the authoritative
+        // moment for which org sessions should sync to. Survives logout/re-login
+        // so login order doesn't matter.
+        if (personalOrgId) {
+            const currentConfig = getSessionSyncConfig();
+            if (currentConfig) {
+                setSessionSyncConfig({
+                    ...currentConfig,
+                    personalOrgId,
+                    personalUserId,
+                });
+            }
+        }
+
         return generateQRPairingPayload(
             serverUrl,
             syncEmail,
-            StytchAuth.getPersonalOrgId() ?? undefined,
-            StytchAuth.getPersonalUserId() ?? undefined,
+            personalOrgId,
+            personalUserId,
         );
     });
 

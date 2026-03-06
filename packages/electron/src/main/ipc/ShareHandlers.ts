@@ -193,7 +193,12 @@ async function getValidJwt(): Promise<string | null> {
   // call signOut() on failure which would nuke credentials.
   const cachedJwt = getSessionJwt();
 
-  const refreshed = await refreshSession(SHARE_SERVER_URL);
+  let refreshed = false;
+  try {
+    refreshed = await refreshSession(SHARE_SERVER_URL);
+  } catch {
+    // Network error -- fall through to cached JWT
+  }
   if (refreshed) {
     return getSessionJwt();
   }

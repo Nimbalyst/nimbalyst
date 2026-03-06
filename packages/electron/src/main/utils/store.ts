@@ -1227,6 +1227,11 @@ export interface SessionSyncConfig {
   environment?: 'development' | 'production';
   // Minutes before user is considered idle (for mobile push suppression). Default: 5
   idleTimeoutMinutes?: number;
+  // Persisted sync identity -- which personal org/user to use for sync room IDs.
+  // Set when sync is enabled or pairing happens. Survives logout/re-login so that
+  // login order doesn't affect which index room sessions sync to.
+  personalOrgId?: string;
+  personalUserId?: string;
 }
 
 // Stytch Auth Configuration (stored separately from session sync)

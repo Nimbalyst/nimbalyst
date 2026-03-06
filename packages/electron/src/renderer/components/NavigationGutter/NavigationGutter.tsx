@@ -515,12 +515,12 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
             <button
               className={`nav-button relative w-9 h-9 flex items-center justify-center border-none rounded-md cursor-pointer transition-all duration-150 p-0 active:scale-95 focus-visible:outline-2 focus-visible:outline-[var(--nim-primary)] focus-visible:outline-offset-2 ${userMenuOpen ? 'bg-nim-tertiary text-nim' : 'bg-transparent text-nim-muted hover:bg-nim-tertiary hover:text-nim'}`}
               onClick={() => setUserMenuOpen(!userMenuOpen)}
-              aria-label={isProjectConnected ? 'User menu' : 'Settings'}
+              aria-label="User menu"
               aria-expanded={userMenuOpen}
               data-testid="gutter-user-button"
             >
               <MaterialSymbol
-                icon={isProjectConnected ? 'person' : 'settings'}
+                icon="person"
                 size={20}
               />
             </button>

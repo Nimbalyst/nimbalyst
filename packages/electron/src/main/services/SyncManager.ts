@@ -382,11 +382,39 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
     // Use personalOrgId and personalUserId for session sync room IDs -- these stay
     // stable even when the JWT is scoped to a team org (after a Stytch session exchange).
     // The server relaxes the orgId check for user-scoped rooms (session/index).
-    const personalOrgId = getPersonalOrgId();
+    //
+    // IMPORTANT: Prefer the persisted config values over live auth state.
+    // The live auth state's personalOrgId depends on which account was logged in
+    // first (login order), which can be wrong after a sign-out/re-login cycle.
+    // The persisted config was set when sync was enabled or pairing happened,
+    // so it reflects the correct org regardless of login order.
+    const personalOrgId = config.personalOrgId || getPersonalOrgId();
     if (!personalOrgId) {
       logger.main.warn('[SyncManager] No personal org ID available - cannot initialize sync');
       return baseStore;
     }
+
+    // If the config didn't have a persisted personalOrgId, persist it now
+    // so future restarts/re-logins use the correct value.
+    if (!config.personalOrgId && personalOrgId) {
+      const { setSessionSyncConfig, getSessionSyncConfig } = await import('../utils/store');
+      const currentConfig = getSessionSyncConfig();
+      if (currentConfig) {
+        setSessionSyncConfig({
+          ...currentConfig,
+          personalOrgId,
+          personalUserId,
+        });
+        logger.main.info('[SyncManager] Persisted personalOrgId to sync config:', personalOrgId);
+      }
+    }
+
+    // Also prefer persisted personalUserId from config if available
+    if (config.personalUserId && config.personalUserId !== personalUserId) {
+      logger.main.info(`[SyncManager] Using persisted personalUserId=${config.personalUserId} (auth state had ${personalUserId})`);
+      personalUserId = config.personalUserId;
+    }
+
     logger.main.info(`[SyncManager] Using personalOrgId=${personalOrgId} personalUserId=${personalUserId} for sync room IDs`);
 
     const provider = createCollabV3Sync({

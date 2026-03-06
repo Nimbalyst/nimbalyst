@@ -440,21 +440,37 @@ export function initializeStytchAuth(config: StytchConfig): void {
       logger.main.info('[StytchAuthService] Stored session has no valid JWT - will attempt refresh');
       // Schedule refresh after initialization completes (don't block startup)
       setImmediate(async () => {
-        const refreshed = await refreshSession();
-        if (refreshed) {
-          logger.main.info('[StytchAuthService] Session refreshed on startup - JWT now available');
-        } else {
-          logger.main.warn('[StytchAuthService] Session refresh failed on startup - signing out');
-          await signOut();
+        try {
+          const refreshed = await refreshSession();
+          if (refreshed) {
+            logger.main.info('[StytchAuthService] Session refreshed on startup - JWT now available');
+          } else {
+            logger.main.warn('[StytchAuthService] Session refresh failed on startup - signing out');
+            await signOut();
+          }
+        } catch (error) {
+          if ((error as any)?.isNetworkError) {
+            logger.main.warn('[StytchAuthService] Network error during startup refresh - keeping credentials');
+          } else {
+            logger.main.error('[StytchAuthService] Unexpected error during startup refresh:', error);
+          }
         }
       });
     } else {
       // JWT looks valid locally, but verify it's still alive server-side
       setImmediate(async () => {
-        const refreshed = await refreshSession();
-        if (!refreshed) {
-          logger.main.warn('[StytchAuthService] Session dead server-side on startup - signing out');
-          await signOut();
+        try {
+          const refreshed = await refreshSession();
+          if (!refreshed) {
+            logger.main.warn('[StytchAuthService] Session dead server-side on startup - signing out');
+            await signOut();
+          }
+        } catch (error) {
+          if ((error as any)?.isNetworkError) {
+            logger.main.warn('[StytchAuthService] Network error during startup verification - keeping credentials');
+          } else {
+            logger.main.error('[StytchAuthService] Unexpected error during startup verification:', error);
+          }
         }
       });
     }
@@ -834,7 +850,15 @@ export async function refreshPersonalSession(serverUrl: string): Promise<boolean
   // to be the personal org. If the sub doesn't match, fall through to the
   // session exchange path to get a genuine personal-org JWT.
   if (!authState.orgId || authState.orgId === personalOrgId) {
-    const result = await refreshSession(serverUrl);
+    let result: boolean;
+    try {
+      result = await refreshSession(serverUrl);
+    } catch (error) {
+      if ((error as any)?.isNetworkError) {
+        logger.main.warn('[StytchAuthService] Network error refreshing personal session - will retry later');
+      }
+      return false;
+    }
     if (result && authState.sessionJwt) {
       // Verify the JWT sub matches personalUserId
       try {
@@ -1210,15 +1234,28 @@ export async function refreshSession(serverUrl?: string): Promise<boolean> {
   try {
     logger.main.info('[StytchAuthService] Refreshing session...');
 
-    const response = await net.fetch(`${httpUrl}/auth/refresh`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        session_token: creds.sessionToken,
-      }),
-    });
+    let response: Response;
+    try {
+      response = await net.fetch(`${httpUrl}/auth/refresh`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          session_token: creds.sessionToken,
+        }),
+      });
+    } catch (fetchError) {
+      // Network-level errors (ERR_INTERNET_DISCONNECTED, ERR_NAME_NOT_RESOLVED, etc.)
+      // are NOT auth failures -- the session may still be valid once connectivity returns.
+      // Tag the error so callers (like validateAndRefreshSession) can distinguish this
+      // from a server-confirmed auth rejection.
+      logger.main.error('[StytchAuthService] Session refresh error:', fetchError);
+      const networkError = new Error('Network error during session refresh');
+      (networkError as any).isNetworkError = true;
+      (networkError as any).cause = fetchError;
+      throw networkError;
+    }
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({})) as { expired?: boolean; error?: string };
@@ -1299,6 +1336,10 @@ export async function refreshSession(serverUrl?: string): Promise<boolean> {
     logger.main.info('[StytchAuthService] Session refreshed successfully');
     return true;
   } catch (error) {
+    // Re-throw network errors so callers can distinguish them from auth failures
+    if ((error as any)?.isNetworkError) {
+      throw error;
+    }
     logger.main.error('[StytchAuthService] Session refresh error:', error);
     return false;
   }
@@ -1312,8 +1353,12 @@ export async function refreshSession(serverUrl?: string): Promise<boolean> {
 export async function refreshSessionForAccount(personalOrgId: string): Promise<string | null> {
   // For primary account, delegate to refreshSession which updates global authState
   if (personalOrgId === primaryAccountId) {
-    const ok = await refreshSession();
-    return ok ? (authState.sessionJwt ?? null) : null;
+    try {
+      const ok = await refreshSession();
+      return ok ? (authState.sessionJwt ?? null) : null;
+    } catch {
+      return null; // Network error -- return null, don't propagate
+    }
   }
 
   // Secondary account: use its session token to hit /auth/refresh
@@ -1397,7 +1442,9 @@ function getSyncServerUrl(): string {
 /**
  * Validate the current session against the server and sign out if dead.
  * Always calls refreshSession() to verify the session is alive server-side,
- * not just locally valid. Signs out on failure so the UI stays in sync.
+ * not just locally valid. Signs out on confirmed auth failure (expired creds,
+ * server rejection) but NOT on network errors -- the session may still be
+ * valid once connectivity is restored.
  */
 export async function validateAndRefreshSession(): Promise<boolean> {
   const creds = loadStytchCredentials();
@@ -1406,13 +1453,27 @@ export async function validateAndRefreshSession(): Promise<boolean> {
     return false;
   }
 
-  const refreshed = await refreshSession();
-  if (!refreshed) {
-    logger.main.warn('[StytchAuthService] Session validation failed - signing out');
-    await signOut();
+  try {
+    const refreshed = await refreshSession();
+    if (!refreshed) {
+      // Server responded but rejected the session (401/403/expired) -- sign out
+      logger.main.warn('[StytchAuthService] Session validation failed - signing out');
+      await signOut();
+      return false;
+    }
+    return true;
+  } catch (error) {
+    if ((error as any)?.isNetworkError) {
+      // Network error (ERR_INTERNET_DISCONNECTED, DNS failure, etc.) -- the session
+      // may still be valid, we just can't reach the server. Don't nuke credentials;
+      // they'll be refreshed automatically once connectivity returns.
+      logger.main.warn('[StytchAuthService] Session refresh failed due to network error - keeping credentials');
+      return false;
+    }
+    // Unexpected error -- don't sign out, could be transient
+    logger.main.error('[StytchAuthService] Unexpected error during session validation:', error);
     return false;
   }
-  return true;
 }
 
 /**

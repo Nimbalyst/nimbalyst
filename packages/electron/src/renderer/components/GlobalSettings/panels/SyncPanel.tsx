@@ -509,27 +509,49 @@ export function SyncPanel() {
           <div className="flex flex-col gap-2">
             {/* Show all accounts if multiple, otherwise show primary */}
             {allAccounts.length > 1 ? (
-              allAccounts.map((acct) => (
-                <div key={acct.personalOrgId} className="flex items-center gap-3 p-2.5 bg-nim-secondary rounded-lg">
-                  <div className="w-9 h-9 rounded-full bg-nim-primary flex items-center justify-center text-white font-semibold text-sm shrink-0">
-                    {(acct.email?.[0] || '?').toUpperCase()}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium text-nim text-[13px] truncate">
-                      {acct.email || 'Unknown'}
+              allAccounts.map((acct) => {
+                const isSyncAccount = config.personalOrgId
+                  ? acct.personalOrgId === config.personalOrgId
+                  : acct.isPrimary;
+                return (
+                  <div key={acct.personalOrgId} className={`flex items-center gap-3 p-2.5 rounded-lg ${isSyncAccount ? 'bg-nim-primary/8 border border-nim-primary/20' : 'bg-nim-secondary'}`}>
+                    <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white font-semibold text-sm shrink-0 ${isSyncAccount ? 'bg-nim-primary' : 'bg-nim-tertiary'}`}>
+                      {(acct.email?.[0] || '?').toUpperCase()}
                     </div>
-                    <div className="text-[11px] text-nim-faint">
-                      {acct.isPrimary ? 'Primary account' : 'Additional account'}
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-nim text-[13px] truncate">
+                        {acct.email || 'Unknown'}
+                      </div>
+                      <div className="text-[11px] text-nim-faint">
+                        {isSyncAccount ? 'Sync account' : (
+                          <button
+                            onClick={async () => {
+                              try {
+                                await window.electronAPI.invoke('sync:switch-sync-account', acct.personalOrgId);
+                                // Reload config from main process to get updated personalOrgId
+                                const freshConfig = await window.electronAPI.invoke('sync:get-config');
+                                if (freshConfig) setConfig(freshConfig);
+                                loadAccounts();
+                              } catch (err) {
+                                console.error('Failed to switch sync account:', err);
+                              }
+                            }}
+                            className="text-nim-primary hover:underline cursor-pointer bg-transparent border-none p-0 text-[11px]"
+                          >
+                            Use for sync
+                          </button>
+                        )}
+                      </div>
                     </div>
+                    <button
+                      onClick={() => handleRemoveAccount(acct.personalOrgId)}
+                      className="px-3 py-1.5 text-xs bg-transparent border border-nim rounded text-nim-muted cursor-pointer hover:bg-nim-hover shrink-0"
+                    >
+                      Sign Out
+                    </button>
                   </div>
-                  <button
-                    onClick={() => handleRemoveAccount(acct.personalOrgId)}
-                    className="px-3 py-1.5 text-xs bg-transparent border border-nim rounded text-nim-muted cursor-pointer hover:bg-nim-hover shrink-0"
-                  >
-                    Sign Out
-                  </button>
-                </div>
-              ))
+                );
+              })
             ) : (
               <div className="flex items-center gap-3 p-2.5 bg-nim-secondary rounded-lg">
                 <div className="w-9 h-9 rounded-full bg-nim-primary flex items-center justify-center text-white font-semibold text-sm">

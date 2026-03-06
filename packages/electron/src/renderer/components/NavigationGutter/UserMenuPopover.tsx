@@ -100,7 +100,7 @@ export function UserMenuPopover({ onNavigateSettings, onClose, isProjectConnecte
         onClose();
       },
     },
-    // Only show Team Settings when the user is connected to a team/sync AND collaboration alpha is enabled
+    // Show Team Settings when connected AND collaboration alpha is enabled
     ...(isProjectConnected && isCollaborationEnabled ? [{
       label: 'Team Settings',
       icon: 'group' as const,
@@ -109,6 +109,15 @@ export function UserMenuPopover({ onNavigateSettings, onClose, isProjectConnecte
         onClose();
       },
     }] : []),
+    // Sync Settings -- always available (login and mobile sync are GA features)
+    {
+      label: 'Sync Settings',
+      icon: 'sync' as const,
+      onClick: () => {
+        onNavigateSettings('user', 'sync');
+        onClose();
+      },
+    },
   ];
 
   return (
@@ -132,34 +141,30 @@ export function UserMenuPopover({ onNavigateSettings, onClose, isProjectConnecte
         ))}
       </div>
 
-      {/* Identity row - only shown when connected to team/sync and collaboration is enabled */}
-      {isProjectConnected && isCollaborationEnabled && (
-        <>
-          <div className="border-t border-nim" />
-          <button
-            className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-nim-tertiary cursor-pointer border-none bg-transparent text-left transition-colors duration-100"
-            onClick={() => {
-              onNavigateSettings('user', 'sync');
-              onClose();
-            }}
-            data-testid="user-menu-identity"
-          >
-            <div className="w-7 h-7 rounded-full bg-nim-primary flex items-center justify-center shrink-0">
-              <span className="text-xs font-semibold text-white leading-none">
-                {email ? email[0].toUpperCase() : '?'}
-              </span>
-            </div>
-            <div className="flex flex-col min-w-0">
-              <span className="text-sm text-nim truncate">
-                {email ?? 'No account'}
-              </span>
-              <span className="text-xs text-nim-muted">
-                {isSignedIn ? 'Signed in' : 'Not signed in'}
-              </span>
-            </div>
-          </button>
-        </>
-      )}
+      {/* Identity row - always shown for login and mobile sync access */}
+      <div className="border-t border-nim" />
+      <button
+        className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-nim-tertiary cursor-pointer border-none bg-transparent text-left transition-colors duration-100"
+        onClick={() => {
+          onNavigateSettings('user', 'sync');
+          onClose();
+        }}
+        data-testid="user-menu-identity"
+      >
+        <div className="w-7 h-7 rounded-full bg-nim-primary flex items-center justify-center shrink-0">
+          <span className="text-xs font-semibold text-white leading-none">
+            {email ? email[0].toUpperCase() : '?'}
+          </span>
+        </div>
+        <div className="flex flex-col min-w-0">
+          <span className="text-sm text-nim truncate">
+            {email ?? 'No account'}
+          </span>
+          <span className="text-xs text-nim-muted">
+            {isSignedIn ? 'Signed in' : 'Not signed in'}
+          </span>
+        </div>
+      </button>
     </div>
   );
 }

@@ -703,6 +703,8 @@ export interface SyncConfig {
   enabledProjects?: string[]; // workspace paths that are enabled for sync
   environment?: 'development' | 'production'; // dev only: override environment
   idleTimeoutMinutes?: number; // minutes before user is considered idle (default: 5)
+  personalOrgId?: string; // persisted sync identity -- which org to use for sync room IDs
+  personalUserId?: string;
 }
 
 /**
@@ -803,6 +805,8 @@ export async function initSyncConfig(): Promise<SyncConfig> {
         enabledProjects: config.enabledProjects ?? defaultSyncConfig.enabledProjects,
         environment: config.environment ?? defaultSyncConfig.environment,
         idleTimeoutMinutes: config.idleTimeoutMinutes ?? defaultSyncConfig.idleTimeoutMinutes,
+        personalOrgId: config.personalOrgId,
+        personalUserId: config.personalUserId,
       };
     }
   } catch (error) {
