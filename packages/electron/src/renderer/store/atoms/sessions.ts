@@ -324,6 +324,16 @@ export const sessionLastSubmitAtAtom = atomFamily((_sessionId: string) =>
 );
 
 /**
+ * Per-session timestamp of last local draft modification (epoch ms).
+ * Tracks when the user last typed in the AIInput on this device.
+ * Used to reject stale sync echoes: if a remote draft has draftUpdatedAt
+ * older than our local modification time, the remote draft is stale.
+ */
+export const sessionDraftLocalModifiedAtAtom = atomFamily((_sessionId: string) =>
+  atom<number>(0)
+);
+
+/**
  * Set draft input for a session.
  *
  * This is the canonical way to set a session's initial prompt when creating

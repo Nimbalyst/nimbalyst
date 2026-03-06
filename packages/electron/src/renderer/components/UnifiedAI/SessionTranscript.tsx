@@ -66,7 +66,7 @@ import {
   clearSessionError,
   loadInitialQueuedPrompts,
 } from '../../store';
-import { convertToWorkstreamAtom, sessionPromptAdditionsAtom, sessionLastSubmitAtAtom } from '../../store/atoms/sessions';
+import { convertToWorkstreamAtom, sessionPromptAdditionsAtom, sessionLastSubmitAtAtom, sessionDraftLocalModifiedAtAtom } from '../../store/atoms/sessions';
 import { scrollToTeammateAtom } from '../../store/atoms/agentMode';
 import { usePostHog } from 'posthog-js/react';
 import { setAgentModeSettingsAtom, showPromptAdditionsAtom, hasExternalEditorAtom, externalEditorNameAtom, openInExternalEditorAtom, defaultAgentModelAtom, defaultEffortLevelAtom } from '../../store/atoms/appSettings';
@@ -292,9 +292,16 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   }, [sessionData?.metadata, defaultEffortLevel]);
 
   // Draft input state via Jotai atoms - only this component re-renders on typing
-  const [draftInput, setDraftInput] = useAtom(sessionDraftInputAtom(sessionId));
+  const [draftInput, setDraftInputRaw] = useAtom(sessionDraftInputAtom(sessionId));
   const [draftAttachments, setDraftAttachments] = useAtom(sessionDraftAttachmentsAtom(sessionId));
   const setLastSubmitAt = useSetAtom(sessionLastSubmitAtAtom(sessionId));
+  const setDraftLocalModifiedAt = useSetAtom(sessionDraftLocalModifiedAtAtom(sessionId));
+
+  // Wrap setDraftInput to track local modification time for sync echo rejection
+  const setDraftInput = useCallback((value: string | ((prev: string) => string)) => {
+    setDraftInputRaw(value);
+    setDraftLocalModifiedAt(Date.now());
+  }, [setDraftInputRaw, setDraftLocalModifiedAt]);
 
   // Debounced persistence of draft input to database
   // This ensures drafts survive app restarts

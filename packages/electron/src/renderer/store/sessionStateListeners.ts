@@ -38,6 +38,7 @@ import {
   sessionStoreAtom,
   sessionDraftInputAtom,
   sessionLastSubmitAtAtom,
+  sessionDraftLocalModifiedAtAtom,
   type PendingPrompt,
 } from './atoms/sessions';
 import { workstreamActiveChildAtom, workstreamStateAtom } from './atoms/workstreamState';
@@ -576,8 +577,8 @@ export function initSessionStateListeners(): () => void {
 
   /**
    * Handle cross-device draft input from sync.
-   * Apply the remote draft unless it's a stale echo from before a local submit.
-   * The user's next local keystroke will immediately override via debounced push.
+   * Apply the remote draft unless it's a stale echo from before a local submit
+   * or older than what the user is currently typing locally.
    */
   const handleSyncDraftInput = (data: { sessionId: string; draftInput: string; draftUpdatedAt?: number }) => {
     const { sessionId, draftInput, draftUpdatedAt } = data;
@@ -588,6 +589,17 @@ export function initSessionStateListeners(): () => void {
     if (draftInput && draftUpdatedAt) {
       const lastSubmitAt = store.get(sessionLastSubmitAtAtom(sessionId));
       if (lastSubmitAt > 0 && draftUpdatedAt <= lastSubmitAt) {
+        return;
+      }
+    }
+
+    // Reject sync echoes older than our local typing.
+    // When the user is actively typing, the local modification timestamp advances
+    // ahead of any echoed drafts from the server. Only accept remote drafts that
+    // are genuinely newer (e.g., typed on mobile after we stopped typing here).
+    if (draftUpdatedAt) {
+      const localModifiedAt = store.get(sessionDraftLocalModifiedAtAtom(sessionId));
+      if (localModifiedAt > 0 && draftUpdatedAt <= localModifiedAt) {
         return;
       }
     }
