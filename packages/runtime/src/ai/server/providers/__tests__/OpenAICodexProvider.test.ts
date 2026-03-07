@@ -322,8 +322,10 @@ describe('OpenAICodexProvider', () => {
       'input',
       expect.any(String),
       {
-        attachments,
-        mode: 'agent',
+        metadata: {
+          attachments,
+          mode: 'agent',
+        },
       }
     );
   });
