@@ -20,6 +20,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.55.25] - 2026-03-07
+
+
+### Changed
+- CollabV3 updated to 0.1.36
+
+### Fixed
+- Suppress mobile push notifications when desktop app is active
+- Mobile session creation fails after sync reconnection
+
 ## [0.55.24] - 2026-03-06
 
 
