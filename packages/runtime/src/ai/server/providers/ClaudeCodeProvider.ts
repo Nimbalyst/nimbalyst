@@ -125,6 +125,7 @@ const CLAUDE_CODE_MODEL_LABELS: Record<ClaudeCodeVariant, string> = {
 export class ClaudeCodeProvider extends BaseAgentProvider {
   private currentMode?: 'planning' | 'agent'; // Track session mode for prompt customization and tool filtering
   private slashCommands: string[] = []; // Available slash commands from SDK
+  private skills: string[] = []; // Available user-invocable skills from SDK
   private markMessagesAsHidden: boolean = false; // Flag to mark next messages as hidden
   private helperMethod: ClaudeHelperMethod = 'electron'; // Track which helper method is being used
 
@@ -1639,6 +1640,9 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
               // Capture available slash commands
               if (chunk.slash_commands && Array.isArray(chunk.slash_commands)) {
                 this.slashCommands = chunk.slash_commands;
+              }
+              if (chunk.skills && Array.isArray(chunk.skills)) {
+                this.skills = chunk.skills;
               }
 
               // Track session initialization with MCP, slash commands, agents, skills, and plugins counts
@@ -3246,6 +3250,13 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
    */
   getSlashCommands(): string[] {
     return [...this.slashCommands];
+  }
+
+  /**
+   * Get available skills discovered from the SDK init payload.
+   */
+  getSkills(): string[] {
+    return [...this.skills];
   }
 
   /**

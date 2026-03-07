@@ -9,6 +9,8 @@ export interface TriggerMatch {
   endIndex: number;
 }
 
+export type SlashTypeaheadScope = 'commands' | 'skills';
+
 /**
  * Extract trigger match from text at cursor position
  * @param value Current textarea value
@@ -40,10 +42,15 @@ export function extractTriggerMatch(
       continue;
     }
 
-    // Special handling for slash commands - must be at the very start
+    // Slash commands/skills can start at the beginning of the prompt or after whitespace.
+    // This keeps `/skill-name` usable inside natural language prompts while avoiding
+    // triggers inside words like "foo/bar".
     if (trigger === '/') {
-      if (lastTriggerIndex !== 0) {
-        continue;
+      if (lastTriggerIndex > 0) {
+        const charBeforeTrigger = textBeforeCursor[lastTriggerIndex - 1];
+        if (!/\s/.test(charBeforeTrigger)) {
+          continue;
+        }
       }
     } else {
       // For other triggers (like @), check if at start or preceded by whitespace
@@ -58,6 +65,14 @@ export function extractTriggerMatch(
 
     // Extract query from trigger to cursor
     const query = textBeforeCursor.substring(lastTriggerIndex + trigger.length);
+
+    if (trigger === '/') {
+      // Slash commands and skills are single tokens like /review or /my-skill.
+      // Ignore path-like values (/Users/me) and stop once the user has typed args.
+      if (query.includes('/') || /\s/.test(query)) {
+        continue;
+      }
+    }
 
     // Query ends on:
     // - Double-space (intentional break)
@@ -83,6 +98,19 @@ export function extractTriggerMatch(
   }
 
   return closestMatch;
+}
+
+/**
+ * Slash completion is context-sensitive:
+ * - At column 0, show slash commands
+ * - Later in the prompt, show skills only
+ */
+export function getSlashTypeaheadScope(match: TriggerMatch | null): SlashTypeaheadScope | null {
+  if (!match || match.trigger !== '/') {
+    return null;
+  }
+
+  return match.startIndex === 0 ? 'commands' : 'skills';
 }
 
 /**

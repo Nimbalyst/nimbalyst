@@ -4902,22 +4902,25 @@ export class AIService {
 
           if ('getSlashCommands' in provider && typeof (provider as any).getSlashCommands === 'function') {
             const commands = (provider as any).getSlashCommands();
+            const skills = 'getSkills' in provider && typeof (provider as any).getSkills === 'function'
+              ? (provider as any).getSkills()
+              : [];
 
             // If commands array is empty, return empty array
-            if (commands.length === 0) {
-              return { success: true, commands: [] };
+            if (commands.length === 0 && skills.length === 0) {
+              return { success: true, commands: [], skills: [] };
             }
 
-            return { success: true, commands };
+            return { success: true, commands, skills };
           } else {
           }
         }
 
         // No provider found - return empty commands
-        return { success: true, commands: [] };
+        return { success: true, commands: [], skills: [] };
       } catch (error) {
         console.error('[AIService] Error getting slash commands:', error);
-        return { success: false, commands: [], error: error instanceof Error ? error.message : 'Unknown error' };
+        return { success: false, commands: [], skills: [], error: error instanceof Error ? error.message : 'Unknown error' };
       }
     });
 

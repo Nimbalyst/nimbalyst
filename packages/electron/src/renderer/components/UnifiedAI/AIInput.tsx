@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, KeyboardEvent, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { GenericTypeahead, TypeaheadOption } from '../Typeahead/GenericTypeahead';
-import { extractTriggerMatch, insertAtTrigger, TriggerMatch } from '../Typeahead/typeaheadUtils';
+import { extractTriggerMatch, getSlashTypeaheadScope, insertAtTrigger, type SlashTypeaheadScope, TriggerMatch } from '../Typeahead/typeaheadUtils';
 import type { ChatAttachment } from '@nimbalyst/runtime';
 import type { TokenUsageCategory } from '@nimbalyst/runtime/ai/server/types';
 import type { EffortLevel } from '../../utils/modelUtils';
@@ -348,10 +348,12 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
         try {
           // Get SDK commands from ClaudeCodeProvider if available
           let sdkCommands: string[] = [];
+          let sdkSkills: string[] = [];
           try {
             const sdkResult = await window.electronAPI.invoke('ai:getSlashCommands', sessionId);
             if (sdkResult?.success && Array.isArray(sdkResult.commands)) {
               sdkCommands = sdkResult.commands;
+              sdkSkills = Array.isArray(sdkResult.skills) ? sdkResult.skills : [];
               // console.log('[AIInput] Got SDK commands from provider:', sdkCommands);
             }
           } catch (sdkError) {
@@ -361,7 +363,8 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
           // Fetch all commands (built-in + custom)
           const commands = await window.electronAPI.invoke('slash-command:list', {
             workspacePath,
-            sdkCommands
+            sdkCommands,
+            sdkSkills,
           });
 
           setAllSlashCommands(commands || []);
@@ -376,6 +379,9 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
 
     // Get icon for command based on name and source
     const getCommandIcon = (cmd: any): string => {
+      if (cmd.kind === 'skill') {
+        return 'psychology';
+      }
       if (cmd.source === 'builtin') {
         const builtinIcons: Record<string, string> = {
           'compact': 'compress',
@@ -422,9 +428,10 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
     };
 
     // Filter and sort slash commands based on query
-    const filterSlashCommands = useCallback((query: string) => {
+    const filterSlashCommands = useCallback((query: string, scope: SlashTypeaheadScope) => {
       const hasQuery = query.length > 0;
       const filtered = allSlashCommands
+        .filter(cmd => scope === 'commands' ? cmd.kind !== 'skill' : cmd.kind === 'skill')
         .map(cmd => ({
           cmd,
           score: scoreCommand(cmd.name, query)
@@ -443,10 +450,14 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
             icon: getCommandIcon(cmd),
             // Only show sections when there's no filter query (full list)
             // When filtering, we want pure relevance-based ordering without section grouping
-            section: hasQuery ? undefined :
-                     cmd.source === 'builtin' ? 'Built-in Commands' :
-                     cmd.source === 'project' ? 'Project Commands' :
-                     cmd.source === 'plugin' ? 'Extension Commands' : 'User Commands',
+            section: hasQuery ? undefined : (
+              cmd.kind === 'skill'
+                ? (cmd.source === 'project' ? 'Project Skills' :
+                   cmd.source === 'plugin' ? 'Plugin Skills' : 'User Skills')
+                : (cmd.source === 'builtin' ? 'Built-in Commands' :
+                   cmd.source === 'project' ? 'Project Commands' :
+                   cmd.source === 'plugin' ? 'Extension Commands' : 'User Commands')
+            ),
             data: cmd
           };
         });
@@ -496,15 +507,23 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
         // Update cursor position for GenericTypeahead dropdown positioning
         setCursorPosition(pos);
 
+        if (match.trigger === '/' && enableSlashCommands) {
+          const slashScope = getSlashTypeaheadScope(match);
+          if (slashScope) {
+            filterSlashCommands(match.query, slashScope);
+          } else {
+            setSlashCommandOptions([]);
+          }
+          setSelectedIndex(0);
+          return undefined;
+        }
+
         // Debounce the expensive filtering operations
         const timerId = setTimeout(() => {
           if (match.trigger === '@@' && workspacePath) {
             searchSessionMention({ workspacePath, query: match.query, excludeSessionId: sessionId });
           } else if (match.trigger === '@' && workspacePath) {
             searchFileMention({ workspacePath, query: match.query });
-          } else if (match.trigger === '/' && enableSlashCommands) {
-            filterSlashCommands(match.query);
-            setSelectedIndex(0);
           }
         }, 150); // 150ms debounce - fast enough to feel instant, slow enough to skip intermediate keystrokes
 
@@ -513,6 +532,7 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
         setTypeaheadMatch(null);
         setSelectedIndex(null);
         setSelectedOption(null);
+        setSlashCommandOptions([]);
       }
       return undefined;
     }, [value, workspacePath, searchFileMention, searchSessionMention, sessionId, filterSlashCommands, enableSlashCommands]);
@@ -543,14 +563,23 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
           const match = extractTriggerMatch(value, pos, triggers);
           if (match) {
             setTypeaheadMatch(match);
+            if (match.trigger === '/' && enableSlashCommands) {
+              const slashScope = getSlashTypeaheadScope(match);
+              if (slashScope) {
+                filterSlashCommands(match.query, slashScope);
+              } else {
+                setSlashCommandOptions([]);
+              }
+            }
           } else {
             setTypeaheadMatch(null);
             setSelectedIndex(null);
             setSelectedOption(null);
+            setSlashCommandOptions([]);
           }
         }
       }
-    }, [value, workspacePath, enableSlashCommands]);
+    }, [value, workspacePath, enableSlashCommands, filterSlashCommands]);
 
     useEffect(() => {
       const textarea = textareaRef.current;

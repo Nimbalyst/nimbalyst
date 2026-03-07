@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, KeyboardEvent, useState, useCallback } from 'react';
 import { GenericTypeahead, TypeaheadOption } from '../Typeahead/GenericTypeahead';
-import { extractTriggerMatch, insertAtTrigger, TriggerMatch } from '../Typeahead/typeaheadUtils';
+import { extractTriggerMatch, getSlashTypeaheadScope, insertAtTrigger, type SlashTypeaheadScope, TriggerMatch } from '../Typeahead/typeaheadUtils';
 import type { ChatAttachment } from '@nimbalyst/runtime';
 import { AttachmentPreviewList } from './AttachmentPreviewList';
 
@@ -71,10 +71,12 @@ export function AgenticInput({
       try {
         // Get SDK commands from ClaudeCodeProvider if available
         let sdkCommands: string[] = [];
+        let sdkSkills: string[] = [];
         try {
           const sdkResult = await window.electronAPI.invoke('ai:getSlashCommands', sessionId);
           if (sdkResult?.success && Array.isArray(sdkResult.commands)) {
             sdkCommands = sdkResult.commands;
+            sdkSkills = Array.isArray(sdkResult.skills) ? sdkResult.skills : [];
             // console.log('[AgenticInput] Got SDK commands from provider:', sdkCommands);
           }
         } catch (sdkError) {
@@ -84,7 +86,8 @@ export function AgenticInput({
         // Fetch all commands (built-in + custom)
         const commands = await window.electronAPI.invoke('slash-command:list', {
           workspacePath,
-          sdkCommands
+          sdkCommands,
+          sdkSkills,
         });
 
         setAllSlashCommands(commands || []);
@@ -100,6 +103,9 @@ export function AgenticInput({
 
   // Get icon for command based on name and source
   const getCommandIcon = (cmd: any): string => {
+    if (cmd.kind === 'skill') {
+      return 'psychology';
+    }
     if (cmd.source === 'builtin') {
       // Built-in command icons
       const builtinIcons: Record<string, string> = {
@@ -145,8 +151,9 @@ export function AgenticInput({
   };
 
   // Filter and sort slash commands based on query
-  const filterSlashCommands = useCallback((query: string) => {
+  const filterSlashCommands = useCallback((query: string, scope: SlashTypeaheadScope) => {
     const filtered = allSlashCommands
+      .filter(cmd => scope === 'commands' ? cmd.kind !== 'skill' : cmd.kind === 'skill')
       .map(cmd => ({
         cmd,
         score: scoreCommand(cmd.name, query)
@@ -163,8 +170,12 @@ export function AgenticInput({
           label,
           description: cmd.description || `Execute ${cmd.name} command`,
           icon: getCommandIcon(cmd),
-          section: cmd.source === 'builtin' ? 'Built-in Commands' :
-                   cmd.source === 'project' ? 'Project Commands' : 'User Commands',
+          section: cmd.kind === 'skill'
+            ? (cmd.source === 'project' ? 'Project Skills' :
+               cmd.source === 'plugin' ? 'Plugin Skills' : 'User Skills')
+            : (cmd.source === 'builtin' ? 'Built-in Commands' :
+               cmd.source === 'project' ? 'Project Commands' :
+               cmd.source === 'plugin' ? 'Extension Commands' : 'User Commands'),
           data: cmd
         };
       });
@@ -196,7 +207,10 @@ export function AgenticInput({
       } else if (match.trigger === '/') {
         // Slash command - filter from already-loaded commands
         // (Now uses static fallback so commands are always available)
-        filterSlashCommands(match.query);
+        const slashScope = getSlashTypeaheadScope(match);
+        if (slashScope) {
+          filterSlashCommands(match.query, slashScope);
+        }
 
         // Auto-select first option
         setSelectedIndex(0);
@@ -205,6 +219,7 @@ export function AgenticInput({
       setTypeaheadMatch(null);
       setSelectedIndex(null);
       setSelectedOption(null);
+      setSlashCommandOptions([]);
     }
   }, [value, cursorPosition, onFileMentionSearch, filterSlashCommands, allSlashCommands]);
 

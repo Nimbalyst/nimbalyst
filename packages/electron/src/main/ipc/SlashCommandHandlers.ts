@@ -4,7 +4,7 @@
 
 import { SlashCommandService, SlashCommand } from '../services/SlashCommandService';
 import { safeHandle, safeOn } from '../utils/ipcRegistry';
-import { getExtensionPluginCommands } from './ExtensionHandlers';
+import { getClaudePluginPaths, getExtensionPluginCommands } from './ExtensionHandlers';
 import { syncProjectCommandsToMobile } from '../services/SyncManager';
 
 // Cache services by workspace path
@@ -27,9 +27,9 @@ function getService(workspacePath: string): SlashCommandService {
  */
 export function registerSlashCommandHandlers() {
   // List all available slash commands (custom + SDK + extension plugins)
-  safeHandle('slash-command:list', async (event, payload: { workspacePath: string; sdkCommands?: string[] }) => {
+  safeHandle('slash-command:list', async (event, payload: { workspacePath: string; sdkCommands?: string[]; sdkSkills?: string[] }) => {
     try {
-      const { workspacePath, sdkCommands = [] } = payload;
+      const { workspacePath, sdkCommands = [], sdkSkills = [] } = payload;
 
       if (!workspacePath) {
         console.warn('[SlashCommandHandlers] No workspace path provided');
@@ -37,7 +37,12 @@ export function registerSlashCommandHandlers() {
       }
 
       const service = getService(workspacePath);
-      const commands = await service.listCommands(sdkCommands);
+      const claudePluginPaths = await getClaudePluginPaths(workspacePath);
+      const commands = await service.listCommands(
+        sdkCommands,
+        sdkSkills,
+        claudePluginPaths.map(plugin => plugin.path)
+      );
 
       // Also get extension plugin commands
       const extensionPluginCommands = await getExtensionPluginCommands();
@@ -76,9 +81,9 @@ export function registerSlashCommandHandlers() {
   });
 
   // Get a specific command
-  safeHandle('slash-command:get', async (event, payload: { workspacePath: string; commandName: string; sdkCommands?: string[] }) => {
+  safeHandle('slash-command:get', async (event, payload: { workspacePath: string; commandName: string; sdkCommands?: string[]; sdkSkills?: string[] }) => {
     try {
-      const { workspacePath, commandName, sdkCommands = [] } = payload;
+      const { workspacePath, commandName, sdkCommands = [], sdkSkills = [] } = payload;
 
       if (!workspacePath) {
         console.warn('[SlashCommandHandlers] No workspace path provided');
@@ -86,7 +91,13 @@ export function registerSlashCommandHandlers() {
       }
 
       const service = getService(workspacePath);
-      const command = await service.getCommand(commandName, sdkCommands);
+      const claudePluginPaths = await getClaudePluginPaths(workspacePath);
+      const command = await service.getCommand(
+        commandName,
+        sdkCommands,
+        sdkSkills,
+        claudePluginPaths.map(plugin => plugin.path)
+      );
 
       return command;
     } catch (error) {
