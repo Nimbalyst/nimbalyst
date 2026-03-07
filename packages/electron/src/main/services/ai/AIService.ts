@@ -58,7 +58,7 @@ import {
 } from '../../utils/store';
 import { mergeAISettings } from '../../utils/aiSettingsMerge';
 import { DocumentContextService, type RawDocumentContext, type PreparedDocumentContext } from '@nimbalyst/runtime';
-import { getMessageSyncHandler, getSyncProvider, deriveDeviceStatus } from '../SyncManager';
+import { getMessageSyncHandler, getSyncProvider, isDesktopTrulyAway } from '../SyncManager';
 import { normalizeCodexProviderConfig, omitModelsField, stripTransientProviderFields } from '@nimbalyst/runtime/ai/server/utils/modelConfigUtils';
 import { isFileInWorkspaceOrWorktree, resolveProjectPath } from '../../utils/workspaceDetection';
 import { SessionFilesRepository } from '@nimbalyst/runtime';
@@ -3503,19 +3503,17 @@ export class AIService {
                   provider: session.provider
                 });
 
-                // Request mobile push notification for agent completion
-                // Only send when desktop user is idle or away to avoid notification spam
-                if (syncProvider) {
-                  const desktopStatus = deriveDeviceStatus();
-                  if (desktopStatus !== 'active') {
-                    // logger.main.info('[AIService] Requesting mobile push for session:', session.id, 'status:', desktopStatus);
-                    syncProvider.requestMobilePush?.(
-                      session.id,
-                      session.title || 'AI Session',
-                      notificationBody
-                    );
-                  }
-                  // else: desktop is active, suppress mobile push
+                // Request mobile push notification for agent completion.
+                // Only send when user has truly left their computer (screen locked or idle
+                // past threshold). When the window is merely unfocused (user in another app),
+                // the Electron notification above already covers it -- sending a mobile push
+                // too causes duplicates via iPhone Mirroring / Continuity.
+                if (syncProvider && isDesktopTrulyAway()) {
+                  syncProvider.requestMobilePush?.(
+                    session.id,
+                    session.title || 'AI Session',
+                    notificationBody
+                  );
                 }
 
                 // Show community popup after 3 completed sessions that used tools.
@@ -3729,8 +3727,8 @@ export class AIService {
               metadata: { isExecuting: false, hasPendingPrompt: false, updatedAt: Date.now() },
             });
 
-            // Request mobile push notification for agent error (only when desktop idle/away)
-            if (deriveDeviceStatus() !== 'active') {
+            // Request mobile push notification for agent error (only when truly away)
+            if (isDesktopTrulyAway()) {
               syncProvider.requestMobilePush?.(
                 session.id,
                 session.title || 'AI Session',
