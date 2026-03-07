@@ -3287,6 +3287,8 @@ export class AIService {
                 const newOutputTokens = tokenUsage.output_tokens || 0;
                 const newTotalTokens = newInputTokens + newOutputTokens;
                 const isCodexProvider = session.provider === 'openai-codex';
+                const codexInitData = isCodexProvider ? (provider as any).getInitData?.() : null;
+                const isResumedCodexThread = codexInitData?.isResumedThread === true;
 
                 const codexContextWindow =
                   isCodexProvider
@@ -3294,20 +3296,58 @@ export class AIService {
                     : currentUsage.contextWindow;
 
                 // Codex SDK turn.completed usage is cumulative for the provider thread.
-                // Other non-claude providers report per-turn deltas, so those are accumulated.
-                const nextInputTokens = isCodexProvider
-                  ? (tokenUsage.input_tokens ?? currentUsage.inputTokens)
-                  : currentUsage.inputTokens + newInputTokens;
-                const nextOutputTokens = isCodexProvider
-                  ? (tokenUsage.output_tokens ?? currentUsage.outputTokens)
-                  : currentUsage.outputTokens + newOutputTokens;
+                // Convert to per-session deltas using the last seen cumulative snapshot.
+                let nextInputTokens = currentUsage.inputTokens + newInputTokens;
+                let nextOutputTokens = currentUsage.outputTokens + newOutputTokens;
+                let nextTotalTokens = currentUsage.totalTokens + newTotalTokens;
+                let providerCumulativeInputTokens = currentUsage.providerCumulativeInputTokens;
+                let providerCumulativeOutputTokens = currentUsage.providerCumulativeOutputTokens;
+
+                if (isCodexProvider) {
+                  const cumulativeInput = tokenUsage.input_tokens ?? 0;
+                  const cumulativeOutput = tokenUsage.output_tokens ?? 0;
+
+                  const previousCumulativeInput =
+                    typeof currentUsage.providerCumulativeInputTokens === 'number'
+                      ? currentUsage.providerCumulativeInputTokens
+                      : currentUsage.inputTokens > 0
+                        ? currentUsage.inputTokens
+                        : undefined;
+                  const previousCumulativeOutput =
+                    typeof currentUsage.providerCumulativeOutputTokens === 'number'
+                      ? currentUsage.providerCumulativeOutputTokens
+                      : currentUsage.outputTokens > 0
+                        ? currentUsage.outputTokens
+                        : undefined;
+
+                  const hasPreviousCumulative =
+                    typeof previousCumulativeInput === 'number' &&
+                    typeof previousCumulativeOutput === 'number';
+
+                  const deltaInput = hasPreviousCumulative
+                    ? Math.max(cumulativeInput - previousCumulativeInput, 0)
+                    : (isResumedCodexThread ? 0 : cumulativeInput);
+                  const deltaOutput = hasPreviousCumulative
+                    ? Math.max(cumulativeOutput - previousCumulativeOutput, 0)
+                    : (isResumedCodexThread ? 0 : cumulativeOutput);
+
+                  nextInputTokens = currentUsage.inputTokens + deltaInput;
+                  nextOutputTokens = currentUsage.outputTokens + deltaOutput;
+                  nextTotalTokens = currentUsage.totalTokens + deltaInput + deltaOutput;
+                  providerCumulativeInputTokens = cumulativeInput;
+                  providerCumulativeOutputTokens = cumulativeOutput;
+                }
 
                 const updatedUsage: NonNullable<SessionData['tokenUsage']> = {
                   inputTokens: nextInputTokens,
                   outputTokens: nextOutputTokens,
                   totalTokens: isCodexProvider
-                    ? nextInputTokens + nextOutputTokens
+                    ? nextTotalTokens
                     : currentUsage.totalTokens + newTotalTokens,
+                  ...(isCodexProvider ? {
+                    providerCumulativeInputTokens,
+                    providerCumulativeOutputTokens,
+                  } : {}),
                   contextWindow: codexContextWindow,
                   currentContext:
                     isCodexProvider && !contextCompacted

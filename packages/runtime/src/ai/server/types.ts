@@ -253,6 +253,10 @@ export interface SessionData {
     inputTokens: number;      // Cumulative input tokens across session lifetime
     outputTokens: number;     // Cumulative output tokens across session lifetime
     totalTokens: number;      // Total tokens (input + output)
+    // Internal Codex baseline tracking for cumulative SDK snapshots.
+    // Not user-facing; used to convert provider-cumulative usage into per-session deltas.
+    providerCumulativeInputTokens?: number;
+    providerCumulativeOutputTokens?: number;
     contextWindow?: number;   // Max context window size for the model (legacy, use currentContext)
     categories?: TokenUsageCategory[]; // Breakdown parsed from /context output (legacy, use currentContext)
     costUSD?: number;         // Total cost in USD (from SDK modelUsage)

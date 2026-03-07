@@ -63,59 +63,15 @@ export class UsageAnalyticsService {
         s.workspace_id,
         s.created_at,
         s.updated_at,
-        CASE
-          WHEN s.provider = 'openai-codex' THEN
-            COALESCE(
-              codex_usage.input_tokens,
-              (s.metadata->'tokenUsage'->>'inputTokens')::bigint,
-              0
-            )
-          ELSE
-            COALESCE((s.metadata->'tokenUsage'->>'inputTokens')::bigint, 0)
-        END AS input_tokens,
-        CASE
-          WHEN s.provider = 'openai-codex' THEN
-            COALESCE(
-              codex_usage.output_tokens,
-              (s.metadata->'tokenUsage'->>'outputTokens')::bigint,
-              0
-            )
-          ELSE
-            COALESCE((s.metadata->'tokenUsage'->>'outputTokens')::bigint, 0)
-        END AS output_tokens,
-        CASE
-          WHEN s.provider = 'openai-codex' THEN
-            COALESCE(
-              codex_usage.input_tokens,
-              (s.metadata->'tokenUsage'->>'inputTokens')::bigint,
-              0
-            ) +
-            COALESCE(
-              codex_usage.output_tokens,
-              (s.metadata->'tokenUsage'->>'outputTokens')::bigint,
-              0
-            )
-          ELSE
-            COALESCE(
-              (s.metadata->'tokenUsage'->>'totalTokens')::bigint,
-              COALESCE((s.metadata->'tokenUsage'->>'inputTokens')::bigint, 0) +
-              COALESCE((s.metadata->'tokenUsage'->>'outputTokens')::bigint, 0),
-              0
-            )
-        END AS total_tokens
+        COALESCE((s.metadata->'tokenUsage'->>'inputTokens')::bigint, 0) AS input_tokens,
+        COALESCE((s.metadata->'tokenUsage'->>'outputTokens')::bigint, 0) AS output_tokens,
+        COALESCE(
+          (s.metadata->'tokenUsage'->>'totalTokens')::bigint,
+          COALESCE((s.metadata->'tokenUsage'->>'inputTokens')::bigint, 0) +
+          COALESCE((s.metadata->'tokenUsage'->>'outputTokens')::bigint, 0),
+          0
+        ) AS total_tokens
       FROM ai_sessions s
-      LEFT JOIN LATERAL (
-        SELECT
-          (m.content::jsonb->'usage'->>'input_tokens')::bigint AS input_tokens,
-          (m.content::jsonb->'usage'->>'output_tokens')::bigint AS output_tokens
-        FROM ai_agent_messages m
-        WHERE m.session_id = s.id
-          AND m.source = 'openai-codex'
-          AND m.direction = 'output'
-          AND m.metadata->>'eventType' = 'turn.completed'
-        ORDER BY m.created_at DESC
-        LIMIT 1
-      ) codex_usage ON TRUE
       WHERE s.metadata->'tokenUsage' IS NOT NULL
     )
   `;
@@ -246,21 +202,134 @@ export class UsageAnalyticsService {
 
     const params = workspaceId ? [startDate, endDate, workspaceId] : [startDate, endDate];
 
-    const whereClause = workspaceId
-      ? `WHERE workspace_id = $3 AND created_at >= to_timestamp($1 / 1000.0) AND created_at <= to_timestamp($2 / 1000.0)`
-      : `WHERE created_at >= to_timestamp($1 / 1000.0) AND created_at <= to_timestamp($2 / 1000.0)`;
+    const timeRangeClause = `created_at >= to_timestamp($1 / 1000.0) AND created_at <= to_timestamp($2 / 1000.0)`;
+    const nonCodexWhereClause = workspaceId
+      ? `WHERE provider <> 'openai-codex' AND workspace_id = $3 AND ${timeRangeClause}`
+      : `WHERE provider <> 'openai-codex' AND ${timeRangeClause}`;
+    const codexWorkspaceFilter = workspaceId ? `AND s.workspace_id = $3` : '';
 
     const result = await this.db.query(
       `${this.SESSION_TOKEN_USAGE_CTE}
+      , non_codex_bucketed AS (
+        SELECT
+          DATE_TRUNC('${truncFunc}', created_at) AS bucket,
+          COALESCE(SUM(input_tokens), 0)::bigint AS input_tokens,
+          COALESCE(SUM(output_tokens), 0)::bigint AS output_tokens,
+          COALESCE(SUM(total_tokens), 0)::bigint AS total_tokens,
+          COUNT(DISTINCT id)::bigint AS session_count
+        FROM session_token_usage
+        ${nonCodexWhereClause}
+        GROUP BY DATE_TRUNC('${truncFunc}', created_at)
+      )
+      , codex_turns_raw AS (
+        SELECT
+          m.session_id,
+          m.created_at,
+          s.provider_session_id,
+          GREATEST(
+            COALESCE((m.content::jsonb->'usage'->>'input_tokens')::bigint, 0) -
+            COALESCE((m.content::jsonb->'usage'->>'cached_input_tokens')::bigint, 0),
+            0
+          ) AS input_tokens,
+          COALESCE((m.content::jsonb->'usage'->>'output_tokens')::bigint, 0) AS output_tokens
+        FROM ai_agent_messages m
+        JOIN ai_sessions s ON s.id = m.session_id
+        WHERE s.provider = 'openai-codex'
+          ${codexWorkspaceFilter}
+          AND m.direction = 'output'
+          AND m.metadata->>'eventType' = 'turn.completed'
+      )
+      , codex_turns AS (
+        SELECT
+          tr.session_id,
+          tr.created_at,
+          tr.provider_session_id,
+          tr.input_tokens,
+          tr.output_tokens
+        FROM codex_turns_raw tr
+        LEFT JOIN LATERAL (
+          SELECT mi.metadata
+          FROM ai_agent_messages mi
+          WHERE mi.session_id = tr.session_id
+            AND mi.direction = 'input'
+            AND mi.created_at <= tr.created_at
+          ORDER BY mi.created_at DESC
+          LIMIT 1
+        ) nearest_input ON TRUE
+        WHERE COALESCE(nearest_input.metadata->>'promptType', '') <> 'system_reminder'
+      )
+      , codex_first_turn AS (
+        SELECT
+          session_id,
+          MIN(created_at) AS first_turn_at
+        FROM codex_turns
+        GROUP BY session_id
+      )
+      , codex_baseline AS (
+        SELECT
+          ft.session_id,
+          COALESCE(prev.input_tokens, 0) AS baseline_input_tokens,
+          COALESCE(prev.output_tokens, 0) AS baseline_output_tokens
+        FROM codex_first_turn ft
+        JOIN ai_sessions s ON s.id = ft.session_id
+        LEFT JOIN LATERAL (
+          SELECT
+            ct_prev.input_tokens,
+            ct_prev.output_tokens
+          FROM codex_turns ct_prev
+          WHERE ct_prev.provider_session_id = s.provider_session_id
+            AND ct_prev.created_at < ft.first_turn_at
+          ORDER BY ct_prev.created_at DESC
+          LIMIT 1
+        ) prev ON TRUE
+      )
+      , codex_turns_with_prev AS (
+        SELECT
+          ct.session_id,
+          ct.created_at,
+          GREATEST(
+            ct.input_tokens - COALESCE(
+              LAG(ct.input_tokens) OVER (PARTITION BY ct.session_id ORDER BY ct.created_at),
+              cb.baseline_input_tokens,
+              0
+            ),
+            0
+          ) AS input_tokens,
+          GREATEST(
+            ct.output_tokens - COALESCE(
+              LAG(ct.output_tokens) OVER (PARTITION BY ct.session_id ORDER BY ct.created_at),
+              cb.baseline_output_tokens,
+              0
+            ),
+            0
+          ) AS output_tokens
+        FROM codex_turns ct
+        LEFT JOIN codex_baseline cb ON cb.session_id = ct.session_id
+      )
+      , codex_bucketed AS (
+        SELECT
+          DATE_TRUNC('${truncFunc}', created_at) AS bucket,
+          COALESCE(SUM(input_tokens), 0)::bigint AS input_tokens,
+          COALESCE(SUM(output_tokens), 0)::bigint AS output_tokens,
+          COALESCE(SUM(input_tokens + output_tokens), 0)::bigint AS total_tokens,
+          COUNT(DISTINCT session_id)::bigint AS session_count
+        FROM codex_turns_with_prev
+        WHERE ${timeRangeClause}
+        GROUP BY DATE_TRUNC('${truncFunc}', created_at)
+      )
+      , combined AS (
+        SELECT * FROM non_codex_bucketed
+        UNION ALL
+        SELECT * FROM codex_bucketed
+      )
       SELECT
-        EXTRACT(EPOCH FROM DATE_TRUNC('${truncFunc}', created_at)) * 1000 as timestamp,
+        EXTRACT(EPOCH FROM bucket) * 1000 as timestamp,
         COALESCE(SUM(input_tokens), 0) as input_tokens,
         COALESCE(SUM(output_tokens), 0) as output_tokens,
         COALESCE(SUM(total_tokens), 0) as total_tokens,
-        COUNT(DISTINCT id) as session_count
-      FROM session_token_usage
-      ${whereClause}
-      GROUP BY DATE_TRUNC('${truncFunc}', created_at)
+        COALESCE(SUM(session_count), 0) as session_count
+      FROM combined
+      GROUP BY bucket
       ORDER BY timestamp ASC`,
       params
     );
