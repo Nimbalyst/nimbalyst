@@ -554,9 +554,9 @@ export class ExtensionLoader {
 
             // Skip if we've already seen this extension ID (user extensions take priority)
             if (seenIds.has(validationResult.id)) {
-              console.info(
-                `[ExtensionLoader] Skipping duplicate extension ${validationResult.id} at ${extensionPath}`
-              );
+              // console.info(
+              //   `[ExtensionLoader] Skipping duplicate extension ${validationResult.id} at ${extensionPath}`
+              // );
               continue;
             }
             seenIds.add(validationResult.id);
