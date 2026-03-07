@@ -138,7 +138,7 @@ export async function getOrgScopedJwt(orgId: string, accountOrgId?: string): Pro
   if (cached && cached.expiresAt > Date.now()) {
     return cached.jwt;
   }
-  logger.main.info(`[TeamService] Org JWT cache miss for ${orgId}, exchanging session...`);
+  // logger.main.info(`[TeamService] Org JWT cache miss for ${orgId}, exchanging session...`);
 
   // Need to exchange -- use the correct account's session token
   const sessionToken = accountOrgId
@@ -452,7 +452,7 @@ export async function findTeamForWorkspace(workspacePath: string): Promise<TeamD
     const activeTeams = teams.filter(t => !t.membershipType || t.membershipType === 'active_member');
     const match = activeTeams.find(t => t.gitRemoteHash === remoteHash) || null;
     if (match) {
-      logger.main.info('[TeamService] findTeamForWorkspace: matched team:', match.name, 'orgId:', match.orgId, 'for workspace:', workspacePath);
+      // logger.main.info('[TeamService] findTeamForWorkspace: matched team:', match.name, 'orgId:', match.orgId, 'for workspace:', workspacePath);
     } else if (teams.length > 0) {
       logger.main.info('[TeamService] findTeamForWorkspace: no hash match. workspace hash:', remoteHash, 'team hashes:', teams.map(t => ({ orgId: t.orgId, name: t.name, hash: t.gitRemoteHash, membership: t.membershipType })));
     }

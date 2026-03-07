@@ -143,7 +143,7 @@ export function registerDocumentSyncHandlers(): void {
     const wsId = `ws-proxy-${++wsIdCounter}`;
     const webContents = event.sender;
 
-    logger.main.info('[DocumentSyncHandlers] WS proxy connect', { wsId, url: payload.url.replace(/token=[^&]+/, 'token=<redacted>') });
+    // logger.main.info('[DocumentSyncHandlers] WS proxy connect', { wsId, url: payload.url.replace(/token=[^&]+/, 'token=<redacted>') });
 
     // Safe send: guard against webContents being destroyed (e.g., window closed)
     function safeSend(data: Record<string, unknown>): void {
@@ -161,7 +161,7 @@ export function registerDocumentSyncHandlers(): void {
       proxiedWebSockets.set(wsId, ws);
 
       ws.on('open', () => {
-        logger.main.info('[DocumentSyncHandlers] WS proxy open', { wsId });
+        // logger.main.info('[DocumentSyncHandlers] WS proxy open', { wsId });
         safeSend({ wsId, type: 'open' });
       });
 
@@ -172,7 +172,7 @@ export function registerDocumentSyncHandlers(): void {
       });
 
       ws.on('close', (code: number, reason: Buffer) => {
-        logger.main.info('[DocumentSyncHandlers] WS proxy close', { wsId, code, reason: reason.toString() });
+        // logger.main.info('[DocumentSyncHandlers] WS proxy close', { wsId, code, reason: reason.toString() });
         safeSend({ wsId, type: 'close', code, reason: reason.toString() });
         proxiedWebSockets.delete(wsId);
       });
@@ -259,7 +259,7 @@ export function registerDocumentSyncHandlers(): void {
     const orgKeyBase64 = Buffer.from(rawBytes).toString('base64');
     const serverUrl = getSyncWsUrl();
 
-    logger.main.info('[DocumentSyncHandlers] Resolved doc index config', { orgId, serverUrl, userId });
+    // logger.main.info('[DocumentSyncHandlers] Resolved doc index config', { orgId, serverUrl, userId });
 
     return {
       success: true,

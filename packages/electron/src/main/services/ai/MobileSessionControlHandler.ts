@@ -90,7 +90,7 @@ export function initMobileSessionControlHandler(
     handleControlMessage(message, findWindowByWorkspace);
   });
 
-  log.info('Mobile session control handler initialized');
+  // log.info('Mobile session control handler initialized');
 
   return cleanup;
 }

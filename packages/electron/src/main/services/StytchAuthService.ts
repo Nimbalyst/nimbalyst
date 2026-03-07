@@ -961,7 +961,7 @@ export function updateSessionToken(newSessionToken: string): void {
   if (authState.personalOrgId) {
     updateAccountCredentials(authState.personalOrgId, { sessionToken: newSessionToken });
   }
-  logger.main.info('[StytchAuthService] Session token updated after exchange');
+  // logger.main.info('[StytchAuthService] Session token updated after exchange');
 }
 
 /**

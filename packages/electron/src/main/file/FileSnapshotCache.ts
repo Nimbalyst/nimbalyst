@@ -55,7 +55,7 @@ export class FileSnapshotCache {
       await this.initFullScan(workspacePath);
     }
 
-    logger.main.info('[FileSnapshotCache] Session started', this.getStats());
+    // logger.main.info('[FileSnapshotCache] Session started', this.getStats());
   }
 
   stopSession(): void {

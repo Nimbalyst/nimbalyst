@@ -1764,11 +1764,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
               timestamp: message.request.timestamp,
             };
 
-            // Debug logging
-            console.log('[CollabV3] Received create_session_request from mobile:', decryptedRequest.requestId, 'projectId:', projectId);
-
             // Notify all listeners (desktop will handle this)
-            console.log('[CollabV3] Notifying', createSessionRequestListeners.size, 'listeners');
             createSessionRequestListeners.forEach((callback) => {
               try {
                 callback(decryptedRequest);
@@ -2034,7 +2030,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       const sessionMap = new Map(sessionsData.map(s => [s.id, s]));
       const sessionIds = messageSyncRequests.map(r => r.sessionId);
 
-      console.log('[CollabV3] Lazy batch syncing messages for', sessionIds.length, 'sessions in batches of', batchSize);
+      // console.log('[CollabV3] Lazy batch syncing messages for', sessionIds.length, 'sessions in batches of', batchSize);
 
       for (let i = 0; i < sessionIds.length; i += batchSize) {
         const batchIds = sessionIds.slice(i, i + batchSize);
@@ -2062,7 +2058,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
         }
       }
 
-      console.log('[CollabV3] Lazy batch sync complete');
+      // console.log('[CollabV3] Lazy batch sync complete');
       return;
     }
 

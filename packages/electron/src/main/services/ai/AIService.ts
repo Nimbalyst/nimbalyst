@@ -58,7 +58,7 @@ import {
 } from '../../utils/store';
 import { mergeAISettings } from '../../utils/aiSettingsMerge';
 import { DocumentContextService, type RawDocumentContext, type PreparedDocumentContext } from '@nimbalyst/runtime';
-import { getMessageSyncHandler, getSyncProvider } from '../SyncManager';
+import { getMessageSyncHandler, getSyncProvider, deriveDeviceStatus } from '../SyncManager';
 import { normalizeCodexProviderConfig, omitModelsField, stripTransientProviderFields } from '@nimbalyst/runtime/ai/server/utils/modelConfigUtils';
 import { isFileInWorkspaceOrWorktree, resolveProjectPath } from '../../utils/workspaceDetection';
 import { SessionFilesRepository } from '@nimbalyst/runtime';
@@ -808,6 +808,7 @@ export class AIService {
   }
 
   private mobileSyncHandlerInitialized = false;
+  private lastSyncProvider: import('@nimbalyst/runtime/sync').SyncProvider | null = null;
   private syncStatusUnsubscribe: (() => void) | null = null;
 
   /**
@@ -908,18 +909,20 @@ export class AIService {
 
     // If already initialized, don't do it again
     if (this.mobileSyncHandlerInitialized) {
-      logger.main.info('[AIService] Mobile sync handler already initialized, skipping');
+      // logger.main.info('[AIService] Mobile sync handler already initialized, skipping');
       return;
     }
 
-    logger.main.info('[AIService] Initializing mobile sync handler (metadata sync only)...');
+    // logger.main.info('[AIService] Initializing mobile sync handler (metadata sync only)...');
 
     // First, subscribe to sync status changes so we can initialize later if sync becomes available
     if (!this.syncStatusUnsubscribe) {
       const { onSyncStatusChange } = await import('../SyncManager');
       this.syncStatusUnsubscribe = onSyncStatusChange((status) => {
-        if (status.connected && !this.mobileSyncHandlerInitialized) {
-          logger.main.info('[AIService] Sync connected, attempting to initialize mobile sync handler...');
+        if (status.connected) {
+          // Always attempt on connect - tryInitializeMobileSyncHandler checks provider identity
+          // to re-register listeners when the provider is recreated on reconnection
+          // logger.main.info('[AIService] Sync connected, attempting to initialize mobile sync handler...');
           this.tryInitializeMobileSyncHandler();
         }
       });
@@ -930,18 +933,20 @@ export class AIService {
   }
 
   private async tryInitializeMobileSyncHandler() {
-    // If already initialized, don't do it again
-    if (this.mobileSyncHandlerInitialized) {
-      return;
-    }
-
     try {
       const syncProvider = getSyncProvider();
 
       if (!syncProvider) {
-        logger.main.info('[AIService] Sync provider not available yet');
+        // logger.main.info('[AIService] Sync provider not available yet');
         return;
       }
+
+      // If already initialized on THIS provider instance, skip.
+      // When the provider is recreated (reconnection), we must re-register listeners.
+      if (this.mobileSyncHandlerInitialized && this.lastSyncProvider === syncProvider) {
+        return;
+      }
+      this.lastSyncProvider = syncProvider;
 
       // Listen for index changes and insert queued prompts into the queued_prompts table
       if (syncProvider.onIndexChange) {
@@ -970,7 +975,7 @@ export class AIService {
 
                   // Forward draftInput from remote device
                   if (entry.draftInput !== undefined) {
-                    logger.main.info('[AIService] Forwarding draftInput to renderer:', { sessionId, draftInput: entry.draftInput });
+                    // logger.main.info('[AIService] Forwarding draftInput to renderer:', { sessionId, draftInput: entry.draftInput });
                     targetWindow.webContents.send('sessions:sync-draft-input', {
                       sessionId,
                       draftInput: entry.draftInput ?? '',
@@ -979,12 +984,12 @@ export class AIService {
                   }
                 } else {
                   if (entry.draftInput !== undefined) {
-                    logger.main.info('[AIService] DEBUG: draftInput present but no targetWindow for projectId:', cachedEntry.projectId);
+                    // logger.main.info('[AIService] DEBUG: draftInput present but no targetWindow for projectId:', cachedEntry.projectId);
                   }
                 }
               } else {
                 if (entry.draftInput !== undefined) {
-                  logger.main.info('[AIService] DEBUG: draftInput present but no projectId in cachedEntry for session:', sessionId);
+                  // logger.main.info('[AIService] DEBUG: draftInput present but no projectId in cachedEntry for session:', sessionId);
                 }
               }
             }
@@ -1007,14 +1012,14 @@ export class AIService {
                   // Skip prompts that were created locally (echoed back via Y.js sync)
                   // Local prompts have IDs starting with 'local-'
                   if (prompt.id.startsWith('local-')) {
-                    logger.main.info(`[AIService] Prompt ${prompt.id} is a local prompt echoed via sync, skipping`);
+                    // logger.main.info(`[AIService] Prompt ${prompt.id} is a local prompt echoed via sync, skipping`);
                     continue;
                   }
 
                   // Check if prompt already exists
                   const existing = await queueStore.get(prompt.id);
                   if (existing) {
-                    logger.main.info(`[AIService] Prompt ${prompt.id} already exists, skipping`);
+                    // logger.main.info(`[AIService] Prompt ${prompt.id} already exists, skipping`);
                     continue;
                   }
 
@@ -1029,7 +1034,7 @@ export class AIService {
                 }
 
                 if (newPromptsCount === 0) {
-                  logger.main.info('[AIService] No new prompts to process, all already exist');
+                  // logger.main.info('[AIService] No new prompts to process, all already exist');
                   return;
                 }
 
@@ -1060,7 +1065,7 @@ export class AIService {
                 if (session.workspacePath) {
                   const targetWindow = findWindowByWorkspace(session.workspacePath);
                   if (targetWindow && !targetWindow.isDestroyed()) {
-                    logger.main.info('[AIService] Notifying window to process queue for workspace:', session.workspacePath);
+                    // logger.main.info('[AIService] Notifying window to process queue for workspace:', session.workspacePath);
                     targetWindow.webContents.send('ai:queuedPromptsReceived', {
                       sessionId,
                       promptCount: newPromptsCount,
@@ -1069,7 +1074,7 @@ export class AIService {
 
                     // Directly trigger queue processing from main process
                     // This ensures mobile messages are processed even when the session isn't open in the UI
-                    logger.main.info('[AIService] Triggering queue processing for mobile prompt');
+                    // logger.main.info('[AIService] Triggering queue processing for mobile prompt');
                     this.processQueuedPrompt(sessionId, session.workspacePath, targetWindow);
                   } else {
                     logger.main.warn('[AIService] No window found for workspace:', session.workspacePath);
@@ -1086,9 +1091,9 @@ export class AIService {
           });
 
         this.mobileSyncHandlerInitialized = true;
-        logger.main.info('[AIService] Mobile sync handler initialized (using queued_prompts table)');
+        // logger.main.info('[AIService] Mobile sync handler initialized (using queued_prompts table)');
       } else {
-        logger.main.info('[AIService] onIndexChange not available on sync provider');
+        // logger.main.info('[AIService] onIndexChange not available on sync provider');
       }
 
       // Listen for session creation requests from mobile
@@ -1102,7 +1107,7 @@ export class AIService {
 
           // Deduplicate requests - same request can be delivered multiple times
           if (this.processingMobileSessionRequests.has(request.requestId)) {
-            logger.main.info('[AIService] Ignoring duplicate session creation request:', request.requestId);
+            // logger.main.info('[AIService] Ignoring duplicate session creation request:', request.requestId);
             return;
           }
           this.processingMobileSessionRequests.add(request.requestId);
@@ -1205,7 +1210,7 @@ export class AIService {
               workspacePath
             });
             if (session && syncProvider.syncSessionsToIndex) {
-              logger.main.info('[AIService] Syncing new session to index:', session.id);
+              // logger.main.info('[AIService] Syncing new session to index:', session.id);
               syncProvider.syncSessionsToIndex([{
                 id: session.id,
                 title: session.title ?? 'Untitled',
@@ -1224,7 +1229,7 @@ export class AIService {
 
             // Notify renderer to refresh session list
             if (targetWindow && !targetWindow.isDestroyed()) {
-              logger.main.info('[AIService] Notifying renderer to refresh session list after mobile session creation');
+              // logger.main.info('[AIService] Notifying renderer to refresh session list after mobile session creation');
               targetWindow.webContents.send('sessions:refresh-list', {
                 workspacePath,
                 sessionId: session.id
@@ -1233,7 +1238,7 @@ export class AIService {
 
             // Send success response
             if (syncProvider.sendCreateSessionResponse) {
-              logger.main.info('[AIService] Sending success response to mobile for:', request.requestId);
+              // logger.main.info('[AIService] Sending success response to mobile for:', request.requestId);
               syncProvider.sendCreateSessionResponse({
                 requestId: request.requestId,
                 success: true,
@@ -1255,10 +1260,10 @@ export class AIService {
                 prompt: request.initialPrompt
               });
 
-              logger.main.info('[AIService] Queued initial prompt from mobile:', {
-                sessionId: session.id,
-                promptId
-              });
+              // logger.main.info('[AIService] Queued initial prompt from mobile:', {
+              //   sessionId: session.id,
+              //   promptId
+              // });
 
               // Notify the window to process the queue
               if (targetWindow && !targetWindow.isDestroyed()) {
@@ -1289,9 +1294,9 @@ export class AIService {
           }
         });
 
-        logger.main.info('[AIService] Session creation request handler initialized');
+        // logger.main.info('[AIService] Session creation request handler initialized');
       } else {
-        logger.main.info('[AIService] onCreateSessionRequest not available on sync provider');
+        // logger.main.info('[AIService] onCreateSessionRequest not available on sync provider');
       }
 
       // Handle worktree creation requests from mobile
@@ -1400,7 +1405,7 @@ export class AIService {
             }
           }
         });
-        logger.main.info('[AIService] Worktree creation request handler initialized');
+        // logger.main.info('[AIService] Worktree creation request handler initialized');
       }
 
       // Initialize mobile session control handler (cancel, question responses, etc.)
@@ -3499,15 +3504,18 @@ export class AIService {
                 });
 
                 // Request mobile push notification for agent completion
+                // Only send when desktop user is idle or away to avoid notification spam
                 if (syncProvider) {
-                  // logger.main.info('[AIService] Requesting mobile push for session:', session.id, 'hasMethod:', !!syncProvider.requestMobilePush);
-                  syncProvider.requestMobilePush?.(
-                    session.id,
-                    session.title || 'AI Session',
-                    notificationBody
-                  );
-                } else {
-                  logger.main.info('[AIService] No syncProvider for mobile push');
+                  const desktopStatus = deriveDeviceStatus();
+                  if (desktopStatus !== 'active') {
+                    // logger.main.info('[AIService] Requesting mobile push for session:', session.id, 'status:', desktopStatus);
+                    syncProvider.requestMobilePush?.(
+                      session.id,
+                      session.title || 'AI Session',
+                      notificationBody
+                    );
+                  }
+                  // else: desktop is active, suppress mobile push
                 }
 
                 // Show community popup after 3 completed sessions that used tools.
@@ -3721,12 +3729,14 @@ export class AIService {
               metadata: { isExecuting: false, hasPendingPrompt: false, updatedAt: Date.now() },
             });
 
-            // Request mobile push notification for agent error
-            syncProvider.requestMobilePush?.(
-              session.id,
-              session.title || 'AI Session',
-              'Error occurred'
-            );
+            // Request mobile push notification for agent error (only when desktop idle/away)
+            if (deriveDeviceStatus() !== 'active') {
+              syncProvider.requestMobilePush?.(
+                session.id,
+                session.title || 'AI Session',
+                'Error occurred'
+              );
+            }
           }
         }
 

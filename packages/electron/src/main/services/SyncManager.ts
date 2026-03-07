@@ -196,7 +196,7 @@ export function setIdleThresholdMs(ms: number): void {
 /**
  * Derive the device status based on focus, activity, and screen lock.
  */
-function deriveDeviceStatus(): 'active' | 'idle' | 'away' {
+export function deriveDeviceStatus(): 'active' | 'idle' | 'away' {
   const idleTime = Date.now() - lastActivityAt;
 
   // If screen is locked, user is definitely "away"
@@ -480,7 +480,7 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
     });
 
     // Sync existing sessions and projects to index using delta sync
-    logger.main.info('[SyncManager] Setting up incremental sync...');
+    // logger.main.info('[SyncManager] Setting up incremental sync...');
     setTimeout(async () => {
       const syncStart = performance.now();
       // logger.main.info('[SyncManager] Starting initial incremental sync...');
@@ -607,7 +607,7 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
 
           const { getSessionMessagesForSyncBatch } = await import('./PGLiteSessionStore');
 
-          logger.main.info(`[SyncManager] Syncing ${sessionsNeedingIndexUpdate.length} sessions (${sessionsNeedingMessageSync.length} need message sync, messages will load lazily)`);
+          // logger.main.info(`[SyncManager] Syncing ${sessionsNeedingIndexUpdate.length} sessions (${sessionsNeedingMessageSync.length} need message sync, messages will load lazily)`);
           provider.syncSessionsToIndex(sessionsNeedingIndexUpdate, {
             syncMessages: sessionsNeedingMessageSync.length > 0,
             messageSyncRequests,
@@ -801,7 +801,7 @@ export async function triggerIncrementalSync(): Promise<void> {
   lastIncrementalSyncAt = now;
 
   const syncStart = performance.now();
-  logger.main.info('[SyncManager] Starting triggered incremental sync...');
+  // logger.main.info('[SyncManager] Starting triggered incremental sync...');
 
   try {
     // Fetch the server's current index
@@ -810,7 +810,7 @@ export async function triggerIncrementalSync(): Promise<void> {
     try {
       serverIndex = await provider.fetchIndex();
       const fetchTime = performance.now() - fetchStart;
-      logger.main.info(`[SyncManager] Triggered sync: server has ${serverIndex.sessions.length} sessions (fetch took ${fetchTime.toFixed(1)}ms)`);
+      // logger.main.info(`[SyncManager] Triggered sync: server has ${serverIndex.sessions.length} sessions (fetch took ${fetchTime.toFixed(1)}ms)`);
     } catch (fetchError) {
       // Don't fall back to full sync - that would load ALL messages for ALL sessions into memory
       // and cause OOM crashes. Instead, attempt to reconnect and skip this sync cycle.
@@ -834,13 +834,13 @@ export async function triggerIncrementalSync(): Promise<void> {
     const { getAllSessionsForSync } = await import('./PGLiteSessionStore');
     const allLocalSessions = await getAllSessionsForSync(false);
     const localTime = performance.now() - localStart;
-    logger.main.info(`[SyncManager] Triggered sync: local has ${allLocalSessions.length} sessions (query took ${localTime.toFixed(1)}ms)`);
+    // logger.main.info(`[SyncManager] Triggered sync: local has ${allLocalSessions.length} sessions (query took ${localTime.toFixed(1)}ms)`);
 
     // Get enabled projects filter
     const { store } = await import('../utils/store');
     const syncSettings = store.get('sessionSync');
     const enabledProjects = syncSettings?.enabledProjects ?? [];
-    logger.main.info(`[SyncManager] Triggered sync: enabled projects: ${JSON.stringify(enabledProjects)}`);
+    // logger.main.info(`[SyncManager] Triggered sync: enabled projects: ${JSON.stringify(enabledProjects)}`);
 
     // Only sync explicitly selected projects
     const enabledProjectIds = new Set(enabledProjects);
@@ -885,19 +885,19 @@ export async function triggerIncrementalSync(): Promise<void> {
         if (localUpdatedAt > serverUpdatedAt) {
           sessionsNeedingIndexUpdate.push(localSession);
           sessionsNeedingMessageSync.push(localSession.id);
-          logger.main.info(`[SyncManager] Session ${localSession.id} needs sync (timestamp): local=${localUpdatedAt} server=${serverUpdatedAt}`);
+          // logger.main.info(`[SyncManager] Session ${localSession.id} needs sync (timestamp): local=${localUpdatedAt} server=${serverUpdatedAt}`);
         } else if (localMessageCount > serverMessageCount) {
           sessionsNeedingIndexUpdate.push(localSession);
           sessionsNeedingMessageSync.push(localSession.id);
-          logger.main.info(`[SyncManager] Session ${localSession.id} needs sync (messages): local=${localMessageCount} server=${serverMessageCount}`);
+          // logger.main.info(`[SyncManager] Session ${localSession.id} needs sync (messages): local=${localMessageCount} server=${serverMessageCount}`);
         }
       }
     }
 
-    logger.main.info(`[SyncManager] Triggered sync: ${sessionsNeedingIndexUpdate.length}/${allLocalSessions.length} sessions need update, ${sessionsNeedingMessageSync.length} need message sync (server has ${serverIndex.sessions.length})`);
+    // logger.main.info(`[SyncManager] Triggered sync: ${sessionsNeedingIndexUpdate.length}/${allLocalSessions.length} sessions need update, ${sessionsNeedingMessageSync.length} need message sync (server has ${serverIndex.sessions.length})`);
 
     if (sessionsNeedingIndexUpdate.length === 0 && sessionsNeedingMessageSync.length === 0) {
-      logger.main.info('[SyncManager] Triggered sync: all sessions up to date');
+      // logger.main.info('[SyncManager] Triggered sync: all sessions up to date');
     } else {
       const messageSyncRequests = sessionsNeedingMessageSync.length > 0
         ? sessionsNeedingIndexUpdate
@@ -910,7 +910,7 @@ export async function triggerIncrementalSync(): Promise<void> {
 
       const { getSessionMessagesForSyncBatch } = await import('./PGLiteSessionStore');
 
-      logger.main.info(`[SyncManager] Syncing ${sessionsNeedingIndexUpdate.length} sessions (${sessionsNeedingMessageSync.length} need message sync, messages will load lazily)`);
+      // logger.main.info(`[SyncManager] Syncing ${sessionsNeedingIndexUpdate.length} sessions (${sessionsNeedingMessageSync.length} need message sync, messages will load lazily)`);
       provider.syncSessionsToIndex(sessionsNeedingIndexUpdate, {
         syncMessages: sessionsNeedingMessageSync.length > 0,
         messageSyncRequests,

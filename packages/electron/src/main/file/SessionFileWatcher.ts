@@ -109,7 +109,7 @@ export class SessionFileWatcher {
       onUnlink: (filePath: string) => this.handleUnlink(filePath),
     });
 
-    logger.main.info('[SessionFileWatcher] Started watching:', { workspacePath, sessionId });
+    // logger.main.info('[SessionFileWatcher] Started watching:', { workspacePath, sessionId });
   }
 
   async stop(): Promise<void> {

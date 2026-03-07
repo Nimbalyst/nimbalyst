@@ -456,11 +456,11 @@ export function updateDocumentState(state: any, sessionId?: string) {
 
   // filePath is optional - if missing, only global-scoped extension tools will be available
   // This is normal for agent mode sessions without a specific file open
-  if (!state?.filePath) {
-    console.log(
-      `[MCP Server] No filePath in document state for session ${sessionId} - only global tools will be available`
-    );
-  }
+  // if (!state?.filePath) {
+  //   console.log(
+  //     `[MCP Server] No filePath in document state for session ${sessionId} - only global tools will be available`
+  //   );
+  // }
 
   // DEFENSIVE LOGGING: Log exactly what we received
   //   sessionId,
@@ -1331,13 +1331,13 @@ The commit message should follow these guidelines:
       const editorTools = extensionTools.filter(
         (t) => t.scope === "editor"
       ).length;
-      console.log(
-        `[MCP Server] Including ${
-          extensionTools.length
-        } extension tools (${globalTools} global, ${editorTools} editor-scoped) for workspace: ${workspacePath}, file: ${
-          currentFilePath || "none"
-        }`
-      );
+      // console.log(
+      //   `[MCP Server] Including ${
+      //     extensionTools.length
+      //   } extension tools (${globalTools} global, ${editorTools} editor-scoped) for workspace: ${workspacePath}, file: ${
+      //     currentFilePath || "none"
+      //   }`
+      // );
     }
 
     const allTools = [...builtInTools, ...extensionToolSchemas];

@@ -426,12 +426,12 @@ export class AgentToolHooks {
           // Check if the pending tag is from the current session
           if (existingTag.sessionId === this.sessionId) {
             // Same session - skip creating another (existing behavior)
-            console.log('[PRE-EDIT SKIP]', JSON.stringify({
-              file: path.basename(filePath),
-              existingTagAge: tagAge + 'ms',
-              existingTagId: existingTag.id,
-              reason: 'same_session_tag',
-            }));
+            // console.log('[PRE-EDIT SKIP]', JSON.stringify({
+            //   file: path.basename(filePath),
+            //   existingTagAge: tagAge + 'ms',
+            //   existingTagId: existingTag.id,
+            //   reason: 'same_session_tag',
+            // }));
             return;
           }
 
@@ -447,13 +447,12 @@ export class AgentToolHooks {
           await this.historyManager.updateTagStatus(filePath, existingTag.id, 'reviewed');
         }
 
-        // PRODUCTION LOG: Track when new tag is created
         const tagId = `ai-edit-pending-${this.sessionId || 'unknown'}-${toolUseId}`;
-        console.log('[PRE-EDIT TAG]', JSON.stringify({
-          file: path.basename(filePath),
-          tagId,
-          isNewFile,
-        }));
+        // console.log('[PRE-EDIT TAG]', JSON.stringify({
+        //   file: path.basename(filePath),
+        //   tagId,
+        //   isNewFile,
+        // }));
 
         // Get content: empty for new files, current content for existing files
         const content = isNewFile ? '' : fs.readFileSync(filePath, 'utf-8');

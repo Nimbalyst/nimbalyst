@@ -460,7 +460,7 @@ export class HistoryManager {
           return;
         }
 
-        logger.main.info('[HistoryManager] Keeping existing pre-edit tag for same session:', { filePath, sessionId });
+        // logger.main.debug('[HistoryManager] Keeping existing pre-edit tag for same session:', { filePath, sessionId });
         return;
       }
 
@@ -503,7 +503,7 @@ export class HistoryManager {
         }
       ]);
 
-      logger.main.info('[HistoryManager] Created tag:', { filePath, tagId, sessionId, toolUseId });
+      // logger.main.info('[HistoryManager] Created tag:', { filePath, tagId, sessionId, toolUseId });
 
       // Re-emit file change after pending tag creation so open editors can
       // re-evaluate diff mode with a guaranteed persisted baseline. The original

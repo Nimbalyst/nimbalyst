@@ -272,14 +272,14 @@ class WorkspaceFileEditAttributionServiceImpl {
         counters.tagsCreated++;
       }
 
-      logger.main.info('[WorkspaceFileEditAttributionService] Attributed file edit:', {
-        workspacePath: event.workspacePath,
-        filePath: event.filePath,
-        sessionId: winner.sessionId,
-        score: winner.score,
-        reasons: winner.reasons,
-        messageId: winner.messageId,
-      });
+      // logger.main.info('[WorkspaceFileEditAttributionService] Attributed file edit:', {
+      //   workspacePath: event.workspacePath,
+      //   filePath: event.filePath,
+      //   sessionId: winner.sessionId,
+      //   score: winner.score,
+      //   reasons: winner.reasons,
+      //   messageId: winner.messageId,
+      // });
 
       const windows = BrowserWindow.getAllWindows();
       for (const window of windows) {

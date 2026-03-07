@@ -294,11 +294,11 @@ export async function subscribe(
   if (existing) {
     existing.refCount++;
     existing.listeners.set(subscriberId, listener);
-    logger.main.info('[WorkspaceEventBus] Reusing shared watcher for workspace:', {
-      workspacePath: key,
-      subscriberId,
-      refCount: existing.refCount,
-    });
+    // logger.main.info('[WorkspaceEventBus] Reusing shared watcher for workspace:', {
+    //   workspacePath: key,
+    //   subscriberId,
+    //   refCount: existing.refCount,
+    // });
     return;
   }
 
@@ -340,11 +340,11 @@ export function unsubscribe(workspacePath: string, subscriberId: string): void {
       lastSubscriberId: subscriberId,
     });
   } else {
-    logger.main.info('[WorkspaceEventBus] Released subscriber:', {
-      workspacePath: key,
-      subscriberId,
-      remainingRefCount: entry.refCount,
-    });
+    // logger.main.info('[WorkspaceEventBus] Released subscriber:', {
+    //   workspacePath: key,
+    //   subscriberId,
+    //   remainingRefCount: entry.refCount,
+    // });
   }
 }
 
