@@ -958,21 +958,29 @@ export class IndexRoom implements DurableObject {
       }
     }
 
-    // if (mostRecentDevice) {
-    //   log.info('Most recently active device:', mostRecentDevice.name,
-    //     'type:', mostRecentDevice.type, 'status:', mostRecentDevice.status,
-    //     'lastActiveAt:', mostRecentDevice.lastActiveAt);
-    // }
+    // log.info('Most recently active device:', mostRecentDevice?.name,
+    //   'type:', mostRecentDevice?.type, 'status:', mostRecentDevice?.status,
+    //   'lastActiveAt:', mostRecentDevice?.lastActiveAt);
 
-    // Route push notifications based on active device
+    // If the most recently active device is a desktop and it reports active status
+    // (or has no status field, meaning an older client that's still connected),
+    // suppress ALL mobile push notifications -- user is at their computer.
+    if (mostRecentDevice
+      && mostRecentDevice.type === 'desktop'
+      && (mostRecentDevice.status === 'active' || !mostRecentDevice.status)) {
+      // log.info('Suppressing mobile push - desktop is active');
+      return;
+    }
+
+    // Desktop is idle/away or most recent device is mobile -- send push to mobile devices
     for (const [key, tokenData] of pushTokens) {
-      // Skip the device that is most recently active - user is already there
-      if (mostRecentDevice && tokenData.deviceId === mostRecentDevice.deviceId) {
+      // Skip the requesting device (desktop that triggered the push)
+      if (message.requestingDeviceId && tokenData.deviceId === message.requestingDeviceId) {
         continue;
       }
 
-      // Skip the requesting device (desktop that triggered the push)
-      if (message.requestingDeviceId && tokenData.deviceId === message.requestingDeviceId) {
+      // Skip if this mobile device is the most recently active device (user is on it already)
+      if (mostRecentDevice && tokenData.deviceId === mostRecentDevice.deviceId) {
         continue;
       }
 
