@@ -4,7 +4,29 @@
  * These tools let Claude interact with JSON data programmatically.
  */
 
-import type { ExtensionAITool } from '@nimbalyst/extension-sdk';
+import type { AIToolContext, ExtensionAITool, ExtensionToolResult } from '@nimbalyst/extension-sdk';
+
+async function loadActiveJson(context: AIToolContext): Promise<{
+  filePath: string;
+  data: unknown;
+} | ExtensionToolResult> {
+  if (!context.activeFilePath) {
+    return { success: false, error: 'No active file is open.' };
+  }
+
+  try {
+    const content = await context.extensionContext.services.filesystem.readFile(context.activeFilePath);
+    return {
+      filePath: context.activeFilePath,
+      data: JSON.parse(content),
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: `Failed to load JSON file: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
 
 export const aiTools: ExtensionAITool[] = [
   {
@@ -19,14 +41,15 @@ export const aiTools: ExtensionAITool[] = [
         },
       },
     },
-    handler: async (args, context) => {
-      if (!context.fileContent) {
-        return { error: 'No file is currently open' };
+    handler: async (args, context): Promise<ExtensionToolResult> => {
+      const loaded = await loadActiveJson(context);
+      if ('success' in loaded) {
+        return loaded;
       }
 
       try {
-        const data = JSON.parse(context.fileContent);
-        const maxDepth = args.maxDepth ?? 3;
+        const data = loaded.data;
+        const maxDepth = typeof args.maxDepth === 'number' ? args.maxDepth : 3;
 
         const getStructure = (value: unknown, depth: number): unknown => {
           if (depth > maxDepth) return '...';
@@ -47,11 +70,15 @@ export const aiTools: ExtensionAITool[] = [
         };
 
         return {
-          structure: getStructure(data, 0),
-          filePath: context.filePath,
+          success: true,
+          message: 'Retrieved JSON structure.',
+          data: {
+            filePath: loaded.filePath,
+            structure: getStructure(data, 0),
+          },
         };
       } catch (e) {
-        return { error: `Failed to parse JSON: ${(e as Error).message}` };
+        return { success: false, error: `Failed to parse JSON: ${(e as Error).message}` };
       }
     },
   },
@@ -69,30 +96,39 @@ export const aiTools: ExtensionAITool[] = [
       },
       required: ['path'],
     },
-    handler: async (args, context) => {
-      if (!context.fileContent) {
-        return { error: 'No file is currently open' };
+    handler: async (args, context): Promise<ExtensionToolResult> => {
+      const loaded = await loadActiveJson(context);
+      if ('success' in loaded) {
+        return loaded;
+      }
+
+      if (typeof args.path !== 'string') {
+        return { success: false, error: 'path must be a string.' };
       }
 
       try {
-        const data = JSON.parse(context.fileContent);
+        const data = loaded.data;
         const pathParts = args.path.split('.');
 
-        let current: any = data;
+        let current: unknown = data;
         for (const part of pathParts) {
           if (current === undefined || current === null) {
-            return { error: `Path not found: ${args.path}` };
+            return { success: false, error: `Path not found: ${args.path}` };
           }
-          current = current[part];
+          current = (current as Record<string, unknown>)[part];
         }
 
         return {
-          path: args.path,
-          value: current,
-          type: Array.isArray(current) ? 'array' : typeof current,
+          success: true,
+          message: `Retrieved JSON value at ${args.path}.`,
+          data: {
+            path: args.path,
+            value: current,
+            type: Array.isArray(current) ? 'array' : typeof current,
+          },
         };
       } catch (e) {
-        return { error: `Failed to parse JSON: ${(e as Error).message}` };
+        return { success: false, error: `Failed to parse JSON: ${(e as Error).message}` };
       }
     },
   },
@@ -108,22 +144,28 @@ export const aiTools: ExtensionAITool[] = [
           description: 'Dot-notation path (e.g., "users.0.name")',
         },
         value: {
+          type: 'object',
           description: 'The new value to set (any JSON-compatible type)',
         },
       },
       required: ['path', 'value'],
     },
-    handler: async (args, context) => {
-      if (!context.fileContent) {
-        return { error: 'No file is currently open' };
+    handler: async (args, context): Promise<ExtensionToolResult> => {
+      const loaded = await loadActiveJson(context);
+      if ('success' in loaded) {
+        return loaded;
+      }
+
+      if (typeof args.path !== 'string') {
+        return { success: false, error: 'path must be a string.' };
       }
 
       try {
-        const data = JSON.parse(context.fileContent);
+        const data = loaded.data as Record<string, unknown>;
         const pathParts = args.path.split('.');
 
         // Navigate to parent
-        let current: any = data;
+        let current: Record<string, unknown> = data;
         for (let i = 0; i < pathParts.length - 1; i++) {
           const part = pathParts[i];
           if (current[part] === undefined) {
@@ -131,23 +173,27 @@ export const aiTools: ExtensionAITool[] = [
             const nextPart = pathParts[i + 1];
             current[part] = isNaN(Number(nextPart)) ? {} : [];
           }
-          current = current[part];
+          current = current[part] as Record<string, unknown>;
         }
 
         // Set the value
         const lastPart = pathParts[pathParts.length - 1];
         const oldValue = current[lastPart];
         current[lastPart] = args.value;
+        const nextContent = JSON.stringify(data, null, 2);
+        await context.extensionContext.services.filesystem.writeFile(loaded.filePath, nextContent);
 
         return {
           success: true,
-          path: args.path,
-          oldValue,
-          newValue: args.value,
-          newContent: JSON.stringify(data, null, 2),
+          message: `Updated ${args.path} in ${loaded.filePath}.`,
+          data: {
+            path: args.path,
+            oldValue,
+            newValue: args.value,
+          },
         };
       } catch (e) {
-        return { error: `Failed to update JSON: ${(e as Error).message}` };
+        return { success: false, error: `Failed to update JSON: ${(e as Error).message}` };
       }
     },
   },

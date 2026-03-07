@@ -71,15 +71,15 @@ Add tools to your `manifest.json`:
 The handler receives a context object with useful information:
 
 ```typescript
-interface ToolContext {
-  // Path to the currently open file (if any)
-  filePath?: string;
+interface AIToolContext {
+  // Path to the current workspace (if any)
+  workspacePath?: string;
 
-  // Current content of the file
-  fileContent?: string;
+  // Path to the active file (if any)
+  activeFilePath?: string;
 
-  // Path to your extension's installation directory
-  extensionPath: string;
+  // Access host services such as filesystem, UI, and AI helpers
+  extensionContext: ExtensionContext;
 }
 ```
 
@@ -88,7 +88,33 @@ interface ToolContext {
 Here's a complete example for a CSV/spreadsheet editor:
 
 ```typescript
-import type { ExtensionAITool } from '@nimbalyst/extension-sdk';
+import type {
+  AIToolContext,
+  ExtensionAITool,
+  ExtensionToolResult,
+} from '@nimbalyst/extension-sdk';
+
+async function loadActiveFile(context: AIToolContext): Promise<{
+  filePath: string;
+  content: string;
+} | ExtensionToolResult> {
+  if (!context.activeFilePath) {
+    return { success: false, error: 'No active file is open.' };
+  }
+
+  try {
+    const content = await context.extensionContext.services.filesystem.readFile(context.activeFilePath);
+    return {
+      filePath: context.activeFilePath,
+      content,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: `Failed to read active file: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
 
 // Helper to parse CSV
 function parseCSV(content: string): string[][] {
@@ -99,22 +125,27 @@ export const aiTools: ExtensionAITool[] = [
   {
     name: 'csv.get_schema',
     description: 'Get the column names and row count of the current CSV file',
+    scope: 'global',
     inputSchema: {
       type: 'object',
       properties: {},
     },
     handler: async (_args, context) => {
-      if (!context.fileContent) {
-        return { error: 'No file is currently open' };
+      const loaded = await loadActiveFile(context);
+      if ('success' in loaded) {
+        return loaded;
       }
 
-      const rows = parseCSV(context.fileContent);
+      const rows = parseCSV(loaded.content);
       const headers = rows[0] || [];
 
       return {
-        columns: headers,
-        rowCount: rows.length - 1, // Exclude header row
-        filePath: context.filePath,
+        success: true,
+        data: {
+          columns: headers,
+          rowCount: rows.length - 1,
+          filePath: loaded.filePath,
+        },
       };
     },
   },
@@ -136,27 +167,31 @@ export const aiTools: ExtensionAITool[] = [
       },
     },
     handler: async (args, context) => {
-      if (!context.fileContent) {
-        return { error: 'No file is currently open' };
+      const loaded = await loadActiveFile(context);
+      if ('success' in loaded) {
+        return loaded;
       }
 
-      const rows = parseCSV(context.fileContent);
+      const rows = parseCSV(loaded.content);
       const headers = rows[0] || [];
       const dataRows = rows.slice(1);
 
-      const start = args.startRow || 0;
-      const count = args.count || 10;
+      const start = typeof args.startRow === 'number' ? args.startRow : 0;
+      const count = typeof args.count === 'number' ? args.count : 10;
       const selectedRows = dataRows.slice(start, start + count);
 
       return {
-        rows: selectedRows.map(row => {
-          const obj: Record<string, string> = {};
-          headers.forEach((h, i) => {
-            obj[h] = row[i] || '';
-          });
-          return obj;
-        }),
-        totalRows: dataRows.length,
+        success: true,
+        data: {
+          rows: selectedRows.map(row => {
+            const obj: Record<string, string> = {};
+            headers.forEach((h, i) => {
+              obj[h] = row[i] || '';
+            });
+            return obj;
+          }),
+          totalRows: dataRows.length,
+        },
       };
     },
   },
@@ -175,22 +210,31 @@ export const aiTools: ExtensionAITool[] = [
       required: ['data'],
     },
     handler: async (args, context) => {
-      if (!context.fileContent) {
-        return { error: 'No file is currently open' };
+      const loaded = await loadActiveFile(context);
+      if ('success' in loaded) {
+        return loaded;
       }
 
-      const rows = parseCSV(context.fileContent);
+      const rows = parseCSV(loaded.content);
       const headers = rows[0] || [];
 
       // Build new row from data object
-      const newRow = headers.map(h => args.data[h] || '');
+      const values = (args.data as Record<string, string>) || {};
+      const newRow = headers.map(h => values[h] || '');
       rows.push(newRow);
 
-      // Return the new content - Nimbalyst will update the file
+      const nextContent = rows.map(r => r.join(',')).join('\n');
+      await context.extensionContext.services.filesystem.writeFile(
+        loaded.filePath,
+        nextContent
+      );
+
       return {
         success: true,
-        newContent: rows.map(r => r.join(',')).join('\n'),
-        rowIndex: rows.length - 1,
+        message: `Added a row to ${loaded.filePath}.`,
+        data: {
+          rowIndex: rows.length - 1,
+        },
       };
     },
   },
@@ -199,24 +243,32 @@ export const aiTools: ExtensionAITool[] = [
 
 ## Updating File Content
 
-When a tool needs to modify the file, return a `newContent` field:
+When a tool needs to modify a file, write through the filesystem service:
 
 ```typescript
 handler: async (args, context) => {
   // ... modify data ...
 
+  if (!context.activeFilePath) {
+    return { success: false, error: 'No active file is open.' };
+  }
+
+  await context.extensionContext.services.filesystem.writeFile(
+    context.activeFilePath,
+    serializedData
+  );
+
   return {
     success: true,
-    newContent: serializedData, // This updates the file
     message: 'Row added successfully',
   };
 }
 ```
 
 Nimbalyst will:
-1. Update the file content
-2. Mark the file as dirty (unsaved)
-3. Refresh the editor view
+1. Persist the updated file content
+2. Notify the active editor through file watching
+3. Let the editor reload or reconcile its in-memory state
 
 ## Tool Naming Conventions
 
@@ -252,12 +304,12 @@ Return errors as objects, not thrown exceptions:
 
 ```typescript
 handler: async (args, context) => {
-  if (!context.fileContent) {
-    return { error: 'No file is currently open' };
+  if (!context.activeFilePath) {
+    return { success: false, error: 'No active file is open' };
   }
 
   if (!args.columnName) {
-    return { error: 'columnName parameter is required' };
+    return { success: false, error: 'columnName parameter is required' };
   }
 
   try {
@@ -327,7 +379,7 @@ inputSchema: {
 1. **Keep tools focused** - One tool, one job
 2. **Return structured data** - Objects are easier for Claude to work with
 3. **Include context in responses** - Return relevant metadata
-4. **Handle missing files gracefully** - Check if `fileContent` exists
+4. **Handle missing files gracefully** - Check if `activeFilePath` exists and read through the filesystem service
 5. **Validate inputs** - Check required parameters
 6. **Use descriptive names** - `get_column_stats` not `stats`
 
@@ -350,12 +402,23 @@ export const aiTools: ExtensionAITool[] = [
     description: 'List all entities (tables/models) defined in the data model',
     inputSchema: { type: 'object', properties: {} },
     handler: async (_args, context) => {
-      const model = parseDataModel(context.fileContent);
+      if (!context.activeFilePath) {
+        return { success: false, error: 'No active file is open' };
+      }
+
+      const content = await context.extensionContext.services.filesystem.readFile(
+        context.activeFilePath
+      );
+      const model = parseDataModel(content);
+
       return {
-        entities: model.entities.map(e => ({
-          name: e.name,
-          fieldCount: e.fields.length,
-        })),
+        success: true,
+        data: {
+          entities: model.entities.map(e => ({
+            name: e.name,
+            fieldCount: e.fields.length,
+          })),
+        },
       };
     },
   },
@@ -371,21 +434,31 @@ export const aiTools: ExtensionAITool[] = [
       required: ['name'],
     },
     handler: async (args, context) => {
-      const model = parseDataModel(context.fileContent);
+      if (!context.activeFilePath) {
+        return { success: false, error: 'No active file is open' };
+      }
+
+      const content = await context.extensionContext.services.filesystem.readFile(
+        context.activeFilePath
+      );
+      const model = parseDataModel(content);
       const entity = model.entities.find(e => e.name === args.name);
 
       if (!entity) {
-        return { error: `Entity '${args.name}' not found` };
+        return { success: false, error: `Entity '${args.name}' not found` };
       }
 
       return {
-        name: entity.name,
-        fields: entity.fields.map(f => ({
-          name: f.name,
-          type: f.type,
-          required: f.required,
-        })),
-        relations: entity.relations,
+        success: true,
+        data: {
+          name: entity.name,
+          fields: entity.fields.map(f => ({
+            name: f.name,
+            type: f.type,
+            required: f.required,
+          })),
+          relations: entity.relations,
+        },
       };
     },
   },
@@ -404,11 +477,18 @@ export const aiTools: ExtensionAITool[] = [
       required: ['entityName', 'fieldName', 'fieldType'],
     },
     handler: async (args, context) => {
-      const model = parseDataModel(context.fileContent);
+      if (!context.activeFilePath) {
+        return { success: false, error: 'No active file is open' };
+      }
+
+      const content = await context.extensionContext.services.filesystem.readFile(
+        context.activeFilePath
+      );
+      const model = parseDataModel(content);
       const entity = model.entities.find(e => e.name === args.entityName);
 
       if (!entity) {
-        return { error: `Entity '${args.entityName}' not found` };
+        return { success: false, error: `Entity '${args.entityName}' not found` };
       }
 
       entity.fields.push({
@@ -417,9 +497,14 @@ export const aiTools: ExtensionAITool[] = [
         required: args.required ?? false,
       });
 
+      await context.extensionContext.services.filesystem.writeFile(
+        context.activeFilePath,
+        serializeDataModel(model)
+      );
+
       return {
         success: true,
-        newContent: serializeDataModel(model),
+        message: `Added ${args.fieldName} to ${args.entityName}.`,
       };
     },
   },

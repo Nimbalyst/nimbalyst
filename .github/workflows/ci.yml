@@ -54,6 +54,9 @@ jobs:
         working-directory: packages/extension-sdk
         run: npm run build
 
+      - name: Public extension SDK smoke checks
+        run: npm run extension-sdk:check-public
+
       - name: Build runtime
         working-directory: packages/runtime
         run: npm run build

@@ -1,302 +1,358 @@
 # API Reference
 
-This document covers the TypeScript types and interfaces available in the Extension SDK.
+This document summarizes the main TypeScript exports from `@nimbalyst/extension-sdk`.
+
+## Main Imports
+
+```ts
+import type {
+  ExtensionContext,
+  ExtensionManifest,
+  ExtensionModule,
+  EditorHostProps,
+  ExtensionAITool,
+  AIToolContext,
+  ExtensionToolResult,
+  PanelHostProps,
+  SettingsPanelProps,
+} from '@nimbalyst/extension-sdk';
+
+import { REQUIRED_EXTERNALS, validateExtensionBundle } from '@nimbalyst/extension-sdk';
+import { createExtensionConfig } from '@nimbalyst/extension-sdk/vite';
+```
 
 ## Extension Entry Point
 
-Your extension's `index.ts` should export these items:
+Your extension module can export any subset of these fields:
 
-```typescript
-// Required: Components referenced by manifest
-export const components: Record<string, React.ComponentType<any>>;
+```ts
+interface ExtensionModule {
+  activate?: (context: ExtensionContext) => void | Promise<void>;
+  deactivate?: () => void | Promise<void>;
 
-// Optional: AI tools
-export const aiTools: ExtensionAITool[];
+  components?: Record<string, React.ComponentType<EditorHostProps>>;
+  aiTools?: ExtensionAITool[];
+  slashCommandHandlers?: Record<string, () => void>;
 
-// Optional: Lifecycle hooks
-export function activate(context: ExtensionContext): void;
-export function deactivate(): void;
+  nodes?: Record<string, unknown>;
+  transformers?: Record<string, unknown>;
+  hostComponents?: Record<string, React.ComponentType>;
+
+  panels?: Record<string, PanelExport>;
+  settingsPanel?: Record<string, React.ComponentType<SettingsPanelProps>>;
+}
 ```
 
-## ExtensionContext
+## `ExtensionContext`
 
-Passed to `activate()`:
+Passed to `activate()` and available inside `AIToolContext.extensionContext`.
 
-```typescript
+```ts
 interface ExtensionContext {
-  // Absolute path to the extension's installation directory
+  manifest: ExtensionManifest;
   extensionPath: string;
+  services: ExtensionServices;
+  subscriptions: Disposable[];
 }
 ```
 
-## Custom Editor Props
+### `ExtensionServices`
 
-Props passed to custom editor components:
+```ts
+interface ExtensionServices {
+  filesystem: ExtensionFileSystemService;
+  ui: ExtensionUIService;
+  ai?: ExtensionAIService;
+  configuration?: ExtensionConfigurationService;
+}
+```
 
-```typescript
-interface CustomEditorProps {
-  // Current file content as a string
+```ts
+interface ExtensionFileSystemService {
+  readFile(path: string): Promise<string>;
+  writeFile(path: string, content: string): Promise<void>;
+  fileExists(path: string): Promise<boolean>;
+  findFiles(pattern: string): Promise<string[]>;
+}
+
+interface ExtensionUIService {
+  showInfo(message: string): void;
+  showWarning(message: string): void;
+  showError(message: string): void;
+}
+
+interface ExtensionConfigurationService {
+  get<T>(key: string, defaultValue?: T): T;
+  update(key: string, value: unknown, scope?: 'user' | 'workspace'): Promise<void>;
+  getAll(): Record<string, unknown>;
+}
+```
+
+## Custom Editors
+
+Custom editors receive a single `host` prop.
+
+```ts
+interface EditorHostProps {
+  host: EditorHost;
+}
+```
+
+```ts
+interface EditorHost {
+  readonly filePath: string;
+  readonly fileName: string;
+  readonly theme: string;
+  readonly isActive: boolean;
+  readonly workspaceId?: string;
+  readonly supportsSourceMode?: boolean;
+  readonly storage: ExtensionStorage;
+
+  onThemeChanged(callback: (theme: string) => void): () => void;
+
+  loadContent(): Promise<string>;
+  loadBinaryContent(): Promise<ArrayBuffer>;
+  onFileChanged(callback: (newContent: string) => void): () => void;
+
+  setDirty(isDirty: boolean): void;
+  saveContent(content: string | ArrayBuffer): Promise<void>;
+  onSaveRequested(callback: () => void): () => void;
+
+  openHistory(): void;
+
+  onDiffRequested?(callback: (config: DiffConfig) => void): () => void;
+  reportDiffResult?(result: DiffResult): void;
+  isDiffModeActive?(): boolean;
+  onDiffCleared?(callback: () => void): () => void;
+
+  toggleSourceMode?(): void;
+  onSourceModeChanged?(callback: (isSourceMode: boolean) => void): () => void;
+  isSourceModeActive?(): boolean;
+
+  getConfig?<T>(key: string, defaultValue?: T): T;
+  registerMenuItems(items: EditorMenuItem[]): void;
+}
+```
+
+Supporting editor types:
+
+```ts
+interface EditorMenuItem {
+  label: string;
+  icon?: string;
+  onClick: () => void;
+}
+
+interface DiffConfig {
+  originalContent: string;
+  modifiedContent: string;
+  tagId: string;
+  sessionId: string;
+}
+
+interface DiffResult {
   content: string;
-
-  // Absolute path to the file
-  filePath: string;
-
-  // Call when content changes
-  onChange: (newContent: string) => void;
-
-  // Optional extension context
-  context?: {
-    extensionPath: string;
-  };
+  action: 'accept' | 'reject';
 }
 ```
 
-### Usage
+## AI Tools
 
-```tsx
-function MyEditor({ content, filePath, onChange }: CustomEditorProps) {
-  // Parse content into your data structure
-  const [data, setData] = useState(() => parse(content));
-
-  // Sync with content prop when file reloads
-  useEffect(() => {
-    setData(parse(content));
-  }, [content]);
-
-  // Notify Nimbalyst of changes
-  const handleChange = (newData: MyData) => {
-    setData(newData);
-    onChange(serialize(newData));
-  };
-
-  return <div>...</div>;
-}
-```
-
-## AI Tool Types
-
-### ExtensionAITool
-
-Definition for an AI tool:
-
-```typescript
+```ts
 interface ExtensionAITool {
-  // Unique name (use prefix.action format)
   name: string;
-
-  // Description for Claude to understand when to use it
   description: string;
-
-  // JSON Schema for input parameters
-  inputSchema: {
-    type: 'object';
-    properties: Record<string, JsonSchemaProperty>;
-    required?: string[];
-  };
-
-  // Handler function
+  inputSchema?: JSONSchema;
+  parameters?: JSONSchema; // legacy alias
+  scope?: 'global' | 'editor';
+  editorFilePatterns?: string[];
   handler: (
-    args: Record<string, unknown>,
-    context: ToolContext
-  ) => Promise<ToolResult>;
+    params: Record<string, unknown>,
+    context: AIToolContext
+  ) => Promise<ExtensionToolResult>;
 }
 ```
 
-### JsonSchemaProperty
+```ts
+interface AIToolContext {
+  workspacePath?: string;
+  activeFilePath?: string;
+  extensionContext: ExtensionContext;
+}
+```
 
-Property definition in input schema:
+```ts
+interface ExtensionToolResult {
+  success: boolean;
+  message?: string;
+  data?: unknown;
+  error?: string;
+  extensionId?: string;
+  toolName?: string;
+  stack?: string;
+  errorContext?: Record<string, unknown>;
+}
+```
 
-```typescript
-interface JsonSchemaProperty {
-  type: 'string' | 'number' | 'boolean' | 'array' | 'object';
+### JSON Schema Types
+
+```ts
+interface JSONSchema {
+  type: 'object' | 'array' | 'string' | 'number' | 'boolean' | 'null';
+  properties?: Record<string, JSONSchemaProperty>;
+  required?: string[];
+  items?: JSONSchema;
   description?: string;
-  enum?: string[];
-  items?: JsonSchemaProperty;  // For arrays
-  properties?: Record<string, JsonSchemaProperty>;  // For objects
+}
+
+interface JSONSchemaProperty {
+  type: 'string' | 'number' | 'boolean' | 'array' | 'object' | 'null';
+  description?: string;
+  enum?: Array<string | number>;
+  items?: JSONSchemaProperty;
+  properties?: Record<string, JSONSchemaProperty>;
+  required?: string[];
+  default?: unknown;
 }
 ```
 
-### ToolContext
+## Panels
 
-Context passed to tool handlers:
+Panels are non-file-based extension UIs.
 
-```typescript
-interface ToolContext {
-  // Path to the currently open file (may be undefined)
-  filePath?: string;
-
-  // Content of the currently open file (may be undefined)
-  fileContent?: string;
-
-  // Path to extension installation directory
-  extensionPath: string;
+```ts
+interface PanelExport {
+  component: React.ComponentType<PanelHostProps>;
+  gutterButton?: React.ComponentType<PanelGutterButtonProps>;
+  settingsComponent?: React.ComponentType<PanelHostProps>;
 }
 ```
 
-### ToolResult
-
-Return type for tool handlers:
-
-```typescript
-// Success result
-interface ToolSuccessResult {
-  // Any data to return to Claude
-  [key: string]: unknown;
-
-  // If present, updates the file content
-  newContent?: string;
+```ts
+interface PanelHostProps {
+  host: PanelHost;
 }
 
-// Error result
-interface ToolErrorResult {
-  error: string;
-}
+interface PanelHost {
+  readonly panelId: string;
+  readonly extensionId: string;
+  readonly theme: string;
+  readonly workspacePath: string;
+  readonly isSettingsOpen: boolean;
+  readonly ai?: PanelAIContext;
+  readonly storage: ExtensionStorage;
 
-type ToolResult = ToolSuccessResult | ToolErrorResult;
+  onThemeChanged(callback: (theme: string) => void): () => void;
+  openFile(path: string): void;
+  openPanel(panelId: string): void;
+  close(): void;
+  openSettings(): void;
+  closeSettings(): void;
+}
+```
+
+```ts
+interface PanelAIContext {
+  setContext(context: Record<string, unknown>): void;
+  getContext(): Record<string, unknown>;
+  clearContext(): void;
+  notifyChange(event: string, data?: unknown): void;
+  onContextChanged(callback: (context: Record<string, unknown>) => void): () => void;
+}
+```
+
+```ts
+interface SettingsPanelProps {
+  storage: ExtensionStorage;
+  theme: string;
+}
+```
+
+## Extension Storage
+
+`ExtensionStorage` is available to custom editors, panels, and settings panels.
+
+```ts
+interface ExtensionStorage {
+  get<T>(key: string): T | undefined;
+  set<T>(key: string, value: T): Promise<void>;
+  delete(key: string): Promise<void>;
+
+  getGlobal<T>(key: string): T | undefined;
+  setGlobal<T>(key: string, value: T): Promise<void>;
+  deleteGlobal(key: string): Promise<void>;
+
+  getSecret(key: string): Promise<string | undefined>;
+  setSecret(key: string, value: string): Promise<void>;
+  deleteSecret(key: string): Promise<void>;
+}
 ```
 
 ## Manifest Types
 
-### ExtensionManifest
+The manifest shape is defined by `ExtensionManifest` and `ExtensionContributions`.
+See [Manifest Reference](./manifest-reference.md) for field-by-field guidance.
 
-Full manifest schema:
-
-```typescript
+```ts
 interface ExtensionManifest {
-  // Required fields
   id: string;
   name: string;
   version: string;
-  main: string;
-  apiVersion: string;
-
-  // Optional metadata
   description?: string;
   author?: string;
-  license?: string;
-  repository?: string;
-  icon?: string;
+  main: string;
   styles?: string;
-
-  // Permissions
-  permissions?: {
-    filesystem?: boolean;
-    ai?: boolean;
-  };
-
-  // Contributions
-  contributions?: {
-    customEditors?: CustomEditorContribution[];
-    aiTools?: string[];
-    newFileMenu?: NewFileMenuContribution[];
-    fileIcons?: Record<string, string>;
-    slashCommands?: SlashCommandContribution[];
-  };
+  apiVersion?: string;
+  permissions?: ExtensionPermissions;
+  contributions?: ExtensionContributions;
+  requiredReleaseChannel?: 'stable' | 'alpha';
+  defaultEnabled?: boolean;
 }
 ```
 
-### CustomEditorContribution
-
-```typescript
-interface CustomEditorContribution {
-  // Glob patterns for files (e.g., ["*.csv", "*.tsv"])
-  filePatterns: string[];
-
-  // Name shown in editor selector
-  displayName: string;
-
-  // Key in exported components object
-  component: string;
+```ts
+interface ExtensionContributions {
+  customEditors?: CustomEditorContribution[];
+  fileIcons?: Record<string, string>;
+  aiTools?: string[];
+  newFileMenu?: NewFileMenuContribution[];
+  commands?: CommandContribution[];
+  slashCommands?: SlashCommandContribution[];
+  nodes?: string[];
+  transformers?: string[];
+  hostComponents?: string[];
+  configuration?: ExtensionConfigurationContribution;
+  claudePlugin?: ClaudePluginContribution;
+  panels?: PanelContribution[];
+  settingsPanel?: SettingsPanelContribution;
+  documentHeaders?: DocumentHeaderContribution[];
+  themes?: ThemeContribution[];
 }
 ```
 
-### NewFileMenuContribution
+## Vite Helper
 
-```typescript
-interface NewFileMenuContribution {
-  // File extension with dot (e.g., ".csv")
-  extension: string;
+Use `createExtensionConfig()` to get the correct externalization and output shape for extensions.
 
-  // Name shown in menu
-  displayName: string;
-
-  // Material icon name
-  icon: string;
-
-  // Initial file content
-  defaultContent: string;
-}
-```
-
-### SlashCommandContribution
-
-```typescript
-interface SlashCommandContribution {
-  // Command identifier
-  name: string;
-
-  // Shown in command palette
-  displayName: string;
-
-  // Help text
-  description: string;
-
-  // Name of exported handler function
-  handler: string;
-}
-```
-
-## Vite Configuration
-
-### createExtensionConfig
-
-Helper to create a vite config with correct externals:
-
-```typescript
+```ts
+import react from '@vitejs/plugin-react';
 import { createExtensionConfig } from '@nimbalyst/extension-sdk/vite';
 
-// Basic usage
-export default defineConfig(createExtensionConfig());
-
-// With custom config
-export default defineConfig(createExtensionConfig({
-  build: {
-    sourcemap: true,
-  },
-}));
+export default createExtensionConfig({
+  entry: './src/index.tsx',
+  plugins: [react()],
+});
 ```
 
-### REQUIRED_EXTERNALS
+## Validation Helpers
 
-List of packages that must be externalized (provided by Nimbalyst):
-
-```typescript
-import { REQUIRED_EXTERNALS } from '@nimbalyst/extension-sdk';
-
-// ['react', 'react-dom', 'react/jsx-runtime', 'react/jsx-dev-runtime', 'lexical', ...]
-```
-
-## Validation
-
-### validateExtensionBundle
-
-Validate an extension bundle before installation:
-
-```typescript
+```ts
 import { validateExtensionBundle } from '@nimbalyst/extension-sdk';
 
 const result = await validateExtensionBundle('/path/to/extension');
-
-if (result.valid) {
-  console.log('Extension is valid');
-} else {
-  console.error('Validation errors:', result.errors);
-}
 ```
 
-Returns:
-
-```typescript
+```ts
 interface ValidationResult {
   valid: boolean;
   errors: string[];
@@ -305,20 +361,6 @@ interface ValidationResult {
 }
 ```
 
-## CSS Variables
+## Required Externals
 
-Available CSS variables for theming:
-
-| Variable | Purpose |
-| --- | --- |
-| `--nim-bg` | Main background |
-| `--nim-bg-secondary` | Toolbar/panel background |
-| `--nim-bg-tertiary` | Nested element background |
-| `--nim-bg-hover` | Hover state background |
-| `--nim-text` | Main text color |
-| `--nim-text-muted` | Muted text |
-| `--nim-text-faint` | Very muted text |
-| `--nim-border` | Main borders |
-| `--nim-primary` | Accent/brand color |
-
-Always use these variables instead of hardcoded colors for theme compatibility.
+`REQUIRED_EXTERNALS` exports the package names that must stay external in your build because Nimbalyst provides them at runtime.

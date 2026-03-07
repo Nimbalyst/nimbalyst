@@ -5,7 +5,6 @@
   "description": "Tools for building Nimbalyst extensions with AI assistance",
   "main": "dist/index.js",
   "apiVersion": "1.0.0",
-  "requiredReleaseChannel": "alpha",
   "permissions": {
     "filesystem": true,
     "ai": true

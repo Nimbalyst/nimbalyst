@@ -2,6 +2,19 @@
  * Core types for Nimbalyst extensions.
  */
 
+import type { ComponentType } from 'react';
+import type { EditorHostProps } from './editor';
+import type {
+  ExtensionStorage,
+  PanelContribution,
+  PanelExport,
+  PanelGutterButtonProps,
+  PanelHostProps,
+  SettingsPanelContribution,
+  SettingsPanelProps,
+} from './panel';
+import type { ThemeColors } from './theme';
+
 /**
  * Extension manifest schema (manifest.json)
  */
@@ -42,20 +55,178 @@ export interface ExtensionManifest {
    * - 'alpha': Only visible to users on the alpha release channel
    */
   requiredReleaseChannel?: 'stable' | 'alpha';
+
+  /**
+   * Default enabled state for the extension.
+   * - true: Extension is enabled by default when first discovered
+   * - false: Extension is disabled by default until the user enables it
+   */
+  defaultEnabled?: boolean;
 }
 
 export interface ExtensionPermissions {
   /** Can read/write files */
   filesystem?: boolean;
 
+  /** Can access AI services */
+  ai?: boolean;
+
   /** Can make network requests */
   network?: boolean;
+}
 
-  /** Can access clipboard */
-  clipboard?: boolean;
+export interface ExtensionContributions {
+  /** Custom editors for specific file types */
+  customEditors?: CustomEditorContribution[];
 
-  /** Can register AI tools */
-  ai?: boolean;
+  /** Custom file icons keyed by glob pattern */
+  fileIcons?: Record<string, string>;
+
+  /** AI tools the extension provides (list of tool names) */
+  aiTools?: string[];
+
+  /** Entries to add to the New File menu */
+  newFileMenu?: NewFileMenuContribution[];
+
+  /** Commands (reserved for future use) */
+  commands?: CommandContribution[];
+
+  /** Slash commands for AI chat */
+  slashCommands?: SlashCommandContribution[];
+
+  /** Lexical node exports contributed by the extension */
+  nodes?: string[];
+
+  /** Markdown transformers for Lexical */
+  transformers?: string[];
+
+  /** Components mounted by the host at app level */
+  hostComponents?: string[];
+
+  /** Extension configuration schema */
+  configuration?: ExtensionConfigurationContribution;
+
+  /** Claude Code plugin metadata */
+  claudePlugin?: ClaudePluginContribution;
+
+  /**
+   * Non-file-based panels (e.g., database browser, deployment dashboard).
+   * Panels integrate with the navigation gutter and can expose AI tools.
+   */
+  panels?: PanelContribution[];
+
+  /**
+   * Settings panel shown in the Settings screen under "Extensions" section.
+   */
+  settingsPanel?: SettingsPanelContribution;
+
+  /**
+   * Document headers that render above editors for matching file types.
+   * Headers augment the editor without replacing it.
+   */
+  documentHeaders?: DocumentHeaderContribution[];
+
+  /**
+   * Custom themes that users can select.
+   * Extensions can provide color themes that override the built-in themes.
+   */
+  themes?: ThemeContribution[];
+}
+
+/**
+ * Configuration schema for extension settings.
+ * Follows a JSON Schema-like structure for defining configurable properties.
+ */
+export interface ExtensionConfigurationContribution {
+  /** Title displayed in settings panel */
+  title?: string;
+
+  /** Configuration properties */
+  properties: Record<string, ConfigurationProperty>;
+}
+
+/**
+ * A single configuration property that can be set by the user.
+ */
+export interface ConfigurationProperty {
+  /** Property type */
+  type: 'string' | 'number' | 'boolean' | 'array' | 'object';
+
+  /** Default value */
+  default?: unknown;
+
+  /** Human-readable description */
+  description?: string;
+
+  /** Enum values for dropdown selection */
+  enum?: (string | number)[];
+
+  /** Human-readable labels for enum values */
+  enumDescriptions?: string[];
+
+  /**
+   * Scope of the setting:
+   * - 'user': Global setting
+   * - 'workspace': Per-project setting
+   * - 'both': Available in both scopes (workspace overrides user)
+   */
+  scope?: 'user' | 'workspace' | 'both';
+
+  /** Order for display (lower = higher priority) */
+  order?: number;
+
+  /** Minimum value for numbers */
+  minimum?: number;
+
+  /** Maximum value for numbers */
+  maximum?: number;
+
+  /** Pattern for string validation (regex) */
+  pattern?: string;
+
+  /** Placeholder text for input fields */
+  placeholder?: string;
+}
+
+/**
+ * Claude Agent SDK plugin contribution.
+ * Allows extensions to bundle Claude Code plugins that provide
+ * slash commands, agents, skills, and hooks.
+ */
+export interface ClaudePluginContribution {
+  /** Path to plugin directory relative to extension root */
+  path: string;
+
+  /** Human-readable name for settings UI */
+  displayName: string;
+
+  /** Description for settings UI */
+  description?: string;
+
+  /** Whether this plugin is enabled by default */
+  enabledByDefault?: boolean;
+
+  /** Commands provided by this plugin (for documentation/UI) */
+  commands?: ClaudePluginCommand[];
+
+  /** Agents provided by this plugin (for documentation/UI) */
+  agents?: ClaudePluginAgent[];
+}
+
+export interface ClaudePluginCommand {
+  /** Command name (without slash or namespace) */
+  name: string;
+
+  /** Human-readable description */
+  description: string;
+}
+
+export interface ClaudePluginAgent {
+  /** Agent name */
+  name: string;
+
+  /** Human-readable description */
+  description: string;
 }
 
 /**
@@ -75,47 +246,6 @@ export interface NewFileMenuContribution {
   defaultContent: string;
 }
 
-// Import panel types from panel.ts
-import type { PanelContribution, SettingsPanelContribution } from './panel';
-
-export interface ExtensionContributions {
-  /** Custom editors for specific file types */
-  customEditors?: CustomEditorContribution[];
-
-  /** Custom file icons */
-  fileIcons?: FileIconContribution[];
-
-  /** AI tools the extension provides (list of tool names) */
-  aiTools?: string[];
-
-  /** Entries to add to the New File menu */
-  newFileMenu?: NewFileMenuContribution[];
-
-  /** Lexical nodes the extension contributes */
-  lexicalNodes?: LexicalNodeContribution[];
-
-  /** Slash commands for AI chat */
-  slashCommands?: SlashCommandContribution[];
-
-  /**
-   * Non-file-based panels (e.g., database browser, deployment dashboard).
-   * Panels integrate with the navigation gutter and can expose AI tools.
-   */
-  panels?: PanelContribution[];
-
-  /**
-   * Settings panel shown in the Settings screen under "Extensions" section.
-   * Use this for managing extension configuration like database connections.
-   */
-  settingsPanel?: SettingsPanelContribution;
-
-  /**
-   * Document headers that render above editors for matching file types.
-   * Headers augment the editor without replacing it (e.g., frontmatter forms above Monaco).
-   */
-  documentHeaders?: DocumentHeaderContribution[];
-}
-
 export interface CustomEditorContribution {
   /** Glob patterns for files this editor handles (e.g., ['*.csv', '*.tsv']) */
   filePatterns: string[];
@@ -125,6 +255,12 @@ export interface CustomEditorContribution {
 
   /** Component name exported from the extension */
   component: string;
+
+  /**
+   * Whether this editor supports source mode (editing the raw file in Monaco).
+   * When true, the host will provide a source-mode toggle.
+   */
+  supportsSourceMode?: boolean;
 }
 
 export interface DocumentHeaderContribution {
@@ -144,26 +280,15 @@ export interface DocumentHeaderContribution {
   priority?: number;
 }
 
-export interface FileIconContribution {
-  /** Glob pattern (e.g., '*.pdf') */
-  pattern: string;
-
-  /** Material symbol icon name */
-  icon: string;
-
-  /** Icon color (hex) */
-  color?: string;
-}
-
-export interface LexicalNodeContribution {
-  /** Node type identifier */
-  type: string;
+export interface CommandContribution {
+  /** Unique command ID */
+  id: string;
 
   /** Display name */
-  name: string;
+  title: string;
 
-  /** Node class name exported from extension */
-  nodeClass: string;
+  /** Optional keyboard shortcut */
+  keybinding?: string;
 }
 
 export interface SlashCommandContribution {
@@ -187,127 +312,175 @@ export interface SlashCommandContribution {
 }
 
 /**
+ * Theme contribution for extensions.
+ * Extensions can provide custom color themes that users can select.
+ */
+export interface ThemeContribution {
+  /** Unique theme ID within this extension (will be namespaced as extensionId:themeId) */
+  id: string;
+
+  /** Display name for the theme (shown in theme picker) */
+  name: string;
+
+  /** Whether this is a dark theme (determines base theme for fallbacks) */
+  isDark: boolean;
+
+  /**
+   * Theme color values. Only include colors you want to override.
+   * Missing colors will fall back to the appropriate base theme.
+   */
+  colors: ThemeColors;
+}
+
+/**
  * The module interface that extensions export.
  */
 export interface ExtensionModule {
   /** Called when extension is activated */
-  activate?: () => void | Promise<void>;
+  activate?: (context: ExtensionContext) => void | Promise<void>;
 
   /** Called when extension is deactivated */
   deactivate?: () => void | Promise<void>;
 
   /** React components exported by the extension */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  components?: Record<string, any>;
+  components?: Record<string, ComponentType<EditorHostProps>>;
 
   /** AI tools the extension provides */
-  aiTools?: AIToolDefinition[];
+  aiTools?: ExtensionAITool[];
 
   /** Lexical nodes contributed by the extension */
-  nodes?: Record<string, any>;
+  nodes?: Record<string, unknown>;
 
   /** Markdown transformers for Lexical */
-  transformers?: Record<string, any>;
+  transformers?: Record<string, unknown>;
 
   /** Components that render inside the host editor */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  hostComponents?: Record<string, any>;
+  hostComponents?: Record<string, ComponentType>;
 
   /** Slash command handlers */
-  slashCommandHandlers?: Record<string, (args: string) => Promise<string>>;
+  slashCommandHandlers?: Record<string, () => void>;
 
   /**
    * Panel exports for non-file-based UIs.
    * Keys are panel IDs matching the `panels` contribution in manifest.json.
-   * @see {@link ./panel.ts} for PanelExport type
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  panels?: Record<string, any>;
+  panels?: Record<string, PanelExport>;
 
   /**
    * Settings panel component for the Settings screen.
    * Keys match the `settingsPanel.component` in manifest.json.
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  settingsPanel?: Record<string, any>;
+  settingsPanel?: Record<string, ComponentType<SettingsPanelProps>>;
 }
 
 /**
- * AI tool definition for extensions.
+ * JSON Schema type for tool parameters.
  */
-export interface AIToolDefinition {
-  /** Tool name */
+export interface JSONSchema {
+  type: 'object' | 'array' | 'string' | 'number' | 'boolean' | 'null';
+  properties?: Record<string, JSONSchemaProperty>;
+  required?: string[];
+  items?: JSONSchema;
+  description?: string;
+}
+
+export interface JSONSchemaProperty {
+  type: 'string' | 'number' | 'boolean' | 'array' | 'object' | 'null';
+  description?: string;
+  enum?: (string | number)[];
+  items?: JSONSchemaProperty;
+  properties?: Record<string, JSONSchemaProperty>;
+  required?: string[];
+  default?: unknown;
+}
+
+/**
+ * AI tool definition from an extension.
+ */
+export interface ExtensionAITool {
+  /** Unique name (use prefix.action format, e.g., 'csv.get_schema') */
   name: string;
 
   /** Description for the AI */
   description: string;
 
-  /** JSON schema for parameters */
-  parameters?: {
-    type: 'object';
-    properties: Record<string, unknown>;
-    required?: string[];
-  };
+  /**
+   * JSON Schema for tool parameters.
+   * Use either 'inputSchema' (preferred) or 'parameters'.
+   */
+  inputSchema?: JSONSchema;
+
+  /**
+   * JSON Schema for tool parameters (legacy alias).
+   * @deprecated Use inputSchema instead.
+   */
+  parameters?: JSONSchema;
+
+  /**
+   * Tool scope.
+   * - 'global': Always available
+   * - 'editor': Only available when a matching editor is active
+   */
+  scope?: 'global' | 'editor';
+
+  /**
+   * File patterns this tool applies to when scope is 'editor'.
+   * If omitted, the host may inherit the extension's custom editor patterns.
+   */
+  editorFilePatterns?: string[];
 
   /** Handler function */
-  handler: (params: Record<string, unknown>) => Promise<unknown>;
+  handler: (
+    params: Record<string, unknown>,
+    context: AIToolContext
+  ) => Promise<ExtensionToolResult>;
 }
 
 /**
- * Services provided to extensions via the context.
+ * Result returned from extension AI tool handlers.
+ * Includes enhanced error details for debugging and diagnostics.
+ */
+export interface ExtensionToolResult {
+  /** Whether the tool executed successfully */
+  success: boolean;
+
+  /** Human-readable result message (shown to AI) */
+  message?: string;
+
+  /** Structured data result */
+  data?: unknown;
+
+  /** Error message if success is false */
+  error?: string;
+
+  /** Extension ID that provided this tool (added during execution) */
+  extensionId?: string;
+
+  /** Tool name that was executed (added during execution) */
+  toolName?: string;
+
+  /** Stack trace if an error occurred (for debugging) */
+  stack?: string;
+
+  /** Additional context about the error (for debugging) */
+  errorContext?: Record<string, unknown>;
+}
+
+/**
+ * Services provided to extensions via the runtime context.
  */
 export interface ExtensionServices {
   /** File system operations */
-  filesystem: {
-    /** Read a file's contents */
-    readFile: (path: string) => Promise<string>;
-    /** Write content to a file */
-    writeFile: (path: string, content: string) => Promise<void>;
-    /** Check if a file exists */
-    fileExists: (path: string) => Promise<boolean>;
-    /** Find files matching a pattern */
-    findFiles: (pattern: string) => Promise<string[]>;
-  };
+  filesystem: ExtensionFileSystemService;
 
   /** UI operations */
-  ui: {
-    /** Show an info message */
-    showInfo: (message: string) => void;
-    /** Show a warning message */
-    showWarning: (message: string) => void;
-    /** Show an error message */
-    showError: (message: string) => void;
-  };
+  ui: ExtensionUIService;
 
   /** AI services (only available if permissions.ai is true) */
-  ai?: {
-    /** Register an AI tool */
-    registerTool: (tool: ExtensionAITool) => { dispose: () => void };
-    /** Register a context provider */
-    registerContextProvider: (provider: { id: string; getContext: () => Promise<string> }) => { dispose: () => void };
-    /** Send a prompt to the AI and get a response. Defaults to claude-code provider. */
-    sendPrompt: (options: {
-      prompt: string;
-      sessionName?: string;
-      /** AI provider to use. Defaults to 'claude-code'. */
-      provider?: 'claude-code' | 'claude' | 'openai';
-      /** Model ID (e.g. 'claude-code:opus', 'claude-code:sonnet'). Uses provider default if omitted. */
-      model?: string;
-    }) => Promise<{
-      sessionId: string;
-      response: string;
-    }>;
-  };
+  ai?: ExtensionAIService;
 
   /** Configuration service (only available if contributions.configuration is defined) */
-  configuration?: {
-    /** Get a configuration value */
-    get: <T>(key: string, defaultValue?: T) => T;
-    /** Update a configuration value */
-    update: (key: string, value: unknown, scope?: 'user' | 'workspace') => Promise<void>;
-    /** Get all configuration values */
-    getAll: () => Record<string, unknown>;
-  };
+  configuration?: ExtensionConfigurationService;
 }
 
 /**
@@ -325,15 +498,14 @@ export interface ExtensionContext {
   services: ExtensionServices;
 
   /**
-   * Array to add disposables to - these will be cleaned up on deactivation.
-   * Push any cleanup functions here.
+   * Array to add disposables to.
+   * These will be cleaned up on deactivation.
    */
-  subscriptions: Array<{ dispose: () => void }>;
+  subscriptions: Disposable[];
 }
 
 /**
  * Context passed to AI tool handlers.
- * NOTE: This is different from ExtensionContext!
  */
 export interface AIToolContext {
   /** Path to the current workspace (may be undefined if no workspace is open) */
@@ -346,6 +518,88 @@ export interface AIToolContext {
   extensionContext: ExtensionContext;
 }
 
+export interface ExtensionConfigurationService {
+  /**
+   * Get a configuration value.
+   * Returns the workspace value if set, otherwise the user value, otherwise the default.
+   */
+  get<T>(key: string, defaultValue?: T): T;
+
+  /**
+   * Update a configuration value.
+   * @param scope Which scope to update ('user' or 'workspace')
+   */
+  update(key: string, value: unknown, scope?: 'user' | 'workspace'): Promise<void>;
+
+  /** Get all configuration values */
+  getAll(): Record<string, unknown>;
+}
+
+export interface ExtensionFileSystemService {
+  /** Read a file's contents */
+  readFile(path: string): Promise<string>;
+
+  /** Write content to a file */
+  writeFile(path: string, content: string): Promise<void>;
+
+  /** Check if a file exists */
+  fileExists(path: string): Promise<boolean>;
+
+  /** Find files matching a pattern */
+  findFiles(pattern: string): Promise<string[]>;
+}
+
+export interface ExtensionUIService {
+  /** Show an info message */
+  showInfo(message: string): void;
+
+  /** Show a warning message */
+  showWarning(message: string): void;
+
+  /** Show an error message */
+  showError(message: string): void;
+}
+
+export interface ExtensionAIService {
+  /** Register an AI tool */
+  registerTool(tool: ExtensionAITool): Disposable;
+
+  /** Register a context provider */
+  registerContextProvider(provider: ExtensionContextProvider): Disposable;
+
+  /** Send a prompt to the AI and get a response. Defaults to claude-code provider. */
+  sendPrompt(options: {
+    prompt: string;
+    sessionName?: string;
+    /** AI provider to use. Defaults to 'claude-code'. */
+    provider?: 'claude-code' | 'claude' | 'openai';
+    /** Model ID (e.g. 'claude-code:opus', 'claude-code:sonnet'). Uses provider default if omitted. */
+    model?: string;
+  }): Promise<{
+    sessionId: string;
+    response: string;
+  }>;
+}
+
+export interface ExtensionContextProvider {
+  /** Provider identifier */
+  id: string;
+
+  /** Priority (higher = earlier in context) */
+  priority?: number;
+
+  /** Generate context string */
+  provideContext(): Promise<string>;
+}
+
+export interface Disposable {
+  dispose(): void;
+}
+
+// ============================================================================
+// Deprecated compatibility aliases
+// ============================================================================
+
 /**
  * @deprecated Use AIToolContext instead. This type has incorrect property names.
  */
@@ -353,7 +607,7 @@ export interface ToolContext {
   /** @deprecated Use activeFilePath instead */
   filePath?: string;
 
-  /** @deprecated This property is not available - use extensionContext.services.filesystem.readFile */
+  /** @deprecated This property is not available. Use services.filesystem.readFile(). */
   fileContent?: string;
 
   /** Path to extension installation directory */
@@ -361,93 +615,68 @@ export interface ToolContext {
 }
 
 /**
- * Result returned from AI tool handlers.
+ * @deprecated Use ExtensionToolResult for tool handlers.
+ * This remains as a loose compatibility type for older internal extensions.
  */
 export type ToolResult = ToolSuccessResult | ToolErrorResult;
 
+/**
+ * @deprecated Use ExtensionToolResult for tool handlers.
+ */
 export interface ToolSuccessResult {
-  /** Any data to return to Claude */
+  /** Any data to return to the AI */
   [key: string]: unknown;
 
   /** If present, updates the file content */
   newContent?: string;
 }
 
+/**
+ * @deprecated Use ExtensionToolResult for tool handlers.
+ */
 export interface ToolErrorResult {
   error: string;
 }
 
 /**
- * Full AI tool definition with typed handler.
- * This is the recommended type to use when defining tools.
+ * @deprecated Use ExtensionAITool instead.
  */
-export interface ExtensionAITool {
-  /** Unique name (use prefix.action format, e.g., 'csv.get_schema') */
+export type AIToolDefinition = ExtensionAITool;
+
+/**
+ * @deprecated Use JSONSchemaProperty instead.
+ */
+export type JsonSchemaProperty = JSONSchemaProperty;
+
+/**
+ * @deprecated `fileIcons` now uses a Record<string, string> map in ExtensionContributions.
+ */
+export interface FileIconContribution {
+  pattern: string;
+  icon: string;
+  color?: string;
+}
+
+/**
+ * @deprecated Use `contributions.nodes` plus exported node classes instead.
+ */
+export interface LexicalNodeContribution {
+  type: string;
   name: string;
-
-  /** Description for Claude to understand when to use it */
-  description: string;
-
-  /** Tool scope: 'global' for workspace-wide tools, 'file' for file-specific tools */
-  scope?: 'global' | 'file';
-
-  /**
-   * JSON Schema for input parameters.
-   * Can use either 'inputSchema' or 'parameters' - both are supported.
-   */
-  inputSchema?: {
-    type: 'object';
-    properties: Record<string, JsonSchemaProperty>;
-    required?: string[];
-  };
-
-  /**
-   * JSON Schema for input parameters (alias for inputSchema).
-   * Use whichever naming convention you prefer.
-   */
-  parameters?: {
-    type: 'object';
-    properties: Record<string, JsonSchemaProperty>;
-    required?: string[];
-  };
-
-  /**
-   * Handler function.
-   * @param args - The validated input parameters
-   * @param context - Context including workspace path, active file, and extension services
-   * @returns A result object. Use { success: true, message: "..." } for success,
-   *          or { success: false, error: "..." } for errors.
-   */
-  handler: (
-    args: Record<string, unknown>,
-    context: AIToolContext
-  ) => Promise<ExtensionToolResult>;
+  nodeClass: string;
 }
 
 /**
- * Result returned from extension AI tool handlers.
+ * @deprecated Extensions should use host storage and service contracts instead.
  */
-export interface ExtensionToolResult {
-  /** Whether the tool executed successfully */
-  success: boolean;
-
-  /** Human-readable result message (shown to AI) */
-  message?: string;
-
-  /** Structured data result */
-  data?: unknown;
-
-  /** Error message if success is false */
-  error?: string;
-}
+export type SettingsPanelStorage = ExtensionStorage;
 
 /**
- * JSON Schema property definition for tool input schemas.
+ * @deprecated Use PanelHostProps from './panel' instead.
  */
-export interface JsonSchemaProperty {
-  type: 'string' | 'number' | 'boolean' | 'array' | 'object';
-  description?: string;
-  enum?: string[];
-  items?: JsonSchemaProperty;
-  properties?: Record<string, JsonSchemaProperty>;
-}
+export type LegacyPanelHostProps = PanelHostProps;
+
+/**
+ * @deprecated Use PanelGutterButtonProps from './panel' instead.
+ */
+export type LegacyPanelGutterButtonProps = PanelGutterButtonProps;

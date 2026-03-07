@@ -72,14 +72,21 @@ To add your own analysis tools:
     },
   },
   handler: async (args, context) => {
-    if (!context.fileContent) {
-      return { error: 'No file is currently open' };
+    if (!context.activeFilePath) {
+      return { success: false, error: 'No active file is open' };
     }
 
-    // Your analysis logic here
+    const content = await context.extensionContext.services.filesystem.readFile(
+      context.activeFilePath
+    );
+
+    // Your analysis logic here using content
 
     return {
-      // Results for Claude
+      success: true,
+      data: {
+        // Results for Claude
+      },
     };
   },
 }

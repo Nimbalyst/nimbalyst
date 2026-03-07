@@ -40,9 +40,10 @@ Entry point that exports:
 ### MinimalEditor.tsx
 
 Custom editor component that:
-- Receives `content`, `filePath`, and `onChange` props
-- Calls `onChange(newContent)` when user edits
-- Syncs with `content` prop when file reloads
+- Receives `host` via `EditorHostProps`
+- Calls `host.loadContent()` on mount
+- Calls `host.setDirty(true)` when the user edits
+- Saves through `host.onSaveRequested()` / `host.saveContent()`
 
 ## Customizing
 

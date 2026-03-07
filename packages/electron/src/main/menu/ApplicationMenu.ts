@@ -43,6 +43,7 @@ import { autoUpdaterService } from '../services/autoUpdater';
 import { KeyboardShortcuts } from './KeyboardShortcuts';
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
 import { FeatureTrackingService } from '../services/analytics/FeatureTrackingService';
+import { showNewExtensionProjectDialog } from '../services/ExtensionProjectScaffolder';
 
 // Import shared SDK docs path function
 import { getExtensionSDKDocsPath } from '../utils/workspaceDetection';
@@ -365,6 +366,19 @@ export async function createApplicationMenu() {
                                 }
                             }
                         }
+                    }
+                },
+                {
+                    id: 'file-new-extension-project',
+                    label: 'New Extension Project...',
+                    click: async () => {
+                        AnalyticsService.getInstance().sendEvent('menu_action_used', {
+                            menu: 'file',
+                            action: 'new_extension_project',
+                            hasKeyboardEquivalent: false,
+                        });
+
+                        await showNewExtensionProjectDialog(getFocusedWindow());
                     }
                 },
                 {
@@ -1021,6 +1035,18 @@ export async function createApplicationMenu() {
                     click: async () => {
                         const focused = getFocusedWindow();
                         if (focused) focused.webContents.toggleDevTools();
+                    }
+                },
+                {
+                    label: 'New Extension Project...',
+                    click: async () => {
+                        AnalyticsService.getInstance().sendEvent('menu_action_used', {
+                            menu: 'developer',
+                            action: 'new_extension_project',
+                            hasKeyboardEquivalent: false,
+                        });
+
+                        await showNewExtensionProjectDialog(getFocusedWindow());
                     }
                 },
                 { type: 'separator' },
@@ -1700,4 +1726,3 @@ function isWorkspaceManagerWindow(window: BrowserWindow): boolean {
     // Check if this is the workspace manager window by checking the title
     return window.getTitle() === 'Project Manager - Nimbalyst';
 }
-

@@ -13,6 +13,6 @@
     "@nimbalyst/extension-sdk": "workspace:*",
     "@types/react": "^18.2.0",
     "typescript": "^5.0.0",
-    "vite": "^5.0.0"
+    "vite": "^7.1.12"
   }
 }

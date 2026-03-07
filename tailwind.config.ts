@@ -14,6 +14,7 @@ import type { Config } from 'tailwindcss';
 const config: Config = {
   content: [
     './packages/*/src/**/*.{ts,tsx,js,jsx}',
+    './packages/extension-sdk-docs/examples/*/src/**/*.{ts,tsx,js,jsx}',
   ],
   darkMode: ['variant', '&:is([data-theme="dark"] *, [data-theme="crystal-dark"] *)'],
   theme: {

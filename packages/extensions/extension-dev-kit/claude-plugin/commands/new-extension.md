@@ -26,21 +26,22 @@ This command follows a **plan-first approach**:
 ## Usage
 
 ```
-/new-extension <name> <path> [file-patterns]
+/new-extension <template> <path> <name> [file-patterns]
 ```
 
 ### Arguments
 
-- `<name>` - Human-readable name for the extension (e.g., "3D Model Viewer")
+- `<template>` - One of `minimal`, `custom-editor`, or `ai-tool`
 - `<path>` - Directory path where the extension should be created
+- `<name>` - Human-readable name for the extension (e.g., "3D Model Viewer")
 - `[file-patterns]` - (Optional) Comma-separated file patterns (e.g., `*.obj,*.stl`)
 
 ### Examples
 
 ```
-/new-extension "OBJ Viewer" ~/extensions/obj-viewer *.obj
-/new-extension "Todo List Editor" ~/my-todo-extension *.todo
-/new-extension "Code Metrics" ~/code-metrics
+/new-extension custom-editor ~/extensions/obj-viewer "OBJ Viewer" *.obj
+/new-extension custom-editor ~/my-todo-extension "Todo List Editor" *.todo
+/new-extension ai-tool ~/code-metrics "Code Metrics"
 ```
 
 ## Step 1: Create Project Scaffold
@@ -62,6 +63,8 @@ Create these base files only:
 }
 ```
 
+`apiVersion` is currently optional but recommended.
+
 ### package.json
 
 ```json
@@ -77,10 +80,10 @@ Create these base files only:
     "react": "^18.2.0"
   },
   "devDependencies": {
-    "@nimbalyst/extension-sdk": "*",
+    "@nimbalyst/extension-sdk": "^0.1.0",
     "@types/react": "^18.2.0",
     "typescript": "^5.0.0",
-    "vite": "^5.0.0"
+    "vite": "^7.1.12"
   }
 }
 ```

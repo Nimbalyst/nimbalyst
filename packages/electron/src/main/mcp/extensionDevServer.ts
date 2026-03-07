@@ -139,8 +139,37 @@ function validateManifest(manifestPath: string): {
     if (!manifest.apiVersion) {
       warnings.push({
         field: "apiVersion",
-        message: 'Missing required field "apiVersion"',
+        message: 'Missing optional field "apiVersion". Recommended for forward-compatibility checks.',
         severity: "warning",
+      });
+    } else if (typeof manifest.apiVersion !== "string") {
+      warnings.push({
+        field: "apiVersion",
+        message: '"apiVersion" must be a string if provided',
+        severity: "error",
+      });
+    }
+
+    if (
+      manifest.defaultEnabled !== undefined &&
+      typeof manifest.defaultEnabled !== "boolean"
+    ) {
+      warnings.push({
+        field: "defaultEnabled",
+        message: '"defaultEnabled" must be a boolean',
+        severity: "error",
+      });
+    }
+
+    if (
+      manifest.requiredReleaseChannel !== undefined &&
+      manifest.requiredReleaseChannel !== "stable" &&
+      manifest.requiredReleaseChannel !== "alpha"
+    ) {
+      warnings.push({
+        field: "requiredReleaseChannel",
+        message: '"requiredReleaseChannel" must be "stable" or "alpha"',
+        severity: "error",
       });
     }
 
@@ -161,6 +190,12 @@ function validateManifest(manifestPath: string): {
             severity: "error",
           });
         }
+      } else if (manifest.contributions.aiTools) {
+        warnings.push({
+          field: "contributions.aiTools",
+          message: 'aiTools must be an array of strings',
+          severity: "error",
+        });
       }
 
       // Validate customEditors
@@ -188,6 +223,16 @@ function validateManifest(manifestPath: string): {
               warnings.push({
                 field: `contributions.customEditors[${idx}].component`,
                 message: 'customEditor must have a "component" name',
+                severity: "error",
+              });
+            }
+            if (
+              editor.supportsSourceMode !== undefined &&
+              typeof editor.supportsSourceMode !== "boolean"
+            ) {
+              warnings.push({
+                field: `contributions.customEditors[${idx}].supportsSourceMode`,
+                message: '"supportsSourceMode" must be a boolean',
                 severity: "error",
               });
             }
@@ -232,7 +277,88 @@ function validateManifest(manifestPath: string): {
               severity: "error",
             });
           }
+          if (typeof item.defaultContent !== "string") {
+            warnings.push({
+              field: `contributions.newFileMenu[${idx}].defaultContent`,
+              message: 'newFileMenu item must have a "defaultContent" string',
+              severity: "error",
+            });
+          }
         });
+      }
+
+      // Validate fileIcons
+      if (manifest.contributions.fileIcons !== undefined) {
+        if (
+          typeof manifest.contributions.fileIcons !== "object" ||
+          manifest.contributions.fileIcons === null ||
+          Array.isArray(manifest.contributions.fileIcons)
+        ) {
+          warnings.push({
+            field: "contributions.fileIcons",
+            message: 'fileIcons must be an object map like { "*.csv": "table" }',
+            severity: "error",
+          });
+        } else {
+          Object.entries(manifest.contributions.fileIcons as Record<string, unknown>).forEach(([pattern, icon]) => {
+            if (typeof icon !== "string" || !icon) {
+              warnings.push({
+                field: `contributions.fileIcons.${pattern}`,
+                message: 'fileIcons values must be non-empty icon name strings',
+                severity: "error",
+              });
+            }
+          });
+        }
+      }
+
+      // Validate slashCommands
+      if (manifest.contributions.slashCommands !== undefined) {
+        if (!Array.isArray(manifest.contributions.slashCommands)) {
+          warnings.push({
+            field: "contributions.slashCommands",
+            message: 'slashCommands must be an array',
+            severity: "error",
+          });
+        } else {
+          manifest.contributions.slashCommands.forEach((command: any, idx: number) => {
+            if (!command.id) {
+              warnings.push({
+                field: `contributions.slashCommands[${idx}].id`,
+                message: 'slashCommand must have an "id" field',
+                severity: "error",
+              });
+            }
+            if (!command.title) {
+              warnings.push({
+                field: `contributions.slashCommands[${idx}].title`,
+                message: 'slashCommand must have a "title" field',
+                severity: "error",
+              });
+            }
+            if (command.name && !command.id) {
+              warnings.push({
+                field: `contributions.slashCommands[${idx}]`,
+                message: 'slashCommands use "id", not "name". Rename the field.',
+                severity: "error",
+              });
+            }
+            if (command.displayName && !command.title) {
+              warnings.push({
+                field: `contributions.slashCommands[${idx}]`,
+                message: 'slashCommands use "title", not "displayName". Rename the field.',
+                severity: "error",
+              });
+            }
+            if (!command.handler) {
+              warnings.push({
+                field: `contributions.slashCommands[${idx}].handler`,
+                message: 'slashCommand must have a "handler" field',
+                severity: "error",
+              });
+            }
+          });
+        }
       }
     }
 

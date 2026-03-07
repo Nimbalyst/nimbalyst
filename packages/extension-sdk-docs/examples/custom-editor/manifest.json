@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "A tree-view editor for JSON files with expand/collapse",
   "main": "dist/index.js",
-  "styles": "dist/styles.css",
+  "styles": "dist/index.css",
   "apiVersion": "1.0.0",
   "permissions": {
     "filesystem": true,

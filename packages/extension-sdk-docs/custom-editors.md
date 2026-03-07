@@ -6,116 +6,80 @@ Custom editors are the most powerful extension type. They let you create entirel
 
 When a user opens a file, Nimbalyst checks if any extension has registered a custom editor for that file type. If found, your React component is rendered instead of the default editor.
 
-Your component receives props from Nimbalyst including the file content, path, theme, and callbacks for managing dirty state and content retrieval.
+Your component receives a single `host` prop from Nimbalyst. The host handles loading, saving, dirty tracking, file change notifications, and optional features like diff mode.
 
 ## Editor Component Interface
 
 ```typescript
-interface CustomEditorProps {
-  /** Absolute path to the file being edited */
-  filePath: string;
+interface EditorHostProps {
+  host: EditorHost;
+}
 
-  /** File name (basename) */
-  fileName: string;
+interface EditorHost {
+  readonly filePath: string;
+  readonly fileName: string;
+  readonly theme: string;
+  readonly isActive: boolean;
+  readonly workspaceId?: string;
 
-  /** Initial file content (may be empty for binary files) */
-  initialContent: string;
-
-  /** Current theme: 'light' | 'dark' | 'crystal-dark' */
-  theme: 'light' | 'dark' | 'crystal-dark';
-
-  /** Whether this editor tab is currently active/focused */
-  isActive: boolean;
-
-  /** Workspace path (if in a workspace) */
-  workspaceId?: string;
-
-  /**
-   * Called when the editor content changes.
-   * This triggers dirty state tracking and autosave.
-   */
-  onContentChange?: () => void;
-
-  /**
-   * Called to update the dirty state.
-   * @param isDirty - Whether the editor has unsaved changes
-   */
-  onDirtyChange?: (isDirty: boolean) => void;
-
-  /**
-   * Register a function that returns the current editor content.
-   * This is called by the host when saving.
-   *
-   * IMPORTANT: For read-only editors (like PDF viewer), do NOT call this.
-   * Calling it with a function that returns '' will cause file corruption.
-   */
-  onGetContentReady?: (getContentFn: () => string) => void;
-
-  /** Called when user requests to view file history */
-  onViewHistory?: () => void;
-
-  /** Called when user requests to rename the document */
-  onRenameDocument?: () => void;
+  loadContent(): Promise<string>;
+  loadBinaryContent(): Promise<ArrayBuffer>;
+  onFileChanged(callback: (newContent: string) => void): () => void;
+  setDirty(isDirty: boolean): void;
+  saveContent(content: string | ArrayBuffer): Promise<void>;
+  onSaveRequested(callback: () => void): () => void;
+  openHistory(): void;
 }
 ```
 
 ## Basic Editor Structure
 
 ```tsx
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import type { CustomEditorProps } from '@nimbalyst/extension-sdk';
+import React, { useState, useEffect } from 'react';
+import type { EditorHostProps } from '@nimbalyst/extension-sdk';
 
-export function MyEditor({
-  initialContent,
-  filePath,
-  fileName,
-  theme,
-  isActive,
-  onContentChange,
-  onDirtyChange,
-  onGetContentReady,
-}: CustomEditorProps) {
-  // Parse the file content into your internal data structure
-  const [data, setData] = useState(() => parseContent(initialContent));
-  const dataRef = useRef(data);
+export function MyEditor({ host }: EditorHostProps) {
+  const [content, setContent] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Keep ref in sync for the getContent callback
   useEffect(() => {
-    dataRef.current = data;
-  }, [data]);
+    let mounted = true;
 
-  // Register the content getter for saving
+    host.loadContent().then((initialContent) => {
+      if (!mounted) return;
+      setContent(initialContent);
+      setIsLoading(false);
+    });
+
+    return () => {
+      mounted = false;
+    };
+  }, [host]);
+
   useEffect(() => {
-    if (onGetContentReady) {
-      onGetContentReady(() => serializeContent(dataRef.current));
-    }
-  }, [onGetContentReady]);
+    return host.onSaveRequested(async () => {
+      await host.saveContent(content);
+      host.setDirty(false);
+    });
+  }, [host, content]);
 
-  // Re-parse when file is reloaded from disk
   useEffect(() => {
-    setData(parseContent(initialContent));
-  }, [initialContent]);
+    return host.onFileChanged((newContent) => {
+      setContent(newContent);
+      host.setDirty(false);
+    });
+  }, [host]);
 
-  // Handle user edits
-  const handleEdit = useCallback((newData: MyDataType) => {
-    setData(newData);
-    onDirtyChange?.(true);    // Mark as dirty
-    onContentChange?.();      // Trigger autosave timer
-  }, [onDirtyChange, onContentChange]);
+  const handleEdit = (nextContent: string) => {
+    setContent(nextContent);
+    host.setDirty(true);
+  };
 
-  return (
-    <div className="my-editor" data-theme={theme}>
-      {/* Your editor UI */}
-    </div>
-  );
-}
+  if (isLoading) {
+    return <div className="my-editor">Loading...</div>;
+  }
 
-function parseContent(content: string): MyDataType {
-  // Parse file content into your data structure
-}
-
-function serializeContent(data: MyDataType): string {
-  // Convert data structure back to file content
+  return <div className="my-editor">{/* Your editor UI */}</div>;
 }
 ```
 
@@ -123,21 +87,21 @@ function serializeContent(data: MyDataType): string {
 
 ### Content Management
 
-Unlike simpler editor patterns, Nimbalyst uses a **pull-based** content model:
+Nimbalyst uses a **host-driven save model**:
 
-1. **Initial content**: You receive `initialContent` once when the editor mounts
-2. **Dirty tracking**: Call `onDirtyChange(true)` when the user makes changes
-3. **Content retrieval**: Register a getter via `onGetContentReady` that returns current content
-4. **Saving**: When the user saves, Nimbalyst calls your getter to retrieve the content
+1. **Initial load**: Call `host.loadContent()` when the editor mounts
+2. **Dirty tracking**: Call `host.setDirty(true)` when the user makes changes
+3. **Saving**: Subscribe with `host.onSaveRequested()` and push the current content via `host.saveContent()`
+4. **External reloads**: Subscribe with `host.onFileChanged()` to react to disk changes
 
-This pattern allows editors to maintain complex internal state without constantly serializing to a string.
+This lets complex editors own their in-memory state while still integrating cleanly with tabs, autosave, file watching, and AI edits.
 
-### Why not just `onChange(content)`?
+### Why not just pass `content` as a prop?
 
-The pull-based model is more efficient for complex editors:
-- Spreadsheets with thousands of cells don't serialize on every keystroke
+The `EditorHost` model is more efficient for complex editors:
+- Spreadsheets with thousands of cells do not need to serialize on every keystroke
 - Diagram editors can maintain rich object graphs internally
-- Binary format editors only serialize when actually saving
+- Binary editors can load and save `ArrayBuffer` data without pretending everything is text
 
 ## Registering the Editor
 
@@ -211,7 +175,7 @@ Create a `styles.css` file and reference it in your manifest:
 
 ```json
 {
-  "styles": "dist/styles.css"
+  "styles": "dist/index.css"
 }
 ```
 

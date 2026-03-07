@@ -7,6 +7,8 @@ description: Build, install, and hot-reload Nimbalyst extensions using MCP tools
 
 Nimbalyst provides MCP tools for building, installing, and hot-reloading extensions directly from within the running app. This enables rapid iteration on extension development without manually running build commands.
 
+The recommended in-app scaffold flow uses `File > New Extension Project`, `Developer > New Extension Project`, or the Extension Developer Kit's `/new-extension` command. Enable Extension Dev Tools in Settings > Advanced before using the build/install workflow.
+
 ## Available MCP Tools
 
 ### Build Extension
@@ -70,7 +72,7 @@ Restarts the entire Nimbalyst application. **Only use when explicitly requested 
 ## Development Workflow
 
 ### Initial Setup
-1. Create extension project with `/new-extension` command
+1. Create extension project with `/new-extension <template> <path> <name> [file-patterns]`
 2. Implement the extension code
 3. Build with `extension_build`
 4. Install with `extension_install`

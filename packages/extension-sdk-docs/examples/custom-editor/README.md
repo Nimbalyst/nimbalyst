@@ -77,12 +77,17 @@ to light, dark, and crystal-dark themes.
 
 ### AI Tool with File Updates
 
-Tools that modify data return `newContent`:
+Tools that modify data write through the extension filesystem service:
 
 ```typescript
+await context.extensionContext.services.filesystem.writeFile(
+  context.activeFilePath!,
+  JSON.stringify(data, null, 2)
+);
+
 return {
   success: true,
-  newContent: JSON.stringify(data, null, 2),
+  message: 'Updated the JSON file',
 };
 ```
 

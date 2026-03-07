@@ -17,6 +17,7 @@
     "test:unit": "vitest",
     "test:unit:ui": "vitest --ui",
     "test:unit:coverage": "vitest --coverage",
+    "extension-sdk:check-public": "bash scripts/extension-sdk-public-checks.sh",
     "analyze": "node scripts/bundle-size.js",
     "analyze:top": "node scripts/bundle-size.js --top",
     "clean": "rm -rf packages/*/node_modules/.vite packages/*/dist node_modules/.cache",

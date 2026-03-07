@@ -2,6 +2,18 @@
 
 This guide walks you through creating your first Nimbalyst extension. By the end, you'll have a working extension that registers a custom editor for `.hello` files.
 
+## Recommended: Create It From Inside Nimbalyst
+
+The intended workflow is to scaffold and iterate on extensions from inside Nimbalyst:
+
+1. Enable Extension Dev Tools in Settings > Advanced
+2. Use `File > New Extension Project` or `Developer > New Extension Project`
+3. Or ask Claude to run `/new-extension minimal ~/my-first-extension "Hello Editor"`
+4. Ask Claude to build and install it with `extension_build` and `extension_install`
+5. Use `extension_reload` while iterating
+
+The rest of this guide shows the manual scaffold path if you prefer to create the project yourself.
+
 ## Prerequisites
 
 1. **Enable Extension Dev Tools** - Go to Settings > Advanced and enable "Extension Dev Tools"
@@ -56,6 +68,8 @@ Create `manifest.json` - this tells Nimbalyst about your extension:
 }
 ```
 
+`apiVersion` is currently optional but recommended.
+
 ## Step 4: Create the Vite Config
 
 Create `vite.config.ts`:
@@ -66,7 +80,7 @@ import { createExtensionConfig } from '@nimbalyst/extension-sdk/vite';
 
 export default defineConfig(
   createExtensionConfig({
-    // Add any custom vite config here
+    entry: './src/index.ts',
   })
 );
 ```
@@ -98,6 +112,7 @@ Create `tsconfig.json`:
 Create `src/index.ts`:
 
 ```typescript
+import type { ExtensionContext } from '@nimbalyst/extension-sdk';
 import { HelloEditor } from './HelloEditor';
 
 // Export components that the manifest references
@@ -106,7 +121,7 @@ export const components = {
 };
 
 // Called when the extension is loaded
-export function activate(context: { extensionPath: string }) {
+export function activate(context: ExtensionContext) {
   console.log('Hello Editor extension activated!');
 }
 
@@ -121,42 +136,53 @@ export function deactivate() {
 Create `src/HelloEditor.tsx`:
 
 ```tsx
-import React, { useState, useEffect, useRef } from 'react';
-import type { CustomEditorProps } from '@nimbalyst/extension-sdk';
+import React, { useState, useEffect } from 'react';
+import type { EditorHostProps } from '@nimbalyst/extension-sdk';
 
-export function HelloEditor({
-  initialContent,
-  filePath,
-  onContentChange,
-  onDirtyChange,
-  onGetContentReady,
-}: CustomEditorProps) {
-  const [text, setText] = useState(initialContent);
-  const textRef = useRef(text);
+export function HelloEditor({ host }: EditorHostProps) {
+  const [text, setText] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Keep ref in sync for the content getter
+  // Load content from disk on mount
   useEffect(() => {
-    textRef.current = text;
-  }, [text]);
+    let mounted = true;
 
-  // Register content getter - Nimbalyst calls this when saving
-  useEffect(() => {
-    if (onGetContentReady) {
-      onGetContentReady(() => textRef.current);
-    }
-  }, [onGetContentReady]);
+    host.loadContent().then((content) => {
+      if (!mounted) return;
+      setText(content);
+      setIsLoading(false);
+    });
 
-  // Update local state when file is reloaded from disk
+    return () => {
+      mounted = false;
+    };
+  }, [host]);
+
+  // Save when the host requests it (autosave / Cmd+S)
   useEffect(() => {
-    setText(initialContent);
-  }, [initialContent]);
+    return host.onSaveRequested(async () => {
+      await host.saveContent(text);
+      host.setDirty(false);
+    });
+  }, [host, text]);
+
+  // Reload if the file changes on disk
+  useEffect(() => {
+    return host.onFileChanged((newContent) => {
+      setText(newContent);
+      host.setDirty(false);
+    });
+  }, [host]);
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newText = e.target.value;
     setText(newText);
-    onDirtyChange?.(true);   // Show dirty indicator on tab
-    onContentChange?.();     // Trigger autosave timer
+    host.setDirty(true);
   };
+
+  if (isLoading) {
+    return <div style={{ padding: '20px' }}>Loading...</div>;
+  }
 
   return (
     <div style={{
@@ -167,7 +193,7 @@ export function HelloEditor({
     }}>
       <h2 style={{ marginBottom: '10px' }}>Hello Editor</h2>
       <p style={{ color: 'var(--nim-text-muted)', marginBottom: '10px' }}>
-        Editing: {filePath}
+        Editing: {host.filePath}
       </p>
       <textarea
         value={text}
@@ -190,10 +216,10 @@ export function HelloEditor({
 ```
 
 **Key points:**
-- Use `initialContent` (not `content`) for the initial file content
-- Register a content getter via `onGetContentReady` - Nimbalyst calls this when saving
-- Call `onDirtyChange(true)` to show the dirty indicator on the tab
-- Call `onContentChange()` to trigger the autosave timer
+- Call `host.loadContent()` on mount instead of expecting a `content` prop
+- Subscribe with `host.onSaveRequested()` and call `host.saveContent()` when the host asks you to save
+- Call `host.setDirty(true)` when the user edits the document
+- Subscribe with `host.onFileChanged()` to handle external edits or AI edits
 
 ## Step 8: Add Build Script
 
@@ -228,7 +254,7 @@ Claude will use the `extension_build` and `extension_install` tools to compile a
 - Add a toolbar with actions
 - Handle more complex file formats
 
-See the [Custom Editors](./custom-editors.md) guide for more advanced editor development.
+See the [custom-editors.md](./custom-editors.md) guide for more advanced editor development.
 
 ## Troubleshooting
 

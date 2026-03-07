@@ -103,6 +103,18 @@ export interface EditorHost {
   /** Whether this editor's tab is active */
   readonly isActive: boolean;
 
+  // ============ THEME CHANGES ============
+
+  /**
+   * Subscribe to theme changes.
+   * Called when the application theme changes.
+   * Editor should update its visual appearance in response.
+   *
+   * @param callback Called with new theme when it changes
+   * @returns Unsubscribe function
+   */
+  onThemeChanged(callback: (theme: string) => void): () => void;
+
   /** Workspace identifier (if in a workspace) */
   readonly workspaceId?: string;
 
@@ -194,6 +206,16 @@ export interface EditorHost {
    */
   isDiffModeActive?(): boolean;
 
+  /**
+   * Subscribe to diff mode being cleared externally.
+   * Called when the user accepts/rejects diff via the unified diff header.
+   * Editor should clear its diff state when this fires.
+   *
+   * @param callback Called when diff mode should be cleared
+   * @returns Unsubscribe function
+   */
+  onDiffCleared?(callback: () => void): () => void;
+
   // ============ SOURCE MODE (OPTIONAL) ============
 
   /**
@@ -224,6 +246,15 @@ export interface EditorHost {
    * If true, a "View Source" button will be available.
    */
   readonly supportsSourceMode?: boolean;
+
+  // ============ CONFIGURATION (OPTIONAL) ============
+
+  /**
+   * Get a configuration value for the extension.
+   * Only available if the extension has configuration contributions defined.
+   * Returns the workspace value if set, otherwise the user value, otherwise the default.
+   */
+  getConfig?<T>(key: string, defaultValue?: T): T;
 
   // ============ STORAGE ============
 

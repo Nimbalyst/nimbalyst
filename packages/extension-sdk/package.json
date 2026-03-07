@@ -2,6 +2,15 @@
   "name": "@nimbalyst/extension-sdk",
   "version": "0.1.0",
   "description": "SDK for building Nimbalyst extensions",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nimbalyst/nimbalyst.git",
+    "directory": "packages/extension-sdk"
+  },
+  "homepage": "https://docs.nimbalyst.com/extensions",
+  "bugs": {
+    "url": "https://github.com/nimbalyst/nimbalyst/issues"
+  },
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -55,7 +64,9 @@
     "nimbalyst",
     "extension",
     "sdk",
-    "plugin"
+    "plugin",
+    "custom-editor",
+    "ai-tools"
   ],
   "license": "MIT"
 }

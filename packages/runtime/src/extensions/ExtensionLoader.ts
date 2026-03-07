@@ -149,6 +149,26 @@ function validateManifest(
     });
   }
 
+  if (m.defaultEnabled !== undefined && typeof m.defaultEnabled !== 'boolean') {
+    errors.push({
+      error: `Invalid 'defaultEnabled' - should be a boolean`,
+      field: 'defaultEnabled',
+      suggestion: 'Use "defaultEnabled": true or false',
+    });
+  }
+
+  if (
+    m.requiredReleaseChannel !== undefined &&
+    m.requiredReleaseChannel !== 'stable' &&
+    m.requiredReleaseChannel !== 'alpha'
+  ) {
+    errors.push({
+      error: `Invalid 'requiredReleaseChannel' - must be "stable" or "alpha"`,
+      field: 'requiredReleaseChannel',
+      suggestion: 'Use "requiredReleaseChannel": "stable" or "alpha"',
+    });
+  }
+
   // Validate contributions if present
   if (m.contributions !== undefined) {
     if (typeof m.contributions !== 'object' || m.contributions === null) {
@@ -170,18 +190,37 @@ function validateManifest(
           });
         } else {
           contributions.customEditors.forEach((editor, index) => {
-            if (!editor.filePatterns || !Array.isArray(editor.filePatterns)) {
+            const editorRecord = editor as Record<string, unknown>;
+
+            if (!Array.isArray(editorRecord.filePatterns)) {
               errors.push({
                 error: `customEditors[${index}] missing 'filePatterns' array`,
                 field: `contributions.customEditors[${index}].filePatterns`,
                 suggestion: 'Add file patterns, e.g., "filePatterns": ["*.myext"]',
               });
             }
-            if (!editor.component || typeof editor.component !== 'string') {
+            if (typeof editorRecord.displayName !== 'string' || !editorRecord.displayName) {
+              errors.push({
+                error: `customEditors[${index}] missing 'displayName'`,
+                field: `contributions.customEditors[${index}].displayName`,
+                suggestion: 'Add a user-facing name, e.g., "displayName": "My Editor"',
+              });
+            }
+            if (typeof editorRecord.component !== 'string' || !editorRecord.component) {
               errors.push({
                 error: `customEditors[${index}] missing 'component' name`,
                 field: `contributions.customEditors[${index}].component`,
                 suggestion: 'Add component name that matches an export, e.g., "component": "MyEditor"',
+              });
+            }
+            if (
+              editorRecord.supportsSourceMode !== undefined &&
+              typeof editorRecord.supportsSourceMode !== 'boolean'
+            ) {
+              errors.push({
+                error: `customEditors[${index}] has invalid 'supportsSourceMode'`,
+                field: `contributions.customEditors[${index}].supportsSourceMode`,
+                suggestion: 'Use "supportsSourceMode": true or false',
               });
             }
           });
@@ -231,6 +270,235 @@ function validateManifest(
             field: 'contributions.aiTools',
             suggestion: 'aiTools should be an array listing AI tool names exported by the module',
           });
+        } else if (contributions.aiTools.some((tool) => typeof tool !== 'string')) {
+          errors.push({
+            error: `Invalid 'contributions.aiTools' - entries must be strings`,
+            field: 'contributions.aiTools',
+            suggestion: 'List tool names only, e.g., ["myext.do_thing"]',
+          });
+        }
+      }
+
+      // Validate newFileMenu
+      if (contributions.newFileMenu !== undefined) {
+        if (!Array.isArray(contributions.newFileMenu)) {
+          errors.push({
+            error: `Invalid 'contributions.newFileMenu' - should be an array`,
+            field: 'contributions.newFileMenu',
+            suggestion: 'newFileMenu should be an array of new file definitions',
+          });
+        } else {
+          contributions.newFileMenu.forEach((item, index) => {
+            const itemRecord = item as Record<string, unknown>;
+            if (typeof itemRecord.extension !== 'string' || !itemRecord.extension) {
+              errors.push({
+                error: `newFileMenu[${index}] missing 'extension'`,
+                field: `contributions.newFileMenu[${index}].extension`,
+                suggestion: 'Add a file extension, e.g., ".csv"',
+              });
+            }
+            if (typeof itemRecord.displayName !== 'string' || !itemRecord.displayName) {
+              errors.push({
+                error: `newFileMenu[${index}] missing 'displayName'`,
+                field: `contributions.newFileMenu[${index}].displayName`,
+                suggestion: 'Use "displayName", not "label"',
+              });
+            }
+            if (typeof itemRecord.icon !== 'string' || !itemRecord.icon) {
+              errors.push({
+                error: `newFileMenu[${index}] missing 'icon'`,
+                field: `contributions.newFileMenu[${index}].icon`,
+                suggestion: 'Add a Material icon name, e.g., "table"',
+              });
+            }
+            if (typeof itemRecord.defaultContent !== 'string') {
+              errors.push({
+                error: `newFileMenu[${index}] missing 'defaultContent'`,
+                field: `contributions.newFileMenu[${index}].defaultContent`,
+                suggestion: 'Add initial file contents as a string',
+              });
+            }
+          });
+        }
+      }
+
+      // Validate fileIcons
+      if (contributions.fileIcons !== undefined) {
+        if (
+          typeof contributions.fileIcons !== 'object' ||
+          contributions.fileIcons === null ||
+          Array.isArray(contributions.fileIcons)
+        ) {
+          errors.push({
+            error: `Invalid 'contributions.fileIcons' - should be an object map`,
+            field: 'contributions.fileIcons',
+            suggestion: 'Use { "*.csv": "table" } instead of an array',
+          });
+        } else {
+          for (const [pattern, icon] of Object.entries(contributions.fileIcons as Record<string, unknown>)) {
+            if (typeof icon !== 'string' || !icon) {
+              errors.push({
+                error: `fileIcons["${pattern}"] must be a string icon name`,
+                field: `contributions.fileIcons.${pattern}`,
+                suggestion: 'Use a Material icon name string, e.g., "table"',
+              });
+            }
+          }
+        }
+      }
+
+      // Validate slashCommands
+      if (contributions.slashCommands !== undefined) {
+        if (!Array.isArray(contributions.slashCommands)) {
+          errors.push({
+            error: `Invalid 'contributions.slashCommands' - should be an array`,
+            field: 'contributions.slashCommands',
+            suggestion: 'slashCommands should be an array of slash command contributions',
+          });
+        } else {
+          contributions.slashCommands.forEach((command, index) => {
+            const commandRecord = command as Record<string, unknown>;
+            if (typeof commandRecord.id !== 'string' || !commandRecord.id) {
+              errors.push({
+                error: `slashCommands[${index}] missing 'id'`,
+                field: `contributions.slashCommands[${index}].id`,
+                suggestion: 'Use "id" for the command identifier',
+              });
+            }
+            if (typeof commandRecord.title !== 'string' || !commandRecord.title) {
+              errors.push({
+                error: `slashCommands[${index}] missing 'title'`,
+                field: `contributions.slashCommands[${index}].title`,
+                suggestion: 'Use "title" for the display label',
+              });
+            }
+            if (typeof commandRecord.handler !== 'string' || !commandRecord.handler) {
+              errors.push({
+                error: `slashCommands[${index}] missing 'handler'`,
+                field: `contributions.slashCommands[${index}].handler`,
+                suggestion: 'Add the exported handler name',
+              });
+            }
+          });
+        }
+      }
+
+      // Validate configuration
+      if (contributions.configuration !== undefined) {
+        const configuration = contributions.configuration as Record<string, unknown>;
+        if (
+          typeof configuration !== 'object' ||
+          configuration === null ||
+          typeof configuration.properties !== 'object' ||
+          configuration.properties === null ||
+          Array.isArray(configuration.properties)
+        ) {
+          errors.push({
+            error: `Invalid 'contributions.configuration' - missing 'properties' object`,
+            field: 'contributions.configuration',
+            suggestion: 'Use { "properties": { "mySetting": { "type": "string" } } }',
+          });
+        }
+      }
+
+      // Validate claudePlugin
+      if (contributions.claudePlugin !== undefined) {
+        const claudePlugin = contributions.claudePlugin as Record<string, unknown>;
+        if (typeof claudePlugin !== 'object' || claudePlugin === null) {
+          errors.push({
+            error: `Invalid 'contributions.claudePlugin' - should be an object`,
+            field: 'contributions.claudePlugin',
+            suggestion: 'Provide plugin metadata with at least "path" and "displayName"',
+          });
+        } else {
+          if (typeof claudePlugin.path !== 'string' || !claudePlugin.path) {
+            errors.push({
+              error: `claudePlugin missing 'path'`,
+              field: 'contributions.claudePlugin.path',
+              suggestion: 'Add the relative plugin directory path',
+            });
+          }
+          if (typeof claudePlugin.displayName !== 'string' || !claudePlugin.displayName) {
+            errors.push({
+              error: `claudePlugin missing 'displayName'`,
+              field: 'contributions.claudePlugin.displayName',
+              suggestion: 'Add a user-facing plugin name',
+            });
+          }
+        }
+      }
+
+      // Validate panels
+      if (contributions.panels !== undefined) {
+        if (!Array.isArray(contributions.panels)) {
+          errors.push({
+            error: `Invalid 'contributions.panels' - should be an array`,
+            field: 'contributions.panels',
+            suggestion: 'panels should be an array of panel contributions',
+          });
+        } else {
+          contributions.panels.forEach((panel, index) => {
+            const panelRecord = panel as Record<string, unknown>;
+            if (typeof panelRecord.id !== 'string' || !panelRecord.id) {
+              errors.push({
+                error: `panels[${index}] missing 'id'`,
+                field: `contributions.panels[${index}].id`,
+                suggestion: 'Add a unique panel id',
+              });
+            }
+            if (typeof panelRecord.title !== 'string' || !panelRecord.title) {
+              errors.push({
+                error: `panels[${index}] missing 'title'`,
+                field: `contributions.panels[${index}].title`,
+                suggestion: 'Add a user-facing panel title',
+              });
+            }
+            if (typeof panelRecord.icon !== 'string' || !panelRecord.icon) {
+              errors.push({
+                error: `panels[${index}] missing 'icon'`,
+                field: `contributions.panels[${index}].icon`,
+                suggestion: 'Add a panel icon',
+              });
+            }
+            if (
+              panelRecord.placement !== 'sidebar' &&
+              panelRecord.placement !== 'fullscreen' &&
+              panelRecord.placement !== 'floating'
+            ) {
+              errors.push({
+                error: `panels[${index}] has invalid 'placement'`,
+                field: `contributions.panels[${index}].placement`,
+                suggestion: 'Use "sidebar", "fullscreen", or "floating"',
+              });
+            }
+          });
+        }
+      }
+
+      // Validate settingsPanel
+      if (contributions.settingsPanel !== undefined) {
+        const settingsPanel = contributions.settingsPanel as Record<string, unknown>;
+        if (typeof settingsPanel !== 'object' || settingsPanel === null) {
+          errors.push({
+            error: `Invalid 'contributions.settingsPanel' - should be an object`,
+            field: 'contributions.settingsPanel',
+            suggestion: 'Provide settings panel metadata with "component" and "title"',
+          });
+        } else {
+          if (typeof settingsPanel.component !== 'string' || !settingsPanel.component) {
+            errors.push({
+              error: `settingsPanel missing 'component'`,
+              field: 'contributions.settingsPanel.component',
+              suggestion: 'Add the exported settings component name',
+            });
+          }
+          if (typeof settingsPanel.title !== 'string' || !settingsPanel.title) {
+            errors.push({
+              error: `settingsPanel missing 'title'`,
+              field: 'contributions.settingsPanel.title',
+              suggestion: 'Add a user-facing settings title',
+            });
+          }
         }
       }
     }
@@ -244,6 +512,17 @@ function validateManifest(
         field: 'permissions',
         suggestion: 'Permissions should be an object, e.g., { "ai": true, "filesystem": true }',
       });
+    } else {
+      const permissions = m.permissions as Record<string, unknown>;
+      for (const key of ['filesystem', 'ai', 'network']) {
+        if (permissions[key] !== undefined && typeof permissions[key] !== 'boolean') {
+          errors.push({
+            error: `permissions.${key} must be a boolean`,
+            field: `permissions.${key}`,
+            suggestion: `Use "${key}": true or false`,
+          });
+        }
+      }
     }
   }
 

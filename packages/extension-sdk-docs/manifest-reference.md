@@ -1,6 +1,6 @@
 # Manifest Reference
 
-The `manifest.json` file defines your extension's metadata, permissions, and contributions. This document covers all available fields.
+The `manifest.json` file declares your extension metadata, permissions, and contributions.
 
 ## Basic Structure
 
@@ -9,10 +9,8 @@ The `manifest.json` file defines your extension's metadata, permissions, and con
   "id": "com.example.my-extension",
   "name": "My Extension",
   "version": "1.0.0",
-  "description": "What my extension does",
-  "author": "Your Name",
   "main": "dist/index.js",
-  "styles": "dist/styles.css",
+  "styles": "dist/index.css",
   "apiVersion": "1.0.0",
   "permissions": {},
   "contributions": {}
@@ -21,125 +19,129 @@ The `manifest.json` file defines your extension's metadata, permissions, and con
 
 ## Required Fields
 
-### id
+### `id`
 
-Unique identifier for your extension. Use reverse domain notation:
+Unique identifier for your extension.
 
 ```json
 "id": "com.yourcompany.extension-name"
 ```
 
-- Must be globally unique
-- Use lowercase letters, numbers, dots, and hyphens only
-- Cannot be changed after publishing
+- Use reverse-domain style identifiers.
+- Must start with a letter.
+- Can contain letters, numbers, dots, underscores, and hyphens.
 
-### name
+### `name`
 
-Human-readable name displayed in the UI:
+Human-readable name shown in the UI.
 
 ```json
 "name": "CSV Spreadsheet Editor"
 ```
 
-### version
+### `version`
 
-Semantic version (semver) of your extension:
+Extension version in semver format.
 
 ```json
 "version": "1.0.0"
 ```
 
-### main
+### `main`
 
-Path to the compiled JavaScript entry point:
+Path to the built JavaScript entry point, relative to the manifest.
 
 ```json
 "main": "dist/index.js"
 ```
 
-### apiVersion
+`main` is required for normal extensions. Claude-plugin-only extensions can omit it if they do not ship runtime code.
 
-Version of the Nimbalyst Extension API your extension uses:
+## Optional Top-Level Fields
 
-```json
-"apiVersion": "1.0.0"
-```
+### `description`
 
-## Optional Fields
-
-### description
-
-Short description of what your extension does:
+Short description of what your extension does.
 
 ```json
 "description": "Edit CSV files with a spreadsheet interface"
 ```
 
-### author
+### `author`
 
-Extension author name or organization:
-
-```json
-"author": "Your Name <email@example.com>"
-```
-
-### styles
-
-Path to CSS file to include:
+Author or organization name.
 
 ```json
-"styles": "dist/styles.css"
+"author": "Nimbalyst"
 ```
 
-### icon
+### `styles`
 
-Path to extension icon (displayed in settings):
+Path to a CSS bundle to load with your extension.
 
 ```json
-"icon": "icon.png"
+"styles": "dist/index.css"
 ```
 
-### repository
+### `apiVersion`
 
-URL to source code repository:
+Optional extension API version string.
 
 ```json
-"repository": "https://github.com/user/extension"
+"apiVersion": "1.0.0"
 ```
 
-### license
+This is currently recommended, not required. Use it so future compatibility checks can warn more precisely.
 
-SPDX license identifier:
+### `requiredReleaseChannel`
+
+Restrict visibility to a release channel.
 
 ```json
-"license": "MIT"
+"requiredReleaseChannel": "alpha"
 ```
+
+Allowed values:
+- `"stable"`
+- `"alpha"`
+
+### `defaultEnabled`
+
+Control whether the extension starts enabled the first time it is discovered.
+
+```json
+"defaultEnabled": false
+```
+
+If omitted, the extension defaults to enabled.
 
 ## Permissions
 
-Declare what capabilities your extension needs:
+Declare the capabilities your extension needs:
 
 ```json
 "permissions": {
   "filesystem": true,
-  "ai": true
+  "ai": true,
+  "network": false
 }
 ```
 
-### Available Permissions
+Available permissions:
 
 | Permission | Description |
 | --- | --- |
-| `filesystem` | Read/write files through editor APIs |
-| `ai` | Register AI tools for Claude |
+| `filesystem` | Read and write files through extension services |
+| `ai` | Register AI tools and context providers |
+| `network` | Reserved for network-enabled extensions |
 
 ## Contributions
 
 The `contributions` object declares what your extension adds to Nimbalyst.
 
-### customEditors
+### `customEditors`
 
-Register custom editors for file types:
+Register custom editors for matching file types.
 
 ```json
 "contributions": {
@@ -147,7 +149,8 @@ Register custom editors for file types:
     {
       "filePatterns": ["*.csv", "*.tsv"],
       "displayName": "Spreadsheet Editor",
-      "component": "SpreadsheetEditor"
+      "component": "SpreadsheetEditor",
+      "supportsSourceMode": true
     }
   ]
 }
@@ -156,143 +159,228 @@ Register custom editors for file types:
 | Field | Type | Description |
 | --- | --- | --- |
 | `filePatterns` | `string[]` | Glob patterns for matching files |
-| `displayName` | `string` | Name shown in editor selector |
-| `component` | `string` | Name of exported React component |
+| `displayName` | `string` | Name shown in the editor selector |
+| `component` | `string` | Key in your exported `components` object |
+| `supportsSourceMode` | `boolean` | Enables the host's source-mode toggle |
 
-The `component` value must match a key in your exported `components` object:
+### `documentHeaders`
 
-```typescript
-// src/index.ts
-export const components = {
-  SpreadsheetEditor: SpreadsheetEditorComponent,
-};
-```
-
-### aiTools
-
-Declare AI tools your extension provides. **This is an array of tool name strings, NOT objects.**
+Render UI above matching editors without replacing the editor itself.
 
 ```json
-"contributions": {
-  "aiTools": [
-    "csv.get_schema",
-    "csv.get_rows",
-    "csv.add_row"
-  ]
-}
+"documentHeaders": [
+  {
+    "id": "astro-frontmatter",
+    "filePatterns": ["*.astro"],
+    "displayName": "Astro Frontmatter",
+    "component": "AstroFrontmatterHeader",
+    "priority": 100
+  }
+]
 ```
 
-**IMPORTANT:** The manifest only lists tool names as strings. The actual tool definitions (with descriptions, input schemas, and handlers) go in your TypeScript code:
+### `aiTools`
 
-```typescript
-// src/aiTools.ts - Tool definitions with full details
+Declare AI tools your extension provides. This is an array of tool name strings, not full tool definitions.
+
+```json
+"aiTools": [
+  "csv.get_schema",
+  "csv.query"
+]
+```
+
+The actual tool definitions belong in your TypeScript exports:
+
+```ts
 export const aiTools: ExtensionAITool[] = [
   {
     name: 'csv.get_schema',
-    description: 'Get the column names and types from the CSV',
+    description: 'Get the column names from the active CSV file',
     inputSchema: { type: 'object', properties: {} },
-    handler: async (args, context) => { /* ... */ }
-  }
+    handler: async (_args, context) => {
+      return { success: true, data: {} };
+    },
+  },
 ];
-
-// src/index.ts - Export the tools
-export { aiTools } from './aiTools';
 ```
 
-**Common mistake:** Don't put objects in the manifest:
+### `newFileMenu`
+
+Add items to the "New File" menu.
 
 ```json
-// WRONG - will cause runtime errors!
-"aiTools": [
-  { "name": "csv.get_schema", "description": "..." }
-]
-
-// CORRECT - just the tool names
-"aiTools": [
-  "csv.get_schema"
+"newFileMenu": [
+  {
+    "extension": ".csv",
+    "displayName": "CSV Spreadsheet",
+    "icon": "table",
+    "defaultContent": "Column A,Column B\n,\n,"
+  }
 ]
 ```
 
-### newFileMenu
+### `fileIcons`
 
-Add entries to the "New File" menu:
+Override file icons in the sidebar.
 
 ```json
-"contributions": {
-  "newFileMenu": [
-    {
-      "extension": ".csv",
-      "displayName": "CSV Spreadsheet",
-      "icon": "table",
-      "defaultContent": "Column A,Column B,Column C\n,,\n,,"
-    }
-  ]
+"fileIcons": {
+  "*.csv": "table",
+  "*.tsv": "table",
+  "*.json": "data_object"
 }
+```
+
+Keys are glob patterns. Values are Material icon names.
+
+### `slashCommands`
+
+Register slash commands for the command picker.
+
+```json
+"slashCommands": [
+  {
+    "id": "csv.insert-table",
+    "title": "Insert CSV Table",
+    "description": "Insert a table from CSV data",
+    "icon": "table",
+    "keywords": ["csv", "table"],
+    "handler": "insertCsvTable"
+  }
+]
 ```
 
 | Field | Type | Description |
 | --- | --- | --- |
-| `extension` | `string` | File extension including dot |
-| `displayName` | `string` | Name shown in menu |
-| `icon` | `string` | Material icon name |
-| `defaultContent` | `string` | Initial file content |
+| `id` | `string` | Stable command identifier |
+| `title` | `string` | Label shown in the picker |
+| `description` | `string` | Optional help text |
+| `icon` | `string` | Optional Material icon name |
+| `keywords` | `string[]` | Optional search keywords |
+| `handler` | `string` | Name of the exported handler function |
 
-### fileIcons
+### `commands`
 
-Custom icons for file types in the sidebar:
+Reserved for future command contributions.
 
 ```json
-"contributions": {
-  "fileIcons": {
-    "*.csv": "table",
-    "*.tsv": "table",
-    "*.json": "data_object"
+"commands": [
+  {
+    "id": "csv.refresh",
+    "title": "Refresh CSV Data",
+    "keybinding": "CmdOrCtrl+Shift+R"
+  }
+]
+```
+
+### `configuration`
+
+Declare user/workspace settings for your extension.
+
+```json
+"configuration": {
+  "title": "CSV Tools",
+  "properties": {
+    "delimiter": {
+      "type": "string",
+      "default": ",",
+      "description": "Default delimiter for new CSV files",
+      "scope": "workspace"
+    }
   }
 }
 ```
 
-Keys are glob patterns, values are Material icon names.
+### `claudePlugin`
 
-### slashCommands
-
-Register slash commands for the editor:
+Bundle a Claude Code plugin with the extension.
 
 ```json
-"contributions": {
-  "slashCommands": [
-    {
-      "name": "insert-chart",
-      "displayName": "Insert Chart",
-      "description": "Insert a chart from CSV data",
-      "handler": "insertChartCommand"
-    }
-  ]
+"claudePlugin": {
+  "path": "claude-plugin",
+  "displayName": "CSV Assistant",
+  "description": "Adds Claude Code helpers for CSV workflows",
+  "enabledByDefault": true
 }
 ```
 
-| Field | Type | Description |
-| --- | --- | --- |
-| `name` | `string` | Command identifier |
-| `displayName` | `string` | Shown in command palette |
-| `description` | `string` | Help text |
-| `handler` | `string` | Name of exported handler function |
+### `panels`
+
+Register non-file-based panels.
+
+```json
+"panels": [
+  {
+    "id": "database-browser",
+    "title": "Database",
+    "icon": "database",
+    "placement": "sidebar",
+    "aiSupported": true
+  }
+]
+```
+
+`placement` must be one of:
+- `"sidebar"`
+- `"fullscreen"`
+- `"floating"`
+
+### `settingsPanel`
+
+Add a settings UI for your extension inside the main Settings screen.
+
+```json
+"settingsPanel": {
+  "component": "CsvSettingsPanel",
+  "title": "CSV Tools",
+  "icon": "settings",
+  "order": 100
+}
+```
+
+### `themes`
+
+Register selectable themes contributed by your extension.
+
+```json
+"themes": [
+  {
+    "id": "solarized-light",
+    "name": "Solarized Light",
+    "isDark": false,
+    "colors": {
+      "bg": "#fdf6e3",
+      "text": "#657b83",
+      "primary": "#268bd2"
+    }
+  }
+]
+```
+
+### `nodes`, `transformers`, and `hostComponents`
+
+These contribution arrays declare names of exports provided by your module.
+
+```json
+"nodes": ["MyLexicalNode"],
+"transformers": ["myMarkdownTransformer"],
+"hostComponents": ["MyFloatingToolbar"]
+```
 
 ## Complete Example
 
-Here's a complete manifest for a CSV editor extension:
-
 ```json
 {
-  "id": "com.nimbalyst.csv-spreadsheet",
-  "name": "CSV Spreadsheet",
+  "id": "com.nimbalyst.csv-tools",
+  "name": "CSV Tools",
   "version": "1.0.0",
-  "description": "Edit CSV files with a spreadsheet interface and formula support",
+  "description": "Custom CSV editing and AI helpers",
   "author": "Nimbalyst",
   "main": "dist/index.js",
-  "styles": "dist/styles.css",
+  "styles": "dist/index.css",
   "apiVersion": "1.0.0",
-  "license": "MIT",
-  "repository": "https://github.com/nimbalyst/csv-spreadsheet",
+  "defaultEnabled": true,
   "permissions": {
     "filesystem": true,
     "ai": true
@@ -302,26 +390,33 @@ Here's a complete manifest for a CSV editor extension:
       {
         "filePatterns": ["*.csv", "*.tsv"],
         "displayName": "Spreadsheet Editor",
-        "component": "SpreadsheetEditor"
+        "component": "SpreadsheetEditor",
+        "supportsSourceMode": true
       }
     ],
     "aiTools": [
       "csv.get_schema",
-      "csv.get_rows",
       "csv.query"
     ],
     "fileIcons": {
       "*.csv": "table",
       "*.tsv": "table"
     },
-    "newFileMenu": [
+    "slashCommands": [
       {
-        "extension": ".csv",
-        "displayName": "CSV Spreadsheet",
-        "icon": "table",
-        "defaultContent": "Column A,Column B,Column C\n,,\n,,\n,,"
+        "id": "csv.insert-table",
+        "title": "Insert CSV Table",
+        "handler": "insertCsvTable"
       }
-    ]
+    ],
+    "configuration": {
+      "properties": {
+        "delimiter": {
+          "type": "string",
+          "default": ","
+        }
+      }
+    }
   }
 }
 ```
@@ -334,22 +429,23 @@ File patterns use glob syntax:
 | --- | --- |
 | `*.csv` | Any file ending in `.csv` |
 | `*.{csv,tsv}` | Files ending in `.csv` or `.tsv` |
-| `data/*.json` | JSON files in `data/` folder |
-| `**/*.test.ts` | Test files anywhere in tree |
+| `data/*.json` | JSON files in `data/` |
+| `**/*.test.ts` | Test files anywhere in the tree |
 
-## Validation
+## Validation Notes
 
 Nimbalyst validates your manifest on load. Common errors:
 
-- **Missing required fields** - Add `id`, `name`, `version`, `main`, `apiVersion`
-- **Invalid id format** - Use lowercase, dots, and hyphens only
-- **Component not found** - Ensure component name matches export
-- **Invalid version** - Use semver format (e.g., `1.0.0`)
+- Missing required top-level fields: `id`, `name`, `version`, or `main`
+- `aiTools` contains objects instead of tool-name strings
+- `slashCommands` uses old `name` / `displayName` fields instead of `id` / `title`
+- `fileIcons` is declared as an array instead of an object map
+- Contribution component names do not match your exported module names
 
 ## Best Practices
 
-1. **Use descriptive ids** - `com.company.feature-description`
-2. **Keep descriptions short** - One sentence, under 100 characters
-3. **Request minimal permissions** - Only what you need
-4. **Include all file patterns** - Don't miss common variations
-5. **Test with validation** - Use `validateExtensionBundle()` during development
+1. Use a stable reverse-domain `id`.
+2. Request only the permissions you actually need.
+3. Keep `contributions.aiTools` and your exported `aiTools` array in sync.
+4. Prefer adding `apiVersion` even though it is currently optional.
+5. Validate on every build with `validateExtensionBundle()`.

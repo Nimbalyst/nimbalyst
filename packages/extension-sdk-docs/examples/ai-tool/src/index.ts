@@ -5,7 +5,33 @@
  * Provides tools for analyzing text documents.
  */
 
-import type { ExtensionAITool } from '@nimbalyst/extension-sdk';
+import type {
+  AIToolContext,
+  ExtensionAITool,
+  ExtensionToolResult,
+} from '@nimbalyst/extension-sdk';
+
+async function loadActiveTextFile(context: AIToolContext): Promise<{
+  filePath: string;
+  content: string;
+} | ExtensionToolResult> {
+  if (!context.activeFilePath) {
+    return { success: false, error: 'No active file is open.' };
+  }
+
+  try {
+    const content = await context.extensionContext.services.filesystem.readFile(context.activeFilePath);
+    return {
+      filePath: context.activeFilePath,
+      content,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: `Failed to read active file: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
 
 // No components needed for tool-only extensions
 export const components = {};
@@ -15,37 +41,43 @@ export const aiTools: ExtensionAITool[] = [
   {
     name: 'wordstats.count',
     description: 'Count words, characters, sentences, and paragraphs in the current document',
+    scope: 'global',
     inputSchema: {
       type: 'object',
       properties: {},
     },
-    handler: async (_args, context) => {
-      if (!context.fileContent) {
-        return { error: 'No file is currently open' };
+    handler: async (_args, context): Promise<ExtensionToolResult> => {
+      const loaded = await loadActiveTextFile(context);
+      if ('success' in loaded) {
+        return loaded;
       }
 
-      const text = context.fileContent;
+      const text = loaded.content;
 
       // Word count (split on whitespace)
-      const words = text.trim().split(/\s+/).filter(w => w.length > 0);
+      const words = text.trim().split(/\s+/).filter((word) => word.length > 0);
 
       // Character counts
       const characters = text.length;
       const charactersNoSpaces = text.replace(/\s/g, '').length;
 
       // Sentence count (rough estimate)
-      const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0).length;
+      const sentences = text.split(/[.!?]+/).filter((sentence) => sentence.trim().length > 0).length;
 
       // Paragraph count (split on double newlines)
-      const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim().length > 0).length;
+      const paragraphs = text.split(/\n\s*\n/).filter((paragraph) => paragraph.trim().length > 0).length;
 
       return {
-        words: words.length,
-        characters,
-        charactersNoSpaces,
-        sentences,
-        paragraphs,
-        filePath: context.filePath,
+        success: true,
+        message: 'Counted document statistics.',
+        data: {
+          filePath: loaded.filePath,
+          words: words.length,
+          characters,
+          charactersNoSpaces,
+          sentences,
+          paragraphs,
+        },
       };
     },
   },
@@ -53,6 +85,7 @@ export const aiTools: ExtensionAITool[] = [
   {
     name: 'wordstats.frequency',
     description: 'Get the most frequently used words in the document',
+    scope: 'global',
     inputSchema: {
       type: 'object',
       properties: {
@@ -66,16 +99,17 @@ export const aiTools: ExtensionAITool[] = [
         },
       },
     },
-    handler: async (args, context) => {
-      if (!context.fileContent) {
-        return { error: 'No file is currently open' };
+    handler: async (args, context): Promise<ExtensionToolResult> => {
+      const loaded = await loadActiveTextFile(context);
+      if ('success' in loaded) {
+        return loaded;
       }
 
-      const limit = args.limit ?? 20;
-      const minLength = args.minLength ?? 3;
+      const limit = typeof args.limit === 'number' ? args.limit : 20;
+      const minLength = typeof args.minLength === 'number' ? args.minLength : 3;
 
       // Extract words (lowercase, letters only)
-      const words = context.fileContent
+      const words = loaded.content
         .toLowerCase()
         .match(/\b[a-z]+\b/g) || [];
 
@@ -90,12 +124,16 @@ export const aiTools: ExtensionAITool[] = [
       // Sort by frequency
       const sorted = Object.entries(freq)
         .sort((a, b) => b[1] - a[1])
-        .slice(0, limit);
+        .slice(0, Math.max(1, Math.floor(limit)));
 
       return {
-        topWords: sorted.map(([word, count]) => ({ word, count })),
-        uniqueWords: Object.keys(freq).length,
-        totalWords: words.length,
+        success: true,
+        message: 'Calculated word frequency.',
+        data: {
+          topWords: sorted.map(([word, count]) => ({ word, count })),
+          uniqueWords: Object.keys(freq).length,
+          totalWords: words.length,
+        },
       };
     },
   },
@@ -103,16 +141,18 @@ export const aiTools: ExtensionAITool[] = [
   {
     name: 'wordstats.readability',
     description: 'Calculate readability metrics (Flesch-Kincaid grade level)',
+    scope: 'global',
     inputSchema: {
       type: 'object',
       properties: {},
     },
-    handler: async (_args, context) => {
-      if (!context.fileContent) {
-        return { error: 'No file is currently open' };
+    handler: async (_args, context): Promise<ExtensionToolResult> => {
+      const loaded = await loadActiveTextFile(context);
+      if ('success' in loaded) {
+        return loaded;
       }
 
-      const text = context.fileContent;
+      const text = loaded.content;
 
       // Count syllables (rough approximation)
       const countSyllables = (word: string): number => {
@@ -128,10 +168,10 @@ export const aiTools: ExtensionAITool[] = [
 
       // Get words and sentences
       const words = text.match(/\b[a-z]+\b/gi) || [];
-      const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
+      const sentences = text.split(/[.!?]+/).filter((sentence) => sentence.trim().length > 0);
 
       if (words.length === 0 || sentences.length === 0) {
-        return { error: 'Document is too short for readability analysis' };
+        return { success: false, error: 'Document is too short for readability analysis' };
       }
 
       // Count total syllables
@@ -155,13 +195,17 @@ export const aiTools: ExtensionAITool[] = [
       else difficulty = 'Very difficult (graduate level)';
 
       return {
-        fleschKincaidGrade: Math.round(gradeLevel * 10) / 10,
-        fleschReadingEase: Math.round(readingEase * 10) / 10,
-        difficulty,
-        avgWordsPerSentence: Math.round(avgWordsPerSentence * 10) / 10,
-        avgSyllablesPerWord: Math.round(avgSyllablesPerWord * 100) / 100,
-        totalWords: words.length,
-        totalSentences: sentences.length,
+        success: true,
+        message: 'Calculated readability metrics.',
+        data: {
+          fleschKincaidGrade: Math.round(gradeLevel * 10) / 10,
+          fleschReadingEase: Math.round(readingEase * 10) / 10,
+          difficulty,
+          avgWordsPerSentence: Math.round(avgWordsPerSentence * 10) / 10,
+          avgSyllablesPerWord: Math.round(avgSyllablesPerWord * 100) / 100,
+          totalWords: words.length,
+          totalSentences: sentences.length,
+        },
       };
     },
   },

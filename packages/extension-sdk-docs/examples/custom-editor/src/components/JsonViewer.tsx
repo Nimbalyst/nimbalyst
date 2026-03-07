@@ -1,10 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-
-interface JsonViewerProps {
-  content: string;
-  filePath: string;
-  onChange: (content: string) => void;
-}
+import type { EditorHostProps } from '@nimbalyst/extension-sdk';
 
 interface JsonNodeProps {
   keyName: string | null;
@@ -123,9 +118,43 @@ function JsonNode({ keyName, value, depth, onValueChange, path }: JsonNodeProps)
 /**
  * Main JSON Viewer component.
  */
-export function JsonViewer({ content, filePath, onChange }: JsonViewerProps) {
+export function JsonViewer({ host }: EditorHostProps) {
+  const [content, setContent] = useState('');
   const [data, setData] = useState<unknown>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+
+    host.loadContent().then((initialContent) => {
+      if (!mounted) return;
+      setContent(initialContent || '{}');
+      setIsLoading(false);
+    }).catch(() => {
+      if (!mounted) return;
+      setContent('{}');
+      setIsLoading(false);
+    });
+
+    return () => {
+      mounted = false;
+    };
+  }, [host]);
+
+  useEffect(() => {
+    return host.onSaveRequested(async () => {
+      await host.saveContent(content);
+      host.setDirty(false);
+    });
+  }, [host, content]);
+
+  useEffect(() => {
+    return host.onFileChanged((newContent) => {
+      setContent(newContent);
+      host.setDirty(false);
+    });
+  }, [host]);
 
   // Parse JSON content
   useEffect(() => {
@@ -138,6 +167,11 @@ export function JsonViewer({ content, filePath, onChange }: JsonViewerProps) {
       setData(null);
     }
   }, [content]);
+
+  const updateContent = useCallback((nextContent: string) => {
+    setContent(nextContent);
+    host.setDirty(true);
+  }, [host]);
 
   // Handle value changes from nodes
   const handleValueChange = useCallback((path: string[], newValue: unknown) => {
@@ -156,14 +190,14 @@ export function JsonViewer({ content, filePath, onChange }: JsonViewerProps) {
     }
 
     setData(newData);
-    onChange(JSON.stringify(newData, null, 2));
-  }, [data, onChange]);
+    updateContent(JSON.stringify(newData, null, 2));
+  }, [data, updateContent]);
 
   // Toolbar actions
   const handleFormat = () => {
     try {
       const parsed = JSON.parse(content);
-      onChange(JSON.stringify(parsed, null, 2));
+      updateContent(JSON.stringify(parsed, null, 2));
     } catch {
       // Already invalid
     }
@@ -172,11 +206,15 @@ export function JsonViewer({ content, filePath, onChange }: JsonViewerProps) {
   const handleMinify = () => {
     try {
       const parsed = JSON.parse(content);
-      onChange(JSON.stringify(parsed));
+      updateContent(JSON.stringify(parsed));
     } catch {
       // Already invalid
     }
   };
+
+  if (isLoading) {
+    return <div className="json-viewer">Loading...</div>;
+  }
 
   return (
     <div className="json-viewer">

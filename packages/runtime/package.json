@@ -146,6 +146,7 @@
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.69",
     "@anthropic-ai/sdk": "^0.71.2",
+    "@nimbalyst/extension-sdk": "*",
     "@lexical/dragon": "^0.34.0",
     "@lexical/history": "^0.34.0",
     "@monaco-editor/react": "^4.7.0",

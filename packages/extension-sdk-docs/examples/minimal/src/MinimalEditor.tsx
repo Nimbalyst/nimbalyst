@@ -1,32 +1,60 @@
 import React, { useState, useEffect } from 'react';
-
-interface MinimalEditorProps {
-  content: string;
-  filePath: string;
-  onChange: (content: string) => void;
-}
+import type { EditorHostProps } from '@nimbalyst/extension-sdk';
 
 /**
  * A minimal custom editor component.
  *
  * This demonstrates the basic structure every custom editor needs:
- * - Receive content and filePath as props
- * - Call onChange when user edits content
- * - Sync with content prop when file is reloaded
+ * - Load content from the host on mount
+ * - Mark the tab dirty when the user edits
+ * - Save when the host requests it
+ * - Reload when the file changes on disk
  */
-export function MinimalEditor({ content, filePath, onChange }: MinimalEditorProps) {
-  const [text, setText] = useState(content);
+export function MinimalEditor({ host }: EditorHostProps) {
+  const [text, setText] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Re-sync when file is reloaded from disk
   useEffect(() => {
-    setText(content);
-  }, [content]);
+    let mounted = true;
+
+    host.loadContent().then((content) => {
+      if (!mounted) return;
+      setText(content);
+      setIsLoading(false);
+    }).catch(() => {
+      if (!mounted) return;
+      setText('');
+      setIsLoading(false);
+    });
+
+    return () => {
+      mounted = false;
+    };
+  }, [host]);
+
+  useEffect(() => {
+    return host.onSaveRequested(async () => {
+      await host.saveContent(text);
+      host.setDirty(false);
+    });
+  }, [host, text]);
+
+  useEffect(() => {
+    return host.onFileChanged((newContent) => {
+      setText(newContent);
+      host.setDirty(false);
+    });
+  }, [host]);
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newText = e.target.value;
     setText(newText);
-    onChange(newText);
+    host.setDirty(true);
   };
+
+  if (isLoading) {
+    return <div style={{ padding: '16px' }}>Loading...</div>;
+  }
 
   return (
     <div
@@ -45,7 +73,7 @@ export function MinimalEditor({ content, filePath, onChange }: MinimalEditorProp
           fontSize: '12px',
         }}
       >
-        Editing: {filePath}
+        Editing: {host.filePath}
       </div>
       <textarea
         value={text}

@@ -32,9 +32,19 @@ Working example projects you can copy and modify:
 | [custom-editor](./examples/custom-editor/) | Full custom editor with toolbar |
 | [ai-tool](./examples/ai-tool/) | Extension that adds AI tools |
 
+## Recommended In-App Flow
+
+The intended workflow is to create and iterate on extensions from inside Nimbalyst:
+
+1. Enable Extension Dev Tools in Settings > Advanced
+2. Use `File > New Extension Project` or `Developer > New Extension Project`
+3. Or, in Claude, run `/new-extension <template> <path> <name> [file-patterns]`
+4. Ask Claude to build and install the extension with `extension_build` and `extension_install`
+5. Use `extension_reload` for rebuild + reinstall during iteration
+
 ## Development Workflow
 
-1. **Create** - Use "File > New Extension Project" or copy an example
+1. **Create** - Use `/new-extension` inside Nimbalyst or copy an example
 2. **Develop** - Edit files in your extension project
 3. **Build** - Claude uses `extension_build` to compile
 4. **Install** - Claude uses `extension_install` to load it

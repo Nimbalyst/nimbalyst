@@ -12,6 +12,8 @@ interface TemplateOptions {
 
 type TemplateFiles = Record<string, string>;
 
+const SDK_VERSION = '^0.1.0';
+
 /**
  * Minimal extension template
  * Simple custom editor with basic functionality
@@ -56,10 +58,10 @@ export function minimalTemplate(options: TemplateOptions): TemplateFiles {
           react: '^18.2.0',
         },
         devDependencies: {
-          '@nimbalyst/extension-sdk': '*',
+          '@nimbalyst/extension-sdk': SDK_VERSION,
           '@types/react': '^18.2.0',
           typescript: '^5.0.0',
-          vite: '^5.0.0',
+          vite: '^7.1.12',
         },
       },
       null,
@@ -110,25 +112,53 @@ export function deactivate() {
 `,
 
     [`src/${componentName}.tsx`]: `import React, { useState, useEffect } from 'react';
+import type { EditorHostProps } from '@nimbalyst/extension-sdk';
 
-interface ${componentName}Props {
-  content: string;
-  filePath: string;
-  onChange: (content: string) => void;
-}
-
-export function ${componentName}({ content, filePath, onChange }: ${componentName}Props) {
-  const [text, setText] = useState(content);
+export function ${componentName}({ host }: EditorHostProps) {
+  const [text, setText] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    setText(content);
-  }, [content]);
+    let mounted = true;
+
+    host.loadContent().then((content) => {
+      if (!mounted) return;
+      setText(content);
+      setIsLoading(false);
+    }).catch(() => {
+      if (!mounted) return;
+      setText('');
+      setIsLoading(false);
+    });
+
+    return () => {
+      mounted = false;
+    };
+  }, [host]);
+
+  useEffect(() => {
+    return host.onSaveRequested(async () => {
+      await host.saveContent(text);
+      host.setDirty(false);
+    });
+  }, [host, text]);
+
+  useEffect(() => {
+    return host.onFileChanged((newContent) => {
+      setText(newContent);
+      host.setDirty(false);
+    });
+  }, [host]);
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newText = e.target.value;
     setText(newText);
-    onChange(newText);
+    host.setDirty(true);
   };
+
+  if (isLoading) {
+    return <div style={{ padding: '16px' }}>Loading...</div>;
+  }
 
   return (
     <div style={{
@@ -143,7 +173,7 @@ export function ${componentName}({ content, filePath, onChange }: ${componentNam
         color: 'var(--nim-text-muted)',
         fontSize: '12px',
       }}>
-        Editing: {filePath}
+        Editing: {host.filePath}
       </div>
       <textarea
         value={text}
@@ -187,7 +217,7 @@ export function customEditorTemplate(options: TemplateOptions): TemplateFiles {
         version: '1.0.0',
         description: `Custom editor for ${filePatterns.join(', ')} files`,
         main: 'dist/index.js',
-        styles: 'dist/styles.css',
+        styles: 'dist/index.css',
         apiVersion: '1.0.0',
         permissions: {
           filesystem: true,
@@ -221,10 +251,10 @@ export function customEditorTemplate(options: TemplateOptions): TemplateFiles {
           react: '^18.2.0',
         },
         devDependencies: {
-          '@nimbalyst/extension-sdk': '*',
+          '@nimbalyst/extension-sdk': SDK_VERSION,
           '@types/react': '^18.2.0',
           typescript: '^5.0.0',
-          vite: '^5.0.0',
+          vite: '^7.1.12',
         },
       },
       null,
@@ -279,24 +309,52 @@ export function deactivate() {
 `,
 
     [`src/${componentName}.tsx`]: `import React, { useState, useEffect } from 'react';
+import type { EditorHostProps } from '@nimbalyst/extension-sdk';
 
-interface ${componentName}Props {
-  content: string;
-  filePath: string;
-  onChange: (content: string) => void;
-}
-
-export function ${componentName}({ content, filePath, onChange }: ${componentName}Props) {
-  const [data, setData] = useState(content);
+export function ${componentName}({ host }: EditorHostProps) {
+  const [data, setData] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    setData(content);
-  }, [content]);
+    let mounted = true;
+
+    host.loadContent().then((content) => {
+      if (!mounted) return;
+      setData(content);
+      setIsLoading(false);
+    }).catch(() => {
+      if (!mounted) return;
+      setData('');
+      setIsLoading(false);
+    });
+
+    return () => {
+      mounted = false;
+    };
+  }, [host]);
+
+  useEffect(() => {
+    return host.onSaveRequested(async () => {
+      await host.saveContent(data);
+      host.setDirty(false);
+    });
+  }, [host, data]);
+
+  useEffect(() => {
+    return host.onFileChanged((newContent) => {
+      setData(newContent);
+      host.setDirty(false);
+    });
+  }, [host]);
 
   const handleChange = (newData: string) => {
     setData(newData);
-    onChange(newData);
+    host.setDirty(true);
   };
+
+  if (isLoading) {
+    return <div className="${toolPrefix}-editor">Loading...</div>;
+  }
 
   return (
     <div className="${toolPrefix}-editor">
@@ -319,7 +377,33 @@ export function ${componentName}({ content, filePath, onChange }: ${componentNam
 }
 `,
 
-    'src/aiTools.ts': `import type { ExtensionAITool } from '@nimbalyst/extension-sdk';
+    'src/aiTools.ts': `import type {
+  AIToolContext,
+  ExtensionAITool,
+  ExtensionToolResult,
+} from '@nimbalyst/extension-sdk';
+
+async function loadActiveFile(context: AIToolContext): Promise<{
+  filePath: string;
+  content: string;
+} | ExtensionToolResult> {
+  if (!context.activeFilePath) {
+    return { success: false, error: 'No active file is open.' };
+  }
+
+  try {
+    const content = await context.extensionContext.services.filesystem.readFile(context.activeFilePath);
+    return {
+      filePath: context.activeFilePath,
+      content,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: \`Failed to read active file: \${error instanceof Error ? error.message : String(error)}\`,
+    };
+  }
+}
 
 export const aiTools: ExtensionAITool[] = [
   {
@@ -329,15 +413,20 @@ export const aiTools: ExtensionAITool[] = [
       type: 'object',
       properties: {},
     },
-    handler: async (_args, context) => {
-      if (!context.fileContent) {
-        return { error: 'No file is currently open' };
+    handler: async (_args, context): Promise<ExtensionToolResult> => {
+      const loaded = await loadActiveFile(context);
+      if ('success' in loaded) {
+        return loaded;
       }
 
       return {
-        filePath: context.filePath,
-        contentLength: context.fileContent.length,
-        lineCount: context.fileContent.split('\\n').length,
+        success: true,
+        message: 'Retrieved file information.',
+        data: {
+          filePath: loaded.filePath,
+          contentLength: loaded.content.length,
+          lineCount: loaded.content.split('\\n').length,
+        },
       };
     },
   },
@@ -355,14 +444,20 @@ export const aiTools: ExtensionAITool[] = [
       },
       required: ['newContent'],
     },
-    handler: async (args, context) => {
-      if (!context.fileContent) {
-        return { error: 'No file is currently open' };
+    handler: async (args, context): Promise<ExtensionToolResult> => {
+      if (!context.activeFilePath) {
+        return { success: false, error: 'No active file is open.' };
       }
+
+      const newContent = typeof args.newContent === 'string' ? args.newContent : '';
+      await context.extensionContext.services.filesystem.writeFile(
+        context.activeFilePath,
+        newContent
+      );
 
       return {
         success: true,
-        newContent: args.newContent as string,
+        message: \`Updated \${context.activeFilePath}.\`,
       };
     },
   },
@@ -471,9 +566,9 @@ export function aiToolTemplate(options: TemplateOptions): TemplateFiles {
           build: 'vite build',
         },
         devDependencies: {
-          '@nimbalyst/extension-sdk': '*',
+          '@nimbalyst/extension-sdk': SDK_VERSION,
           typescript: '^5.0.0',
-          vite: '^5.0.0',
+          vite: '^7.1.12',
         },
       },
       null,
@@ -507,7 +602,33 @@ export default defineConfig(createExtensionConfig({
 }));
 `,
 
-    'src/index.ts': `import type { ExtensionAITool } from '@nimbalyst/extension-sdk';
+    'src/index.ts': `import type {
+  AIToolContext,
+  ExtensionAITool,
+  ExtensionToolResult,
+} from '@nimbalyst/extension-sdk';
+
+async function loadActiveFile(context: AIToolContext): Promise<{
+  filePath: string;
+  content: string;
+} | ExtensionToolResult> {
+  if (!context.activeFilePath) {
+    return { success: false, error: 'No active file is open.' };
+  }
+
+  try {
+    const content = await context.extensionContext.services.filesystem.readFile(context.activeFilePath);
+    return {
+      filePath: context.activeFilePath,
+      content,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: \`Failed to read active file: \${error instanceof Error ? error.message : String(error)}\`,
+    };
+  }
+}
 
 // No UI components
 export const components = {};
@@ -517,25 +638,31 @@ export const aiTools: ExtensionAITool[] = [
   {
     name: '${toolPrefix}.analyze',
     description: 'Analyze the current document',
+    scope: 'global',
     inputSchema: {
       type: 'object',
       properties: {},
     },
-    handler: async (_args, context) => {
-      if (!context.fileContent) {
-        return { error: 'No file is currently open' };
+    handler: async (_args, context): Promise<ExtensionToolResult> => {
+      const loaded = await loadActiveFile(context);
+      if ('success' in loaded) {
+        return loaded;
       }
 
-      const content = context.fileContent;
+      const content = loaded.content;
       const lines = content.split('\\n');
       const words = content.split(/\\s+/).filter(w => w.length > 0);
 
       return {
-        filePath: context.filePath,
-        stats: {
-          characters: content.length,
-          lines: lines.length,
-          words: words.length,
+        success: true,
+        message: 'Analyzed the active document.',
+        data: {
+          filePath: loaded.filePath,
+          stats: {
+            characters: content.length,
+            lines: lines.length,
+            words: words.length,
+          },
         },
       };
     },
@@ -544,6 +671,7 @@ export const aiTools: ExtensionAITool[] = [
   {
     name: '${toolPrefix}.transform',
     description: 'Transform the document content',
+    scope: 'global',
     inputSchema: {
       type: 'object',
       properties: {
@@ -555,9 +683,10 @@ export const aiTools: ExtensionAITool[] = [
       },
       required: ['operation'],
     },
-    handler: async (args, context) => {
-      if (!context.fileContent) {
-        return { error: 'No file is currently open' };
+    handler: async (args, context): Promise<ExtensionToolResult> => {
+      const loaded = await loadActiveFile(context);
+      if ('success' in loaded) {
+        return loaded;
       }
 
       const operation = args.operation as string;
@@ -565,21 +694,26 @@ export const aiTools: ExtensionAITool[] = [
 
       switch (operation) {
         case 'uppercase':
-          result = context.fileContent.toUpperCase();
+          result = loaded.content.toUpperCase();
           break;
         case 'lowercase':
-          result = context.fileContent.toLowerCase();
+          result = loaded.content.toLowerCase();
           break;
         case 'reverse':
-          result = context.fileContent.split('').reverse().join('');
+          result = loaded.content.split('').reverse().join('');
           break;
         default:
-          return { error: \`Unknown operation: \${operation}\` };
+          return { success: false, error: \`Unknown operation: \${operation}\` };
       }
+
+      await context.extensionContext.services.filesystem.writeFile(
+        loaded.filePath,
+        result
+      );
 
       return {
         success: true,
-        newContent: result,
+        message: \`Applied \${operation} to \${loaded.filePath}.\`,
       };
     },
   },
