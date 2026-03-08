@@ -4,6 +4,7 @@
  */
 
 import { promises as fs } from 'fs';
+import { shell } from 'electron';
 import { join, basename, extname } from 'path';
 import { createHash } from 'crypto';
 import type { ChatAttachment } from '@nimbalyst/runtime';
@@ -207,7 +208,7 @@ export class AttachmentService {
         const id = this.generateId(filepath);
 
         if (id === attachmentId) {
-          await fs.unlink(filepath);
+          await shell.trashItem(filepath);
           console.log('[AttachmentService] Deleted attachment', { attachmentId, sessionId });
           return { success: true };
         }
@@ -338,7 +339,7 @@ export class AttachmentService {
       for (const sessionId of sessionDirs) {
         if (!validSessionIds.includes(sessionId)) {
           const sessionDir = join(this.attachmentsDir, sessionId);
-          await fs.rm(sessionDir, { recursive: true, force: true });
+          await shell.trashItem(sessionDir);
           deletedCount++;
           console.log('[AttachmentService] Cleaned up orphaned session', { sessionId });
         }

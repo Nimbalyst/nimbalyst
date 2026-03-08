@@ -85,3 +85,13 @@ Lesson: In the release workflow, ALWAYS check GitHub Actions to find the last SU
 When creating the `@@` session mention typeahead, used `\u{1F4AC}` (speech balloon emoji) as the icon for session options in `sessionMention.ts`. Both CLAUDE.md and the user's global instructions explicitly say "Never use emojis." Additionally, the GenericTypeahead component renders string icons via the `material-symbols-outlined` font, so the correct value was a Material Symbols icon name like `chat_bubble_outline`, not an emoji character.
 
 Lesson: The no-emoji rule applies everywhere -- icons, code, UI elements, not just text output. When a component expects a specific icon system (Material Symbols), use that system's identifiers.
+
+## Permanent file deletion instead of moving to trash
+
+**Date**: 2026-03-07
+
+The `delete-file` IPC handler in WorkspaceHandlers.ts used `fs.unlink()` for files and `fs.rm({ recursive: true, force: true })` for directories -- permanently destroying user data with no recovery path. Additionally, the keyboard handler in `treeKeyboardHandler.ts` triggered deletion on Backspace/Delete with zero confirmation dialog, while the right-click context menu at least had `window.confirm()`. A user on Reddit reported losing an entire folder by accidentally pressing Backspace.
+
+The fix was twofold: (1) replace all `fs.unlink`/`fs.rm` calls with `shell.trashItem()` so deleted files go to system Trash/Recycle Bin, and (2) add a confirmation dialog to the keyboard delete path. The same permanent-deletion pattern was also found in AttachmentService, ElectronDocumentService (asset GC), ThemeHandlers (theme uninstall), and GitWorktreeService (worktree cleanup) -- all switched to `shell.trashItem()`.
+
+Lesson: Any code that deletes user-facing files should use `shell.trashItem()`, never `fs.unlink`/`fs.rm`. Permanent deletion should be reserved for internal app data (logs, caches, lock files). And destructive keyboard shortcuts must always have a confirmation step.

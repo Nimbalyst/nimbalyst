@@ -1,4 +1,4 @@
-import { BrowserWindow, type IpcMainEvent, type IpcMainInvokeEvent, app } from 'electron';
+import { BrowserWindow, type IpcMainEvent, type IpcMainInvokeEvent, app, shell } from 'electron';
 import { safeHandle, safeOn } from '../utils/ipcRegistry';
 import * as fs from 'fs/promises';
 import * as fsSync from 'fs';
@@ -1590,7 +1590,7 @@ export class ElectronDocumentService implements DocumentService {
 
       if (!referencedHashes.has(hash)) {
         const assetPath = path.join(assetsDir, file);
-        await fs.unlink(assetPath);
+        await shell.trashItem(assetPath);
         console.log(`[DocumentService] Deleted unreferenced asset: ${file}`);
         deletedCount++;
       }

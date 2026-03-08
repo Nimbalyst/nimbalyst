@@ -10,6 +10,7 @@ import type {
   ThemeManifest,
   ThemeValidationResult,
 } from '@nimbalyst/extension-sdk';
+import { shell } from 'electron';
 import { safeHandle } from '../utils/ipcRegistry';
 import path from 'path';
 import fs from 'fs/promises';
@@ -262,8 +263,8 @@ export async function registerThemeHandlers() {
         throw new Error(`Cannot uninstall built-in theme '${themeId}'`);
       }
 
-      // Delete theme directory
-      await fs.rm(theme.path, { recursive: true, force: true });
+      // Move theme directory to trash (recoverable)
+      await shell.trashItem(theme.path);
 
       // Reload themes
       await themeLoader.reload(userThemesDir);
