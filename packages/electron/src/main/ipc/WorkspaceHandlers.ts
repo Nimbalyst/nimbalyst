@@ -751,11 +751,11 @@ export function registerWorkspaceHandlers() {
             const stats = await stat(filePath);
             const isDirectory = stats.isDirectory();
 
-            if (isDirectory) {
-                // For directories, use recursive removal
-                await rm(filePath, { recursive: true, force: true });
-            } else {
-                await unlink(filePath);
+            // Move to system trash (Recycle Bin on Windows, Trash on macOS/Linux)
+            // so the user can recover accidentally deleted files
+            await shell.trashItem(filePath);
+
+            if (!isDirectory) {
                 // Prevent autosave from recreating the file (race condition with in-flight save timers)
                 recentlyDeletedFiles.add(filePath);
                 setTimeout(() => recentlyDeletedFiles.delete(filePath), 10000);

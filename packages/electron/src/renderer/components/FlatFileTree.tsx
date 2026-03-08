@@ -771,6 +771,15 @@ export function FlatFileTree({
       },
       startRename: handleStartRename,
       deleteItems: async (paths) => {
+        if (paths.length === 0) return;
+
+        // Show confirmation before deleting (matches context menu behavior)
+        const confirmMessage = paths.length > 1
+          ? `Are you sure you want to delete ${paths.length} items?`
+          : `Are you sure you want to delete "${paths[paths.length - 1].split('/').pop()}"?`;
+
+        if (!window.confirm(confirmMessage)) return;
+
         for (const path of paths) {
           const result = await window.electronAPI.deleteFile(path);
           if (!result.success) {
