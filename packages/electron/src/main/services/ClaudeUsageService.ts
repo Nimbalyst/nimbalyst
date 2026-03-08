@@ -2,13 +2,18 @@
  * ClaudeUsageService - Tracks Claude Code API usage limits
  *
  * This service:
- * - Reads OAuth credentials from macOS Keychain (where Claude Code stores them)
+ * - Reads OAuth credentials from the platform credential store:
+ *   - macOS: macOS Keychain (where Claude Code stores them)
+ *   - Windows/Linux: ~/.claude/.credentials.json file
  * - Calls Anthropic's usage API to get 5-hour session and 7-day weekly limits
  * - Implements activity-aware polling (active when using Claude, sleeps when idle)
  * - Broadcasts usage updates to renderer via IPC
  */
 
 import { execSync } from 'child_process';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 import { BrowserWindow } from 'electron';
 import { logger } from '../utils/logger';
 
@@ -102,10 +107,11 @@ class ClaudeUsageServiceImpl {
 
   private async doRefresh(): Promise<ClaudeUsageData> {
     try {
-      const token = this.getAccessTokenFromKeychain();
+      const token = this.getAccessToken();
       if (!token) {
+        const source = process.platform === 'darwin' ? 'macOS Keychain' : '~/.claude/.credentials.json';
         logger.main.warn(
-          '[ClaudeUsageService] No Claude OAuth token found in macOS Keychain entries (Claude Code-credentials, Claude Code). ' +
+          `[ClaudeUsageService] No Claude OAuth token found in ${source}. ` +
           'Claude usage indicator will remain hidden until Claude Code login is restored.'
         );
         const errorData: ClaudeUsageData = {
@@ -178,12 +184,15 @@ class ClaudeUsageServiceImpl {
     await this.refresh();
   }
 
-  private getAccessTokenFromKeychain(): string | null {
-    // Only supported on macOS (reads from macOS Keychain)
-    if (process.platform !== 'darwin') {
-      return null;
+  private getAccessToken(): string | null {
+    if (process.platform === 'darwin') {
+      return this.getAccessTokenFromKeychain();
     }
+    // Windows and Linux: read from ~/.claude/.credentials.json
+    return this.getAccessTokenFromCredentialsFile();
+  }
 
+  private getAccessTokenFromKeychain(): string | null {
     // Try each keychain service name (primary and fallback)
     for (const serviceName of KEYCHAIN_SERVICES) {
       const token = this.tryGetTokenFromKeychain(serviceName);
@@ -194,6 +203,30 @@ class ClaudeUsageServiceImpl {
 
     logger.main.debug('[ClaudeUsageService] Claude Code credentials not found in any keychain entry');
     return null;
+  }
+
+  private getAccessTokenFromCredentialsFile(): string | null {
+    try {
+      const credentialsPath = path.join(os.homedir(), '.claude', '.credentials.json');
+      if (!fs.existsSync(credentialsPath)) {
+        logger.main.debug('[ClaudeUsageService] Credentials file not found:', credentialsPath);
+        return null;
+      }
+
+      const fileContent = fs.readFileSync(credentialsPath, 'utf8');
+      const credentials: KeychainCredentials = JSON.parse(fileContent);
+      const token = credentials.claudeAiOauth?.accessToken;
+
+      if (!token) {
+        logger.main.debug('[ClaudeUsageService] No access token in credentials file');
+        return null;
+      }
+
+      return token;
+    } catch (error) {
+      logger.main.warn('[ClaudeUsageService] Error reading credentials file:', error);
+      return null;
+    }
   }
 
   private tryGetTokenFromKeychain(serviceName: string): string | null {
