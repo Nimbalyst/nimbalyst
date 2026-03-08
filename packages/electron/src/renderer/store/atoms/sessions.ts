@@ -992,13 +992,23 @@ export const createChildSessionAtom = atom(
       const worktreeId = parentData?.worktreeId;
       console.log(`[sessions:createChildSessionAtom] Parent data: worktreeId=${worktreeId}, hasMessages=${!!parentData?.messages?.length}`);
 
-      console.log(`[sessions:createChildSessionAtom] Invoking sessions:create-child IPC with model: ${model}...`);
+      // Derive provider from model ID to prevent provider/model mismatches
+      // (e.g., codex provider with opus model when default model differs from parent's provider)
+      let resolvedProvider = provider || 'claude-code';
+      if (model) {
+        const modelId = ModelIdentifier.tryParse(model);
+        if (modelId) {
+          resolvedProvider = modelId.provider;
+        }
+      }
+
+      console.log(`[sessions:createChildSessionAtom] Invoking sessions:create-child IPC with provider: ${resolvedProvider}, model: ${model}...`);
       const result = await window.electronAPI.invoke('sessions:create-child', {
         parentSessionId,
         workspacePath,
         worktreeId,
-        provider: provider || 'claude-code',
-        model,  // Pass user's default model preference
+        provider: resolvedProvider,
+        model,
       });
       console.log(`[sessions:createChildSessionAtom] IPC result:`, result);
 
@@ -1016,7 +1026,7 @@ export const createChildSessionAtom = atom(
         set(sessionStoreAtom(result.sessionId), {
           id: result.sessionId,
           title: 'New Session',
-          provider: provider || 'claude-code',
+          provider: resolvedProvider,
           model: model || 'claude-code:sonnet',
           mode: 'agent',
           messages: [],
@@ -1283,12 +1293,20 @@ export const convertToWorkstreamAtom = atom(
       let siblingResult: { success: boolean; sessionId?: string; error?: string } = { success: false };
       if (!skipSiblingCreation) {
         try {
+          // Derive provider from model ID to prevent provider/model mismatches
+          let siblingProvider = sessionData.provider || 'claude-code';
+          if (model) {
+            const modelId = ModelIdentifier.tryParse(model);
+            if (modelId) {
+              siblingProvider = modelId.provider;
+            }
+          }
           siblingResult = await window.electronAPI.invoke('sessions:create-child', {
             parentSessionId,
             workspacePath,
             worktreeId: sessionData.worktreeId,
-            provider: sessionData.provider || 'claude-code',
-            model,  // Pass user's default model preference
+            provider: siblingProvider,
+            model,
           });
         } catch (error) {
           // Sibling creation failed - rollback: remove parentSessionId from original, delete parent

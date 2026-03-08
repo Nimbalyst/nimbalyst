@@ -651,13 +651,24 @@ export async function registerSessionHandlers() {
     }) => {
         console.log('[SessionHandlers] sessions:create-child called with:', JSON.stringify(payload));
         try {
-            const { parentSessionId, workspacePath, worktreeId, provider = 'claude-code', model: providedModel } = payload;
+            const { parentSessionId, workspacePath, worktreeId, provider: rawProvider = 'claude-code', model: providedModel } = payload;
             // Use crypto.randomUUID() instead of dynamic import to avoid bundling issues
             const sessionId = crypto.randomUUID();
             console.log(`[SessionHandlers] Creating child session ${sessionId} for parent ${parentSessionId}`);
 
-            // Use provided model, or fall back to hardcoded default
-            const model = providedModel || ModelIdentifier.getDefaultModelId(provider as AIProviderType);
+            // Extract and sync provider from model ID if model follows "provider:model" format
+            // This prevents mismatches where provider and model come from different sources
+            let provider = rawProvider;
+            let model: string;
+            if (providedModel) {
+                const modelId = ModelIdentifier.tryParse(providedModel);
+                if (modelId) {
+                    provider = modelId.provider;
+                }
+                model = providedModel;
+            } else {
+                model = ModelIdentifier.getDefaultModelId(provider as AIProviderType);
+            }
 
             const createPayload = {
                 id: sessionId,
